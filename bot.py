@@ -2,8 +2,8 @@ import requests
 from datetime import datetime, timedelta
 import pytz
 
-TOKEN = "8714533132:AAGEAYs-Q-oZJDwwBwwuB0MPb27mqnDtzxs"
-CHAT_ID = "7119676798"
+TOKEN = "你的TOKEN"
+CHAT_ID = "你的CHAT_ID"
 
 stocks = {
     "緯創": "3231",
@@ -18,34 +18,36 @@ HEADERS = {"User-Agent": "Mozilla/5.0"}
 # ========= 時段 =========
 def get_phase():
     now = datetime.now(tz)
-    if 8 <= now.hour < 9:
+    if now.hour < 9:
         return "盤前"
-    elif 9 <= now.hour < 12:
-        return "盤中"
-    elif 12 <= now.hour <= 13:
-        return "收盤前"
+    elif 9 <= now.hour < 11:
+        return "盤中🔥"
+    elif 11 <= now.hour < 13:
+        return "午盤"
     else:
         return "盤後"
 
 
-# ========= Yahoo =========
+# ========= Yahoo（盤中） =========
 def get_yahoo(code):
     try:
         url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={code}.TW"
         r = requests.get(url, headers=HEADERS, timeout=10).json()
-        data = r.get("quoteResponse", {}).get("result", [])
+        data = r["quoteResponse"]["result"]
         if not data:
             return None
         d = data[0]
+
         price = d.get("regularMarketPrice")
         change = d.get("regularMarketChangePercent")
+
         if price and price > 0:
             return price, change
     except:
         return None
 
 
-# ========= TWSE =========
+# ========= TWSE（日線） =========
 def get_twse(code):
     try:
         rows = []
@@ -61,18 +63,15 @@ def get_twse(code):
 
             for d in r.get("data", []):
                 try:
-                    rows.append((
-                        d[0],
-                        float(d[6].replace(",", "")),
-                        float(d[1].replace(",", ""))
-                    ))
+                    close = float(d[6].replace(",", ""))
+                    vol = float(d[1].replace(",", ""))
+                    rows.append((d[0], close, vol))
                 except:
                     continue
 
         if len(rows) < 20:
             return None
 
-        # 排序
         rows.sort(key=lambda x: x[0])
 
         closes = [x[1] for x in rows]
@@ -97,17 +96,11 @@ def get_twse(code):
 
 # ========= 量能 =========
 def volume_model(volumes, change):
-
-    if len(volumes) < 10:
-        return "資料不足"
-
     vol = volumes[-1]
     avg10 = sum(volumes[-10:]) / 10
     ratio = vol / avg10
 
-    if ratio > 2:
-        base = "極爆量"
-    elif ratio > 1.5:
+    if ratio > 1.5:
         base = "爆量"
     elif ratio > 1.2:
         base = "放量"
@@ -117,35 +110,27 @@ def volume_model(volumes, change):
         base = "正常"
 
     if change > 0 and ratio > 1.2:
-        return f"{base}（趨勢確認）"
+        return f"{base}（有效上漲）"
     elif change < 0 and ratio > 1.2:
         return f"{base}（出貨風險）"
-    elif change > 0 and ratio < 1:
-        return f"{base}（假上漲）"
 
     return base
 
 
 # ========= 趨勢 =========
 def trend_model(price, ma5, ma20, closes):
-
     ma5_prev = sum(closes[-6:-1]) / 5
     ma20_prev = sum(closes[-21:-1]) / 20
 
     slope_up = ma5 > ma5_prev and ma20 > ma20_prev
-    momentum = price - closes[-2]
+    momentum = price > closes[-2]
 
-    high = max(closes[-5:])
-    low = min(closes[-5:])
-
-    if price > ma5 > ma20 and slope_up and momentum > 0:
+    if price > ma5 > ma20 and slope_up and momentum:
         return "強勢多頭"
     elif price > ma20 and slope_up:
-        return "多頭"
-    elif price >= high:
-        return "突破"
-    elif price <= low:
-        return "破位"
+        return "偏多"
+    elif price < ma20:
+        return "偏弱"
     else:
         return "震盪"
 
@@ -154,36 +139,36 @@ def trend_model(price, ma5, ma20, closes):
 def strategy(price, ma5, ma20, closes, volumes):
 
     ma20_prev = sum(closes[-21:-1]) / 20
-    trend_up = price > ma20 and ma20 > ma20_prev
 
-    breakout = price >= max(closes[-5:])
+    trend_ok = price > ma20 and ma20 > ma20_prev
     momentum = price > closes[-2]
 
     vol = volumes[-1]
     avg10 = sum(volumes[-10:]) / 10
-    vol_ok = vol > avg10 * 1.2
+    volume_ok = vol > avg10 * 1.2
 
-    score = sum([trend_up, breakout, momentum, vol_ok])
+    breakout = price >= max(closes[-5:])
 
-    if score == 4:
-        decision = "進場"
-    elif score == 3:
-        decision = "觀察"
+    score = sum([trend_ok, momentum, volume_ok, breakout])
+
+    if score >= 3:
+        decision = "進場🔥"
+        buy_low = round(ma5 * 0.99, 1)
+        buy_high = round(ma5 * 1.01, 1)
+        buy_text = f"{buy_low} ~ {buy_high}"
     else:
-        decision = "不進場"
+        decision = "觀望"
+        buy_text = "-"
 
-    buy = (round(ma5 * 0.99, 1), round(ma5 * 1.01, 1))
-
-    return decision, buy
+    return decision, buy_text
 
 
 # ========= 主 =========
 def generate():
-
     now = datetime.now(tz)
     phase = get_phase()
 
-    msg = f"【{now.strftime('%m/%d')} {phase}｜最終系統】\n\n"
+    msg = f"【{now.strftime('%m/%d')} {phase}｜策略系統】\n\n"
 
     for name, code in stocks.items():
 
@@ -191,12 +176,12 @@ def generate():
         yahoo = get_yahoo(code)
 
         if not twse:
-            msg += f"📌 {name}\n→ 無資料\n\n"
+            msg += f"📌 {name}\n→ 無法取得資料\n\n"
             continue
 
         t_price, t_change, ma5, ma20, closes, volumes = twse
 
-        if phase == "盤中" and yahoo:
+        if "盤中" in phase and yahoo:
             price, change = yahoo
         else:
             price, change = t_price, t_change
@@ -213,13 +198,7 @@ def generate():
         msg += f"→ 量能：{volume}\n"
         msg += f"→ 趨勢：{trend}\n"
         msg += f"👉 決策：{decision}\n"
-
-        if decision == "進場":
-            msg += f"🔥 買點：{buy[0]} ~ {buy[1]}\n"
-        else:
-            msg += f"⛔ 建議觀望\n"
-
-        msg += "\n"
+        msg += f"🔥 買點：{buy}\n\n"
 
     return msg
 
