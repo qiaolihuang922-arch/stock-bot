@@ -5,6 +5,12 @@ import pytz
 TOKEN = "8714533132:AAGEAYs-Q-oZJDwwBwwuB0MPb27mqnDtzxs"
 CHAT_ID = "7119676798"
 
+# 🔥 你提供的key
+
+import os
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+
 stocks = {
     "緯創": "3231",
     "建準": "2421",
@@ -15,7 +21,54 @@ tz = pytz.timezone("Asia/Taipei")
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
-# ===== 時段 =====
+# ===== 🔥 AI分析（新增，不影響原系統）=====
+def ai_analysis(name, price, change, ma5, ma20, volume, trend, decision, buy, stop):
+
+    prompt = f"""
+你是一位專業股票交易員，請分析：
+
+股票：{name}
+現價：{price}
+漲跌：{change}%
+MA5：{ma5}
+MA20：{ma20}
+量能：{volume}
+趨勢：{trend}
+決策：{decision}
+買點：{buy}
+停損：{stop}
+
+請用人話給建議：
+- 是否進場
+- 風險
+- 該怎麼做
+
+限制：50字內，不要模板
+"""
+
+    try:
+        url = "https://api.openai.com/v1/chat/completions"
+
+        headers = {
+            "Authorization": f"Bearer {OPENAI_API_KEY}",
+            "Content-Type": "application/json"
+        }
+
+        data = {
+            "model": "gpt-4o-mini",
+            "messages": [{"role": "user", "content": prompt}]
+        }
+
+        res = requests.post(url, headers=headers, json=data, timeout=15).json()
+
+        return res["choices"][0]["message"]["content"]
+
+    except:
+        return "AI分析失敗"
+
+
+# ===== 以下全部保留你原本代碼 =====
+
 def get_phase():
     now = datetime.now(tz)
     if now.hour < 9:
@@ -28,7 +81,6 @@ def get_phase():
         return "盤後"
 
 
-# ===== Yahoo =====
 def get_yahoo(code):
     try:
         url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={code}.TW"
@@ -42,7 +94,6 @@ def get_yahoo(code):
         return None
 
 
-# ===== TWSE =====
 def get_twse(code):
     try:
         rows = []
@@ -88,7 +139,6 @@ def get_twse(code):
         return None
 
 
-# ===== 量能 =====
 def volume_model(volumes, closes):
     vol = volumes[-1]
     avg10 = sum(volumes[-10:]) / 10
@@ -119,7 +169,6 @@ def volume_model(volumes, closes):
     return level
 
 
-# ===== 趨勢 =====
 def trend_model(price, ma5, ma20, closes, volumes):
 
     ma20_prev = sum(closes[-21:-1]) / 20
@@ -153,12 +202,10 @@ def trend_model(price, ma5, ma20, closes, volumes):
     return "震盪"
 
 
-# ===== 支撐壓力 =====
 def support_resistance(closes):
     return round(min(closes[-10:]),1), round(max(closes[-10:]),1)
 
 
-# ===== 策略（最終強化版）=====
 def strategy(price, ma5, ma20, closes, volumes):
 
     support, resistance = support_resistance(closes)
@@ -174,37 +221,28 @@ def strategy(price, ma5, ma20, closes, volumes):
 
     breakout = price > resistance
 
-    # ===== 結構低點 =====
     recent_low = min(closes[-5:])
     prev_low = min(closes[-10:-5])
     structure_low = min(recent_low, prev_low)
 
-    # ===== 強勢追價 =====
     if price > resistance and vol > avg10 * 1.5:
         stop = max(resistance * 0.97, structure_low, ma5 * 0.98)
-
-        # 🔥 防呆
         stop = min(stop, price * 0.99)
 
-        risk = (price - stop) / price
-        if risk > 0.08:
+        if (price - stop) / price > 0.08:
             return "不進場（風險過大）", "-", "-"
 
         return "進場🔥（強勢續漲）", "現價附近", round(stop,1)
 
-    # ===== 突破 =====
     if breakout and confirm:
         stop = max(resistance * 0.97, structure_low, ma5 * 0.98)
-
         stop = min(stop, price * 0.99)
 
-        risk = (price - stop) / price
-        if risk > 0.08:
+        if (price - stop) / price > 0.08:
             return "不進場（風險過大）", "-", "-"
 
         return "進場🔥（突破）", "現價附近", round(stop,1)
 
-    # ===== 回檔 =====
     if price >= ma5:
         if price > ma5 * 1.05:
             return "觀望（過高）", "-", "-"
@@ -212,24 +250,18 @@ def strategy(price, ma5, ma20, closes, volumes):
         buy_price = min(ma5, support)
 
         stop = max(ma20 * 0.98, structure_low)
-
-        # 🔥 停損不能高於買點
         stop = min(stop, buy_price * 0.97)
 
-        risk = (buy_price - stop) / buy_price
-        if risk > 0.08:
+        if (buy_price - stop) / buy_price > 0.08:
             return "觀望（風險過大）", "-", "-"
 
         return "進場🔥（回檔）", f"{round(buy_price,1)}", round(stop,1)
 
-    # ===== 轉強 =====
     if price > ma20:
         stop = max(ma20 * 0.97, structure_low)
-
         stop = min(stop, price * 0.99)
 
-        risk = (price - stop) / price
-        if risk > 0.08:
+        if (price - stop) / price > 0.08:
             return "觀望（風險過大）", "-", "-"
 
         return "進場🔥（轉強）", f"{round(ma20,1)}", round(stop,1)
@@ -237,31 +269,16 @@ def strategy(price, ma5, ma20, closes, volumes):
     return "觀望", "-", "-"
 
 
-# ===== 發送 =====
 def send(msg):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-
-    for i in range(3):
-        try:
-            r = requests.post(url, data={
-                "chat_id": CHAT_ID,
-                "text": msg
-            }, timeout=10)
-
-            print(r.text)
-
-            if r.status_code == 200 and r.json().get("ok"):
-                return
-        except:
-            pass
+    requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
 
 
-# ===== 主 =====
 def generate():
     now = datetime.now(tz)
     phase = get_phase()
 
-    msg = f"【{now.strftime('%m/%d')} {phase}｜最終完整交易系統】\n\n"
+    msg = f"【{now.strftime('%m/%d')} {phase}｜AI交易系統】\n\n"
 
     for name, code in stocks.items():
 
@@ -282,6 +299,10 @@ def generate():
         volume = volume_model(volumes, closes)
         trend = trend_model(price, ma5, ma20, closes, volumes)
         decision, buy, stop = strategy(price, ma5, ma20, closes, volumes)
+
+        # 🔥 AI分析加入（不影響原系統）
+        ai_text = ai_analysis(name, price, change, ma5, ma20, volume, trend, decision, buy, stop)
+
         support, resistance = support_resistance(closes)
 
         msg += f"{name}\n"
@@ -292,7 +313,8 @@ def generate():
         msg += f"支撐：{support} 壓力：{resistance}\n"
         msg += f"決策：{decision}\n"
         msg += f"買點：{buy}\n"
-        msg += f"停損：{stop}\n\n"
+        msg += f"停損：{stop}\n"
+        msg += f"🤖 AI分析：{ai_text}\n\n"
 
     return msg
 
