@@ -88,7 +88,7 @@ def get_twse(code):
         return None
 
 
-# ===== 量能（強化：主升 / 出貨 / 假突破）=====
+# ===== 量能 =====
 def volume_model(volumes, closes):
     vol = volumes[-1]
     avg10 = sum(volumes[-10:]) / 10
@@ -110,7 +110,7 @@ def volume_model(volumes, closes):
         level = "正常"
 
     if price_up and ratio > 1.3 and vol_trend and accumulation:
-        return f"{level}（主升段✔）"
+        return f"{level}（主升✔）"
     if ratio > 1.3 and not price_up:
         return f"{level}（出貨⚠）"
     if price_up and ratio < 1:
@@ -119,7 +119,7 @@ def volume_model(volumes, closes):
     return level
 
 
-# ===== 趨勢（強化：結構＋斜率＋壓力位置）=====
+# ===== 趨勢 =====
 def trend_model(price, ma5, ma20, closes, volumes):
 
     ma20_prev = sum(closes[-21:-1]) / 20
@@ -158,7 +158,7 @@ def support_resistance(closes):
     return round(min(closes[-10:]),1), round(max(closes[-10:]),1)
 
 
-# ===== 策略（完整強化版）=====
+# ===== 策略（最終強化版）=====
 def strategy(price, ma5, ma20, closes, volumes):
 
     support, resistance = support_resistance(closes)
@@ -182,19 +182,27 @@ def strategy(price, ma5, ma20, closes, volumes):
     # ===== 強勢追價 =====
     if price > resistance and vol > avg10 * 1.5:
         stop = max(resistance * 0.97, structure_low, ma5 * 0.98)
-        stop = round(stop, 1)
-        return "進場🔥（強勢續漲）", "現價附近", stop
+
+        # 🔥 防呆
+        stop = min(stop, price * 0.99)
+
+        risk = (price - stop) / price
+        if risk > 0.08:
+            return "不進場（風險過大）", "-", "-"
+
+        return "進場🔥（強勢續漲）", "現價附近", round(stop,1)
 
     # ===== 突破 =====
     if breakout and confirm:
-        stop_old = resistance * 0.97
-        stop = max(stop_old, structure_low, ma5 * 0.98)
-        stop = round(stop, 1)
+        stop = max(resistance * 0.97, structure_low, ma5 * 0.98)
 
-        if (price - stop) / price > 0.08:
+        stop = min(stop, price * 0.99)
+
+        risk = (price - stop) / price
+        if risk > 0.08:
             return "不進場（風險過大）", "-", "-"
 
-        return "進場🔥（突破）", "現價附近", stop
+        return "進場🔥（突破）", "現價附近", round(stop,1)
 
     # ===== 回檔 =====
     if price >= ma5:
@@ -203,19 +211,28 @@ def strategy(price, ma5, ma20, closes, volumes):
 
         buy_price = min(ma5, support)
 
-        stop_old = ma20 * 0.98
-        stop = max(stop_old, structure_low)
-        stop = round(stop, 1)
+        stop = max(ma20 * 0.98, structure_low)
 
-        return "進場🔥（回檔）", f"{round(buy_price,1)}", stop
+        # 🔥 停損不能高於買點
+        stop = min(stop, buy_price * 0.97)
+
+        risk = (buy_price - stop) / buy_price
+        if risk > 0.08:
+            return "觀望（風險過大）", "-", "-"
+
+        return "進場🔥（回檔）", f"{round(buy_price,1)}", round(stop,1)
 
     # ===== 轉強 =====
     if price > ma20:
-        stop_old = ma20 * 0.97
-        stop = max(stop_old, structure_low)
-        stop = round(stop, 1)
+        stop = max(ma20 * 0.97, structure_low)
 
-        return "進場🔥（轉強）", f"{round(ma20,1)}", stop
+        stop = min(stop, price * 0.99)
+
+        risk = (price - stop) / price
+        if risk > 0.08:
+            return "觀望（風險過大）", "-", "-"
+
+        return "進場🔥（轉強）", f"{round(ma20,1)}", round(stop,1)
 
     return "觀望", "-", "-"
 
