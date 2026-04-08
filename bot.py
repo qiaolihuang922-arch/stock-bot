@@ -18,10 +18,25 @@ tz = pytz.timezone("Asia/Taipei")
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
-# ===== AI =====
+# ===== AI（🔥強化）=====
 def ai_analysis(name, price, change, ma5, ma20, volume, trend, decision, buy, stop):
 
-    prompt = f"{name} 現價{price} 漲跌{change}% 趨勢{trend} 決策{decision} 買點{buy} 停損{stop}"
+    prompt = f"""
+你是專業交易員，請直接給建議：
+
+{name}
+現價:{price} 漲跌:{change}%
+趨勢:{trend}
+決策:{decision}
+買點:{buy}
+停損:{stop}
+
+請說：
+1. 是否值得進場
+2. 風險
+3. 操作方式
+限制：50字
+"""
 
     try:
         r = requests.post(
@@ -42,6 +57,14 @@ def ai_analysis(name, price, change, ma5, ma20, volume, trend, decision, buy, st
 
     except:
         pass
+
+    # fallback（🔥強化）
+    if "觀望" in decision:
+        return "位置不佳，等待更好機會"
+    if "突破" in decision:
+        return "突破後需觀察是否站穩"
+    if "回檔" in decision:
+        return "回檔支撐區可分批進場"
 
     return "依策略操作"
 
@@ -117,7 +140,7 @@ def get_twse(code):
         return None
 
 
-# ===== 量能（完整保留）=====
+# ===== 量能（原版保留）=====
 def volume_model(volumes, closes):
     vol = volumes[-1]
     avg10 = sum(volumes[-10:]) / 10
@@ -148,7 +171,7 @@ def volume_model(volumes, closes):
     return level
 
 
-# ===== 趨勢（完整保留）=====
+# ===== 趨勢（原版保留）=====
 def trend_model(price, ma5, ma20, closes, volumes):
 
     ma20_prev = sum(closes[-21:-1]) / 20
@@ -187,7 +210,7 @@ def support_resistance(closes):
     return round(min(closes[-10:]),1), round(max(closes[-10:]),1)
 
 
-# ===== 策略（🔥原版 + 插入修正）=====
+# ===== 策略（🔥完整強化版，不刪原邏輯）=====
 def strategy(price, ma5, ma20, closes, volumes):
 
     support, resistance = support_resistance(closes)
@@ -197,17 +220,20 @@ def strategy(price, ma5, ma20, closes, volumes):
 
     volume_ok = vol > avg10 * 1.2
     momentum = price > closes[-2]
-    trend_ok = price > ma20
+    confirm = sum([volume_ok, momentum, price > ma20]) >= 2
 
-    confirm = sum([volume_ok, momentum, trend_ok]) >= 2
     breakout = price > resistance
 
     recent_low = min(closes[-5:])
     prev_low = min(closes[-10:-5])
     structure_low = min(recent_low, prev_low)
 
-    # ===== 原邏輯 =====
+    # ===== 🔥 A：突破確認 =====
+    if breakout and confirm:
+        if closes[-1] <= closes[-2]:
+            return "觀望（假突破）", "-", "-"
 
+    # ===== 原邏輯 =====
     if price > resistance and vol > avg10 * 1.5:
         buy = price
         stop = max(resistance * 0.97, structure_low)
@@ -229,15 +255,12 @@ def strategy(price, ma5, ma20, closes, volumes):
     else:
         return "觀望", "-", "-"
 
-    # ===== 🔥 插入強化 =====
-
-    if price > resistance * 1.03:
-        return "觀望（突破過遠）", "-", "-"
-
+    # ===== 🔥 B：買點校正 =====
     if abs(price - buy) / buy > 0.04:
         return "觀望（未到買點）", "-", "-"
 
-    stop = min(stop, buy * 0.97)
+    # ===== 🔥 C：停損進階 =====
+    stop = min(stop, structure_low, buy * 0.97)
 
     if stop >= buy:
         stop = buy * 0.97
