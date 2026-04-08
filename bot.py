@@ -4,7 +4,6 @@ from datetime import datetime
 TOKEN = "8714533132:AAGEAYs-Q-oZJDwwBwwuB0MPb27mqnDtzxs"
 CHAT_ID = "7119676798"
 
-# 股票代碼（台股）
 stocks = {
     "緯創": "3231.TW",
     "建準": "2421.TW",
@@ -12,20 +11,24 @@ stocks = {
 }
 
 def get_stock_price(symbol):
-    url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={symbol}"
-    data = requests.get(url).json()
-    
     try:
-        result = data["quoteResponse"]["result"][0]
-        price = result["regularMarketPrice"]
-        change = result["regularMarketChangePercent"]
+        url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={symbol}"
+        data = requests.get(url, timeout=10).json()
+        result = data["quoteResponse"]["result"]
+
+        if not result:
+            return None, None
+
+        price = result[0].get("regularMarketPrice")
+        change = result[0].get("regularMarketChangePercent")
+
         return price, change
     except:
         return None, None
 
 def analyze_stock(change):
     if change is None:
-        return "資料錯誤", "觀望"
+        return "無資料", "觀望"
 
     if change > 2:
         return "強勢上漲", "可關注"
@@ -51,13 +54,16 @@ def generate_report():
             best_score = change
             best = name
 
+        change_text = f"{round(change,2)}%" if change is not None else "無資料"
+        price_text = price if price is not None else "無資料"
+
         msg += f"📌 {name}\n"
-        msg += f"→ 價格：{price}\n"
-        msg += f"→ 漲跌：{round(change,2)}%\n"
+        msg += f"→ 價格：{price_text}\n"
+        msg += f"→ 漲跌：{change_text}\n"
         msg += f"→ 趨勢：{trend}\n"
         msg += f"→ 建議：{suggestion}\n\n"
 
-    msg += f"👉 今日結論：優先關注 {best}"
+    msg += f"👉 今日結論：{best if best else '觀望'}"
 
     return msg
 
