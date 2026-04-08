@@ -1,5 +1,5 @@
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 
 TOKEN = "8714533132:AAGEAYs-Q-oZJDwwBwwuB0MPb27mqnDtzxs"
@@ -34,7 +34,7 @@ def get_realtime(code):
         return None, None
 
 
-# ========= TWSE 多月K線 =========
+# ========= TWSE 多月資料 =========
 def get_twse_history(code):
     try:
         closes = []
@@ -42,12 +42,10 @@ def get_twse_history(code):
 
         now = datetime.now(tz)
 
-        # 抓3個月（確保>=20天）
+        # 抓近3個月（確保>=20天）
         for i in range(3):
-            month = (now.month - i - 1) % 12 + 1
-            year = now.year if now.month - i > 0 else now.year - 1
-
-            date_str = f"{year}{month:02d}"
+            date = now - timedelta(days=30 * i)
+            date_str = date.strftime("%Y%m01")
 
             url = f"https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date={date_str}&stockNo={code}"
             r = requests.get(url, headers=HEADERS, timeout=10).json()
@@ -64,7 +62,11 @@ def get_twse_history(code):
                 except:
                     continue
 
-        if len(closes) < 20:
+        # 去重 + 排序（防API亂序）
+        closes = closes[-60:]
+        volumes = volumes[-60:]
+
+        if len(closes) < 5:
             return None
 
         price = closes[-1]
@@ -72,7 +74,7 @@ def get_twse_history(code):
         change = (price - prev) / prev * 100
 
         ma5 = sum(closes[-5:]) / 5
-        ma20 = sum(closes[-20:]) / 20
+        ma20 = sum(closes[-20:]) / 20 if len(closes) >= 20 else None
 
         vol = volumes[-1]
         vol_avg = sum(volumes[-5:]) / 5
@@ -84,25 +86,28 @@ def get_twse_history(code):
 
 
 # ========= 買點區間 =========
-def get_buy_zone(ma20):
-    low = ma20 * 0.99
-    high = ma20 * 1.01
+def get_buy_zone(base):
+    low = base * 0.99
+    high = base * 1.01
     return round(low, 1), round(high, 1)
 
 
 # ========= 分析 =========
-def analyze(price, change, ma5, ma20, vol, vol_avg):
+def analyze(price, ma5, ma20, vol, vol_avg):
 
-    volume_strong = vol and vol_avg and vol > vol_avg * 1.5
+    if ma5 is None:
+        return "資料不足", "觀望", None
 
-    if price > ma5 > ma20:
+    volume_strong = vol > vol_avg * 1.5 if vol and vol_avg else False
+
+    if ma20 and price > ma5 > ma20:
         trend = "強勢多頭"
-        strategy = "回踩MA5附近進場"
+        strategy = "回踩MA5進場"
         buy = get_buy_zone(ma5)
 
-    elif price > ma20:
+    elif ma20 and price > ma20:
         trend = "轉強"
-        strategy = "回踩MA20附近低接"
+        strategy = "回踩MA20進場"
         buy = get_buy_zone(ma20)
 
     else:
@@ -110,21 +115,21 @@ def analyze(price, change, ma5, ma20, vol, vol_avg):
         strategy = "不進場"
         buy = None
 
-    return trend, strategy, buy
+    return trend, strategy, buy, volume_strong
 
 
 # ========= 主流程 =========
 def generate():
 
     today = datetime.now(tz).strftime("%m/%d")
-    msg = f"【{today} 完整穩定版（無假數據）】\n\n"
+    msg = f"【{today} 最終穩定版】\n\n"
 
     for name, code in stocks.items():
 
-        # Yahoo
+        # 即時
         y_price, y_change = get_realtime(code)
 
-        # TWSE
+        # K線
         t_data = get_twse_history(code)
 
         if not t_data and not y_price:
@@ -139,7 +144,7 @@ def generate():
         price = y_price if y_price else t_price
         change = y_change if y_change else t_change
 
-        trend, strategy, buy = analyze(price, change, ma5, ma20, vol, vol_avg)
+        trend, strategy, buy, volume_strong = analyze(price, ma5, ma20, vol, vol_avg)
 
         msg += f"📌 {name}\n"
         msg += f"→ 現價：{round(price,1)}\n"
@@ -149,7 +154,7 @@ def generate():
         msg += f"→ MA20：{round(ma20,1) if ma20 else '無'}\n"
 
         if vol and vol_avg:
-            msg += f"→ 量能：{'爆量' if vol > vol_avg*1.5 else '正常'}\n"
+            msg += f"→ 量能：{'爆量' if volume_strong else '正常'}\n"
 
         msg += f"→ 趨勢：{trend}\n"
 
