@@ -13,7 +13,6 @@ stocks = {
 
 tz = pytz.timezone("Asia/Taipei")
 
-# ✅ 防封鎖 headers（關鍵）
 HEADERS = {
     "User-Agent": "Mozilla/5.0",
     "Accept": "application/json"
@@ -24,26 +23,29 @@ def get_realtime(code):
     try:
         url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={code}.TW"
         r = requests.get(url, headers=HEADERS, timeout=10).json()
-
         data = r.get("quoteResponse", {}).get("result", [])
+
         if not data:
             return None, None
 
         d = data[0]
-        price = d.get("regularMarketPrice")
-        change = d.get("regularMarketChangePercent")
-
-        return price, change
+        return d.get("regularMarketPrice"), d.get("regularMarketChangePercent")
 
     except:
         return None, None
 
 
-# ========= TWSE 日K =========
+# ========= TWSE K線 =========
 def get_twse_data(code):
     try:
-        url = f"https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&stockNo={code}"
+        now = datetime.now(tz)
+        date_str = now.strftime("%Y%m")
+
+        url = f"https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date={date_str}&stockNo={code}"
         r = requests.get(url, headers=HEADERS, timeout=10).json()
+
+        if r.get("stat") != "OK":
+            return None
 
         data = r.get("data")
         if not data:
@@ -54,10 +56,8 @@ def get_twse_data(code):
 
         for d in data:
             try:
-                close = float(d[6].replace(",", ""))
-                vol = float(d[1].replace(",", ""))
-                closes.append(close)
-                volumes.append(vol)
+                closes.append(float(d[6].replace(",", "")))
+                volumes.append(float(d[1].replace(",", "")))
             except:
                 continue
 
@@ -68,11 +68,12 @@ def get_twse_data(code):
         prev = closes[-2]
         change = (price - prev) / prev * 100
 
-        ma5 = sum(closes[-5:]) / 5 if len(closes) >= 5 else None
-        ma20 = sum(closes[-20:]) / 20 if len(closes) >= 20 else None
+        # 🔥 關鍵修正（永遠算）
+        ma5 = sum(closes[-5:]) / min(5, len(closes))
+        ma20 = sum(closes[-20:]) / min(20, len(closes))
 
         vol = volumes[-1] if volumes else None
-        vol_avg = sum(volumes[-5:]) / 5 if len(volumes) >= 5 else None
+        vol_avg = sum(volumes[-5:]) / min(5, len(volumes))
 
         return price, change, ma5, ma20, vol, vol_avg
 
@@ -85,10 +86,6 @@ def analyze(price, change, ma5, ma20, vol, vol_avg):
 
     if price is None:
         return "無資料", "觀望", None
-
-    # 沒MA就不做趨勢判斷
-    if ma5 is None or ma20 is None:
-        return "資料不足", "觀望", None
 
     volume_strong = vol and vol_avg and vol > vol_avg * 1.5
 
@@ -106,37 +103,35 @@ def analyze(price, change, ma5, ma20, vol, vol_avg):
 def generate():
 
     today = datetime.now(tz).strftime("%m/%d")
-    msg = f"【{today} 穩定最終版】\n\n"
+    msg = f"【{today} 完整穩定版】\n\n"
 
     for name, code in stocks.items():
 
-        # 1️⃣ 先抓 Yahoo
+        # 1️⃣ Yahoo（主）
         y_price, y_change = get_realtime(code)
 
-        # 2️⃣ 再抓 TWSE
-        twse = get_twse_data(code)
+        # 2️⃣ TWSE（補）
+        t_data = get_twse_data(code)
 
-        if twse:
-            t_price, t_change, ma5, ma20, vol, vol_avg = twse
+        if t_data:
+            t_price, t_change, ma5, ma20, vol, vol_avg = t_data
         else:
             t_price = t_change = ma5 = ma20 = vol = vol_avg = None
 
-        # 3️⃣ 價格決策（重點）
+        # 3️⃣ 價格決策（優先Yahoo）
         price = y_price if y_price else t_price
         change = y_change if y_change else t_change
 
-        # 4️⃣ 保底（但不亂設0）
+        # 4️⃣ 最後防呆（不給0假數據）
         if price is None:
             msg += f"📌 {name}\n→ 無法取得資料\n\n"
             continue
 
-        # 5️⃣ 分析
         trend, suggestion, buy = analyze(price, change, ma5, ma20, vol, vol_avg)
 
         msg += f"📌 {name}\n"
         msg += f"→ 現價：{round(price,1)}\n"
         msg += f"→ 漲跌：{round(change,2) if change else 0}%\n"
-
         msg += f"→ MA5：{round(ma5,1) if ma5 else '無'}\n"
         msg += f"→ MA20：{round(ma20,1) if ma20 else '無'}\n"
 
