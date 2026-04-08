@@ -21,7 +21,7 @@ def is_market_open():
     return 9 <= now.hour < 13
 
 
-# ========= 即時價格（主） =========
+# ========= Yahoo 即時 =========
 def get_realtime(code):
     try:
         url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={code}.TW"
@@ -29,56 +29,54 @@ def get_realtime(code):
         data = r["quoteResponse"]["result"]
 
         if not data:
-            return None, None, None
+            return None, None
 
         d = data[0]
-        return (
-            d.get("regularMarketPrice"),
-            d.get("regularMarketChangePercent"),
-            d.get("regularMarketPreviousClose")
-        )
-    except:
-        return None, None, None
-
-
-# ========= K線（算MA/量） =========
-def get_kline(code):
-    try:
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{code}.TW?range=1mo&interval=1d"
-        r = requests.get(url, timeout=10).json()
-
-        result = r["chart"]["result"][0]
-        closes = result["indicators"]["quote"][0]["close"]
-        volumes = result["indicators"]["quote"][0]["volume"]
-
-        clean = [(c, v) for c, v in zip(closes, volumes) if c and v]
-
-        if len(clean) < 20:
-            return None, None, None, None
-
-        ma5 = sum([x[0] for x in clean[-5:]]) / 5
-        ma20 = sum([x[0] for x in clean[-20:]]) / 20
-
-        vol = clean[-1][1]
-        vol_avg = sum([x[1] for x in clean[-5:]]) / 5
-
-        return ma5, ma20, vol, vol_avg
+        return d.get("regularMarketPrice"), d.get("regularMarketChangePercent")
 
     except:
-        return None, None, None, None
+        return None, None
 
 
-# ========= TWSE fallback =========
-def get_twse(code):
+# ========= TWSE K線（穩定核心） =========
+def get_twse_kline(code):
     try:
-        url = f"https://www.twse.com.tw/exchangeReport/STOCK_DAY_AVG?response=json&stockNo={code}"
+        url = f"https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&stockNo={code}"
         r = requests.get(url, timeout=10).json()
+
         data = r.get("data")
-
-        if not data:
+        if not data or len(data) < 20:
             return None
 
-        return float(data[-1][1])
+        closes = []
+        volumes = []
+
+        for d in data:
+            try:
+                close = float(d[6].replace(",", ""))
+                vol = float(d[1].replace(",", ""))
+                closes.append(close)
+                volumes.append(vol)
+            except:
+                continue
+
+        if len(closes) < 20:
+            return None
+
+        # 🔥 MA（用最後完整日）
+        ma5 = sum(closes[-5:]) / 5
+        ma20 = sum(closes[-20:]) / 20
+
+        price = closes[-1]
+        prev = closes[-2]
+
+        change = (price - prev) / prev * 100
+
+        vol = volumes[-1]
+        vol_avg = sum(volumes[-5:]) / 5
+
+        return price, change, ma5, ma20, vol, vol_avg
+
     except:
         return None
 
@@ -91,29 +89,23 @@ def analyze(price, change, ma5, ma20, vol, vol_avg):
 
     volume_strong = vol and vol_avg and vol > vol_avg * 1.5
 
-    if ma5 and ma20:
-        if price > ma5 > ma20:
-            trend = "強勢多頭"
-            buy = round(ma5, 1)
-            suggestion = "回踩MA5"
+    if price > ma5 > ma20:
+        trend = "強勢多頭"
+        buy = round(ma5, 1)
+        suggestion = "回踩MA5"
 
-            if volume_strong:
-                suggestion = "爆量回踩更佳"
+        if volume_strong:
+            suggestion = "爆量更佳"
 
-        elif price > ma20:
-            trend = "轉強"
-            buy = round(ma20, 1)
-            suggestion = "靠MA20低接"
-
-        else:
-            trend = "弱勢"
-            buy = None
-            suggestion = "不進場"
+    elif price > ma20:
+        trend = "轉強"
+        buy = round(ma20, 1)
+        suggestion = "靠MA20"
 
     else:
-        trend = "資料不足"
+        trend = "弱勢"
         buy = None
-        suggestion = "觀望"
+        suggestion = "不進場"
 
     return trend, suggestion, buy
 
@@ -122,21 +114,21 @@ def analyze(price, change, ma5, ma20, vol, vol_avg):
 def generate():
 
     today = datetime.now(tz).strftime("%m/%d")
-    mode = "盤中模式" if is_market_open() else "收盤模式"
+    mode = "盤中" if is_market_open() else "收盤"
 
-    msg = f"【{today} {mode} 多源交易系統】\n\n"
+    msg = f"【{today} {mode}模式（最終穩定版）】\n\n"
 
     for name, code in stocks.items():
 
-        # 1️⃣ 即時（主）
-        price, change, prev = get_realtime(code)
+        # 1️⃣ 先拿官方資料（最穩）
+        data = get_twse_kline(code)
 
-        # 2️⃣ fallback
-        if price is None:
-            price = get_twse(code)
-
-        # 3️⃣ 指標
-        ma5, ma20, vol, vol_avg = get_kline(code)
+        if data:
+            price, change, ma5, ma20, vol, vol_avg = data
+        else:
+            # fallback：即時
+            price, change = get_realtime(code)
+            ma5 = ma20 = vol = vol_avg = None
 
         trend, suggestion, buy = analyze(price, change, ma5, ma20, vol, vol_avg)
 
