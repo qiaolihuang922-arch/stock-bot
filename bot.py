@@ -13,30 +13,39 @@ stocks = {
 
 tz = pytz.timezone("Asia/Taipei")
 
+# ✅ 防封鎖 headers（關鍵）
+HEADERS = {
+    "User-Agent": "Mozilla/5.0",
+    "Accept": "application/json"
+}
+
 # ========= Yahoo 即時 =========
 def get_realtime(code):
     try:
         url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={code}.TW"
-        r = requests.get(url, timeout=10).json()
-        data = r.get("quoteResponse", {}).get("result", [])
+        r = requests.get(url, headers=HEADERS, timeout=10).json()
 
+        data = r.get("quoteResponse", {}).get("result", [])
         if not data:
             return None, None
 
         d = data[0]
-        return d.get("regularMarketPrice"), d.get("regularMarketChangePercent")
+        price = d.get("regularMarketPrice")
+        change = d.get("regularMarketChangePercent")
+
+        return price, change
 
     except:
         return None, None
 
 
-# ========= TWSE =========
-def get_twse(code):
+# ========= TWSE 日K =========
+def get_twse_data(code):
     try:
         url = f"https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&stockNo={code}"
-        r = requests.get(url, timeout=10).json()
-        data = r.get("data")
+        r = requests.get(url, headers=HEADERS, timeout=10).json()
 
+        data = r.get("data")
         if not data:
             return None
 
@@ -45,24 +54,25 @@ def get_twse(code):
 
         for d in data:
             try:
-                closes.append(float(d[6].replace(",", "")))
-                volumes.append(float(d[1].replace(",", "")))
+                close = float(d[6].replace(",", ""))
+                vol = float(d[1].replace(",", ""))
+                closes.append(close)
+                volumes.append(vol)
             except:
                 continue
 
-        if len(closes) < 5:
+        if len(closes) < 2:
             return None
 
         price = closes[-1]
         prev = closes[-2]
-
         change = (price - prev) / prev * 100
 
-        ma5 = sum(closes[-5:]) / 5 if len(closes) >= 5 else price
-        ma20 = sum(closes[-20:]) / 20 if len(closes) >= 20 else price
+        ma5 = sum(closes[-5:]) / 5 if len(closes) >= 5 else None
+        ma20 = sum(closes[-20:]) / 20 if len(closes) >= 20 else None
 
-        vol = volumes[-1]
-        vol_avg = sum(volumes[-5:]) / 5 if len(volumes) >= 5 else vol
+        vol = volumes[-1] if volumes else None
+        vol_avg = sum(volumes[-5:]) / 5 if len(volumes) >= 5 else None
 
         return price, change, ma5, ma20, vol, vol_avg
 
@@ -75,6 +85,10 @@ def analyze(price, change, ma5, ma20, vol, vol_avg):
 
     if price is None:
         return "無資料", "觀望", None
+
+    # 沒MA就不做趨勢判斷
+    if ma5 is None or ma20 is None:
+        return "資料不足", "觀望", None
 
     volume_strong = vol and vol_avg and vol > vol_avg * 1.5
 
@@ -96,44 +110,39 @@ def generate():
 
     for name, code in stocks.items():
 
-        # 1️⃣ Yahoo
-        price, change = get_realtime(code)
+        # 1️⃣ 先抓 Yahoo
+        y_price, y_change = get_realtime(code)
 
-        # 2️⃣ TWSE
-        twse = get_twse(code)
+        # 2️⃣ 再抓 TWSE
+        twse = get_twse_data(code)
 
         if twse:
             t_price, t_change, ma5, ma20, vol, vol_avg = twse
-
-            if price is None:
-                price = t_price
-
-            if change is None:
-                change = t_change
-
         else:
-            ma5 = ma20 = vol = vol_avg = None
+            t_price = t_change = ma5 = ma20 = vol = vol_avg = None
 
-        # 3️⃣ 🔥 強制保底（最關鍵）
+        # 3️⃣ 價格決策（重點）
+        price = y_price if y_price else t_price
+        change = y_change if y_change else t_change
+
+        # 4️⃣ 保底（但不亂設0）
         if price is None:
-            price = 0
+            msg += f"📌 {name}\n→ 無法取得資料\n\n"
+            continue
 
-        if change is None:
-            change = 0
-
-        if ma5 is None:
-            ma5 = price
-
-        if ma20 is None:
-            ma20 = price
-
+        # 5️⃣ 分析
         trend, suggestion, buy = analyze(price, change, ma5, ma20, vol, vol_avg)
 
         msg += f"📌 {name}\n"
         msg += f"→ 現價：{round(price,1)}\n"
-        msg += f"→ 漲跌：{round(change,2)}%\n"
-        msg += f"→ MA5：{round(ma5,1)}\n"
-        msg += f"→ MA20：{round(ma20,1)}\n"
+        msg += f"→ 漲跌：{round(change,2) if change else 0}%\n"
+
+        msg += f"→ MA5：{round(ma5,1) if ma5 else '無'}\n"
+        msg += f"→ MA20：{round(ma20,1) if ma20 else '無'}\n"
+
+        if vol and vol_avg:
+            msg += f"→ 量能：{'爆量' if vol > vol_avg*1.5 else '正常'}\n"
+
         msg += f"→ 趨勢：{trend}\n"
 
         if buy:
@@ -149,7 +158,10 @@ def generate():
 
 def send(msg):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
+    requests.post(url, data={
+        "chat_id": CHAT_ID,
+        "text": msg
+    })
 
 
 if __name__ == "__main__":
