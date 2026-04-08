@@ -164,7 +164,7 @@ def support_resistance(closes):
     return round(min(closes[-10:]),1), round(max(closes[-10:]),1)
 
 
-# ===== 策略 =====
+# ===== 策略（唯一修改：停損強化）=====
 def strategy(price, ma5, ma20, closes, volumes):
 
     support, resistance = support_resistance(closes)
@@ -180,8 +180,16 @@ def strategy(price, ma5, ma20, closes, volumes):
 
     breakout = price > resistance
 
+    # 🔥 新增：結構低點（補強用）
+    recent_low = min(closes[-5:])
+    prev_low = min(closes[-10:-5])
+    structure_low = min(recent_low, prev_low)
+
     if breakout and confirm:
-        stop = round(resistance * 0.97,1)
+        stop_old = resistance * 0.97
+        stop = max(stop_old, structure_low)
+        stop = round(stop, 1)
+
         if (price - stop) / price > 0.08:
             return "不進場（風險過大）", "-", "-"
         return "進場🔥（突破）", "現價附近", stop
@@ -189,11 +197,15 @@ def strategy(price, ma5, ma20, closes, volumes):
     if price >= ma5:
         if price > ma5 * 1.05:
             return "觀望（過高）", "-", "-"
-        stop = round(ma20 * 0.98,1)
+        stop_old = ma20 * 0.98
+        stop = max(stop_old, structure_low)
+        stop = round(stop, 1)
         return "進場🔥（回檔）", f"{round(ma5,1)}", stop
 
     if price > ma20:
-        stop = round(ma20 * 0.97,1)
+        stop_old = ma20 * 0.97
+        stop = max(stop_old, structure_low)
+        stop = round(stop, 1)
         return "進場🔥（轉強）", f"{round(ma20,1)}", stop
 
     return "觀望", "-", "-"
