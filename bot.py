@@ -47,12 +47,10 @@ def get_yahoo(code):
         return None
 
 
-# ========= TWSE =========
+# ========= TWSE（嚴謹版） =========
 def get_twse(code):
     try:
-        closes = []
-        volumes = []
-        dates = []
+        rows = []
 
         now = datetime.now(tz)
 
@@ -68,21 +66,22 @@ def get_twse(code):
 
             for d in r.get("data", []):
                 try:
-                    dates.append(d[0])
-                    closes.append(float(d[6].replace(",", "")))
-                    volumes.append(float(d[1].replace(",", "")))
+                    rows.append({
+                        "date": d[0],
+                        "close": float(d[6].replace(",", "")),
+                        "vol": float(d[1].replace(",", ""))
+                    })
                 except:
                     continue
 
-        if len(closes) < 5:
+        if len(rows) < 10:
             return None
 
-        # 🔥 排序（避免亂序）
-        combined = list(zip(dates, closes, volumes))
-        combined.sort(key=lambda x: x[0])
+        # 🔥 排序（關鍵）
+        rows.sort(key=lambda x: x["date"])
 
-        closes = [x[1] for x in combined]
-        volumes = [x[2] for x in combined]
+        closes = [r["close"] for r in rows]
+        volumes = [r["vol"] for r in rows]
 
         price = closes[-1]
         prev = closes[-2]
@@ -92,44 +91,71 @@ def get_twse(code):
 
         change = (price - prev) / prev * 100
 
+        # 🔥 嚴謹 MA
         ma5 = sum(closes[-5:]) / 5
 
         ma20 = None
         if len(closes) >= 20:
             ma20 = sum(closes[-20:]) / 20
 
-        vol = volumes[-1]
-        vol_avg = sum(volumes[-5:]) / 5
-
-        return price, change, ma5, ma20, vol, vol_avg
+        return price, change, ma5, ma20, volumes
 
     except:
         return None
 
 
+# ========= 量能（專業版） =========
+def analyze_volume(volumes, change):
+
+    if len(volumes) < 10:
+        return "資料不足"
+
+    vol = volumes[-1]
+    avg10 = sum(volumes[-10:]) / 10
+
+    ratio = vol / avg10
+
+    if ratio > 2:
+        level = "極爆量"
+    elif ratio > 1.5:
+        level = "爆量"
+    elif ratio > 1.1:
+        level = "放量"
+    elif ratio < 0.8:
+        level = "縮量"
+    else:
+        level = "正常"
+
+    # 🔥 量價關係
+    if change > 0 and ratio > 1.2:
+        return f"{level}（上漲放量✔）"
+    elif change < 0 and ratio > 1.2:
+        return f"{level}（下跌放量⚠）"
+    elif change > 0 and ratio < 1:
+        return f"{level}（無量上漲⚠）"
+
+    return level
+
+
 # ========= 買點 =========
-def get_buy_zone(ma):
-    return round(ma * 0.99, 1), round(ma * 1.01, 1)
+def get_buy_zone(base):
+    return round(base * 0.99, 1), round(base * 1.01, 1)
 
 
 # ========= 分析 =========
-def analyze(price, ma5, ma20, vol, vol_avg):
+def analyze(price, ma5, ma20):
 
     if ma5 is None:
-        return "資料不足", "觀望", None, False
-
-    volume_strong = False
-    if vol and vol_avg:
-        volume_strong = vol > vol_avg * 1.5
+        return "資料不足", "觀望", None
 
     if ma20 and price > ma5 > ma20:
-        return "強勢多頭", "回踩MA5進場", get_buy_zone(ma5), volume_strong
+        return "強勢多頭", "回踩MA5進場", get_buy_zone(ma5)
 
     elif ma20 and price > ma20:
-        return "轉強", "回踩MA20進場", get_buy_zone(ma20), volume_strong
+        return "轉強", "回踩MA20進場", get_buy_zone(ma20)
 
     else:
-        return "弱勢", "不進場", None, volume_strong
+        return "弱勢", "不進場", None
 
 
 # ========= 主 =========
@@ -138,7 +164,7 @@ def generate():
     now = datetime.now(tz)
     mode = "盤中" if is_market_open() else "收盤"
 
-    msg = f"【{now.strftime('%m/%d')} {mode}優化穩定版】\n\n"
+    msg = f"【{now.strftime('%m/%d')} {mode}嚴謹版】\n\n"
 
     for name, code in stocks.items():
 
@@ -149,31 +175,26 @@ def generate():
             msg += f"📌 {name}\n→ 無法取得資料\n\n"
             continue
 
-        # 🔥 模式切換（不混用）
+        if twse:
+            t_price, t_change, ma5, ma20, volumes = twse
+        else:
+            continue
+
+        # 🔥 價格選擇（不混用）
         if is_market_open() and yahoo:
             price, change = yahoo
-        elif twse:
-            price, change, ma5, ma20, vol, vol_avg = twse
         else:
-            price, change = yahoo
+            price, change = t_price, t_change
 
-        if twse:
-            t_price, t_change, ma5, ma20, vol, vol_avg = twse
-        else:
-            ma5 = ma20 = vol = vol_avg = None
-
-        trend, strategy, buy, vol_flag = analyze(price, ma5, ma20, vol, vol_avg)
+        volume_text = analyze_volume(volumes, change)
+        trend, strategy, buy = analyze(price, ma5, ma20)
 
         msg += f"📌 {name}\n"
         msg += f"→ 現價：{round(price,1)}\n"
-        msg += f"→ 漲跌：{round(change,2) if change is not None else '無'}%\n"
-
-        msg += f"→ MA5：{round(ma5,1) if ma5 else '無'}\n"
+        msg += f"→ 漲跌：{round(change,2)}%\n"
+        msg += f"→ MA5：{round(ma5,1)}\n"
         msg += f"→ MA20：{round(ma20,1) if ma20 else '無'}\n"
-
-        if vol and vol_avg:
-            msg += f"→ 量能：{'爆量' if vol_flag else '正常'}\n"
-
+        msg += f"→ 量能：{volume_text}\n"
         msg += f"→ 趨勢：{trend}\n"
 
         if buy:
