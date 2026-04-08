@@ -88,7 +88,7 @@ def get_twse(code):
         return None
 
 
-# ===== 量能 =====
+# ===== 量能（強化：主升 / 出貨 / 假突破）=====
 def volume_model(volumes, closes):
     vol = volumes[-1]
     avg10 = sum(volumes[-10:]) / 10
@@ -98,26 +98,28 @@ def volume_model(volumes, closes):
     accumulation = sum(volumes[-3:]) > avg10 * 3
     price_up = closes[-1] > closes[-2]
 
-    if ratio > 1.8:
+    if ratio > 2:
         level = "爆量"
-    elif ratio > 1.3:
+    elif ratio > 1.5:
+        level = "強放量"
+    elif ratio > 1.2:
         level = "放量"
     elif ratio < 0.7:
         level = "縮量"
     else:
         level = "正常"
 
-    if price_up and ratio > 1.2 and vol_trend and accumulation:
-        return f"{level}（主升✔）"
-    if ratio > 1.2 and not price_up:
+    if price_up and ratio > 1.3 and vol_trend and accumulation:
+        return f"{level}（主升段✔）"
+    if ratio > 1.3 and not price_up:
         return f"{level}（出貨⚠）"
     if price_up and ratio < 1:
-        return f"{level}（假漲⚠）"
+        return f"{level}（假突破⚠）"
 
     return level
 
 
-# ===== 趨勢 =====
+# ===== 趨勢（強化：結構＋斜率＋壓力位置）=====
 def trend_model(price, ma5, ma20, closes, volumes):
 
     ma20_prev = sum(closes[-21:-1]) / 20
@@ -131,30 +133,22 @@ def trend_model(price, ma5, ma20, closes, volumes):
     higher_high = recent_high > prev_high
     higher_low = recent_low > prev_low
 
-    vol = volumes[-1]
-    avg10 = sum(volumes[-10:]) / 10
-    vol_ratio = vol / avg10
-
-    pullback = (recent_high - price) / recent_high
     resistance = max(closes[-10:])
     near_res = price >= resistance * 0.97
 
-    if price > ma5 > ma20 and slope > 0 and higher_high and higher_low and vol_ratio > 1.2:
-        if pullback < 0.03:
+    if price > ma5 > ma20 and slope > 0 and higher_high and higher_low:
+        if price > recent_high * 0.98:
             return "🔥主升段"
-        elif pullback < 0.08:
-            return "🚀加速段"
-        else:
-            return "⚠過熱"
+        return "👍多頭結構"
 
-    if near_res and vol_ratio < 1.2:
+    if near_res:
         return "⚠高位震盪"
 
     if price > ma20 and slope > 0:
-        return "👍多頭"
+        return "多頭"
 
     if price < ma20 and slope < 0:
-        return "❌空頭"
+        return "空頭"
 
     return "震盪"
 
@@ -164,15 +158,15 @@ def support_resistance(closes):
     return round(min(closes[-10:]),1), round(max(closes[-10:]),1)
 
 
-# ===== 策略（唯一修改：停損強化）=====
+# ===== 策略（完整強化版）=====
 def strategy(price, ma5, ma20, closes, volumes):
 
     support, resistance = support_resistance(closes)
 
     vol = volumes[-1]
     avg10 = sum(volumes[-10:]) / 10
-    volume_ok = vol > avg10 * 1.2
 
+    volume_ok = vol > avg10 * 1.2
     momentum = price > closes[-2]
     trend_ok = price > ma20
 
@@ -180,32 +174,47 @@ def strategy(price, ma5, ma20, closes, volumes):
 
     breakout = price > resistance
 
-    # 🔥 新增：結構低點（補強用）
+    # ===== 結構低點 =====
     recent_low = min(closes[-5:])
     prev_low = min(closes[-10:-5])
     structure_low = min(recent_low, prev_low)
 
+    # ===== 強勢追價 =====
+    if price > resistance and vol > avg10 * 1.5:
+        stop = max(resistance * 0.97, structure_low, ma5 * 0.98)
+        stop = round(stop, 1)
+        return "進場🔥（強勢續漲）", "現價附近", stop
+
+    # ===== 突破 =====
     if breakout and confirm:
         stop_old = resistance * 0.97
-        stop = max(stop_old, structure_low)
+        stop = max(stop_old, structure_low, ma5 * 0.98)
         stop = round(stop, 1)
 
         if (price - stop) / price > 0.08:
             return "不進場（風險過大）", "-", "-"
+
         return "進場🔥（突破）", "現價附近", stop
 
+    # ===== 回檔 =====
     if price >= ma5:
         if price > ma5 * 1.05:
             return "觀望（過高）", "-", "-"
+
+        buy_price = min(ma5, support)
+
         stop_old = ma20 * 0.98
         stop = max(stop_old, structure_low)
         stop = round(stop, 1)
-        return "進場🔥（回檔）", f"{round(ma5,1)}", stop
 
+        return "進場🔥（回檔）", f"{round(buy_price,1)}", stop
+
+    # ===== 轉強 =====
     if price > ma20:
         stop_old = ma20 * 0.97
         stop = max(stop_old, structure_low)
         stop = round(stop, 1)
+
         return "進場🔥（轉強）", f"{round(ma20,1)}", stop
 
     return "觀望", "-", "-"
