@@ -2,7 +2,8 @@ import requests
 from datetime import datetime, timedelta
 import pytz
 
-TOKEN = "8714533132:AAGEAYs-Q-oZJDwwuB0MPb27mqnDtzxs"
+# ===== 必填 =====
+TOKEN = "8714533132:AAGEAYs-Q-oZJDwwBwwuB0MPb27mqnDtzxs"
 CHAT_ID = "7119676798"
 
 stocks = {
@@ -15,6 +16,7 @@ tz = pytz.timezone("Asia/Taipei")
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
+# ========= 時段 =========
 def get_phase():
     now = datetime.now(tz)
     if now.hour < 9:
@@ -27,6 +29,7 @@ def get_phase():
         return "盤後"
 
 
+# ========= Yahoo =========
 def get_yahoo(code):
     try:
         url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={code}.TW"
@@ -40,6 +43,7 @@ def get_yahoo(code):
         return None
 
 
+# ========= TWSE =========
 def get_twse(code):
     try:
         rows = []
@@ -85,7 +89,7 @@ def get_twse(code):
         return None
 
 
-# ========= 強化量能 =========
+# ========= 量能 =========
 def volume_model(volumes, closes):
     vol = volumes[-1]
     avg10 = sum(volumes[-10:]) / 10
@@ -114,7 +118,7 @@ def volume_model(volumes, closes):
     return level
 
 
-# ========= 🔥終極趨勢 =========
+# ========= 趨勢（分層強化） =========
 def trend_model(price, ma5, ma20, closes):
 
     ma5_prev = sum(closes[-6:-1]) / 5
@@ -136,14 +140,12 @@ def trend_model(price, ma5, ma20, closes):
 
     pullback = (recent_high - price) / recent_high
 
-    # 🔥 分層開始
-
     if price > ma5 > ma20 and ma20_slope > 0:
 
         if higher_high and higher_low and momentum:
 
             if pullback < 0.03:
-                return "🔥主升段（強）"
+                return "🔥主升段"
             elif pullback < 0.07:
                 return "🚀加速段"
             else:
@@ -154,7 +156,7 @@ def trend_model(price, ma5, ma20, closes):
     if price > ma20:
         return "⚠️高位震盪"
 
-    if price < ma5 and ma5_slope < 0:
+    if price < ma5:
         return "❌轉弱"
 
     return "🧊空頭"
@@ -187,11 +189,11 @@ def strategy(price, ma5, ma20, closes, volumes):
     else:
         decision = "觀望"
 
-    # ========= 買點（修正錯誤） =========
+    # ========= 買點 =========
     if decision == "進場🔥":
 
         if breakout:
-            buy = f"回踩 {round(resistance,1)}（突破後）"
+            buy = f"回踩 {round(resistance,1)}"
 
         elif price >= ma5:
             buy = f"{round(ma5,1)} 附近"
@@ -210,13 +212,41 @@ def strategy(price, ma5, ma20, closes, volumes):
     return decision, buy, stop, support, resistance
 
 
+# ========= 發送（最穩版本） =========
+def send(msg):
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+
+    if len(msg) > 4000:
+        msg = msg[:4000]
+
+    for i in range(3):
+        try:
+            r = requests.post(url, data={
+                "chat_id": CHAT_ID,
+                "text": msg
+            }, timeout=10)
+
+            if r.status_code == 200:
+                res = r.json()
+                if res.get("ok"):
+                    print("✅ 發送成功")
+                    return
+                else:
+                    print("❌ TG錯誤:", res)
+
+        except Exception as e:
+            print("⚠️ 錯誤:", e)
+
+    print("🚨 發送失敗")
+
+
 # ========= 主 =========
 def generate():
 
     now = datetime.now(tz)
     phase = get_phase()
 
-    msg = f"【{now.strftime('%m/%d')} {phase}｜最終完成版】\n\n"
+    msg = f"【{now.strftime('%m/%d')} {phase}｜最終穩定版】\n\n"
 
     for name, code in stocks.items():
 
@@ -253,25 +283,6 @@ def generate():
 
     return msg
 
-
-def send(msg):
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-
-    # 防爆長度
-    if len(msg) > 4000:
-        msg = msg[:4000]
-
-    try:
-        r = requests.post(url, data={
-            "chat_id": CHAT_ID,
-            "text": msg
-        })
-
-        print("狀態碼:", r.status_code)
-        print("回應:", r.text)
-
-    except Exception as e:
-        print("錯誤:", e)
 
 if __name__ == "__main__":
     send(generate())
