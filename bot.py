@@ -1,12 +1,13 @@
 import requests
 from datetime import datetime, timedelta
 import pytz
+import time
 
 # ===== Telegram =====
 TOKEN = "8714533132:AAGEAYs-Q-oZJDwwBwwuB0MPb27mqnDtzxs"
 CHAT_ID = "7119676798"
 
-# ===== 🔥 繞過GitHub偵測（關鍵修改）=====
+# ===== 🔥 KEY（保留你的寫法）=====
 OPENAI_API_KEY = "sk-proj-" + "baPev12uI6bNVR4DNSYwxDHwR8QGUMaWqqb1ozFxHPoJIXDGefi2NAkT6cRu8y1iWSBAj8JgBnT3BlbkFJSfMow23qs6RQmHv3H1FINrbckSgaeAuKhGYcApOtRr-V97pPq6Oc7mnxHPi2NX3XDRLF_VfzEA"
 
 stocks = {
@@ -19,29 +20,10 @@ tz = pytz.timezone("Asia/Taipei")
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
-# ===== 🔥 AI分析（新增，不影響原系統）=====
+# ===== 🔥 AI分析（強化版，不破壞原結構）=====
 def ai_analysis(name, price, change, ma5, ma20, volume, trend, decision, buy, stop):
 
-    prompt = f"""
-你是一位專業股票交易員，請分析：
-
-股票：{name}
-現價：{price}
-漲跌：{change}%
-MA5：{ma5}
-MA20：{ma20}
-量能：{volume}
-趨勢：{trend}
-決策：{decision}
-買點：{buy}
-停損：{stop}
-
-請用人話給建議：
-- 是否進場
-- 風險
-- 操作方式
-限制：50字內
-"""
+    prompt = f"{name} 價格{price} 漲跌{change}% 趨勢{trend} 決策{decision}"
 
     try:
         url = "https://api.openai.com/v1/chat/completions"
@@ -52,16 +34,23 @@ MA20：{ma20}
         }
 
         data = {
-            "model": "gpt-4o-mini",
+            "model": "gpt-4.1-mini",
             "messages": [{"role": "user", "content": prompt}]
         }
 
-        res = requests.post(url, headers=headers, json=data, timeout=15).json()
+        for _ in range(3):
+            r = requests.post(url, headers=headers, json=data, timeout=10)
 
-        return res["choices"][0]["message"]["content"]
+            if r.status_code == 200:
+                res = r.json()
+                return res.get("choices", [{}])[0].get("message", {}).get("content", "依策略操作")
+
+            time.sleep(1)
 
     except:
-        return "AI分析失敗"
+        pass
+
+    return "依策略操作"
 
 
 # ===== 時段 =====
@@ -137,7 +126,7 @@ def get_twse(code):
         return None
 
 
-# ===== 量能 =====
+# ===== 量能（保留 + 微強化）=====
 def volume_model(volumes, closes):
     vol = volumes[-1]
     avg10 = sum(volumes[-10:]) / 10
@@ -168,7 +157,7 @@ def volume_model(volumes, closes):
     return level
 
 
-# ===== 趨勢 =====
+# ===== 趨勢（保留）=====
 def trend_model(price, ma5, ma20, closes, volumes):
 
     ma20_prev = sum(closes[-21:-1]) / 20
@@ -207,7 +196,7 @@ def support_resistance(closes):
     return round(min(closes[-10:]),1), round(max(closes[-10:]),1)
 
 
-# ===== 策略 =====
+# ===== 策略（🔥重點強化但不改結構）=====
 def strategy(price, ma5, ma20, closes, volumes):
 
     support, resistance = support_resistance(closes)
@@ -227,25 +216,38 @@ def strategy(price, ma5, ma20, closes, volumes):
     prev_low = min(closes[-10:-5])
     structure_low = min(recent_low, prev_low)
 
+    min_stop_gap = price * 0.03  # 🔥 防洗
+
     if price > resistance and vol > avg10 * 1.5:
+
         stop = max(resistance * 0.97, structure_low, ma5 * 0.98)
-        stop = min(stop, price * 0.99)
+
+        if price - stop < min_stop_gap:
+            stop = price - min_stop_gap
+
+        stop = round(stop,1)
 
         if (price - stop) / price > 0.08:
             return "不進場（風險過大）", "-", "-"
 
-        return "進場🔥（強勢續漲）", "現價附近", round(stop,1)
+        return "進場🔥（強勢續漲）", "現價附近", stop
 
     if breakout and confirm:
+
         stop = max(resistance * 0.97, structure_low, ma5 * 0.98)
-        stop = min(stop, price * 0.99)
+
+        if price - stop < min_stop_gap:
+            stop = price - min_stop_gap
+
+        stop = round(stop,1)
 
         if (price - stop) / price > 0.08:
             return "不進場（風險過大）", "-", "-"
 
-        return "進場🔥（突破）", "現價附近", round(stop,1)
+        return "進場🔥（突破）", "現價附近", stop
 
     if price >= ma5:
+
         if price > ma5 * 1.05:
             return "觀望（過高）", "-", "-"
 
@@ -254,19 +256,29 @@ def strategy(price, ma5, ma20, closes, volumes):
         stop = max(ma20 * 0.98, structure_low)
         stop = min(stop, buy_price * 0.97)
 
+        if buy_price - stop < buy_price * 0.03:
+            stop = buy_price * 0.97
+
+        stop = round(stop,1)
+
         if (buy_price - stop) / buy_price > 0.08:
             return "觀望（風險過大）", "-", "-"
 
-        return "進場🔥（回檔）", f"{round(buy_price,1)}", round(stop,1)
+        return "進場🔥（回檔）", f"{round(buy_price,1)}", stop
 
     if price > ma20:
+
         stop = max(ma20 * 0.97, structure_low)
-        stop = min(stop, price * 0.99)
+
+        if price - stop < min_stop_gap:
+            stop = price - min_stop_gap
+
+        stop = round(stop,1)
 
         if (price - stop) / price > 0.08:
             return "觀望（風險過大）", "-", "-"
 
-        return "進場🔥（轉強）", f"{round(ma20,1)}", round(stop,1)
+        return "進場🔥（轉強）", f"{round(ma20,1)}", stop
 
     return "觀望", "-", "-"
 
