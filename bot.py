@@ -256,8 +256,22 @@ def generate():
 
 def send(msg):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
 
+    # 防爆長度
+    if len(msg) > 4000:
+        msg = msg[:4000]
+
+    try:
+        r = requests.post(url, data={
+            "chat_id": CHAT_ID,
+            "text": msg
+        })
+
+        print("狀態碼:", r.status_code)
+        print("回應:", r.text)
+
+    except Exception as e:
+        print("錯誤:", e)
 
 if __name__ == "__main__":
     send(generate())
