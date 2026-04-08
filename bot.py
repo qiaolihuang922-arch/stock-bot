@@ -2,8 +2,9 @@ import requests
 from datetime import datetime, timedelta
 import pytz
 
-TOKEN = "你的TOKEN"
-CHAT_ID = "你的CHAT_ID"
+# ✅ 不准刪
+TOKEN = "8714533132:AAGEAYs-Q-oZJDwwBwwuB0MPb27mqnDtzxs"
+CHAT_ID = "7119676798"
 
 stocks = {
     "緯創": "3231",
@@ -28,16 +29,16 @@ def get_phase():
         return "盤後"
 
 
-# ========= Yahoo（盤中） =========
+# ========= Yahoo =========
 def get_yahoo(code):
     try:
         url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={code}.TW"
         r = requests.get(url, headers=HEADERS, timeout=10).json()
-        data = r["quoteResponse"]["result"]
+        data = r.get("quoteResponse", {}).get("result", [])
         if not data:
             return None
-        d = data[0]
 
+        d = data[0]
         price = d.get("regularMarketPrice")
         change = d.get("regularMarketChangePercent")
 
@@ -47,7 +48,7 @@ def get_yahoo(code):
         return None
 
 
-# ========= TWSE（日線） =========
+# ========= TWSE =========
 def get_twse(code):
     try:
         rows = []
@@ -96,6 +97,9 @@ def get_twse(code):
 
 # ========= 量能 =========
 def volume_model(volumes, change):
+    if len(volumes) < 10:
+        return "資料不足"
+
     vol = volumes[-1]
     avg10 = sum(volumes[-10:]) / 10
     ratio = vol / avg10
@@ -112,7 +116,7 @@ def volume_model(volumes, change):
     if change > 0 and ratio > 1.2:
         return f"{base}（有效上漲）"
     elif change < 0 and ratio > 1.2:
-        return f"{base}（出貨風險）"
+        return f"{base}（出貨）"
 
     return base
 
@@ -122,12 +126,12 @@ def trend_model(price, ma5, ma20, closes):
     ma5_prev = sum(closes[-6:-1]) / 5
     ma20_prev = sum(closes[-21:-1]) / 20
 
-    slope_up = ma5 > ma5_prev and ma20 > ma20_prev
+    slope = ma5 > ma5_prev and ma20 > ma20_prev
     momentum = price > closes[-2]
 
-    if price > ma5 > ma20 and slope_up and momentum:
+    if price > ma5 > ma20 and slope and momentum:
         return "強勢多頭"
-    elif price > ma20 and slope_up:
+    elif price > ma20 and slope:
         return "偏多"
     elif price < ma20:
         return "偏弱"
@@ -140,27 +144,23 @@ def strategy(price, ma5, ma20, closes, volumes):
 
     ma20_prev = sum(closes[-21:-1]) / 20
 
-    trend_ok = price > ma20 and ma20 > ma20_prev
-    momentum = price > closes[-2]
+    cond1 = price > ma20 and ma20 > ma20_prev
+    cond2 = price > closes[-2]
+    cond3 = volumes[-1] > sum(volumes[-10:]) / 10 * 1.2
+    cond4 = price >= max(closes[-5:])
 
-    vol = volumes[-1]
-    avg10 = sum(volumes[-10:]) / 10
-    volume_ok = vol > avg10 * 1.2
-
-    breakout = price >= max(closes[-5:])
-
-    score = sum([trend_ok, momentum, volume_ok, breakout])
+    score = sum([cond1, cond2, cond3, cond4])
 
     if score >= 3:
         decision = "進場🔥"
         buy_low = round(ma5 * 0.99, 1)
         buy_high = round(ma5 * 1.01, 1)
-        buy_text = f"{buy_low} ~ {buy_high}"
+        buy = f"{buy_low} ~ {buy_high}"
     else:
         decision = "觀望"
-        buy_text = "-"
+        buy = "-"
 
-    return decision, buy_text
+    return decision, buy
 
 
 # ========= 主 =========
@@ -168,7 +168,7 @@ def generate():
     now = datetime.now(tz)
     phase = get_phase()
 
-    msg = f"【{now.strftime('%m/%d')} {phase}｜策略系統】\n\n"
+    msg = f"【{now.strftime('%m/%d')} {phase}｜最終穩定版】\n\n"
 
     for name, code in stocks.items():
 
