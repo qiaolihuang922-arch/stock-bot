@@ -2,8 +2,8 @@ import requests
 from datetime import datetime
 import pytz
 
-TOKEN = "你的TOKEN"
-CHAT_ID = "你的CHAT_ID"
+TOKEN = "8714533132:AAGEAYs-Q-oZJDwwBwwuB0MPb27mqnDtzxs"
+CHAT_ID = "7119676798"
 
 stocks = {
     "緯創": "3231",
@@ -41,7 +41,7 @@ def get_realtime(code):
         return None, None, None
 
 
-# ========= K線（只算指標） =========
+# ========= K線（算MA/量） =========
 def get_kline(code):
     try:
         url = f"https://query1.finance.yahoo.com/v8/finance/chart/{code}.TW?range=1mo&interval=1d"
@@ -122,13 +122,13 @@ def analyze(price, change, ma5, ma20, vol, vol_avg):
 def generate():
 
     today = datetime.now(tz).strftime("%m/%d")
-    mode = "盤中" if is_market_open() else "收盤"
+    mode = "盤中模式" if is_market_open() else "收盤模式"
 
-    msg = f"【{today} {mode}模式（重構版）】\n\n"
+    msg = f"【{today} {mode} 多源交易系統】\n\n"
 
     for name, code in stocks.items():
 
-        # 1️⃣ 即時價（主）
+        # 1️⃣ 即時（主）
         price, change, prev = get_realtime(code)
 
         # 2️⃣ fallback
@@ -164,7 +164,10 @@ def generate():
 
 def send(msg):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
+    requests.post(url, data={
+        "chat_id": CHAT_ID,
+        "text": msg
+    })
 
 
 if __name__ == "__main__":
