@@ -17,33 +17,46 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0"
 }
 
-# ========= Yahoo 即時 =========
-def get_realtime(code):
+# ========= 判斷盤中 =========
+def is_market_open():
+    now = datetime.now(tz)
+    return (9 <= now.hour < 13) or (now.hour == 13 and now.minute <= 30)
+
+
+# ========= Yahoo =========
+def get_yahoo(code):
     try:
         url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={code}.TW"
         r = requests.get(url, headers=HEADERS, timeout=10).json()
 
         data = r.get("quoteResponse", {}).get("result", [])
         if not data:
-            return None, None
+            return None
 
         d = data[0]
-        return d.get("regularMarketPrice"), d.get("regularMarketChangePercent")
+
+        price = d.get("regularMarketPrice")
+        change = d.get("regularMarketChangePercent")
+
+        if price is None or price <= 0:
+            return None
+
+        return price, change
 
     except:
-        return None, None
+        return None
 
 
-# ========= TWSE 多月資料 =========
-def get_twse_history(code):
+# ========= TWSE =========
+def get_twse(code):
     try:
         closes = []
         volumes = []
+        dates = []
 
         now = datetime.now(tz)
 
-        # 抓近3個月（確保>=20天）
-        for i in range(3):
+        for i in range(4):
             date = now - timedelta(days=30 * i)
             date_str = date.strftime("%Y%m01")
 
@@ -53,28 +66,37 @@ def get_twse_history(code):
             if r.get("stat") != "OK":
                 continue
 
-            data = r.get("data", [])
-
-            for d in data:
+            for d in r.get("data", []):
                 try:
+                    dates.append(d[0])
                     closes.append(float(d[6].replace(",", "")))
                     volumes.append(float(d[1].replace(",", "")))
                 except:
                     continue
 
-        # 去重 + 排序（防API亂序）
-        closes = closes[-60:]
-        volumes = volumes[-60:]
-
         if len(closes) < 5:
             return None
 
+        # 🔥 排序（避免亂序）
+        combined = list(zip(dates, closes, volumes))
+        combined.sort(key=lambda x: x[0])
+
+        closes = [x[1] for x in combined]
+        volumes = [x[2] for x in combined]
+
         price = closes[-1]
         prev = closes[-2]
+
+        if price <= 0 or prev <= 0:
+            return None
+
         change = (price - prev) / prev * 100
 
         ma5 = sum(closes[-5:]) / 5
-        ma20 = sum(closes[-20:]) / 20 if len(closes) >= 20 else None
+
+        ma20 = None
+        if len(closes) >= 20:
+            ma20 = sum(closes[-20:]) / 20
 
         vol = volumes[-1]
         vol_avg = sum(volumes[-5:]) / 5
@@ -85,76 +107,72 @@ def get_twse_history(code):
         return None
 
 
-# ========= 買點區間 =========
-def get_buy_zone(base):
-    low = base * 0.99
-    high = base * 1.01
-    return round(low, 1), round(high, 1)
+# ========= 買點 =========
+def get_buy_zone(ma):
+    return round(ma * 0.99, 1), round(ma * 1.01, 1)
 
 
 # ========= 分析 =========
 def analyze(price, ma5, ma20, vol, vol_avg):
 
     if ma5 is None:
-        return "資料不足", "觀望", None
+        return "資料不足", "觀望", None, False
 
-    volume_strong = vol > vol_avg * 1.5 if vol and vol_avg else False
+    volume_strong = False
+    if vol and vol_avg:
+        volume_strong = vol > vol_avg * 1.5
 
     if ma20 and price > ma5 > ma20:
-        trend = "強勢多頭"
-        strategy = "回踩MA5進場"
-        buy = get_buy_zone(ma5)
+        return "強勢多頭", "回踩MA5進場", get_buy_zone(ma5), volume_strong
 
     elif ma20 and price > ma20:
-        trend = "轉強"
-        strategy = "回踩MA20進場"
-        buy = get_buy_zone(ma20)
+        return "轉強", "回踩MA20進場", get_buy_zone(ma20), volume_strong
 
     else:
-        trend = "弱勢"
-        strategy = "不進場"
-        buy = None
-
-    return trend, strategy, buy, volume_strong
+        return "弱勢", "不進場", None, volume_strong
 
 
-# ========= 主流程 =========
+# ========= 主 =========
 def generate():
 
-    today = datetime.now(tz).strftime("%m/%d")
-    msg = f"【{today} 最終穩定版】\n\n"
+    now = datetime.now(tz)
+    mode = "盤中" if is_market_open() else "收盤"
+
+    msg = f"【{now.strftime('%m/%d')} {mode}優化穩定版】\n\n"
 
     for name, code in stocks.items():
 
-        # 即時
-        y_price, y_change = get_realtime(code)
+        yahoo = get_yahoo(code)
+        twse = get_twse(code)
 
-        # K線
-        t_data = get_twse_history(code)
-
-        if not t_data and not y_price:
+        if not yahoo and not twse:
             msg += f"📌 {name}\n→ 無法取得資料\n\n"
             continue
 
-        if t_data:
-            t_price, t_change, ma5, ma20, vol, vol_avg = t_data
+        # 🔥 模式切換（不混用）
+        if is_market_open() and yahoo:
+            price, change = yahoo
+        elif twse:
+            price, change, ma5, ma20, vol, vol_avg = twse
         else:
-            t_price = t_change = ma5 = ma20 = vol = vol_avg = None
+            price, change = yahoo
 
-        price = y_price if y_price else t_price
-        change = y_change if y_change else t_change
+        if twse:
+            t_price, t_change, ma5, ma20, vol, vol_avg = twse
+        else:
+            ma5 = ma20 = vol = vol_avg = None
 
-        trend, strategy, buy, volume_strong = analyze(price, ma5, ma20, vol, vol_avg)
+        trend, strategy, buy, vol_flag = analyze(price, ma5, ma20, vol, vol_avg)
 
         msg += f"📌 {name}\n"
         msg += f"→ 現價：{round(price,1)}\n"
-        msg += f"→ 漲跌：{round(change,2) if change else 0}%\n"
+        msg += f"→ 漲跌：{round(change,2) if change is not None else '無'}%\n"
 
         msg += f"→ MA5：{round(ma5,1) if ma5 else '無'}\n"
         msg += f"→ MA20：{round(ma20,1) if ma20 else '無'}\n"
 
         if vol and vol_avg:
-            msg += f"→ 量能：{'爆量' if volume_strong else '正常'}\n"
+            msg += f"→ 量能：{'爆量' if vol_flag else '正常'}\n"
 
         msg += f"→ 趨勢：{trend}\n"
 
