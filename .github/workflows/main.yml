@@ -2,7 +2,7 @@ name: Stock Bot Pro
 
 on:
   schedule:
-    # ✅ 每分鐘執行一次
+    # 每5分鐘執行一次
     - cron: '*/5 * * * *'
 
   workflow_dispatch:
@@ -13,15 +13,21 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v3
 
-      - uses: actions/setup-python@v4
+      - name: Setup Python
+        uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      - name: Install deps
-        run: pip install requests pytz
+      # 🔥 正確安裝（關鍵）
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
 
+      # 🔥 執行（保留你原本 retry 邏輯）
       - name: Run bot (retry 3 times)
         run: |
           for i in 1 2 3
