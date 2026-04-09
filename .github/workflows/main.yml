@@ -1,0 +1,32 @@
+name: Stock Bot Pro
+
+on:
+  schedule:
+    # ✅ 每分鐘執行一次
+    - cron: '*/2 * * * *'
+
+  workflow_dispatch:
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install deps
+        run: pip install requests pytz
+
+      - name: Run bot (retry 3 times)
+        run: |
+          for i in 1 2 3
+          do
+            python bot.py && break
+            echo "Retry $i failed..."
+            sleep 5
+          done
