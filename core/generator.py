@@ -48,6 +48,13 @@ def rr_filter(rr):
     return ""
 
 
+# ===== 🔥 不污染 decision（只加提示）=====
+def add_rr_warning(decision, rr):
+    if rr != "-" and rr < 1:
+        return f"{decision} ⚠️RR過低"
+    return decision
+
+
 # ===== 位置 =====
 def position_level(price, ma5, ma20):
 
@@ -147,7 +154,7 @@ def global_decision(decisions):
     return f"🔴 不能買（市場弱） {t_msg}"
 
 
-# ===== 評分（只用來排序，不影響決策）=====
+# ===== 評分（只排序）=====
 def score_stock(decision, trend, volume):
 
     score = 0
@@ -180,8 +187,11 @@ def score_stock(decision, trend, volume):
     return score
 
 
-# ===== 行動（純顯示，不干預）=====
-def build_action(decision, buy, position):
+# ===== 行動（不與RR衝突）=====
+def build_action(decision, buy, position, rr):
+
+    if rr != "-" and rr < 1:
+        return "⚠️風險不佳（RR過低）"
 
     if "進場🔥" in decision:
         return f"👉 現價進場（{position}）"
@@ -239,6 +249,7 @@ def generate():
                 price = t_price
                 change = t_change
 
+        # ===== 核心分析（完全不動）=====
         volume = volume_model(volumes, closes)
         trend = trend_model(price, ma5, ma20, closes, volumes)
         decision, buy, stop, position = strategy(price, ma5, ma20, closes, volumes)
@@ -246,6 +257,8 @@ def generate():
 
         rr = calc_rr(buy, stop, resistance)
         rr_tag = rr_filter(rr)
+        display_decision = add_rr_warning(decision, rr)
+
         pos_level = position_level(price, ma5, ma20)
 
         ai_text, is_real_ai = ai_analysis(
@@ -259,25 +272,42 @@ def generate():
 
         decisions.append(decision)
 
-        # 記錄（不動）
+        # ===== 記錄（補強資料）=====
         if allow_record() and can_record_today(name):
             if ("進場" in decision or "試單" in decision) and buy not in ["-", None]:
                 try:
-                    record_trade(name, "buy", price, buy, stop, ma5, ma20, volume, trend)
+                    record_trade(
+                        name,
+                        "buy",
+                        price,
+                        buy,
+                        stop,
+                        ma5,
+                        ma20,
+                        volume,
+                        trend,
+                        extra_data={
+                            "rr": rr,
+                            "position_level": pos_level,
+                            "decision_raw": decision
+                        }
+                    )
                 except:
                     pass
 
         s = score_stock(decision, trend, volume)
 
-        if buy != "-" and "進場" in decision:
+        # 🔥 修正：試單也納入
+        if buy != "-" and ("進場" in decision or "試單" in decision):
             candidates.append((s, name, buy, stop))
 
-        action = build_action(decision, buy, position)
+        action = build_action(decision, buy, position, rr)
         pre_buy = get_prebuy(price, ma5, ma20, support, resistance, decision)
 
         # ===== 輸出 =====
         msg += f"{name}\n"
-        msg += f"{decision}｜倉位 {position}\n"
+
+        msg += f"{display_decision}｜倉位 {position}\n"
 
         if action:
             msg += f"{action}\n"
