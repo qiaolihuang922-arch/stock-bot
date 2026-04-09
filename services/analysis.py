@@ -1,4 +1,4 @@
-# ===== 量能（🔥強化版）=====
+# ===== 量能（🔥完整保留+強化）=====
 def volume_model(volumes, closes):
     vol = volumes[-1]
     avg10 = sum(volumes[-10:]) / 10
@@ -6,9 +6,11 @@ def volume_model(volumes, closes):
 
     price_up = closes[-1] > closes[-2]
 
+    # 健康整理
     if volumes[-1] < volumes[-2] < volumes[-3] and closes[-1] > sum(closes[-20:]) / 20:
         return "縮量整理（健康上升）"
 
+    # 爆量出貨
     if ratio > 2 and not price_up:
         return "爆量（出貨⚠⚠）"
 
@@ -38,9 +40,10 @@ def volume_model(volumes, closes):
     return level
 
 
-# ===== 趨勢（🔥強化版）=====
+# ===== 趨勢（🔥完整保留）=====
 def trend_model(price, ma5, ma20, closes, volumes):
 
+    # 轉強
     if closes[-2] < ma20 and price > ma20:
         return "🚀轉強起漲"
 
@@ -83,95 +86,106 @@ def support_resistance(closes):
     return round(min(closes[-10:]), 1), round(max(closes[-10:]), 1)
 
 
-# ===== 策略（🔥統一決策引擎版）=====
+# ===== 策略（🔥最終融合版｜不刪邏輯）=====
 def strategy(price, ma5, ma20, closes, volumes):
 
     support, resistance = support_resistance(closes)
 
     vol = volumes[-1]
     avg10 = sum(volumes[-10:]) / 10
+    ratio = vol / avg10
 
-    volume_ok = vol > avg10 * 1.2
-    volume_strong = vol > avg10 * 1.5
     momentum = price > closes[-2]
 
     recent_low = min(closes[-5:])
     prev_low = min(closes[-10:-5])
     structure_low = min(recent_low, prev_low)
 
-    # ===== 🔥 統一評分系統（核心）=====
+    breakout = price > resistance
+
+    # ===== 🔥 統一評分 =====
     score = 0
-    reasons = []
 
     # ===== 趨勢 =====
     if price > ma20:
         score += 2
-        reasons.append("站上MA20")
     else:
-        score -= 2
-        reasons.append("跌破MA20")
+        score -= 3
 
     if price > ma5:
         score += 1
-        reasons.append("站上MA5")
 
     # ===== 動能 =====
     if momentum:
         score += 1
-        reasons.append("動能上升")
 
-    # ===== 量能 =====
-    ratio = vol / avg10
+    # ===== 量能（融合舊邏輯）=====
+    if ratio > 2:
+        if not momentum:
+            score -= 3   # 爆量出貨
+        else:
+            score += 2   # 爆量上攻
 
-    if ratio > 1.5:
+    elif ratio > 1.5:
         score += 2
-        reasons.append("強放量")
+
     elif ratio > 1.2:
         score += 1
-        reasons.append("放量")
+
     elif ratio < 0.7:
         score -= 1
-        reasons.append("縮量")
 
-    # ===== 結構 =====
-    if closes[-1] > closes[-2] > closes[-3]:
+    # ===== 結構（升級版）=====
+    up_days = sum([1 for i in range(-5, 0) if closes[i] > closes[i-1]])
+
+    if up_days >= 4:
+        score += 2
+    elif up_days >= 3:
         score += 1
-        reasons.append("連續上漲")
 
-    # ===== 位置（超重要）=====
+    # 創高
+    if closes[-1] > max(closes[-5:-1]):
+        score += 1
+
+    # 破低
+    if closes[-1] < min(closes[-5:-1]):
+        score -= 2
+
+    # ===== 位置 =====
     if price > resistance * 0.97:
         score -= 2
-        reasons.append("接近壓力")
 
     if price < ma5:
         score += 1
-        reasons.append("回踩支撐")
 
-    # ===== 🔥 轉強加分（取代 trend）=====
-    if closes[-2] < ma20 and price > ma20:
+    # ===== 假突破 =====
+    if breakout and closes[-1] <= closes[-2]:
+        score -= 3
+
+    # ===== 轉強確認 =====
+    if closes[-3] < ma20 and closes[-2] < ma20 and price > ma20:
         score += 2
-        reasons.append("轉強突破")
 
-    # ===== 防呆 =====
+    # ===== 過熱 =====
     if price > resistance * 1.05:
-        return "觀望（過熱區）", "-", "-", "0%"
+        return "觀望（過熱）", "-", "-", "0%"
 
-    # ===== 🔥 買點計算 =====
+    # ===== 買點 =====
     buy = "-"
     stop = "-"
 
-    # 主升
+    # 強勢
     if score >= 6:
-        buy = price * 0.995
+        buy = min(price * 0.995, resistance * 1.01)
         stop = structure_low
 
     # 穩健
     elif score >= 4:
         if abs(price - ma5) / ma5 <= 0.03:
             buy = ma5
+            stop = max(ma20 * 0.97, structure_low)
         else:
-            buy = "-"
-        stop = max(ma20 * 0.97, structure_low)
+            return "觀望（未回踩）", "-", "-", "0%"
 
     # 試單
     elif score >= 2:
@@ -185,30 +199,28 @@ def strategy(price, ma5, ma20, closes, volumes):
             return "觀望（等待轉強）", "-", "-", "0%"
 
     else:
-        return "觀望（訊號不足）", "-", "-", "0%"
+        return "觀望（弱勢）", "-", "-", "0%"
 
     # ===== 風險控制 =====
-    if buy != "-" and stop != "-":
+    if stop >= buy:
+        stop = buy * 0.97
 
-        if stop >= buy:
-            stop = buy * 0.97
+    risk = (buy - stop) / buy
 
-        risk = (buy - stop) / buy
+    if risk > 0.08:
+        return "觀望（風險過大）", "-", "-", "0%"
 
-        if risk > 0.08:
-            return "觀望（風險過大）", "-", "-", "0%"
+    # ===== RR（關鍵補強）=====
+    reward = resistance - buy
+    rr = reward / (buy - stop) if (buy - stop) > 0 else 0
 
-    # ===== 🔥 決策輸出 =====
+    if rr < 1.2:
+        return "觀望（報酬不足）", "-", "-", "0%"
+
+    # ===== 最終決策 =====
     if score >= 6:
-        decision = "進場🔥（強勢）"
-        position = "100%"
+        return "進場🔥（強勢）", round(buy,1), round(stop,1), "100%"
     elif score >= 4:
-        decision = "進場（穩健）"
-        position = "50%"
+        return "進場（穩健）", round(buy,1), round(stop,1), "50%"
     else:
-        decision = "試單（觀察）"
-        position = "30%"
-
-    return decision, round(buy,1), round(stop,1), position
-
- 
+        return "試單（觀察）", round(buy,1), round(stop,1), "30%"
