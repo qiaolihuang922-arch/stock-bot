@@ -25,7 +25,7 @@ def get_phase():
         return "盤後"
 
 
-# ===== 🔥 全局判斷（新增）=====
+# ===== 🔥 全局判斷 =====
 def global_decision(decisions):
     for d in decisions:
         if any(x in d for x in [
@@ -38,6 +38,31 @@ def global_decision(decisions):
     return "🔴 不能買（全部觀望）"
 
 
+# ===== 🔥 評分（選最佳標的）=====
+def score_stock(decision, trend, volume):
+    score = 0
+
+    if "主升" in decision:
+        score += 5
+    elif "進場" in decision:
+        score += 3
+    elif "試單" in decision:
+        score += 1
+
+    if "主升" in trend:
+        score += 3
+    elif "轉強" in trend:
+        score += 2
+
+    if "爆量" in volume or "強放量" in volume:
+        score += 2
+
+    if "高位" in trend:
+        score -= 2
+
+    return score
+
+
 # ===== 主產出 =====
 def generate():
     now = datetime.now(tz)
@@ -45,26 +70,24 @@ def generate():
 
     msg = f"【{now.strftime('%m/%d')} {phase}｜AI交易系統】\n\n"
 
-    decisions = []  # 🔥 新增（收集決策）
+    decisions = []
+    candidates = []
 
     for name, code in stocks.items():
 
         twse = get_twse(code)
         yahoo = get_yahoo(code)
 
-        # ===== Debug =====
         print(f"{name} TWSE:", twse)
         print(f"{name} Yahoo:", yahoo)
         print("------")
 
-        # ===== fallback =====
         if not twse:
             if not yahoo:
                 msg += f"{name}：無資料\n\n"
                 continue
 
             price, change = yahoo
-
             closes = [price] * 20
             volumes = [1] * 20
             ma5 = price
@@ -72,14 +95,10 @@ def generate():
 
         else:
             t_price, t_change, ma5, ma20, closes, volumes = twse
-
             prev_close = closes[-2]
 
             now_time = datetime.now(tz)
-            use_realtime = False
-
-            if now_time.hour > 9 or (now_time.hour == 9 and now_time.minute >= 2):
-                use_realtime = True
+            use_realtime = now_time.hour > 9 or (now_time.hour == 9 and now_time.minute >= 2)
 
             if use_realtime:
                 realtime = get_realtime_price(code)
@@ -101,7 +120,6 @@ def generate():
         decision, buy, stop, position = strategy(price, ma5, ma20, closes, volumes)
         support, resistance = support_resistance(closes)
 
-        # ===== 🔥 AI =====
         ai_text, is_real_ai = ai_analysis(
             name, price, change,
             ma5, ma20,
@@ -111,10 +129,24 @@ def generate():
 
         tag = "🧠AI" if is_real_ai else "⚠️Fallback"
 
-        # ===== 🔥 收集決策（新增）=====
         decisions.append(decision)
 
-        # ===== 組訊息 =====
+        # ===== 🔥 預備買點 =====
+        pre_buy = "-"
+        if "觀望" in decision:
+            if price > resistance * 0.97:
+                pre_buy = round(ma5, 1)
+            elif price < ma20:
+                pre_buy = round(ma20, 1)
+            else:
+                pre_buy = round(ma5, 1)
+
+        # ===== 🔥 收集候選 =====
+        s = score_stock(decision, trend, volume)
+        if buy != "-" and "觀望" not in decision:
+            candidates.append((s, name, buy, stop))
+
+        # ===== 輸出 =====
         msg += f"{name}\n"
         msg += f"現價：{round(price,1)} | 漲跌：{round(change,2)}%\n"
         msg += f"MA5：{round(ma5,1)} | MA20：{round(ma20,1)}\n"
@@ -125,12 +157,23 @@ def generate():
         msg += f"買點：{buy}\n"
         msg += f"停損：{stop}\n"
         msg += f"倉位：{position}\n"
+        msg += f"預備買點：{pre_buy}\n"
         msg += f"{tag}：{ai_text}\n\n"
 
-    # ===== 🔥 最終判斷（新增）=====
+    # ===== 全局 =====
     final = global_decision(decisions)
 
     msg += "====================\n"
     msg += f"{final}\n"
+
+    # ===== 🔥 最佳標的 =====
+    if candidates:
+        best = sorted(candidates, reverse=True)[0]
+        _, name, buy, stop = best
+
+        msg += "\n🔥 今日最佳標的\n"
+        msg += f"{name}\n"
+        msg += f"👉 買點：{buy}\n"
+        msg += f"👉 停損：{stop}\n"
 
     return msg
