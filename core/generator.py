@@ -25,7 +25,7 @@ def get_phase():
         return "盤後"
 
 
-# ===== 🔥 時間權重（修正版）=====
+# ===== 🔥 時間權重（強化：影響決策）=====
 def time_weight():
     now = datetime.now(tz)
     h, m = now.hour, now.minute
@@ -34,7 +34,7 @@ def time_weight():
         return -2, "⛔ 盤前觀察"
 
     if h > 13:
-        return -1, "📊 盤後規劃"
+        return -2, "📊 盤後規劃"
 
     if h == 9 and m < 30:
         return -2, "⚠ 開盤震盪"
@@ -48,35 +48,54 @@ def time_weight():
     return 0, ""
 
 
-# ===== 🔥 全局決策（最終版）=====
+# ===== 🔥 市場情緒（新增核心）=====
+def market_sentiment(decisions):
+    strong = sum(1 for d in decisions if "進場🔥" in d)
+    entry = sum(1 for d in decisions if "進場" in d)
+    test = sum(1 for d in decisions if "試單" in d)
+
+    if strong >= 2:
+        return "🟢 強勢市場"
+    if strong + entry >= 2:
+        return "🟢 可操作市場"
+    if test >= 1:
+        return "🟡 僅試單市場"
+    return "🔴 觀望市場"
+
+
+# ===== 🔥 全局決策（最終嚴格版）=====
 def global_decision(decisions):
 
-    strong = 0
-    medium = 0
-
-    for d in decisions:
-        if "進場🔥" in d:
-            strong += 1
-        elif "進場" in d:
-            medium += 1
-        elif "試單" in d:
-            medium += 1
-
     t_score, t_msg = time_weight()
+    sentiment = market_sentiment(decisions)
 
-    # 強勢市場
-    if strong >= 1 or medium >= 2:
-        return f"🟢 能買（有機會） {t_msg}"
+    strong = sum(1 for d in decisions if "進場🔥" in d)
+    entry = sum(1 for d in decisions if "進場" in d)
+    test = sum(1 for d in decisions if "試單" in d)
 
-    # 單一試單
-    if medium == 1:
-        return f"🟡 可試單（輕倉） {t_msg}"
+    # ===== 非交易時段 =====
+    if t_score <= -2:
+        return f"🔴 不能買（非交易時段） {t_msg}"
 
-    return f"🔴 不能買（風險偏高） {t_msg}"
+    # ===== 強市場 =====
+    if strong >= 1 and entry >= 1:
+        return f"🟢 可進場（趨勢成立） {t_msg}"
+
+    # ===== 普通可操作 =====
+    if entry >= 2:
+        return f"🟢 能買（結構成立） {t_msg}"
+
+    # ===== 試單 =====
+    if test == 1:
+        return f"🟡 可試單（低信心） {t_msg}"
+
+    # ===== 弱市場 =====
+    return f"🔴 不能買（市場弱） {t_msg}"
 
 
-# ===== 評分 =====
+# ===== 評分（只排序）=====
 def score_stock(decision, trend, volume, ai_text):
+
     score = 0
 
     if "進場🔥" in decision:
@@ -101,13 +120,13 @@ def score_stock(decision, trend, volume, ai_text):
     if "高位" in trend:
         score -= 3
 
-    # AI微調
+    # AI微調（不能主導）
     if "BUY" in ai_text:
         score += 1
     elif "NO" in ai_text:
         score -= 2
 
-    # 時間加權
+    # 時間權重
     t_score, _ = time_weight()
     score += t_score
 
@@ -132,7 +151,7 @@ def build_action(decision, price, buy, position):
     return ""
 
 
-# ===== 預備買點（強化版）=====
+# ===== 預備買點 =====
 def get_prebuy(price, ma5, ma20, support, resistance, decision):
 
     if "觀望" not in decision:
@@ -149,6 +168,7 @@ def get_prebuy(price, ma5, ma20, support, resistance, decision):
 
 # ===== 主產出 =====
 def generate():
+
     now = datetime.now(tz)
     phase = get_phase()
 
@@ -207,6 +227,10 @@ def generate():
             decision, buy, stop
         )
 
+        # ===== 🔥 AI防打架 =====
+        if "觀望" in decision and "BUY" in ai_text:
+            ai_text = "WAIT｜0%｜以策略為準"
+
         tag = "🧠AI" if is_real_ai else "⚠️Fallback"
 
         decisions.append(decision)
@@ -215,8 +239,8 @@ def generate():
 
         s = score_stock(decision, trend, volume, ai_text)
 
-        # 🔥 修正門檻（允許試單進榜）
-        if buy != "-" and "觀望" not in decision and s >= 3:
+        # 🔥 僅進場級才入選最佳標的
+        if buy != "-" and "進場" in decision:
             candidates.append((s, name, buy, stop))
 
         action = build_action(decision, price, buy, position)
@@ -238,13 +262,9 @@ def generate():
 
     # ===== 全局 =====
     final = global_decision(decisions)
-    _, t_msg = time_weight()
 
     msg += "====================\n"
     msg += f"{final}\n"
-
-    if t_msg:
-        msg += f"{t_msg}\n"
 
     # ===== 最佳標的 =====
     if candidates:
