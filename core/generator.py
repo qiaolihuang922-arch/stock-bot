@@ -25,23 +25,19 @@ def get_phase():
         return "盤後"
 
 
-# ===== 🔥 全局判斷 =====
-def global_decision(decisions):
-    for d in decisions:
-        if any(x in d for x in [
-            "進場🔥",
-            "進場（穩健）",
-            "試單"
-        ]):
+# ===== 🔥 全局判斷（改成AI）=====
+def global_decision(ai_results):
+    for ai in ai_results:
+        if "BUY" in ai:
             return "🟢 能買（有機會）"
-
     return "🔴 不能買（全部觀望）"
 
 
-# ===== 🔥 評分（選最佳標的）=====
-def score_stock(decision, trend, volume):
+# ===== 🔥 評分（加入AI權重）=====
+def score_stock(decision, trend, volume, ai_text):
     score = 0
 
+    # 技術面
     if "主升" in decision:
         score += 5
     elif "進場" in decision:
@@ -60,6 +56,14 @@ def score_stock(decision, trend, volume):
     if "高位" in trend:
         score -= 2
 
+    # 🔥 AI加權（關鍵）
+    if "BUY" in ai_text:
+        score += 5
+    elif "WAIT" in ai_text:
+        score += 1
+    elif "NO" in ai_text:
+        score -= 3
+
     return score
 
 
@@ -70,7 +74,7 @@ def generate():
 
     msg = f"【{now.strftime('%m/%d')} {phase}｜AI交易系統】\n\n"
 
-    decisions = []
+    ai_results = []
     candidates = []
 
     for name, code in stocks.items():
@@ -129,7 +133,8 @@ def generate():
 
         tag = "🧠AI" if is_real_ai else "⚠️Fallback"
 
-        decisions.append(decision)
+        # ===== 🔥 收集AI =====
+        ai_results.append(ai_text)
 
         # ===== 🔥 預備買點 =====
         pre_buy = "-"
@@ -141,8 +146,9 @@ def generate():
             else:
                 pre_buy = round(ma5, 1)
 
-        # ===== 🔥 收集候選 =====
-        s = score_stock(decision, trend, volume)
+        # ===== 🔥 評分（含AI）=====
+        s = score_stock(decision, trend, volume, ai_text)
+
         if buy != "-" and "觀望" not in decision:
             candidates.append((s, name, buy, stop))
 
@@ -160,8 +166,8 @@ def generate():
         msg += f"預備買點：{pre_buy}\n"
         msg += f"{tag}：{ai_text}\n\n"
 
-    # ===== 全局 =====
-    final = global_decision(decisions)
+    # ===== 🔥 全局（AI判斷）=====
+    final = global_decision(ai_results)
 
     msg += "====================\n"
     msg += f"{final}\n"
@@ -169,10 +175,10 @@ def generate():
     # ===== 🔥 最佳標的 =====
     if candidates:
         best = sorted(candidates, reverse=True)[0]
-        _, name, buy, stop = best
+        score, name, buy, stop = best
 
         msg += "\n🔥 今日最佳標的\n"
-        msg += f"{name}\n"
+        msg += f"{name}（分數:{score}）\n"
         msg += f"👉 買點：{buy}\n"
         msg += f"👉 停損：{stop}\n"
 
