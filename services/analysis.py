@@ -6,11 +6,9 @@ def volume_model(volumes, closes):
 
     price_up = closes[-1] > closes[-2]
 
-    # 健康整理
     if volumes[-1] < volumes[-2] < volumes[-3] and closes[-1] > sum(closes[-20:]) / 20:
         return "縮量整理（健康上升）"
 
-    # 爆量出貨
     if ratio > 2 and not price_up:
         return "爆量（出貨⚠⚠）"
 
@@ -43,7 +41,6 @@ def volume_model(volumes, closes):
 # ===== 趨勢（🔥完整保留）=====
 def trend_model(price, ma5, ma20, closes, volumes):
 
-    # 轉強
     if closes[-2] < ma20 and price > ma20:
         return "🚀轉強起漲"
 
@@ -86,7 +83,7 @@ def support_resistance(closes):
     return round(min(closes[-10:]), 1), round(max(closes[-10:]), 1)
 
 
-# ===== 策略（🔥最終融合版｜不刪邏輯）=====
+# ===== 策略（🔥最終完整融合版）=====
 def strategy(price, ma5, ma20, closes, volumes):
 
     support, resistance = support_resistance(closes)
@@ -106,7 +103,6 @@ def strategy(price, ma5, ma20, closes, volumes):
     # ===== 🔥 統一評分 =====
     score = 0
 
-    # ===== 趨勢 =====
     if price > ma20:
         score += 2
     else:
@@ -115,27 +111,20 @@ def strategy(price, ma5, ma20, closes, volumes):
     if price > ma5:
         score += 1
 
-    # ===== 動能 =====
     if momentum:
         score += 1
 
-    # ===== 量能（融合舊邏輯）=====
+    # ===== 量能 =====
     if ratio > 2:
-        if not momentum:
-            score -= 3   # 爆量出貨
-        else:
-            score += 2   # 爆量上攻
-
+        score += 2 if momentum else -3
     elif ratio > 1.5:
         score += 2
-
     elif ratio > 1.2:
         score += 1
-
     elif ratio < 0.7:
         score -= 1
 
-    # ===== 結構（升級版）=====
+    # ===== 結構 =====
     up_days = sum([1 for i in range(-5, 0) if closes[i] > closes[i-1]])
 
     if up_days >= 4:
@@ -143,11 +132,9 @@ def strategy(price, ma5, ma20, closes, volumes):
     elif up_days >= 3:
         score += 1
 
-    # 創高
     if closes[-1] > max(closes[-5:-1]):
         score += 1
 
-    # 破低
     if closes[-1] < min(closes[-5:-1]):
         score -= 2
 
@@ -162,9 +149,18 @@ def strategy(price, ma5, ma20, closes, volumes):
     if breakout and closes[-1] <= closes[-2]:
         score -= 3
 
-    # ===== 轉強確認 =====
+    # ===== 轉強 =====
     if closes[-3] < ma20 and closes[-2] < ma20 and price > ma20:
         score += 2
+
+    # ===== 🔥 confirm（補回）=====
+    confirm = 0
+    if price > ma20: confirm += 1
+    if momentum: confirm += 1
+    if ratio > 1.2: confirm += 1
+
+    if confirm < 2 and score >= 4:
+        score -= 1
 
     # ===== 過熱 =====
     if price > resistance * 1.05:
@@ -174,12 +170,10 @@ def strategy(price, ma5, ma20, closes, volumes):
     buy = "-"
     stop = "-"
 
-    # 強勢
     if score >= 6:
         buy = min(price * 0.995, resistance * 1.01)
         stop = structure_low
 
-    # 穩健
     elif score >= 4:
         if abs(price - ma5) / ma5 <= 0.03:
             buy = ma5
@@ -187,7 +181,6 @@ def strategy(price, ma5, ma20, closes, volumes):
         else:
             return "觀望（未回踩）", "-", "-", "0%"
 
-    # 試單
     elif score >= 2:
         if price > ma20 and momentum:
             buy = price * 0.995
@@ -201,26 +194,34 @@ def strategy(price, ma5, ma20, closes, volumes):
     else:
         return "觀望（弱勢）", "-", "-", "0%"
 
-    # ===== 風險控制 =====
+    # ===== 🔥 買點距離限制（補回）=====
+    if buy != "-" and abs(price - buy) / buy > 0.04:
+        return "觀望（未到買點）", "-", "-", "0%"
+
+    # ===== 🔥 stop 強化（補回）=====
+    stop = min(structure_low, stop)
+
     if stop >= buy:
         stop = buy * 0.97
 
+    # ===== 🔥 風險 vs 機會 =====
     risk = (buy - stop) / buy
+    opportunity = score >= 3
 
     if risk > 0.08:
-    # 🔥 不直接觀望 → 改試單
-    if score >= 3 and price > ma20:
-        return "試單（高風險）", round(price*0.995,1), round(ma20*0.97,1), "30%"
-    return "觀望（風險過大）", "-", "-", "0%"
+        if opportunity and price > ma20:
+            return "試單（高風險）", round(price*0.995,1), round(ma20*0.97,1), "30%"
+        return "觀望（風險過大）", "-", "-", "0%"
 
-    # ===== RR（關鍵補強）=====
+    # ===== 🔥 RR（含突破例外）=====
     reward = resistance - buy
     rr = reward / (buy - stop) if (buy - stop) > 0 else 0
 
     if rr < 1.2:
-        return "觀望（報酬不足）", "-", "-", "0%"
+        if not (breakout and score >= 5):
+            return "觀望（報酬不足）", "-", "-", "0%"
 
-    # ===== 最終決策 =====
+    # ===== 🔥 最終決策 =====
     if score >= 6:
         return "進場🔥（強勢）", round(buy,1), round(stop,1), "100%"
     elif score >= 4:
