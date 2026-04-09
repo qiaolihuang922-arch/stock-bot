@@ -3,7 +3,7 @@ name: Stock Bot Pro
 on:
   schedule:
     # ✅ 每分鐘執行一次
-    - cron: '* * * * *'
+    - cron: '*/2 * * * *'
 
   workflow_dispatch:
 
