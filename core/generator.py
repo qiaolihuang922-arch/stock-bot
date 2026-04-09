@@ -55,6 +55,27 @@ def add_rr_warning(decision, rr):
     return decision
 
 
+# ===== 🔥 補：人話原因（超關鍵）=====
+def decision_reason(decision):
+
+    if "未回踩" in decision:
+        return "原因：尚未回測均線"
+
+    if "追高" in decision:
+        return "原因：接近壓力區"
+
+    if "風險過大" in decision:
+        return "原因：停損過遠"
+
+    if "報酬不足" in decision:
+        return "原因：RR不足"
+
+    if "弱勢" in decision:
+        return "原因：空頭結構"
+
+    return ""
+
+
 # ===== 位置 =====
 def position_level(price, ma5, ma20):
 
@@ -258,6 +279,7 @@ def generate():
         rr_tag = rr_filter(rr)
         display_decision = add_rr_warning(decision, rr)
 
+        reason = decision_reason(decision)
         pos_level = position_level(price, ma5, ma20)
 
         ai_text, is_real_ai = ai_analysis(
@@ -271,7 +293,7 @@ def generate():
 
         decisions.append(decision)
 
-        # ===== 記錄（安全版）=====
+        # ===== 記錄 =====
         if allow_record() and can_record_today(name):
             if ("進場" in decision or "試單" in decision) and buy not in ["-", None]:
                 try:
@@ -306,8 +328,12 @@ def generate():
         action = build_action(decision, buy, position, rr)
         pre_buy = get_prebuy(price, ma5, ma20, support, resistance, decision)
 
+        # ===== 輸出 =====
         msg += f"{name}\n"
         msg += f"{display_decision}｜倉位 {position}\n"
+
+        if reason:
+            msg += f"{reason}\n"
 
         if action:
             msg += f"{action}\n"
