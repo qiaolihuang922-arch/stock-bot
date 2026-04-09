@@ -9,15 +9,19 @@ def ai_analysis(name, price, change, ma5, ma20, volume, trend, decision, buy, st
     global AI_ENABLED
 
     prompt = f"""
+你是短線交易專家，請根據以下資訊判斷：
+
 {name}
 現價:{price} 漲跌:{change}%
+MA5:{ma5} MA20:{ma20}
+量能:{volume}
 趨勢:{trend}
 策略:{decision}
 買點:{buy}
 停損:{stop}
 
 請輸出：
-BUY / WAIT / NO + 倉位% + 原因（簡短）
+BUY / WAIT / NO + 倉位% + 原因（20字內）
 """
 
     if not AI_ENABLED:
@@ -33,13 +37,14 @@ BUY / WAIT / NO + 倉位% + 原因（簡短）
             json={
                 "model": "gpt-4.1-mini",
                 "input": prompt,
-                "temperature": 0.3
+                "temperature": 0.2
             },
             timeout=10
         )
 
         print("AI STATUS:", r.status_code)
 
+        # 👉 限流直接切 fallback（避免卡死）
         if r.status_code == 429:
             AI_ENABLED = False
             return fallback_ai(price, ma5, ma20, volume, trend, decision, buy, stop)
@@ -53,6 +58,7 @@ BUY / WAIT / NO + 倉位% + 原因（簡短）
                 if content and "text" in content[0]:
                     text = content[0]["text"]
 
+                    # 👉 防空、防垃圾回應
                     if text and len(text.strip()) > 10:
                         return text.strip(), True
 
@@ -62,37 +68,35 @@ BUY / WAIT / NO + 倉位% + 原因（簡短）
     return fallback_ai(price, ma5, ma20, volume, trend, decision, buy, stop)
 
 
-# ===== 🔥 最終交易級AI（完整升級）=====
+# ===== 🔥 統一決策AI（與 strategy 完全同步）=====
 def fallback_ai(price, ma5, ma20, volume, trend, decision, buy, stop):
 
     score = 0
 
-    # ===== 🔥 1. 情境優先（最重要） =====
+    # ===== 🔥 1. 直接同步 strategy（最重要）=====
+    if "進場🔥" in decision:
+        return "BUY｜100%｜順勢主升段", False
 
-    # 🚀 主升 → 全倉
-    if "主升" in trend and "進場" in decision:
-        return "BUY｜100%｜主升段延續", False
+    if "進場（穩健）" in decision:
+        return "BUY｜50%｜趨勢成立回踩", False
 
-    # 🚀 轉強突破 → 試單
-    if "轉強" in trend and price > ma20:
-        return "BUY｜30%｜轉強突破試單", False
+    if "試單" in decision:
+        return "BUY｜30%｜轉強試單", False
 
-    # 📉 高位 → 等
-    if "高位" in trend:
-        return "WAIT｜0%｜高位震盪避免追高", False
+    if "觀望（過熱" in decision or "追高" in decision:
+        return "WAIT｜0%｜避免追高", False
 
-    # ❌ 弱勢
-    if "弱勢" in decision or "空頭" in trend:
+    if "弱勢" in decision:
         return "NO｜0%｜弱勢結構", False
 
-    # ===== 🔥 2. 分數系統（保留+強化） =====
+    # ===== 🔥 2. 多因子評分（補強判斷）=====
 
     # 趨勢
     if "主升" in trend:
         score += 4
-    elif "多頭" in trend:
-        score += 2
     elif "轉強" in trend:
+        score += 2
+    elif "多頭" in trend:
         score += 2
     elif "空頭" in trend:
         score -= 4
@@ -111,34 +115,35 @@ def fallback_ai(price, ma5, ma20, volume, trend, decision, buy, stop):
     else:
         score -= 2
 
-    # 策略
-    if "進場🔥" in decision:
-        score += 2
-    elif "進場" in decision:
+    if price > ma5:
         score += 1
-    elif "試單" in decision:
-        score += 1
-    elif "觀望" in decision:
-        score -= 1
+
+    # 位置（避免高位）
+    if "高位" in trend:
+        score -= 2
 
     # 風險控制
     if buy != "-" and stop != "-":
         risk = (buy - stop) / buy
-        if risk > 0.07:
+
+        if risk > 0.08:
             score -= 3
 
-    # ===== 🔥 3. 最終決策（交易級） =====
+        elif risk < 0.03:
+            score += 1  # 風險小加分
 
-    if score >= 7:
+    # ===== 🔥 3. 最終輸出（嚴格版）=====
+
+    if score >= 6:
         return "BUY｜100%｜多因子共振", False
 
-    elif score >= 5:
+    elif score >= 4:
         return "BUY｜50%｜條件良好", False
 
-    elif score >= 3:
-        return "BUY｜30%｜試單觀察", False
+    elif score >= 2:
+        return "BUY｜30%｜可試單", False
 
-    elif score >= 1:
+    elif score >= 0:
         return "WAIT｜0%｜訊號不足", False
 
     else:
