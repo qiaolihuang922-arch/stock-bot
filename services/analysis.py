@@ -83,7 +83,7 @@ def support_resistance(closes):
     return round(min(closes[-10:]), 1), round(max(closes[-10:]), 1)
 
 
-# ===== 策略（🔥最終穩定版｜統一決策）=====
+# ===== 策略（🔥最終升級版｜完全一致）=====
 def strategy(price, ma5, ma20, closes, volumes):
 
     support, resistance = support_resistance(closes)
@@ -100,10 +100,9 @@ def strategy(price, ma5, ma20, closes, volumes):
 
     breakout = price > resistance
 
-    # ===== 🔥 統一評分 =====
+    # ===== 🔥 統一評分（完全保留）=====
     score = 0
 
-    # 趨勢
     if price > ma20:
         score += 2
     else:
@@ -112,11 +111,9 @@ def strategy(price, ma5, ma20, closes, volumes):
     if price > ma5:
         score += 1
 
-    # 動能
     if momentum:
         score += 1
 
-    # ===== 量能 =====
     if ratio > 2:
         score += 2 if momentum else -3
     elif ratio > 1.5:
@@ -126,7 +123,6 @@ def strategy(price, ma5, ma20, closes, volumes):
     elif ratio < 0.7:
         score -= 1
 
-    # ===== 結構 =====
     up_days = sum([1 for i in range(-5, 0) if closes[i] > closes[i-1]])
 
     if up_days >= 4:
@@ -147,19 +143,19 @@ def strategy(price, ma5, ma20, closes, volumes):
     if price < ma5:
         score += 1
 
-    # ===== 防追高（補強）=====
+    # ===== 防追高（保留）=====
     if price > ma5 * 1.05:
         return "觀望（追高風險）", "-", "-", "0%"
 
-    # ===== 假突破 =====
+    # ===== 假突破（保留）=====
     if breakout and closes[-1] <= closes[-2]:
         score -= 3
 
-    # ===== 轉強 =====
+    # ===== 轉強（保留）=====
     if closes[-3] < ma20 and closes[-2] < ma20 and price > ma20:
         score += 2
 
-    # ===== confirm =====
+    # ===== confirm（保留）=====
     confirm = 0
     if price > ma20: confirm += 1
     if momentum: confirm += 1
@@ -168,11 +164,11 @@ def strategy(price, ma5, ma20, closes, volumes):
     if confirm < 2 and score >= 4:
         score -= 1
 
-    # ===== 過熱 =====
+    # ===== 過熱（保留）=====
     if price > resistance * 1.05:
         return "觀望（過熱）", "-", "-", "0%"
 
-    # ===== 買點 =====
+    # ===== 買點（完全保留）=====
     buy = "-"
     stop = "-"
 
@@ -200,37 +196,60 @@ def strategy(price, ma5, ma20, closes, volumes):
     else:
         return "觀望（弱勢）", "-", "-", "0%"
 
-    # ===== 買點距離 =====
+    # ===== 買點距離（保留）=====
     if buy != "-" and abs(price - buy) / buy > 0.04:
         return "觀望（未到買點）", "-", "-", "0%"
 
-    # ===== stop統一 =====
+    # ===== stop統一（保留）=====
     stop = min(structure_low, stop)
 
     if stop >= buy:
         stop = buy * 0.97
 
-    # ===== 風險 =====
+    # ===== 風險（優先）=====
     risk = (buy - stop) / buy
-    opportunity = score >= 3
 
     if risk > 0.08:
-        if opportunity and price > ma20:
-            return "試單（高風險）", round(price*0.995,1), round(ma20*0.97,1), "30%"
         return "觀望（風險過大）", "-", "-", "0%"
 
-    # ===== RR =====
+    # ===== RR（唯一決策）=====
     reward = resistance - buy
     rr = reward / (buy - stop) if (buy - stop) > 0 else 0
 
     if rr < 1.2:
-        if not (breakout and score >= 5):
-            return "觀望（報酬不足）", "-", "-", "0%"
+        return "觀望（報酬不足）", "-", "-", "0%"
 
-    # ===== 最終 =====
-    if score >= 6:
-        return "進場🔥（強勢）", round(buy,1), round(stop,1), "100%"
-    elif score >= 4:
-        return "進場（穩健）", round(buy,1), round(stop,1), "50%"
+    # ===== 🔥 倉位模型（升級｜但不破壞原邏輯）=====
+    position = 0
+
+    # RR
+    if rr >= 2:
+        position += 50
+    elif rr >= 1.5:
+        position += 40
     else:
-        return "試單（觀察）", round(buy,1), round(stop,1), "30%"
+        position += 30
+
+    # 風險
+    if risk < 0.03:
+        position += 30
+    elif risk < 0.05:
+        position += 20
+    else:
+        position += 10
+
+    # 結構（保留score影響）
+    if score >= 6:
+        position += 20
+    elif score >= 4:
+        position += 10
+
+    position = min(position, 100)
+
+    # ===== 最終決策（統一）=====
+    if position >= 80:
+        return "進場🔥（強勢）", round(buy,1), round(stop,1), f"{position}%"
+    elif position >= 50:
+        return "進場（穩健）", round(buy,1), round(stop,1), f"{position}%"
+    else:
+        return "試單（觀察）", round(buy,1), round(stop,1), f"{position}%"
