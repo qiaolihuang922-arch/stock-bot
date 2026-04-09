@@ -1,35 +1,30 @@
 import requests
 from config import OPENAI_API_KEY
 
+AI_ENABLED = True
+
 
 def ai_analysis(name, price, change, ma5, ma20, volume, trend, decision, buy, stop):
 
+    global AI_ENABLED
+
     prompt = f"""
-你是頂級短線交易員，請用專業角度快速判斷：
+{name}
+現價:{price} 漲跌:{change}%
+趨勢:{trend}
+策略:{decision}
+買點:{buy}
+停損:{stop}
 
-【股票】{name}
-【現價】{price}
-【漲跌】{change}%
-【MA5】{ma5}
-【MA20】{ma20}
-【量能】{volume}
-【趨勢】{trend}
-【策略】{decision}
-【買點】{buy}
-【停損】{stop}
-
-請嚴格輸出（不要廢話）：
-
-1️⃣ 是否該進場（YES / NO / WAIT）
-2️⃣ 原因（一句）
-3️⃣ 操作（怎麼做）
-
-限制：50字內
+YES / NO / WAIT + 原因
 """
+
+    if not AI_ENABLED:
+        return fallback_ai(price, ma5, ma20, volume, trend, decision, buy, stop)
 
     try:
         r = requests.post(
-            "https://api.openai.com/v1/responses",  # ✅ 新API（關鍵修復）
+            "https://api.openai.com/v1/responses",
             headers={
                 "Authorization": f"Bearer {OPENAI_API_KEY}",
                 "Content-Type": "application/json"
@@ -39,44 +34,85 @@ def ai_analysis(name, price, change, ma5, ma20, volume, trend, decision, buy, st
                 "input": prompt,
                 "temperature": 0.3
             },
-            timeout=12
+            timeout=10
         )
 
-        # ===== DEBUG（你可以保留）=====
         print("AI STATUS:", r.status_code)
-        print("AI RAW:", r.text[:200])
+
+        if r.status_code == 429:
+            AI_ENABLED = False
+            return fallback_ai(price, ma5, ma20, volume, trend, decision, buy, stop)
 
         if r.status_code == 200:
             data = r.json()
 
-            # ✅ 新API解析方式（重點）
-            if "output" in data and len(data["output"]) > 0:
+            if "output" in data and data["output"]:
                 content = data["output"][0]["content"]
 
                 if content and "text" in content[0]:
                     text = content[0]["text"]
 
-                    # ✅ 真AI判斷（防空、防亂碼、防假回）
-                    if text and len(text.strip()) > 10 and "ERROR" not in text:
+                    if text and len(text.strip()) > 10:
                         return text.strip(), True
 
     except Exception as e:
         print("AI error:", e)
 
-    # ===== 🔥 fallback（保留你原本 + 強化）=====
-    if "主升" in trend and "進場" in decision:
-        return "YES｜主升延續｜小量追", False
+    return fallback_ai(price, ma5, ma20, volume, trend, decision, buy, stop)
 
-    if "突破" in decision:
-        return "WAIT｜假突破風險｜等回踩", False
 
-    if "回檔" in decision:
-        return "YES｜支撐區｜分批布局", False
+# ===== 🔥 類AI（嚴格版）=====
+def fallback_ai(price, ma5, ma20, volume, trend, decision, buy, stop):
 
-    if "轉強" in decision:
-        return "YES｜轉多初期｜試單", False
+    score = 0
 
-    if "觀望" in decision:
-        return "NO｜位置差｜等待", False
+    # 趨勢
+    if "主升" in trend:
+        score += 4
+    elif "多頭" in trend:
+        score += 2
+    elif "轉強" in trend:
+        score += 2
+    elif "空頭" in trend:
+        score -= 4
 
-    return "WAIT｜訊號不明｜觀察", False
+    # 量能
+    if "主升" in volume:
+        score += 3
+    elif "強放量" in volume:
+        score += 2
+    elif "出貨" in volume:
+        score -= 3
+
+    # 結構
+    if price > ma20:
+        score += 1
+    else:
+        score -= 2
+
+    # 策略一致性
+    if "進場🔥" in decision:
+        score += 2
+    elif "進場" in decision:
+        score += 1
+    elif "觀望" in decision:
+        score -= 1
+
+    # 風險
+    if buy != "-" and stop != "-":
+        risk = (buy - stop) / buy
+        if risk > 0.07:
+            score -= 3
+
+    # ===== 輸出 =====
+    if score >= 7:
+        return "YES｜多因子共振｜可進場", False
+
+    elif score >= 4:
+        return "WAIT｜條件尚可｜等確認", False
+
+    elif score >= 1:
+        return "WAIT｜訊號不足｜觀察", False
+
+    else:
+        return "NO｜弱勢｜避免進場", False
