@@ -1,4 +1,6 @@
 import requests
+from config import OPENAI_API_KEY
+
 
 def ai_analysis(name, price, change, ma5, ma20, volume, trend, decision, buy, stop):
 
