@@ -18,10 +18,9 @@ tz = pytz.timezone("Asia/Taipei")
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
-# ===== AI（🔥一致性強化）=====
-def ai_analysis(name, price, change, ma5, ma20, volume, trend, decision, buy, stop):
+# ===== AI（🔥強化版）=====
+def ai_analysis(name, price, change, ma5, ma20, volume, trend, decision, buy, stop, resistance):
 
-    # 🔥策略優先
     if "觀望" in decision:
         base = "不建議進場"
     elif "主升" in decision:
@@ -30,21 +29,22 @@ def ai_analysis(name, price, change, ma5, ma20, volume, trend, decision, buy, st
         base = "可進場"
 
     prompt = f"""
-請解釋以下交易決策：
+請解釋交易決策：
 
 股票：{name}
 現價：{price}
 MA20：{ma20}
+壓力：{resistance}
 量能：{volume}
 趨勢：{trend}
 決策：{decision}
 
-必須說明：
-1. 是否站上MA20
-2. 是否接近壓力
-3. 主升或反彈
+說明：
+- 是否站上MA20
+- 是否接近壓力
+- 建議追或等回檔
 
-限制40字內
+40字內
 """
 
     try:
@@ -70,11 +70,13 @@ MA20：{ma20}
     except:
         pass
 
-    # fallback（與策略一致）
+    # fallback
     if "觀望" in decision:
         return "不建議進場，位置或結構不佳"
     if price > ma20:
-        return "站上MA20偏多，留意壓力"
+        if abs(price - resistance) / resistance < 0.03:
+            return f"站上MA20但接近壓力{resistance}，勿追高"
+        return "多頭結構，可回檔布局"
     return "未站上MA20，屬弱勢"
 
 
@@ -149,13 +151,12 @@ def get_twse(code):
         return None
 
 
-# ===== 量能（完整保留+強化）=====
+# ===== 量能（完整保留）=====
 def volume_model(volumes, closes):
     vol = volumes[-1]
     avg10 = sum(volumes[-10:]) / 10
     ratio = vol / avg10
 
-    # 🔥縮量蓄力
     if volumes[-1] < volumes[-2] < volumes[-3] and closes[-1] > sum(closes[-20:]) / 20:
         return "縮量整理（蓄力🔥）"
 
@@ -184,10 +185,9 @@ def volume_model(volumes, closes):
     return level
 
 
-# ===== 趨勢（完整保留+強化）=====
+# ===== 趨勢（完整保留）=====
 def trend_model(price, ma5, ma20, closes, volumes):
 
-    # 🔥轉強
     if closes[-2] < ma20 and price > ma20:
         return "🚀轉強起漲"
 
@@ -227,7 +227,7 @@ def support_resistance(closes):
     return round(min(closes[-10:]),1), round(max(closes[-10:]),1)
 
 
-# ===== 策略（🔥最終完整）=====
+# ===== 策略（🔥完整強化）=====
 def strategy(price, ma5, ma20, closes, volumes):
 
     support, resistance = support_resistance(closes)
@@ -246,7 +246,7 @@ def strategy(price, ma5, ma20, closes, volumes):
     prev_low = min(closes[-10:-5])
     structure_low = min(recent_low, prev_low)
 
-    # 🔥弱勢過濾
+    # 🔥弱勢
     if price < ma20 and not volume_strong:
         return "觀望（弱勢）", "-", "-", "0%"
 
@@ -259,8 +259,9 @@ def strategy(price, ma5, ma20, closes, volumes):
         if closes[-1] <= closes[-2]:
             return "觀望（假突破）", "-", "-", "0%"
 
-    # 🔥主升
-    if volume_strong and momentum and price > ma5 and price > ma20:
+    # 🔥主升（防追高）
+    not_too_high = price < resistance * 1.03
+    if volume_strong and momentum and price > ma5 and price > ma20 and not_too_high:
         return "進場🔥（主升）", round(price,1), round(structure_low,1), "100%"
 
     # ===== 原邏輯 =====
@@ -285,8 +286,9 @@ def strategy(price, ma5, ma20, closes, volumes):
     else:
         return "觀望", "-", "-", "0%"
 
-    # 🔥停損
+    # 🔥停損強化
     stop = min(structure_low, buy * 0.97)
+    stop = min(stop, buy * 0.96)
 
     if stop >= buy:
         stop = buy * 0.97
@@ -294,15 +296,18 @@ def strategy(price, ma5, ma20, closes, volumes):
     if (buy - stop) / buy > 0.08:
         return "觀望（風險過大）", "-", "-", "0%"
 
-    # 🔥倉位
+    # 🔥決策分級
     if volume_strong and price > ma20:
+        decision = "進場🔥（主升）"
         position = "100%"
     elif price > ma20:
+        decision = "進場"
         position = "50%"
     else:
-        position = "30%"
+        decision = "觀望"
+        position = "0%"
 
-    return "進場🔥", round(buy,1), round(stop,1), position
+    return decision, round(buy,1), round(stop,1), position
 
 
 # ===== 發送 =====
@@ -339,7 +344,7 @@ def generate():
         decision, buy, stop, position = strategy(price, ma5, ma20, closes, volumes)
         support, resistance = support_resistance(closes)
 
-        ai_text = ai_analysis(name, price, change, ma5, ma20, volume, trend, decision, buy, stop)
+        ai_text = ai_analysis(name, price, change, ma5, ma20, volume, trend, decision, buy, stop, resistance)
 
         msg += f"{name}\n"
         msg += f"現價：{round(price,1)} | 漲跌：{round(change,2)}%\n"
