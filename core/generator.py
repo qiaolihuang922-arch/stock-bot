@@ -25,12 +25,27 @@ def get_phase():
         return "盤後"
 
 
+# ===== 🔥 全局判斷（新增）=====
+def global_decision(decisions):
+    for d in decisions:
+        if any(x in d for x in [
+            "進場🔥",
+            "進場（穩健）",
+            "試單"
+        ]):
+            return "🟢 能買（有機會）"
+
+    return "🔴 不能買（全部觀望）"
+
+
 # ===== 主產出 =====
 def generate():
     now = datetime.now(tz)
     phase = get_phase()
 
     msg = f"【{now.strftime('%m/%d')} {phase}｜AI交易系統】\n\n"
+
+    decisions = []  # 🔥 新增（收集決策）
 
     for name, code in stocks.items():
 
@@ -86,7 +101,7 @@ def generate():
         decision, buy, stop, position = strategy(price, ma5, ma20, closes, volumes)
         support, resistance = support_resistance(closes)
 
-        # ===== 🔥 AI（關鍵修改）=====
+        # ===== 🔥 AI =====
         ai_text, is_real_ai = ai_analysis(
             name, price, change,
             ma5, ma20,
@@ -95,6 +110,9 @@ def generate():
         )
 
         tag = "🧠AI" if is_real_ai else "⚠️Fallback"
+
+        # ===== 🔥 收集決策（新增）=====
+        decisions.append(decision)
 
         # ===== 組訊息 =====
         msg += f"{name}\n"
@@ -108,5 +126,11 @@ def generate():
         msg += f"停損：{stop}\n"
         msg += f"倉位：{position}\n"
         msg += f"{tag}：{ai_text}\n\n"
+
+    # ===== 🔥 最終判斷（新增）=====
+    final = global_decision(decisions)
+
+    msg += "====================\n"
+    msg += f"{final}\n"
 
     return msg
