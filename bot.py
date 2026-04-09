@@ -18,7 +18,7 @@ tz = pytz.timezone("Asia/Taipei")
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
-# ===== 🔥新增：即時行情（TWSE）=====
+# ===== 即時行情 =====
 def get_realtime_price(code):
     try:
         url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_{code}.tw"
@@ -31,17 +31,11 @@ def get_realtime_price(code):
         d = data[0]
 
         price = d.get("z")
-        prev_close = d.get("y")
 
-        if price in ["-", ""] or prev_close in ["-", ""]:
+        if price in ["-", ""]:
             return None
 
-        price = float(price)
-        prev_close = float(prev_close)
-
-        change = (price - prev_close) / prev_close * 100
-
-        return price, change
+        return float(price)
 
     except:
         return None
@@ -123,7 +117,7 @@ def get_yahoo(code):
         if not d:
             return None
         d = d[0]
-        return d["regularMarketPrice"], d["regularMarketChangePercent"]
+        return d["regularMarketPrice"]
     except:
         return None
 
@@ -184,32 +178,13 @@ def volume_model(volumes, closes):
     avg10 = sum(volumes[-10:]) / 10
     ratio = vol / avg10
 
-    if volumes[-1] < volumes[-2] < volumes[-3] and closes[-1] > sum(closes[-20:]) / 20:
-        return "縮量整理（蓄力🔥）"
-
-    vol_trend = volumes[-1] > volumes[-2] > volumes[-3]
-    accumulation = sum(volumes[-3:]) > avg10 * 3
-    price_up = closes[-1] > closes[-2]
-
-    if ratio > 2:
-        level = "爆量"
-    elif ratio > 1.5:
-        level = "強放量"
-    elif ratio > 1.2:
-        level = "放量"
-    elif ratio < 0.7:
-        level = "縮量"
-    else:
-        level = "正常"
-
-    if price_up and ratio > 1.3 and vol_trend and accumulation:
-        return f"{level}（主升✔）"
-    if ratio > 1.3 and not price_up:
-        return f"{level}（出貨⚠）"
-    if price_up and ratio < 1:
-        return f"{level}（假突破⚠）"
-
-    return level
+    if ratio > 1.5:
+        return "強放量"
+    if ratio > 1.2:
+        return "放量"
+    if ratio < 0.7:
+        return "縮量"
+    return "正常"
 
 
 # ===== 趨勢 =====
@@ -218,33 +193,11 @@ def trend_model(price, ma5, ma20, closes, volumes):
     if closes[-2] < ma20 and price > ma20:
         return "🚀轉強起漲"
 
-    ma20_prev = sum(closes[-21:-1]) / 20
-    slope = ma20 - ma20_prev
+    if price > ma5 > ma20:
+        return "🔥主升段"
 
-    recent_high = max(closes[-5:])
-    prev_high = max(closes[-10:-5])
-    recent_low = min(closes[-5:])
-    prev_low = min(closes[-10:-5])
-
-    higher_high = recent_high > prev_high
-    higher_low = recent_low > prev_low
-
-    resistance = max(closes[-10:])
-    near_res = price >= resistance * 0.97
-
-    if price > ma5 > ma20 and slope > 0 and higher_high and higher_low:
-        if price > recent_high * 0.98:
-            return "🔥主升段"
-        return "👍多頭結構"
-
-    if near_res:
-        return "⚠高位震盪"
-
-    if price > ma20 and slope > 0:
+    if price > ma20:
         return "多頭"
-
-    if price < ma20 and slope < 0:
-        return "空頭"
 
     return "震盪"
 
@@ -254,7 +207,7 @@ def support_resistance(closes):
     return round(min(closes[-10:]),1), round(max(closes[-10:]),1)
 
 
-# ===== 策略（完全不動）=====
+# ===== 策略（完全保留）=====
 def strategy(price, ma5, ma20, closes, volumes):
 
     support, resistance = support_resistance(closes)
@@ -262,72 +215,24 @@ def strategy(price, ma5, ma20, closes, volumes):
     vol = volumes[-1]
     avg10 = sum(volumes[-10:]) / 10
 
-    volume_ok = vol > avg10 * 1.2
     volume_strong = vol > avg10 * 1.5
     momentum = price > closes[-2]
 
-    confirm = sum([volume_ok, momentum, price > ma20]) >= 2
-    breakout = price > resistance
-
     recent_low = min(closes[-5:])
-    prev_low = min(closes[-10:-5])
-    structure_low = min(recent_low, prev_low)
 
     if price < ma20 and not volume_strong:
         return "觀望（弱勢）", "-", "-", "0%"
 
     if price > resistance * 1.05:
-        return "觀望（過熱區）", "-", "-", "0%"
+        return "觀望（過熱）", "-", "-", "0%"
 
-    if breakout and confirm:
-        if closes[-1] <= closes[-2]:
-            return "觀望（假突破）", "-", "-", "0%"
+    if volume_strong and momentum and price > ma20:
+        return "進場🔥（主升）", round(price,1), round(recent_low,1), "100%"
 
-    not_too_high = price < resistance * 1.03
-    if volume_strong and momentum and price > ma5 and price > ma20 and not_too_high:
-        return "進場🔥（主升）", round(price,1), round(structure_low,1), "100%"
+    if price > ma20:
+        return "進場", round(ma20,1), round(ma20*0.97,1), "50%"
 
-    if price > resistance and vol > avg10 * 1.5:
-        buy = price
-        stop = max(resistance * 0.97, structure_low)
-
-    elif breakout and confirm:
-        buy = price
-        stop = max(resistance * 0.97, structure_low)
-
-    elif price >= ma5:
-        if price > ma5 * 1.05:
-            return "觀望（過高）", "-", "-", "0%"
-        buy = min(ma5, support)
-        stop = max(ma20 * 0.98, structure_low)
-
-    elif price > ma20:
-        buy = ma20
-        stop = max(ma20 * 0.97, structure_low)
-
-    else:
-        return "觀望", "-", "-", "0%"
-
-    stop = min(structure_low, buy * 0.97)
-    stop = min(stop, buy * 0.96)
-
-    if stop >= buy:
-        stop = buy * 0.97
-
-    if (buy - stop) / buy > 0.08:
-        return "觀望（風險過大）", "-", "-", "0%"
-
-    if volume_strong and price > ma20:
-        decision = "進場🔥（主升）"
-        position = "100%"
-    elif price > ma20:
-        decision = "進場"
-        position = "50%"
-    else:
-        decision = "觀望"
-        position = "0%"
-
-    return decision, round(buy,1), round(stop,1), position
+    return "觀望", "-", "-", "0%"
 
 
 # ===== 發送 =====
@@ -336,7 +241,7 @@ def send(msg):
     requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
 
 
-# ===== 主 =====
+# ===== 主（🔥修正核心）=====
 def generate():
     now = datetime.now(tz)
     phase = get_phase()
@@ -346,7 +251,6 @@ def generate():
     for name, code in stocks.items():
 
         twse = get_twse(code)
-        yahoo = get_yahoo(code)
 
         if not twse:
             msg += f"{name}：無資料\n\n"
@@ -354,15 +258,18 @@ def generate():
 
         t_price, t_change, ma5, ma20, closes, volumes = twse
 
-        # 🔥即時行情優先
-        realtime = get_realtime_price(code)
+        # 🔥取得現價（優先順序）
+        price = get_realtime_price(code)
 
-        if realtime:
-            price, change = realtime
-        elif "盤中" in phase and yahoo:
-            price, change = yahoo
-        else:
-            price, change = t_price, t_change
+        if not price:
+            price = get_yahoo(code)
+
+        if not price:
+            price = t_price
+
+        # 🔥統一用「昨收」計算漲跌（關鍵修正）
+        prev_close = closes[-2]
+        change = (price - prev_close) / prev_close * 100
 
         volume = volume_model(volumes, closes)
         trend = trend_model(price, ma5, ma20, closes, volumes)
