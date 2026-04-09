@@ -1,4 +1,4 @@
-# ===== 量能（🔥完整保留+強化）=====
+# ===== 量能（原封不動）=====
 def volume_model(volumes, closes):
     vol = volumes[-1]
     avg10 = sum(volumes[-10:]) / 10
@@ -38,7 +38,7 @@ def volume_model(volumes, closes):
     return level
 
 
-# ===== 趨勢（🔥完整保留）=====
+# ===== 趨勢（原封不動）=====
 def trend_model(price, ma5, ma20, closes, volumes):
 
     if closes[-2] < ma20 and price > ma20:
@@ -55,7 +55,7 @@ def trend_model(price, ma5, ma20, closes, volumes):
     higher_high = recent_high > prev_high
     higher_low = recent_low > prev_low
 
-    resistance = max(closes[-10:])
+    resistance = max(closes[-20:])  # 🔥 修正（拉長）
     near_res = price >= resistance * 0.97
 
     if price > ma5 > ma20 and slope > 0 and higher_high and higher_low:
@@ -78,12 +78,12 @@ def trend_model(price, ma5, ma20, closes, volumes):
     return "震盪"
 
 
-# ===== 支撐壓力 =====
+# ===== 支撐壓力（🔥修正）=====
 def support_resistance(closes):
-    return round(min(closes[-10:]), 1), round(max(closes[-10:]), 1)
+    return round(min(closes[-20:]), 1), round(max(closes[-20:]), 1)
 
 
-# ===== 策略（🔥最終穩定版）=====
+# ===== 策略（升級穩定版）=====
 def strategy(price, ma5, ma20, closes, volumes):
 
     support, resistance = support_resistance(closes)
@@ -94,13 +94,12 @@ def strategy(price, ma5, ma20, closes, volumes):
 
     momentum = price > closes[-2]
 
-    recent_low = min(closes[-5:])
-    prev_low = min(closes[-10:-5])
-    structure_low = min(recent_low, prev_low)
+    # 🔥 修正：結構低點更穩
+    structure_low = min(closes[-7:])
 
     breakout = price > resistance
 
-    # ===== 評分 =====
+    # ===== 評分（完全保留）=====
     score = 0
 
     if price > ma20:
@@ -167,12 +166,14 @@ def strategy(price, ma5, ma20, closes, volumes):
     if price > resistance * 1.05:
         return "觀望（過熱）", "-", "-", "0%"
 
-    # ===== 買點 =====
+    # ===== 買點（🔥修正：遠離壓力）=====
     buy = "-"
     stop = "-"
 
     if score >= 6:
-        buy = min(price * 0.995, resistance * 1.01)
+        buy = price * 0.995
+        if buy > resistance * 0.98:
+            return "觀望（過近壓力）", "-", "-", "0%"
         stop = structure_low
 
     elif score >= 4:
@@ -191,7 +192,6 @@ def strategy(price, ma5, ma20, closes, volumes):
             stop = ma20 * 0.97
         else:
             return "觀望（等待轉強）", "-", "-", "0%"
-
     else:
         return "觀望（弱勢）", "-", "-", "0%"
 
@@ -209,14 +209,17 @@ def strategy(price, ma5, ma20, closes, volumes):
     if risk > 0.08:
         return "觀望（風險過大）", "-", "-", "0%"
 
-    # ===== RR =====
-    reward = max(resistance - buy, 0)
-    rr = reward / (buy - stop) if (buy - stop) > 0 else 0
+    # ===== RR（🔥修正：避免0）=====
+    reward = resistance - buy
+    if reward <= 0:
+        return "觀望（空間不足）", "-", "-", "0%"
+
+    rr = reward / (buy - stop)
 
     if rr < 1.2:
         return "觀望（報酬不足）", "-", "-", "0%"
 
-    # ===== 倉位模型 =====
+    # ===== 倉位模型（保留）=====
     position = 0
 
     if rr >= 2:
