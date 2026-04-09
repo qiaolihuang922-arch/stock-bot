@@ -134,7 +134,16 @@ def strategy(price, ma5, ma20, closes, volumes):
         score += 1
     if price > resistance * 0.98:
         score -= 1
+# ===== 🔥 轉強突破試單（關鍵補強）=====
+if "轉強" in trend and price > ma20:
 
+    # 有動能 + 不過熱
+    if momentum and price < resistance * 1.02:
+
+        buy = price * 0.995
+        stop = ma20 * 0.97
+
+        return "試單（轉強突破）", round(buy,1), round(stop,1), "30%"
     # ===== 主升 =====
     if volume_strong and momentum and price > ma5 and price > ma20:
         buy = price * 0.995
