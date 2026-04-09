@@ -38,7 +38,7 @@ def already_sent(tag):
 def get_realtime_price(code):
     try:
         url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_{code}.tw"
-        r = requests.get(url, timeout=5).json()
+        r = requests.get(url, timeout=10).json()
 
         data = r.get("msgArray")
         if not data:
@@ -375,9 +375,12 @@ def strategy(price, ma5, ma20, closes, volumes):
     return decision, round(buy,1), round(stop,1), position
 
 
-# ===== 🔥 發送（加debug）=====
+# ===== 🔥 發送（加強版）=====
 def send(msg):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+
+    if len(msg) > 3500:
+        msg = msg[:3500] + "\n\n⚠ 訊息過長已截斷"
 
     for i in range(3):
         try:
@@ -398,8 +401,7 @@ def send(msg):
         time.sleep(2)
 
 
-# ===== 主 =====（只補 fallback）
-
+# ===== 主 =====（只補強 不刪）
 def generate():
     now = datetime.now(tz)
     phase = get_phase()
@@ -411,12 +413,10 @@ def generate():
         twse = get_twse(code)
         yahoo = get_yahoo(code)
 
-        # ===== 🔥 Debug（關鍵）=====
         print(f"{name} TWSE:", twse)
         print(f"{name} Yahoo:", yahoo)
         print("------")
 
-        # ===== 🔥 核心修正：TWSE失效也要繼續跑 =====
         if not twse:
             if not yahoo:
                 msg += f"{name}：無資料\n\n"
@@ -424,36 +424,33 @@ def generate():
 
             price, change = yahoo
 
-            # 🔥 模擬資料（讓策略能跑）
-            closes = [price] * 20
-            volumes = [1] * 20
-            ma5 = price
-            ma20 = price
+            msg += f"{name}\n"
+            msg += f"現價：{round(price,1)} | 漲跌：{round(change,2)}%\n"
+            msg += f"⚠ 僅Yahoo資料（無技術分析）\n\n"
+            continue
 
-        else:
-            t_price, t_change, ma5, ma20, closes, volumes = twse
+        t_price, t_change, ma5, ma20, closes, volumes = twse
 
-            prev_close = closes[-2]
+        prev_close = closes[-2]
 
-            use_realtime = False
-            if now.hour > 9 or (now.hour == 9 and now.minute >= 2):
-                use_realtime = True
+        use_realtime = False
+        if now.hour > 9 or (now.hour == 9 and now.minute >= 2):
+            use_realtime = True
 
-            if use_realtime:
-                realtime = get_realtime_price(code)
+        if use_realtime:
+            realtime = get_realtime_price(code)
 
-                if realtime:
-                    price, change = realtime
-                elif yahoo:
-                    price, change = yahoo
-                else:
-                    price = t_price
-                    change = (price - prev_close) / prev_close * 100
+            if realtime:
+                price, change = realtime
+            elif yahoo:
+                price, change = yahoo
             else:
                 price = t_price
-                change = t_change
+                change = (price - prev_close) / prev_close * 100
+        else:
+            price = t_price
+            change = t_change
 
-        # ===== 以下完全不動你原本邏輯 =====
         volume = volume_model(volumes, closes)
         trend = trend_model(price, ma5, ma20, closes, volumes)
         decision, buy, stop, position = strategy(price, ma5, ma20, closes, volumes)
@@ -476,46 +473,42 @@ def generate():
     return msg
 
 
-# ===== 🌐 Render
-
+# ===== 🌐 Render =====
 @app.route("/")
 def home():
     try:
+        time.sleep(1)
+
         now = datetime.now(tz)
+
+        if now.weekday() >= 5:
+            return "📴 假日不執行"
+
         hour = now.hour
         minute = now.minute
 
-        # ✅ 讀取網址參數
         test_mode = request.args.get("test")
-
-        # ===== 🎯 時間策略 =====
-        send_flag = False
 
         if test_mode == "1":
             tag = now.strftime("%Y%m%d_test_%H%M%S")
-            send_flag = True
 
         elif hour == 8 and 30 <= minute < 35:
             tag = now.strftime("%Y%m%d_pre")
-            send_flag = True
 
         elif 9 <= hour <= 13:
-            if minute % 10 == 0:
-                tag = now.strftime("%Y%m%d_%H%M")
-                send_flag = True
+            if not (minute % 10 == 0 and now.second < 10):
+                return "⏭️ Skip"
+            tag = now.strftime("%Y%m%d_%H%M")
 
         elif hour == 13 and 20 <= minute < 25:
             tag = now.strftime("%Y%m%d_close")
-            send_flag = True
 
         else:
             return "⏭️ Skip"
 
-        # ===== 防重複 =====
         if already_sent(tag):
             return "⚠️ Already sent"
 
-        # ===== 觸發 GitHub =====
         token = os.getenv("GITHUB_TOKEN")
         if not token:
             return "❌ GITHUB_TOKEN not found"
@@ -531,18 +524,19 @@ def home():
             "ref": "main"
         }
 
-        r = requests.post(url, headers=headers, json=data)
+        r = requests.post(url, headers=headers, json=data, timeout=10)
 
         return f"""
 ✅ Trigger GitHub: {r.status_code}
-
 🧪 Test Mode: {test_mode}
 🕒 Time: {now.strftime("%H:%M")}
 📌 Tag: {tag}
+📡 Response: {r.text[:100]}
 """
 
     except Exception as e:
         return f"ERROR:\n{str(e)}"
+
 
 # ===== 🚀 GitHub入口 =====
 if __name__ == "__main__":
@@ -554,9 +548,6 @@ if __name__ == "__main__":
         else:
             msg = generate()
             send(msg)
-
-            if datetime.now(tz).hour == 8:
-                send("✅ Bot正常運行")
 
     except Exception as e:
         err = f"❌ Bot錯誤\n{str(e)}\n\n{traceback.format_exc()}"
