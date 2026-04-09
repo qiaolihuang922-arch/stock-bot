@@ -86,12 +86,15 @@ def generate():
         decision, buy, stop, position = strategy(price, ma5, ma20, closes, volumes)
         support, resistance = support_resistance(closes)
 
-        ai_text = ai_analysis(
+        # ===== 🔥 AI（關鍵修改）=====
+        ai_text, is_real_ai = ai_analysis(
             name, price, change,
             ma5, ma20,
             volume, trend,
-            decision, buy, stop, resistance
+            decision, buy, stop
         )
+
+        tag = "🧠AI" if is_real_ai else "⚠️Fallback"
 
         # ===== 組訊息 =====
         msg += f"{name}\n"
@@ -104,6 +107,6 @@ def generate():
         msg += f"買點：{buy}\n"
         msg += f"停損：{stop}\n"
         msg += f"倉位：{position}\n"
-        msg += f"🤖 AI分析：{ai_text}\n\n"
+        msg += f"{tag}：{ai_text}\n\n"
 
     return msg
