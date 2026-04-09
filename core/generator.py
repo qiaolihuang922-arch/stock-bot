@@ -1,6 +1,8 @@
 from datetime import datetime
 import pytz
 
+from services.learning import record_trade
+
 from services.stock_api import get_twse, get_yahoo, get_realtime_price
 from services.analysis import volume_model, trend_model, strategy, support_resistance
 from services.ai import ai_analysis
