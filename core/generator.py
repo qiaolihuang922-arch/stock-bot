@@ -16,7 +16,6 @@ stocks = {
 }
 
 
-# ===== 時段 =====
 def get_phase():
     now = datetime.now(tz)
     if now.hour < 9:
@@ -27,15 +26,12 @@ def get_phase():
         return "盤後"
 
 
-# ===== 🔥 是否允許記錄 =====
 def allow_record():
     now = datetime.now(tz)
     return now.hour >= 13
 
 
-# ===== 🔥 防重複記錄（核心補強）=====
 recorded_today = set()
-
 
 def can_record_today(name):
     today = datetime.now(tz).strftime("%Y-%m-%d")
@@ -48,30 +44,24 @@ def can_record_today(name):
     return True
 
 
-# ===== 時間權重 =====
 def time_weight():
     now = datetime.now(tz)
     h, m = now.hour, now.minute
 
     if h < 9:
         return -2, "⛔ 盤前觀察"
-
     if h > 13:
         return -2, "📊 盤後規劃"
-
     if h == 9 and m < 30:
         return -2, "⚠ 開盤震盪"
-
     if (h == 9 and m >= 30) or h == 10:
         return 2, "🔥 主攻時段"
-
     if h >= 11:
         return -1, "⚠ 盤中震盪"
 
     return 0, ""
 
 
-# ===== 市場情緒 =====
 def market_sentiment(decisions):
     strong = sum(1 for d in decisions if "進場🔥" in d)
     entry = sum(1 for d in decisions if "進場" in d)
@@ -86,7 +76,6 @@ def market_sentiment(decisions):
     return "🔴 觀望市場"
 
 
-# ===== 全局決策 =====
 def global_decision(decisions):
 
     t_score, t_msg = time_weight()
@@ -110,7 +99,6 @@ def global_decision(decisions):
     return f"🔴 不能買（市場弱） {t_msg}"
 
 
-# ===== 評分 =====
 def score_stock(decision, trend, volume, ai_text):
 
     score = 0
@@ -148,25 +136,20 @@ def score_stock(decision, trend, volume, ai_text):
     return score
 
 
-# ===== 行動建議 =====
 def build_action(decision, price, buy, position):
 
     if "進場🔥" in decision:
         return f"👉 現價進場（{position}）"
-
     elif "進場" in decision:
         return f"👉 回踩 {buy} 進場（{position}）"
-
     elif "試單" in decision:
         return f"👉 小倉試單（{position}）"
-
     elif buy != "-":
         return f"👉 等 {buy} 才進場"
 
     return ""
 
 
-# ===== 預備買點 =====
 def get_prebuy(price, ma5, ma20, support, resistance, decision):
 
     if "觀望" not in decision:
@@ -181,7 +164,6 @@ def get_prebuy(price, ma5, ma20, support, resistance, decision):
     return round(max(ma5, support), 1)
 
 
-# ===== 主產出 =====
 def generate():
 
     now = datetime.now(tz)
@@ -229,7 +211,6 @@ def generate():
                 price = t_price
                 change = t_change
 
-        # ===== 分析 =====
         volume = volume_model(volumes, closes)
         trend = trend_model(price, ma5, ma20, closes, volumes)
         decision, buy, stop, position = strategy(price, ma5, ma20, closes, volumes)
@@ -249,10 +230,28 @@ def generate():
 
         decisions.append(decision)
 
-        # ===== 🔥 記錄（最終安全版）=====
+        # 🔥 記錄（最小必要修正）
         if allow_record() and can_record_today(name):
-            if ("進場" in decision or "試單" in decision) and buy != "-":
-                record_trade(name, decision, price, buy, stop)
+
+            if ("進場" in decision or "試單" in decision) and buy not in ["-", None]:
+
+                # 最小轉換（避免資料錯）
+                d = "buy" if ("進場" in decision or "試單" in decision) else "hold"
+
+                try:
+                    record_trade(
+                        name=name,
+                        decision=d,
+                        price=price,
+                        buy=buy,
+                        stop=stop,
+                        ma5=ma5,
+                        ma20=ma20,
+                        volume=volume,
+                        trend=trend
+                    )
+                except Exception:
+                    pass
 
         pre_buy = get_prebuy(price, ma5, ma20, support, resistance, decision)
 
