@@ -14,7 +14,6 @@ stocks = {
 }
 
 
-# ===== 時段 =====
 def get_phase():
     now = datetime.now(tz)
     if now.hour < 9:
@@ -25,19 +24,56 @@ def get_phase():
         return "盤後"
 
 
-# ===== 🔥 全局判斷（只看 strategy）=====
+# ===== 時間權重 =====
+def time_weight():
+    now = datetime.now(tz)
+    h, m = now.hour, now.minute
+
+    if h < 9 or h > 13:
+        return -3, "⛔ 非交易時段"
+
+    if h == 9 and m < 30:
+        return -2, "⚠ 開盤震盪"
+
+    if (h == 9 and m >= 30) or h == 10:
+        return 2, "🔥 主攻時段"
+
+    if h >= 11:
+        return -1, "⚠ 盤中震盪"
+
+    return 0, ""
+
+
+# ===== 🔥 全局決策（修正版）=====
 def global_decision(decisions):
+    score = 0
+    strong_signal = False
+
     for d in decisions:
-        if "進場" in d or "試單" in d:
-            return "🟢 能買（有機會）"
-    return "🔴 不能買（全部觀望）"
+        if "進場🔥" in d:
+            score += 3
+            strong_signal = True
+        elif "進場" in d:
+            score += 2
+        elif "試單" in d:
+            score += 1
+        elif "觀望" in d:
+            score -= 1
+
+    t_score, t_msg = time_weight()
+    score += t_score
+
+    # 🔥 必須有強訊號才允許買
+    if score >= 2 and strong_signal:
+        return f"🟢 能買（有機會） {t_msg}"
+    else:
+        return f"🔴 不能買（風險偏高） {t_msg}"
 
 
-# ===== 🔥 評分（AI只做輔助）=====
+# ===== 評分 =====
 def score_stock(decision, trend, volume, ai_text):
     score = 0
 
-    # ===== 技術核心（主導）=====
     if "進場🔥" in decision:
         score += 6
     elif "進場" in decision:
@@ -45,13 +81,11 @@ def score_stock(decision, trend, volume, ai_text):
     elif "試單" in decision:
         score += 2
 
-    # 趨勢
     if "主升" in trend:
         score += 3
     elif "轉強" in trend:
         score += 2
 
-    # 量能
     if "主升" in volume:
         score += 3
     elif "強放量" in volume:
@@ -59,17 +93,53 @@ def score_stock(decision, trend, volume, ai_text):
     elif "出貨" in volume:
         score -= 3
 
-    # 風險（高位扣分）
     if "高位" in trend:
         score -= 3
 
-    # ===== 🔥 AI（只能微調）=====
     if "BUY" in ai_text:
         score += 1
     elif "NO" in ai_text:
         score -= 2
 
+    t_score, _ = time_weight()
+    score += t_score
+
     return score
+
+
+# ===== 行動建議（升級）=====
+def build_action(decision, price, buy, position):
+    if "進場🔥" in decision:
+        return f"👉 現價進場（{position}）"
+
+    elif "進場" in decision:
+        return f"👉 回踩 {buy} 進場（{position}）"
+
+    elif "試單" in decision:
+        return f"👉 小倉試單（{position}）"
+
+    elif buy != "-":
+        return f"👉 等 {buy} 才進場"
+
+    return ""
+
+
+# ===== 預備買點（升級）=====
+def get_prebuy(price, ma5, ma20, support, resistance, decision):
+
+    if "觀望" not in decision:
+        return "-"
+
+    # 高位 → 等MA5
+    if price > resistance * 0.97:
+        return round(ma5, 1)
+
+    # 跌破 → 等MA20或支撐
+    if price < ma20:
+        return round(max(ma20, support), 1)
+
+    # 中間 → MA5 or support
+    return round(max(ma5, support), 1)
 
 
 # ===== 主產出 =====
@@ -79,17 +149,13 @@ def generate():
 
     msg = f"【{now.strftime('%m/%d')} {phase}｜AI交易系統】\n\n"
 
-    decisions = []   # ✅ 改回 strategy
+    decisions = []
     candidates = []
 
     for name, code in stocks.items():
 
         twse = get_twse(code)
         yahoo = get_yahoo(code)
-
-        print(f"{name} TWSE:", twse)
-        print(f"{name} Yahoo:", yahoo)
-        print("------")
 
         if not twse:
             if not yahoo:
@@ -123,7 +189,6 @@ def generate():
                 price = t_price
                 change = t_change
 
-        # ===== 分析 =====
         volume = volume_model(volumes, closes)
         trend = trend_model(price, ma5, ma20, closes, volumes)
         decision, buy, stop, position = strategy(price, ma5, ma20, closes, volumes)
@@ -138,35 +203,18 @@ def generate():
 
         tag = "🧠AI" if is_real_ai else "⚠️Fallback"
 
-        # ===== ✅ 正確：收集 strategy =====
         decisions.append(decision)
 
-        # ===== 🔥 預備買點 =====
-        pre_buy = "-"
-        if "觀望" in decision:
-            if price > resistance * 0.97:
-                pre_buy = round(ma5, 1)
-            elif price < ma20:
-                pre_buy = round(ma20, 1)
-            else:
-                pre_buy = round(ma5, 1)
+        pre_buy = get_prebuy(price, ma5, ma20, support, resistance, decision)
 
-        # ===== 🔥 評分 =====
         s = score_stock(decision, trend, volume, ai_text)
 
+        # 🔥 修正：允許試單進榜
         if buy != "-" and "觀望" not in decision:
             candidates.append((s, name, buy, stop))
 
-        # ===== 🔥 行動建議（新增）=====
-        action = ""
-        if "進場🔥" in decision:
-            action = f"👉 強勢進場（{position}）"
-        elif "進場" in decision:
-            action = f"👉 回踩進場（{position}）"
-        elif "試單" in decision:
-            action = f"👉 小倉試單（{position}）"
+        action = build_action(decision, price, buy, position)
 
-        # ===== 輸出 =====
         msg += f"{name}\n"
         msg += f"現價：{round(price,1)} | 漲跌：{round(change,2)}%\n"
         msg += f"MA5：{round(ma5,1)} | MA20：{round(ma20,1)}\n"
@@ -181,13 +229,15 @@ def generate():
         msg += f"{tag}：{ai_text}\n"
         msg += f"{action}\n\n"
 
-    # ===== 🔥 全局（修正後）=====
     final = global_decision(decisions)
+    _, t_msg = time_weight()
 
     msg += "====================\n"
     msg += f"{final}\n"
 
-    # ===== 🔥 最佳標的 =====
+    if t_msg:
+        msg += f"{t_msg}\n"
+
     if candidates:
         best = sorted(candidates, reverse=True)[0]
         score, name, buy, stop = best
