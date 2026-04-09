@@ -1,12 +1,16 @@
 import requests
 from datetime import datetime, timedelta
 import pytz
+import time
+import os
+import traceback
 
-# ===== 永不移除 =====
+# ===== 🔒 永不修改區（AI也不能動）=====
 TOKEN = "8714533132:AAGEAYs-Q-oZJDwwBwwuB0MPb27mqnDtzxs"
 CHAT_ID = "7119676798"
-
 OPENAI_API_KEY = "sk-proj-xxxx"
+# ===== 🔒 永不修改區 END =====
+
 
 stocks = {
     "緯創": "3231",
@@ -18,7 +22,16 @@ tz = pytz.timezone("Asia/Taipei")
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
-# ===== 🔥即時行情（最終正確版）=====
+# ===== ✅ 防重複 =====
+def already_sent(tag):
+    path = f"/tmp/{tag}"
+    if os.path.exists(path):
+        return True
+    open(path, "w").close()
+    return False
+
+
+# ===== 🔥即時行情（完全保留）=====
 def get_realtime_price(code):
     try:
         url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_{code}.tw"
@@ -41,11 +54,8 @@ def get_realtime_price(code):
         prev_close = float(y)
         price = None
 
-        # ===== 成交價 =====
         if z not in ["-", "", "0"]:
             price = float(z)
-
-        # ===== 買賣價補 =====
         else:
             try:
                 bid = float(b.split("_")[0]) if b else None
@@ -63,19 +73,17 @@ def get_realtime_price(code):
         if not price:
             return None
 
-        # ===== 防呆 =====
         if price > prev_close * 1.1 or price < prev_close * 0.9:
             return None
 
         change = (price - prev_close) / prev_close * 100
-
         return price, change
 
     except:
         return None
 
 
-# ===== AI =====
+# ===== AI（完全保留）=====
 def ai_analysis(name, price, change, ma5, ma20, volume, trend, decision, buy, stop, resistance):
 
     if "觀望" in decision:
@@ -358,13 +366,29 @@ def strategy(price, ma5, ma20, closes, volumes):
     return decision, round(buy,1), round(stop,1), position
 
 
-# ===== 發送 =====
+# ===== 🔥 發送（唯一強化）=====
 def send(msg):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
+
+    for i in range(3):
+        try:
+            r = requests.post(url, data={
+                "chat_id": CHAT_ID,
+                "text": msg
+            }, timeout=10)
+
+            if r.status_code == 200:
+                print("✅ 發送成功")
+                return
+        except Exception as e:
+            print(f"❌ 發送失敗 {i}: {e}")
+
+        time.sleep(3)
+
+    print("❌ 發送最終失敗")
 
 
-# ===== 主 =====
+# ===== 主 =====（完全保留）
 def generate():
     now = datetime.now(tz)
     phase = get_phase()
@@ -384,7 +408,6 @@ def generate():
 
         prev_close = closes[-2]
 
-        # ===== 🔥時間控管 =====
         use_realtime = False
         if now.hour > 9:
             use_realtime = True
@@ -427,5 +450,20 @@ def generate():
     return msg
 
 
+# ===== 🚀 主入口（只加保護）=====
 if __name__ == "__main__":
-    send(generate())
+    try:
+        tag = datetime.now(tz).strftime("%Y%m%d%H%M")
+
+        if already_sent(tag):
+            print("⚠️ 已發送過")
+        else:
+            msg = generate()
+            send(msg)
+
+            if datetime.now(tz).hour == 8:
+                send("✅ Bot正常運行")
+
+    except Exception as e:
+        err = f"❌ Bot錯誤\n{str(e)}\n\n{traceback.format_exc()}"
+        send(err)
