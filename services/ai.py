@@ -4,28 +4,38 @@ from config import OPENAI_API_KEY
 AI_ENABLED = True
 
 
+# ===== 🔥 AI分析（只做解釋）=====
 def ai_analysis(name, price, change, ma5, ma20, volume, trend, decision, buy, stop):
 
     global AI_ENABLED
 
     prompt = f"""
-你是短線交易專家，請根據以下資訊判斷：
+你是交易分析助手，只能解釋策略，不可做決策。
 
-{name}
-現價:{price} 漲跌:{change}%
-MA5:{ma5} MA20:{ma20}
-量能:{volume}
-趨勢:{trend}
-策略:{decision}
-買點:{buy}
-停損:{stop}
+股票：{name}
+現價：{price}（{change}%）
+MA5：{ma5} MA20：{ma20}
+量能：{volume}
+趨勢：{trend}
 
-請輸出：
-BUY / WAIT / NO + 倉位% + 原因（20字內）
+策略決策：
+{decision}
+
+請輸出（只能選一種）：
+
+BUY｜解釋為何偏多（20字內）
+WAIT｜解釋為何觀望（20字內）
+NO｜解釋為何不做（20字內）
+
+⚠️禁止提供：
+- 買點
+- 停損
+- 倉位
+- 交易建議
 """
 
     if not AI_ENABLED:
-        return fallback_ai(price, ma5, ma20, volume, trend, decision, buy, stop)
+        return fallback_ai(decision), False
 
     try:
         r = requests.post(
@@ -46,7 +56,7 @@ BUY / WAIT / NO + 倉位% + 原因（20字內）
 
         if r.status_code == 429:
             AI_ENABLED = False
-            return fallback_ai(price, ma5, ma20, volume, trend, decision, buy, stop)
+            return fallback_ai(decision), False
 
         if r.status_code == 200:
             data = r.json()
@@ -55,138 +65,78 @@ BUY / WAIT / NO + 倉位% + 原因（20字內）
                 content = data["output"][0]["content"]
 
                 if content and "text" in content[0]:
-                    text = content[0]["text"]
+                    text = content[0]["text"].strip()
 
-                    if text and len(text.strip()) > 10:
-                        return text.strip(), True
+                    # ===== 🔒 格式防護 =====
+                    if any(x in text for x in ["BUY｜", "WAIT｜", "NO｜"]):
+                        return text, True
 
     except Exception as e:
         print("AI error:", e)
 
-    return fallback_ai(price, ma5, ma20, volume, trend, decision, buy, stop)
+    return fallback_ai(decision), False
 
 
-# ===== 🔥 最終穩定版 =====
-def fallback_ai(price, ma5, ma20, volume, trend, decision, buy, stop):
+# ===== 🔥 fallback（補語意，但不做決策）=====
+def fallback_ai(decision):
 
     # =============================
-    # 🔥 0. 強制服從 strategy（最重要）
+    # 🔴 觀望類（細分語意）
     # =============================
-
     if "觀望" in decision:
-        return "WAIT｜0%｜策略觀望", False
+
+        if "未回踩" in decision:
+            return "WAIT｜尚未回踩"
+
+        if "追高" in decision:
+            return "WAIT｜避免追高"
+
+        if "過熱" in decision:
+            return "WAIT｜過熱不追"
+
+        if "未到買點" in decision:
+            return "WAIT｜尚未到點"
+
+        if "報酬不足" in decision:
+            return "WAIT｜報酬不足"
+
+        if "風險過大" in decision:
+            return "WAIT｜風險過高"
+
+        if "弱勢" in decision:
+            return "WAIT｜弱勢結構"
+
+        return "WAIT｜策略觀望"
 
     # =============================
-    # 🔥 1. 同步 strategy
+    # 🟢 進場類
     # =============================
-
     if "進場🔥" in decision:
-        return "BUY｜100%｜順勢主升段", False
+        return "BUY｜強勢突破"
 
-    if "進場（穩健）" in decision:
-        return "BUY｜50%｜回踩進場", False
+    if "進場" in decision:
+        return "BUY｜回踩確認"
 
+    # =============================
+    # 🟡 試單（細分）
+    # =============================
     if "試單" in decision:
-        return "BUY｜30%｜轉強試單", False
 
-    if "過熱" in decision or "追高" in decision:
-        return "WAIT｜0%｜避免追高", False
+        if "高風險" in decision:
+            return "BUY｜高風險試單"
+
+        return "BUY｜轉強觀察"
+
+    # =============================
+    # 🔴 明確不做
+    # =============================
+    if "風險" in decision:
+        return "NO｜風險偏高"
 
     if "弱勢" in decision:
-        return "NO｜0%｜弱勢結構", False
+        return "NO｜結構偏弱"
 
     # =============================
-    # 🔥 2. 無買點 → 禁止判斷（關鍵）
+    # 預設
     # =============================
-
-    if buy == "-" or stop == "-":
-        return "WAIT｜0%｜無有效買點", False
-
-    # =============================
-    # 🔥 3. 高位限制
-    # =============================
-
-    if "高位" in trend:
-        return "WAIT｜0%｜高位震盪", False
-
-    # =============================
-    # 🔥 4. 風險檢查
-    # =============================
-
-    risk = (buy - stop) / buy if buy != 0 else 0
-
-    if risk > 0.08:
-        if price > ma20:
-            return "BUY｜30%｜高風險試單", False
-        return "NO｜0%｜風險過大", False
-
-    if risk < 0.02:
-        return "WAIT｜0%｜空間不足", False
-
-    # =============================
-    # 🔥 5. 買點距離
-    # =============================
-
-    distance = abs(price - buy) / buy
-
-    if distance > 0.04:
-        return "WAIT｜0%｜未到買點", False
-
-    # =============================
-    # 🔥 6. 突破（嚴格版）
-    # =============================
-
-    if "轉強" in trend and price > ma20 and price > ma5:
-        return "BUY｜30%｜轉強結構成立", False
-
-    # =============================
-    # 🔥 7. 多因子（最後備用）
-    # =============================
-
-    score = 0
-
-    if "主升" in trend:
-        score += 4
-    elif "轉強" in trend:
-        score += 2
-    elif "多頭" in trend:
-        score += 2
-    elif "空頭" in trend:
-        score -= 4
-
-    if "主升" in volume:
-        score += 3
-    elif "強放量" in volume:
-        score += 2
-    elif "出貨" in volume:
-        score -= 3
-
-    if price > ma20:
-        score += 1
-    else:
-        score -= 2
-
-    if price > ma5:
-        score += 1
-
-    if "高位" in trend:
-        score -= 2
-
-    # =============================
-    # 🔥 最終輸出
-    # =============================
-
-    if score >= 6:
-        return "BUY｜100%｜多因子共振", False
-
-    elif score >= 4:
-        return "BUY｜50%｜條件良好", False
-
-    elif score >= 2:
-        return "BUY｜30%｜可試單", False
-
-    elif score >= 0:
-        return "WAIT｜0%｜訊號不足", False
-
-    else:
-        return "NO｜0%｜避免進場", False
+    return "WAIT｜訊號不足"
