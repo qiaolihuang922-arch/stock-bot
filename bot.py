@@ -492,7 +492,7 @@ def home():
         send_flag = False
 
         if test_mode == "1":
-            tag = now.strftime("%Y%m%d_test")
+            tag = now.strftime("%Y%m%d_test_%H%M%S")
             send_flag = True
 
         elif hour == 8 and 30 <= minute < 35:
