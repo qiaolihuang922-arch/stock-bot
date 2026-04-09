@@ -83,7 +83,7 @@ def support_resistance(closes):
     return round(min(closes[-10:]), 1), round(max(closes[-10:]), 1)
 
 
-# ===== 策略（🔥最終完整融合版）=====
+# ===== 策略（🔥最終穩定版｜統一決策）=====
 def strategy(price, ma5, ma20, closes, volumes):
 
     support, resistance = support_resistance(closes)
@@ -103,6 +103,7 @@ def strategy(price, ma5, ma20, closes, volumes):
     # ===== 🔥 統一評分 =====
     score = 0
 
+    # 趨勢
     if price > ma20:
         score += 2
     else:
@@ -111,6 +112,7 @@ def strategy(price, ma5, ma20, closes, volumes):
     if price > ma5:
         score += 1
 
+    # 動能
     if momentum:
         score += 1
 
@@ -145,6 +147,10 @@ def strategy(price, ma5, ma20, closes, volumes):
     if price < ma5:
         score += 1
 
+    # ===== 防追高（補強）=====
+    if price > ma5 * 1.05:
+        return "觀望（追高風險）", "-", "-", "0%"
+
     # ===== 假突破 =====
     if breakout and closes[-1] <= closes[-2]:
         score -= 3
@@ -153,7 +159,7 @@ def strategy(price, ma5, ma20, closes, volumes):
     if closes[-3] < ma20 and closes[-2] < ma20 and price > ma20:
         score += 2
 
-    # ===== 🔥 confirm（補回）=====
+    # ===== confirm =====
     confirm = 0
     if price > ma20: confirm += 1
     if momentum: confirm += 1
@@ -194,17 +200,17 @@ def strategy(price, ma5, ma20, closes, volumes):
     else:
         return "觀望（弱勢）", "-", "-", "0%"
 
-    # ===== 🔥 買點距離限制（補回）=====
+    # ===== 買點距離 =====
     if buy != "-" and abs(price - buy) / buy > 0.04:
         return "觀望（未到買點）", "-", "-", "0%"
 
-    # ===== 🔥 stop 強化（補回）=====
+    # ===== stop統一 =====
     stop = min(structure_low, stop)
 
     if stop >= buy:
         stop = buy * 0.97
 
-    # ===== 🔥 風險 vs 機會 =====
+    # ===== 風險 =====
     risk = (buy - stop) / buy
     opportunity = score >= 3
 
@@ -213,7 +219,7 @@ def strategy(price, ma5, ma20, closes, volumes):
             return "試單（高風險）", round(price*0.995,1), round(ma20*0.97,1), "30%"
         return "觀望（風險過大）", "-", "-", "0%"
 
-    # ===== 🔥 RR（含突破例外）=====
+    # ===== RR =====
     reward = resistance - buy
     rr = reward / (buy - stop) if (buy - stop) > 0 else 0
 
@@ -221,7 +227,7 @@ def strategy(price, ma5, ma20, closes, volumes):
         if not (breakout and score >= 5):
             return "觀望（報酬不足）", "-", "-", "0%"
 
-    # ===== 🔥 最終決策 =====
+    # ===== 最終 =====
     if score >= 6:
         return "進場🔥（強勢）", round(buy,1), round(stop,1), "100%"
     elif score >= 4:
