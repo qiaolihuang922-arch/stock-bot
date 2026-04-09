@@ -18,7 +18,7 @@ tz = pytz.timezone("Asia/Taipei")
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
-# ===== AI（🔥強化版）=====
+# ===== AI =====
 def ai_analysis(name, price, change, ma5, ma20, volume, trend, decision, buy, stop, resistance):
 
     if "觀望" in decision:
@@ -29,8 +29,6 @@ def ai_analysis(name, price, change, ma5, ma20, volume, trend, decision, buy, st
         base = "可進場"
 
     prompt = f"""
-請解釋交易決策：
-
 股票：{name}
 現價：{price}
 MA20：{ma20}
@@ -40,10 +38,7 @@ MA20：{ma20}
 決策：{decision}
 
 說明：
-- 是否站上MA20
-- 是否接近壓力
-- 建議追或等回檔
-
+是否站上MA20、是否接近壓力、是否可追或等回檔
 40字內
 """
 
@@ -70,7 +65,6 @@ MA20：{ma20}
     except:
         pass
 
-    # fallback
     if "觀望" in decision:
         return "不建議進場，位置或結構不佳"
     if price > ma20:
@@ -105,16 +99,20 @@ def get_yahoo(code):
         return None
 
 
-# ===== TWSE =====
+# ===== TWSE（🔥資料穩定版）=====
 def get_twse(code):
     try:
         rows = []
         now = datetime.now(tz)
 
-        for i in range(3):
+        for i in range(6):
             date = now - timedelta(days=30*i)
             url = f"https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date={date.strftime('%Y%m01')}&stockNo={code}"
-            r = requests.get(url, headers=HEADERS, timeout=10).json()
+
+            try:
+                r = requests.get(url, headers=HEADERS, timeout=10).json()
+            except:
+                continue
 
             if r.get("stat") != "OK":
                 continue
@@ -129,13 +127,20 @@ def get_twse(code):
                 except:
                     continue
 
-        if len(rows) < 25:
-            return None
-
         rows.sort(key=lambda x: x[0])
 
         closes = [x[1] for x in rows]
         volumes = [x[2] for x in rows]
+
+        # 🔥資料不足 → Yahoo補
+        if len(closes) < 20:
+            yahoo = get_yahoo(code)
+            if yahoo:
+                price, change = yahoo
+                closes = [price] * 20
+                volumes = [1] * 20
+                return price, change, price, price, closes, volumes
+            return None
 
         price = closes[-1]
         prev = closes[-2]
@@ -148,10 +153,16 @@ def get_twse(code):
         return price, change, ma5, ma20, closes, volumes
 
     except:
+        yahoo = get_yahoo(code)
+        if yahoo:
+            price, change = yahoo
+            closes = [price] * 20
+            volumes = [1] * 20
+            return price, change, price, price, closes, volumes
         return None
 
 
-# ===== 量能（完整保留）=====
+# ===== 量能 =====
 def volume_model(volumes, closes):
     vol = volumes[-1]
     avg10 = sum(volumes[-10:]) / 10
@@ -185,7 +196,7 @@ def volume_model(volumes, closes):
     return level
 
 
-# ===== 趨勢（完整保留）=====
+# ===== 趨勢 =====
 def trend_model(price, ma5, ma20, closes, volumes):
 
     if closes[-2] < ma20 and price > ma20:
@@ -227,7 +238,7 @@ def support_resistance(closes):
     return round(min(closes[-10:]),1), round(max(closes[-10:]),1)
 
 
-# ===== 策略（🔥完整強化）=====
+# ===== 策略（完整強化）=====
 def strategy(price, ma5, ma20, closes, volumes):
 
     support, resistance = support_resistance(closes)
@@ -246,25 +257,20 @@ def strategy(price, ma5, ma20, closes, volumes):
     prev_low = min(closes[-10:-5])
     structure_low = min(recent_low, prev_low)
 
-    # 🔥弱勢
     if price < ma20 and not volume_strong:
         return "觀望（弱勢）", "-", "-", "0%"
 
-    # 🔥過熱
     if price > resistance * 1.05:
         return "觀望（過熱區）", "-", "-", "0%"
 
-    # 🔥假突破
     if breakout and confirm:
         if closes[-1] <= closes[-2]:
             return "觀望（假突破）", "-", "-", "0%"
 
-    # 🔥主升（防追高）
     not_too_high = price < resistance * 1.03
     if volume_strong and momentum and price > ma5 and price > ma20 and not_too_high:
         return "進場🔥（主升）", round(price,1), round(structure_low,1), "100%"
 
-    # ===== 原邏輯 =====
     if price > resistance and vol > avg10 * 1.5:
         buy = price
         stop = max(resistance * 0.97, structure_low)
@@ -286,7 +292,6 @@ def strategy(price, ma5, ma20, closes, volumes):
     else:
         return "觀望", "-", "-", "0%"
 
-    # 🔥停損強化
     stop = min(structure_low, buy * 0.97)
     stop = min(stop, buy * 0.96)
 
@@ -296,7 +301,6 @@ def strategy(price, ma5, ma20, closes, volumes):
     if (buy - stop) / buy > 0.08:
         return "觀望（風險過大）", "-", "-", "0%"
 
-    # 🔥決策分級
     if volume_strong and price > ma20:
         decision = "進場🔥（主升）"
         position = "100%"
