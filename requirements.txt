@@ -2,3 +2,5 @@ flask
 requests
 pytz
 gunicorn
+
+supabase
