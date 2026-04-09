@@ -66,11 +66,18 @@ BUY / WAIT / NO + 倉位% + 原因（20字內）
     return fallback_ai(price, ma5, ma20, volume, trend, decision, buy, stop)
 
 
-# ===== 🔥 統一決策AI（最終穩定版）=====
+# ===== 🔥 最終穩定版 =====
 def fallback_ai(price, ma5, ma20, volume, trend, decision, buy, stop):
 
     # =============================
-    # 🔥 第一層：100%同步 strategy（最高原則）
+    # 🔥 0. 強制服從 strategy（最重要）
+    # =============================
+
+    if "觀望" in decision:
+        return "WAIT｜0%｜策略觀望", False
+
+    # =============================
+    # 🔥 1. 同步 strategy
     # =============================
 
     if "進場🔥" in decision:
@@ -89,55 +96,55 @@ def fallback_ai(price, ma5, ma20, volume, trend, decision, buy, stop):
         return "NO｜0%｜弱勢結構", False
 
     # =============================
-    # 🔥 第二層：高位強制限制（關鍵）
+    # 🔥 2. 無買點 → 禁止判斷（關鍵）
+    # =============================
+
+    if buy == "-" or stop == "-":
+        return "WAIT｜0%｜無有效買點", False
+
+    # =============================
+    # 🔥 3. 高位限制
     # =============================
 
     if "高位" in trend:
         return "WAIT｜0%｜高位震盪", False
 
     # =============================
-    # 🔥 第三層：風險檢查（同步 strategy）
+    # 🔥 4. 風險檢查
     # =============================
 
-    if buy != "-" and stop != "-":
+    risk = (buy - stop) / buy if buy != 0 else 0
 
-        risk = (buy - stop) / buy if buy != 0 else 0
-
-        # 高風險
-        if risk > 0.08:
-            if price > ma20:
-                return "BUY｜30%｜高風險試單", False
-            return "NO｜0%｜風險過大", False
-
-        # 太小（沒空間）
-        if risk < 0.02:
-            return "WAIT｜0%｜空間不足", False
-
-    # =============================
-    # 🔥 第四層：買點距離（防亂進）
-    # =============================
-
-    if buy != "-":
-        distance = abs(price - buy) / buy
-
-        if distance > 0.04:
-            return "WAIT｜0%｜未到買點", False
-
-    # =============================
-    # 🔥 第五層：突破例外（補回）
-    # =============================
-
-    if "突破" in trend or "轉強" in trend:
+    if risk > 0.08:
         if price > ma20:
-            return "BUY｜30%｜結構轉強", False
+            return "BUY｜30%｜高風險試單", False
+        return "NO｜0%｜風險過大", False
+
+    if risk < 0.02:
+        return "WAIT｜0%｜空間不足", False
 
     # =============================
-    # 🔥 第六層：多因子（最後才用）
+    # 🔥 5. 買點距離
+    # =============================
+
+    distance = abs(price - buy) / buy
+
+    if distance > 0.04:
+        return "WAIT｜0%｜未到買點", False
+
+    # =============================
+    # 🔥 6. 突破（嚴格版）
+    # =============================
+
+    if "轉強" in trend and price > ma20 and price > ma5:
+        return "BUY｜30%｜轉強結構成立", False
+
+    # =============================
+    # 🔥 7. 多因子（最後備用）
     # =============================
 
     score = 0
 
-    # 趨勢
     if "主升" in trend:
         score += 4
     elif "轉強" in trend:
@@ -147,7 +154,6 @@ def fallback_ai(price, ma5, ma20, volume, trend, decision, buy, stop):
     elif "空頭" in trend:
         score -= 4
 
-    # 量能
     if "主升" in volume:
         score += 3
     elif "強放量" in volume:
@@ -155,7 +161,6 @@ def fallback_ai(price, ma5, ma20, volume, trend, decision, buy, stop):
     elif "出貨" in volume:
         score -= 3
 
-    # 結構
     if price > ma20:
         score += 1
     else:
@@ -164,12 +169,11 @@ def fallback_ai(price, ma5, ma20, volume, trend, decision, buy, stop):
     if price > ma5:
         score += 1
 
-    # 高位扣分
     if "高位" in trend:
         score -= 2
 
     # =============================
-    # 🔥 最終輸出（備用，不主導）
+    # 🔥 最終輸出
     # =============================
 
     if score >= 6:
