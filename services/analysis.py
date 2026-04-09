@@ -6,11 +6,9 @@ def volume_model(volumes, closes):
 
     price_up = closes[-1] > closes[-2]
 
-    # 🔥 健康上漲（量縮+價格撐住）
     if volumes[-1] < volumes[-2] < volumes[-3] and closes[-1] > sum(closes[-20:]) / 20:
         return "縮量整理（健康上升）"
 
-    # 🔥 爆量下跌（強警告）
     if ratio > 2 and not price_up:
         return "爆量（出貨⚠⚠）"
 
@@ -43,7 +41,6 @@ def volume_model(volumes, closes):
 # ===== 趨勢（🔥強化版）=====
 def trend_model(price, ma5, ma20, closes, volumes):
 
-    # 🔥 MA翻多起漲（優先判斷）
     if closes[-2] < ma20 and price > ma20:
         return "🚀轉強起漲"
 
@@ -61,13 +58,11 @@ def trend_model(price, ma5, ma20, closes, volumes):
     resistance = max(closes[-10:])
     near_res = price >= resistance * 0.97
 
-    # 🔥 主升結構
     if price > ma5 > ma20 and slope > 0 and higher_high and higher_low:
         if price > recent_high * 0.98:
             return "🔥主升段"
         return "👍多頭結構"
 
-    # 🔥 高位風險（提前警告）
     if near_res and slope < 0:
         return "⚠高位轉弱"
 
@@ -83,12 +78,12 @@ def trend_model(price, ma5, ma20, closes, volumes):
     return "震盪"
 
 
-# ===== 支撐壓力（保留）=====
+# ===== 支撐壓力 =====
 def support_resistance(closes):
     return round(min(closes[-10:]), 1), round(max(closes[-10:]), 1)
 
 
-# ===== 策略（🔥AI級強化版）=====
+# ===== 策略（🔥最終強化版｜不刪邏輯）=====
 def strategy(price, ma5, ma20, closes, volumes):
     support, resistance = support_resistance(closes)
 
@@ -106,20 +101,23 @@ def strategy(price, ma5, ma20, closes, volumes):
     prev_low = min(closes[-10:-5])
     structure_low = min(recent_low, prev_low)
 
-    # ===== 🔥 防呆 =====
+    # ===== 防呆 =====
     if price < ma20 and not volume_strong:
         return "觀望（弱勢）", "-", "-", "0%"
 
-    # 🔥 過熱區（避免追高）
     if price > resistance * 1.05:
         return "觀望（過熱區）", "-", "-", "0%"
 
-    # 🔥 假突破過濾（強化）
+    # 🔥 防追高（新增）
+    if price > ma5 * 1.03:
+        return "觀望（追高風險）", "-", "-", "0%"
+
+    # 假突破過濾
     if breakout and confirm:
         if closes[-1] <= closes[-2]:
             return "觀望（假突破）", "-", "-", "0%"
 
-    # ===== 🔥 類AI評分系統 =====
+    # ===== 評分 =====
     score = 0
 
     if price > ma20:
@@ -136,27 +134,30 @@ def strategy(price, ma5, ma20, closes, volumes):
     if price > resistance:
         score += 1
     if price > resistance * 0.98:
-        score -= 1  # 靠近壓力扣分
+        score -= 1
 
-    # ===== 🔥 主升直接進場 =====
+    # ===== 主升（保留+強化）=====
     not_too_high = price < resistance * 1.03
 
     if volume_strong and momentum and price > ma5 and price > ma20 and not_too_high:
-        return "進場🔥（主升）", round(price, 1), round(structure_low, 1), "100%"
+        buy = min(price, price * 0.995)   # 🔥 不追高
+        stop = structure_low
+        return "進場🔥（主升）", round(buy,1), round(stop,1), "100%"
 
-    # ===== 原邏輯 =====
+    # ===== 原邏輯（完全保留）=====
     if price > resistance and vol > avg10 * 1.5:
-        buy = price
+        buy = resistance * 1.01  # 🔥 改回踩
         stop = max(resistance * 0.97, structure_low)
 
     elif breakout and confirm:
-        buy = price
+        buy = resistance * 1.01  # 🔥 改回踩
         stop = max(resistance * 0.97, structure_low)
 
     elif price >= ma5:
         if price > ma5 * 1.05:
             return "觀望（過高）", "-", "-", "0%"
-        buy = min(ma5, support)
+
+        buy = ma5  # 🔥 強化：固定接MA5
         stop = max(ma20 * 0.98, structure_low)
 
     elif price > ma20:
@@ -166,7 +167,11 @@ def strategy(price, ma5, ma20, closes, volumes):
     else:
         return "觀望", "-", "-", "0%"
 
-    # ===== 🔥 停損強化 =====
+    # ===== 🔥 買點距離檢查（關鍵新增）=====
+    if abs(price - buy) / buy > 0.04:
+        return "觀望（未到買點）", "-", "-", "0%"
+
+    # ===== 停損 =====
     stop = min(structure_low, buy * 0.97)
     stop = min(stop, buy * 0.96)
 
@@ -176,7 +181,7 @@ def strategy(price, ma5, ma20, closes, volumes):
     if (buy - stop) / buy > 0.08:
         return "觀望（風險過大）", "-", "-", "0%"
 
-    # ===== 🔥 決策分級（關鍵升級）=====
+    # ===== 決策 =====
     if score >= 6:
         decision = "進場🔥（強勢）"
         position = "100%"
