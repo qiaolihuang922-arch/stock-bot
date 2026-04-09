@@ -1,9 +1,12 @@
+from flask import Flask  # ✅新增
 import requests
 from datetime import datetime, timedelta
 import pytz
 import time
 import os
 import traceback
+
+app = Flask(__name__)  # ✅新增
 
 # ===== 🔒 永不修改區（AI也不能動）=====
 TOKEN = "8714533132:AAGEAYs-Q-oZJDwwBwwuB0MPb27mqnDtzxs"
@@ -450,7 +453,27 @@ def generate():
     return msg
 
 
-# ===== 🚀 主入口（只加保護）=====
+# ===== 🌐 Render入口（唯一新增）=====
+@app.route("/")
+def home():
+    try:
+        tag = datetime.now(tz).strftime("%Y%m%d")
+
+        if already_sent(tag):
+            return "Already sent today"
+
+        msg = generate()
+        send(msg)
+
+        return "OK"
+
+    except Exception as e:
+        err = f"❌ Bot錯誤\n{str(e)}\n\n{traceback.format_exc()}"
+        send(err)
+        return "ERROR"
+
+
+# ===== 🚀 原本入口（完全保留）=====
 if __name__ == "__main__":
     try:
         tag = datetime.now(tz).strftime("%Y%m%d%H%M")
