@@ -1,3 +1,5 @@
+import requests
+
 def ai_analysis(name, price, change, ma5, ma20, volume, trend, decision, buy, stop):
 
     prompt = f"""
