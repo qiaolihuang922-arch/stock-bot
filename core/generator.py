@@ -33,7 +33,7 @@ def calc_rr(buy, stop, resistance):
     return round(reward / risk, 2)
 
 
-# ===== RR過濾 =====
+# ===== RR提示 =====
 def rr_filter(rr):
 
     if rr == "-":
@@ -63,7 +63,7 @@ def position_level(price, ma5, ma20):
         return "高位"
 
 
-# ===== 🔥 加回：預備買點 =====
+# ===== 預備買點 =====
 def get_prebuy(price, ma5, ma20, support, resistance, decision):
 
     if "觀望" not in decision:
@@ -184,9 +184,10 @@ def score_stock(decision, trend, volume, ai_text):
     return score
 
 
-# ===== 行動（含RR保護）=====
+# ===== 行動（修正衝突）=====
 def build_action(decision, buy, position, rr):
 
+    # 🔥 RR優先（避免衝突）
     if rr != "-" and rr < 1:
         return "⚠️不建議進場（RR過低）"
 
@@ -268,6 +269,7 @@ def generate():
 
         decisions.append(decision)
 
+        # ===== 記錄（完全保留）=====
         if allow_record() and can_record_today(name):
             if ("進場" in decision or "試單" in decision) and buy not in ["-", None]:
                 try:
@@ -281,25 +283,31 @@ def generate():
             candidates.append((s, name, buy, stop))
 
         action = build_action(decision, buy, position, rr)
-
         pre_buy = get_prebuy(price, ma5, ma20, support, resistance, decision)
 
+        # ===== 🔥 分層輸出 =====
         msg += f"{name}\n"
-        msg += f"{round(price,1)}（{round(change,2)}%）\n"
-        msg += f"MA5:{round(ma5,1)} MA20:{round(ma20,1)}\n"
-        msg += f"{volume}｜{trend}｜{pos_level}\n"
-        msg += f"S:{support} R:{resistance}\n"
-        msg += f"{decision}\n"
 
+        # 第一層（決策）
+        msg += f"{decision}｜倉位 {position}\n"
+        if action:
+            msg += f"{action}\n"
+
+        # 第二層（交易關鍵）
         if buy != "-":
             msg += f"買:{buy} 停:{stop} RR:{rr} {rr_tag}\n"
 
         if pre_buy != "-":
             msg += f"預備:{pre_buy}\n"
 
-        msg += f"{position}\n"
-        msg += f"{tag}：{ai_text}\n"
-        msg += f"{action}\n\n"
+        # 第三層（分析）
+        msg += f"{round(price,1)}（{round(change,2)}%）\n"
+        msg += f"MA5:{round(ma5,1)} MA20:{round(ma20,1)}\n"
+        msg += f"{volume}｜{trend}｜{pos_level}\n"
+        msg += f"S:{support} R:{resistance}\n"
+
+        # AI
+        msg += f"{tag}：{ai_text}\n\n"
 
     final = global_decision(decisions)
 
