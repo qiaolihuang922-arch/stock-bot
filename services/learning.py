@@ -2,6 +2,7 @@ import logging
 from supabase import create_client
 from datetime import datetime
 import pytz
+import uuid
 
 from config import SUPABASE_URL, SUPABASE_KEY
 
@@ -19,7 +20,14 @@ tz = pytz.timezone("Asia/Taipei")
 
 
 # ================================
-# 🚨 連續虧損檢查（防污染）
+# 🔧 debug id（每筆交易追蹤）
+# ================================
+def gen_trace_id():
+    return str(uuid.uuid4())[:8]
+
+
+# ================================
+# 🚨 連續虧損檢查
 # ================================
 def get_loss_streak(limit=3):
     try:
@@ -57,14 +65,15 @@ def can_record():
 
 
 # ================================
-# 🔧 型別安全（關鍵防炸）
+# 🔧 型別安全
 # ================================
 def safe_float(val):
     try:
         if val in ["-", None]:
             return None
         return float(val)
-    except:
+    except Exception as e:
+        logging.warning(f"[safe_float_error] {val} | {e}")
         return None
 
 
@@ -91,19 +100,24 @@ def record_trade(
     source="live"
 ):
 
+    trace_id = gen_trace_id()
+
+    logging.info(f"[start_record] {trace_id} | {name}")
+
     # 🔒 決策合法性
     if decision not in ["buy", "sell", "hold"]:
-        logging.error(f"[invalid_decision] {decision}")
+        logging.error(f"[invalid_decision] {trace_id} | {decision}")
         return
 
     if not can_record():
+        logging.warning(f"[blocked_record] {trace_id}")
         return
 
     now = datetime.now(tz)
     trade_date = now.date().isoformat()
 
     try:
-        # 🔒 防重複（核心）
+        # 🔒 防重複
         existing = supabase.table("trades") \
             .select("id") \
             .eq("stock", name) \
@@ -111,10 +125,10 @@ def record_trade(
             .execute()
 
         if existing.data:
-            logging.info(f"[skip] {name} {trade_date} 已存在")
+            logging.info(f"[skip] {trace_id} | {name} {trade_date} 已存在")
             return
 
-        # ===== 🔥 型別轉換 =====
+        # ===== 型別轉換 =====
         price = safe_float(price)
         buy = safe_float(buy)
         stop = safe_float(stop)
@@ -124,7 +138,10 @@ def record_trade(
         volume_str = safe_str(volume)
         trend_str = safe_str(trend)
 
-        # ===== 🔥 data（乾淨版）=====
+        # ===== debug 檢查 =====
+        logging.info(f"[data_check] {trace_id} | price={price} buy={buy} stop={stop}")
+
+        # ===== data_field =====
         data_field = {}
 
         if ma5 is not None:
@@ -142,10 +159,9 @@ def record_trade(
         if extra_data:
             data_field.update(extra_data)
 
-        # ===== 🔥 insert =====
+        # ===== insert data =====
         insert_data = {
             "trade_date": trade_date,
-
             "stock": name,
             "decision": decision,
 
@@ -164,12 +180,18 @@ def record_trade(
             "source": source
         }
 
-        supabase.table("trades").insert(insert_data).execute()
+        logging.info(f"[insert_ready] {trace_id}")
 
-        logging.info(f"[recorded] {name} | {decision} | {price}")
+        res = supabase.table("trades").insert(insert_data).execute()
+
+        # ===== 🔥 回傳檢查 =====
+        if hasattr(res, "data"):
+            logging.info(f"[recorded] {trace_id} | {name} | {decision} | {price}")
+        else:
+            logging.warning(f"[no_response_data] {trace_id}")
 
     except Exception as e:
-        logging.error(f"[record_error] {name} | {e}")
+        logging.error(f"[record_error] {trace_id} | {name} | {e}")
 
 
 # ================================
@@ -177,8 +199,10 @@ def record_trade(
 # ================================
 def update_trade_result(name, result, price_after):
 
+    trace_id = gen_trace_id()
+
     if result not in ["win", "loss"]:
-        logging.error(f"[invalid_result] {result}")
+        logging.error(f"[invalid_result] {trace_id} | {result}")
         return
 
     price_after = safe_float(price_after)
@@ -193,7 +217,7 @@ def update_trade_result(name, result, price_after):
             .execute()
 
         if not res.data:
-            logging.warning(f"[no_pending] {name}")
+            logging.warning(f"[no_pending] {trace_id} | {name}")
             return
 
         trade_id = res.data[0]["id"]
@@ -207,16 +231,18 @@ def update_trade_result(name, result, price_after):
             .eq("id", trade_id) \
             .execute()
 
-        logging.info(f"[closed] {name} | {result}")
+        logging.info(f"[closed] {trace_id} | {name} | {result}")
 
     except Exception as e:
-        logging.error(f"[update_error] {name} | {e}")
+        logging.error(f"[update_error] {trace_id} | {name} | {e}")
 
 
 # ================================
 # 🔄 標記無效
 # ================================
 def mark_invalid(name):
+
+    trace_id = gen_trace_id()
 
     try:
         res = supabase.table("trades") \
@@ -228,7 +254,7 @@ def mark_invalid(name):
             .execute()
 
         if not res.data:
-            logging.warning(f"[no_data] {name}")
+            logging.warning(f"[no_data] {trace_id} | {name}")
             return
 
         trade_id = res.data[0]["id"]
@@ -238,7 +264,7 @@ def mark_invalid(name):
             .eq("id", trade_id) \
             .execute()
 
-        logging.info(f"[invalid] {name}")
+        logging.info(f"[invalid] {trace_id} | {name}")
 
     except Exception as e:
-        logging.error(f"[invalid_error] {name} | {e}")
+        logging.error(f"[invalid_error] {trace_id} | {name} | {e}")
