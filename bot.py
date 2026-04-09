@@ -18,6 +18,35 @@ tz = pytz.timezone("Asia/Taipei")
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
+# ===== 🔥新增：即時行情（TWSE）=====
+def get_realtime_price(code):
+    try:
+        url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_{code}.tw"
+        r = requests.get(url, timeout=5).json()
+
+        data = r.get("msgArray")
+        if not data:
+            return None
+
+        d = data[0]
+
+        price = d.get("z")
+        prev_close = d.get("y")
+
+        if price in ["-", ""] or prev_close in ["-", ""]:
+            return None
+
+        price = float(price)
+        prev_close = float(prev_close)
+
+        change = (price - prev_close) / prev_close * 100
+
+        return price, change
+
+    except:
+        return None
+
+
 # ===== AI =====
 def ai_analysis(name, price, change, ma5, ma20, volume, trend, decision, buy, stop, resistance):
 
@@ -99,7 +128,7 @@ def get_yahoo(code):
         return None
 
 
-# ===== TWSE（🔥資料穩定版）=====
+# ===== TWSE（日K）=====
 def get_twse(code):
     try:
         rows = []
@@ -132,14 +161,7 @@ def get_twse(code):
         closes = [x[1] for x in rows]
         volumes = [x[2] for x in rows]
 
-        # 🔥資料不足 → Yahoo補
         if len(closes) < 20:
-            yahoo = get_yahoo(code)
-            if yahoo:
-                price, change = yahoo
-                closes = [price] * 20
-                volumes = [1] * 20
-                return price, change, price, price, closes, volumes
             return None
 
         price = closes[-1]
@@ -153,12 +175,6 @@ def get_twse(code):
         return price, change, ma5, ma20, closes, volumes
 
     except:
-        yahoo = get_yahoo(code)
-        if yahoo:
-            price, change = yahoo
-            closes = [price] * 20
-            volumes = [1] * 20
-            return price, change, price, price, closes, volumes
         return None
 
 
@@ -238,7 +254,7 @@ def support_resistance(closes):
     return round(min(closes[-10:]),1), round(max(closes[-10:]),1)
 
 
-# ===== 策略（完整強化）=====
+# ===== 策略（完全不動）=====
 def strategy(price, ma5, ma20, closes, volumes):
 
     support, resistance = support_resistance(closes)
@@ -338,7 +354,12 @@ def generate():
 
         t_price, t_change, ma5, ma20, closes, volumes = twse
 
-        if "盤中" in phase and yahoo:
+        # 🔥即時行情優先
+        realtime = get_realtime_price(code)
+
+        if realtime:
+            price, change = realtime
+        elif "盤中" in phase and yahoo:
             price, change = yahoo
         else:
             price, change = t_price, t_change
