@@ -208,7 +208,10 @@ def strategy(price, ma5, ma20, closes, volumes):
     risk = (buy - stop) / buy
 
     if risk > 0.08:
-        return "觀望（風險過大）", "-", "-", "0%"
+    # 🔥 不直接觀望 → 改試單
+    if score >= 3 and price > ma20:
+        return "試單（高風險）", round(price*0.995,1), round(ma20*0.97,1), "30%"
+    return "觀望（風險過大）", "-", "-", "0%"
 
     # ===== RR（關鍵補強）=====
     reward = resistance - buy
