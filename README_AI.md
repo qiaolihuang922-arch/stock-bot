@@ -197,10 +197,17 @@ RAW（pending） → CLEAN（closed） → TRAIN
 
 ---
 
-### ❌ 禁止：
+### 🔒 呼叫限制（強制）
 
-- RAW 影響 strategy  
-- RAW 即時訓練  
+learning 只能由 generator 呼叫  
+
+---
+
+### ❌ 嚴禁：
+
+- analysis 呼叫 learning  
+- ai 呼叫 learning  
+- strategy 內寫入資料  
 
 ---
 
@@ -240,6 +247,7 @@ RAW（pending） → CLEAN（closed） → TRAIN
 
 - 呼叫 strategy  
 - 呼叫 AI  
+- 呼叫 learning  
 - 輸出訊息  
 - 全局判斷  
 
@@ -341,8 +349,8 @@ Supabase → trades
 
 - trade_date → date  
 
-trade_date = 交易判斷時間
-created_at = 系統時間
+trade_date = 交易判斷時間  
+created_at = 系統時間  
 
 ---
 
@@ -382,22 +390,29 @@ created_at = 系統時間
 
 - status → text  
 
-pending → 未結算
-closed → 可用資料
-invalid → 無效
+pending → 未結算  
+closed → 可用資料  
+invalid → 無效  
 
 ---
 
 ### 📌 來源
 
 - source → text  
-live / paper / manual
+
+live / paper / manual  
+
+---
+
+### 🔒 唯一約束（強制）
+
+(stock, trade_date) 必須唯一  
 
 ---
 
 # 🔄 五、資料流（不可違反）
 
-strategy → learning → Supabase  
+strategy → generator → learning → Supabase  
 
 ---
 
@@ -420,7 +435,25 @@ strategy → learning → Supabase
 
 ## ✅ 必須：
 
-WHERE status = 'closed'
+WHERE status = 'closed'  
+
+---
+
+## 📊 結果寫入規範（強制）
+
+update_trade_result 只能在以下情況執行：
+
+- 觸發停損  
+- 達成停利  
+- 明確結束交易  
+
+---
+
+### ❌ 嚴禁：
+
+- 當日立即寫 result  
+- 使用未來資訊  
+- 人工主觀修改  
 
 ---
 
@@ -486,8 +519,3 @@ learning 完全隔離
 
 AI只能強化系統  
 不能改變系統  
-
-
-
-
-
