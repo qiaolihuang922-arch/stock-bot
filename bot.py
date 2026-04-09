@@ -18,7 +18,7 @@ tz = pytz.timezone("Asia/Taipei")
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
-# ===== 🔥即時行情（最終穩定版）=====
+# ===== 🔥即時行情（最終正確版）=====
 def get_realtime_price(code):
     try:
         url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_{code}.tw"
@@ -30,16 +30,40 @@ def get_realtime_price(code):
 
         d = data[0]
 
-        price = d.get("z")
-        prev_close = d.get("y")
+        z = d.get("z")
+        b = d.get("b")
+        a = d.get("a")
+        y = d.get("y")
 
-        if price in ["-", "", "0"] or prev_close in ["-", "", "0"]:
+        if y in ["-", "", "0"]:
             return None
 
-        price = float(price)
-        prev_close = float(prev_close)
+        prev_close = float(y)
+        price = None
 
-        # 🔥異常過濾（避免假資料）
+        # ===== 成交價 =====
+        if z not in ["-", "", "0"]:
+            price = float(z)
+
+        # ===== 買賣價補 =====
+        else:
+            try:
+                bid = float(b.split("_")[0]) if b else None
+                ask = float(a.split("_")[0]) if a else None
+
+                if bid and ask:
+                    price = (bid + ask) / 2
+                elif bid:
+                    price = bid
+                elif ask:
+                    price = ask
+            except:
+                return None
+
+        if not price:
+            return None
+
+        # ===== 防呆 =====
         if price > prev_close * 1.1 or price < prev_close * 0.9:
             return None
 
@@ -182,7 +206,7 @@ def get_twse(code):
         return None
 
 
-# ===== 量能（完整版）=====
+# ===== 量能 =====
 def volume_model(volumes, closes):
     vol = volumes[-1]
     avg10 = sum(volumes[-10:]) / 10
@@ -216,7 +240,7 @@ def volume_model(volumes, closes):
     return level
 
 
-# ===== 趨勢（完整版）=====
+# ===== 趨勢 =====
 def trend_model(price, ma5, ma20, closes, volumes):
 
     if closes[-2] < ma20 and price > ma20:
@@ -340,7 +364,7 @@ def send(msg):
     requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
 
 
-# ===== 主（🔥最終版）=====
+# ===== 主 =====
 def generate():
     now = datetime.now(tz)
     phase = get_phase()
@@ -360,7 +384,7 @@ def generate():
 
         prev_close = closes[-2]
 
-        # 🔥時間控管（台灣時間）
+        # ===== 🔥時間控管 =====
         use_realtime = False
         if now.hour > 9:
             use_realtime = True
@@ -369,6 +393,7 @@ def generate():
 
         if use_realtime:
             realtime = get_realtime_price(code)
+
             if realtime:
                 price, change = realtime
             elif yahoo:
