@@ -1,4 +1,4 @@
-# 🔥 AI交易系統（不可破壞架構｜FINAL v2）
+# 🔥 AI交易系統（不可破壞架構｜FINAL v3）
 
 本文件為本專案最高規範  
 所有 AI / 人工修改 必須遵守  
@@ -118,8 +118,6 @@ AI = 語言層，不是決策層
 
 # 📦 二、模組職責（不可混用）
 
----
-
 ## 📁 services/analysis.py（🔥唯一決策核心）
 
 負責：
@@ -164,7 +162,7 @@ AI = 語言層，不是決策層
 
 - record_trade()  
 - update_trade_result()  
-- 資料儲存  
+- Supabase 寫入  
 
 ---
 
@@ -187,22 +185,22 @@ learning ≠ 決策系統
 
 ### ✅ 只允許：
 
-- 收集 RAW 資料  
-- 記錄結果（win / loss）  
-- 產生 CLEAN 資料  
+- 收集 RAW（pending）  
+- 轉為 CLEAN（closed）  
+- 作為未來訓練資料  
 
 ---
 
 ### 🔥 防污染規則（強制）
 
-RAW → CLEAN →（未來）→ TRAIN  
+RAW（pending） → CLEAN（closed） → TRAIN  
 
 ---
 
 ### ❌ 禁止：
 
-RAW → 直接影響 strategy  
-RAW → 即時訓練  
+- RAW 影響 strategy  
+- RAW 即時訓練  
 
 ---
 
@@ -245,13 +243,6 @@ RAW → 即時訓練
 - 輸出訊息  
 - 全局判斷  
 
-包含：
-
-- global_decision()  
-- score_stock()  
-- 預備買點  
-- 最佳標的  
-
 ---
 
 ### ⚠️ 核心限制：
@@ -274,126 +265,189 @@ RAW → 即時訓練
 
 ## 📁 core/utils.py
 
-- 工具函數  
+工具函數  
 
 ---
 
 ## 📄 main.py
 
-- 程式入口  
+程式入口  
 
 ---
 
 ## 📄 app.py
 
-- 部署入口  
+部署入口  
 
 ---
 
 ## 📄 config.py
 
-- 設定檔  
+設定檔  
 
 ---
 
 ## 📄 render.yaml
 
-- 部署設定  
+部署設定  
 
 ---
 
 ## 📄 requirements.txt
 
-- 套件依賴  
+套件依賴  
 
 ---
 
-# 📂 三、資料結構（強制）
+# 📦 三、資料層（唯一來源｜Supabase）
 
-data/
+## 🚫 已移除
 
-- trades.json（舊資料｜不可用於訓練）  
-- raw_trades.json（原始資料）  
-- clean_trades.json（訓練資料）  
-
----
-
-### 🔒 定義：
-
-- raw → 未驗證  
-- clean → 已驗證  
+- data/  
+- trades.json  
+- raw_trades.json  
+- clean_trades.json  
 
 ---
 
-### ❌ 嚴禁：
+## ✅ 唯一資料來源
 
-- raw 作為策略依據  
-- raw 直接進模型  
-- trades.json 作為訓練資料  
+Supabase → trades  
 
 ---
 
-# 🔄 四、系統流程（不可更改）
+## ❌ 嚴禁：
 
-stock_api → analysis(strategy) → ai → generator → notifier  
-
----
-
-# 🧠 五、Learning 流（完全獨立）
-
-record_trade → raw_data  
-update_result → clean_data  
+- 本地 JSON  
+- 第二資料源  
+- 雙寫入  
 
 ---
 
-### 🔒 永久限制：
+# 🧱 四、資料表結構（不可變更）
 
-learning 不得進入主流程  
-learning 不得影響即時決策  
-
----
-
-# 🔥 六、決策模型（strategy 必備）
-
-必須同時包含：
-
-- 趨勢（MA / 結構）  
-- 動能  
-- 量能  
-- 位置  
-- 風控  
+## Table：trades
 
 ---
 
-# 🔥 七、全局決策（市場層）
+### 🔑 基本欄位
 
-輸出：
-
-- 🔴 禁止交易  
-- 🟡 試單  
-- 🟢 可進場  
+- id → bigint（PK）  
+- created_at → timestamp  
 
 ---
 
-# 🔥 八、評分系統（僅排序）
+### 📅 時間（核心）
 
-用途：
+- trade_date → date  
 
-👉 選「最佳標的」
-
----
-
-### ❌ 禁止：
-
-- score 決定買賣  
-- score 覆蓋 decision  
+trade_date = 交易判斷時間
+created_at = 系統時間
 
 ---
 
-# 🚫 九、禁止修改清單（紅線）
+### 📈 決策資料
 
-1. 多一個 decision  
-2. AI 影響交易結果  
+- stock → text  
+- decision → text  
+- price → numeric  
+- buy → numeric  
+- stop → numeric  
+
+---
+
+### 📊 特徵資料
+
+- ma5 → numeric  
+- ma20 → numeric  
+- volume → numeric  
+- trend → text  
+
+---
+
+### 🧠 上下文
+
+- data → jsonb  
+
+---
+
+### 📉 結果
+
+- result → text  
+- price_after → numeric  
+
+---
+
+### 🔥 狀態（核心）
+
+- status → text  
+
+pending → 未結算
+closed → 可用資料
+invalid → 無效
+
+---
+
+### 📌 來源
+
+- source → text  
+live / paper / manual
+
+---
+
+# 🔄 五、資料流（不可違反）
+
+strategy → learning → Supabase  
+
+---
+
+### 🔒 規則：
+
+- learning 只記錄  
+- 不可回寫  
+- 不可干預  
+
+---
+
+# 🚨 六、資料使用規範
+
+## ❌ 禁止：
+
+- 使用 pending  
+- 使用未結算  
+
+---
+
+## ✅ 必須：
+
+WHERE status = 'closed'
+
+---
+
+# 🧠 七、防污染機制
+
+## 1️⃣ 防重複
+
+stock + trade_date 唯一  
+
+---
+
+## 2️⃣ 連續虧損停止
+
+≥3 → 停止記錄  
+
+---
+
+## 3️⃣ JSON限制
+
+data 不可包含未來資訊  
+
+---
+
+# 🚫 八、禁止修改清單（紅線）
+
+1. 多 decision  
+2. AI 影響交易  
 3. score 取代 strategy  
 4. generator 做決策  
 5. 移除停損  
@@ -401,36 +455,39 @@ learning 不得影響即時決策
 7. 拆分 strategy  
 8. 多決策來源  
 9. learning 影響 strategy  
-10. raw_data 進模型  
-11. 使用 trades.json 作為訓練  
+10. 使用 pending  
+11. 本地資料庫  
 
 ---
 
-# 🧠 十、AI修改前必讀（強制）
+# 🧠 九、AI修改前必讀
 
-AI在修改任何程式碼前，必須確認：
+- 是否改 strategy  
+- 是否新增 decision  
+- 是否影響風控  
+- 是否讓 learning 影響決策  
 
-- 是否改動 strategy？  
-- 是否新增 decision？  
-- 是否影響風控？  
-- 是否破壞單一決策？  
-- 是否讓 learning 影響決策？  
-
-👉 任一為是 → 禁止修改  
+👉 任一為是 → 禁止  
 
 ---
 
-# 🔥 十一、核心總結（最重要）
+# 🔥 十、核心總結
 
 strategy 決定交易  
 AI 不得干預  
 generator 不得決策  
 風控不可動  
-learning 不得污染  
+learning 完全隔離  
+資料只來自 Supabase  
 
 ---
 
-# 🚀 十二、最終原則
+# 🚀 十一、最終原則
 
 AI只能強化系統  
 不能改變系統  
+
+
+
+
+
