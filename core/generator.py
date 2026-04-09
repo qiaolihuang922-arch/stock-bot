@@ -33,7 +33,7 @@ def calc_rr(buy, stop, resistance):
     return round(reward / risk, 2)
 
 
-# ===== RR提示 =====
+# ===== RR提示（只顯示）=====
 def rr_filter(rr):
 
     if rr == "-":
@@ -147,7 +147,8 @@ def global_decision(decisions):
     return f"🔴 不能買（市場弱） {t_msg}"
 
 
-def score_stock(decision, trend, volume, ai_text):
+# ===== 評分（只用來排序，不影響決策）=====
+def score_stock(decision, trend, volume):
 
     score = 0
 
@@ -173,23 +174,14 @@ def score_stock(decision, trend, volume, ai_text):
     if "高位" in trend:
         score -= 3
 
-    if "BUY" in ai_text:
-        score += 1
-    elif "NO" in ai_text:
-        score -= 2
-
     t_score, _ = time_weight()
     score += t_score
 
     return score
 
 
-# ===== 行動（修正衝突）=====
-def build_action(decision, buy, position, rr):
-
-    # 🔥 RR優先（避免衝突）
-    if rr != "-" and rr < 1:
-        return "⚠️不建議進場（RR過低）"
+# ===== 行動（純顯示，不干預）=====
+def build_action(decision, buy, position):
 
     if "進場🔥" in decision:
         return f"👉 現價進場（{position}）"
@@ -197,8 +189,6 @@ def build_action(decision, buy, position, rr):
         return f"👉 回踩 {buy} 進場（{position}）"
     elif "試單" in decision:
         return f"👉 小倉試單（{position}）"
-    elif buy != "-":
-        return f"👉 等 {buy} 才進場"
 
     return ""
 
@@ -269,7 +259,7 @@ def generate():
 
         decisions.append(decision)
 
-        # ===== 記錄（完全保留）=====
+        # 記錄（不動）
         if allow_record() and can_record_today(name):
             if ("進場" in decision or "試單" in decision) and buy not in ["-", None]:
                 try:
@@ -277,36 +267,31 @@ def generate():
                 except:
                     pass
 
-        s = score_stock(decision, trend, volume, ai_text)
+        s = score_stock(decision, trend, volume)
 
         if buy != "-" and "進場" in decision:
             candidates.append((s, name, buy, stop))
 
-        action = build_action(decision, buy, position, rr)
+        action = build_action(decision, buy, position)
         pre_buy = get_prebuy(price, ma5, ma20, support, resistance, decision)
 
-        # ===== 🔥 分層輸出 =====
+        # ===== 輸出 =====
         msg += f"{name}\n"
-
-        # 第一層（決策）
         msg += f"{decision}｜倉位 {position}\n"
+
         if action:
             msg += f"{action}\n"
 
-        # 第二層（交易關鍵）
         if buy != "-":
             msg += f"買:{buy} 停:{stop} RR:{rr} {rr_tag}\n"
 
         if pre_buy != "-":
             msg += f"預備:{pre_buy}\n"
 
-        # 第三層（分析）
         msg += f"{round(price,1)}（{round(change,2)}%）\n"
         msg += f"MA5:{round(ma5,1)} MA20:{round(ma20,1)}\n"
         msg += f"{volume}｜{trend}｜{pos_level}\n"
         msg += f"S:{support} R:{resistance}\n"
-
-        # AI
         msg += f"{tag}：{ai_text}\n\n"
 
     final = global_decision(decisions)
