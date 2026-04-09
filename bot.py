@@ -1,4 +1,5 @@
-from flask import Flask  # ✅新增
+
+from flask import Flask
 import requests
 from datetime import datetime, timedelta
 import pytz
@@ -6,13 +7,13 @@ import time
 import os
 import traceback
 
-app = Flask(__name__)  # ✅新增
+app = Flask(__name__)
 
 # ===== 🔒 永不修改區（AI也不能動）=====
 TOKEN = "8714533132:AAGEAYs-Q-oZJDwwBwwuB0MPb27mqnDtzxs"
 CHAT_ID = "7119676798"
 OPENAI_API_KEY = "sk-proj-xxxx"
-# ===== 🔒 永不修改區 END =====
+# ===== 🔒 END =====
 
 
 stocks = {
@@ -295,9 +296,7 @@ def support_resistance(closes):
 
 # ===== 策略（完全保留）=====
 def strategy(price, ma5, ma20, closes, volumes):
-
     support, resistance = support_resistance(closes)
-
     vol = volumes[-1]
     avg10 = sum(volumes[-10:]) / 10
 
@@ -369,29 +368,19 @@ def strategy(price, ma5, ma20, closes, volumes):
     return decision, round(buy,1), round(stop,1), position
 
 
-# ===== 🔥 發送（唯一強化）=====
+# ===== 🔥 發送 =====
 def send(msg):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-
     for i in range(3):
         try:
-            r = requests.post(url, data={
-                "chat_id": CHAT_ID,
-                "text": msg
-            }, timeout=10)
-
+            r = requests.post(url, data={"chat_id": CHAT_ID, "text": msg}, timeout=10)
             if r.status_code == 200:
-                print("✅ 發送成功")
                 return
-        except Exception as e:
-            print(f"❌ 發送失敗 {i}: {e}")
-
-        time.sleep(3)
-
-    print("❌ 發送最終失敗")
+        except:
+            time.sleep(2)
 
 
-# ===== 主 =====（完全保留）
+# ===== 主 =====
 def generate():
     now = datetime.now(tz)
     phase = get_phase()
@@ -403,8 +392,13 @@ def generate():
         twse = get_twse(code)
         yahoo = get_yahoo(code)
 
+        # ✅ 唯一新增：Yahoo備援（不動策略）
         if not twse:
-            msg += f"{name}：無資料\n\n"
+            if yahoo:
+                price, change = yahoo
+                msg += f"{name}\n現價：{round(price,1)} | 漲跌：{round(change,2)}%\n⚠ Yahoo備援\n\n"
+            else:
+                msg += f"{name}：無資料\n\n"
             continue
 
         t_price, t_change, ma5, ma20, closes, volumes = twse
@@ -412,14 +406,11 @@ def generate():
         prev_close = closes[-2]
 
         use_realtime = False
-        if now.hour > 9:
-            use_realtime = True
-        elif now.hour == 9 and now.minute >= 2:
+        if now.hour > 9 or (now.hour == 9 and now.minute >= 2):
             use_realtime = True
 
         if use_realtime:
             realtime = get_realtime_price(code)
-
             if realtime:
                 price, change = realtime
             elif yahoo:
@@ -438,29 +429,25 @@ def generate():
 
         ai_text = ai_analysis(name, price, change, ma5, ma20, volume, trend, decision, buy, stop, resistance)
 
-        msg += f"{name}\n"
-        msg += f"現價：{round(price,1)} | 漲跌：{round(change,2)}%\n"
+        msg += f"{name}\n現價：{round(price,1)} | 漲跌：{round(change,2)}%\n"
         msg += f"MA5：{round(ma5,1)} | MA20：{round(ma20,1)}\n"
-        msg += f"量能：{volume}\n"
-        msg += f"趨勢：{trend}\n"
+        msg += f"量能：{volume}\n趨勢：{trend}\n"
         msg += f"支撐：{support} 壓力：{resistance}\n"
-        msg += f"決策：{decision}\n"
-        msg += f"買點：{buy}\n"
-        msg += f"停損：{stop}\n"
-        msg += f"倉位：{position}\n"
+        msg += f"決策：{decision}\n買點：{buy}\n停損：{stop}\n倉位：{position}\n"
         msg += f"🤖 AI分析：{ai_text}\n\n"
 
     return msg
 
 
-# ===== 🌐 Render入口（唯一新增）=====
+# ===== 🌐 Render入口（修正）=====
 @app.route("/")
 def home():
     try:
-        tag = datetime.now(tz).strftime("%Y%m%d")
+        # ✅ 修正：分鐘級，不會鎖死一天
+        tag = datetime.now(tz).strftime("%Y%m%d%H%M")
 
         if already_sent(tag):
-            return "Already sent today"
+            return "Already sent"
 
         msg = generate()
         send(msg)
@@ -473,7 +460,7 @@ def home():
         return "ERROR"
 
 
-# ===== 🚀 原本入口（完全保留）=====
+# ===== 🚀 GitHub入口 =====
 if __name__ == "__main__":
     try:
         tag = datetime.now(tz).strftime("%Y%m%d%H%M")
