@@ -15,28 +15,67 @@ stocks = {
 }
 
 
-# ===== 🔥 新增：RR =====
+# ===== RR =====
 def calc_rr(buy, stop, resistance):
+
     if buy in ["-", None] or stop in ["-", None]:
-        return "-", "-"
+        return "-"
+
+    if buy <= stop:
+        return "-"
+
     risk = buy - stop
     reward = resistance - buy
+
     if risk <= 0:
-        return "-", "-"
-    rr = round(reward / risk, 2)
-    return resistance, rr
+        return "-"
+
+    return round(reward / risk, 2)
 
 
-# ===== 🔥 新增：位置 =====
+# ===== RR過濾 =====
+def rr_filter(rr):
+
+    if rr == "-":
+        return ""
+
+    if rr < 1:
+        return "⚠️RR過低"
+
+    if rr >= 2:
+        return "🔥優質"
+
+    return ""
+
+
+# ===== 位置 =====
 def position_level(price, ma5, ma20):
-    if price < ma20:
+
+    if price < ma20 * 0.97:
         return "低位"
-    elif price < ma5:
+    elif price < ma20:
         return "中位"
-    elif price > ma5 * 1.03:
-        return "高位"
-    else:
+    elif price < ma5:
+        return "中高位"
+    elif price < ma5 * 1.03:
         return "起漲區"
+    else:
+        return "高位"
+
+
+# ===== 🔥 加回：預備買點 =====
+def get_prebuy(price, ma5, ma20, support, resistance, decision):
+
+    if "觀望" not in decision:
+        return "-"
+
+    if price > resistance * 0.97:
+        return round(ma5, 1)
+
+    if price < ma20:
+        return round(max(ma20, support), 1)
+
+    return round(max(ma5, support), 1)
 
 
 def get_phase():
@@ -83,20 +122,6 @@ def time_weight():
         return -1, "⚠ 盤中震盪"
 
     return 0, ""
-
-
-def market_sentiment(decisions):
-    strong = sum(1 for d in decisions if "進場🔥" in d)
-    entry = sum(1 for d in decisions if "進場" in d)
-    test = sum(1 for d in decisions if "試單" in d)
-
-    if strong >= 2:
-        return "🟢 強勢市場"
-    if strong + entry >= 2:
-        return "🟢 可操作市場"
-    if test >= 1:
-        return "🟡 僅試單市場"
-    return "🔴 觀望市場"
 
 
 def global_decision(decisions):
@@ -159,7 +184,11 @@ def score_stock(decision, trend, volume, ai_text):
     return score
 
 
-def build_action(decision, price, buy, position):
+# ===== 行動（含RR保護）=====
+def build_action(decision, buy, position, rr):
+
+    if rr != "-" and rr < 1:
+        return "⚠️不建議進場（RR過低）"
 
     if "進場🔥" in decision:
         return f"👉 現價進場（{position}）"
@@ -171,20 +200,6 @@ def build_action(decision, price, buy, position):
         return f"👉 等 {buy} 才進場"
 
     return ""
-
-
-def get_prebuy(price, ma5, ma20, support, resistance, decision):
-
-    if "觀望" not in decision:
-        return "-"
-
-    if price > resistance * 0.97:
-        return round(ma5, 1)
-
-    if price < ma20:
-        return round(max(ma20, support), 1)
-
-    return round(max(ma5, support), 1)
 
 
 def generate():
@@ -222,7 +237,6 @@ def generate():
 
             if use_realtime:
                 realtime = get_realtime_price(code)
-
                 if realtime:
                     price, change = realtime
                 elif yahoo:
@@ -239,8 +253,8 @@ def generate():
         decision, buy, stop, position = strategy(price, ma5, ma20, closes, volumes)
         support, resistance = support_resistance(closes)
 
-        # 🔥 新增分析（不影響決策）
-        target, rr = calc_rr(buy, stop, resistance)
+        rr = calc_rr(buy, stop, resistance)
+        rr_tag = rr_filter(rr)
         pos_level = position_level(price, ma5, ma20)
 
         ai_text, is_real_ai = ai_analysis(
@@ -250,55 +264,40 @@ def generate():
             decision, buy, stop
         )
 
-        if "觀望" in decision and "BUY" in ai_text:
-            ai_text = "WAIT｜0%｜以策略為準"
-
         tag = "🧠AI" if is_real_ai else "⚠️Fallback"
 
         decisions.append(decision)
 
-        # 記錄（完全不動）
         if allow_record() and can_record_today(name):
             if ("進場" in decision or "試單" in decision) and buy not in ["-", None]:
-                d = "buy" if ("進場" in decision or "試單" in decision) else "hold"
                 try:
-                    record_trade(
-                        name=name,
-                        decision=d,
-                        price=price,
-                        buy=buy,
-                        stop=stop,
-                        ma5=ma5,
-                        ma20=ma20,
-                        volume=volume,
-                        trend=trend
-                    )
-                except Exception:
+                    record_trade(name, "buy", price, buy, stop, ma5, ma20, volume, trend)
+                except:
                     pass
-
-        pre_buy = get_prebuy(price, ma5, ma20, support, resistance, decision)
 
         s = score_stock(decision, trend, volume, ai_text)
 
         if buy != "-" and "進場" in decision:
             candidates.append((s, name, buy, stop))
 
-        action = build_action(decision, price, buy, position)
+        action = build_action(decision, buy, position, rr)
+
+        pre_buy = get_prebuy(price, ma5, ma20, support, resistance, decision)
 
         msg += f"{name}\n"
-        msg += f"現價：{round(price,1)} | 漲跌：{round(change,2)}%\n"
-        msg += f"MA5：{round(ma5,1)} | MA20：{round(ma20,1)}\n"
-        msg += f"量能：{volume}\n"
-        msg += f"趨勢：{trend}\n"
-        msg += f"位置：{pos_level}\n"
-        msg += f"支撐：{support} 壓力：{resistance}\n"
-        msg += f"決策：{decision}\n"
-        msg += f"買點：{buy}\n"
-        msg += f"停損：{stop}\n"
-        msg += f"目標價：{target}\n"
-        msg += f"RR：{rr}\n"
-        msg += f"倉位：{position}\n"
-        msg += f"預備買點：{pre_buy}\n"
+        msg += f"{round(price,1)}（{round(change,2)}%）\n"
+        msg += f"MA5:{round(ma5,1)} MA20:{round(ma20,1)}\n"
+        msg += f"{volume}｜{trend}｜{pos_level}\n"
+        msg += f"S:{support} R:{resistance}\n"
+        msg += f"{decision}\n"
+
+        if buy != "-":
+            msg += f"買:{buy} 停:{stop} RR:{rr} {rr_tag}\n"
+
+        if pre_buy != "-":
+            msg += f"預備:{pre_buy}\n"
+
+        msg += f"{position}\n"
         msg += f"{tag}：{ai_text}\n"
         msg += f"{action}\n\n"
 
@@ -312,8 +311,7 @@ def generate():
         score, name, buy, stop = best
 
         msg += "\n🔥 今日最佳標的\n"
-        msg += f"{name}（分數:{score}）\n"
-        msg += f"👉 買點：{buy}\n"
-        msg += f"👉 停損：{stop}\n"
+        msg += f"{name}（{score}）\n"
+        msg += f"買:{buy} 停:{stop}\n"
 
     return msg
