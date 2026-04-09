@@ -1,24 +1,20 @@
-name: Stock Bot
+name: Stock Bot Pro
 
 on:
   schedule:
-    # ===== 盤前 =====
-    - cron: '30 0 * * 1-5'   # 08:30
-
-    # ===== 盤中（每10分鐘）=====
-    - cron: '0,10,20,30,40,50 1 * * 1-5'   # 09:00–09:50
-    - cron: '0,10,20,30,40,50 2 * * 1-5'   # 10:00–10:50
-    - cron: '0,10,20,30,40,50 3 * * 1-5'   # 11:00–11:50
-    - cron: '0,10,20 4 * * 1-5'            # 12:00–12:20
-
-    # ===== 收盤前 =====
-    - cron: '30 4 * * 1-5'   # 12:30
+    - cron: '30 0 * * 1-5'
+    - cron: '0,10,20,30,40,50 1 * * 1-5'
+    - cron: '0,10,20,30,40,50 2 * * 1-5'
+    - cron: '0,10,20,30,40,50 3 * * 1-5'
+    - cron: '0,10,20,30,40,50 4 * * 1-5'
+    - cron: '30 4 * * 1-5'
 
   workflow_dispatch:
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
 
     steps:
       - uses: actions/checkout@v3
@@ -27,6 +23,14 @@ jobs:
         with:
           python-version: '3.10'
 
-      - run: pip install requests pytz
+      - name: Install deps
+        run: pip install requests pytz
 
-      - run: python bot.py
+      - name: Run bot (retry 3 times)
+        run: |
+          for i in 1 2 3
+          do
+            python bot.py && break
+            echo "Retry $i failed..."
+            sleep 5
+          done
