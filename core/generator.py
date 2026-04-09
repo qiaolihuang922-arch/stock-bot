@@ -2,7 +2,6 @@ from datetime import datetime
 import pytz
 
 from services.learning import record_trade
-
 from services.stock_api import get_twse, get_yahoo, get_realtime_price
 from services.analysis import volume_model, trend_model, strategy, support_resistance
 from services.ai import ai_analysis
@@ -14,6 +13,30 @@ stocks = {
     "建準": "2421",
     "智原": "3035"
 }
+
+
+# ===== 🔥 新增：RR =====
+def calc_rr(buy, stop, resistance):
+    if buy in ["-", None] or stop in ["-", None]:
+        return "-", "-"
+    risk = buy - stop
+    reward = resistance - buy
+    if risk <= 0:
+        return "-", "-"
+    rr = round(reward / risk, 2)
+    return resistance, rr
+
+
+# ===== 🔥 新增：位置 =====
+def position_level(price, ma5, ma20):
+    if price < ma20:
+        return "低位"
+    elif price < ma5:
+        return "中位"
+    elif price > ma5 * 1.03:
+        return "高位"
+    else:
+        return "起漲區"
 
 
 def get_phase():
@@ -216,6 +239,10 @@ def generate():
         decision, buy, stop, position = strategy(price, ma5, ma20, closes, volumes)
         support, resistance = support_resistance(closes)
 
+        # 🔥 新增分析（不影響決策）
+        target, rr = calc_rr(buy, stop, resistance)
+        pos_level = position_level(price, ma5, ma20)
+
         ai_text, is_real_ai = ai_analysis(
             name, price, change,
             ma5, ma20,
@@ -230,14 +257,10 @@ def generate():
 
         decisions.append(decision)
 
-        # 🔥 記錄（最小必要修正）
+        # 記錄（完全不動）
         if allow_record() and can_record_today(name):
-
             if ("進場" in decision or "試單" in decision) and buy not in ["-", None]:
-
-                # 最小轉換（避免資料錯）
                 d = "buy" if ("進場" in decision or "試單" in decision) else "hold"
-
                 try:
                     record_trade(
                         name=name,
@@ -267,10 +290,13 @@ def generate():
         msg += f"MA5：{round(ma5,1)} | MA20：{round(ma20,1)}\n"
         msg += f"量能：{volume}\n"
         msg += f"趨勢：{trend}\n"
+        msg += f"位置：{pos_level}\n"
         msg += f"支撐：{support} 壓力：{resistance}\n"
         msg += f"決策：{decision}\n"
         msg += f"買點：{buy}\n"
         msg += f"停損：{stop}\n"
+        msg += f"目標價：{target}\n"
+        msg += f"RR：{rr}\n"
         msg += f"倉位：{position}\n"
         msg += f"預備買點：{pre_buy}\n"
         msg += f"{tag}：{ai_text}\n"
