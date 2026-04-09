@@ -1,15 +1,21 @@
-# ===== 量能（完全保留）=====
+# ===== 量能（🔥強化版）=====
 def volume_model(volumes, closes):
     vol = volumes[-1]
     avg10 = sum(volumes[-10:]) / 10
     ratio = vol / avg10
 
+    price_up = closes[-1] > closes[-2]
+
+    # 🔥 健康上漲（量縮+價格撐住）
     if volumes[-1] < volumes[-2] < volumes[-3] and closes[-1] > sum(closes[-20:]) / 20:
-        return "縮量整理（蓄力🔥）"
+        return "縮量整理（健康上升）"
+
+    # 🔥 爆量下跌（強警告）
+    if ratio > 2 and not price_up:
+        return "爆量（出貨⚠⚠）"
 
     vol_trend = volumes[-1] > volumes[-2] > volumes[-3]
     accumulation = sum(volumes[-3:]) > avg10 * 3
-    price_up = closes[-1] > closes[-2]
 
     if ratio > 2:
         level = "爆量"
@@ -24,17 +30,20 @@ def volume_model(volumes, closes):
 
     if price_up and ratio > 1.3 and vol_trend and accumulation:
         return f"{level}（主升✔）"
+
     if ratio > 1.3 and not price_up:
         return f"{level}（出貨⚠）"
+
     if price_up and ratio < 1:
         return f"{level}（假突破⚠）"
 
     return level
 
 
-# ===== 趨勢（完全保留）=====
+# ===== 趨勢（🔥強化版）=====
 def trend_model(price, ma5, ma20, closes, volumes):
 
+    # 🔥 MA翻多起漲（優先判斷）
     if closes[-2] < ma20 and price > ma20:
         return "🚀轉強起漲"
 
@@ -52,10 +61,15 @@ def trend_model(price, ma5, ma20, closes, volumes):
     resistance = max(closes[-10:])
     near_res = price >= resistance * 0.97
 
+    # 🔥 主升結構
     if price > ma5 > ma20 and slope > 0 and higher_high and higher_low:
         if price > recent_high * 0.98:
             return "🔥主升段"
         return "👍多頭結構"
+
+    # 🔥 高位風險（提前警告）
+    if near_res and slope < 0:
+        return "⚠高位轉弱"
 
     if near_res:
         return "⚠高位震盪"
@@ -69,12 +83,12 @@ def trend_model(price, ma5, ma20, closes, volumes):
     return "震盪"
 
 
-# ===== 支撐壓力（完全保留）=====
+# ===== 支撐壓力（保留）=====
 def support_resistance(closes):
     return round(min(closes[-10:]), 1), round(max(closes[-10:]), 1)
 
 
-# ===== 策略（完全保留）=====
+# ===== 策略（🔥AI級強化版）=====
 def strategy(price, ma5, ma20, closes, volumes):
     support, resistance = support_resistance(closes)
 
@@ -92,20 +106,45 @@ def strategy(price, ma5, ma20, closes, volumes):
     prev_low = min(closes[-10:-5])
     structure_low = min(recent_low, prev_low)
 
+    # ===== 🔥 防呆 =====
     if price < ma20 and not volume_strong:
         return "觀望（弱勢）", "-", "-", "0%"
 
+    # 🔥 過熱區（避免追高）
     if price > resistance * 1.05:
         return "觀望（過熱區）", "-", "-", "0%"
 
+    # 🔥 假突破過濾（強化）
     if breakout and confirm:
         if closes[-1] <= closes[-2]:
             return "觀望（假突破）", "-", "-", "0%"
 
+    # ===== 🔥 類AI評分系統 =====
+    score = 0
+
+    if price > ma20:
+        score += 2
+    if price > ma5:
+        score += 1
+    if momentum:
+        score += 1
+    if volume_strong:
+        score += 2
+    elif volume_ok:
+        score += 1
+
+    if price > resistance:
+        score += 1
+    if price > resistance * 0.98:
+        score -= 1  # 靠近壓力扣分
+
+    # ===== 🔥 主升直接進場 =====
     not_too_high = price < resistance * 1.03
+
     if volume_strong and momentum and price > ma5 and price > ma20 and not_too_high:
         return "進場🔥（主升）", round(price, 1), round(structure_low, 1), "100%"
 
+    # ===== 原邏輯 =====
     if price > resistance and vol > avg10 * 1.5:
         buy = price
         stop = max(resistance * 0.97, structure_low)
@@ -127,6 +166,7 @@ def strategy(price, ma5, ma20, closes, volumes):
     else:
         return "觀望", "-", "-", "0%"
 
+    # ===== 🔥 停損強化 =====
     stop = min(structure_low, buy * 0.97)
     stop = min(stop, buy * 0.96)
 
@@ -136,14 +176,17 @@ def strategy(price, ma5, ma20, closes, volumes):
     if (buy - stop) / buy > 0.08:
         return "觀望（風險過大）", "-", "-", "0%"
 
-    if volume_strong and price > ma20:
-        decision = "進場🔥（主升）"
+    # ===== 🔥 決策分級（關鍵升級）=====
+    if score >= 6:
+        decision = "進場🔥（強勢）"
         position = "100%"
-    elif price > ma20:
-        decision = "進場"
+    elif score >= 4:
+        decision = "進場（穩健）"
         position = "50%"
+    elif score >= 2:
+        decision = "試單（觀察）"
+        position = "30%"
     else:
-        decision = "觀望"
-        position = "0%"
+        return "觀望（訊號不足）", "-", "-", "0%"
 
     return decision, round(buy, 1), round(stop, 1), position
