@@ -1,158 +1,170 @@
-import json
-import os
+from supabase import create_client
 from datetime import datetime
+import pytz
 
-# ===== 路徑（100%正確）=====
-BASE_DIR = os.path.dirname(os.path.dirname(__file__))
-DATA_DIR = os.path.join(BASE_DIR, "data")
-
-RAW_FILE = os.path.join(DATA_DIR, "raw_trades.json")
-CLEAN_FILE = os.path.join(DATA_DIR, "clean_trades.json")
-
-# ===== 設定 =====
-ENABLE_LEARNING = True
-MAX_LOSS_STREAK = 3
-
+from config import SUPABASE_URL, SUPABASE_KEY
 
 # ===== 初始化 =====
-def init_storage():
-    if not os.path.exists(DATA_DIR):
-        os.makedirs(DATA_DIR)
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-    for file in [RAW_FILE, CLEAN_FILE]:
-        if not os.path.exists(file):
-            with open(file, "w") as f:
-                json.dump([], f)
+# ===== 時區（可自行改）=====
+tz = pytz.timezone("Asia/Taipei")
 
 
-# ===== 基本工具 =====
-def load(file):
-    with open(file, "r") as f:
-        return json.load(f)
+# ================================
+# 🚨 連續虧損檢查（防污染）
+# ================================
+def get_loss_streak(limit=3):
 
-
-def save(file, data):
-    with open(file, "w") as f:
-        json.dump(data, f, indent=2)
-
-
-# ===== 防重複 =====
-def already_recorded(stock, date):
-    data = load(RAW_FILE)
-    return any(t["stock"] == stock and t["date"] == date for t in data)
-
-
-# ===== 驗證 =====
-def validate_trade(trade):
-    if trade["price"] <= 0:
-        return False
-
-    if trade["decision"] not in ["buy", "sell", "hold"]:
-        return False
-
-    return True
-
-
-# ===== 連續虧損 =====
-def get_loss_streak():
-    data = load(RAW_FILE)
+    res = supabase.table("trades") \
+        .select("result") \
+        .eq("status", "closed") \
+        .order("created_at", desc=True) \
+        .limit(limit) \
+        .execute()
 
     streak = 0
-    for t in reversed(data):
-        if t.get("result") == "loss":
+
+    for r in res.data:
+        if r["result"] == "loss":
             streak += 1
-        elif t.get("result") == "win":
+        else:
             break
 
     return streak
 
 
-# ===== 主紀錄（只收集，不學習）=====
-def record_trade(name, decision, price, buy=None, stop=None):
+def can_record():
+    streak = get_loss_streak()
 
-    if not ENABLE_LEARNING:
-        print("⚠️ Learning 關閉")
+    if streak >= 3:
+        print(f"🚨 連續虧損 {streak} 次 → 停止記錄")
+        return False
+
+    return True
+
+
+# ================================
+# 🧠 記錄交易（核心）
+# ================================
+def record_trade(
+    name,
+    decision,
+    price,
+    buy=None,
+    stop=None,
+    ma5=None,
+    ma20=None,
+    volume=None,
+    trend=None,
+    extra_data=None,
+    source="live"
+):
+
+    if not can_record():
         return
 
-    init_storage()
+    now = datetime.now(tz)
+    trade_date = now.date().isoformat()   # ⭐交易日
 
-    today = datetime.now().strftime("%Y-%m-%d")
+    # 🔒 防重複（同一天同股票）
+    existing = supabase.table("trades") \
+        .select("id") \
+        .eq("stock", name) \
+        .eq("trade_date", trade_date) \
+        .execute()
 
-    if already_recorded(name, today):
-        print(f"[略過] {name} 今日已記錄")
+    if existing.data:
+        print(f"[略過] {name} {trade_date} 已記錄")
         return
 
-    trade = {
-        "date": today,
-        "time": datetime.now().strftime("%H:%M"),
+    # ===== 組 data（上下文）=====
+    data_field = {
+        "ma5": ma5,
+        "ma20": ma20,
+        "volume": volume,
+        "trend": trend
+    }
+
+    if extra_data:
+        data_field.update(extra_data)
+
+    insert_data = {
+        "trade_date": trade_date,
         "stock": name,
         "decision": decision,
         "price": price,
         "buy": buy,
         "stop": stop,
-        "result": None,
-        "price_after": None
+        "ma5": ma5,
+        "ma20": ma20,
+        "volume": volume,
+        "trend": trend,
+        "data": data_field,
+        "status": "pending",   # ⭐關鍵
+        "source": source
     }
 
-    # 驗證
-    if not validate_trade(trade):
-        print("❌ 資料錯誤")
+    supabase.table("trades").insert(insert_data).execute()
+
+    print(f"✅ 已記錄（pending）：{name} | {trade_date}")
+
+
+# ================================
+# 📊 更新結果（進入可用資料）
+# ================================
+def update_trade_result(name, result, price_after):
+
+    res = supabase.table("trades") \
+        .select("id") \
+        .eq("stock", name) \
+        .eq("status", "pending") \
+        .order("created_at", desc=True) \
+        .limit(1) \
+        .execute()
+
+    if not res.data:
+        print("❌ 找不到 pending 資料")
         return
 
-    # 風控：停止污染
-    loss_streak = get_loss_streak()
-    if loss_streak >= MAX_LOSS_STREAK:
-        print(f"🚨 連續虧損 {loss_streak} → 停止記錄")
+    trade_id = res.data[0]["id"]
+
+    supabase.table("trades") \
+        .update({
+            "result": result,
+            "price_after": price_after,
+            "status": "closed"   # ⭐進入乾淨資料
+        }) \
+        .eq("id", trade_id) \
+        .execute()
+
+    print("📊 已更新為 closed（可分析）")
+
+
+# ================================
+# 🔄 手動標記為無效（可選）
+# ================================
+def mark_invalid(name):
+
+    res = supabase.table("trades") \
+        .select("id") \
+        .eq("stock", name) \
+        .eq("status", "pending") \
+        .order("created_at", desc=True) \
+        .limit(1) \
+        .execute()
+
+    if not res.data:
+        print("❌ 找不到資料")
         return
 
-    # 存 RAW
-    data = load(RAW_FILE)
-    data.append(trade)
-    save(RAW_FILE, data)
+    trade_id = res.data[0]["id"]
 
-    print(f"✅ RAW記錄：{name}")
+    supabase.table("trades") \
+        .update({
+            "status": "invalid"
+        }) \
+        .eq("id", trade_id) \
+        .execute()
 
-
-# ===== 更新結果（這才是關鍵）=====
-def update_trade_result(name, date, result, price_after):
-
-    init_storage()
-
-    data = load(RAW_FILE)
-
-    target = None
-
-    for t in data:
-        if t["stock"] == name and t["date"] == date:
-            t["result"] = result
-            t["price_after"] = price_after
-            target = t
-            break
-
-    if not target:
-        print("❌ 找不到交易")
-        return
-
-    save(RAW_FILE, data)
-    print("✅ 已更新結果")
-
-    # ===== 進 CLEAN（唯一入口）=====
-    if result in ["win", "loss"]:
-        clean = load(CLEAN_FILE)
-        clean.append(target)
-        save(CLEAN_FILE, clean)
-
-        print("📊 已進入 CLEAN（可訓練）")
-
-
-# ===== 控制 =====
-def set_learning(status: bool):
-    global ENABLE_LEARNING
-    ENABLE_LEARNING = status
-    print(f"🧠 Learning：{ENABLE_LEARNING}")
-
-
-def reset_learning():
-    save(RAW_FILE, [])
-    save(CLEAN_FILE, [])
-    print("♻️ 清空完成")
+    print("⚠️ 已標記為 invalid")
