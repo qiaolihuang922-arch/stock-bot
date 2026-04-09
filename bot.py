@@ -478,8 +478,6 @@ def generate():
 
 # ===== 🌐 Render
 
-import os
-
 @app.route("/")
 def home():
     try:
@@ -487,21 +485,25 @@ def home():
         hour = now.hour
         minute = now.minute
 
+        # ✅ 讀取網址參數
+        test_mode = request.args.get("test")
+
         # ===== 🎯 時間策略 =====
         send_flag = False
 
-        # 🟢 盤前 08:30
-        if hour == 8 and 30 <= minute < 35:
+        if test_mode == "1":
+            tag = now.strftime("%Y%m%d_test")
+            send_flag = True
+
+        elif hour == 8 and 30 <= minute < 35:
             tag = now.strftime("%Y%m%d_pre")
             send_flag = True
 
-        # 🟡 盤中 每10分鐘
         elif 9 <= hour <= 13:
             if minute % 10 == 0:
                 tag = now.strftime("%Y%m%d_%H%M")
                 send_flag = True
 
-        # 🔴 尾盤前 13:20
         elif hour == 13 and 20 <= minute < 25:
             tag = now.strftime("%Y%m%d_close")
             send_flag = True
@@ -534,6 +536,7 @@ def home():
         return f"""
 ✅ Trigger GitHub: {r.status_code}
 
+🧪 Test Mode: {test_mode}
 🕒 Time: {now.strftime("%H:%M")}
 📌 Tag: {tag}
 """
