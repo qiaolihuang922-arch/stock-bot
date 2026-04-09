@@ -483,8 +483,38 @@ import os
 @app.route("/")
 def home():
     try:
-        token = os.getenv("GITHUB_TOKEN")
+        now = datetime.now(tz)
+        hour = now.hour
+        minute = now.minute
 
+        # ===== 🎯 時間策略 =====
+        send_flag = False
+
+        # 🟢 盤前 08:30
+        if hour == 8 and 30 <= minute < 35:
+            tag = now.strftime("%Y%m%d_pre")
+            send_flag = True
+
+        # 🟡 盤中 每10分鐘
+        elif 9 <= hour <= 13:
+            if minute % 10 == 0:
+                tag = now.strftime("%Y%m%d_%H%M")
+                send_flag = True
+
+        # 🔴 尾盤前 13:20
+        elif hour == 13 and 20 <= minute < 25:
+            tag = now.strftime("%Y%m%d_close")
+            send_flag = True
+
+        else:
+            return "⏭️ Skip"
+
+        # ===== 防重複 =====
+        if already_sent(tag):
+            return "⚠️ Already sent"
+
+        # ===== 觸發 GitHub =====
+        token = os.getenv("GITHUB_TOKEN")
         if not token:
             return "❌ GITHUB_TOKEN not found"
 
@@ -502,10 +532,10 @@ def home():
         r = requests.post(url, headers=headers, json=data)
 
         return f"""
-Trigger GitHub: {r.status_code}
+✅ Trigger GitHub: {r.status_code}
 
-Response:
-{r.text}
+🕒 Time: {now.strftime("%H:%M")}
+📌 Tag: {tag}
 """
 
     except Exception as e:
