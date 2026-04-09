@@ -399,6 +399,7 @@ def send(msg):
 
 
 # ===== 主 =====（只補 fallback）
+
 def generate():
     now = datetime.now(tz)
     phase = get_phase()
@@ -410,7 +411,12 @@ def generate():
         twse = get_twse(code)
         yahoo = get_yahoo(code)
 
-        # ===== 🔥 核心修正：TWSE失效也要繼續跑策略 =====
+        # ===== 🔥 Debug（關鍵）=====
+        print(f"{name} TWSE:", twse)
+        print(f"{name} Yahoo:", yahoo)
+        print("------")
+
+        # ===== 🔥 核心修正：TWSE失效也要繼續跑 =====
         if not twse:
             if not yahoo:
                 msg += f"{name}：無資料\n\n"
@@ -418,10 +424,9 @@ def generate():
 
             price, change = yahoo
 
-            # 🔥 模擬數據（讓所有策略正常運作）
+            # 🔥 模擬資料（讓策略能跑）
             closes = [price] * 20
             volumes = [1] * 20
-
             ma5 = price
             ma20 = price
 
@@ -448,7 +453,7 @@ def generate():
                 price = t_price
                 change = t_change
 
-        # ===== 以下全部保留你原本邏輯（完全不動）=====
+        # ===== 以下完全不動你原本邏輯 =====
         volume = volume_model(volumes, closes)
         trend = trend_model(price, ma5, ma20, closes, volumes)
         decision, buy, stop, position = strategy(price, ma5, ma20, closes, volumes)
