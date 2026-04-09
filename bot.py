@@ -476,24 +476,23 @@ def generate():
     return msg
 
 
-# ===== 🌐 Render入口 =====
+# ===== 🌐 Render
 
 import os
 
 @app.route("/")
 def home():
     try:
-        # 👉 從 Render 環境變數拿 token
-        GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+        token = os.getenv("GITHUB_TOKEN")
 
-        if not GITHUB_TOKEN:
+        if not token:
             return "❌ GITHUB_TOKEN not found"
 
         url = "https://api.github.com/repos/qiaolihuang922-arch/stock-bot/actions/workflows/main.yml/dispatches"
 
         headers = {
             "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {GITHUB_TOKEN}"
+            "Authorization": f"Bearer {token}"
         }
 
         data = {
@@ -503,15 +502,14 @@ def home():
         r = requests.post(url, headers=headers, json=data)
 
         return f"""
-✅ Trigger GitHub: {r.status_code}
+Trigger GitHub: {r.status_code}
 
 Response:
 {r.text}
 """
 
     except Exception as e:
-        return f"❌ ERROR:\n{str(e)}"
-
+        return f"ERROR:\n{str(e)}"
 
 # ===== 🚀 GitHub入口 =====
 if __name__ == "__main__":
