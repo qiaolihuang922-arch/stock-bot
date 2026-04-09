@@ -1,4 +1,3 @@
-
 from flask import Flask
 import requests
 from datetime import datetime, timedelta
@@ -168,57 +167,64 @@ def get_yahoo(code):
         return None
 
 
-# ===== TWSE（日K）=====
+# ===== TWSE（日K）🔥修復版 =====
 def get_twse(code):
-    try:
-        rows = []
-        now = datetime.now(tz)
+    for _ in range(3):
+        try:
+            rows = []
+            now = datetime.now(tz)
 
-        for i in range(6):
-            date = now - timedelta(days=30*i)
-            url = f"https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date={date.strftime('%Y%m01')}&stockNo={code}"
+            for i in range(6):
+                date = now - timedelta(days=30*i)
+                url = f"https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date={date.strftime('%Y%m01')}&stockNo={code}"
 
-            try:
-                r = requests.get(url, headers=HEADERS, timeout=10).json()
-            except:
-                continue
-
-            if r.get("stat") != "OK":
-                continue
-
-            for d in r.get("data", []):
                 try:
-                    rows.append((
-                        d[0],
-                        float(d[6].replace(",", "")),
-                        float(d[1].replace(",", ""))
-                    ))
+                    r = requests.get(url, headers=HEADERS, timeout=10).json()
                 except:
                     continue
 
-        rows.sort(key=lambda x: x[0])
+                if r.get("stat") != "OK":
+                    continue
 
-        closes = [x[1] for x in rows]
-        volumes = [x[2] for x in rows]
+                for d in r.get("data", []):
+                    try:
+                        rows.append((
+                            d[0],
+                            float(d[6].replace(",", "")),
+                            float(d[1].replace(",", ""))
+                        ))
+                    except:
+                        continue
 
-        if len(closes) < 20:
-            return None
+            if not rows:
+                time.sleep(2)
+                continue
 
-        price = closes[-1]
-        prev = closes[-2]
+            rows.sort(key=lambda x: x[0])
 
-        change = (price - prev) / prev * 100
+            closes = [x[1] for x in rows]
+            volumes = [x[2] for x in rows]
 
-        ma5 = sum(closes[-5:]) / 5
-        ma20 = sum(closes[-20:]) / 20
+            if len(closes) < 5:
+                return None
 
-        return price, change, ma5, ma20, closes, volumes
+            price = closes[-1]
+            prev = closes[-2]
 
-    except:
-        return None
+            change = (price - prev) / prev * 100
+
+            ma5 = sum(closes[-5:]) / 5 if len(closes) >= 5 else price
+            ma20 = sum(closes[-20:]) / 20 if len(closes) >= 20 else price
+
+            return price, change, ma5, ma20, closes, volumes
+
+        except:
+            time.sleep(2)
+
+    return None
 
 
-# ===== 量能 =====
+# ===== 量能（完全保留）=====
 def volume_model(volumes, closes):
     vol = volumes[-1]
     avg10 = sum(volumes[-10:]) / 10
@@ -252,7 +258,7 @@ def volume_model(volumes, closes):
     return level
 
 
-# ===== 趨勢 =====
+# ===== 趨勢（完全保留）=====
 def trend_model(price, ma5, ma20, closes, volumes):
 
     if closes[-2] < ma20 and price > ma20:
@@ -289,7 +295,7 @@ def trend_model(price, ma5, ma20, closes, volumes):
     return "震盪"
 
 
-# ===== 支撐壓力 =====
+# ===== 支撐壓力（完全保留）=====
 def support_resistance(closes):
     return round(min(closes[-10:]),1), round(max(closes[-10:]),1)
 
@@ -297,6 +303,7 @@ def support_resistance(closes):
 # ===== 策略（完全保留）=====
 def strategy(price, ma5, ma20, closes, volumes):
     support, resistance = support_resistance(closes)
+
     vol = volumes[-1]
     avg10 = sum(volumes[-10:]) / 10
 
@@ -368,19 +375,30 @@ def strategy(price, ma5, ma20, closes, volumes):
     return decision, round(buy,1), round(stop,1), position
 
 
-# ===== 🔥 發送 =====
+# ===== 🔥 發送（加debug）=====
 def send(msg):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+
     for i in range(3):
         try:
-            r = requests.post(url, data={"chat_id": CHAT_ID, "text": msg}, timeout=10)
+            r = requests.post(url, data={
+                "chat_id": CHAT_ID,
+                "text": msg
+            }, timeout=10)
+
             if r.status_code == 200:
+                print("✅ 發送成功")
                 return
-        except:
-            time.sleep(2)
+            else:
+                print("❌ 發送失敗", r.text)
+
+        except Exception as e:
+            print("❌ 發送錯誤", e)
+
+        time.sleep(2)
 
 
-# ===== 主 =====
+# ===== 主 =====（只補 fallback）
 def generate():
     now = datetime.now(tz)
     phase = get_phase()
@@ -392,11 +410,12 @@ def generate():
         twse = get_twse(code)
         yahoo = get_yahoo(code)
 
-        # ✅ 唯一新增：Yahoo備援（不動策略）
         if not twse:
             if yahoo:
                 price, change = yahoo
-                msg += f"{name}\n現價：{round(price,1)} | 漲跌：{round(change,2)}%\n⚠ Yahoo備援\n\n"
+                msg += f"{name}\n"
+                msg += f"現價：{round(price,1)} | 漲跌：{round(change,2)}%\n"
+                msg += f"⚠ Yahoo備援\n\n"
             else:
                 msg += f"{name}：無資料\n\n"
             continue
@@ -411,6 +430,7 @@ def generate():
 
         if use_realtime:
             realtime = get_realtime_price(code)
+
             if realtime:
                 price, change = realtime
             elif yahoo:
@@ -429,21 +449,25 @@ def generate():
 
         ai_text = ai_analysis(name, price, change, ma5, ma20, volume, trend, decision, buy, stop, resistance)
 
-        msg += f"{name}\n現價：{round(price,1)} | 漲跌：{round(change,2)}%\n"
+        msg += f"{name}\n"
+        msg += f"現價：{round(price,1)} | 漲跌：{round(change,2)}%\n"
         msg += f"MA5：{round(ma5,1)} | MA20：{round(ma20,1)}\n"
-        msg += f"量能：{volume}\n趨勢：{trend}\n"
+        msg += f"量能：{volume}\n"
+        msg += f"趨勢：{trend}\n"
         msg += f"支撐：{support} 壓力：{resistance}\n"
-        msg += f"決策：{decision}\n買點：{buy}\n停損：{stop}\n倉位：{position}\n"
+        msg += f"決策：{decision}\n"
+        msg += f"買點：{buy}\n"
+        msg += f"停損：{stop}\n"
+        msg += f"倉位：{position}\n"
         msg += f"🤖 AI分析：{ai_text}\n\n"
 
     return msg
 
 
-# ===== 🌐 Render入口（修正）=====
+# ===== 🌐 Render入口 =====
 @app.route("/")
 def home():
     try:
-        # ✅ 修正：分鐘級，不會鎖死一天
         tag = datetime.now(tz).strftime("%Y%m%d%H%M")
 
         if already_sent(tag):
