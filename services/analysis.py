@@ -83,7 +83,7 @@ def support_resistance(closes):
     return round(min(closes[-10:]), 1), round(max(closes[-10:]), 1)
 
 
-# ===== 策略（🔥最終極強化版）=====
+# ===== 策略（🔥最終極穩定版）=====
 def strategy(price, ma5, ma20, closes, volumes):
     support, resistance = support_resistance(closes)
 
@@ -111,7 +111,6 @@ def strategy(price, ma5, ma20, closes, volumes):
     if price > ma5 * 1.03:
         return "觀望（追高風險）", "-", "-", "0%"
 
-    # 假突破
     if breakout and confirm:
         if closes[-1] <= closes[-2]:
             return "觀望（假突破）", "-", "-", "0%"
@@ -134,16 +133,14 @@ def strategy(price, ma5, ma20, closes, volumes):
         score += 1
     if price > resistance * 0.98:
         score -= 1
-# ===== 🔥 轉強突破試單（關鍵補強）=====
-if "轉強" in trend and price > ma20:
 
-    # 有動能 + 不過熱
-    if momentum and price < resistance * 1.02:
+    # ===== 🔥 轉強突破試單（修正版本）=====
+    if price > ma20 and closes[-2] < ma20:
+        if momentum and price < resistance * 1.02:
+            buy = price * 0.995
+            stop = ma20 * 0.97
+            return "試單（轉強突破）", round(buy,1), round(stop,1), "30%"
 
-        buy = price * 0.995
-        stop = ma20 * 0.97
-
-        return "試單（轉強突破）", round(buy,1), round(stop,1), "30%"
     # ===== 主升 =====
     if volume_strong and momentum and price > ma5 and price > ma20:
         buy = price * 0.995
@@ -155,7 +152,7 @@ if "轉強" in trend and price > ma20:
 
         return "進場🔥（主升）", round(buy,1), round(stop,1), "100%"
 
-    # ===== 回踩突破（重點強化）=====
+    # ===== 回踩 =====
     if breakout and confirm:
         buy = resistance * 1.01
         stop = max(resistance * 0.97, structure_low)
@@ -184,7 +181,7 @@ if "轉強" in trend and price > ma20:
     if stop >= buy:
         stop = buy * 0.97
 
-    # ===== RR檢查（🔥核心）=====
+    # ===== RR =====
     rr = (buy - stop) / buy
     if rr > 0.08:
         return "觀望（風險過大）", "-", "-", "0%"
@@ -198,7 +195,6 @@ if "轉強" in trend and price > ma20:
 
     elif score >= 2:
 
-        # 🔥 試單（優化）
         if price <= ma5 * 1.01:
             return "試單（支撐）", round(ma5,1), round(ma20*0.97,1), "30%"
 
