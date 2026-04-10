@@ -24,8 +24,11 @@ def calc_rr(buy, stop, resistance):
     if buy <= stop:
         return "-"
 
+    if resistance <= buy:
+        return 0
+
     risk = buy - stop
-    reward = max(resistance - buy, 0)
+    reward = resistance - buy
 
     if risk <= 0:
         return "-"
@@ -48,27 +51,23 @@ def rr_filter(rr):
     return ""
 
 
-# ===== 不污染 decision =====
 def add_rr_warning(decision, rr):
     if rr != "-" and rr < 1:
         return f"{decision}（報酬偏低）"
     return decision
 
 
-# ===== 🔥 人話原因（用數據，不亂講）=====
+# ===== 原因 =====
 def decision_reason(decision, buy, stop, rr):
 
-    # ===== 用數據優先 =====
     if buy not in ["-", None] and stop not in ["-", None]:
         risk = (buy - stop) / buy
-
         if risk > 0.08:
             return "原因：停損距離過大（風險高）"
 
     if rr != "-" and rr < 1:
         return "原因：潛在報酬不足"
 
-    # ===== fallback（文字解釋）=====
     if "未回踩" in decision:
         return "原因：尚未回測支撐"
 
@@ -96,7 +95,7 @@ def position_level(price, ma5, ma20):
         return "高位（易震盪）"
 
 
-# ===== 🔥 預備買點（修正：只能在下方）=====
+# ===== 預備買點（強化）=====
 def get_prebuy(price, ma5, ma20, support, resistance, decision):
 
     if "觀望" not in decision:
@@ -104,14 +103,9 @@ def get_prebuy(price, ma5, ma20, support, resistance, decision):
 
     candidates = []
 
-    if ma5 < price:
-        candidates.append(ma5)
-
-    if ma20 < price:
-        candidates.append(ma20)
-
-    if support < price:
-        candidates.append(support)
+    for v in [ma5, ma20, support]:
+        if v < price * 0.995:  # 🔥 避免貼太近
+            candidates.append(v)
 
     if not candidates:
         return "-"
@@ -135,6 +129,7 @@ def allow_record():
 
 
 recorded_today = set()
+
 
 def can_record_today(name):
     today = datetime.now(tz).strftime("%Y-%m-%d")
@@ -268,7 +263,9 @@ def generate():
             prev_close = closes[-2]
 
             now_time = datetime.now(tz)
-            use_realtime = now_time.hour > 9 or (now_time.hour == 9 and now_time.minute >= 2)
+
+            # 🔥 修正：避免開盤初期亂抓
+            use_realtime = now_time.hour > 9 or (now_time.hour == 9 and now_time.minute >= 3)
 
             if use_realtime:
                 realtime = get_realtime_price(code)
@@ -285,6 +282,11 @@ def generate():
 
         volume = volume_model(volumes, closes)
         trend = trend_model(price, ma5, ma20, closes, volumes)
+
+        # 🔥 顯示修正（不影響決策）
+        if "轉強" in trend and ma5 < ma20:
+            trend = "轉強中（未確認）"
+
         decision, buy, stop, position = strategy(price, ma5, ma20, closes, volumes)
         support, resistance = support_resistance(closes)
 
@@ -306,21 +308,22 @@ def generate():
 
         decisions.append(decision)
 
-        # ===== 記錄 =====
+        # ===== 記錄（強化安全）=====
         if allow_record() and can_record_today(name):
-            if ("進場" in decision or "試單" in decision) and buy not in ["-", None]:
-                try:
-                    extra = {"position_level": pos_level, "decision_raw": decision}
-                    if rr != "-":
-                        extra["rr"] = rr
+            if ("進場" in decision or "試單" in decision):
+                if buy not in ["-", None] and stop not in ["-", None] and buy > stop:
+                    try:
+                        extra = {"position_level": pos_level, "decision_raw": decision}
+                        if rr != "-":
+                            extra["rr"] = rr
 
-                    record_trade(
-                        name, "buy", price, buy, stop,
-                        ma5, ma20, volume, trend,
-                        extra_data=extra
-                    )
-                except Exception as e:
-                    print("record error:", e)
+                        record_trade(
+                            name, "buy", price, buy, stop,
+                            ma5, ma20, volume, trend,
+                            extra_data=extra
+                        )
+                    except Exception as e:
+                        print("record error:", e)
 
         s = score_stock(decision, trend, volume)
 
