@@ -1,7 +1,8 @@
-# ===== 量能（原封不動）=====
+# ===== 量能 =====
 def volume_model(volumes, closes):
     vol = volumes[-1]
-    avg10 = sum(volumes[-10:]) / 10
+    total = sum(volumes[-10:])
+    avg10 = total / 10 if total > 0 else 1
     ratio = vol / avg10
 
     price_up = closes[-1] > closes[-2]
@@ -38,10 +39,10 @@ def volume_model(volumes, closes):
     return level
 
 
-# ===== 趨勢（原封不動）=====
+# ===== 趨勢 =====
 def trend_model(price, ma5, ma20, closes, volumes):
 
-    if closes[-2] < ma20 and price > ma20:
+    if closes[-2] < ma20 and price > ma20 and closes[-1] > closes[-2]:
         return "🚀轉強起漲"
 
     ma20_prev = sum(closes[-21:-1]) / 20
@@ -55,7 +56,7 @@ def trend_model(price, ma5, ma20, closes, volumes):
     higher_high = recent_high > prev_high
     higher_low = recent_low > prev_low
 
-    resistance = max(closes[-20:])  # 🔥 修正（拉長）
+    resistance = max(closes[-20:])
     near_res = price >= resistance * 0.97
 
     if price > ma5 > ma20 and slope > 0 and higher_high and higher_low:
@@ -78,30 +79,27 @@ def trend_model(price, ma5, ma20, closes, volumes):
     return "震盪"
 
 
-# ===== 支撐壓力（🔥修正）=====
+# ===== 支撐壓力 =====
 def support_resistance(closes):
     return round(min(closes[-20:]), 1), round(max(closes[-20:]), 1)
 
 
-# ===== 策略（升級穩定版）=====
+# ===== 策略（🔥最終版｜進攻＋風控完整）=====
 def strategy(price, ma5, ma20, closes, volumes):
 
     support, resistance = support_resistance(closes)
 
-    vol = volumes[-1]
-    avg10 = sum(volumes[-10:]) / 10
-    ratio = vol / avg10
+    total = sum(volumes[-10:])
+    avg10 = total / 10 if total > 0 else 1
+    ratio = volumes[-1] / avg10
 
     momentum = price > closes[-2]
-
-    # 🔥 修正：結構低點更穩
     structure_low = min(closes[-7:])
-
     breakout = price > resistance
 
-    # ===== 評分（完全保留）=====
     score = 0
 
+    # ===== 趨勢 =====
     if price > ma20:
         score += 2
     else:
@@ -113,6 +111,7 @@ def strategy(price, ma5, ma20, closes, volumes):
     if momentum:
         score += 1
 
+    # ===== 量能 =====
     if ratio > 2:
         score += 2 if momentum else -3
     elif ratio > 1.5:
@@ -122,7 +121,8 @@ def strategy(price, ma5, ma20, closes, volumes):
     elif ratio < 0.7:
         score -= 1
 
-    up_days = sum([1 for i in range(-5, 0) if closes[i] > closes[i-1]])
+    # ===== 結構 =====
+    up_days = sum(1 for i in range(-5, 0) if closes[i] > closes[i-1])
 
     if up_days >= 4:
         score += 2
@@ -138,19 +138,20 @@ def strategy(price, ma5, ma20, closes, volumes):
     if price > resistance * 0.97:
         score -= 2
 
-    if price < ma5:
-        score += 1
-
     # ===== 防追高 =====
     if price > ma5 * 1.05:
         return "觀望（追高風險）", "-", "-", "0%"
 
     # ===== 假突破 =====
-    if breakout and closes[-1] <= closes[-2]:
+    if breakout and (not momentum or ratio < 1.2):
         score -= 3
 
     # ===== 轉強 =====
     if closes[-3] < ma20 and closes[-2] < ma20 and price > ma20:
+        score += 2
+
+    # ===== 起漲強化 =====
+    if breakout and momentum and ratio > 1.3:
         score += 2
 
     # ===== confirm =====
@@ -163,19 +164,25 @@ def strategy(price, ma5, ma20, closes, volumes):
         score -= 1
 
     # ===== 過熱 =====
-    if price > resistance * 1.05:
+    if price > resistance * 1.08:
         return "觀望（過熱）", "-", "-", "0%"
 
-    # ===== 買點（🔥修正：遠離壓力）=====
     buy = "-"
     stop = "-"
 
-    if score >= 6:
-        buy = price * 0.995
-        if buy > resistance * 0.98:
+    # ===== ① 強勢突破 =====
+    if score >= 6 and breakout and momentum and ratio > 1.3:
+        buy = price * 0.992
+        stop = min(ma5, structure_low)
+
+    # ===== ② 強勢 =====
+    elif score >= 6:
+        buy = price * 0.99
+        if buy > resistance * 0.99:
             return "觀望（過近壓力）", "-", "-", "0%"
         stop = structure_low
 
+    # ===== ③ 回踩 =====
     elif score >= 4:
         if abs(price - ma5) / ma5 <= 0.03:
             buy = ma5
@@ -183,9 +190,10 @@ def strategy(price, ma5, ma20, closes, volumes):
         else:
             return "觀望（未回踩）", "-", "-", "0%"
 
+    # ===== ④ 弱轉強 =====
     elif score >= 2:
         if price > ma20 and momentum:
-            buy = price * 0.995
+            buy = price * 0.99
             stop = ma20 * 0.97
         elif abs(price - ma5) / ma5 <= 0.02:
             buy = ma5
@@ -199,18 +207,21 @@ def strategy(price, ma5, ma20, closes, volumes):
     if abs(price - buy) / buy > 0.04:
         return "觀望（未到買點）", "-", "-", "0%"
 
-    # ===== stop防呆 =====
-    stop = min(structure_low, stop)
+    # ===== stop 修正（只防錯）=====
     if stop >= buy:
         stop = buy * 0.97
 
-    # ===== 風險 =====
     risk = (buy - stop) / buy
+
     if risk > 0.08:
         return "觀望（風險過大）", "-", "-", "0%"
 
-    # ===== RR（🔥修正：避免0）=====
-    reward = resistance - buy
+    # ===== reward =====
+    if breakout:
+        reward = max(resistance - buy, (resistance * 1.03) - buy)
+    else:
+        reward = resistance - buy
+
     if reward <= 0:
         return "觀望（空間不足）", "-", "-", "0%"
 
@@ -219,7 +230,7 @@ def strategy(price, ma5, ma20, closes, volumes):
     if rr < 1.2:
         return "觀望（報酬不足）", "-", "-", "0%"
 
-    # ===== 倉位模型（保留）=====
+    # ===== 倉位 =====
     position = 0
 
     if rr >= 2:
