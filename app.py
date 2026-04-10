@@ -6,99 +6,94 @@ from datetime import datetime
 import pytz
 
 app = Flask(__name__)
-
-# ===== 時區 =====
 tz = pytz.timezone("Asia/Taipei")
 
-# ===== 防重複（10分鐘過期）=====
-sent_cache = {}
-CACHE_EXPIRE = 600  # 秒（10分鐘）
 
-
+# ===== 永久防重複 =====
 def already_sent(tag):
-    now_ts = time.time()
+    today = datetime.now(tz).strftime("%Y%m%d")
+    filename = f"sent_{today}.txt"
 
-    # 清除過期tag
-    expired = [k for k, v in sent_cache.items() if now_ts - v > CACHE_EXPIRE]
-    for k in expired:
-        del sent_cache[k]
+    if os.path.exists(filename):
+        with open(filename, "r") as f:
+            tags = f.read().splitlines()
+    else:
+        tags = []
 
-    if tag in sent_cache:
+    if tag in tags:
         return True
 
-    sent_cache[tag] = now_ts
+    with open(filename, "a") as f:
+        f.write(tag + "\n")
+
     return False
 
 
-# ===== 主入口 =====
 @app.route("/")
 def home():
     try:
-        # 🔥 Render 冷啟動優化
         if not request.args.get("test"):
             time.sleep(0.3)
 
         now = datetime.now(tz)
 
-        # ===== 假日不跑 =====
         if now.weekday() >= 5:
-            return "📴 假日不執行"
+            return "📴 假日"
 
         hour = now.hour
         minute = now.minute
-
         test_mode = request.args.get("test")
 
-        # ===== 測試模式 =====
+        tag = None
+        reason = ""
+
+        # 測試
         if test_mode == "1":
             tag = now.strftime("%Y%m%d_test_%H%M%S")
+            reason = "測試"
 
-        # ===== 盤前（只發一次）=====
-        elif hour == 8 and 30 <= minute < 35:
+        # 盤前（不補發）
+        elif hour == 8 and 30 <= minute < 40:
             tag = now.strftime("%Y%m%d_pre")
+            reason = "盤前"
 
-        # ===== 盤中（每10分鐘）=====
-        elif 9 <= hour <= 13:
-
-            # 🔥 關鍵修復：用10分鐘區間
-            bucket = minute // 10  # 0~5
-            tag = f"{now.strftime('%Y%m%d_%H')}_{bucket}"
-
-        # ===== 收盤（只發一次）=====
-        elif hour == 13 and 20 <= minute < 25:
+        # 收盤（允許補發）
+        elif hour == 13 and minute >= 20:
             tag = now.strftime("%Y%m%d_close")
+            reason = "收盤"
+
+        # 盤中（不補發）
+        elif 9 <= hour < 13:
+            bucket = minute // 10
+            tag = f"{now.strftime('%Y%m%d_%H')}_{bucket}"
+            reason = "盤中"
 
         else:
             return "⏭️ Skip"
 
-        # ===== 防重複 =====
         if already_sent(tag):
-            return f"⏭️ Skip ({tag})"
+            return f"⏭️ 已發 {tag}"
 
-        # ===== Token =====
         token = os.getenv("GITHUB_TOKEN")
         if not token:
-            return "❌ GITHUB_TOKEN not found"
+            return "❌ No Token"
 
-        # ===== GitHub Actions =====
         url = "https://api.github.com/repos/qiaolihuang922-arch/stock-bot/actions/workflows/main.yml/dispatches"
 
-        headers = {
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {token}"
-        }
+        r = requests.post(
+            url,
+            headers={
+                "Accept": "application/vnd.github+json",
+                "Authorization": f"Bearer {token}"
+            },
+            json={"ref": "main"},
+            timeout=10
+        )
 
-        data = {
-            "ref": "main"
-        }
+        if r.status_code != 204:
+            return f"❌ GitHub錯誤 {r.status_code}: {r.text[:100]}"
 
-        r = requests.post(url, headers=headers, json=data, timeout=10)
-
-        return f"""✅ Trigger GitHub: {r.status_code}
-🧪 Test Mode: {test_mode}
-🕒 Time: {now.strftime("%H:%M:%S")}
-📌 Tag: {tag}
-📡 Response: {r.text[:100]}"""
+        return f"✅ {reason} | {tag} | {now.strftime('%H:%M:%S')}"
 
     except Exception as e:
-        return f"ERROR:\n{str(e)}"
+        return f"❌ ERROR: {str(e)}"
