@@ -18,7 +18,7 @@ logging.basicConfig(
 
 
 # ================================
-# 🔥 入庫（強化版）
+# 🔥 入庫（v7最終版）
 # ================================
 def record_trade(
     name,
@@ -45,12 +45,12 @@ def record_trade(
 
         today = datetime.now(tz).strftime("%Y-%m-%d")
 
-        # ===== 資料格式 =====
+        # ===== 主資料 =====
         data = {
             "stock": name,
             "trade_date": today,
             "action": action,
-            "price": float(buy),  # 規則：price = buy
+            "price": float(buy),   # 規則：price = buy
             "buy": float(buy),
             "stop": float(stop),
             "ma5": float(ma5),
@@ -61,7 +61,9 @@ def record_trade(
             "created_at": datetime.now(tz).isoformat()
         }
 
-        # ===== extra_data（標準化🔥）=====
+        # ================================
+        # 🔥 extra_data（核心升級）
+        # ================================
         clean_extra = {}
 
         if extra_data:
@@ -71,16 +73,35 @@ def record_trade(
                 if k in ["result", "future_price", "price_after"]:
                     continue
 
-                # 清理 None
+                # ❌ 忽略 None
                 if v is None:
                     continue
 
-                clean_extra[k] = v
+                # ✅ 型別統一
+                if isinstance(v, (int, float, str)):
+                    clean_extra[k] = v
+                else:
+                    clean_extra[k] = str(v)
 
-        if clean_extra:
-            data["extra_data"] = clean_extra
+        # ===== 強制補齊（v7關鍵）=====
+        required_keys = [
+            "rr",
+            "decision_type",
+            "market",
+            "structure_state",
+            "momentum_state",
+            "breakout_quality",
+            "pullback_type"
+        ]
 
-        # ===== 寫入 =====
+        for k in required_keys:
+            if k not in clean_extra:
+                clean_extra[k] = None
+
+        # ===== 寫入 extra_data =====
+        data["extra_data"] = clean_extra
+
+        # ===== 寫入資料庫 =====
         res = supabase.table("trades").insert(data).execute()
 
         # ===== 成功 =====
@@ -88,7 +109,7 @@ def record_trade(
             logging.info(f"[SUCCESS] {name} 入庫成功 | buy:{buy} stop:{stop}")
             return True
 
-        # ===== 未知狀態 =====
+        # ===== 未知 =====
         logging.warning(f"[UNKNOWN] {name} 無回傳資料")
         return False
 
@@ -107,7 +128,7 @@ def record_trade(
 
 
 # ================================
-# 🔥 更新結果（平倉用）
+# 🔥 更新結果（平倉）
 # ================================
 def update_trade_result(name, trade_date, result):
 
