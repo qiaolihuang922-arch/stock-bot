@@ -7,7 +7,7 @@ AI_DISABLED_UNTIL = 0
 
 
 # ================================
-# 🔥 輸出標準化（v6）
+# 🔥 輸出標準化
 # ================================
 def normalize_ai_output(text):
 
@@ -15,35 +15,70 @@ def normalize_ai_output(text):
         return None
 
     text = text.strip()
-
-    # 只取第一行
     text = text.split("\n")[0].strip()
 
-    # 避免過長
     return text[:40]
 
 
 # ================================
-# 🔥 fallback（完全對齊 v6）
+# 🔥 fallback（v7升級）
 # ================================
-def fallback_ai(decision, decision_type):
+def fallback_ai(
+    decision,
+    decision_type,
+    market=None,
+    trend=None,
+    structure=None,
+    volume=None,
+    momentum=None,
+    breakout_quality=None,
+    pullback_type=None,
+    rr=0
+):
 
     # ===== BUY =====
     if decision == "BUY":
+
         if decision_type == "breakout":
-            reason = "突破成立，動能偏強"
+            if breakout_quality == "CLEAN":
+                reason = "強勢突破，動能充足"
+            elif breakout_quality == "WEAK":
+                reason = "突破偏弱，需留意"
+            else:
+                reason = "突破成立"
+
         elif decision_type == "pullback":
-            reason = "回踩支撐，風險較低"
+            if pullback_type == "SHALLOW":
+                reason = "強勢回踩，延續性高"
+            elif pullback_type == "DEEP":
+                reason = "回踩過深，風險提高"
+            else:
+                reason = "回踩支撐"
+
         else:
             reason = "結構成立"
 
     # ===== NO_TRADE =====
     elif decision == "NO_TRADE":
-        reason = "結構不佳或風險過高"
+
+        if market == "WEAK":
+            reason = "市場偏弱"
+        elif volume == "DISTRIBUTION":
+            reason = "出貨量風險"
+        elif trend == "DOWN":
+            reason = "空頭趨勢"
+        else:
+            reason = "結構不佳"
 
     # ===== WAIT =====
     else:
-        reason = "尚未出現明確進場訊號"
+
+        if structure == "WEAK":
+            reason = "結構未穩"
+        elif momentum == "DECELERATING":
+            reason = "動能減弱"
+        else:
+            reason = "等待觸發條件"
 
     return {
         "decision": decision,
@@ -52,16 +87,20 @@ def fallback_ai(decision, decision_type):
 
 
 # ================================
-# 🔥 AI分析（v6最終版）
+# 🔥 AI分析（v7）
 # ================================
 def ai_analysis(
     name,
     decision,
     decision_type,
-    price,
-    change,
-    risk,
-    rr
+    market=None,
+    trend=None,
+    structure=None,
+    volume=None,
+    momentum=None,
+    breakout_quality=None,
+    pullback_type=None,
+    rr=0
 ):
 
     global AI_ENABLED, AI_DISABLED_UNTIL
@@ -72,22 +111,40 @@ def ai_analysis(
 
     # ===== fallback模式 =====
     if not AI_ENABLED:
-        return fallback_ai(decision, decision_type)
+        return fallback_ai(
+            decision, decision_type,
+            market, trend, structure,
+            volume, momentum,
+            breakout_quality, pullback_type,
+            rr
+        )
 
-    # ===== prompt（嚴格限制🔥）=====
+    # ===== prompt（v7強化🔥）=====
     prompt = f"""
-你是交易解釋器，不可改策略。
+你是交易決策解釋器（不是分析師）。
+
+請根據以下「已確定的系統判斷」說明原因：
 
 股票:{name}
-價格:{price}（{change}%）
-風險:{round(risk,3)}
-RR:{rr}
-
 決策:{decision}
 類型:{decision_type}
 
-請用一句話說明原因（20字內）
-禁止提供建議
+市場:{market}
+趨勢:{trend}
+結構:{structure}
+量能:{volume}
+動能:{momentum}
+
+突破品質:{breakout_quality}
+回踩類型:{pullback_type}
+
+RR:{rr}
+
+規則：
+- 只能解釋（不可建議）
+- 不可新增觀點
+- 不可猜測
+- 20字內一句話
 """
 
     try:
@@ -109,14 +166,25 @@ RR:{rr}
         if r.status_code == 429:
             AI_ENABLED = False
             AI_DISABLED_UNTIL = time.time() + 60
-            return fallback_ai(decision, decision_type)
+            return fallback_ai(
+                decision, decision_type,
+                market, trend, structure,
+                volume, momentum,
+                breakout_quality, pullback_type,
+                rr
+            )
 
         if r.status_code != 200:
-            return fallback_ai(decision, decision_type)
+            return fallback_ai(
+                decision, decision_type,
+                market, trend, structure,
+                volume, momentum,
+                breakout_quality, pullback_type,
+                rr
+            )
 
         data = r.json()
 
-        # ===== 解析 =====
         text = None
 
         try:
@@ -145,4 +213,10 @@ RR:{rr}
     except Exception as e:
         print("AI request error:", e)
 
-    return fallback_ai(decision, decision_type)
+    return fallback_ai(
+        decision, decision_type,
+        market, trend, structure,
+        volume, momentum,
+        breakout_quality, pullback_type,
+        rr
+    )
