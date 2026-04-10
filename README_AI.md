@@ -1,21 +1,17 @@
-# 🔥 AI交易系統守則（FINAL v7｜實戰盈利版）
+🔥 AI交易系統守則（FINAL v8｜完整最終版）
 
 本文件 = 系統唯一行為來源  
 所有模組必須遵守  
 違反 = 系統錯誤  
 
----
+--------------------------------------------------
 
-# 🧠 一、核心原則（不可違反）
+一、核心原則（不可違反）
 
-## 1️⃣ 唯一決策
-
-唯一來源：
-
+唯一決策來源：
 strategy()
 
 輸出：
-
 - decision
 - decision_type
 - buy
@@ -24,454 +20,367 @@ strategy()
 - risk
 - rr
 
----
+decision：
+- BUY = 已觸發（允許進場）
+- WAIT = 未觸發（不可進場）
+- NO_TRADE = 禁止交易
 
-## decision 定義（強制）
-
-- BUY        # 可進場（已觸發）
-- WAIT       # 條件未到（可轉BUY）
-- NO_TRADE   # 結構錯誤（禁止交易）
-
----
-
-## decision_type（強制）
-
+decision_type：
 - breakout
 - pullback
 - none
 
----
+禁止：
+- 多 decision
+- AI 參與決策
+- learning 影響 decision
+- generator 修改 decision
 
-❌ 禁止：
+--------------------------------------------------
 
-- 多 decision  
-- AI 決策  
-- learning 影響 decision  
-- generator 修改 decision  
+二、決策流程（v8）
 
----
+市場 → 結構 → 趨勢 → 量能 → 事件 → Edge → 風控 → 倉位 → decision
 
-# 🧠 二、決策流程（v7升級）
+任一階段不成立 → 停止流程
 
-市場環境 → 結構 → 趨勢 → 量能 → 事件 → Edge篩選 → 風控 → 倉位 → decision  
+--------------------------------------------------
 
----
+三、市場系統（強制）
 
-# 🧠 三、市場過濾器（強制）
+market_signal：
+- STRONG
+- NORMAL
+- CHOPPY
+- WEAK
 
-## market_signal
+規則：
+- WEAK → 禁止 BUY
+- CHOPPY → position ≤ 0.5
+- STRONG → breakout 優先
 
-- STRONG  
-- NORMAL  
-- WEAK  
-- CHOPPY  
+核心原則：
+市場錯 → 全部錯
 
----
+--------------------------------------------------
 
-## 規則（強制）
+四、事件系統（嚴格）
 
-if market_signal == "WEAK":
-    禁止 breakout
+event 必須由 analysis 明確輸出  
+不得由 decision 反推  
 
-if market_signal == "CHOPPY":
-    position <= 0.5
+breakout_event（全部成立）：
+- price > resistance
+- 收盤站上
+- volume > avg5 × 1.5
 
-if market_signal == "STRONG":
-    breakout 優先
-    可提高倉位
+pullback_event（全部成立）：
+- 回踩支撐
+- 未破支撐
+- 出現反彈
 
-👉 沒有 market_signal = 禁止 BUY  
+沒有 event → 禁止 BUY
 
----
+--------------------------------------------------
 
-# 🧠 四、事件定義（強制）
+五、Edge系統（核心）
 
-## breakout
+edge 必須拆解，不可簡化  
 
-- 突破壓力位  
-- 收盤確認  
-- 成交量放大  
+breakout_edge：
+- consolidation_ok
+- not_high_zone
+- no_fake_breakout
 
----
+pullback_edge：
+- ma20_up
+- first_pullback
+- structure_hold
 
-## pullback
+未通過 → WAIT
 
-- 上升趨勢成立  
-- 回踩支撐  
-- 未跌破結構  
+--------------------------------------------------
 
----
+六、風控（強制）
 
-👉 沒有事件 = 禁止 BUY  
+- stop < buy
+- risk ≤ 0.08
 
----
+RR：
+- breakout ≥ 1.8
+- pullback ≥ 1.5
 
-# 🧠 五、Edge 篩選（v7核心）
+不成立 → NO_TRADE
 
-## breakout（全部成立）
+--------------------------------------------------
 
-- 突破壓力位  
-- 收盤站上  
-- 成交量 > 5日均量 × 1.5  
-- 盤整 ≥ 3天  
-- 非高檔（距離前高 < 5% 禁止）
+七、倉位系統
 
----
+risk ≤ 0.03 → 1.0  
+risk ≤ 0.05 → 0.7  
+risk ≤ 0.08 → 0.5  
+> 0.08 → NO_TRADE  
 
-## pullback（全部成立）
+市場調整：
+CHOPPY → ×0.7  
+WEAK → 0  
 
-- MA20 上升  
-- 價格在 MA20 上方  
-- 第一次回踩  
-- 未跌破前低  
+--------------------------------------------------
 
----
+八、條件引擎（核心）
 
-👉 未通過 Edge = WAIT  
+用途：
+拆解條件狀態
 
----
+不可：
+- 改 decision
+- 新增邏輯
+- 反推 decision
 
-# 🧠 六、風控（強制）
+輸出：
 
-必須全部成立：
+{
+ "market": True/False,
+ "structure": True/False,
+ "trend": True/False,
+ "volume": True/False,
+ "event": True/False,
+ "edge": True/False,
+ "risk": True/False,
+ "rr": True/False
+}
 
-- stop < buy  
-- risk ≤ 0.08  
+條件來源必須來自 analysis：
 
----
+- event_breakout
+- event_pullback
+- edge_consolidation
+- edge_fake_breakout
+- edge_first_pullback
+- edge_ma20_trend
 
-## RR 規則（v7升級）
+--------------------------------------------------
 
-if decision_type == "breakout":
-    RR ≥ 1.8
+九、條件顯示規則
 
-if decision_type == "pullback":
-    RR ≥ 1.5
+BUY：
+顯示 OK 條件
 
----
+WAIT：
+顯示 缺少條件
 
-👉 任一不成立 → NO_TRADE  
+NO_TRADE：
+只顯示致命條件
 
----
+優先順序：
+market → trend → volume
 
-# 🧠 七、倉位系統（v7新增）
+--------------------------------------------------
 
-## 基於 risk
+十、評分系統
 
-if risk <= 0.03:
-    position = 1.0
+範圍：
+0 ~ 100
 
-elif risk <= 0.05:
-    position = 0.7
+來源：
+- market
+- trend
+- structure
+- momentum
+- rr
 
-elif risk <= 0.08:
-    position = 0.5
+禁止影響 decision
 
-else:
-    NO_TRADE
+--------------------------------------------------
 
----
+十一、AI系統
 
-## 市場調整（強制）
+只做解釋
 
-if market_signal == "CHOPPY":
-    position *= 0.7
+輸出：
+- decision
+- reason（單一句）
 
-if market_signal == "WEAK":
-    position = 0
+禁止：
+- 建議
+- 價格
+- 改 decision
 
----
+--------------------------------------------------
 
-# 🧠 八、優先級（不變）
+十二、learning系統
 
-strategy > 風控 > 市場 > 結構 > AI  
+資料來源：
+Supabase（trades）
 
----
+必須紀錄：
+- buy
+- stop
+- rr
+- decision_type
+- market
+- structure
+- momentum
+- edge
 
-# 🧠 九、資料流（單向）
+禁止：
+- 未來資料
+- pending 影響策略
 
-stock_api → analysis → strategy → ai → generator → learning  
+--------------------------------------------------
 
----
+十三、資料流（不可逆）
 
-❌ 禁止逆流：
+stock_api → analysis → strategy → condition_engine → ai → generator → learning
 
-- AI → strategy  
-- learning → strategy  
-- generator → strategy  
+禁止逆流：
+- AI → strategy
+- learning → strategy
+- generator → strategy
 
----
+--------------------------------------------------
 
-# 📦 十、專案結構（不變）
+十四、專案結構
 
 project/
 
-- main.py  
-- app.py  
-- config.py  
-- render.yaml  
-- requirements.txt  
+ main.py
+ app.py
+ config.py
+ render.yaml
+ requirements.txt
 
-core/  
-- generator.py  
-- utils.py  
+ core/
+  generator.py
+  condition_engine.py
+  utils.py
 
-services/  
-- analysis.py  
-- ai.py  
-- learning.py  
-- notifier.py  
-- stock_api.py  
+ services/
+  analysis.py
+  ai.py
+  learning.py
+  notifier.py
+  stock_api.py
 
----
+--------------------------------------------------
 
-# 📄 十一、檔案職責（強制）
+十五、檔案職責
 
-## main.py
-- 呼叫 generator
-- 輸出結果
+analysis.py：
+唯一決策來源
 
-❌ 禁止邏輯  
+condition_engine.py：
+條件拆解
 
----
+generator.py：
+流程控制
 
-## app.py
-- API入口
+ai.py：
+解釋
 
-❌ 禁止交易邏輯  
+learning.py：
+紀錄
 
----
+stock_api.py：
+資料來源
 
-## config.py
-- API KEY
-- DB設定
+--------------------------------------------------
 
----
+十六、顯示層
 
-## render.yaml
-- 排程  
+BUY：
+顯示進場 / 停損 / RR
 
----
+WAIT：
+顯示缺什麼條件
 
-## requirements.txt
-- requests
-- flask
-- pytz
-- supabase  
+NO_TRADE：
+顯示禁止原因
 
----
+--------------------------------------------------
 
-# 🧠 十二、services 層
+十七、排序
 
-## stock_api.py
-👉 純資料
+BUY > WAIT > NO_TRADE
 
----
+BUY排序：
+1 breakout
+2 RR
+3 risk
 
-## analysis.py（核心）
+--------------------------------------------------
 
-包含：
+十八、訊號冷卻（強制）
 
-- market_signal  
-- trend_signal  
-- volume_signal  
-- structure_ok  
-- breakout_event  
-- pullback_event  
-- risk_control  
-- strategy  
+同一標的：
 
----
+BUY 後 3 日內禁止再次 BUY
 
-## strategy()（唯一決策）
+未平倉前：
+禁止重複 BUY
 
-輸出：
+--------------------------------------------------
 
-- decision  
-- decision_type  
-- buy  
-- stop  
-- position  
-- risk  
-- rr  
+十九、訊號失效（強制）
 
----
+WAIT 狀態下：
 
-❌ 禁止：
+若出現：
 
-- AI  
-- learning  
+- 跌破支撐
+- trend 轉 DOWN
+- volume 出現 DISTRIBUTION
 
----
+→ 強制 NO_TRADE
 
-## ai.py
+--------------------------------------------------
 
-👉 解釋 decision
+二十、總風險控制（強制）
 
-輸出：
+總持倉風險：
 
-- decision  
-- reason（單一句）
+sum(risk × position) ≤ 0.06
 
----
+超過 → 禁止新增 BUY
 
-## learning.py
+--------------------------------------------------
 
-👉 記錄交易
+二十一、結果驗證（強制）
 
-- record_trade  
-- update_trade_result  
+每次 strategy 輸出必須檢查：
 
----
+- BUY 必須有 buy / stop / rr
+- stop < buy
+- NO_TRADE 不得有 buy
 
-fail-safe：
+否則 → 系統錯誤
 
-DB錯誤不可影響主流程  
+--------------------------------------------------
 
----
+二十二、紅線（最嚴格）
 
-## notifier.py
+- 無停損
+- RR不達標
+- 無市場
+- 無事件
+- AI決策
+- 修改 decision
 
-👉 發送訊息  
+--------------------------------------------------
 
----
+二十三、最終原則
 
-# 🧠 十三、core 層
-
-## generator.py
-
-流程：
-
-1. 抓資料  
-2. strategy  
-3. AI  
-4. learning  
-5. 輸出  
-
----
-
-❌ 禁止修改 decision  
-
----
-
-## 輸出格式（強制）
-
-- name  
-- price  
-- decision  
-- decision_type  
-- reason  
-- structure  
-- event  
-- buy  
-- stop  
-- risk  
-- rr  
-
----
-
-# 🧠 十四、顯示層
-
-## BUY
-
-【標的】🟢 BUY  
-原因：xxx  
-
-進場：xxx  
-停損：xxx  
-
-類型：breakout / pullback  
-RR：x.x  
-
----
-
-## WAIT
-
-【標的】🟡 WAIT  
-原因：xxx  
-
-關鍵價位：xxx  
-觸發條件：xxx  
-
----
-
-## NO_TRADE
-
-【標的】🔴 NO  
-原因：xxx  
-
----
-
-# 🧠 十五、排序規則
-
-BUY > WAIT > NO_TRADE  
-
-BUY內：
-
-1. breakout優先  
-2. RR高優先  
-3. risk低優先  
-
----
-
-# 🧠 十六、learning 限制
-
-資料來源：
-
-Supabase（trades）
-
----
-
-❌ 禁止：
-
-- pending  
-- 未來資料  
-
----
-
-## 唯一鍵
-
-(stock, trade_date)
-
----
-
-# 🚫 十七、紅線
-
-1. AI 決策  
-2. 多 decision  
-3. 無停損  
-4. RR 不達標  
-5. learning 干預  
-6. generator 改 decision  
-7. 無市場判斷  
-
----
-
-# 🧠 十八、修改檢查
-
-修改前必問：
-
-- 是否影響 strategy？  
-- 是否改 decision？  
-- 是否破壞風控？  
-
-👉 任一 YES → 禁止  
-
----
-
-# 🚀 十九、最終原則
-
+沒有市場 → 不交易  
 沒有事件 → 不交易  
-沒有 Edge → 不交易  
+沒有Edge → 不交易  
 沒有風控 → 不允許存在  
-沒有市場 → 不進場  
 
 decision = 唯一真相  
 AI = 只能解釋  
 
----
+--------------------------------------------------
 
-# 🔥 v7 本質
+🔥 v8本質：
 
 不是找股票  
-是只做「最容易贏的交易
+是只做「最容易贏的交易」
