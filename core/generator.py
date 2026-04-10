@@ -38,6 +38,46 @@ def safe_round(val, n=1):
     return round(val, n) if isinstance(val, (int, float)) else "-"
 
 
+# ================================
+# 🔥 評分系統（v7核心）
+# ================================
+def score_system(market, trend, structure, momentum, breakout_quality, rr):
+
+    score = 50
+
+    if market == "STRONG":
+        score += 10
+    elif market == "WEAK":
+        score -= 15
+
+    if trend == "UP":
+        score += 10
+    elif trend == "DOWN":
+        score -= 15
+
+    if structure == "STRONG":
+        score += 10
+    elif structure == "WEAK":
+        score -= 10
+
+    if momentum == "ACCELERATING":
+        score += 10
+    elif momentum == "DECELERATING":
+        score -= 5
+
+    if breakout_quality == "CLEAN":
+        score += 10
+    elif breakout_quality == "WEAK":
+        score -= 5
+
+    if rr >= 2:
+        score += 10
+    elif rr < 1.5:
+        score -= 10
+
+    return max(0, min(100, int(score)))
+
+
 def generate():
 
     now = datetime.now(tz)
@@ -91,6 +131,8 @@ def generate():
         pullback_type = result.get("pullback_type")
         dist_break = result.get("distance_to_breakout")
 
+        score = score_system(market, trend, structure, momentum, breakout_quality, rr)
+
         risk_text = risk_to_text(risk)
 
         ai = ai_analysis(
@@ -115,15 +157,26 @@ def generate():
                 record_trade(
                     name, "buy", buy, buy, stop,
                     ma5, ma20, "-", "-",
-                    extra_data={"rr": rr, "decision_type": decision_type}
+                    extra_data={
+                        "rr": rr,
+                        "decision_type": decision_type,
+                        "market": market,
+                        "structure_state": structure,
+                        "momentum_state": momentum,
+                        "breakout_quality": breakout_quality,
+                        "pullback_type": pullback_type
+                    }
                 )
             except:
                 pass
 
         if decision == "BUY":
-            candidates.append((decision_type, rr, risk, name, buy, stop))
+            candidates.append((decision_type, rr, risk, name, buy, stop, score))
 
-        # ===== 顯示 =====
+        # ================================
+        # 🔥 顯示
+        # ================================
+
         if decision == "BUY":
 
             entry_type = "突破" if decision_type == "breakout" else "回踩"
@@ -132,19 +185,21 @@ def generate():
             if reason:
                 msg += f"👉 {reason}\n"
 
+            msg += f"🔥 強度：{score}\n"
+
             if breakout_quality == "CLEAN":
-                msg += "⚡ 強勢突破（動能充足）\n"
+                msg += "⚡ 強勢突破\n"
             elif breakout_quality == "WEAK":
-                msg += "⚠️ 突破偏弱（注意假突破）\n"
+                msg += "⚠️ 突破偏弱\n"
 
             if pullback_type == "SHALLOW":
-                msg += "📈 強勢回踩（偏多）\n"
+                msg += "📈 強勢回踩\n"
             elif pullback_type == "DEEP":
-                msg += "⚠️ 回踩過深（轉弱風險）\n"
+                msg += "⚠️ 回踩過深\n"
 
-            msg += f"🎯 進場：{safe_round(buy)} ｜ 停損：{safe_round(stop)}\n"
+            msg += f"🎯 {safe_round(buy)} / {safe_round(stop)}\n"
             msg += f"📊 RR：{rr} ｜ {risk_text}\n"
-            msg += f"💰 現價：{safe_round(price)}（{safe_round(change,2)}%）\n\n"
+            msg += f"💰 {safe_round(price)}（{safe_round(change,2)}%）\n\n"
 
         elif decision == "WAIT":
 
@@ -152,23 +207,16 @@ def generate():
             if reason:
                 msg += f"👉 {reason}\n"
 
-            if structure == "STRONG":
-                msg += "📈 結構穩定\n"
-            elif structure == "WEAK":
-                msg += "⚠️ 結構不穩\n"
+            msg += f"🔥 強度：{score}\n"
 
-            if momentum == "ACCELERATING":
+            if dist_break is not None and dist_break < 0.01:
+                msg += "🔥 接近突破\n"
+            elif momentum == "ACCELERATING":
                 msg += "⚡ 動能轉強\n"
-            elif momentum == "DECELERATING":
-                msg += "📉 動能轉弱\n"
+            elif structure == "STRONG":
+                msg += "📈 結構穩定\n"
 
-            if dist_break is not None:
-                if dist_break < 0.01:
-                    msg += "🔥 接近突破（可重點觀察）\n"
-                elif dist_break < 0.03:
-                    msg += f"📍 距離突破：約 {round(dist_break*100,1)}%\n"
-
-            msg += f"💰 現價：{safe_round(price)}（{safe_round(change,2)}%）\n\n"
+            msg += f"💰 {safe_round(price)}（{safe_round(change,2)}%）\n\n"
 
         else:
 
@@ -176,19 +224,20 @@ def generate():
             if reason:
                 msg += f"👉 {reason}\n"
 
+            msg += f"🔥 強度：{score}\n"
+
             if market == "WEAK":
                 msg += "🌧 市場弱勢\n"
-            if volume == "DISTRIBUTION":
-                msg += "📦 出貨量風險\n"
-            if trend == "DOWN":
+            elif trend == "DOWN":
                 msg += "📉 空頭趨勢\n"
+            elif volume == "DISTRIBUTION":
+                msg += "📦 出貨風險\n"
 
-            msg += f"💰 現價：{safe_round(price)}（{safe_round(change,2)}%）\n\n"
+            msg += f"💰 {safe_round(price)}（{safe_round(change,2)}%）\n\n"
 
     msg += "====================\n"
     msg += f"{global_decision(decisions)}\n"
 
-    # ===== 最佳標的 =====
     if candidates:
         best = sorted(candidates, key=lambda x: (
             x[0] == "breakout",
@@ -196,10 +245,11 @@ def generate():
             -x[2]
         ), reverse=True)[0]
 
-        _, rr, risk, name, buy, stop = best
+        _, rr, risk, name, buy, stop, score = best
 
         msg += "\n🔥 今日最佳標的\n"
         msg += f"{name}\n"
         msg += f"🎯 {safe_round(buy)} / {safe_round(stop)}（RR:{rr}）\n"
+        msg += f"🔥 強度：{score}\n"
 
     return msg
