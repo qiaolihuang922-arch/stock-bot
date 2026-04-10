@@ -10,14 +10,23 @@ app = Flask(__name__)
 # ===== 時區 =====
 tz = pytz.timezone("Asia/Taipei")
 
+# ===== 防重複（10分鐘過期）=====
+sent_cache = {}
+CACHE_EXPIRE = 600  # 秒（10分鐘）
 
-# =====（可選）防重複機制 =====
-sent_cache = set()
 
 def already_sent(tag):
+    now_ts = time.time()
+
+    # 清除過期tag
+    expired = [k for k, v in sent_cache.items() if now_ts - v > CACHE_EXPIRE]
+    for k in expired:
+        del sent_cache[k]
+
     if tag in sent_cache:
         return True
-    sent_cache.add(tag)
+
+    sent_cache[tag] = now_ts
     return False
 
 
@@ -25,9 +34,9 @@ def already_sent(tag):
 @app.route("/")
 def home():
     try:
-        # 🔥 避免 Render 冷啟動卡住（測試模式不延遲）
+        # 🔥 Render 冷啟動優化
         if not request.args.get("test"):
-            time.sleep(0.5)
+            time.sleep(0.3)
 
         now = datetime.now(tz)
 
@@ -44,17 +53,18 @@ def home():
         if test_mode == "1":
             tag = now.strftime("%Y%m%d_test_%H%M%S")
 
-        # ===== 盤前 =====
+        # ===== 盤前（只發一次）=====
         elif hour == 8 and 30 <= minute < 35:
             tag = now.strftime("%Y%m%d_pre")
 
         # ===== 盤中（每10分鐘）=====
         elif 9 <= hour <= 13:
-            if not (minute % 10 == 0 and now.second < 10):
-                return "⏭️ Skip"
-            tag = now.strftime("%Y%m%d_%H%M")
 
-        # ===== 收盤 =====
+            # 🔥 關鍵修復：用10分鐘區間
+            bucket = minute // 10  # 0~5
+            tag = f"{now.strftime('%Y%m%d_%H')}_{bucket}"
+
+        # ===== 收盤（只發一次）=====
         elif hour == 13 and 20 <= minute < 25:
             tag = now.strftime("%Y%m%d_close")
 
@@ -63,7 +73,7 @@ def home():
 
         # ===== 防重複 =====
         if already_sent(tag):
-            return "⚠️ Already sent"
+            return f"⏭️ Skip ({tag})"
 
         # ===== Token =====
         token = os.getenv("GITHUB_TOKEN")
@@ -86,7 +96,7 @@ def home():
 
         return f"""✅ Trigger GitHub: {r.status_code}
 🧪 Test Mode: {test_mode}
-🕒 Time: {now.strftime("%H:%M")}
+🕒 Time: {now.strftime("%H:%M:%S")}
 📌 Tag: {tag}
 📡 Response: {r.text[:100]}"""
 
