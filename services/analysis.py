@@ -86,7 +86,6 @@ def support_resistance(closes):
 
 # ===== 結構確認 =====
 def check_structure(closes, volumes):
-
     stop_falling = closes[-1] >= closes[-2] >= closes[-3]
 
     total = sum(volumes[-10:])
@@ -100,16 +99,28 @@ def check_structure(closes, volumes):
     return stop_falling and no_dump and hold_structure
 
 
-# ===== 策略（最終強化版）=====
-def strategy(price, ma5, ma20, closes, volumes, market_trend):
+# ===== 市場模型（優化版）=====
+def market_model(closes, ma20):
+
+    # 明確弱勢（下破+連跌）
+    if closes[-1] < ma20 and closes[-1] < closes[-2] < closes[-3]:
+        return "weak"
+
+    return "normal"
+
+
+# ===== 策略（最終優化版）=====
+def strategy(price, ma5, ma20, closes, volumes):
 
     support, resistance = support_resistance(closes)
 
-    # ===== 🔴 市場控制（新增）=====
+    # ===== 市場 =====
+    market_trend = market_model(closes, ma20)
+
     if market_trend == "weak":
         return "觀望（市場偏弱）", "-", "-", "0%", "WAIT_AVOID", "HIGH"
 
-    # ===== 基礎數據 =====
+    # ===== 基礎 =====
     prev_resistance = max(closes[-21:-1])
     breakout = price > prev_resistance
 
@@ -144,6 +155,23 @@ def strategy(price, ma5, ma20, closes, volumes, market_trend):
     if closes[-1] > max(closes[-5:-1]): score += 1
     if closes[-1] < min(closes[-5:-1]): score -= 2
 
+    # ===== 🔥 補回 breakout =====
+    if breakout and momentum and ratio > 1.3:
+        score += 2
+
+    if breakout and (not momentum or ratio < 1.2):
+        score -= 3
+
+    # ===== 🔥 confirm（關鍵）=====
+    confirm = 0
+    if price > ma20: confirm += 1
+    if momentum: confirm += 1
+    if ratio > 1.2: confirm += 1
+
+    if confirm < 2 and score >= 4:
+        score -= 2
+
+    # ===== 壓力 =====
     if price > resistance * 0.97:
         return "觀望（接近壓力）", "-", "-", "0%", "WAIT_AVOID", "HIGH"
 
@@ -155,16 +183,16 @@ def strategy(price, ma5, ma20, closes, volumes, market_trend):
     if price > resistance * 1.08:
         return "觀望（過熱）", "-", "-", "0%", "WAIT_AVOID", "HIGH"
 
-    # ===== 決策區 =====
     decision_reason = "WAIT"
 
+    # ===== 決策 =====
     if score >= 6:
         buy = price * 0.99
         stop = min(ma5, structure_low)
         decision_reason = "BREAK"
 
     elif score >= 4:
-        if abs(price - ma5) / ma5 <= 0.03:
+        if abs(price - ma5) / ma5 <= 0.03 and closes[-1] >= closes[-2]:
             buy = ma5
             stop = max(ma20 * 0.97, structure_low)
             decision_reason = "PULLBACK"
@@ -177,17 +205,16 @@ def strategy(price, ma5, ma20, closes, volumes, market_trend):
     else:
         return "觀望（弱勢）", "-", "-", "0%", "WAIT_AVOID", "HIGH"
 
-    # ===== 結構確認 =====
+    # ===== 結構 =====
     if not check_structure(closes, volumes):
         return "觀望（結構未確認）", "-", "-", "0%", "WAIT_AVOID", "HIGH"
 
-    # ===== stop 修正 =====
+    # ===== 風控 =====
     if stop >= buy:
         stop = buy * 0.97
 
     risk = (buy - stop) / buy
 
-    # ===== 🔴 風控否決（新增）=====
     if risk > 0.08:
         return "觀望（風險過大）", "-", "-", "0%", "WAIT_AVOID", "HIGH"
 
@@ -200,14 +227,12 @@ def strategy(price, ma5, ma20, closes, volumes, market_trend):
     if rr < 1.2:
         return "觀望（報酬不足）", "-", "-", "0%", "WAIT_AVOID", "MID"
 
-    # ===== 倉位（重寫）=====
+    # ===== 倉位 =====
     risk_per_trade = 0.02
-    position = risk_per_trade / risk
-    position = min(position, 1.0)
-
+    position = min(risk_per_trade / risk, 1.0)
     position_pct = int(position * 100)
 
-    # ===== 風險等級（新增）=====
+    # ===== 風險等級 =====
     if risk > 0.06:
         risk_level = "HIGH"
     elif risk > 0.03:
