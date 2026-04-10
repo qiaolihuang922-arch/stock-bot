@@ -3,7 +3,20 @@ def avg(arr):
     return sum(arr) / len(arr) if len(arr) > 0 else 0
 
 
-# ===== 量能（判斷型）=====
+# ===== 統一輸出（v6核心🔥）=====
+def build_result(decision, decision_type="none", buy=None, stop=None, pos=0, risk=0, rr=0):
+    return {
+        "decision": decision,
+        "decision_type": decision_type,
+        "buy": buy,
+        "stop": stop,
+        "position": pos,
+        "risk": round(risk, 4),
+        "rr": round(rr, 2)
+    }
+
+
+# ===== 量能 =====
 def volume_signal(volumes):
     avg10 = avg(volumes[-10:])
     ratio = volumes[-1] / avg10 if avg10 > 0 else 1
@@ -11,10 +24,10 @@ def volume_signal(volumes):
     vol_up = volumes[-1] > volumes[-2] > volumes[-3]
 
     if ratio > 1.5 and vol_up:
-        return "STRONG"   # 突破有效
+        return "STRONG"
 
     if ratio > 1.5 and not vol_up:
-        return "DISTRIBUTION"  # 出貨
+        return "DISTRIBUTION"
 
     if ratio < 0.8:
         return "WEAK"
@@ -42,44 +55,41 @@ def market_signal(closes, ma20):
 
 # ===== 結構 =====
 def structure_ok(closes, volumes):
-    # 不再創低
     if not (closes[-1] >= closes[-2] >= closes[-3]):
         return False
 
-    # 無爆量殺盤
     avg10 = avg(volumes[-10:])
     if volumes[-1] > avg10 * 1.8:
         return False
 
-    # 不破結構低點
     if closes[-1] < min(closes[-7:]):
         return False
 
     return True
 
 
-# ===== 支撐壓力 =====
+# ===== 支撐壓力（優化版）=====
 def support_resistance(closes):
-    return min(closes[-20:]), max(closes[-20:])
+    support = min(closes[-20:])
+    resistance = max(closes[-20:-3])  # 避免最新高點污染
+    return support, resistance
 
 
-# ===== 假突破過濾（V5核心🔥）=====
+# ===== 假突破過濾 =====
 def fake_breakout_filter(closes, volumes):
     prev_high = max(closes[-21:-1])
     avg10 = avg(volumes[-10:])
 
-    # 昨天突破但收回
     if closes[-2] > prev_high and closes[-1] < prev_high:
         return True
 
-    # 無量突破
     if closes[-1] > prev_high and volumes[-1] < avg10 * 1.1:
         return True
 
     return False
 
 
-# ===== 突破策略（主策略🔥）=====
+# ===== 突破 =====
 def breakout_entry(price, closes, volumes):
     prev_high = max(closes[-21:-1])
     avg10 = avg(volumes[-10:])
@@ -87,11 +97,11 @@ def breakout_entry(price, closes, volumes):
     return (
         price > prev_high and
         closes[-1] > prev_high and
-        volumes[-1] > avg10 * 1.3
+        volumes[-1] > avg10 * 1.5
     )
 
 
-# ===== 回踩策略（副策略🔥）=====
+# ===== 回踩 =====
 def pullback_entry(price, ma5, closes, volumes):
     avg10 = avg(volumes[-10:])
     ratio = volumes[-1] / avg10 if avg10 > 0 else 1
@@ -106,7 +116,7 @@ def pullback_entry(price, ma5, closes, volumes):
     )
 
 
-# ===== 風控 =====
+# ===== 風控（v6輸出🔥）=====
 def risk_control(buy, stop, resistance):
     if stop >= buy:
         stop = buy * 0.97
@@ -114,85 +124,87 @@ def risk_control(buy, stop, resistance):
     risk = (buy - stop) / buy
 
     if risk > 0.08:
-        return False, "RISK_TOO_HIGH"
+        return False, risk, 0
 
     reward = resistance - buy
     if reward <= 0:
-        return False, "NO_SPACE"
+        return False, risk, 0
 
     rr = reward / (buy - stop)
 
     if rr < 1.2:
-        return False, "RR_LOW"
+        return False, risk, rr
 
-    return True, "OK"
+    return True, risk, rr
 
 
 # ===== 倉位 =====
 def position_size(buy, stop):
     risk = (buy - stop) / buy
+    if risk == 0:
+        return 0
     pos = min(0.02 / risk, 1.0)
     return int(pos * 100)
 
 
-# ===== 🎯 最終策略（唯一決策源）=====
+# ===== 🎯 最終策略 =====
 def strategy(price, ma5, ma20, closes, volumes):
 
     support, resistance = support_resistance(closes)
 
-    # ===== 1️⃣ 市場 =====
+    # ===== 市場 =====
     if market_signal(closes, ma20) == "WEAK":
-        return "WAIT", "-", "-", "0%", "MARKET_WEAK", "HIGH"
+        return build_result("WAIT")
 
-    # ===== 2️⃣ 趨勢 =====
+    # ===== 趨勢 =====
     trend = trend_signal(price, ma5, ma20)
     if trend == "DOWN":
-        return "NO", "-", "-", "0%", "TREND_DOWN", "HIGH"
+        return build_result("NO_TRADE")
 
-    # ===== 3️⃣ 結構 =====
+    # ===== 結構 =====
     if not structure_ok(closes, volumes):
-        return "WAIT", "-", "-", "0%", "STRUCTURE_BAD", "HIGH"
+        return build_result("WAIT")
 
-    # ===== 4️⃣ 量能 =====
+    # ===== 量能 =====
     vol = volume_signal(volumes)
 
     if vol == "DISTRIBUTION":
-        return "NO", "-", "-", "0%", "DISTRIBUTION", "HIGH"
+        return build_result("NO_TRADE")
 
     if vol == "WEAK":
-        return "WAIT", "-", "-", "0%", "NO_VOLUME", "MID"
+        return build_result("WAIT")
 
-    # ===== 5️⃣ 假突破過濾（先擋🔥）=====
+    # ===== 假突破 =====
     if fake_breakout_filter(closes, volumes):
-        return "NO", "-", "-", "0%", "FAKE_BREAKOUT", "HIGH"
+        return build_result("NO_TRADE")
 
-    # ===== 6️⃣ 主策略：突破 =====
+    # ===== 突破 =====
     if breakout_entry(price, closes, volumes):
 
         buy = price
         stop = min(ma5, min(closes[-10:]))
 
-        ok, reason = risk_control(buy, stop, resistance)
+        ok, risk, rr = risk_control(buy, stop, resistance)
         if not ok:
-            return "NO", "-", "-", "0%", reason, "HIGH"
+            return build_result("NO_TRADE")
 
         pos = position_size(buy, stop)
 
-        return "BUY", round(buy,1), round(stop,1), f"{pos}%", "BREAKOUT", "LOW"
+        return build_result("BUY", "breakout", buy, stop, pos, risk, rr)
 
-    # ===== 7️⃣ 副策略：回踩 =====
-    if trend == "UP" and pullback_entry(price, ma5, closes, volumes):
+    # ===== 回踩 =====
+    if trend == "UP" and structure_ok(closes, volumes) and pullback_entry(price, ma5, closes, volumes):
 
         buy = ma5
         stop = min(ma20, min(closes[-10:]))
 
-        ok, reason = risk_control(buy, stop, resistance)
+        ok, risk, rr = risk_control(buy, stop, resistance)
         if not ok:
-            return "NO", "-", "-", "0%", reason, "MID"
+            return build_result("NO_TRADE")
 
         pos = position_size(buy, stop)
 
-        return "BUY", round(buy,1), round(stop,1), f"{pos}%", "PULLBACK", "MID"
+        return build_result("BUY", "pullback", buy, stop, pos, risk, rr)
 
-    # ===== 8️⃣ 無機會 =====
-    return "WAIT", "-", "-", "0%", "NO_SIGNAL", "MID"
+    # ===== 無機會 =====
+    return build_result("WAIT")
