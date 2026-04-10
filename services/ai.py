@@ -3,92 +3,82 @@ import time
 from config import OPENAI_API_KEY
 
 AI_ENABLED = True
-AI_DISABLED_UNTIL = 0  # 🔥 冷卻時間（新增）
+AI_DISABLED_UNTIL = 0
 
 
 # ================================
-# 🔥 格式修正（強化版）
+# 🔥 輸出標準化（強化版）
 # ================================
 def normalize_ai_output(text):
 
     if not text:
         return None
 
-    text = text.strip()
+    text = text.strip().upper()
 
-    # 🔥 清理常見雜訊
+    # 清理符號
     text = text.replace("：", "｜").replace(":", "｜")
 
-    # 只保留第一行
-    text = text.split("\n")[0]
+    # 只取第一行
+    text = text.split("\n")[0].strip()
 
-    # ===== 嚴格開頭匹配 =====
-    for prefix in ["BUY｜", "WAIT｜", "NO｜"]:
-        if text.startswith(prefix):
-            return text[:30]  # 限長（避免失控）
+    # 強制格式
+    valid_prefix = ["BUY｜", "WAIT｜", "NO｜"]
+
+    for p in valid_prefix:
+        if text.startswith(p):
+            return text[:30]
 
     return None
 
 
 # ================================
-# 🔥 fallback（強化對齊 strategy）
+# 🔥 fallback（完全對齊 strategy🔥）
 # ================================
-def fallback_ai(decision):
+def fallback_ai(decision, decision_type=None):
 
-    # ===== 觀望 =====
-    if "觀望" in decision:
+    # ===== BUY =====
+    if decision == "BUY":
 
-        if "市場" in decision:
-            return "WAIT｜市場偏弱"
+        mapping = {
+            "BREAKOUT": "BUY｜突破成立",
+            "PULLBACK": "BUY｜回踩支撐",
+        }
 
-        if "未回踩" in decision:
-            return "WAIT｜尚未回踩"
+        return mapping.get(decision_type, "BUY｜結構成立")
 
-        if "追高" in decision:
-            return "WAIT｜接近壓力"
+    # ===== NO =====
+    if decision == "NO":
 
-        if "過熱" in decision:
-            return "WAIT｜短線過熱"
+        mapping = {
+            "TREND_DOWN": "NO｜空頭趨勢",
+            "DISTRIBUTION": "NO｜出貨訊號",
+            "FAKE_BREAKOUT": "NO｜假突破",
+            "RISK_TOO_HIGH": "NO｜風險過大",
+            "RR_LOW": "NO｜報酬不足",
+            "NO_SPACE": "NO｜空間不足",
+        }
 
-        if "未到買點" in decision:
-            return "WAIT｜尚未到點"
+        return mapping.get(decision_type, "NO｜不符合條件")
 
-        if "報酬不足" in decision:
-            return "WAIT｜報酬不足"
+    # ===== WAIT =====
+    if decision == "WAIT":
 
-        if "風險過大" in decision:
-            return "WAIT｜風險偏高"
+        mapping = {
+            "NO_VOLUME": "WAIT｜量能不足",
+            "STRUCTURE_BAD": "WAIT｜結構不穩",
+            "MARKET_WEAK": "WAIT｜市場偏弱",
+            "NO_BREAKOUT": "WAIT｜未突破",
+            "NO_SIGNAL": "WAIT｜無明確機會",
+        }
 
-        if "結構未確認" in decision:
-            return "WAIT｜結構未穩"
+        return mapping.get(decision_type, "WAIT｜觀望")
 
-        if "空間不足" in decision:
-            return "WAIT｜空間不足"
-
-        if "弱勢" in decision:
-            return "NO｜結構偏弱"
-
-        return "WAIT｜策略觀望"
-
-    # ===== 進場（語意標籤）=====
-    if "進場🔥" in decision:
-        return "BUY｜強勢結構"
-
-    if "進場" in decision:
-        return "BUY｜結構成立"
-
-    if "試單" in decision:
-        return "BUY｜轉強觀察"
-
-    # ===== 風險 =====
-    if "風險" in decision:
-        return "NO｜風險偏高"
-
-    return "WAIT｜訊號不足"
+    return "WAIT｜觀望"
 
 
 # ================================
-# 🔥 AI分析（穩定版）
+# 🔥 AI分析（最終穩定版）
 # ================================
 def ai_analysis(
     name,
@@ -101,7 +91,7 @@ def ai_analysis(
     decision,
     buy,
     stop,
-    decision_type=None  # 🔥 新增（可選）
+    decision_type=None
 ):
 
     global AI_ENABLED, AI_DISABLED_UNTIL
@@ -110,44 +100,31 @@ def ai_analysis(
     if not AI_ENABLED and time.time() > AI_DISABLED_UNTIL:
         AI_ENABLED = True
 
+    # ===== prompt（極簡，避免失控）=====
     prompt = f"""
-你是交易分析助手，只能解釋策略，不可做決策。
+你是交易解釋器，不可改策略。
 
-⚠️ BUY / WAIT / NO 只是分類標籤
-⚠️ 不代表交易建議，不可影響決策
+股票:{name}
+價格:{price}({change}%)
+趨勢:{trend}
+量能:{volume}
 
-股票：{name}
-現價：{price}（{change}%）
-MA5：{ma5} MA20：{ma20}
-量能：{volume}
-趨勢：{trend}
+決策:{decision}
+類型:{decision_type}
 
-策略決策：
-{decision}
-"""
+輸出格式：
+BUY｜原因
+WAIT｜原因
+NO｜原因
 
-    # 👉 若有 decision_type，補充但不影響
-    if decision_type:
-        prompt += f"\n決策類型：{decision_type}"
-
-    prompt += """
-
-請輸出（只能選一種）：
-
-BUY｜解釋原因（20字內）
-WAIT｜解釋原因（20字內）
-NO｜解釋原因（20字內）
-
-⚠️禁止提供：
-- 買點
-- 停損
-- 倉位
-- 交易建議
+限制：
+- 20字內
+- 不可提供建議
 """
 
     # ===== fallback模式 =====
     if not AI_ENABLED:
-        return fallback_ai(decision), False
+        return fallback_ai(decision, decision_type), False
 
     try:
         r = requests.post(
@@ -159,25 +136,24 @@ NO｜解釋原因（20字內）
             json={
                 "model": "gpt-4.1-mini",
                 "input": prompt,
-                "temperature": 0.2
+                "temperature": 0.1
             },
-            timeout=10
+            timeout=8
         )
 
         # ===== 限流 =====
         if r.status_code == 429:
             AI_ENABLED = False
-            AI_DISABLED_UNTIL = time.time() + 60  # 🔥 冷卻60秒
-            return fallback_ai(decision), False
+            AI_DISABLED_UNTIL = time.time() + 60
+            return fallback_ai(decision, decision_type), False
 
         if r.status_code != 200:
-            return fallback_ai(decision), False
+            return fallback_ai(decision, decision_type), False
 
         data = r.json()
 
-        # ===== 🔥 多層解析 =====
+        # ===== 解析 =====
         try:
-            # 新格式
             if "output" in data:
                 for item in data["output"]:
                     if "content" in item:
@@ -187,7 +163,6 @@ NO｜解釋原因（20字內）
                                 if text:
                                     return text, True
 
-            # 舊格式
             if "output_text" in data:
                 text = normalize_ai_output(data["output_text"])
                 if text:
@@ -199,4 +174,4 @@ NO｜解釋原因（20字內）
     except Exception as e:
         print("AI request error:", e)
 
-    return fallback_ai(decision), False
+    return fallback_ai(decision, decision_type), False
