@@ -3,7 +3,7 @@ import pytz
 
 from services.learning import record_trade
 from services.stock_api import get_twse, get_yahoo, get_realtime_price
-from services.analysis import volume_model, trend_model, strategy, support_resistance
+from services.analysis import volume_signal, trend_signal, strategy, support_resistance
 from services.ai import ai_analysis
 
 tz = pytz.timezone("Asia/Taipei")
@@ -14,10 +14,10 @@ stocks = {
     "智原": "3035"
 }
 
-# ===== 決策顯示（整合版🔥）=====
+
+# ===== 顯示 =====
 def humanize_block(decision, reason, rr, risk_level):
 
-    # ===== 決策 =====
     if decision == "BUY":
         if reason == "BREAKOUT":
             title = "🔥 突破進場"
@@ -30,7 +30,6 @@ def humanize_block(decision, reason, rr, risk_level):
     else:
         title = "⏳ 觀望"
 
-    # ===== 原因 =====
     reason_map = {
         "BREAKOUT": "強勢突破，有量",
         "PULLBACK": "回踩支撐，風險低",
@@ -48,7 +47,6 @@ def humanize_block(decision, reason, rr, risk_level):
 
     desc = reason_map.get(reason, "")
 
-    # ===== RR =====
     rr_str = ""
     if rr != "-" and rr is not None:
         if rr >= 2:
@@ -58,16 +56,13 @@ def humanize_block(decision, reason, rr, risk_level):
         else:
             rr_str = f"RR:{rr}⚠"
 
-    # ===== 風險 =====
     risk_map = {
         "HIGH": "⚠️高風險",
         "MID": "⚠️中風險",
         "LOW": "✅低風險"
     }
 
-    risk_str = risk_map.get(risk_level, "")
-
-    return title, desc, rr_str, risk_str
+    return title, desc, rr_str, risk_map.get(risk_level, "")
 
 
 # ===== RR =====
@@ -86,7 +81,7 @@ def calc_rr(buy, stop, resistance):
     return round(rr, 2)
 
 
-# ===== 預備買點（保留）=====
+# ===== 預備買點 =====
 def get_prebuy(price, ma5, ma20, support, resistance, decision):
     if decision != "WAIT":
         return "-"
@@ -101,13 +96,11 @@ def get_phase():
         return "盤前"
     elif 9 <= now.hour <= 13:
         return "盤中🔥"
-    else:
-        return "盤後"
+    return "盤後"
 
 
 def allow_record():
-    now = datetime.now(tz)
-    return now.hour >= 13
+    return datetime.now(tz).hour >= 13
 
 
 recorded_today = set()
@@ -121,7 +114,7 @@ def can_record_today(name):
     return True
 
 
-# ===== 市場總結（保留）=====
+# ===== 市場總結 =====
 def global_decision(decisions):
 
     buy = sum(1 for d in decisions if d == "BUY")
@@ -130,20 +123,18 @@ def global_decision(decisions):
     if buy >= 1:
         return "🟢 市場有機會（可操作）"
 
-    if no >= len(decisions):
+    if no == len(decisions):
         return "🔴 全面弱勢（不操作）"
 
     return "⏳ 觀望市場"
 
 
-# ===== 評分（保留給選股）=====
+# ===== 評分 =====
 def score_stock(decision, trend, volume):
     score = 0
-
     if decision == "BUY": score += 5
-    if "UP" in trend: score += 2
-    if "STRONG" in volume: score += 2
-
+    if trend == "UP": score += 2
+    if volume == "STRONG": score += 2
     return score
 
 
@@ -151,9 +142,7 @@ def score_stock(decision, trend, volume):
 def generate():
 
     now = datetime.now(tz)
-    phase = get_phase()
-
-    msg = f"【{now.strftime('%m/%d')} {phase}｜AI交易系統】\n\n"
+    msg = f"【{now.strftime('%m/%d')} {get_phase()}｜AI交易系統】\n\n"
 
     decisions = []
     candidates = []
@@ -163,22 +152,16 @@ def generate():
         twse = get_twse(code)
         yahoo = get_yahoo(code)
 
-        if not twse:
-            if not yahoo:
-                msg += f"{name}：無資料\n\n"
-                continue
+        if not twse and not yahoo:
+            msg += f"{name}：無資料\n\n"
+            continue
 
-            price, change = yahoo
-            closes = [price] * 20
-            volumes = [1] * 20
-            ma5 = price
-            ma20 = price
-
-        else:
+        if twse:
             t_price, t_change, ma5, ma20, closes, volumes = twse
             prev_close = closes[-2]
 
             realtime = get_realtime_price(code)
+
             if realtime:
                 price, change = realtime
             elif yahoo:
@@ -186,13 +169,23 @@ def generate():
             else:
                 price = t_price
                 change = (price - prev_close) / prev_close * 100
+        else:
+            price, change = yahoo
+            closes = [price] * 20
+            volumes = [1] * 20
+            ma5 = price
+            ma20 = price
 
-        volume = volume_model(volumes)
-        trend = trend_model(price, ma5, ma20)
+        volume = volume_signal(volumes)
+        trend = trend_signal(price, ma5, ma20)
 
-        decision, buy, stop, position, decision_type, risk_level = strategy(
-            price, ma5, ma20, closes, volumes
-        )
+        # ===== strategy 防爆 =====
+        result = strategy(price, ma5, ma20, closes, volumes)
+
+        if len(result) != 6:
+            raise Exception("strategy 回傳格式錯誤")
+
+        decision, buy, stop, position, decision_type, risk_level = result
 
         support, resistance = support_resistance(closes)
         rr = calc_rr(buy, stop, resistance)
@@ -203,26 +196,27 @@ def generate():
 
         decisions.append(decision)
 
-        # ===== 記錄 =====
+        # ===== 記錄（帶debug）=====
         if allow_record() and can_record_today(name):
             if decision == "BUY" and buy != "-" and stop != "-" and buy > stop:
-                try:
-                    record_trade(
-                        name, "buy", buy, buy, stop,
-                        ma5, ma20, volume, trend,
-                        extra_data={
-                            "rr": rr,
-                            "decision_type": decision_type,
-                            "risk_level": risk_level
-                        }
-                    )
-                except Exception as e:
-                    print("record error:", e)
+
+                success = record_trade(
+                    name, "buy", buy, buy, stop,
+                    ma5, ma20, volume, trend,
+                    extra_data={
+                        "rr": rr,
+                        "decision_type": decision_type,
+                        "risk_level": risk_level
+                    }
+                )
+
+                print(f"[{'OK' if success else 'SKIP'}] {name}")
 
         # ===== 選股 =====
-        s = score_stock(decision, trend, volume)
         if decision == "BUY":
-            candidates.append((s, rr if rr != "-" else 0, name, buy, stop))
+            s = score_stock(decision, trend, volume)
+            rr_val = rr if isinstance(rr, (int, float)) else 0
+            candidates.append((s, rr_val, name, buy, stop))
 
         # ===== 顯示 =====
         msg += f"【{name}】{title}\n"
@@ -241,14 +235,12 @@ def generate():
 
         msg += "\n"
 
-    final = global_decision(decisions)
-
     msg += "====================\n"
-    msg += f"{final}\n"
+    msg += f"{global_decision(decisions)}\n"
 
     # ===== 最佳標的 =====
     if candidates:
-        best = sorted(candidates, reverse=True)[0]
+        best = sorted(candidates, key=lambda x: (x[0], x[1]), reverse=True)[0]
         _, rr, name, buy, stop = best
 
         msg += "\n🔥 今日最佳標的\n"
