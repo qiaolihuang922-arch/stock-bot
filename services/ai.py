@@ -5,7 +5,7 @@ AI_ENABLED = True
 
 
 # ================================
-# 🔥 格式修正（超關鍵）
+# 🔥 格式修正（嚴格版）
 # ================================
 def normalize_ai_output(text):
 
@@ -14,6 +14,7 @@ def normalize_ai_output(text):
 
     text = text.strip()
 
+    # ✅ 嚴格匹配
     if text.startswith("BUY｜"):
         return text
 
@@ -23,18 +24,12 @@ def normalize_ai_output(text):
     if text.startswith("NO｜"):
         return text
 
-    # 🔥 防亂輸出（自動矯正）
-    if "BUY" in text:
-        return "BUY｜結構偏多"
-
-    if "NO" in text:
-        return "NO｜風險偏高"
-
-    return "WAIT｜訊號不足"
+    # ❌ 不再用 "in"（避免誤判）
+    return None
 
 
 # ================================
-# 🔥 AI分析（只解釋，不做決策）
+# 🔥 AI分析（嚴格限制版）
 # ================================
 def ai_analysis(name, price, change, ma5, ma20, volume, trend, decision, buy, stop):
 
@@ -42,6 +37,9 @@ def ai_analysis(name, price, change, ma5, ma20, volume, trend, decision, buy, st
 
     prompt = f"""
 你是交易分析助手，只能解釋策略，不可做決策。
+
+⚠️ BUY / WAIT / NO 只是分類標籤
+⚠️ 不代表交易建議，不可影響決策
 
 股票：{name}
 現價：{price}（{change}%）
@@ -93,17 +91,24 @@ NO｜解釋為何不做（20字內）
         if r.status_code == 200:
             data = r.json()
 
-            # 🔥 更安全解析
+            # ===== 🔥 安全解析（新版）=====
             try:
-                content_list = data.get("output", [])
-                if content_list:
-                    content = content_list[0].get("content", [])
-                    if content and "text" in content[0]:
-                        raw_text = content[0]["text"]
-                        text = normalize_ai_output(raw_text)
+                # 新API格式
+                if "output" in data:
+                    for item in data["output"]:
+                        if "content" in item:
+                            for c in item["content"]:
+                                if "text" in c:
+                                    text = normalize_ai_output(c["text"])
+                                    if text:
+                                        return text, True
 
-                        if text:
-                            return text, True
+                # fallback（舊格式）
+                if "output_text" in data:
+                    text = normalize_ai_output(data["output_text"])
+                    if text:
+                        return text, True
+
             except Exception as e:
                 print("parse error:", e)
 
@@ -114,13 +119,11 @@ NO｜解釋為何不做（20字內）
 
 
 # ================================
-# 🔥 fallback（語意一致版）
+# 🔥 fallback（完全對齊 strategy）
 # ================================
 def fallback_ai(decision):
 
-    # =============================
-    # 🔴 觀望（細分）
-    # =============================
+    # ===== 觀望 =====
     if "觀望" in decision:
 
         if "未回踩" in decision:
@@ -139,42 +142,30 @@ def fallback_ai(decision):
             return "WAIT｜報酬不足"
 
         if "風險過大" in decision:
-            return "WAIT｜停損距離過大"
+            return "WAIT｜風險偏高"
 
         if "弱勢" in decision:
             return "WAIT｜結構偏弱"
 
         return "WAIT｜策略觀望"
 
-    # =============================
-    # 🟢 進場
-    # =============================
+    # ===== 進場（語意標籤，不是建議）=====
     if "進場🔥" in decision:
-        return "BUY｜強勢突破"
+        return "BUY｜強勢結構"
 
     if "進場" in decision:
-        return "BUY｜回踩確認"
+        return "BUY｜結構確認"
 
-    # =============================
-    # 🟡 試單
-    # =============================
+    # ===== 試單 =====
     if "試單" in decision:
-
-        if "高風險" in decision:
-            return "BUY｜高風險測試"
-
         return "BUY｜轉強觀察"
 
-    # =============================
-    # 🔴 NO（明確不做）
-    # =============================
+    # ===== 明確風險 =====
     if "風險" in decision:
         return "NO｜風險偏高"
 
     if "弱勢" in decision:
         return "NO｜結構偏弱"
 
-    # =============================
-    # 預設
-    # =============================
+    # ===== 預設 =====
     return "WAIT｜訊號不足"
