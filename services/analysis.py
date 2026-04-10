@@ -1,11 +1,13 @@
 # ================================
-# 🔥 analysis.py（v8修正版｜最終版）
+# 🔥 analysis.py（v8.1最終完整版）
 # ================================
 
+# ===== 工具 =====
 def avg(arr):
     return sum(arr) / len(arr) if len(arr) > 0 else 0
 
 
+# ===== 統一輸出 =====
 def build_result(
     decision,
     decision_type="none",
@@ -75,7 +77,7 @@ def trend_signal(price, ma5, ma20):
     return "SIDE"
 
 
-# ===== 量能（修正🔥）=====
+# ===== 量能 =====
 def volume_signal(volumes):
     avg10 = avg(volumes[-10:])
     ratio = volumes[-1] / avg10 if avg10 > 0 else 1
@@ -115,7 +117,22 @@ def support_resistance(closes):
     return support, resistance
 
 
-# ===== breakout event（修正🔥）=====
+# ===== 假突破過濾 =====
+def fake_breakout(closes):
+    prev_high = max(closes[-21:-1])
+
+    if closes[-2] > prev_high and closes[-1] < prev_high:
+        return True
+
+    return False
+
+
+# ===== 結構未破 =====
+def not_break_structure(closes):
+    return closes[-1] > min(closes[-5:])
+
+
+# ===== breakout event =====
 def breakout_event(price, closes, resistance, volumes):
     avg10 = avg(volumes[-10:])
 
@@ -126,18 +143,15 @@ def breakout_event(price, closes, resistance, volumes):
     )
 
 
-# ===== pullback event（修正🔥）=====
+# ===== pullback event =====
 def pullback_event(closes, price, ma5):
-
     rebound = closes[-1] > closes[-2]
     near = abs(price - ma5) / ma5 < 0.03
-
     return near and rebound
 
 
-# ===== breakout edge（強化🔥）=====
+# ===== breakout edge =====
 def breakout_edge(closes, volumes):
-
     tight = (max(closes[-5:]) - min(closes[-5:])) / closes[-1] < 0.04
 
     recent_high = max(closes[-30:])
@@ -150,10 +164,8 @@ def breakout_edge(closes, volumes):
 
 # ===== pullback edge =====
 def pullback_edge(closes, ma20):
-
     rising = ma20 > avg(closes[-20:])
     first = closes[-2] > ma20 and closes[-3] > ma20
-
     return rising and first
 
 
@@ -227,7 +239,7 @@ def strategy(price, ma5, ma20, closes, volumes):
     if trend == "DOWN":
         return build_result("NO_TRADE", trend=trend)
 
-    # ===== 量能過濾（新增🔥）=====
+    # ===== 量能 =====
     if vol == "DISTRIBUTION":
         return build_result("NO_TRADE", volume_state=vol)
 
@@ -240,6 +252,12 @@ def strategy(price, ma5, ma20, closes, volumes):
 
     # ===== breakout =====
     if breakout_event(price, closes, resistance, volumes):
+
+        if fake_breakout(closes):
+            return build_result("NO_TRADE", event="fake_breakout")
+
+        if distance_to_breakout < 0.01 or distance_to_breakout > 0.08:
+            return build_result("WAIT", event="breakout", edge=False)
 
         if not breakout_edge(closes, volumes):
             return build_result("WAIT", event="breakout", edge=False)
@@ -268,6 +286,9 @@ def strategy(price, ma5, ma20, closes, volumes):
 
     # ===== pullback =====
     if trend == "UP" and pullback_event(closes, price, ma5):
+
+        if not not_break_structure(closes):
+            return build_result("NO_TRADE", event="structure_break")
 
         if not pullback_edge(closes, ma20):
             return build_result("WAIT", event="pullback", edge=False)
