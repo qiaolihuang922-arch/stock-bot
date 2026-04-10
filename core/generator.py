@@ -14,7 +14,7 @@ stocks = {
     "智原": "3035"
 }
 
-# ===== 人性化決策（新增，不影響邏輯）=====
+# ===== 人性化決策 =====
 def humanize_decision(decision):
     if "進場🔥" in decision:
         return "🔥 強勢進場"
@@ -34,7 +34,7 @@ def humanize_decision(decision):
     if "過熱" in decision:
         return "🚫 過熱區"
 
-    return "觀望"
+    return decision  # ✅ 保留原語意
 
 # ===== 快速判斷 =====
 def quick_view(decision, trend):
@@ -208,11 +208,11 @@ def build_action(decision, buy, position, rr):
     if rr != "-" and rr < 1:
         return "⚠️風險報酬不佳，暫不建議進場"
 
-    if "進場🔥" in decision:
+    if decision.startswith("進場🔥"):
         return f"👉 可直接進場（{position}）"
-    elif "進場" in decision:
+    elif decision.startswith("進場"):
         return f"👉 建議回踩 {buy} 再進（{position}）"
-    elif "試單" in decision:
+    elif decision.startswith("試單"):
         return f"👉 小倉觀察（{position}）"
 
     return ""
@@ -269,14 +269,13 @@ def generate():
 
         result = strategy(price, ma5, ma20, closes, volumes)
 
-        if len(result) == 4:
+        if len(result) >= 6:
+            decision, buy, stop, position, decision_type, risk_level = result
+        else:
             decision, buy, stop, position = result
             decision_type, risk_level = "", ""
-        else:
-            decision, buy, stop, position, decision_type, risk_level = result
 
-        # 防呆
-        if "進場" in decision:
+        if decision.startswith("進場") or decision.startswith("試單"):
             assert buy not in ["-", None]
             assert stop not in ["-", None]
             assert stop < buy
@@ -303,9 +302,8 @@ def generate():
 
         decisions.append(decision)
 
-        # ===== 記錄（保留）=====
         if allow_record() and can_record_today(name):
-            if ("進場" in decision or "試單" in decision):
+            if decision.startswith("進場") or decision.startswith("試單"):
                 if buy not in ["-", None] and stop not in ["-", None] and buy > stop:
                     try:
                         extra = {
@@ -329,14 +327,14 @@ def generate():
 
         s = score_stock(decision, trend, volume)
 
-        if buy != "-" and ("進場" in decision or "試單" in decision):
-            candidates.append((s, rr, name, buy, stop))
+        if buy != "-" and (decision.startswith("進場") or decision.startswith("試單")):
+            rr_val = rr if isinstance(rr, (int, float)) else 0
+            candidates.append((s, rr_val, name, buy, stop))
 
         action = build_action(decision, buy, position, rr)
         pre_buy = get_prebuy(price, ma5, ma20, support, resistance, decision)
         view = quick_view(decision, trend)
 
-        # ===== 顯示 =====
         msg += f"【{name}】\n"
         msg += f"{display_decision}｜倉位 {position}\n"
         msg += f"{view}\n"
