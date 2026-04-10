@@ -4,7 +4,6 @@ import pytz
 from services.learning import record_trade
 from services.stock_api import get_twse, get_yahoo, get_realtime_price
 from services.analysis import strategy
-from services.ai import ai_analysis
 
 tz = pytz.timezone("Asia/Taipei")
 
@@ -120,10 +119,8 @@ def generate():
         market = result.get("market")
         trend = result.get("trend")
         structure = result.get("structure_state")
-        volume = result.get("volume_state")
         momentum = result.get("momentum_state")
         breakout_quality = result.get("breakout_quality")
-        pullback_type = result.get("pullback_type")
         dist_break = result.get("distance_to_breakout")
 
         score = score_system(market, trend, structure, momentum, breakout_quality, rr)
@@ -143,8 +140,7 @@ def generate():
                         "market": market,
                         "structure_state": structure,
                         "momentum_state": momentum,
-                        "breakout_quality": breakout_quality,
-                        "pullback_type": pullback_type
+                        "breakout_quality": breakout_quality
                     }
                 )
             except:
@@ -162,12 +158,15 @@ def generate():
         # ===== BUY =====
         if decision == "BUY":
 
-            msg += "👉 可以進場\n"
+            if score >= 80:
+                msg += "👉 現在就可以做\n"
+            else:
+                msg += "👉 可以進場（小倉）\n"
 
             if decision_type == "breakout":
-                msg += "→ 已突破，直接做\n"
+                msg += "→ 已突破壓力\n"
             else:
-                msg += "→ 回踩撐住，可進\n"
+                msg += "→ 回踩撐住\n"
 
             msg += f"🎯 {safe_round(buy)} / {safe_round(stop)}\n"
             msg += f"RR {rr} ｜ {risk_to_text(risk)}\n"
@@ -176,21 +175,25 @@ def generate():
         elif decision == "WAIT":
 
             if dist_break is not None and dist_break < 0.01:
-                msg += "👉 快突破了，盯緊\n"
+                trigger_price = price * (1 + dist_break)
+                msg += f"👉 突破 {safe_round(trigger_price)} 就做\n"
+
             elif momentum == "ACCELERATING":
-                msg += "👉 動能轉強，再等一下\n"
+                msg += "👉 動能在上來，等突破再進\n"
+
             elif structure == "STRONG":
-                msg += "👉 結構OK，但還沒點火\n"
+                msg += "👉 結構OK，等訊號\n"
+
             else:
-                msg += "👉 還沒成形，先別動\n"
+                msg += "👉 還沒成形，不用看\n"
 
         # ===== NO TRADE =====
         else:
 
             if market == "WEAK":
-                msg += "👉 大盤不好，不碰\n"
+                msg += "👉 大盤爛，不碰\n"
             elif trend == "DOWN":
-                msg += "👉 在跌，別接刀\n"
+                msg += "👉 明顯在跌，別接\n"
             else:
                 msg += "👉 不符合策略\n"
 
@@ -203,7 +206,7 @@ def generate():
     else:
         msg += "⏳ 今天沒好機會，先觀望\n"
 
-    # ===== 最佳 =====
+    # ===== 最佳標的 =====
     if candidates:
         best = sorted(candidates, key=lambda x: (
             x[0] == "breakout",
@@ -215,6 +218,11 @@ def generate():
 
         msg += "\n🔥 今天最值得看的\n"
         msg += f"{name}\n"
-        msg += f"👉 {safe_round(buy)} 附近留意\n"
+        msg += f"👉 {safe_round(buy)} 附近優先觀察\n"
+
+        if score >= 80:
+            msg += "（最強，最可能先動）\n"
+        elif rr >= 2:
+            msg += "（報酬最好）\n"
 
     return msg
