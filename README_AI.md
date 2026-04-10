@@ -1,11 +1,11 @@
-# 🔥 AI交易系統守則（FINAL v4｜精簡完整版）
+# 🔥 AI交易系統守則（FINAL v5｜實盤版）
 
 本文件為最高規範  
 任何修改必須遵守  
 
 ---
 
-# 🧠 一、核心原則
+# 🧠 一、核心原則（不可動）
 
 ## 1️⃣ 唯一決策
 
@@ -14,7 +14,7 @@
 👉 strategy()
 
 輸出：
-- decision  
+- decision（BUY / WAIT / NO）
 - buy  
 - stop  
 - position  
@@ -24,40 +24,66 @@
 ❌ 禁止：
 
 - 第二 decision  
-- AI 改 decision  
+- generator 判斷  
 - score 決策  
-- generator 做判斷  
+- AI 影響 decision  
+- learning 影響 decision  
 
 ---
 
-## 2️⃣ 決策優先級
+## 2️⃣ 決策流程（單向）
 
-strategy > 風控 > 時間 > score > AI  
+市場 → 結構 → 量能 → 事件（突破 / 回踩）→ 風控 → decision  
 
 ---
 
-## 3️⃣ AI定位
+❌ 禁止回頭修正 decision  
+
+---
+
+## 3️⃣ 決策優先級
+
+strategy > 風控 > 市場 > 結構 > AI  
+
+---
+
+## 4️⃣ AI定位（強制隔離）
 
 AI = 解釋  
 
-❌ 不可：
-
-- 決策  
-- 改買點  
-- 改停損  
-
-👉 BUY / WAIT / NO  
-只是「文字分類」
+只能輸出：
+- BUY｜原因  
+- WAIT｜原因  
+- NO｜原因  
 
 ---
 
-## 4️⃣ 資料流（不可逆）
+❌ 禁止：
+
+- 改 decision  
+- 改 buy / stop  
+- 提供交易建議  
+- 提供倉位  
+
+---
+
+## 5️⃣ 資料流（不可逆）
 
 stock_api → analysis → ai → generator → learning  
 
 ---
 
-## 5️⃣ 風控（強制）
+❌ 禁止：
+
+- learning → strategy  
+- AI → strategy  
+- generator → strategy  
+
+---
+
+## 6️⃣ 風控（內建於 strategy）
+
+必須在 strategy 內完成：
 
 - stop < buy  
 - risk ≤ 8%  
@@ -65,55 +91,114 @@ stock_api → analysis → ai → generator → learning
 
 ---
 
-# 📦 二、所有檔案職責（🔥完整）
+❌ 禁止外部補風控  
+
+---
+
+# 📦 二、系統架構（完整不可缺）
 
 ---
 
 ## 📁 services/analysis.py
 
-👉 唯一決策核心  
+👉 唯一決策引擎  
 
 包含：
-- volume_model  
-- trend_model  
-- support_resistance  
+
+- volume_signal  
+- trend_signal  
+- market_signal  
+- structure_ok  
+- breakout_entry  
+- pullback_entry  
+- risk_control  
 - strategy  
 
-❌ 禁止依賴：
-AI / score / learning  
+---
+
+❌ 禁止：
+
+- 使用 AI  
+- 使用 score  
+- 使用 learning  
+- 使用外部資料  
 
 ---
 
 ## 📁 services/ai.py
 
-👉 解釋用  
+👉 解釋模組  
+
+包含：
+
+- normalize_ai_output  
+- fallback_ai  
+- ai_analysis  
+
+---
 
 輸出：
-- BUY / WAIT / NO  
 
-❌ 禁止影響交易  
+BUY / WAIT / NO（附原因）  
+
+---
+
+❌ 禁止：
+
+- 影響 decision  
+- 提供交易建議  
 
 ---
 
 ## 📁 services/learning.py
 
-👉 記錄資料  
+👉 記錄模組  
 
-只做：
+包含：
+
 - record_trade  
 - update_trade_result  
 
+---
+
+規則：
+
+- price = buy  
+- buy > stop  
+- status：pending → closed  
+
+---
+
 ❌ 禁止：
-- 影響 decision  
-- 回寫策略  
+
+- 影響策略  
+- 使用未來資料  
+
+---
+
+✅ 必須：
+
+- 回傳 success / fail  
+- 有 debug log  
 
 ---
 
 ## 📁 services/stock_api.py
 
-👉 只提供市場資料  
+👉 資料來源  
+
+---
+
+提供：
+
+- get_twse  
+- get_yahoo  
+- get_realtime_price  
+
+---
 
 ❌ 禁止：
+
 - 分析  
 - 判斷  
 
@@ -123,7 +208,11 @@ AI / score / learning
 
 👉 發送訊息  
 
-❌ 禁止參與任何邏輯  
+---
+
+❌ 禁止：
+
+- 參與決策  
 
 ---
 
@@ -131,11 +220,14 @@ AI / score / learning
 
 👉 系統中樞  
 
-只做：
+---
+
+負責：
+
 - 呼叫 strategy  
-- 整理輸出  
 - 呼叫 AI  
 - 呼叫 learning  
+- 整理輸出  
 
 ---
 
@@ -147,9 +239,22 @@ AI / score / learning
 
 ---
 
+✅ 可做：
+
+- 顯示最佳標的（不改 decision）  
+
+---
+
 ## 📁 core/utils.py
 
 👉 工具函數  
+
+---
+
+❌ 禁止：
+
+- 決策  
+- 呼叫 API  
 
 ---
 
@@ -157,12 +262,17 @@ AI / score / learning
 
 👉 程式入口  
 
+---
+
 只做：
 
 - 呼叫 generator  
 - 輸出結果  
 
+---
+
 ❌ 禁止：
+
 - 寫策略  
 - 寫邏輯  
 
@@ -170,27 +280,36 @@ AI / score / learning
 
 ## 📄 app.py
 
-👉 部署入口（API / Web）  
+👉 API / Web入口  
+
+---
 
 只做：
 
 - 接收請求  
 - 呼叫 main / generator  
 
+---
+
 ❌ 禁止：
+
 - 交易邏輯  
 
 ---
 
 ## 📄 config.py
 
-👉 設定  
+👉 設定中心  
+
+---
 
 包含：
 
 - API KEY  
 - DB  
-- 參數  
+- flags（AI開關 / DEBUG）  
+
+---
 
 ❌ 禁止寫邏輯  
 
@@ -212,7 +331,7 @@ AI / score / learning
 
 唯一：
 
-👉 Supabase（trades）
+👉 Supabase（trades）  
 
 ---
 
@@ -246,20 +365,21 @@ status = closed
 
 # 🧠 五、資料寫入
 
-record_trade：
+## record_trade：
 
 - buy > stop  
 - price = buy  
+- 不可含未來資料  
 
 ---
 
-update_trade_result：
+## update_trade_result：
 
 只能：
 
-- 停損  
-- 停利  
-- 結束  
+- win  
+- loss  
+- breakeven  
 
 ---
 
@@ -274,16 +394,16 @@ update_trade_result：
 
 ## 1️⃣ 唯一鍵
 
-(stock, trade_date)
+(stock, trade_date)  
 
 ---
 
-## 2️⃣ JSON限制
+## 2️⃣ extra_data 限制
 
-data 不可含：
+❌ 禁止：
 
-- 未來價格  
 - result  
+- future_price  
 - price_after  
 
 ---
@@ -301,12 +421,12 @@ data 不可含：
 1. 多 decision  
 2. AI 決策  
 3. score 取代 strategy  
-4. generator 決策  
+4. generator 做決策  
 5. 移除停損  
 6. 放寬風控  
 7. learning 影響策略  
 8. 使用 pending  
-9. 本地資料  
+9. 多資料源  
 
 ---
 
@@ -315,23 +435,23 @@ data 不可含：
 任何修改必須確認：
 
 - 是否影響 strategy  
-- 是否影響風控  
 - 是否新增 decision  
+- 是否影響風控  
 
 👉 有 → 禁止  
 
 ---
 
-# 🔥 九、核心總結
+# 🔥 九、v5 升級重點
 
-strategy 決定一切  
-AI 只負責說明  
-generator 只負責整理  
-learning 只負責記錄  
+- 決策改為「事件驅動」（breakout / pullback）  
+- AI 完全對齊 decision_type  
+- learning 支援 debug + success 機制  
+- 顯示層精簡為交易員模式  
 
 ---
 
 # 🚀 十、最終原則
 
-👉 系統可以變強  
-👉 但架構不能
+👉 strategy 決定一切  
+👉 系統
