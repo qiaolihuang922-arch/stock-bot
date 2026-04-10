@@ -1,20 +1,19 @@
-# 🔥 AI交易系統（不可破壞架構｜FINAL v3）
+# 🔥 AI交易系統守則（FINAL v4｜精簡完整版）
 
-本文件為本專案最高規範  
-所有 AI / 人工修改 必須遵守  
-
-違反本文件 = 錯誤修改  
+本文件為最高規範  
+任何修改必須遵守  
 
 ---
 
-# 🧠 一、核心原則（最高優先）
+# 🧠 一、核心原則
 
-## 1️⃣ 統一決策（唯一來源）
+## 1️⃣ 唯一決策
 
-所有交易決策 **只能來自 strategy()**
+所有交易只能來自：
 
-唯一輸出：
+👉 strategy()
 
+輸出：
 - decision  
 - buy  
 - stop  
@@ -22,500 +21,317 @@
 
 ---
 
-### ❌ 嚴禁：
+❌ 禁止：
 
-- 第二套 decision  
-- AI 覆蓋 decision  
-- score 決定買賣  
-- generator 自行判斷進出場  
-- learning / training 影響即時決策  
+- 第二 decision  
+- AI 改 decision  
+- score 決策  
+- generator 做判斷  
 
 ---
 
-## 2️⃣ 決策優先級（不可違反）
+## 2️⃣ 決策優先級
 
 strategy > 風控 > 時間 > score > AI  
 
 ---
 
-### 🔒 補充（強制）
+## 3️⃣ AI定位
 
-learning / training 不在決策鏈內  
+AI = 解釋  
 
----
+❌ 不可：
 
-## 3️⃣ 資料流（不可逆）
+- 決策  
+- 改買點  
+- 改停損  
 
-stock_api → analysis → ai → generator → notifier  
-
----
-
-### 🔒 規則：
-
-- 不可逆流  
-- 不可回寫 decision  
-- 不可修改上游結果  
+👉 BUY / WAIT / NO  
+只是「文字分類」
 
 ---
 
-## 4️⃣ AI 角色（嚴格限制）
+## 4️⃣ 資料流（不可逆）
 
-AI只允許：
-
-- 解釋（WHY）  
-- 輔助判斷  
-- 輸出文字  
+stock_api → analysis → ai → generator → learning  
 
 ---
 
-### ❌ AI禁止：
-
-- 改 decision  
-- 改 buy  
-- 改 stop  
-- 改 position  
-- 建立交易邏輯  
-
----
-
-AI = 語言層，不是決策層  
-
----
-
-## 5️⃣ 時間權重（市場節奏）
-
-時間只影響：
-
-- global_decision()  
-- score_stock()  
-
----
-
-### ❌ 禁止：
-
-- 影響 strategy()  
-- 影響個股 decision  
-
----
-
-## 6️⃣ 風險優先（強制）
-
-必須存在：
+## 5️⃣ 風控（強制）
 
 - stop < buy  
-- 最大風險 ≤ 8%  
+- risk ≤ 8%  
 - RR ≥ 1.2  
 
 ---
 
-### ❌ 嚴禁：
-
-- 移除停損  
-- 放寬風控  
-- 忽略 RR  
+# 📦 二、所有檔案職責（🔥完整）
 
 ---
 
-# 📦 二、模組職責（不可混用）
+## 📁 services/analysis.py
 
-## 📁 services/analysis.py（🔥唯一決策核心）
+👉 唯一決策核心  
 
-負責：
+包含：
+- volume_model  
+- trend_model  
+- support_resistance  
+- strategy  
 
-- volume_model()  
-- trend_model()  
-- support_resistance()  
-- strategy()  
-
----
-
-### ⚠️ 規則：
-
-- strategy = 唯一決策來源  
-- 不可被覆蓋  
-- 不可拆分決策  
-- 不可依賴 AI / score / time / learning  
+❌ 禁止依賴：
+AI / score / learning  
 
 ---
 
-## 📁 services/ai.py（AI輔助）
+## 📁 services/ai.py
 
-負責：
+👉 解釋用  
 
-- ai_analysis()  
-- fallback_ai()  
+輸出：
+- BUY / WAIT / NO  
 
----
-
-### ⚠️ 規則：
-
-- 只輸出 BUY / WAIT / NO  
-- 不可影響交易結果  
-- 不可控制倉位  
-- 不可計算買點  
+❌ 禁止影響交易  
 
 ---
 
-## 📁 services/learning.py（🔥資料收集層｜完全隔離）
+## 📁 services/learning.py
 
-負責：
+👉 記錄資料  
 
-- record_trade()  
-- update_trade_result()  
-- Supabase 寫入  
+只做：
+- record_trade  
+- update_trade_result  
 
----
-
-### 🔒 核心定位
-
-learning = 離線系統  
-learning ≠ 決策系統  
-
----
-
-### ❌ 嚴禁：
-
-- 影響 strategy  
+❌ 禁止：
 - 影響 decision  
-- 影響 buy / stop / position  
-- 即時訓練模型  
-- 回寫任何決策模組  
+- 回寫策略  
 
 ---
 
-### ✅ 只允許：
+## 📁 services/stock_api.py
 
-- 收集 RAW（pending）  
-- 轉為 CLEAN（closed）  
-- 作為未來訓練資料  
+👉 只提供市場資料  
 
----
-
-### 🔥 防污染規則（強制）
-
-RAW（pending） → CLEAN（closed） → TRAIN  
+❌ 禁止：
+- 分析  
+- 判斷  
 
 ---
 
-### 🔒 呼叫限制（強制）
+## 📁 services/notifier.py
 
-learning 只能由 generator 呼叫  
+👉 發送訊息  
 
----
-
-### ❌ 嚴禁：
-
-- analysis 呼叫 learning  
-- ai 呼叫 learning  
-- strategy 內寫入資料  
+❌ 禁止參與任何邏輯  
 
 ---
 
-## 📁 services/stock_api.py（資料層）
+## 📁 core/generator.py
 
-負責：
+👉 系統中樞  
 
-- 市場數據  
-
----
-
-### ⚠️ 規則：
-
-- 不可分析  
-- 不可決策  
-
----
-
-## 📁 services/notifier.py（輸出層）
-
-負責：
-
-- 發送訊息  
-
----
-
-### ⚠️ 規則：
-
-- 不可改邏輯  
-- 不可參與決策  
-
----
-
-## 📁 core/generator.py（🔥整合中樞）
-
-負責：
-
+只做：
 - 呼叫 strategy  
+- 整理輸出  
 - 呼叫 AI  
 - 呼叫 learning  
-- 輸出訊息  
-- 全局判斷  
 
 ---
 
-### ⚠️ 核心限制：
+❌ 禁止：
 
-❌ 不可：
-
-- 做交易決策  
-- 覆蓋 strategy  
-- 修改 buy / stop  
-
----
-
-### ✅ 只能：
-
-- 整理  
-- 排序  
-- 顯示  
+- 改 decision  
+- 改 buy / stop  
+- 做交易判斷  
 
 ---
 
 ## 📁 core/utils.py
 
-工具函數  
+👉 工具函數  
 
 ---
 
 ## 📄 main.py
 
-程式入口  
+👉 程式入口  
+
+只做：
+
+- 呼叫 generator  
+- 輸出結果  
+
+❌ 禁止：
+- 寫策略  
+- 寫邏輯  
 
 ---
 
 ## 📄 app.py
 
-部署入口  
+👉 部署入口（API / Web）  
+
+只做：
+
+- 接收請求  
+- 呼叫 main / generator  
+
+❌ 禁止：
+- 交易邏輯  
 
 ---
 
 ## 📄 config.py
 
-設定檔  
+👉 設定  
+
+包含：
+
+- API KEY  
+- DB  
+- 參數  
+
+❌ 禁止寫邏輯  
 
 ---
 
 ## 📄 render.yaml
 
-部署設定  
+👉 部署設定  
 
 ---
 
 ## 📄 requirements.txt
 
-套件依賴  
+👉 套件列表  
 
 ---
 
-# 📦 三、資料層（唯一來源｜Supabase）
+# 📦 三、資料來源
 
-## 🚫 已移除
+唯一：
 
-- data/  
-- trades.json  
-- raw_trades.json  
-- clean_trades.json  
+👉 Supabase（trades）
 
 ---
 
-## ✅ 唯一資料來源
+❌ 禁止：
 
-Supabase → trades  
-
----
-
-## ❌ 嚴禁：
-
-- 本地 JSON  
-- 第二資料源  
-- 雙寫入  
+- JSON  
+- 本地資料  
+- 雙資料源  
 
 ---
 
-# 🧱 四、資料表結構（不可變更）
+# 📊 四、資料規則
 
-## Table：trades
+狀態：
 
----
-
-### 🔑 基本欄位
-
-- id → bigint（PK）  
-- created_at → timestamp  
+- pending  
+- closed  
+- invalid  
 
 ---
 
-### 📅 時間（核心）
+## 使用
 
-- trade_date → date  
+❌ 禁止：
+使用 pending  
 
-trade_date = 交易判斷時間  
-created_at = 系統時間  
-
----
-
-### 📈 決策資料
-
-- stock → text  
-- decision → text  
-- price → numeric  
-- buy → numeric  
-- stop → numeric  
+✅ 必須：
+status = closed  
 
 ---
 
-### 📊 特徵資料
+# 🧠 五、資料寫入
 
-- ma5 → numeric  
-- ma20 → numeric  
-- volume → numeric  
-- trend → text  
+record_trade：
 
----
-
-### 🧠 上下文
-
-- data → jsonb  
+- buy > stop  
+- price = buy  
 
 ---
 
-### 📉 結果
+update_trade_result：
 
-- result → text  
-- price_after → numeric  
+只能：
 
----
-
-### 🔥 狀態（核心）
-
-- status → text  
-
-pending → 未結算  
-closed → 可用資料  
-invalid → 無效  
+- 停損  
+- 停利  
+- 結束  
 
 ---
 
-### 📌 來源
+❌ 禁止：
 
-- source → text  
-
-live / paper / manual  
-
----
-
-### 🔒 唯一約束（強制）
-
-(stock, trade_date) 必須唯一  
+- 當日寫結果  
+- 未來資料  
 
 ---
 
-# 🔄 五、資料流（不可違反）
+# 🧠 六、防污染
 
-strategy → generator → learning → Supabase  
+## 1️⃣ 唯一鍵
 
----
-
-### 🔒 規則：
-
-- learning 只記錄  
-- 不可回寫  
-- 不可干預  
+(stock, trade_date)
 
 ---
 
-# 🚨 六、資料使用規範
+## 2️⃣ JSON限制
 
-## ❌ 禁止：
+data 不可含：
 
-- 使用 pending  
-- 使用未結算  
-
----
-
-## ✅ 必須：
-
-WHERE status = 'closed'  
+- 未來價格  
+- result  
+- price_after  
 
 ---
 
-## 📊 結果寫入規範（強制）
+## 3️⃣ learning隔離
 
-update_trade_result 只能在以下情況執行：
-
-- 觸發停損  
-- 達成停利  
-- 明確結束交易  
+❌ 不得影響 strategy  
 
 ---
 
-### ❌ 嚴禁：
+# 🚫 七、紅線
 
-- 當日立即寫 result  
-- 使用未來資訊  
-- 人工主觀修改  
-
----
-
-# 🧠 七、防污染機制
-
-## 1️⃣ 防重複
-
-stock + trade_date 唯一  
-
----
-
-## 2️⃣ 連續虧損停止
-
-≥3 → 停止記錄  
-
----
-
-## 3️⃣ JSON限制
-
-data 不可包含未來資訊  
-
----
-
-# 🚫 八、禁止修改清單（紅線）
+禁止：
 
 1. 多 decision  
-2. AI 影響交易  
+2. AI 決策  
 3. score 取代 strategy  
-4. generator 做決策  
+4. generator 決策  
 5. 移除停損  
-6. 移除風控  
-7. 拆分 strategy  
-8. 多決策來源  
-9. learning 影響 strategy  
-10. 使用 pending  
-11. 本地資料庫  
+6. 放寬風控  
+7. learning 影響策略  
+8. 使用 pending  
+9. 本地資料  
 
 ---
 
-# 🧠 九、AI修改前必讀
+# 🧠 八、修改前檢查
 
-- 是否改 strategy  
-- 是否新增 decision  
+任何修改必須確認：
+
+- 是否影響 strategy  
 - 是否影響風控  
-- 是否讓 learning 影響決策  
+- 是否新增 decision  
 
-👉 任一為是 → 禁止  
-
----
-
-# 🔥 十、核心總結
-
-strategy 決定交易  
-AI 不得干預  
-generator 不得決策  
-風控不可動  
-learning 完全隔離  
-資料只來自 Supabase  
+👉 有 → 禁止  
 
 ---
 
-# 🚀 十一、最終原則
+# 🔥 九、核心總結
 
-AI只能強化系統  
-不能改變系統  
+strategy 決定一切  
+AI 只負責說明  
+generator 只負責整理  
+learning 只負責記錄  
+
+---
+
+# 🚀 十、最終原則
+
+👉 系統可以變強  
+👉 但架構不能
