@@ -1,457 +1,426 @@
-# 🔥 AI交易系統守則（FINAL v5｜實盤版）
+# 🔥 AI交易系統守則（FINAL v6｜完整實作規範）
 
-本文件為最高規範  
-任何修改必須遵守  
+本文件 = 系統唯一行為來源  
+所有模組必須遵守  
+違反 = 系統錯誤  
 
 ---
 
-# 🧠 一、核心原則（不可動）
+# 🧠 一、核心原則（不可違反）
 
 ## 1️⃣ 唯一決策
 
-所有交易只能來自：
+唯一來源：
 
-👉 strategy()
+strategy()
 
 輸出：
-- decision（BUY / WAIT / NO）
-- buy  
-- stop  
-- position  
+
+- decision
+- decision_type
+- buy
+- stop
+- position
+- risk
+- rr
+
+---
+
+## decision 定義（強制）
+
+- BUY        # 可進場（已觸發）
+- WAIT       # 條件未到（可轉BUY）
+- NO_TRADE   # 結構錯誤（禁止交易）
+
+---
+
+## decision_type（強制）
+
+- breakout
+- pullback
+- none
 
 ---
 
 ❌ 禁止：
 
-- 第二 decision  
-- generator 判斷  
-- score 決策  
-- AI 影響 decision  
+- 多 decision  
+- AI 決策  
 - learning 影響 decision  
+- generator 修改 decision  
 
 ---
 
-## 2️⃣ 決策流程（單向）
+# 🧠 二、決策流程（不可逆）
 
-市場 → 結構 → 量能 → 事件（突破 / 回踩）→ 風控 → decision  
-
----
-
-❌ 禁止回頭修正 decision  
+市場 → 結構 → 趨勢 → 量能 → 事件 → 風控 → decision  
 
 ---
 
-## 3️⃣ 決策優先級
+## 事件定義（強制）
+
+### breakout
+- 突破壓力位
+- 成交量放大
+- 收盤確認
+
+### pullback
+- 上升趨勢成立
+- 回踩支撐
+- 未跌破結構
+
+👉 沒有事件 = 禁止 BUY  
+
+---
+
+# 🧠 三、風控（內建 strategy）
+
+必須同時成立：
+
+- stop < buy  
+- risk ≤ 0.08  
+- RR ≥ 1.2  
+
+---
+
+風控失敗：
+
+→ 強制 NO_TRADE  
+
+---
+
+# 🧠 四、優先級
 
 strategy > 風控 > 市場 > 結構 > AI  
 
 ---
 
-## 4️⃣ AI定位（強制隔離）
+# 🧠 五、資料流（單向）
 
-AI = 解釋  
-
-只能輸出：
-- BUY｜原因  
-- WAIT｜原因  
-- NO｜原因  
+stock_api → analysis → strategy → ai → generator → learning  
 
 ---
 
-❌ 禁止：
+❌ 禁止逆流：
 
-- 改 decision  
-- 改 buy / stop  
-- 提供交易建議  
-- 提供倉位  
-
----
-
-## 5️⃣ 資料流（不可逆）
-
-stock_api → analysis → ai → generator → learning  
-
----
-
-❌ 禁止：
-
-- learning → strategy  
 - AI → strategy  
+- learning → strategy  
 - generator → strategy  
 
 ---
 
-## 6️⃣ 風控（內建於 strategy）
+# 📦 六、專案結構
 
-必須在 strategy 內完成：
+project/
 
-- stop < buy  
-- risk ≤ 8%  
-- RR ≥ 1.2  
+- main.py  
+- app.py  
+- config.py  
+- render.yaml  
+- requirements.txt  
 
----
+core/  
+- generator.py  
+- utils.py  
 
-❌ 禁止外部補風控  
-
----
-
-# 📦 二、系統架構（完整不可缺）
-
----
-
-## 📁 services/analysis.py
-
-👉 唯一決策引擎  
-
-包含：
-
-- volume_signal  
-- trend_signal  
-- market_signal  
-- structure_ok  
-- breakout_entry  
-- pullback_entry  
-- risk_control  
-- strategy  
+services/  
+- analysis.py  
+- ai.py  
+- learning.py  
+- notifier.py  
+- stock_api.py  
 
 ---
 
-❌ 禁止：
+# 📄 七、檔案職責（強制）
 
-- 使用 AI  
-- 使用 score  
-- 使用 learning  
-- 使用外部資料  
+## main.py
+- 呼叫 generator
+- 輸出結果
 
----
-
-## 📁 services/ai.py
-
-👉 解釋模組  
-
-包含：
-
-- normalize_ai_output  
-- fallback_ai  
-- ai_analysis  
+❌ 禁止任何邏輯  
 
 ---
 
-輸出：
+## app.py
+- API入口
+- 呼叫 main / generator
 
-BUY / WAIT / NO（附原因）  
-
----
-
-❌ 禁止：
-
-- 影響 decision  
-- 提供交易建議  
+❌ 禁止交易邏輯  
 
 ---
 
-## 📁 services/learning.py
-
-👉 記錄模組  
-
-包含：
-
-- record_trade  
-- update_trade_result  
-
----
-
-規則：
-
-- price = buy  
-- buy > stop  
-- status：pending → closed  
-
----
-
-❌ 禁止：
-
-- 影響策略  
-- 使用未來資料  
-
----
-
-✅ 必須：
-
-- 回傳 success / fail  
-- 有 debug log  
-
----
-
-## 📁 services/stock_api.py
-
-👉 資料來源  
-
----
-
-提供：
-
-- get_twse  
-- get_yahoo  
-- get_realtime_price  
-
----
-
-❌ 禁止：
-
-- 分析  
-- 判斷  
-
----
-
-## 📁 services/notifier.py
-
-👉 發送訊息  
-
----
-
-❌ 禁止：
-
-- 參與決策  
-
----
-
-## 📁 core/generator.py
-
-👉 系統中樞  
-
----
-
-負責：
-
-- 呼叫 strategy  
-- 呼叫 AI  
-- 呼叫 learning  
-- 整理輸出  
-
----
-
-❌ 禁止：
-
-- 改 decision  
-- 改 buy / stop  
-- 做交易判斷  
-
----
-
-✅ 可做：
-
-- 顯示最佳標的（不改 decision）  
-
----
-
-## 📁 core/utils.py
-
-👉 工具函數  
-
----
-
-❌ 禁止：
-
-- 決策  
-- 呼叫 API  
-
----
-
-## 📄 main.py
-
-👉 程式入口  
-
----
-
-只做：
-
-- 呼叫 generator  
-- 輸出結果  
-
----
-
-❌ 禁止：
-
-- 寫策略  
-- 寫邏輯  
-
----
-
-## 📄 app.py
-
-👉 API / Web入口  
-
----
-
-只做：
-
-- 接收請求  
-- 呼叫 main / generator  
-
----
-
-❌ 禁止：
-
-- 交易邏輯  
-
----
-
-## 📄 config.py
-
-👉 設定中心  
-
----
-
-包含：
-
-- API KEY  
-- DB  
-- flags（AI開關 / DEBUG）  
-
----
+## config.py
+- API KEY
+- DB 設定
+- flags
 
 ❌ 禁止寫邏輯  
 
 ---
 
-## 📄 render.yaml
-
-👉 部署設定  
-
----
-
-## 📄 requirements.txt
-
-👉 套件列表  
+## render.yaml
+- 部署排程
+- 定時觸發  
 
 ---
 
-# 📦 三、資料來源
-
-唯一：
-
-👉 Supabase（trades）  
-
----
-
-❌ 禁止：
-
-- JSON  
-- 本地資料  
-- 雙資料源  
+## requirements.txt
+- requests
+- flask
+- pytz
+- supabase  
 
 ---
 
-# 📊 四、資料規則
+# 🧠 八、services 層
 
-狀態：
+## stock_api.py
+👉 純資料提供
 
-- pending  
-- closed  
-- invalid  
+- get_twse
+- get_yahoo
+- get_realtime_price
 
----
-
-## 使用
-
-❌ 禁止：
-使用 pending  
-
-✅ 必須：
-status = closed  
+❌ 禁止分析  
 
 ---
 
-# 🧠 五、資料寫入
+## analysis.py（核心）
 
-## record_trade：
+包含：
 
-- buy > stop  
-- price = buy  
-- 不可含未來資料  
+- market_signal
+- trend_signal
+- volume_signal
+- structure_ok
+- breakout_event
+- pullback_event
+- risk_control
+- strategy
 
 ---
 
-## update_trade_result：
+### strategy() 輸出
 
-只能：
-
-- win  
-- loss  
-- breakeven  
+- decision
+- decision_type
+- buy
+- stop
+- position
+- risk
+- rr
 
 ---
 
 ❌ 禁止：
 
-- 當日寫結果  
-- 未來資料  
+- AI
+- learning
+- score  
 
 ---
 
-# 🧠 六、防污染
+## ai.py
 
-## 1️⃣ 唯一鍵
+👉 解釋 decision
 
-(stock, trade_date)  
+輸出：
 
----
-
-## 2️⃣ extra_data 限制
+- decision
+- reason（單一句）
 
 ❌ 禁止：
+
+- 提供買點
+- 提供停損
+- 改 decision  
+
+---
+
+## learning.py
+
+👉 記錄交易
+
+- record_trade
+- update_trade_result
+
+---
+
+規則：
+
+- price = buy
+- buy > stop
+- status: pending → closed
+
+---
+
+### fail-safe（強制）
+
+- DB錯誤不可影響主流程  
+
+---
+
+## notifier.py
+
+👉 發送訊息
+
+❌ 禁止決策  
+
+---
+
+# 🧠 九、core 層
+
+## generator.py
+
+流程：
+
+1. 抓資料
+2. 跑 strategy
+3. 跑 AI
+4. 記錄 learning
+5. 組輸出
+
+---
+
+❌ 禁止：
+
+- 改 decision
+- 做判斷  
+
+---
+
+## 輸出格式（強制）
+
+- name
+- price
+- decision
+- decision_type
+- reason
+- structure
+- event
+- buy
+- stop
+- risk
+- rr
+
+---
+
+## utils.py
+
+👉 工具函數
+
+❌ 禁止決策  
+
+---
+
+# 🧠 十、顯示層（交易員模式）
+
+## BUY
+
+【標的】🟢 BUY  
+原因：xxx  
+
+進場：xxx  
+停損：xxx  
+
+類型：breakout / pullback  
+RR：x.x  
+
+---
+
+## WAIT
+
+【標的】🟡 WAIT  
+原因：xxx  
+
+關鍵價位：xxx  
+觸發條件：xxx  
+
+---
+
+## NO_TRADE
+
+【標的】🔴 NO  
+原因：xxx  
+
+---
+
+# 🧠 十一、排序規則
+
+BUY > WAIT > NO_TRADE  
+
+BUY內：
+
+1. breakout優先  
+2. RR高優先  
+3. risk低優先  
+
+---
+
+# 🧠 十二、learning 限制
+
+資料來源：
+
+👉 Supabase（trades）
+
+---
+
+❌ 禁止：
+
+- 使用 pending  
+- 使用未來資料  
+
+---
+
+## 唯一鍵
+
+(stock, trade_date)
+
+---
+
+## extra_data 禁止
 
 - result  
 - future_price  
-- price_after  
 
 ---
 
-## 3️⃣ learning隔離
-
-❌ 不得影響 strategy  
-
----
-
-# 🚫 七、紅線
-
-禁止：
+# 🚫 十三、紅線
 
 1. 多 decision  
 2. AI 決策  
-3. score 取代 strategy  
-4. generator 做決策  
-5. 移除停損  
-6. 放寬風控  
-7. learning 影響策略  
-8. 使用 pending  
-9. 多資料源  
+3. learning 影響策略  
+4. generator 改 decision  
+5. 無停損  
+6. RR < 1.2  
+7. 使用 pending  
+8. 多資料源  
 
 ---
 
-# 🧠 八、修改前檢查
+# 🧠 十四、修改檢查
 
-任何修改必須確認：
+修改前必問：
 
-- 是否影響 strategy  
-- 是否新增 decision  
-- 是否影響風控  
+- 是否影響 strategy？
+- 是否改 decision？
+- 是否破壞風控？
 
-👉 有 → 禁止  
-
----
-
-# 🔥 九、v5 升級重點
-
-- 決策改為「事件驅動」（breakout / pullback）  
-- AI 完全對齊 decision_type  
-- learning 支援 debug + success 機制  
-- 顯示層精簡為交易員模式  
+👉 任一 YES → 禁止  
 
 ---
 
-# 🚀 十、最終原則
+# 🚀 十五、最終原則
 
-👉 strategy 決定一切  
-👉 系統
+沒有事件 → 不交易  
+沒有風控 → 不允許存在  
+decision = 唯一真相  
+AI = 只能解釋  
+
+---
+
+# 🔥 v6 本質
+
+不是找股票  
+是過濾交易
