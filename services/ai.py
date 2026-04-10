@@ -7,91 +7,61 @@ AI_DISABLED_UNTIL = 0
 
 
 # ================================
-# 🔥 輸出標準化（強化版）
+# 🔥 輸出標準化（v6）
 # ================================
 def normalize_ai_output(text):
 
     if not text:
         return None
 
-    text = text.strip().upper()
-
-    # 清理符號
-    text = text.replace("：", "｜").replace(":", "｜")
+    text = text.strip()
 
     # 只取第一行
     text = text.split("\n")[0].strip()
 
-    # 強制格式
-    valid_prefix = ["BUY｜", "WAIT｜", "NO｜"]
-
-    for p in valid_prefix:
-        if text.startswith(p):
-            return text[:30]
-
-    return None
+    # 避免過長
+    return text[:40]
 
 
 # ================================
-# 🔥 fallback（完全對齊 strategy🔥）
+# 🔥 fallback（完全對齊 v6）
 # ================================
-def fallback_ai(decision, decision_type=None):
+def fallback_ai(decision, decision_type):
 
     # ===== BUY =====
     if decision == "BUY":
+        if decision_type == "breakout":
+            reason = "突破成立，動能偏強"
+        elif decision_type == "pullback":
+            reason = "回踩支撐，風險較低"
+        else:
+            reason = "結構成立"
 
-        mapping = {
-            "BREAKOUT": "BUY｜突破成立",
-            "PULLBACK": "BUY｜回踩支撐",
-        }
-
-        return mapping.get(decision_type, "BUY｜結構成立")
-
-    # ===== NO =====
-    if decision == "NO":
-
-        mapping = {
-            "TREND_DOWN": "NO｜空頭趨勢",
-            "DISTRIBUTION": "NO｜出貨訊號",
-            "FAKE_BREAKOUT": "NO｜假突破",
-            "RISK_TOO_HIGH": "NO｜風險過大",
-            "RR_LOW": "NO｜報酬不足",
-            "NO_SPACE": "NO｜空間不足",
-        }
-
-        return mapping.get(decision_type, "NO｜不符合條件")
+    # ===== NO_TRADE =====
+    elif decision == "NO_TRADE":
+        reason = "結構不佳或風險過高"
 
     # ===== WAIT =====
-    if decision == "WAIT":
+    else:
+        reason = "尚未出現明確進場訊號"
 
-        mapping = {
-            "NO_VOLUME": "WAIT｜量能不足",
-            "STRUCTURE_BAD": "WAIT｜結構不穩",
-            "MARKET_WEAK": "WAIT｜市場偏弱",
-            "NO_BREAKOUT": "WAIT｜未突破",
-            "NO_SIGNAL": "WAIT｜無明確機會",
-        }
-
-        return mapping.get(decision_type, "WAIT｜觀望")
-
-    return "WAIT｜觀望"
+    return {
+        "decision": decision,
+        "reason": reason
+    }
 
 
 # ================================
-# 🔥 AI分析（最終穩定版）
+# 🔥 AI分析（v6最終版）
 # ================================
 def ai_analysis(
     name,
+    decision,
+    decision_type,
     price,
     change,
-    ma5,
-    ma20,
-    volume,
-    trend,
-    decision,
-    buy,
-    stop,
-    decision_type=None
+    risk,
+    rr
 ):
 
     global AI_ENABLED, AI_DISABLED_UNTIL
@@ -100,31 +70,25 @@ def ai_analysis(
     if not AI_ENABLED and time.time() > AI_DISABLED_UNTIL:
         AI_ENABLED = True
 
-    # ===== prompt（極簡，避免失控）=====
+    # ===== fallback模式 =====
+    if not AI_ENABLED:
+        return fallback_ai(decision, decision_type)
+
+    # ===== prompt（嚴格限制🔥）=====
     prompt = f"""
 你是交易解釋器，不可改策略。
 
 股票:{name}
-價格:{price}({change}%)
-趨勢:{trend}
-量能:{volume}
+價格:{price}（{change}%）
+風險:{round(risk,3)}
+RR:{rr}
 
 決策:{decision}
 類型:{decision_type}
 
-輸出格式：
-BUY｜原因
-WAIT｜原因
-NO｜原因
-
-限制：
-- 20字內
-- 不可提供建議
+請用一句話說明原因（20字內）
+禁止提供建議
 """
-
-    # ===== fallback模式 =====
-    if not AI_ENABLED:
-        return fallback_ai(decision, decision_type), False
 
     try:
         r = requests.post(
@@ -145,33 +109,40 @@ NO｜原因
         if r.status_code == 429:
             AI_ENABLED = False
             AI_DISABLED_UNTIL = time.time() + 60
-            return fallback_ai(decision, decision_type), False
+            return fallback_ai(decision, decision_type)
 
         if r.status_code != 200:
-            return fallback_ai(decision, decision_type), False
+            return fallback_ai(decision, decision_type)
 
         data = r.json()
 
         # ===== 解析 =====
+        text = None
+
         try:
-            if "output" in data:
+            if "output_text" in data:
+                text = data["output_text"]
+
+            elif "output" in data:
                 for item in data["output"]:
                     if "content" in item:
                         for c in item["content"]:
                             if "text" in c:
-                                text = normalize_ai_output(c["text"])
-                                if text:
-                                    return text, True
-
-            if "output_text" in data:
-                text = normalize_ai_output(data["output_text"])
-                if text:
-                    return text, True
+                                text = c["text"]
+                                break
 
         except Exception as e:
             print("AI parse error:", e)
 
+        text = normalize_ai_output(text)
+
+        if text:
+            return {
+                "decision": decision,
+                "reason": text
+            }
+
     except Exception as e:
         print("AI request error:", e)
 
-    return fallback_ai(decision, decision_type), False
+    return fallback_ai(decision, decision_type)
