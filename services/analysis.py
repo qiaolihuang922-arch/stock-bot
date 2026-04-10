@@ -1,9 +1,11 @@
-# ===== 工具 =====
+# ================================
+# 🔥 analysis.py（v8修正版｜最終版）
+# ================================
+
 def avg(arr):
     return sum(arr) / len(arr) if len(arr) > 0 else 0
 
 
-# ===== 統一輸出（高細膩版）=====
 def build_result(
     decision,
     decision_type="none",
@@ -17,18 +19,13 @@ def build_result(
     structure_score=0,
     volume_state=None,
     event=None,
-    breakout_strength=0,
-    pullback_depth=0,
-    distance_to_resistance=0,
-
-    # 🔥 新增細節
-    distance_to_support=0,
-    distance_to_breakout=0,
+    edge=None,
     structure_state=None,
-    momentum=0,
     momentum_state=None,
     breakout_quality=None,
-    pullback_type=None
+    pullback_type=None,
+    distance_to_breakout=0,
+    distance_to_support=0
 ):
     return {
         "decision": decision,
@@ -38,24 +35,18 @@ def build_result(
         "position": pos,
         "risk": round(risk, 4),
         "rr": round(rr, 2),
-
         "market": market,
         "trend": trend,
         "structure_score": round(structure_score, 2),
         "volume_state": volume_state,
         "event": event,
-        "breakout_strength": round(breakout_strength, 2),
-        "pullback_depth": round(pullback_depth, 2),
-        "distance_to_resistance": round(distance_to_resistance, 3),
-
-        # 🔥 高解析輸出
-        "distance_to_support": round(distance_to_support, 3),
-        "distance_to_breakout": round(distance_to_breakout, 3),
+        "edge": edge,
         "structure_state": structure_state,
-        "momentum": round(momentum, 3),
         "momentum_state": momentum_state,
         "breakout_quality": breakout_quality,
-        "pullback_type": pullback_type
+        "pullback_type": pullback_type,
+        "distance_to_breakout": round(distance_to_breakout, 3),
+        "distance_to_support": round(distance_to_support, 3)
     }
 
 
@@ -84,7 +75,7 @@ def trend_signal(price, ma5, ma20):
     return "SIDE"
 
 
-# ===== 量能 =====
+# ===== 量能（修正🔥）=====
 def volume_signal(volumes):
     avg10 = avg(volumes[-10:])
     ratio = volumes[-1] / avg10 if avg10 > 0 else 1
@@ -101,7 +92,7 @@ def volume_signal(volumes):
     return "NORMAL"
 
 
-# ===== 結構評分 =====
+# ===== 結構 =====
 def structure_score(closes):
     score = 0
 
@@ -124,17 +115,46 @@ def support_resistance(closes):
     return support, resistance
 
 
-# ===== breakout 強度 =====
-def breakout_strength(price, resistance, volumes):
+# ===== breakout event（修正🔥）=====
+def breakout_event(price, closes, resistance, volumes):
     avg10 = avg(volumes[-10:])
-    vol_ratio = volumes[-1] / avg10 if avg10 > 0 else 1
-    price_strength = (price - resistance) / resistance
-    return vol_ratio * 0.6 + price_strength * 0.4
+
+    return (
+        price > resistance and
+        closes[-1] > resistance and
+        volumes[-1] > avg10 * 1.5
+    )
 
 
-# ===== pullback 深度 =====
-def pullback_depth(price, ma5):
-    return abs(price - ma5) / ma5
+# ===== pullback event（修正🔥）=====
+def pullback_event(closes, price, ma5):
+
+    rebound = closes[-1] > closes[-2]
+    near = abs(price - ma5) / ma5 < 0.03
+
+    return near and rebound
+
+
+# ===== breakout edge（強化🔥）=====
+def breakout_edge(closes, volumes):
+
+    tight = (max(closes[-5:]) - min(closes[-5:])) / closes[-1] < 0.04
+
+    recent_high = max(closes[-30:])
+    not_high = closes[-1] < recent_high * 0.95
+
+    vol_ok = volumes[-1] > avg(volumes[-5:])
+
+    return tight and not_high and vol_ok
+
+
+# ===== pullback edge =====
+def pullback_edge(closes, ma20):
+
+    rising = ma20 > avg(closes[-20:])
+    first = closes[-2] > ma20 and closes[-3] > ma20
+
+    return rising and first
 
 
 # ===== 風控 =====
@@ -183,7 +203,7 @@ def position_size(risk, market):
     return round(pos, 2)
 
 
-# ===== 🎯 最終策略 =====
+# ===== 🎯 strategy =====
 def strategy(price, ma5, ma20, closes, volumes):
 
     support, resistance = support_resistance(closes)
@@ -193,78 +213,36 @@ def strategy(price, ma5, ma20, closes, volumes):
     vol = volume_signal(volumes)
     struct_score = structure_score(closes)
 
-    # ===== 新增解析資料 =====
-    distance_to_support = (price - support) / price if price > 0 else 0
+    structure_state = "STRONG" if struct_score >= 0.7 else "NORMAL" if struct_score >= 0.5 else "WEAK"
+    momentum_state = "ACCELERATING" if closes[-1] > closes[-3] else "DECELERATING"
+
     distance_to_breakout = (resistance - price) / price if price > 0 else 0
-    distance_to_res = (resistance - price) / price if price > 0 else 0
-
-    momentum = closes[-1] - closes[-3]
-
-    if struct_score >= 0.7:
-        structure_state = "STRONG"
-    elif struct_score >= 0.5:
-        structure_state = "NORMAL"
-    else:
-        structure_state = "WEAK"
-
-    if momentum > 0:
-        momentum_state = "ACCELERATING"
-    else:
-        momentum_state = "DECELERATING"
+    distance_to_support = (price - support) / price if price > 0 else 0
 
     # ===== 市場 =====
     if market == "WEAK":
-        return build_result(
-            "NO_TRADE",
-            market=market,
-            trend=trend,
-            structure_score=struct_score,
-            structure_state=structure_state,
-            momentum=momentum,
-            momentum_state=momentum_state
-        )
+        return build_result("NO_TRADE", market=market)
 
     # ===== 趨勢 =====
     if trend == "DOWN":
-        return build_result(
-            "NO_TRADE",
-            market=market,
-            trend=trend
-        )
+        return build_result("NO_TRADE", trend=trend)
+
+    # ===== 量能過濾（新增🔥）=====
+    if vol == "DISTRIBUTION":
+        return build_result("NO_TRADE", volume_state=vol)
+
+    if vol == "WEAK":
+        return build_result("WAIT", volume_state=vol)
 
     # ===== 結構 =====
     if struct_score < 0.5:
-        return build_result(
-            "WAIT",
-            market=market,
-            trend=trend,
-            structure_score=struct_score,
-            structure_state=structure_state,
-            momentum=momentum,
-            momentum_state=momentum_state,
-            distance_to_breakout=distance_to_breakout
-        )
-
-    # ===== 出貨 =====
-    if vol == "DISTRIBUTION":
-        return build_result(
-            "NO_TRADE",
-            market=market,
-            trend=trend,
-            volume_state=vol
-        )
+        return build_result("WAIT", structure_score=struct_score)
 
     # ===== breakout =====
-    if price > resistance:
+    if breakout_event(price, closes, resistance, volumes):
 
-        strength = breakout_strength(price, resistance, volumes)
-
-        if strength > 1.2:
-            quality = "CLEAN"
-        elif strength > 0.8:
-            quality = "NORMAL"
-        else:
-            quality = "WEAK"
+        if not breakout_edge(closes, volumes):
+            return build_result("WAIT", event="breakout", edge=False)
 
         buy = price
         stop = min(ma5, support)
@@ -279,27 +257,20 @@ def strategy(price, ma5, ma20, closes, volumes):
             "BUY", "breakout",
             buy, stop, pos, risk, rr,
             market, trend, struct_score, vol,
-            "breakout", strength, 0, distance_to_res,
-            distance_to_support,
-            distance_to_breakout,
+            "breakout", True,
             structure_state,
-            momentum,
             momentum_state,
-            quality,
-            None
+            "CLEAN",
+            None,
+            distance_to_breakout,
+            distance_to_support
         )
 
     # ===== pullback =====
-    depth = pullback_depth(price, ma5)
+    if trend == "UP" and pullback_event(closes, price, ma5):
 
-    if depth < 0.01:
-        pb_type = "SHALLOW"
-    elif depth < 0.03:
-        pb_type = "NORMAL"
-    else:
-        pb_type = "DEEP"
-
-    if trend == "UP" and depth < 0.03:
+        if not pullback_edge(closes, ma20):
+            return build_result("WAIT", event="pullback", edge=False)
 
         buy = ma5
         stop = min(ma20, support)
@@ -314,25 +285,13 @@ def strategy(price, ma5, ma20, closes, volumes):
             "BUY", "pullback",
             buy, stop, pos, risk, rr,
             market, trend, struct_score, vol,
-            "pullback", 0, depth, distance_to_res,
-            distance_to_support,
-            distance_to_breakout,
+            "pullback", True,
             structure_state,
-            momentum,
             momentum_state,
             None,
-            pb_type
+            "NORMAL",
+            distance_to_breakout,
+            distance_to_support
         )
 
-    return build_result(
-        "WAIT",
-        market=market,
-        trend=trend,
-        structure_score=struct_score,
-        structure_state=structure_state,
-        volume_state=vol,
-        momentum=momentum,
-        momentum_state=momentum_state,
-        distance_to_breakout=distance_to_breakout,
-        distance_to_support=distance_to_support
-    )
+    return build_result("WAIT", market=market)
