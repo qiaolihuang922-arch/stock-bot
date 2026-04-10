@@ -20,7 +20,7 @@ tz = pytz.timezone("Asia/Taipei")
 
 
 # ================================
-# 🔧 debug id（每筆交易追蹤）
+# 🔧 debug id
 # ================================
 def gen_trace_id():
     return str(uuid.uuid4())[:8]
@@ -41,7 +41,7 @@ def get_loss_streak(limit=3):
         streak = 0
 
         for r in res.data:
-            if r["result"] == "loss":
+            if r.get("result") == "loss":
                 streak += 1
             else:
                 break
@@ -84,7 +84,7 @@ def safe_str(val):
 
 
 # ================================
-# 🧠 記錄交易（核心）
+# 🧠 記錄交易
 # ================================
 def record_trade(
     name,
@@ -104,8 +104,8 @@ def record_trade(
 
     logging.info(f"[start_record] {trace_id} | {name}")
 
-    # 🔒 決策合法性
-    if decision not in ["buy", "sell", "hold"]:
+    # 🔒 僅允許 buy（符合你系統）
+    if decision != "buy":
         logging.error(f"[invalid_decision] {trace_id} | {decision}")
         return
 
@@ -117,18 +117,19 @@ def record_trade(
     trade_date = now.date().isoformat()
 
     try:
-        # 🔒 防重複
+        # 🔒 防重複（只看 pending）
         existing = supabase.table("trades") \
             .select("id") \
             .eq("stock", name) \
             .eq("trade_date", trade_date) \
+            .eq("status", "pending") \
             .execute()
 
         if existing.data:
             logging.info(f"[skip] {trace_id} | {name} {trade_date} 已存在")
             return
 
-        # ===== 型別轉換 =====
+        # ===== 型別 =====
         price = safe_float(price)
         buy = safe_float(buy)
         stop = safe_float(stop)
@@ -138,10 +139,9 @@ def record_trade(
         volume_str = safe_str(volume)
         trend_str = safe_str(trend)
 
-        # ===== debug 檢查 =====
         logging.info(f"[data_check] {trace_id} | price={price} buy={buy} stop={stop}")
 
-        # ===== data_field =====
+        # ===== data_field（防污染）=====
         data_field = {}
 
         if ma5 is not None:
@@ -157,9 +157,10 @@ def record_trade(
             data_field["trend"] = trend_str
 
         if extra_data:
-            data_field.update(extra_data)
+            for k, v in extra_data.items():
+                if k not in ["result", "price_after"]:
+                    data_field[k] = v
 
-        # ===== insert data =====
         insert_data = {
             "trade_date": trade_date,
             "stock": name,
@@ -184,7 +185,6 @@ def record_trade(
 
         res = supabase.table("trades").insert(insert_data).execute()
 
-        # ===== 🔥 回傳檢查 =====
         if hasattr(res, "data"):
             logging.info(f"[recorded] {trace_id} | {name} | {decision} | {price}")
         else:
