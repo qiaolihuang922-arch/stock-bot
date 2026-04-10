@@ -84,19 +84,40 @@ def support_resistance(closes):
     return round(min(closes[-20:]), 1), round(max(closes[-20:]), 1)
 
 
-# ===== 策略（🔥最終版｜進攻＋風控完整）=====
+# ===== 結構確認（強化版）=====
+def check_structure(closes, volumes):
+
+    # 連續止跌（強化）
+    stop_falling = closes[-1] >= closes[-2] and closes[-2] >= closes[-3]
+
+    total = sum(volumes[-10:])
+    avg10 = total / 10 if total > 0 else 1
+
+    # 避免爆量砸盤
+    no_dump = volumes[-1] <= avg10 * 1.5
+
+    # 結構不破（拉長）
+    structure_low = min(closes[-7:])
+    hold_structure = closes[-1] >= structure_low
+
+    return stop_falling and no_dump and hold_structure
+
+
+# ===== 策略（優化版）=====
 def strategy(price, ma5, ma20, closes, volumes):
 
     support, resistance = support_resistance(closes)
+
+    # 🔥 修正 breakout
+    prev_resistance = max(closes[-21:-1])
+    breakout = price > prev_resistance
 
     total = sum(volumes[-10:])
     avg10 = total / 10 if total > 0 else 1
     ratio = volumes[-1] / avg10
 
     momentum = price > closes[-2]
-    structure_low = min(closes[-7:])
-    breakout = price > resistance
-
+    structure_low = min(closes[-10:])  # 🔥 拉長
     score = 0
 
     # ===== 趨勢 =====
@@ -154,14 +175,14 @@ def strategy(price, ma5, ma20, closes, volumes):
     if breakout and momentum and ratio > 1.3:
         score += 2
 
-    # ===== confirm =====
+    # ===== confirm（強化）=====
     confirm = 0
     if price > ma20: confirm += 1
     if momentum: confirm += 1
     if ratio > 1.2: confirm += 1
 
     if confirm < 2 and score >= 4:
-        score -= 1
+        score -= 2  # 🔥 加強
 
     # ===== 過熱 =====
     if price > resistance * 1.08:
@@ -207,7 +228,11 @@ def strategy(price, ma5, ma20, closes, volumes):
     if abs(price - buy) / buy > 0.04:
         return "觀望（未到買點）", "-", "-", "0%"
 
-    # ===== stop 修正（只防錯）=====
+    # ===== 結構確認 =====
+    if not check_structure(closes, volumes):
+        return "觀望（結構未確認）", "-", "-", "0%"
+
+    # ===== stop 修正 =====
     if stop >= buy:
         stop = buy * 0.97
 
@@ -216,11 +241,8 @@ def strategy(price, ma5, ma20, closes, volumes):
     if risk > 0.08:
         return "觀望（風險過大）", "-", "-", "0%"
 
-    # ===== reward =====
-    if breakout:
-        reward = max(resistance - buy, (resistance * 1.03) - buy)
-    else:
-        reward = resistance - buy
+    # ===== reward（保守）=====
+    reward = resistance - buy
 
     if reward <= 0:
         return "觀望（空間不足）", "-", "-", "0%"
