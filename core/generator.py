@@ -14,77 +14,92 @@ stocks = {
     "智原": "3035"
 }
 
+# ===== 人性化決策（新增，不影響邏輯）=====
+def humanize_decision(decision):
+    if "進場🔥" in decision:
+        return "🔥 強勢進場"
+    if "進場" in decision:
+        return "🟢 可進場"
+    if "試單" in decision:
+        return "🟡 小倉試單"
+
+    if "追高" in decision:
+        return "⚠️ 不追高（接近壓力）"
+    if "未回踩" in decision:
+        return "⏳ 等回踩"
+    if "轉強" in decision:
+        return "⏳ 等轉強"
+    if "弱勢" in decision:
+        return "🔴 偏弱不碰"
+    if "過熱" in decision:
+        return "🚫 過熱區"
+
+    return "觀望"
+
+# ===== 快速判斷 =====
+def quick_view(decision, trend):
+    if "進場🔥" in decision:
+        return "👉 趨勢成立，可直接做"
+    if "進場" in decision:
+        return "👉 結構OK，等好點位"
+    if "試單" in decision:
+        return "👉 低信心，小倉觀察"
+
+    if "高位" in trend:
+        return "👉 高位震盪，風險偏高"
+
+    return "👉 目前沒有好機會"
 
 # ===== RR =====
 def calc_rr(buy, stop, resistance):
-
     if buy in ["-", None] or stop in ["-", None]:
         return "-"
-
     if buy <= stop:
         return "-"
-
     risk = buy - stop
     reward = resistance - buy
-
     if risk <= 0:
         return "-"
-
     rr = reward / risk
-
     if rr <= 0:
         return "-"
-
     return round(rr, 2)
 
-
-# ===== RR提示 =====
 def rr_filter(rr):
-
     if rr == "-" or rr <= 0:
         return ""
-
     if rr < 1:
         return "⚠️報酬偏低"
-
     if rr >= 2:
         return "🔥報酬優勢"
-
     return ""
-
 
 def add_rr_warning(decision, rr):
     if rr != "-" and rr < 1:
         return f"{decision}（報酬偏低）"
     return decision
 
-
 # ===== 原因 =====
 def decision_reason(decision, buy, stop, rr):
-
     if buy not in ["-", None] and stop not in ["-", None]:
         risk = (buy - stop) / buy
         if risk > 0.08:
-            return "原因：停損距離過大（風險高）"
+            return "停損距離過大（風險高）"
 
     if rr != "-" and rr < 1:
-        return "原因：潛在報酬不足"
+        return "潛在報酬不足"
 
     if "未回踩" in decision:
-        return "原因：尚未回測支撐"
-
+        return "尚未回測支撐"
     if "追高" in decision:
-        return "原因：接近壓力區，不追價"
-
+        return "接近壓力區，不追價"
     if "弱勢" in decision:
-        return "原因：結構偏弱"
+        return "結構偏弱"
 
     return ""
 
-
 # ===== 位置 =====
 def position_level(price, ma5, ma20):
-
     if price < ma20 * 0.97:
         return "低位（偏弱）"
     elif price < ma20:
@@ -96,25 +111,14 @@ def position_level(price, ma5, ma20):
     else:
         return "高位（易震盪）"
 
-
 # ===== 預備買點 =====
 def get_prebuy(price, ma5, ma20, support, resistance, decision):
-
     if "觀望" not in decision:
         return "-"
+    candidates = [v for v in [ma5, ma20, support] if v < price * 0.995]
+    return round(max(candidates), 1) if candidates else "-"
 
-    candidates = []
-
-    for v in [ma5, ma20, support]:
-        if v < price * 0.995:
-            candidates.append(v)
-
-    if not candidates:
-        return "-"
-
-    return round(max(candidates), 1)
-
-
+# ===== 時間 =====
 def get_phase():
     now = datetime.now(tz)
     if now.hour < 9:
@@ -124,25 +128,19 @@ def get_phase():
     else:
         return "盤後"
 
-
 def allow_record():
     now = datetime.now(tz)
     return now.hour >= 13
 
-
 recorded_today = set()
-
 
 def can_record_today(name):
     today = datetime.now(tz).strftime("%Y-%m-%d")
     key = f"{name}-{today}"
-
     if key in recorded_today:
         return False
-
     recorded_today.add(key)
     return True
-
 
 def time_weight():
     now = datetime.now(tz)
@@ -161,9 +159,8 @@ def time_weight():
 
     return 0, ""
 
-
+# ===== 市場判斷 =====
 def global_decision(decisions):
-
     t_score, t_msg = time_weight()
 
     strong = sum(1 for d in decisions if "進場🔥" in d)
@@ -184,43 +181,30 @@ def global_decision(decisions):
 
     return f"🔴 偏弱市場（暫不操作） {t_msg}"
 
-
-# ===== 評分（只排序用）=====
+# ===== 評分 =====
 def score_stock(decision, trend, volume):
-
     score = 0
 
-    if "進場🔥" in decision:
-        score += 6
-    elif "進場" in decision:
-        score += 4
-    elif "試單" in decision:
-        score += 2
+    if "進場🔥" in decision: score += 6
+    elif "進場" in decision: score += 4
+    elif "試單" in decision: score += 2
 
-    if "主升" in trend:
-        score += 3
-    elif "轉強" in trend:
-        score += 2
+    if "主升" in trend: score += 3
+    elif "轉強" in trend: score += 2
 
-    if "主升" in volume:
-        score += 3
-    elif "強放量" in volume:
-        score += 2
-    elif "出貨" in volume:
-        score -= 3
+    if "主升" in volume: score += 3
+    elif "強放量" in volume: score += 2
+    elif "出貨" in volume: score -= 3
 
-    if "高位" in trend:
-        score -= 3
+    if "高位" in trend: score -= 3
 
     t_score, _ = time_weight()
     score += t_score
 
     return score
 
-
 # ===== 行動 =====
 def build_action(decision, buy, position, rr):
-
     if rr != "-" and rr < 1:
         return "⚠️風險報酬不佳，暫不建議進場"
 
@@ -232,7 +216,6 @@ def build_action(decision, buy, position, rr):
         return f"👉 小倉觀察（{position}）"
 
     return ""
-
 
 # ===== 主流程 =====
 def generate():
@@ -284,18 +267,27 @@ def generate():
         volume = volume_model(volumes, closes)
         trend = trend_model(price, ma5, ma20, closes, volumes)
 
-        if "轉強" in trend and ma5 < ma20:
-            trend = "轉強中（未確認）"
+        result = strategy(price, ma5, ma20, closes, volumes)
 
-        decision, buy, stop, position = strategy(price, ma5, ma20, closes, volumes)
+        if len(result) == 4:
+            decision, buy, stop, position = result
+            decision_type, risk_level = "", ""
+        else:
+            decision, buy, stop, position, decision_type, risk_level = result
+
+        # 防呆
+        if "進場" in decision:
+            assert buy not in ["-", None]
+            assert stop not in ["-", None]
+            assert stop < buy
+
         support, resistance = support_resistance(closes)
 
-        # 🔥 同步 strategy RR
         adj_res = max(resistance, resistance * 1.03) if price > resistance else resistance
         rr = calc_rr(buy, stop, adj_res)
 
         rr_tag = rr_filter(rr)
-        display_decision = add_rr_warning(decision, rr)
+        display_decision = humanize_decision(add_rr_warning(decision, rr))
 
         reason = decision_reason(decision, buy, stop, rr)
         pos_level = position_level(price, ma5, ma20)
@@ -311,14 +303,21 @@ def generate():
 
         decisions.append(decision)
 
-        # ===== 記錄 =====
+        # ===== 記錄（保留）=====
         if allow_record() and can_record_today(name):
             if ("進場" in decision or "試單" in decision):
                 if buy not in ["-", None] and stop not in ["-", None] and buy > stop:
                     try:
-                        extra = {"position_level": pos_level, "decision_raw": decision}
+                        extra = {
+                            "position_level": pos_level,
+                            "decision_raw": decision
+                        }
                         if rr != "-":
                             extra["rr"] = rr
+                        if decision_type:
+                            extra["decision_type"] = decision_type
+                        if risk_level:
+                            extra["risk_level"] = risk_level
 
                         record_trade(
                             name, "buy", buy, buy, stop,
@@ -335,21 +334,24 @@ def generate():
 
         action = build_action(decision, buy, position, rr)
         pre_buy = get_prebuy(price, ma5, ma20, support, resistance, decision)
+        view = quick_view(decision, trend)
 
-        msg += f"{name}\n"
+        # ===== 顯示 =====
+        msg += f"【{name}】\n"
         msg += f"{display_decision}｜倉位 {position}\n"
+        msg += f"{view}\n"
 
         if reason:
-            msg += f"{reason}\n"
+            msg += f"📌 {reason}\n"
 
         if action:
-            msg += f"{action}\n"
+            msg += f"🧭 {action}\n"
 
         if buy != "-":
-            msg += f"買:{buy} 停:{stop} RR:{rr} {rr_tag}\n"
+            msg += f"🎯 進場:{buy}｜停損:{stop}｜RR:{rr} {rr_tag}\n"
 
         if pre_buy != "-":
-            msg += f"預備買點:{pre_buy}\n"
+            msg += f"📍 預備買點:{pre_buy}\n"
 
         msg += f"{round(price,1)}（{round(change,2)}%）\n"
         msg += f"MA5:{round(ma5,1)} MA20:{round(ma20,1)}\n"
