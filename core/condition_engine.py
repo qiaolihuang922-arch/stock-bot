@@ -1,5 +1,5 @@
 # ================================
-# 🔥 condition_engine.py（FINAL v8.5+）
+# 🔥 condition_engine.py（FINAL v8.6）
 # ================================
 
 """
@@ -31,7 +31,31 @@ def condition_engine(result):
         "rr": False
     }
 
-    # ===== 直接讀取 analysis 結果 =====
+    decision = result.get("decision")
+
+    # ================================
+    # 🔥 NO_TRADE（關鍵修正：避免誤導）
+    # ================================
+    if decision == "NO_TRADE":
+
+        market = result.get("market_signal")
+        trend = result.get("trend")
+        volume = result.get("volume_state")
+
+        if market and market != "WEAK":
+            conditions["market"] = True
+
+        if trend == "UP":
+            conditions["trend"] = True
+
+        if volume and volume not in ["WEAK", "DISTRIBUTION"]:
+            conditions["volume"] = True
+
+        return conditions
+
+    # ================================
+    # 🔥 正常流程
+    # ================================
     market = result.get("market_signal")
     structure = result.get("structure_state")
     trend = result.get("trend")
@@ -50,7 +74,7 @@ def condition_engine(result):
     decision_type = result.get("decision_type")
 
     # ================================
-    # 🔥 條件判斷（只映射，不推論）
+    # 🔥 條件判斷（只映射）
     # ================================
 
     # ===== 市場 =====
@@ -65,17 +89,17 @@ def condition_engine(result):
     if trend == "UP":
         conditions["trend"] = True
 
-    # ===== 量能（修正 None 問題）=====
+    # ===== 量能 =====
     if volume and volume not in ["WEAK", "DISTRIBUTION"]:
         conditions["volume"] = True
 
     # ================================
-    # 🔥 decision_type 防呆（關鍵修正）
+    # 🔥 decision_type 防呆（關鍵）
     # ================================
     if decision_type not in ["breakout", "pullback"]:
         return conditions
 
-    # ===== 事件（嚴格來自 analysis）=====
+    # ===== 事件 =====
     if decision_type == "breakout":
         if event_breakout:
             conditions["event"] = True
@@ -84,7 +108,7 @@ def condition_engine(result):
         if event_pullback:
             conditions["event"] = True
 
-    # ===== Edge（不得簡化）=====
+    # ===== Edge =====
     if decision_type == "breakout":
         if (
             edge_consolidation is True and
@@ -114,7 +138,7 @@ def condition_engine(result):
 
 
 # ================================
-# 🔥 顯示用（符合 v8）
+# 🔥 顯示用（完全對齊 v8.6）
 # ================================
 def summarize_conditions(c, decision):
 
@@ -126,7 +150,7 @@ def summarize_conditions(c, decision):
     elif decision == "WAIT":
         return [k for k, v in c.items() if not v]
 
-    # ===== NO_TRADE：只顯示致命條件 =====
+    # ===== NO_TRADE：只顯示致命 =====
     elif decision == "NO_TRADE":
         priority = ["market", "trend", "volume"]
         return [k for k in priority if not c.get(k)]
