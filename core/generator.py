@@ -29,33 +29,24 @@ def get_action(result, price, ma5):
 
     decision = result.get("decision")
     pos = result.get("position") or 0
-    trend = result.get("trend")
-    volume = result.get("volume_state")
-    buy = result.get("buy")
 
     # ❌ 全出
     if decision == "NO_TRADE":
         return "🔴 賣出 100%"
 
-    # 🟢 進場
+    # 🟢 買（直接用倉位）
     if decision == "BUY":
         return f"🟢 買進 {round(pos*100)}%"
 
-    # ===== 以下是 WAIT 狀態 =====
+    # ===== WAIT =====
 
-    # 🔴 明確轉弱 → 出場
-    if trend == "DOWN" or volume == "DISTRIBUTION":
-        return "🔴 賣出 50%"
+    if pos >= 0.4:
+        return f"⚪ 持有（目標 {round(pos*100)}%）"
 
-    # 🟡 減碼
-    if buy and price >= buy * 1.05:
-        return "🟡 減碼 50%"
+    if pos >= 0.2:
+        return f"🟡 降至 {round(pos*100)}%"
 
-    if ma5 and price < ma5:
-        return "🟡 減碼 50%"
-
-    # ⏳ 不動
-    return "⏳ 不動"
+    return "⏳ 空手觀望"
 
 
 # ================================
