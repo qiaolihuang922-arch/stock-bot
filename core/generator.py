@@ -16,32 +16,26 @@ stocks = {
 
 
 # ================================
-# 🔥 時間系統（與 Flask 完全同步）
+# 🔥 時間系統
 # ================================
 def get_market_phase():
 
     now = datetime.now(tz)
-    hour = now.hour
-    minute = now.minute
+    h, m = now.hour, now.minute
 
     if now.weekday() >= 5:
         return "假日"
 
-    # 盤前
-    if hour == 8 and 30 <= minute < 40:
+    if h == 8 and 30 <= m < 40:
         return "盤前"
 
-    # 盤中
-    elif 9 <= hour < 13:
+    elif 9 <= h < 13:
         return "盤中"
 
-    # 收盤
-    elif hour == 13 and minute >= 20:
+    elif h == 13 and m >= 20:
         return "收盤"
 
-    # 其他時間
-    else:
-        return "盤後"
+    return "盤後"
 
 
 # ================================
@@ -70,7 +64,7 @@ def safe_round(val, n=1):
 
 
 # ================================
-# 🔥 人話翻譯
+# 🔥 基本翻譯（保留）
 # ================================
 def translate_conditions(cond_list):
 
@@ -89,7 +83,47 @@ def translate_conditions(cond_list):
 
 
 # ================================
-# 🔥 進場劇本（強化版）
+# 🔥 NEW：Edge細節翻譯（核心升級）
+# ================================
+def explain_edge(result, decision_type):
+
+    reasons = []
+
+    # ===== breakout =====
+    if decision_type == "breakout":
+
+        if result.get("event_breakout") is False:
+            reasons.append("尚未突破")
+
+        if result.get("edge_consolidation") is False:
+            reasons.append("盤整不夠")
+
+        if result.get("edge_not_high_zone") is False:
+            reasons.append("位置太高（不要追）")
+
+        if result.get("edge_fake_breakout") is True:
+            reasons.append("疑似假突破")
+
+    # ===== pullback =====
+    elif decision_type == "pullback":
+
+        if result.get("event_pullback") is False:
+            reasons.append("還沒回踩完成")
+
+        if result.get("edge_first_pullback") is False:
+            reasons.append("不是第一次回踩")
+
+        if result.get("edge_ma20_trend") is False:
+            reasons.append("MA20未走升")
+
+        if result.get("edge_structure_hold") is False:
+            reasons.append("結構沒守住")
+
+    return reasons
+
+
+# ================================
+# 🔥 進場劇本
 # ================================
 def entry_plan(price, buy):
 
@@ -173,8 +207,7 @@ def generate():
             elif yahoo:
                 price, change = yahoo
             else:
-                price = t_price
-                change = t_change
+                price, change = t_price, t_change
         else:
             price, change = yahoo
             closes = [price] * 20
@@ -226,7 +259,7 @@ def generate():
 
         msg += f"【{name}】{score_text}\n"
 
-        # ===== BUY =====
+        # ================= BUY =================
         if decision == "BUY":
 
             zone, action, diff = entry_plan(price, buy)
@@ -247,23 +280,27 @@ def generate():
             if diff > 0.02:
                 msg += "❗ 已偏離進場點，避免追高\n"
 
-        # ===== WAIT =====
+        # ================= WAIT（升級） =================
         elif decision == "WAIT":
 
             msg += "👉 還不能做\n"
 
-            reasons = translate_conditions(summary)
+            # 🔥 先顯示 Edge（重點升級）
+            edge_reasons = explain_edge(result, decision_type)
 
-            for r in reasons[:3]:
-                msg += f"- {r}\n"
-
-            if len(reasons) >= 3:
-                msg += "👉 距離進場還很遠\n"
+            if edge_reasons:
+                for r in edge_reasons[:3]:
+                    msg += f"- {r}\n"
+            else:
+                # fallback（舊機制）
+                reasons = translate_conditions(summary)
+                for r in reasons[:3]:
+                    msg += f"- {r}\n"
 
             if "event" in summary:
                 msg += "👉 等突破 / 訊號出現\n"
 
-        # ===== NO_TRADE =====
+        # ================= NO TRADE =================
         else:
 
             msg += "👉 不要做\n"
