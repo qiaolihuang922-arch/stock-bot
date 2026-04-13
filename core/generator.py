@@ -58,12 +58,12 @@ def safe_list(data, n=20):
 
 
 # ================================
-# 🔥 ⭐ 評分系統（重構版）
+# 🔥 ⭐ 評分系統（修正版）
 # ================================
-def score_to_text(conditions):
+def score_to_text(conditions, result):
 
-    # ❌ 直接淘汰
-    if not conditions["trend"] or not conditions["market"]:
+    # ❌ 只有市場真的弱才禁止
+    if result.get("market_signal") == "WEAK":
         return "❌ 不成立（別碰）"
 
     # 🟢 完整成立
@@ -141,12 +141,10 @@ def build_signals(result, conditions, decision_type, price, ma5, ma20, closes):
 
     main, sub, detail = [], [], []
 
-    # 🔥 主因（交易核心）
     for k in ["event", "edge", "risk", "rr"]:
         if not conditions.get(k):
             main.append(translate_condition(k))
 
-    # 次因
     for k in ["volume", "trend", "market"]:
         if not conditions.get(k):
             sub.append(translate_condition(k))
@@ -189,7 +187,7 @@ def build_signals(result, conditions, decision_type, price, ma5, ma20, closes):
 
 
 # ================================
-# 🔥 主流程（最終版）
+# 🔥 主流程（最終穩定版）
 # ================================
 def generate():
 
@@ -241,8 +239,8 @@ def generate():
 
         decisions.append(decision)
 
-        # ===== 標題（已修正）
-        msg += f"【{name}】{score_to_text(conditions)}\n"
+        # ⭐ 修正這裡
+        msg += f"【{name}】{score_to_text(conditions, result)}\n"
 
         if result.get("market_grade"):
             msg += f"🌍 市場：{result.get('market_grade')}\n"
@@ -251,7 +249,6 @@ def generate():
         if stage_text:
             msg += f"{stage_text}\n"
 
-        # ===== BUY =====
         if decision == "BUY":
 
             msg += "👉 🟢 可進場\n"
@@ -278,7 +275,6 @@ def generate():
                 extra_data=result
             )
 
-        # ===== 非BUY =====
         else:
 
             msg += "👉 還不能做\n" if decision == "WAIT" else "👉 不要做\n"
