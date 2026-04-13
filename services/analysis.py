@@ -1,5 +1,5 @@
 # ================================
-# 🔥 analysis.py（FINAL v9.8｜觸發優化版）
+# 🔥 analysis.py（FINAL v10｜穩定可上線版）
 # ================================
 
 # ===== 工具 =====
@@ -8,30 +8,21 @@ def avg(arr):
 
 
 # ================================
-# 🔥 行動引擎（核心）
+# 🔥 行動引擎
 # ================================
 def action_mapper(decision, position):
 
     if decision == "BUY":
-        return {
-            "action": round(position, 2),
-            "action_type": "BUY"
-        }
+        return {"action": round(position, 2), "action_type": "BUY"}
 
     if decision == "NO_TRADE":
-        return {
-            "action": -1.0,
-            "action_type": "SELL_ALL"
-        }
+        return {"action": -1.0, "action_type": "SELL_ALL"}
 
-    return {
-        "action": 0.0,
-        "action_type": "HOLD"
-    }
+    return {"action": 0.0, "action_type": "HOLD"}
 
 
 # ================================
-# 🔥 🔥 強度分數（保留）
+# 🔥 強度分數
 # ================================
 def strength_score(result):
 
@@ -42,18 +33,13 @@ def strength_score(result):
     elif result.get("decision") == "WAIT":
         score += 2
 
-    m = result.get("market_score") or 0
-    score += m * 0.5
-
-    rr = result.get("rr") or 0
-    score += rr
+    score += (result.get("market_score") or 0) * 0.5
+    score += (result.get("rr") or 0)
 
     if result.get("trend") == "UP":
         score += 1
-
     if result.get("structure_state") == "STRONG":
         score += 1
-
     if result.get("volume_state") == "STRONG":
         score += 1
 
@@ -61,54 +47,7 @@ def strength_score(result):
 
 
 # ================================
-# 🔥 市場強度（保留）
-# ================================
-def market_score(market, trend, structure, volume, momentum):
-
-    score = 0
-
-    if market == "STRONG":
-        score += 2
-    elif market == "CHOPPY":
-        score += 1
-    elif market == "WEAK":
-        score -= 2
-
-    if trend == "UP":
-        score += 2
-    elif trend == "DOWN":
-        score -= 2
-
-    if structure == "STRONG":
-        score += 2
-    elif structure == "WEAK":
-        score -= 1
-
-    if volume == "STRONG":
-        score += 2
-    elif volume == "DISTRIBUTION":
-        score -= 2
-
-    if momentum == "ACCELERATING":
-        score += 1
-    else:
-        score -= 0.5
-
-    return score
-
-
-def market_grade(score):
-    if score >= 6:
-        return "A"
-    elif score >= 3:
-        return "B"
-    elif score >= 0:
-        return "C"
-    return "D"
-
-
-# ================================
-# 🔥 統一輸出（保留）
+# 🔥 統一輸出（🔥補回）
 # ================================
 def build_result(**kwargs):
 
@@ -155,23 +94,79 @@ def build_result(**kwargs):
 
 
 # ================================
-# 🔥 訊號層（微調）
+# 🔥 市場 / 趨勢 / 量能 / 結構
+# ================================
+def market_signal(closes, ma20):
+    momentum = closes[-1] - closes[-3]
+
+    if closes[-1] < ma20 and momentum < 0:
+        return "WEAK"
+
+    if (max(closes[-10:]) - min(closes[-10:])) / closes[-1] < 0.04:
+        return "CHOPPY"
+
+    if closes[-1] > ma20 and momentum > 0:
+        return "STRONG"
+
+    return "NORMAL"
+
+
+def trend_signal(price, ma5, ma20):
+    if price > ma5 > ma20:
+        return "UP"
+    if price < ma20:
+        return "DOWN"
+    return "SIDE"
+
+
+def volume_signal(volumes):
+    avg10 = avg(volumes[-10:])
+    ratio = volumes[-1] / avg10 if avg10 else 1
+
+    if ratio > 1.5 and volumes[-1] > volumes[-2]:
+        return "STRONG"
+    if ratio > 1.5 and volumes[-1] < volumes[-2]:
+        return "DISTRIBUTION"
+    if ratio < 0.8:
+        return "WEAK"
+
+    return "NORMAL"
+
+
+def structure_state(closes):
+    score = 0
+    if closes[-1] > closes[-2]:
+        score += 1
+    if closes[-2] > closes[-3]:
+        score += 1
+    if closes[-1] > avg(closes[-5:]):
+        score += 1
+
+    if score >= 3:
+        return "STRONG"
+    elif score == 2:
+        return "NORMAL"
+    return "WEAK"
+
+
+def structure_hold(closes):
+    return closes[-1] > min(closes[-5:])
+
+
+# ================================
+# 🔥 壓力 / 事件（🔥優化）
 # ================================
 def support_resistance(closes):
-    # 🔥 修改：避免抓到「最新高點」→ 更容易觸發突破
-    return min(closes[-20:]), max(closes[-20:-3])  # ← 修改
+    return min(closes[-20:]), max(closes[-20:-3])  # 🔥避免過高壓力
 
 
 def event_breakout(price, closes, resistance, volumes):
     avg5 = avg(volumes[-5:])
-    near = closes[-1] > resistance * 0.99
-    return near and volumes[-1] > avg5 * 1.2
+    return closes[-1] > resistance * 0.99 and volumes[-1] > avg5 * 1.2
 
 
 def event_pullback(price, ma5, closes):
-    near = abs(price - ma5) / ma5 < 0.03
-    rebound = closes[-1] > closes[-2]
-    return near and rebound
+    return abs(price - ma5) / ma5 < 0.03 and closes[-1] > closes[-2]
 
 
 def edge_consolidation(closes):
@@ -188,7 +183,7 @@ def edge_first_pullback(closes, ma20):
 
 
 # ================================
-# 🔥 風控（微調）
+# 🔥 風控（🔥放寬）
 # ================================
 def risk_control(buy, stop, resistance, mode):
 
@@ -202,7 +197,6 @@ def risk_control(buy, stop, resistance, mode):
     target = buy + (buy - stop) * 2 if mode == "breakout" else resistance
     rr = (target - buy) / (buy - stop) if (buy - stop) else 0
 
-    # 🔥 修改：放寬 RR
     if mode == "breakout" and rr < 1.5:
         return False, risk, rr
     if mode == "pullback" and rr < 1.3:
@@ -212,7 +206,50 @@ def risk_control(buy, stop, resistance, mode):
 
 
 # ================================
-# 🔥 strategy（核心升級）
+# 🔥 倉位
+# ================================
+def base_position(market, trend, structure, volume):
+
+    pos = 0
+
+    if market == "STRONG":
+        pos += 0.3
+    elif market == "CHOPPY":
+        pos += 0.2
+    elif market == "NORMAL":
+        pos += 0.1
+
+    if trend == "UP":
+        pos += 0.2
+
+    if structure == "STRONG":
+        pos += 0.2
+
+    if volume == "STRONG":
+        pos += 0.2
+    elif volume == "NORMAL":
+        pos += 0.1
+
+    return round(min(pos, 0.5), 2)
+
+
+def position_size(risk, market):
+
+    if risk <= 0.03:
+        pos = 1.0
+    elif risk <= 0.05:
+        pos = 0.7
+    elif risk <= 0.08:
+        pos = 0.5
+    else:
+        return 0
+
+    cap = 1.0 if market == "STRONG" else 0.7 if market == "CHOPPY" else 0.5
+    return min(pos, cap)
+
+
+# ================================
+# 🔥 strategy（核心）
 # ================================
 def strategy(price, ma5, ma20, closes, volumes):
 
@@ -231,9 +268,7 @@ def strategy(price, ma5, ma20, closes, volumes):
     cons = edge_consolidation(closes)
     base_pos = base_position(market, trend, structure, volume)
 
-    # ================================
-    # ❌ 直接排除
-    # ================================
+    # ❌ 排除
     if market == "WEAK" or trend == "DOWN" or volume == "DISTRIBUTION":
         return build_result(decision="NO_TRADE", position=0)
 
@@ -243,16 +278,14 @@ def strategy(price, ma5, ma20, closes, volumes):
     if structure == "WEAK" and not cons:
         return build_result(decision="WAIT", position=base_pos)
 
-    # ================================
-    # 🔥🔥 新增：準突破試單（核心升級）
-    # ================================
+    # 🔥 準突破試單（關鍵）
     if trend == "UP" and volume != "WEAK" and price > resistance * 0.97:
         return build_result(
             decision="BUY",
-            decision_type="pre_breakout",  # ← 新類型
+            decision_type="pre_breakout",
             buy=price,
             stop=min(ma5, support),
-            position=0.3,  # 小倉試單
+            position=0.3,
             market_score=m_score,
             market_grade=m_grade,
             trend=trend,
@@ -260,9 +293,7 @@ def strategy(price, ma5, ma20, closes, volumes):
             structure_state=structure
         )
 
-    # ================================
     # 🔥 突破
-    # ================================
     if event_breakout(price, closes, resistance, volumes):
 
         if edge_fake_breakout(closes):
@@ -287,12 +318,8 @@ def strategy(price, ma5, ma20, closes, volumes):
                 structure_state=structure
             )
 
-    # ================================
-    # 🔥 提前卡位（放寬）
-    # ================================
+    # 🔥 early（放寬）
     if cons and volume == "NORMAL" and closes[-1] > closes[-2] and trend == "UP":
-
-        # 🔥 修改：early 不再卡 RR（讓系統會進場）
         return build_result(
             decision="BUY",
             decision_type="early",
@@ -315,3 +342,21 @@ def strategy(price, ma5, ma20, closes, volumes):
         volume_state=volume,
         structure_state=structure
     )
+
+
+# ================================
+# 🔥 最強股（避免 import error）
+# ================================
+def pick_best_stock(results_dict):
+
+    best_name = None
+    best_score = -999
+
+    for name, result in results_dict.items():
+        score = result.get("strength", 0)
+
+        if score > best_score:
+            best_score = score
+            best_name = name
+
+    return best_name, best_score
