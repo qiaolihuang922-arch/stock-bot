@@ -1,5 +1,5 @@
 # ================================
-# 🔥 analysis.py（FINAL v9.6｜指令版）
+# 🔥 analysis.py（FINAL v9.7｜最強股版）
 # ================================
 
 # ===== 工具 =====
@@ -14,20 +14,54 @@ def action_mapper(decision, position):
 
     if decision == "BUY":
         return {
-            "action": round(position, 2),   # 👉 買多少
+            "action": round(position, 2),
             "action_type": "BUY"
         }
 
     if decision == "NO_TRADE":
         return {
-            "action": -1.0,                # 👉 全賣
+            "action": -1.0,
             "action_type": "SELL_ALL"
         }
 
     return {
-        "action": 0.0,                    # 👉 不動
+        "action": 0.0,
         "action_type": "HOLD"
     }
+
+
+# ================================
+# 🔥 🔥 強度分數（新增）
+# ================================
+def strength_score(result):
+
+    score = 0
+
+    # ✅ decision 權重最大
+    if result.get("decision") == "BUY":
+        score += 5
+    elif result.get("decision") == "WAIT":
+        score += 2
+
+    # ✅ 市場分數
+    m = result.get("market_score") or 0
+    score += m * 0.5
+
+    # ✅ RR
+    rr = result.get("rr") or 0
+    score += rr
+
+    # ✅ 趨勢 / 結構 / 量能
+    if result.get("trend") == "UP":
+        score += 1
+
+    if result.get("structure_state") == "STRONG":
+        score += 1
+
+    if result.get("volume_state") == "STRONG":
+        score += 1
+
+    return round(score, 2)
 
 
 # ================================
@@ -78,7 +112,7 @@ def market_grade(score):
 
 
 # ================================
-# 🔥 統一輸出（只加 action）
+# 🔥 統一輸出（升級）
 # ================================
 def build_result(**kwargs):
 
@@ -95,7 +129,7 @@ def build_result(**kwargs):
         rr = 0
         position = 0
 
-    return {
+    result = {
         "decision": decision,
         "decision_type": kwargs.get("decision_type", "none"),
 
@@ -104,7 +138,6 @@ def build_result(**kwargs):
 
         "position": round(position, 2),
 
-        # 🔥 核心（你要的）
         "action": action_data["action"],
         "action_type": action_data["action_type"],
 
@@ -119,6 +152,11 @@ def build_result(**kwargs):
         "market_score": kwargs.get("market_score"),
         "market_grade": kwargs.get("market_grade"),
     }
+
+    # 🔥 加入強度分數
+    result["strength"] = strength_score(result)
+
+    return result
 
 
 # ================================
@@ -319,7 +357,12 @@ def strategy(price, ma5, ma20, closes, volumes):
                 stop=stop,
                 position=position_size(risk, market),
                 risk=risk,
-                rr=rr
+                rr=rr,
+                market_score=m_score,
+                market_grade=m_grade,
+                trend=trend,
+                volume_state=volume,
+                structure_state=structure
             )
 
     if trend == "UP" and event_pullback(price, ma5, closes):
@@ -341,7 +384,12 @@ def strategy(price, ma5, ma20, closes, volumes):
                 stop=stop,
                 position=position_size(risk, market),
                 risk=risk,
-                rr=rr
+                rr=rr,
+                market_score=m_score,
+                market_grade=m_grade,
+                trend=trend,
+                volume_state=volume,
+                structure_state=structure
             )
 
     if cons and volume == "NORMAL" and closes[-1] > closes[-2]:
@@ -357,7 +405,38 @@ def strategy(price, ma5, ma20, closes, volumes):
                 stop=stop,
                 position=max(base_pos, 0.3),
                 risk=risk,
-                rr=rr
+                rr=rr,
+                market_score=m_score,
+                market_grade=m_grade,
+                trend=trend,
+                volume_state=volume,
+                structure_state=structure
             )
 
-    return build_result(decision="WAIT", position=base_pos)
+    return build_result(
+        decision="WAIT",
+        position=base_pos,
+        market_score=m_score,
+        market_grade=m_grade,
+        trend=trend,
+        volume_state=volume,
+        structure_state=structure
+    )
+
+
+# ================================
+# 🔥 🔥 選出最強股票（新增）
+# ================================
+def pick_best_stock(results_dict):
+
+    best_name = None
+    best_score = -999
+
+    for name, result in results_dict.items():
+        score = result.get("strength", 0)
+
+        if score > best_score:
+            best_score = score
+            best_name = name
+
+    return best_name, best_score
