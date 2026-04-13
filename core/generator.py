@@ -4,7 +4,7 @@ import pytz
 from services.learning import record_trade
 from services.stock_api import get_twse, get_yahoo, get_realtime_price
 from services.analysis import strategy
-from core.condition_engine import condition_engine, summarize_conditions
+from core.condition_engine import condition_engine
 
 tz = pytz.timezone("Asia/Taipei")
 
@@ -39,22 +39,17 @@ def get_market_phase():
 
 
 # ================================
-# 🔥 工具
+# 🔥 強度評分（改 condition）
 # ================================
-def risk_to_text(risk):
-    if risk >= 0.06:
-        return "⚠️風險高"
-    elif risk >= 0.03:
-        return "⚠️風險中"
-    return "✅風險低"
+def score_to_text(conditions):
 
+    score = sum(conditions.values()) * 12.5
 
-def score_to_text(score):
-    if score >= 80:
+    if score >= 75:
         return "🔥 很強（可準備）"
-    elif score >= 65:
+    elif score >= 60:
         return "👍 不錯（差一步）"
-    elif score >= 50:
+    elif score >= 40:
         return "👌 普通（先觀察）"
     return "❌ 很弱（別碰）"
 
@@ -64,7 +59,7 @@ def safe_round(val, n=1):
 
 
 # ================================
-# 🔥 🔥🔥 核心新增：階段判斷
+# 🔥 階段判斷
 # ================================
 def stage_detection(price, closes):
 
@@ -76,10 +71,8 @@ def stage_detection(price, closes):
 
     if dist < 0.02:
         return "BREAKOUT_READY"
-
     elif dist < 0.05:
         return "APPROACH"
-
     else:
         return "FAR"
 
@@ -97,92 +90,81 @@ def stage_to_text(stage):
 
 
 # ================================
-# 🔥 價格細節
+# 🔥 訊號整理（核心優化）
 # ================================
-def price_evidence(price, ma5, ma20, closes):
+def build_signals(result, conditions, decision_type, price, ma5, ma20, closes):
 
-    evidence = []
+    signals = []
 
-    resistance = max(closes[-20:-3])
-    support = min(closes[-20:])
+    # ===== 1️⃣ 致命條件（最重要）=====
+    if not conditions["event"]:
+        signals.append("尚未觸發")
 
-    if price < ma20:
-        if closes[-2] > ma20:
-            evidence.append("跌破MA20（轉弱）")
-        else:
-            evidence.append("MA20下方（弱勢）")
+    if not conditions["edge"]:
+        signals.append("型態不完整")
 
-    elif price > ma5 > ma20:
-        evidence.append("多頭排列")
+    if not conditions["volume"]:
+        signals.append("量能不足")
 
-    if abs(price - ma5) / ma5 < 0.02:
-        evidence.append("貼近MA5")
+    if not conditions["trend"]:
+        signals.append("趨勢不對")
 
-    dist = (resistance - price) / price
+    if not conditions["market"]:
+        signals.append("市場不佳")
 
-    if dist < 0.02:
-        evidence.append("壓力貼近")
-    elif dist < 0.05:
-        evidence.append("接近壓力")
-
-    return evidence
-
-
-# ================================
-# 🔥 動能 / 量能
-# ================================
-def momentum_explain(momentum):
-    if momentum == "ACCELERATING":
-        return "動能增強"
-    elif momentum == "DECELERATING":
-        return "動能轉弱"
-
-
-def volume_explain(volume):
-    if volume == "STRONG":
-        return "量能放大"
-    elif volume == "WEAK":
-        return "量能不足"
-    elif volume == "DISTRIBUTION":
-        return "出貨量"
-
-
-# ================================
-# 🔥 Edge翻譯
-# ================================
-def explain_edge(result, decision_type):
-
-    reasons = []
-
+    # ===== 2️⃣ Edge細節 =====
     if decision_type == "breakout":
-
-        if result.get("event_breakout") is False:
-            reasons.append("尚未突破")
-
         if result.get("edge_consolidation") is False:
-            reasons.append("盤整不夠")
-
-        if result.get("edge_not_high_zone") is False:
-            reasons.append("位置太高")
-
+            signals.append("盤整不夠")
         if result.get("edge_fake_breakout") is True:
-            reasons.append("疑似假突破")
+            signals.append("疑似假突破")
 
     elif decision_type == "pullback":
-
-        if result.get("event_pullback") is False:
-            reasons.append("還沒回踩")
-
         if result.get("edge_first_pullback") is False:
-            reasons.append("非第一次回踩")
-
+            signals.append("非第一次回踩")
         if result.get("edge_ma20_trend") is False:
-            reasons.append("MA20未上升")
+            signals.append("MA20未上升")
 
-        if result.get("edge_structure_hold") is False:
-            reasons.append("結構未守")
+    # ===== 3️⃣ 價格結構 =====
+    resistance = max(closes[-20:-3])
 
-    return reasons
+    if price < ma20:
+        signals.append("MA20下方（弱勢）")
+    elif price > ma5 > ma20:
+        signals.append("多頭排列")
+
+    if abs(price - ma5) / ma5 < 0.02:
+        signals.append("貼近MA5")
+
+    dist = (resistance - price) / price
+    if dist < 0.02:
+        signals.append("壓力貼近")
+    elif dist < 0.05:
+        signals.append("接近壓力")
+
+    # ===== 4️⃣ 動能 / 量能 =====
+    momentum = result.get("momentum_state")
+    volume = result.get("volume_state")
+
+    if momentum == "ACCELERATING":
+        signals.append("動能增強")
+    elif momentum == "DECELERATING":
+        signals.append("動能轉弱")
+
+    if volume == "STRONG":
+        signals.append("量能放大")
+    elif volume == "DISTRIBUTION":
+        signals.append("出貨量")
+
+    # ===== 去重 =====
+    seen = set()
+    final = []
+    for s in signals:
+        if s not in seen:
+            final.append(s)
+            seen.add(s)
+
+    return final
 
 
 # ================================
@@ -233,13 +215,15 @@ def generate():
             elif result.get("event_pullback"):
                 decision_type = "pullback"
 
-        grade = result.get("market_grade")
+        conditions = condition_engine(result)
 
+        grade = result.get("market_grade")
         stage = stage_detection(price, closes)
 
         decisions.append(decision)
 
-        msg += f"【{name}】{score_to_text(50)}\n"
+        # ===== 標題 =====
+        msg += f"【{name}】{score_to_text(conditions)}\n"
 
         if grade:
             msg += f"🌍 市場：{grade}\n"
@@ -248,25 +232,20 @@ def generate():
         if stage_text:
             msg += f"{stage_text}\n"
 
+        # ===== 非BUY =====
         if decision != "BUY":
 
             msg += "👉 還不能做\n" if decision == "WAIT" else "👉 不要做\n"
 
-            signals = []
-            signals += explain_edge(result, decision_type)
-            signals += price_evidence(price, ma5, ma20, closes)
-
-            m = momentum_explain(result.get("momentum_state"))
-            if m:
-                signals.append(m)
-
-            v = volume_explain(result.get("volume_state"))
-            if v:
-                signals.append(v)
+            signals = build_signals(
+                result, conditions, decision_type,
+                price, ma5, ma20, closes
+            )
 
             for r in signals[:3]:
                 msg += f"- {r}\n"
 
+        # ===== 價格 =====
         msg += f"💰 現價 {safe_round(price)}（{safe_round(change,2)}%）\n\n"
 
     msg += "====================\n"
