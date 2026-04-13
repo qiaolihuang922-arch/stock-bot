@@ -39,17 +39,28 @@ def get_market_phase():
 
 
 # ================================
-# 🔥 強度評分（改 condition）
+# 🔥 強度評分（權重版）
 # ================================
 def score_to_text(conditions):
 
-    score = sum(conditions.values()) * 12.5
+    weights = {
+        "event": 2,
+        "edge": 2,
+        "risk": 1.5,
+        "rr": 1.5,
+        "volume": 1,
+        "trend": 1,
+        "market": 1,
+        "structure": 1
+    }
 
-    if score >= 75:
+    score = sum(weights[k] for k, v in conditions.items() if v)
+
+    if score >= 8:
         return "🔥 很強（可準備）"
-    elif score >= 60:
+    elif score >= 6:
         return "👍 不錯（差一步）"
-    elif score >= 40:
+    elif score >= 4:
         return "👌 普通（先觀察）"
     return "❌ 很弱（別碰）"
 
@@ -78,97 +89,91 @@ def stage_detection(price, closes):
 
 
 def stage_to_text(stage):
-
-    mapping = {
+    return {
         "BREAKOUT_READY": "🔥 突破前（重點觀察）",
         "APPROACH": "👀 接近壓力（觀察）",
         "FAR": "⏳ 尚未接近壓力",
         "WEAK": "❌ 空方趨勢（避免）"
-    }
-
-    return mapping.get(stage)
+    }.get(stage)
 
 
 # ================================
-# 🔥 訊號整理（核心優化）
+# 🔥 條件翻譯
+# ================================
+def translate_condition(k):
+    return {
+        "event": "尚未觸發",
+        "edge": "型態不完整",
+        "risk": "風控不合",
+        "rr": "報酬不夠",
+        "volume": "量能不足",
+        "trend": "趨勢不對",
+        "market": "市場不佳"
+    }.get(k, k)
+
+
+# ================================
+# 🔥 訊號整理（主因 / 次因 / 細節）
 # ================================
 def build_signals(result, conditions, decision_type, price, ma5, ma20, closes):
 
-    signals = []
+    main = []
+    sub = []
+    detail = []
 
-    # ===== 1️⃣ 致命條件（最重要）=====
-    if not conditions["event"]:
-        signals.append("尚未觸發")
+    # ===== 主因 =====
+    for k in ["event", "edge", "risk", "rr"]:
+        if not conditions[k]:
+            main.append(translate_condition(k))
 
-    if not conditions["edge"]:
-        signals.append("型態不完整")
+    # ===== 次因 =====
+    for k in ["volume", "trend", "market"]:
+        if not conditions[k]:
+            sub.append(translate_condition(k))
 
-    if not conditions["volume"]:
-        signals.append("量能不足")
-
-    if not conditions["trend"]:
-        signals.append("趨勢不對")
-
-    if not conditions["market"]:
-        signals.append("市場不佳")
-
-    # ===== 2️⃣ Edge細節 =====
+    # ===== Edge細節 =====
     if decision_type == "breakout":
         if result.get("edge_consolidation") is False:
-            signals.append("盤整不夠")
+            detail.append("盤整不夠")
         if result.get("edge_fake_breakout") is True:
-            signals.append("疑似假突破")
+            detail.append("疑似假突破")
 
     elif decision_type == "pullback":
         if result.get("edge_first_pullback") is False:
-            signals.append("非第一次回踩")
+            detail.append("非第一次回踩")
         if result.get("edge_ma20_trend") is False:
-            signals.append("MA20未上升")
+            detail.append("MA20未上升")
 
-    # ===== 3️⃣ 價格結構 =====
+    # ===== 價格補充 =====
     resistance = max(closes[-20:-3])
 
     if price < ma20:
-        signals.append("MA20下方（弱勢）")
+        detail.append("MA20下方（弱勢）")
     elif price > ma5 > ma20:
-        signals.append("多頭排列")
+        detail.append("多頭排列")
 
-    if abs(price - ma5) / ma5 < 0.02:
-        signals.append("貼近MA5")
+    if ma5 and abs(price - ma5) / ma5 < 0.02:
+        detail.append("貼近MA5")
 
     dist = (resistance - price) / price
     if dist < 0.02:
-        signals.append("壓力貼近")
+        detail.append("壓力貼近")
     elif dist < 0.05:
-        signals.append("接近壓力")
-
-    # ===== 4️⃣ 動能 / 量能 =====
-    momentum = result.get("momentum_state")
-    volume = result.get("volume_state")
-
-    if momentum == "ACCELERATING":
-        signals.append("動能增強")
-    elif momentum == "DECELERATING":
-        signals.append("動能轉弱")
-
-    if volume == "STRONG":
-        signals.append("量能放大")
-    elif volume == "DISTRIBUTION":
-        signals.append("出貨量")
+        detail.append("接近壓力")
 
     # ===== 去重 =====
     seen = set()
-    final = []
-    for s in signals:
-        if s not in seen:
-            final.append(s)
-            seen.add(s)
+    final_detail = []
+    for d in detail:
+        if d not in seen:
+            final_detail.append(d)
+            seen.add(d)
 
-    return final
+    return main, sub, final_detail
 
 
 # ================================
-# 🔥 主流程
+# 🔥 主流程（完整版）
 # ================================
 def generate():
 
@@ -209,15 +214,14 @@ def generate():
         decision = result.get("decision")
         decision_type = result.get("decision_type")
 
-        if decision_type == "none":
-            if result.get("event_breakout"):
-                decision_type = "breakout"
-            elif result.get("event_pullback"):
-                decision_type = "pullback"
+        # ===== 交易數據 =====
+        buy = result.get("buy")
+        stop = result.get("stop")
+        rr = result.get("rr")
+        risk = result.get("risk")
+        position = result.get("position")
 
         conditions = condition_engine(result)
-
-        grade = result.get("market_grade")
         stage = stage_detection(price, closes)
 
         decisions.append(decision)
@@ -225,25 +229,50 @@ def generate():
         # ===== 標題 =====
         msg += f"【{name}】{score_to_text(conditions)}\n"
 
-        if grade:
-            msg += f"🌍 市場：{grade}\n"
+        if result.get("market_grade"):
+            msg += f"🌍 市場：{result.get('market_grade')}\n"
 
         stage_text = stage_to_text(stage)
         if stage_text:
             msg += f"{stage_text}\n"
 
-        # ===== 非BUY =====
-        if decision != "BUY":
+        # =========================
+        # 🔥 BUY
+        # =========================
+        if decision == "BUY":
+
+            msg += "👉 🟢 可進場\n"
+            msg += f"📍 Buy: {safe_round(buy)}\n"
+            msg += f"🛑 Stop: {safe_round(stop)}\n"
+            msg += f"🎯 RR: {safe_round(rr,2)}\n"
+
+            if risk is not None:
+                msg += f"⚠️ Risk: {round(risk*100,1)}%\n"
+
+            if position is not None:
+                msg += f"📊 倉位: {round(position*100)}%\n"
+
+        # =========================
+        # 🔥 非BUY
+        # =========================
+        else:
 
             msg += "👉 還不能做\n" if decision == "WAIT" else "👉 不要做\n"
 
-            signals = build_signals(
+            main, sub, detail = build_signals(
                 result, conditions, decision_type,
                 price, ma5, ma20, closes
             )
 
-            for r in signals[:3]:
+            for r in main[:2]:
                 msg += f"- {r}\n"
+
+            if len(main) < 2:
+                for r in sub[:1]:
+                    msg += f"- {r}\n"
+
+            if detail:
+                msg += f"（{' / '.join(detail[:2])}）\n"
 
         # ===== 價格 =====
         msg += f"💰 現價 {safe_round(price)}（{safe_round(change,2)}%）\n\n"
