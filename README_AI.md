@@ -1,4 +1,4 @@
-🔥 AI交易系統守則（FINAL v8.5｜精簡可維護版｜含資料庫表）
+🔥 AI交易系統守則（FINAL v8.6｜無漏洞可維護版｜含資料庫表）
 
 本文件 = 系統唯一行為來源  
 所有模組必須遵守  
@@ -30,6 +30,10 @@ decision_type：
 - pullback
 - none
 
+🔥 v8.6 強制：
+- WAIT / NO_TRADE 必須有 decision_type（除非市場層終止）
+- NO_TRADE → risk = 0、rr = 0（不得殘留）
+
 禁止：
 - 多 decision
 - AI 參與決策
@@ -42,7 +46,7 @@ decision_type：
 
 市場 → 結構 → 趨勢 → 量能 → 事件 → Edge → 風控 → 倉位 → decision
 
-任一階段不成立 → 停止流程
+任一階段不成立 → 立即停止流程（不得往下）
 
 --------------------------------------------------
 
@@ -55,7 +59,7 @@ decision_type：
 3. 有Edge（對應條件成立）
 4. 風控合格（risk / RR）
 
-缺一不可 → 不交易
+缺一不可 → NO_TRADE
 
 --------------------------------------------------
 
@@ -73,18 +77,22 @@ RR：
 
 不成立 → NO_TRADE
 
+🔥 v8.6：
+- NO_TRADE 不得保留 risk / rr
+- risk / rr 僅允許存在於 BUY / WAIT（已計算）
+
 --------------------------------------------------
 
 五、倉位系統
 
-risk ≤ 0.03 → 1.0
-risk ≤ 0.05 → 0.7
-risk ≤ 0.08 → 0.5
-> 0.08 → NO_TRADE
+risk ≤ 0.03 → 1.0  
+risk ≤ 0.05 → 0.7  
+risk ≤ 0.08 → 0.5  
+> 0.08 → NO_TRADE  
 
 市場調整：
-- CHOPPY → ×0.7
-- WEAK → 0
+- CHOPPY → ×0.7  
+- WEAK → 0  
 
 --------------------------------------------------
 
@@ -106,6 +114,10 @@ risk ≤ 0.08 → 0.5
  "rr": True/False
 }
 
+🔥 v8.6：
+- decision = NO_TRADE → 不得輸出 event / edge / risk / rr = True
+- decision_type 不合法 → 僅允許 market / structure / trend / volume
+
 禁止：
 - 推論 decision
 - 新增策略
@@ -117,18 +129,26 @@ risk ≤ 0.08 → 0.5
 
 BUY：
 - 顯示：進場 / 停損 / RR
-- 顯示：是否接近進場點
+- 顯示：倉位
+- 顯示：市場評級
 
 WAIT：
 - 顯示：缺少條件（轉人話）
 - 最多顯示 3 個
 
 NO_TRADE：
-- 顯示：禁止原因（轉人話）
+- 顯示：禁止原因（僅限 market / trend / volume）
+
+🔥 v8.6：
+- 顯示層必須以 decision 為唯一依據
+- 禁止使用：
+  - market_signal 判斷交易
+  - MA / 價格自行推論
+- detail 必須來自 result（analysis）
 
 禁止：
 - 顯示層自行做決策
-- 使用策略邏輯判斷
+- 顯示與 decision 不一致內容
 
 --------------------------------------------------
 
@@ -147,111 +167,94 @@ stock_api → analysis → strategy → condition_engine → generator → learn
 
 project/
 
- main.py
- app.py
- config.py
- render.yaml
- requirements.txt
+ main.py  
+ app.py  
+ config.py  
+ render.yaml  
+ requirements.txt  
 
- core/
-  generator.py
-  condition_engine.py
-  utils.py
+ core/  
+  generator.py  
+  condition_engine.py  
+  utils.py  
 
- services/
-  analysis.py
-  ai.py
-  learning.py
-  notifier.py
-  stock_api.py
+ services/  
+  analysis.py  
+  ai.py  
+  learning.py  
+  notifier.py  
+  stock_api.py  
 
 --------------------------------------------------
 
-十、檔案職責（重點）
+十、檔案職責（強化）
 
 analysis.py：
-- 計算市場 / 趨勢 / 結構 / 量能
-- 判斷 event（breakout / pullback）
-- 拆解 edge
-- 計算 risk / RR / position
-→ 輸出 strategy 結果
+- 唯一決策來源
+- 必須輸出完整 decision_type
 
 condition_engine.py：
-- 將結果轉為條件 True/False
-→ 用於顯示
+- 僅做映射
+- 不得在 NO_TRADE 產生假條件
 
 generator.py：
-- 顯示結果（人話）
-→ 不參與決策
+- 僅顯示
+- 不得推論策略
 
 learning.py：
-- 記錄交易資料（Supabase）
-→ 不影響策略
-
-stock_api.py：
-- 提供價格 / MA / 量能
-
-ai.py：
-- 解釋 decision（單一句）
-→ 不參與決策
-
-main.py / app.py：
-- 控制流程與排程
+- 僅記錄
+- 不影響策略
 
 --------------------------------------------------
 
-十一、資料庫表結構（Supabase｜固定｜不可修改）
+十一、資料庫表（Supabase｜固定）
 
 Table: trades
 
 欄位名稱        型別        說明
 ----------------------------------------
-id              bigint      主鍵（自動）
+id              bigint      主鍵
 created_at      timestamp   建立時間
 stock           text        股票名稱
 decision        text        BUY / WAIT / NO_TRADE
-price           numeric     當下價格（現價）
+price           numeric     現價
 buy             numeric     進場價
 stop            numeric     停損價
 ma5             numeric     MA5
 ma20            numeric     MA20
 volume          text        量能狀態
 trend           text        趨勢狀態
-result          text        結果（win/loss/breakeven）
+result          text        結果
 price_after     text        後續價格
 status          text        pending / closed
 source          text        訊號來源
-trade_date      date        交易日期
-extra_data      jsonb       擴展欄位（策略細節）
-
-----------------------------------------
+trade_date      date        日期
+extra_data      jsonb       策略細節
 
 寫入規則（強制）：
 
 - decision 必須使用（禁止 action）
-- price = 現價（不可用 buy 取代）
-- buy / stop 必須存在（BUY時）
-- stop < buy
+- price = 現價
+- BUY：
+  - 必須有 buy / stop
+  - stop < buy
+- NO_TRADE：
+  - 不得有 buy / stop
 - status 預設 = "pending"
-- extra_data 必須為 dict(JSON)
+- extra_data 必須為 dict
 
 禁止：
-
-- 新增不存在欄位
-- 修改欄位名稱
-- 寫入未定義欄位
+- 修改欄位
+- 新增欄位
 
 --------------------------------------------------
 
 十二、結果驗證（強制）
 
-每次輸出必須符合：
-
 - BUY 必須有 buy / stop / rr
 - stop < buy
-- NO_TRADE 不得有 buy
-
-否則 → 系統錯誤
+- NO_TRADE 不得有 buy / stop
+- decision_type 必須存在（除非市場終止）
 
 --------------------------------------------------
 
@@ -269,11 +272,10 @@ extra_data      jsonb       擴展欄位（策略細節）
 WAIT 狀態下：
 
 若出現：
-- 跌破支撐
 - trend = DOWN
 - volume = DISTRIBUTION
 
-→ 強制 NO_TRADE
+→ 必須轉 NO_TRADE（由 strategy）
 
 --------------------------------------------------
 
@@ -281,7 +283,8 @@ WAIT 狀態下：
 
 sum(risk × position) ≤ 0.06
 
-超過 → 禁止新增 BUY
+🔥 v8.6：
+- 超過 → 禁止新增 BUY
 
 --------------------------------------------------
 
@@ -294,20 +297,23 @@ sum(risk × position) ≤ 0.06
 - 無Edge
 - AI決策
 - 修改 decision
+- decision_type 缺失
 - DB 欄位亂改
 
 --------------------------------------------------
 
 十七、最終原則
 
-沒有市場 → 不交易
-沒有事件 → 不交易
-沒有Edge → 不交易
-沒有風控 → 不允許存在
+沒有市場 → 不交易  
+沒有事件 → 不交易  
+沒有Edge → 不交易  
+沒有風控 → 不允許存在  
 
 --------------------------------------------------
 
-🔥 v8.5 本質：
+🔥 v8.6 本質：
 
 不是找股票  
-是只做「已經站在你這邊的交易」
+不是找機會  
+
+是只允許「所有條件同時成立」的交易存在
