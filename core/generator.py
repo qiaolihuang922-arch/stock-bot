@@ -58,34 +58,33 @@ def safe_list(data, n=20):
 
 
 # ================================
-# 🔥 強度評分
+# 🔥 ⭐ 評分系統（重構版）
 # ================================
 def score_to_text(conditions):
 
-    weights = {
-        "event": 2,
-        "edge": 2,
-        "risk": 1.5,
-        "rr": 1.5,
-        "volume": 1,
-        "trend": 1,
-        "market": 1,
-        "structure": 1
-    }
+    # ❌ 直接淘汰
+    if not conditions["trend"] or not conditions["market"]:
+        return "❌ 不成立（別碰）"
 
-    score = sum(weights[k] for k, v in conditions.items() if v)
+    # 🟢 完整成立
+    if all([
+        conditions["event"],
+        conditions["edge"],
+        conditions["risk"],
+        conditions["rr"]
+    ]):
+        return "🟢 可進場"
 
-    if score >= 8:
-        return "🔥 很強（可準備）"
-    elif score >= 6:
-        return "👍 不錯（差一步）"
-    elif score >= 4:
-        return "👌 普通（先觀察）"
-    return "❌ 很弱（別碰）"
+    # 🟡 接近成立（最重要）
+    if conditions["edge"] or conditions["event"]:
+        return "🟡 準備中（接近機會）"
+
+    # 👀 還在形成
+    return "👀 觀察中"
 
 
 # ================================
-# 🔥 階段判斷（防呆版）
+# 🔥 階段判斷
 # ================================
 def stage_detection(price, closes):
 
@@ -142,15 +141,17 @@ def build_signals(result, conditions, decision_type, price, ma5, ma20, closes):
 
     main, sub, detail = [], [], []
 
+    # 🔥 主因（交易核心）
     for k in ["event", "edge", "risk", "rr"]:
         if not conditions.get(k):
             main.append(translate_condition(k))
 
+    # 次因
     for k in ["volume", "trend", "market"]:
         if not conditions.get(k):
             sub.append(translate_condition(k))
 
-    # Edge
+    # Edge細節
     if decision_type == "breakout":
         if result.get("edge_consolidation") is False:
             detail.append("盤整不夠")
@@ -184,12 +185,11 @@ def build_signals(result, conditions, decision_type, price, ma5, ma20, closes):
     elif dist < 0.05:
         detail.append("接近壓力")
 
-    # 去重
     return list(dict.fromkeys(main)), list(dict.fromkeys(sub)), list(dict.fromkeys(detail))
 
 
 # ================================
-# 🔥 主流程（最終穩定版）
+# 🔥 主流程（最終版）
 # ================================
 def generate():
 
@@ -241,6 +241,7 @@ def generate():
 
         decisions.append(decision)
 
+        # ===== 標題（已修正）
         msg += f"【{name}】{score_to_text(conditions)}\n"
 
         if result.get("market_grade"):
@@ -250,7 +251,7 @@ def generate():
         if stage_text:
             msg += f"{stage_text}\n"
 
-        # ================= BUY =================
+        # ===== BUY =====
         if decision == "BUY":
 
             msg += "👉 🟢 可進場\n"
@@ -264,7 +265,6 @@ def generate():
             if position:
                 msg += f"📊 倉位: {round(position*100)}%\n"
 
-            # 🔥 入庫（只在BUY）
             record_trade(
                 name=name,
                 action=decision,
@@ -278,7 +278,7 @@ def generate():
                 extra_data=result
             )
 
-        # ================= 非BUY =================
+        # ===== 非BUY =====
         else:
 
             msg += "👉 還不能做\n" if decision == "WAIT" else "👉 不要做\n"
