@@ -1,5 +1,5 @@
 # ================================
-# 🔥 condition_engine.py（FINAL v8）
+# 🔥 condition_engine.py（FINAL v8.5+）
 # ================================
 
 """
@@ -10,7 +10,7 @@
 嚴格遵守：
 - 不改 decision
 - 不推論 decision
-- 不新增邏輯
+- 不新增策略
 - 所有條件來源必須來自 analysis
 """
 
@@ -53,23 +53,29 @@ def condition_engine(result):
     # 🔥 條件判斷（只映射，不推論）
     # ================================
 
-    # 市場
+    # ===== 市場 =====
     if market and market != "WEAK":
         conditions["market"] = True
 
-    # 結構
+    # ===== 結構 =====
     if structure in ["STRONG", "NORMAL"]:
         conditions["structure"] = True
 
-    # 趨勢
+    # ===== 趨勢 =====
     if trend == "UP":
         conditions["trend"] = True
 
-    # 量能
-    if volume not in ["WEAK", "DISTRIBUTION"]:
+    # ===== 量能（修正 None 問題）=====
+    if volume and volume not in ["WEAK", "DISTRIBUTION"]:
         conditions["volume"] = True
 
-    # 事件（嚴格來自 analysis）
+    # ================================
+    # 🔥 decision_type 防呆（關鍵修正）
+    # ================================
+    if decision_type not in ["breakout", "pullback"]:
+        return conditions
+
+    # ===== 事件（嚴格來自 analysis）=====
     if decision_type == "breakout":
         if event_breakout:
             conditions["event"] = True
@@ -78,7 +84,7 @@ def condition_engine(result):
         if event_pullback:
             conditions["event"] = True
 
-    # Edge（不得簡化）
+    # ===== Edge（不得簡化）=====
     if decision_type == "breakout":
         if (
             edge_consolidation is True and
@@ -93,11 +99,11 @@ def condition_engine(result):
         ):
             conditions["edge"] = True
 
-    # 風控
+    # ===== 風控 =====
     if risk is not None and 0 < risk <= 0.08:
         conditions["risk"] = True
 
-    # RR
+    # ===== RR =====
     if rr is not None:
         if decision_type == "breakout" and rr >= 1.8:
             conditions["rr"] = True
@@ -112,15 +118,15 @@ def condition_engine(result):
 # ================================
 def summarize_conditions(c, decision):
 
-    # ===== BUY：顯示 OK =====
+    # ===== BUY：顯示成立條件 =====
     if decision == "BUY":
         return [k for k, v in c.items() if v]
 
-    # ===== WAIT：顯示缺少 =====
+    # ===== WAIT：顯示缺少條件 =====
     elif decision == "WAIT":
         return [k for k, v in c.items() if not v]
 
-    # ===== NO_TRADE：只顯示致命 =====
+    # ===== NO_TRADE：只顯示致命條件 =====
     elif decision == "NO_TRADE":
         priority = ["market", "trend", "volume"]
         return [k for k in priority if not c.get(k)]
