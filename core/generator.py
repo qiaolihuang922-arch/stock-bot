@@ -60,7 +60,27 @@ def translate_conditions(cond_list):
 
 
 # ================================
-# 🔥 評分（不影響 decision）
+# 🔥 進場劇本（強化版）
+# ================================
+def entry_plan(price, buy):
+
+    if not buy:
+        return "", "", 0
+
+    diff = (price - buy) / buy
+
+    if diff > 0.02:
+        return "追高區（風險高）", "不要追，等回踩", diff
+    elif diff > 0.005:
+        return "偏高區", "可小倉或等回踩", diff
+    elif diff >= -0.005:
+        return "理想區", "可以進場", diff
+    else:
+        return "尚未觸發", "等待價格到位", diff
+
+
+# ================================
+# 🔥 評分
 # ================================
 def score_system(market, trend, structure, momentum, rr):
 
@@ -107,7 +127,6 @@ def generate():
 
     for name, code in stocks.items():
 
-        # ===== 取得資料 =====
         twse = get_twse(code)
         yahoo = get_yahoo(code)
 
@@ -132,7 +151,6 @@ def generate():
             ma5 = price
             ma20 = price
 
-        # ===== 策略 =====
         result = strategy(price, ma5, ma20, closes, volumes)
 
         decision = result.get("decision")
@@ -147,13 +165,11 @@ def generate():
         structure = result.get("structure_state")
         momentum = result.get("momentum_state")
 
-        # ===== 評分 =====
         score = score_system(market, trend, structure, momentum, rr)
         score_text = score_to_text(score)
 
         decisions.append(decision)
 
-        # ===== 條件引擎 =====
         conditions = condition_engine(result)
         summary = summarize_conditions(conditions, decision)
 
@@ -174,38 +190,38 @@ def generate():
             except:
                 pass
 
-        # ===== 候選 =====
         if decision == "BUY":
             candidates.append((decision_type, rr, risk, name, buy, stop, score))
 
-        # ================================
-        # 🔥 顯示層（人話實戰版）
-        # ================================
         msg += f"【{name}】{score_text}\n"
 
-        # ===== BUY =====
+        # ================================
+        # 🔥 BUY（強化）
+        # ================================
         if decision == "BUY":
+
+            zone, action, diff = entry_plan(price, buy)
 
             msg += "👉 可以進場\n"
 
             if decision_type == "breakout":
-                msg += "→ 已突破（強勢）\n"
-            elif decision_type == "pullback":
-                msg += "→ 回踩撐住（低風險）\n"
+                msg += "→ 突破（順勢）\n"
+            else:
+                msg += "→ 回踩（低風險）\n"
 
             msg += f"🎯 進場 {safe_round(buy)} ｜ 停損 {safe_round(stop)}\n"
             msg += f"📊 RR {rr} ｜ {risk_to_text(risk)}\n"
 
-            # 價格位置
-            if price > buy:
-                msg += "⚠️ 已高於進場點（勿追）\n"
-            elif abs(price - buy) / buy < 0.01:
-                msg += "👉 接近進場點\n"
+            msg += f"📍 位置：{zone}\n"
+            msg += f"👉 操作：{action}\n"
 
-            if summary:
-                msg += "✅ 條件完整\n"
+            # 🔥 新增：風險提示（超重要）
+            if diff > 0.02:
+                msg += "❗ 已偏離進場點，避免追高\n"
 
-        # ===== WAIT =====
+        # ================================
+        # 🔥 WAIT（優化）
+        # ================================
         elif decision == "WAIT":
 
             msg += "👉 還不能做\n"
@@ -215,25 +231,29 @@ def generate():
             for r in reasons[:3]:
                 msg += f"- {r}\n"
 
+            if len(reasons) >= 3:
+                msg += "👉 距離進場還很遠\n"
+
             if "event" in summary:
                 msg += "👉 等突破 / 訊號出現\n"
 
-        # ===== NO TRADE =====
+        # ================================
+        # 🔥 NO_TRADE（精準）
+        # ================================
         else:
 
             msg += "👉 不要做\n"
 
-            reasons = translate_conditions(summary)
+            priority = ["market", "trend", "volume"]
+            reasons = [r for r in summary if r in priority]
+
+            reasons = translate_conditions(reasons)
 
             for r in reasons:
                 msg += f"- {r}\n"
 
-        # ===== 價格 =====
         msg += f"💰 現價 {safe_round(price)}（{safe_round(change,2)}%）\n\n"
 
-    # ================================
-    # 🔥 總結
-    # ================================
     msg += "====================\n"
 
     if any(d == "BUY" for d in decisions):
@@ -241,9 +261,6 @@ def generate():
     else:
         msg += "⏳ 今天沒好機會，先觀望\n"
 
-    # ================================
-    # 🔥 最佳標的
-    # ================================
     if candidates:
         best = sorted(candidates, key=lambda x: (
             x[0] == "breakout",
