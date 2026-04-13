@@ -1,12 +1,12 @@
 # ================================
-# 🔥 FINAL（顯示層 + 行動指令版）
+# 🔥 FINAL（顯示層穩定最終版）
 # ================================
 
 from datetime import datetime
 import pytz
 
 from services.stock_api import get_twse, get_yahoo, get_realtime_price
-from services.analysis import strategy
+from services.analysis import strategy, pick_best_stock
 from core.condition_engine import condition_engine
 
 tz = pytz.timezone("Asia/Taipei")
@@ -23,56 +23,45 @@ stocks = {
 
 
 # ================================
-# 🔥 行動統一（🔥關鍵修正）
+# 🔥 行動（100% 跟策略）
 # ================================
-def get_action(result, price, ma5):
+def get_action(result):
 
-    decision = result.get("decision")
-    pos = result.get("position") or 0
+    action = result.get("action", 0)
+    action_type = result.get("action_type")
 
-    # ❌ 全出
-    if decision == "NO_TRADE":
+    if action_type == "SELL_ALL":
         return "🔴 賣出 100%"
 
-    # 🟢 買（直接用倉位）
+    if action_type == "BUY":
+        return f"🟢 買進 {round(action*100)}%"
+
+    return "⏳ 不動"
+
+
+# ================================
+# 🔥 解釋（完全不影響決策）
+# ================================
+def explain(result, conditions, stage):
+
+    decision = result.get("decision")
+
     if decision == "BUY":
-        return f"🟢 買進 {round(pos*100)}%"
 
-    # ===== WAIT =====
+        t = result.get("decision_type")
 
-    if pos >= 0.4:
-        return f"⚪ 持有（目標 {round(pos*100)}%）"
+        if t == "breakout":
+            return "突破壓力"
+        elif t == "pullback":
+            return "回踩轉強"
+        elif t == "early":
+            return "提前卡位"
 
-    if pos >= 0.2:
-        return f"🟡 降至 {round(pos*100)}%"
+        return "訊號成立"
 
-    return "⏳ 空手觀望"
-
-
-# ================================
-# 🔥 人話（保留）
-# ================================
-def explain_buy(result):
-
-    t = result.get("decision_type")
-
-    if t == "breakout":
-        return "突破壓力區"
-    elif t == "pullback":
-        return "回踩支撐轉強"
-    elif t == "early":
-        return "提前卡位"
-
-    return "訊號成立"
-
-
-def explain_wait(result, conditions, stage):
-
+    # WAIT
     if stage == "BREAKOUT_READY":
         return "接近突破，等觸發"
-
-    if (result.get("position") or 0) >= 0.3:
-        return "市場偏強，可留意"
 
     if not conditions.get("event"):
         return "等待觸發"
@@ -84,42 +73,7 @@ def explain_wait(result, conditions, stage):
 
 
 # ================================
-# 🔥 加碼提示（保留）
-# ================================
-def detect_add_position(result, price, ma5):
-
-    if result.get("decision") != "BUY":
-        return None
-
-    if (
-        result.get("trend") == "UP" and
-        result.get("volume_state") == "STRONG" and
-        ma5 and abs(price - ma5) / ma5 < 0.02
-    ):
-        return "📈 強勢延續，可考慮加碼"
-
-    return None
-
-
-# ================================
-# 🔥 倉位顯示（保留但不主導）
-# ================================
-def build_action(result, conditions, stage):
-
-    decision = result.get("decision")
-    position = result.get("position") or 0
-
-    if decision == "NO_TRADE":
-        return "0%", "條件不成立"
-
-    if decision == "BUY":
-        return f"{round(position*100)}%", explain_buy(result)
-
-    return f"{round(position*100)}%", explain_wait(result, conditions, stage)
-
-
-# ================================
-# 🔥 工具（全部保留）
+# 🔥 工具
 # ================================
 def get_market_phase():
     now = datetime.now(tz)
@@ -153,23 +107,6 @@ def safe_list(data, n=20):
     return data
 
 
-def score_to_text(conditions, result):
-
-    decision = result.get("decision")
-    pos = result.get("position") or 0
-
-    if decision == "NO_TRADE":
-        return "❌ 不成立"
-
-    if decision == "BUY":
-        return "🟢 進場訊號"
-
-    if pos >= 0.3:
-        return "🟡 準備進場"
-
-    return "👀 觀察中"
-
-
 def stage_detection(price, closes):
     closes = safe_list(closes)
 
@@ -196,31 +133,35 @@ def stage_to_text(stage):
     }.get(stage)
 
 
-def translate_condition(k):
-    return {
+def build_signals(result, conditions):
+
+    decision = result.get("decision")
+
+    # 🔴 NO_TRADE → 只顯示致命問題
+    if decision == "NO_TRADE":
+        keys = ["market", "trend", "volume"]
+    else:
+        keys = ["event", "edge", "volume"]
+
+    mapping = {
         "event": "尚未觸發",
         "edge": "型態未完成",
-        "risk": "風控不合",
-        "rr": "報酬不足",
         "volume": "量能不足",
         "trend": "趨勢不對",
         "market": "市場不佳"
-    }.get(k, k)
-
-
-def build_signals(result, conditions):
+    }
 
     msgs = []
 
-    for k in ["event", "edge", "volume"]:
+    for k in keys:
         if not conditions.get(k):
-            msgs.append(translate_condition(k))
+            msgs.append(mapping.get(k, k))
 
     return msgs[:3]
 
 
 # ================================
-# 🔥 主流程（最終完整版）
+# 🔥 主流程（穩定版）
 # ================================
 def generate():
 
@@ -230,6 +171,7 @@ def generate():
     msg = f"【{now.strftime('%m/%d')} {phase}】\n\n"
 
     decisions = []
+    results_map = {}
 
     for name, code in stocks.items():
 
@@ -261,29 +203,28 @@ def generate():
         stage = stage_detection(price, closes)
 
         decisions.append(result.get("decision"))
+        results_map[name] = result
 
-        # 🔥 行動（唯一主軸）
-        action = get_action(result, price, ma5)
+        # 🔥 行動
+        action = get_action(result)
 
         msg += f"【{name}】{action}\n"
 
+        # 🌍 市場
         if result.get("market_grade"):
             msg += f"🌍 市場：{result.get('market_grade')} ｜ {stage_to_text(stage)}\n"
 
-        # 💡 理由
-        _, reason = build_action(result, conditions, stage)
-        msg += f"💡 {reason}\n"
+        # 💡 解釋（完全對齊 decision）
+        msg += f"💡 {explain(result, conditions, stage)}\n"
 
+        # 🟢 BUY 顯示
         if result.get("decision") == "BUY":
-
-            add = detect_add_position(result, price, ma5)
-            if add:
-                msg += f"{add}\n"
 
             msg += f"📍 Buy: {safe_round(result.get('buy'))}\n"
             msg += f"🛑 Stop: {safe_round(result.get('stop'))}\n"
             msg += f"🎯 RR: {safe_round(result.get('rr'),2)}\n"
 
+        # ⚪ WAIT / ❌ NO_TRADE
         else:
             signals = build_signals(result, conditions)
             for r in signals:
@@ -291,7 +232,13 @@ def generate():
 
         msg += f"💰 {safe_round(price)}（{safe_round(change,2)}%）\n\n"
 
+    # ================================
+    # 🔥 最強股
+    # ================================
+    best, score = pick_best_stock(results_map)
+
     msg += "====================\n"
+    msg += f"🔥 今日最強：{best}（強度 {score}）\n\n"
 
     if any(d == "BUY" for d in decisions):
         msg += "🟢 有交易機會"
