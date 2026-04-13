@@ -228,8 +228,8 @@ def support_resistance(closes):
 
 def event_breakout(price, closes, resistance, volumes):
     avg5 = avg(volumes[-5:])
-    near = closes[-1] > resistance * 0.995
-    return near and volumes[-1] > avg5 * 1.3
+    near = closes[-1] > resistance * 0.99
+    return near and volumes[-1] > avg5 * 1.2
 
 
 def event_pullback(price, ma5, closes):
@@ -263,9 +263,9 @@ def risk_control(buy, stop, resistance, mode):
     target = buy + (buy - stop) * 2 if mode == "breakout" else resistance
     rr = (target - buy) / (buy - stop) if (buy - stop) else 0
 
-    if mode == "breakout" and rr < 1.8:
+    if mode == "breakout" and rr < 1.5:
         return False, risk, rr
-    if mode == "pullback" and rr < 1.5:
+    if mode == "pullback" and rr < 1.3:
         return False, risk, rr
 
     return True, risk, rr
