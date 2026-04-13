@@ -1,5 +1,5 @@
 # ================================
-# 🔥 FINAL（顯示層 + 行動版）
+# 🔥 FINAL（顯示層 + 行動指令版）
 # ================================
 
 from datetime import datetime
@@ -23,45 +23,43 @@ stocks = {
 
 
 # ================================
-# 🔥 行動判斷（新增，不影響策略）
+# 🔥 行動統一（🔥關鍵修正）
 # ================================
 def get_action(result, price, ma5):
 
     decision = result.get("decision")
-    position = result.get("position") or 0
+    pos = result.get("position") or 0
     trend = result.get("trend")
     volume = result.get("volume_state")
     buy = result.get("buy")
 
+    # ❌ 全出
     if decision == "NO_TRADE":
-        return "❌ 觀望"
+        return "🔴 賣出 100%"
 
+    # 🟢 進場
     if decision == "BUY":
-        return "🟢 買入"
+        return f"🟢 買進 {round(pos*100)}%"
 
-    # 🔴 出場邏輯（補上缺口）
-    if trend == "DOWN":
-        return "🔴 賣出"
+    # ===== 以下是 WAIT 狀態 =====
 
-    if volume == "DISTRIBUTION":
-        return "🔴 賣出"
+    # 🔴 明確轉弱 → 出場
+    if trend == "DOWN" or volume == "DISTRIBUTION":
+        return "🔴 賣出 50%"
 
     # 🟡 減碼
     if buy and price >= buy * 1.05:
-        return "🟡 減碼"
+        return "🟡 減碼 50%"
 
     if ma5 and price < ma5:
-        return "🟡 減碼"
+        return "🟡 減碼 50%"
 
-    # ⚪ 持有
-    if position > 0:
-        return "⚪ 持有"
-
-    return "👀 觀察"
+    # ⏳ 不動
+    return "⏳ 不動"
 
 
 # ================================
-# 🔥 人話模組（保留）
+# 🔥 人話（保留）
 # ================================
 def explain_buy(result):
 
@@ -113,7 +111,7 @@ def detect_add_position(result, price, ma5):
 
 
 # ================================
-# 🔥 核心（只顯示策略結果）
+# 🔥 倉位顯示（保留但不主導）
 # ================================
 def build_action(result, conditions, stage):
 
@@ -231,7 +229,7 @@ def build_signals(result, conditions):
 
 
 # ================================
-# 🔥 主流程（完整版）
+# 🔥 主流程（最終完整版）
 # ================================
 def generate():
 
@@ -268,25 +266,21 @@ def generate():
             ma20 = price
 
         result = strategy(price, ma5, ma20, closes, volumes)
-
         conditions = condition_engine(result)
         stage = stage_detection(price, closes)
 
         decisions.append(result.get("decision"))
 
-        # 🔥 行動（新增）
+        # 🔥 行動（唯一主軸）
         action = get_action(result, price, ma5)
 
-        msg += f"【{name}】{score_to_text(conditions, result)}｜{action}\n"
+        msg += f"【{name}】{action}\n"
 
         if result.get("market_grade"):
-            msg += f"🌍 市場：{result.get('market_grade')}\n"
+            msg += f"🌍 市場：{result.get('market_grade')} ｜ {stage_to_text(stage)}\n"
 
-        msg += f"{stage_to_text(stage)}\n"
-
-        size, reason = build_action(result, conditions, stage)
-
-        msg += f"👉 建議倉位：{size}\n"
+        # 💡 理由
+        _, reason = build_action(result, conditions, stage)
         msg += f"💡 {reason}\n"
 
         if result.get("decision") == "BUY":
@@ -301,16 +295,15 @@ def generate():
 
         else:
             signals = build_signals(result, conditions)
-
             for r in signals:
                 msg += f"- {r}\n"
 
-        msg += f"💰 現價 {safe_round(price)}（{safe_round(change,2)}%）\n\n"
+        msg += f"💰 {safe_round(price)}（{safe_round(change,2)}%）\n\n"
 
     msg += "====================\n"
 
     if any(d == "BUY" for d in decisions):
-        msg += "🟢 市場有機會"
+        msg += "🟢 有交易機會"
     else:
         msg += "⏳ 市場觀望"
 
