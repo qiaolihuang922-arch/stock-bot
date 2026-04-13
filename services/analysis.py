@@ -1,5 +1,5 @@
 # ================================
-# 🔥 analysis.py（FINAL v10｜穩定可上線版）
+# 🔥 analysis.py（FINAL v10.2｜完整無缺漏版）
 # ================================
 
 # ===== 工具 =====
@@ -47,7 +47,54 @@ def strength_score(result):
 
 
 # ================================
-# 🔥 統一輸出（🔥補回）
+# 🔥 補回（❗你原本就有用，但剛漏）
+# ================================
+def market_score(market, trend, structure, volume, momentum):
+
+    score = 0
+
+    if market == "STRONG":
+        score += 2
+    elif market == "CHOPPY":
+        score += 1
+    elif market == "WEAK":
+        score -= 2
+
+    if trend == "UP":
+        score += 2
+    elif trend == "DOWN":
+        score -= 2
+
+    if structure == "STRONG":
+        score += 2
+    elif structure == "WEAK":
+        score -= 1
+
+    if volume == "STRONG":
+        score += 2
+    elif volume == "DISTRIBUTION":
+        score -= 2
+
+    if momentum == "ACCELERATING":
+        score += 1
+    else:
+        score -= 0.5
+
+    return score
+
+
+def market_grade(score):
+    if score >= 6:
+        return "A"
+    elif score >= 3:
+        return "B"
+    elif score >= 0:
+        return "C"
+    return "D"
+
+
+# ================================
+# 🔥 統一輸出
 # ================================
 def build_result(**kwargs):
 
@@ -154,10 +201,10 @@ def structure_hold(closes):
 
 
 # ================================
-# 🔥 壓力 / 事件（🔥優化）
+# 🔥 壓力 / 事件
 # ================================
 def support_resistance(closes):
-    return min(closes[-20:]), max(closes[-20:-3])  # 🔥避免過高壓力
+    return min(closes[-20:]), max(closes[-20:-3])
 
 
 def event_breakout(price, closes, resistance, volumes):
@@ -183,7 +230,7 @@ def edge_first_pullback(closes, ma20):
 
 
 # ================================
-# 🔥 風控（🔥放寬）
+# 🔥 風控
 # ================================
 def risk_control(buy, stop, resistance, mode):
 
@@ -249,7 +296,7 @@ def position_size(risk, market):
 
 
 # ================================
-# 🔥 strategy（核心）
+# 🔥 strategy（完全保留你邏輯）
 # ================================
 def strategy(price, ma5, ma20, closes, volumes):
 
@@ -268,7 +315,6 @@ def strategy(price, ma5, ma20, closes, volumes):
     cons = edge_consolidation(closes)
     base_pos = base_position(market, trend, structure, volume)
 
-    # ❌ 排除
     if market == "WEAK" or trend == "DOWN" or volume == "DISTRIBUTION":
         return build_result(decision="NO_TRADE", position=0)
 
@@ -278,7 +324,6 @@ def strategy(price, ma5, ma20, closes, volumes):
     if structure == "WEAK" and not cons:
         return build_result(decision="WAIT", position=base_pos)
 
-    # 🔥 準突破試單（關鍵）
     if trend == "UP" and volume != "WEAK" and price > resistance * 0.97:
         return build_result(
             decision="BUY",
@@ -293,7 +338,6 @@ def strategy(price, ma5, ma20, closes, volumes):
             structure_state=structure
         )
 
-    # 🔥 突破
     if event_breakout(price, closes, resistance, volumes):
 
         if edge_fake_breakout(closes):
@@ -318,7 +362,6 @@ def strategy(price, ma5, ma20, closes, volumes):
                 structure_state=structure
             )
 
-    # 🔥 early（放寬）
     if cons and volume == "NORMAL" and closes[-1] > closes[-2] and trend == "UP":
         return build_result(
             decision="BUY",
@@ -345,7 +388,7 @@ def strategy(price, ma5, ma20, closes, volumes):
 
 
 # ================================
-# 🔥 最強股（避免 import error）
+# 🔥 最強股
 # ================================
 def pick_best_stock(results_dict):
 
