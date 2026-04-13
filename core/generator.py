@@ -58,33 +58,29 @@ def safe_list(data, n=20):
 
 
 # ================================
-# 🔥 ⭐ 評分系統（修正版）
+# 🔥 ⭐ 評分系統（完全對齊 decision）
 # ================================
 def score_to_text(conditions, result):
 
-    # ❌ 只有市場真的弱才禁止
-    if result.get("market_signal") == "WEAK":
+    decision = result.get("decision")
+
+    # 🔴 NO_TRADE
+    if decision == "NO_TRADE":
         return "❌ 不成立（別碰）"
 
-    # 🟢 完整成立
-    if all([
-        conditions["event"],
-        conditions["edge"],
-        conditions["risk"],
-        conditions["rr"]
-    ]):
+    # 🟢 BUY
+    if decision == "BUY":
         return "🟢 可進場"
 
-    # 🟡 接近成立（最重要）
-    if conditions["edge"] or conditions["event"]:
+    # 🟡 WAIT（依條件接近程度）
+    if conditions["event"] or conditions["edge"]:
         return "🟡 準備中（接近機會）"
 
-    # 👀 還在形成
     return "👀 觀察中"
 
 
 # ================================
-# 🔥 階段判斷
+# 🔥 階段判斷（純顯示，不干預策略）
 # ================================
 def stage_detection(price, closes):
 
@@ -94,9 +90,6 @@ def stage_detection(price, closes):
         resistance = max(closes[-20:-3])
     except:
         return "FAR"
-
-    if price < min(closes[-5:]):
-        return "WEAK"
 
     dist = (resistance - price) / price if price else 0
 
@@ -112,8 +105,7 @@ def stage_to_text(stage):
     return {
         "BREAKOUT_READY": "🔥 突破前（重點觀察）",
         "APPROACH": "👀 接近壓力（觀察）",
-        "FAR": "⏳ 尚未接近壓力",
-        "WEAK": "❌ 空方趨勢（避免）"
+        "FAR": "⏳ 尚未接近壓力"
     }.get(stage)
 
 
@@ -133,14 +125,20 @@ def translate_condition(k):
 
 
 # ================================
-# 🔥 訊號整理
+# 🔥 訊號整理（嚴格依 result）
 # ================================
-def build_signals(result, conditions, decision_type, price, ma5, ma20, closes):
-
-    closes = safe_list(closes)
+def build_signals(result, conditions, decision, decision_type):
 
     main, sub, detail = [], [], []
 
+    # ===== NO_TRADE（只顯示致命）=====
+    if decision == "NO_TRADE":
+        for k in ["market", "trend", "volume"]:
+            if not conditions.get(k):
+                main.append(translate_condition(k))
+        return main[:2], [], []
+
+    # ===== WAIT（顯示缺條件）=====
     for k in ["event", "edge", "risk", "rr"]:
         if not conditions.get(k):
             main.append(translate_condition(k))
@@ -149,7 +147,7 @@ def build_signals(result, conditions, decision_type, price, ma5, ma20, closes):
         if not conditions.get(k):
             sub.append(translate_condition(k))
 
-    # Edge細節
+    # ===== Edge細節（只讀 result）=====
     if decision_type == "breakout":
         if result.get("edge_consolidation") is False:
             detail.append("盤整不夠")
@@ -162,26 +160,11 @@ def build_signals(result, conditions, decision_type, price, ma5, ma20, closes):
         if result.get("edge_ma20_trend") is False:
             detail.append("MA20未上升")
 
-    # 價格
-    try:
-        resistance = max(closes[-20:-3])
-    except:
-        resistance = price
-
-    if price < ma20:
-        detail.append("MA20下方（弱勢）")
-    elif price > ma5 > ma20:
-        detail.append("多頭排列")
-
-    if ma5 and ma5 != 0 and abs(price - ma5) / ma5 < 0.02:
-        detail.append("貼近MA5")
-
-    dist = (resistance - price) / price if price else 0
-
-    if dist < 0.02:
-        detail.append("壓力貼近")
-    elif dist < 0.05:
-        detail.append("接近壓力")
+    # ===== 趨勢補充（只用 result）=====
+    if result.get("trend") == "DOWN":
+        detail.append("趨勢偏弱")
+    elif result.get("trend") == "UP":
+        detail.append("多頭結構")
 
     return list(dict.fromkeys(main)), list(dict.fromkeys(sub)), list(dict.fromkeys(detail))
 
@@ -239,7 +222,6 @@ def generate():
 
         decisions.append(decision)
 
-        # ⭐ 修正這裡
         msg += f"【{name}】{score_to_text(conditions, result)}\n"
 
         if result.get("market_grade"):
@@ -249,6 +231,9 @@ def generate():
         if stage_text:
             msg += f"{stage_text}\n"
 
+        # =========================
+        # BUY
+        # =========================
         if decision == "BUY":
 
             msg += "👉 🟢 可進場\n"
@@ -275,13 +260,15 @@ def generate():
                 extra_data=result
             )
 
+        # =========================
+        # WAIT / NO_TRADE
+        # =========================
         else:
 
             msg += "👉 還不能做\n" if decision == "WAIT" else "👉 不要做\n"
 
             main, sub, detail = build_signals(
-                result, conditions, decision_type,
-                price, ma5, ma20, closes
+                result, conditions, decision, decision_type
             )
 
             for r in main[:2]:
