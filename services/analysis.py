@@ -1,5 +1,5 @@
 # ================================
-# 🔥 analysis.py（FINAL v9.5｜完整版）
+# 🔥 analysis.py（FINAL v9.5 FIX｜完整穩定版）
 # ================================
 
 # ===== 工具 =====
@@ -55,7 +55,7 @@ def market_grade(score):
 
 
 # ================================
-# 🔥 統一輸出（修正倉位問題）
+# 🔥 統一輸出
 # ================================
 def build_result(**kwargs):
 
@@ -194,7 +194,7 @@ def event_pullback(price, ma5, closes):
 
 
 # ================================
-# 🔥 Edge（完整保留）
+# 🔥 Edge
 # ================================
 def edge_consolidation(closes):
     return (max(closes[-5:]) - min(closes[-5:])) / closes[-1] < 0.04
@@ -237,8 +237,33 @@ def risk_control(buy, stop, resistance, mode):
 
 
 # ================================
-# 🔥 倉位
+# 🔥 倉位（🔥唯一修改：動態）
 # ================================
+def base_position(market, trend, structure, volume):
+
+    pos = 0
+
+    if market == "STRONG":
+        pos += 0.3
+    elif market == "CHOPPY":
+        pos += 0.2
+    elif market == "NORMAL":
+        pos += 0.1
+
+    if trend == "UP":
+        pos += 0.2
+
+    if structure == "STRONG":
+        pos += 0.2
+
+    if volume == "STRONG":
+        pos += 0.2
+    elif volume == "NORMAL":
+        pos += 0.1
+
+    return round(min(pos, 0.5), 2)
+
+
 def position_size(risk, market):
 
     if risk <= 0.03:
@@ -255,7 +280,7 @@ def position_size(risk, market):
 
 
 # ================================
-# 🔥 🎯 strategy（最終版）
+# 🔥 🎯 strategy（穩定版）
 # ================================
 def strategy(price, ma5, ma20, closes, volumes):
 
@@ -273,15 +298,41 @@ def strategy(price, ma5, ma20, closes, volumes):
 
     cons = edge_consolidation(closes)
 
+    base_pos = base_position(market, trend, structure, volume)
+
     # ===== 過濾 =====
     if market == "WEAK" or trend == "DOWN" or volume == "DISTRIBUTION":
-        return build_result(decision="NO_TRADE", market_signal=market, market_score=m_score, market_grade=m_grade)
+        return build_result(
+            decision="NO_TRADE",
+            position=0,
+            market_signal=market,
+            market_score=m_score,
+            market_grade=m_grade
+        )
 
     if volume == "WEAK":
-        return build_result(decision="WAIT", position=0.2, market_signal=market, market_score=m_score, market_grade=m_grade)
+        return build_result(
+            decision="WAIT",
+            position=base_pos,
+            market_signal=market,
+            trend=trend,
+            volume_state=volume,
+            structure_state=structure,
+            market_score=m_score,
+            market_grade=m_grade
+        )
 
     if structure == "WEAK" and not cons:
-        return build_result(decision="WAIT", position=0.2, market_signal=market, market_score=m_score, market_grade=m_grade)
+        return build_result(
+            decision="WAIT",
+            position=base_pos,
+            market_signal=market,
+            trend=trend,
+            volume_state=volume,
+            structure_state=structure,
+            market_score=m_score,
+            market_grade=m_grade
+        )
 
     # ===== breakout =====
     if event_breakout(price, closes, resistance, volumes):
@@ -300,7 +351,13 @@ def strategy(price, ma5, ma20, closes, volumes):
                 stop=stop,
                 position=position_size(risk, market),
                 risk=risk,
-                rr=rr
+                rr=rr,
+                market_signal=market,
+                trend=trend,
+                volume_state=volume,
+                structure_state=structure,
+                market_score=m_score,
+                market_grade=m_grade
             )
 
     # ===== pullback =====
@@ -310,7 +367,13 @@ def strategy(price, ma5, ma20, closes, volumes):
             return build_result(decision="NO_TRADE")
 
         if not edge_first_pullback(closes, ma20):
-            return build_result(decision="WAIT", position=0.3)
+            return build_result(
+                decision="WAIT",
+                position=max(base_pos, 0.3),
+                market_signal=market,
+                market_score=m_score,
+                market_grade=m_grade
+            )
 
         buy, stop = ma5, min(ma20, support)
         ok, risk, rr = risk_control(buy, stop, resistance, "pullback")
@@ -323,7 +386,13 @@ def strategy(price, ma5, ma20, closes, volumes):
                 stop=stop,
                 position=position_size(risk, market),
                 risk=risk,
-                rr=rr
+                rr=rr,
+                market_signal=market,
+                trend=trend,
+                volume_state=volume,
+                structure_state=structure,
+                market_score=m_score,
+                market_grade=m_grade
             )
 
     # ===== early =====
@@ -338,9 +407,24 @@ def strategy(price, ma5, ma20, closes, volumes):
                 decision_type="early",
                 buy=buy,
                 stop=stop,
-                position=0.3,
+                position=max(base_pos, 0.3),
                 risk=risk,
-                rr=rr
+                rr=rr,
+                market_signal=market,
+                trend=trend,
+                volume_state=volume,
+                structure_state=structure,
+                market_score=m_score,
+                market_grade=m_grade
             )
 
-    return build_result(decision="WAIT", position=0.2)
+    return build_result(
+        decision="WAIT",
+        position=base_pos,
+        market_signal=market,
+        trend=trend,
+        volume_state=volume,
+        structure_state=structure,
+        market_score=m_score,
+        market_grade=m_grade
+    )
