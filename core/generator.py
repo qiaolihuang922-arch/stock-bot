@@ -1,5 +1,5 @@
 # ================================
-# 🔥 修正版（僅修 bug，不改邏輯）
+# 🔥 FINAL（完整穩定版）
 # ================================
 
 from datetime import datetime
@@ -49,13 +49,13 @@ def explain_wait(result, conditions, stage):
     if stage == "BREAKOUT_READY":
         return "接近突破，等觸發"
 
-    if result.get("position", 0) >= 0.3:
+    if (result.get("position") or 0) >= 0.3:
         return "可小倉試單"
 
-    if not conditions["event"]:
+    if not conditions.get("event"):
         return "等待進場訊號"
 
-    if not conditions["edge"]:
+    if not conditions.get("edge"):
         return "型態還沒完成"
 
     return "條件尚未成熟"
@@ -83,12 +83,12 @@ def detect_add_position(result, price, ma5):
 
 
 # ================================
-# 🔥 持倉建議（修正參數）
+# 🔥 持倉建議
 # ================================
 def build_action(result, price, ma5, conditions, stage):
 
     decision = result.get("decision")
-    position = result.get("position", 0)
+    position = result.get("position") or 0
     trend = result.get("trend")
     volume = result.get("volume_state")
     buy = result.get("buy")
@@ -115,7 +115,7 @@ def build_action(result, price, ma5, conditions, stage):
 
 
 # ================================
-# 🔥 其他（原樣保留）
+# 🔥 工具
 # ================================
 def get_market_phase():
     now = datetime.now(tz)
@@ -158,7 +158,7 @@ def score_to_text(conditions, result):
     if decision == "BUY":
         return "🟢 可進場"
 
-    if result.get("position", 0) >= 0.3:
+    if (result.get("position") or 0) >= 0.3:
         return "🟡 準備進場"
 
     return "👀 觀察中"
@@ -205,12 +205,6 @@ def translate_condition(k):
 def build_signals(result, conditions, decision, decision_type):
     main, sub, detail = [], [], []
 
-    if decision == "NO_TRADE":
-        for k in ["market", "trend", "volume"]:
-            if not conditions.get(k):
-                main.append(translate_condition(k))
-        return main[:2], [], []
-
     for k in ["event", "edge", "risk", "rr"]:
         if not conditions.get(k):
             main.append(translate_condition(k))
@@ -235,7 +229,7 @@ def build_signals(result, conditions, decision, decision_type):
 
 
 # ================================
-# 🔥 主流程（修正）
+# 🔥 主流程
 # ================================
 def generate():
 
@@ -273,13 +267,10 @@ def generate():
 
         result = strategy(price, ma5, ma20, closes, volumes)
 
-        decision = result.get("decision")
-        decision_type = result.get("decision_type")
-
         conditions = condition_engine(result)
         stage = stage_detection(price, closes)
 
-        decisions.append(decision)
+        decisions.append(result.get("decision"))
 
         msg += f"【{name}】{score_to_text(conditions, result)}\n"
 
@@ -288,13 +279,12 @@ def generate():
 
         msg += f"{stage_to_text(stage)}\n"
 
-        # ✅ 修正這裡
         size, reason = build_action(result, price, ma5, conditions, stage)
 
         msg += f"👉 建議持倉：{size}\n"
         msg += f"💡 {reason}\n"
 
-        if decision == "BUY":
+        if result.get("decision") == "BUY":
 
             add = detect_add_position(result, price, ma5)
             if add:
@@ -306,7 +296,9 @@ def generate():
 
         else:
             main, sub, detail = build_signals(
-                result, conditions, decision, decision_type
+                result, conditions,
+                result.get("decision"),
+                result.get("decision_type")
             )
 
             for r in main:
