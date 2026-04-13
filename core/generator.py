@@ -20,7 +20,99 @@ stocks = {
 
 
 # ================================
-# 🔥 時間系統
+# 🔥 人話模組
+# ================================
+def explain_buy(result):
+    reasons = []
+
+    if result.get("decision_type") == "breakout":
+        reasons.append("突破壓力區")
+
+    if result.get("decision_type") == "pullback":
+        reasons.append("回踩支撐轉強")
+
+    if result.get("trend") == "UP":
+        reasons.append("多頭趨勢")
+
+    if result.get("volume_state") == "STRONG":
+        reasons.append("量能放大")
+
+    return "、".join(reasons[:2])
+
+
+def explain_wait(conditions, stage):
+    if stage == "BREAKOUT_READY":
+        return "接近突破，等觸發"
+
+    if not conditions["event"]:
+        return "等待進場訊號"
+
+    if not conditions["edge"]:
+        return "型態還沒完成"
+
+    if not conditions["risk"] or not conditions["rr"]:
+        return "風報比不夠"
+
+    return "條件尚未成熟"
+
+
+# ================================
+# 🔥 加碼
+# ================================
+def detect_add_position(result, price, ma5):
+
+    trend = result.get("trend")
+    volume = result.get("volume_state")
+
+    if (
+        trend == "UP" and
+        volume == "STRONG" and
+        ma5 and abs(price - ma5) / ma5 < 0.02
+    ):
+        return "📈 可考慮加碼（順勢）"
+
+    return None
+
+
+# ================================
+# 🔥 統一決策（修正版）
+# ================================
+def build_action(result, price, ma5):
+
+    decision = result.get("decision")
+    trend = result.get("trend")
+    volume = result.get("volume_state")
+    position = result.get("position")
+    buy = result.get("buy")
+
+    # ❗️NO_TRADE 防呆
+    if decision == "NO_TRADE":
+        return "⚪ 觀望", "0%", "條件不成立"
+
+    # 🟢 BUY
+    if decision == "BUY":
+        return "🟢 買進", f"{round(position*100)}%", explain_buy(result)
+
+    # 🔴 強制出場
+    if trend == "DOWN":
+        return "🔴 賣出", "100%", "趨勢轉弱"
+
+    if volume == "DISTRIBUTION":
+        return "🔴 賣出", "100%", "主力出貨"
+
+    # 🟡 停利（用價格，不用RR）
+    if buy and price >= buy * 1.05:
+        return "🟡 減碼", "30%", "已獲利5%"
+
+    # 🟡 轉弱
+    if ma5 and price < ma5 and trend != "UP":
+        return "🟡 減碼", "50%", "跌破MA5"
+
+    return "⚪ 觀望", "0%", None
+
+
+# ================================
+# 🔥 原邏輯（完全保留）
 # ================================
 def get_market_phase():
     now = datetime.now(tz)
@@ -39,9 +131,6 @@ def get_market_phase():
     return "盤後"
 
 
-# ================================
-# 🔥 工具
-# ================================
 def safe_round(val, n=1):
     try:
         return round(float(val), n)
@@ -57,33 +146,22 @@ def safe_list(data, n=20):
     return data
 
 
-# ================================
-# 🔥 ⭐ 評分系統（完全對齊 decision）
-# ================================
 def score_to_text(conditions, result):
-
     decision = result.get("decision")
 
-    # 🔴 NO_TRADE
     if decision == "NO_TRADE":
         return "❌ 不成立（別碰）"
 
-    # 🟢 BUY
     if decision == "BUY":
         return "🟢 可進場"
 
-    # 🟡 WAIT（依條件接近程度）
     if conditions["event"] or conditions["edge"]:
         return "🟡 準備中（接近機會）"
 
     return "👀 觀察中"
 
 
-# ================================
-# 🔥 階段判斷（純顯示，不干預策略）
-# ================================
 def stage_detection(price, closes):
-
     closes = safe_list(closes)
 
     try:
@@ -109,9 +187,6 @@ def stage_to_text(stage):
     }.get(stage)
 
 
-# ================================
-# 🔥 條件翻譯
-# ================================
 def translate_condition(k):
     return {
         "event": "尚未觸發",
@@ -124,21 +199,15 @@ def translate_condition(k):
     }.get(k, k)
 
 
-# ================================
-# 🔥 訊號整理（嚴格依 result）
-# ================================
 def build_signals(result, conditions, decision, decision_type):
-
     main, sub, detail = [], [], []
 
-    # ===== NO_TRADE（只顯示致命）=====
     if decision == "NO_TRADE":
         for k in ["market", "trend", "volume"]:
             if not conditions.get(k):
                 main.append(translate_condition(k))
         return main[:2], [], []
 
-    # ===== WAIT（顯示缺條件）=====
     for k in ["event", "edge", "risk", "rr"]:
         if not conditions.get(k):
             main.append(translate_condition(k))
@@ -147,7 +216,6 @@ def build_signals(result, conditions, decision, decision_type):
         if not conditions.get(k):
             sub.append(translate_condition(k))
 
-    # ===== Edge細節（只讀 result）=====
     if decision_type == "breakout":
         if result.get("edge_consolidation") is False:
             detail.append("盤整不夠")
@@ -160,7 +228,6 @@ def build_signals(result, conditions, decision, decision_type):
         if result.get("edge_ma20_trend") is False:
             detail.append("MA20未上升")
 
-    # ===== 趨勢補充（只用 result）=====
     if result.get("trend") == "DOWN":
         detail.append("趨勢偏弱")
     elif result.get("trend") == "UP":
@@ -170,7 +237,7 @@ def build_signals(result, conditions, decision, decision_type):
 
 
 # ================================
-# 🔥 主流程（最終穩定版）
+# 🔥 主流程（最終完整版）
 # ================================
 def generate():
 
@@ -231,12 +298,19 @@ def generate():
         if stage_text:
             msg += f"{stage_text}\n"
 
-        # =========================
-        # BUY
-        # =========================
+        # 🔥 統一決策
+        action, size, reason = build_action(result, price, ma5)
+
+        msg += f"👉 {action}（{size}）\n"
+
         if decision == "BUY":
 
-            msg += "👉 🟢 可進場\n"
+            add = detect_add_position(result, price, ma5)
+            if add:
+                msg += f"{add}\n"
+
+            msg += f"💡 {explain_buy(result)}\n"
+
             msg += f"📍 Buy: {safe_round(buy)}\n"
             msg += f"🛑 Stop: {safe_round(stop)}\n"
             msg += f"🎯 RR: {safe_round(rr,2)}\n"
@@ -260,12 +334,12 @@ def generate():
                 extra_data=result
             )
 
-        # =========================
-        # WAIT / NO_TRADE
-        # =========================
         else:
 
-            msg += "👉 還不能做\n" if decision == "WAIT" else "👉 不要做\n"
+            if reason:
+                msg += f"💡 {reason}\n"
+            else:
+                msg += f"💡 {explain_wait(conditions, stage)}\n"
 
             main, sub, detail = build_signals(
                 result, conditions, decision, decision_type
