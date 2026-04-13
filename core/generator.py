@@ -1,5 +1,11 @@
 # ================================
-# 🔥 FINAL（顯示層 v9.1｜完全對齊策略）
+# 🔥 FINAL（顯示層 v10｜LOCKED｜完全對齊 v11 strategy）
+# ================================
+
+# 🔒 VERSION LOCK
+# - 基於 v9.1 顯示層
+# - 對齊 strategy v11（add_on / fail_exit）
+# - ❗禁止刪減 / 重構 / 簡化
 # ================================
 
 from datetime import datetime
@@ -40,7 +46,7 @@ def get_action(result):
 
 
 # ================================
-# 🔥 解釋（升級對齊 strategy）
+# 🔥 解釋（🔥升級：對齊 v11）
 # ================================
 def explain(result, conditions, stage):
 
@@ -56,13 +62,19 @@ def explain(result, conditions, stage):
             return "回踩轉強"
         elif t == "early":
             return "提前卡位"
-        elif t == "pre_breakout":  # 🔥 新增
+        elif t == "pre_breakout":
             return "突破前試單"
-
+        elif t == "add_on":  # 🔥 新增（加碼）
+            return "突破確認，加碼"
+        
         return "訊號成立"
 
+    # 🔥 新增：失敗退出顯示
+    if result.get("decision_type") == "fail_exit":
+        return "跌破趨勢，強制出場"
+
     # ================================
-    # 🔥 修正：避免準突破被誤判成「未觸發」
+    # 🔥 原邏輯（保留）
     # ================================
     if stage == "BREAKOUT_READY":
         return "接近突破，等觸發"
@@ -138,13 +150,13 @@ def stage_to_text(stage):
 
 
 # ================================
-# 🔥 訊號顯示（修正避免衝突）
+# 🔥 訊號顯示（保留）
 # ================================
 def build_signals(result, conditions):
 
     decision = result.get("decision")
 
-    # 🔥 修正：BUY 不顯示負面訊號（避免邏輯打架）
+    # 🔥 BUY 不顯示負面訊號
     if decision == "BUY":
         return []
 
