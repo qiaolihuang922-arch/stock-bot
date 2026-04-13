@@ -1,113 +1,128 @@
 # ================================
-# 🔥 condition_engine.py（v1乾淨版）
+# 🔥 condition_engine.py（FINAL v8）
 # ================================
 
 """
 用途：
 - 拆解 strategy 結果
-- 提供顯示層使用
+- 僅做條件映射（不可推論）
 
-限制（v8）：
-- 不可修改 decision
-- 不可推論 decision
-- 不可新增策略邏輯
-- 只讀 strategy 輸出
+嚴格遵守：
+- 不改 decision
+- 不推論 decision
+- 不新增邏輯
+- 所有條件來源必須來自 analysis
 """
 
 
 # ================================
-# 🔥 條件引擎
+# 🔥 條件引擎（唯一入口）
 # ================================
 def condition_engine(result):
 
-    market = result.get("market")
+    conditions = {
+        "market": False,
+        "structure": False,
+        "trend": False,
+        "volume": False,
+        "event": False,
+        "edge": False,
+        "risk": False,
+        "rr": False
+    }
+
+    # ===== 直接讀取 analysis 結果 =====
+    market = result.get("market_signal")
+    structure = result.get("structure_state")
     trend = result.get("trend")
     volume = result.get("volume_state")
 
-    structure = result.get("structure_state")
-    momentum = result.get("momentum_state")
+    event_breakout = result.get("event_breakout")
+    event_pullback = result.get("event_pullback")
 
+    edge_consolidation = result.get("edge_consolidation")
+    edge_fake_breakout = result.get("edge_fake_breakout")
+    edge_first_pullback = result.get("edge_first_pullback")
+    edge_ma20_trend = result.get("edge_ma20_trend")
+
+    risk = result.get("risk")
+    rr = result.get("rr")
     decision_type = result.get("decision_type")
 
-    breakout_quality = result.get("breakout_quality")
-    pullback_type = result.get("pullback_type")
+    # ================================
+    # 🔥 條件判斷（只映射，不推論）
+    # ================================
 
-    risk = result.get("risk", 0)
-    rr = result.get("rr", 0)
+    # 市場
+    if market and market != "WEAK":
+        conditions["market"] = True
 
-    conditions = {
-        "market_ok": False,
-        "structure_ok": False,
-        "trend_ok": False,
-        "volume_ok": False,
-        "event_ok": False,
-        "risk_ok": False,
-        "rr_ok": False
-    }
-
-    # ===== 市場 =====
-    if market is not None and market != "WEAK":
-        conditions["market_ok"] = True
-
-    # ===== 結構 =====
+    # 結構
     if structure in ["STRONG", "NORMAL"]:
-        conditions["structure_ok"] = True
+        conditions["structure"] = True
 
-    # ===== 趨勢 =====
+    # 趨勢
     if trend == "UP":
-        conditions["trend_ok"] = True
+        conditions["trend"] = True
 
-    # ===== 量能 =====
+    # 量能
     if volume not in ["WEAK", "DISTRIBUTION"]:
-        conditions["volume_ok"] = True
+        conditions["volume"] = True
 
-    # ===== 事件（不推論）=====
-    if decision_type == "breakout" and breakout_quality is not None:
-        conditions["event_ok"] = True
+    # 事件（嚴格來自 analysis）
+    if decision_type == "breakout":
+        if event_breakout:
+            conditions["event"] = True
 
-    elif decision_type == "pullback" and pullback_type is not None:
-        conditions["event_ok"] = True
+    elif decision_type == "pullback":
+        if event_pullback:
+            conditions["event"] = True
 
-    # ===== 風控 =====
-    if 0 < risk <= 0.08:
-        conditions["risk_ok"] = True
+    # Edge（不得簡化）
+    if decision_type == "breakout":
+        if (
+            edge_consolidation is True and
+            edge_fake_breakout is False
+        ):
+            conditions["edge"] = True
 
-    # ===== RR =====
-    if decision_type == "breakout" and rr >= 1.8:
-        conditions["rr_ok"] = True
+    elif decision_type == "pullback":
+        if (
+            edge_first_pullback is True and
+            edge_ma20_trend is True
+        ):
+            conditions["edge"] = True
 
-    elif decision_type == "pullback" and rr >= 1.5:
-        conditions["rr_ok"] = True
+    # 風控
+    if risk is not None and 0 < risk <= 0.08:
+        conditions["risk"] = True
+
+    # RR
+    if rr is not None:
+        if decision_type == "breakout" and rr >= 1.8:
+            conditions["rr"] = True
+        elif decision_type == "pullback" and rr >= 1.5:
+            conditions["rr"] = True
 
     return conditions
 
 
 # ================================
-# 🔥 顯示用（可選）
+# 🔥 顯示用（符合 v8）
 # ================================
-def summarize_conditions(c):
+def summarize_conditions(c, decision):
 
-    failed = []
+    # ===== BUY：顯示 OK =====
+    if decision == "BUY":
+        return [k for k, v in c.items() if v]
 
-    if not c["market_ok"]:
-        failed.append("市場")
+    # ===== WAIT：顯示缺少 =====
+    elif decision == "WAIT":
+        return [k for k, v in c.items() if not v]
 
-    if not c["structure_ok"]:
-        failed.append("結構")
+    # ===== NO_TRADE：只顯示致命 =====
+    elif decision == "NO_TRADE":
+        priority = ["market", "trend", "volume"]
+        return [k for k in priority if not c.get(k)]
 
-    if not c["trend_ok"]:
-        failed.append("趨勢")
-
-    if not c["volume_ok"]:
-        failed.append("量能")
-
-    if not c["event_ok"]:
-        failed.append("事件")
-
-    if not c["risk_ok"]:
-        failed.append("風控")
-
-    if not c["rr_ok"]:
-        failed.append("報酬")
-
-    return failed
+    return []
