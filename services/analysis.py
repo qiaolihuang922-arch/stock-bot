@@ -1,5 +1,5 @@
 # ================================
-# 🔥 analysis.py（FINAL v8）
+# 🔥 analysis.py（FINAL v8.5 強化版）
 # ================================
 
 # ===== 工具 =====
@@ -8,7 +8,7 @@ def avg(arr):
 
 
 # ================================
-# 🔥 統一輸出（符合 v8）
+# 🔥 統一輸出
 # ================================
 def build_result(**kwargs):
 
@@ -23,22 +23,20 @@ def build_result(**kwargs):
         "risk": round(kwargs.get("risk", 0), 4),
         "rr": round(kwargs.get("rr", 0), 2),
 
-        # ===== 核心 =====
         "market_signal": kwargs.get("market_signal"),
         "trend": kwargs.get("trend"),
         "structure_state": kwargs.get("structure_state"),
         "volume_state": kwargs.get("volume_state"),
         "momentum_state": kwargs.get("momentum_state"),
 
-        # ===== event（不可推論）=====
         "event_breakout": kwargs.get("event_breakout"),
         "event_pullback": kwargs.get("event_pullback"),
 
-        # ===== edge（拆解）=====
         "edge_consolidation": kwargs.get("edge_consolidation"),
         "edge_fake_breakout": kwargs.get("edge_fake_breakout"),
         "edge_first_pullback": kwargs.get("edge_first_pullback"),
         "edge_ma20_trend": kwargs.get("edge_ma20_trend"),
+        "edge_structure_hold": kwargs.get("edge_structure_hold"),
     }
 
 
@@ -104,6 +102,10 @@ def structure_state(closes):
     return "WEAK"
 
 
+def structure_hold(closes):
+    return closes[-1] > min(closes[-5:])
+
+
 # ================================
 # 🔥 支撐 / 壓力
 # ================================
@@ -136,7 +138,7 @@ def event_pullback(price, ma5, closes):
 
 
 # ================================
-# 🔥 Edge（拆解）
+# 🔥 Edge
 # ================================
 def edge_consolidation(closes):
     return (max(closes[-5:]) - min(closes[-5:])) / closes[-1] < 0.04
@@ -156,7 +158,7 @@ def edge_ma20_trend(ma20, closes):
 
 
 # ================================
-# 🔥 風控（修正 RR）
+# 🔥 風控
 # ================================
 def risk_control(buy, stop, resistance, decision_type):
 
@@ -167,9 +169,8 @@ def risk_control(buy, stop, resistance, decision_type):
     if risk > 0.08:
         return False, risk, 0
 
-    # 🔥 target 修正
     if decision_type == "breakout":
-        target = buy + (buy - stop) * 2  # 固定倍數（避免錯誤）
+        target = buy + (buy - stop) * 2
     else:
         target = resistance
 
@@ -209,7 +210,7 @@ def position_size(risk, market):
 
 
 # ================================
-# 🔥 🎯 strategy（唯一決策）
+# 🔥 🎯 strategy
 # ================================
 def strategy(price, ma5, ma20, closes, volumes):
 
@@ -242,27 +243,25 @@ def strategy(price, ma5, ma20, closes, volumes):
         return build_result(decision="WAIT", structure_state=structure)
 
     # ================================
-    # 🔥 breakout
+    # 🔥 breakout（強化）
     # ================================
     e_break = event_breakout(price, closes, resistance, volumes)
     fake = edge_fake_breakout(closes)
     cons = edge_consolidation(closes)
 
+    # 🔥 避免高位追
+    high_zone = price > resistance * 1.08
+
     if e_break:
 
         if fake:
-            return build_result(
-                decision="NO_TRADE",
-                event_breakout=True,
-                edge_fake_breakout=True
-            )
+            return build_result(decision="NO_TRADE", edge_fake_breakout=True)
+
+        if high_zone:
+            return build_result(decision="WAIT", event_breakout=True)
 
         if not cons:
-            return build_result(
-                decision="WAIT",
-                event_breakout=True,
-                edge_consolidation=False
-            )
+            return build_result(decision="WAIT", edge_consolidation=False)
 
         buy = price
         stop = min(ma5, support)
@@ -292,13 +291,17 @@ def strategy(price, ma5, ma20, closes, volumes):
         )
 
     # ================================
-    # 🔥 pullback
+    # 🔥 pullback（強化）
     # ================================
     e_pull = event_pullback(price, ma5, closes)
     first = edge_first_pullback(closes, ma20)
     ma20_up = edge_ma20_trend(ma20, closes)
+    hold = structure_hold(closes)
 
     if trend == "UP" and e_pull:
+
+        if not hold:
+            return build_result(decision="NO_TRADE", edge_structure_hold=False)
 
         if not first or not ma20_up:
             return build_result(
@@ -332,7 +335,8 @@ def strategy(price, ma5, ma20, closes, volumes):
             momentum_state=momentum,
             event_pullback=True,
             edge_first_pullback=True,
-            edge_ma20_trend=True
+            edge_ma20_trend=True,
+            edge_structure_hold=True
         )
 
     return build_result(decision="WAIT", market_signal=market)
