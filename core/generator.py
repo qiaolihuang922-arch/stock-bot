@@ -16,6 +16,35 @@ stocks = {
 
 
 # ================================
+# 🔥 時間系統（與 Flask 完全同步）
+# ================================
+def get_market_phase():
+
+    now = datetime.now(tz)
+    hour = now.hour
+    minute = now.minute
+
+    if now.weekday() >= 5:
+        return "假日"
+
+    # 盤前
+    if hour == 8 and 30 <= minute < 40:
+        return "盤前"
+
+    # 盤中
+    elif 9 <= hour < 13:
+        return "盤中"
+
+    # 收盤
+    elif hour == 13 and minute >= 20:
+        return "收盤"
+
+    # 其他時間
+    else:
+        return "盤後"
+
+
+# ================================
 # 🔥 工具
 # ================================
 def risk_to_text(risk):
@@ -120,7 +149,9 @@ def score_system(market, trend, structure, momentum, rr):
 def generate():
 
     now = datetime.now(tz)
-    msg = f"【{now.strftime('%m/%d')} 盤後】\n\n"
+    phase = get_market_phase()
+
+    msg = f"【{now.strftime('%m/%d')} {phase}】\n\n"
 
     decisions = []
     candidates = []
@@ -195,9 +226,7 @@ def generate():
 
         msg += f"【{name}】{score_text}\n"
 
-        # ================================
-        # 🔥 BUY（強化）
-        # ================================
+        # ===== BUY =====
         if decision == "BUY":
 
             zone, action, diff = entry_plan(price, buy)
@@ -215,13 +244,10 @@ def generate():
             msg += f"📍 位置：{zone}\n"
             msg += f"👉 操作：{action}\n"
 
-            # 🔥 新增：風險提示（超重要）
             if diff > 0.02:
                 msg += "❗ 已偏離進場點，避免追高\n"
 
-        # ================================
-        # 🔥 WAIT（優化）
-        # ================================
+        # ===== WAIT =====
         elif decision == "WAIT":
 
             msg += "👉 還不能做\n"
@@ -237,9 +263,7 @@ def generate():
             if "event" in summary:
                 msg += "👉 等突破 / 訊號出現\n"
 
-        # ================================
-        # 🔥 NO_TRADE（精準）
-        # ================================
+        # ===== NO_TRADE =====
         else:
 
             msg += "👉 不要做\n"
