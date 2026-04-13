@@ -1,7 +1,6 @@
 from datetime import datetime
 import pytz
 
-from services.learning import record_trade
 from services.stock_api import get_twse, get_yahoo, get_realtime_price
 from services.analysis import strategy
 from core.condition_engine import condition_engine
@@ -57,7 +56,7 @@ def explain_wait(conditions, stage):
 
 
 # ================================
-# 🔥 加碼
+# 🔥 加碼提示（不影響倉位）
 # ================================
 def detect_add_position(result, price, ma5):
 
@@ -75,7 +74,7 @@ def detect_add_position(result, price, ma5):
 
 
 # ================================
-# 🔥 統一決策（最終穩定版）
+# 🔥 核心：持倉建議系統（最終穩定版）
 # ================================
 def build_action(result, price, ma5):
 
@@ -85,33 +84,31 @@ def build_action(result, price, ma5):
     position = result.get("position")
     buy = result.get("buy")
 
-    # ❌ NO_TRADE → 永遠觀望
+    # ❌ 不成立
     if decision == "NO_TRADE":
-        return "⚪ 觀望", "0%", "條件不成立"
+        return "0%", "條件不成立"
 
-    # 🟢 BUY → 用策略倉位
+    # 🟢 可進場
     if decision == "BUY":
-        return "🟢 買進", f"{round(position*100)}%", explain_buy(result)
+        return f"{round(position*100)}%", explain_buy(result)
 
-    # =========================
-    # 🔴 出場邏輯（只在非NO_TRADE）
-    # =========================
+    # 🔴 轉弱 → 清倉
     if trend == "DOWN":
-        return "🔴 賣出", "100%", "趨勢轉弱"
+        return "0%", "趨勢轉弱"
 
     if volume == "DISTRIBUTION":
-        return "🔴 賣出", "100%", "主力出貨"
+        return "0%", "主力出貨"
 
-    # 🟡 停利（價格優先）
-    if buy and price >= buy * 1.05:
-        return "🟡 減碼", "30%", "已獲利5%"
+    # 🟡 停利（修正）
+    if buy and price >= buy * 1.05 and trend == "UP":
+        return "50%", "已獲利5%"
 
-    # 🟡 轉弱
+    # 🟡 跌破MA5（修正）
     if ma5 and price < ma5 and trend != "UP":
-        return "🟡 減碼", "50%", "跌破MA5"
+        return "20%", "跌破MA5（轉弱）"
 
     # ⚪ 預設
-    return "⚪ 觀望", "0%", "等待訊號"
+    return "0%", "等待訊號"
 
 
 # ================================
@@ -240,7 +237,7 @@ def build_signals(result, conditions, decision, decision_type):
 
 
 # ================================
-# 🔥 主流程（最終完整版）
+# 🔥 主流程（最終版）
 # ================================
 def generate():
 
@@ -301,10 +298,10 @@ def generate():
         if stage_text:
             msg += f"{stage_text}\n"
 
-        # 🔥 統一決策
-        action, size, reason = build_action(result, price, ma5)
+        # 🔥 持倉建議
+        size, reason = build_action(result, price, ma5)
 
-        msg += f"👉 {action}（{size}）\n"
+        msg += f"👉 建議持倉：{size}\n"
         msg += f"💡 {reason}\n"
 
         if decision == "BUY":
@@ -322,19 +319,6 @@ def generate():
 
             if position:
                 msg += f"📊 倉位: {round(position*100)}%\n"
-
-            record_trade(
-                name=name,
-                action=decision,
-                price=price,
-                buy=buy,
-                stop=stop,
-                ma5=ma5,
-                ma20=ma20,
-                volume=result.get("volume_state"),
-                trend=result.get("trend"),
-                extra_data=result
-            )
 
         else:
 
