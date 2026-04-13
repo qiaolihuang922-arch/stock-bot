@@ -37,7 +37,7 @@ def explain_buy(result):
     if result.get("volume_state") == "STRONG":
         reasons.append("量能放大")
 
-    return "、".join(reasons[:2])
+    return "、".join(reasons[:2]) or "訊號成立"
 
 
 def explain_wait(conditions, stage):
@@ -75,7 +75,7 @@ def detect_add_position(result, price, ma5):
 
 
 # ================================
-# 🔥 統一決策（修正版）
+# 🔥 統一決策（最終穩定版）
 # ================================
 def build_action(result, price, ma5):
 
@@ -85,22 +85,24 @@ def build_action(result, price, ma5):
     position = result.get("position")
     buy = result.get("buy")
 
-    # ❗️NO_TRADE 防呆
+    # ❌ NO_TRADE → 永遠觀望
     if decision == "NO_TRADE":
         return "⚪ 觀望", "0%", "條件不成立"
 
-    # 🟢 BUY
+    # 🟢 BUY → 用策略倉位
     if decision == "BUY":
         return "🟢 買進", f"{round(position*100)}%", explain_buy(result)
 
-    # 🔴 強制出場
+    # =========================
+    # 🔴 出場邏輯（只在非NO_TRADE）
+    # =========================
     if trend == "DOWN":
         return "🔴 賣出", "100%", "趨勢轉弱"
 
     if volume == "DISTRIBUTION":
         return "🔴 賣出", "100%", "主力出貨"
 
-    # 🟡 停利（用價格，不用RR）
+    # 🟡 停利（價格優先）
     if buy and price >= buy * 1.05:
         return "🟡 減碼", "30%", "已獲利5%"
 
@@ -108,7 +110,8 @@ def build_action(result, price, ma5):
     if ma5 and price < ma5 and trend != "UP":
         return "🟡 減碼", "50%", "跌破MA5"
 
-    return "⚪ 觀望", "0%", None
+    # ⚪ 預設
+    return "⚪ 觀望", "0%", "等待訊號"
 
 
 # ================================
@@ -302,14 +305,13 @@ def generate():
         action, size, reason = build_action(result, price, ma5)
 
         msg += f"👉 {action}（{size}）\n"
+        msg += f"💡 {reason}\n"
 
         if decision == "BUY":
 
             add = detect_add_position(result, price, ma5)
             if add:
                 msg += f"{add}\n"
-
-            msg += f"💡 {explain_buy(result)}\n"
 
             msg += f"📍 Buy: {safe_round(buy)}\n"
             msg += f"🛑 Stop: {safe_round(stop)}\n"
@@ -335,11 +337,6 @@ def generate():
             )
 
         else:
-
-            if reason:
-                msg += f"💡 {reason}\n"
-            else:
-                msg += f"💡 {explain_wait(conditions, stage)}\n"
 
             main, sub, detail = build_signals(
                 result, conditions, decision, decision_type
