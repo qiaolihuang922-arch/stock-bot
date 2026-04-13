@@ -1,5 +1,5 @@
 # ================================
-# 🔥 analysis.py（FINAL v8.5 強化版）
+# 🔥 analysis.py（FINAL v8.5.1）
 # ================================
 
 # ===== 工具 =====
@@ -8,7 +8,54 @@ def avg(arr):
 
 
 # ================================
-# 🔥 統一輸出
+# 🔥 市場強度（不影響 decision）
+# ================================
+def market_score(market, trend, structure, volume, momentum):
+
+    score = 0
+
+    if market == "STRONG":
+        score += 2
+    elif market == "CHOPPY":
+        score += 1
+    elif market == "WEAK":
+        score -= 2
+
+    if trend == "UP":
+        score += 2
+    elif trend == "DOWN":
+        score -= 2
+
+    if structure == "STRONG":
+        score += 2
+    elif structure == "WEAK":
+        score -= 1
+
+    if volume == "STRONG":
+        score += 2
+    elif volume == "DISTRIBUTION":
+        score -= 2
+
+    if momentum == "ACCELERATING":
+        score += 1
+    else:
+        score -= 0.5
+
+    return score
+
+
+def market_grade(score):
+    if score >= 6:
+        return "A"
+    elif score >= 3:
+        return "B"
+    elif score >= 0:
+        return "C"
+    return "D"
+
+
+# ================================
+# 🔥 統一輸出（修正 default）
 # ================================
 def build_result(**kwargs):
 
@@ -29,11 +76,18 @@ def build_result(**kwargs):
         "volume_state": kwargs.get("volume_state"),
         "momentum_state": kwargs.get("momentum_state"),
 
-        "event_breakout": kwargs.get("event_breakout"),
-        "event_pullback": kwargs.get("event_pullback"),
+        # 🔥 新增（顯示用，不影響策略）
+        "market_score": kwargs.get("market_score"),
+        "market_grade": kwargs.get("market_grade"),
 
+        # ===== event（避免 None）=====
+        "event_breakout": kwargs.get("event_breakout", False),
+        "event_pullback": kwargs.get("event_pullback", False),
+
+        # ===== edge =====
         "edge_consolidation": kwargs.get("edge_consolidation"),
         "edge_fake_breakout": kwargs.get("edge_fake_breakout"),
+        "edge_not_high_zone": kwargs.get("edge_not_high_zone"),  # 🔥補齊
         "edge_first_pullback": kwargs.get("edge_first_pullback"),
         "edge_ma20_trend": kwargs.get("edge_ma20_trend"),
         "edge_structure_hold": kwargs.get("edge_structure_hold"),
@@ -210,7 +264,7 @@ def position_size(risk, market):
 
 
 # ================================
-# 🔥 🎯 strategy
+# 🔥 🎯 strategy（核心不動）
 # ================================
 def strategy(price, ma5, ma20, closes, volumes):
 
@@ -223,33 +277,30 @@ def strategy(price, ma5, ma20, closes, volumes):
 
     momentum = "ACCELERATING" if closes[-1] > closes[-3] else "DECELERATING"
 
+    # 🔥 新增（不影響決策）
+    m_score = market_score(market, trend, structure, volume, momentum)
+    m_grade = market_grade(m_score)
+
     # ===== 市場 =====
     if market == "WEAK":
-        return build_result(decision="NO_TRADE", market_signal=market)
+        return build_result(decision="NO_TRADE", market_signal=market, market_score=m_score, market_grade=m_grade)
 
-    # ===== 趨勢 =====
     if trend == "DOWN":
-        return build_result(decision="NO_TRADE", trend=trend)
+        return build_result(decision="NO_TRADE", trend=trend, market_score=m_score, market_grade=m_grade)
 
-    # ===== 量能 =====
     if volume == "DISTRIBUTION":
-        return build_result(decision="NO_TRADE", volume_state=volume)
+        return build_result(decision="NO_TRADE", volume_state=volume, market_score=m_score, market_grade=m_grade)
 
     if volume == "WEAK":
-        return build_result(decision="WAIT", volume_state=volume)
+        return build_result(decision="WAIT", volume_state=volume, market_score=m_score, market_grade=m_grade)
 
-    # ===== 結構 =====
     if structure == "WEAK":
-        return build_result(decision="WAIT", structure_state=structure)
+        return build_result(decision="WAIT", structure_state=structure, market_score=m_score, market_grade=m_grade)
 
-    # ================================
-    # 🔥 breakout（強化）
-    # ================================
+    # ===== breakout =====
     e_break = event_breakout(price, closes, resistance, volumes)
     fake = edge_fake_breakout(closes)
     cons = edge_consolidation(closes)
-
-    # 🔥 避免高位追
     high_zone = price > resistance * 1.08
 
     if e_break:
@@ -258,7 +309,11 @@ def strategy(price, ma5, ma20, closes, volumes):
             return build_result(decision="NO_TRADE", edge_fake_breakout=True)
 
         if high_zone:
-            return build_result(decision="WAIT", event_breakout=True)
+            return build_result(
+                decision="WAIT",
+                event_breakout=True,
+                edge_not_high_zone=False
+            )
 
         if not cons:
             return build_result(decision="WAIT", edge_consolidation=False)
@@ -287,12 +342,13 @@ def strategy(price, ma5, ma20, closes, volumes):
             momentum_state=momentum,
             event_breakout=True,
             edge_consolidation=True,
-            edge_fake_breakout=False
+            edge_fake_breakout=False,
+            edge_not_high_zone=True,
+            market_score=m_score,
+            market_grade=m_grade
         )
 
-    # ================================
-    # 🔥 pullback（強化）
-    # ================================
+    # ===== pullback =====
     e_pull = event_pullback(price, ma5, closes)
     first = edge_first_pullback(closes, ma20)
     ma20_up = edge_ma20_trend(ma20, closes)
@@ -336,7 +392,9 @@ def strategy(price, ma5, ma20, closes, volumes):
             event_pullback=True,
             edge_first_pullback=True,
             edge_ma20_trend=True,
-            edge_structure_hold=True
+            edge_structure_hold=True,
+            market_score=m_score,
+            market_grade=m_grade
         )
 
-    return build_result(decision="WAIT", market_signal=market)
+    return build_result(decision="WAIT", market_signal=market, market_score=m_score, market_grade=m_grade)
