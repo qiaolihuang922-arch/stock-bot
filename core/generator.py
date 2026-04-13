@@ -1,5 +1,5 @@
 # ================================
-# 🔥 FINAL（顯示層穩定最終版）
+# 🔥 FINAL（顯示層 v9.1｜完全對齊策略）
 # ================================
 
 from datetime import datetime
@@ -23,7 +23,7 @@ stocks = {
 
 
 # ================================
-# 🔥 行動（100% 跟策略）
+# 🔥 行動（保留）
 # ================================
 def get_action(result):
 
@@ -40,7 +40,7 @@ def get_action(result):
 
 
 # ================================
-# 🔥 解釋（完全不影響決策）
+# 🔥 解釋（升級對齊 strategy）
 # ================================
 def explain(result, conditions, stage):
 
@@ -56,10 +56,14 @@ def explain(result, conditions, stage):
             return "回踩轉強"
         elif t == "early":
             return "提前卡位"
+        elif t == "pre_breakout":  # 🔥 新增
+            return "突破前試單"
 
         return "訊號成立"
 
-    # WAIT
+    # ================================
+    # 🔥 修正：避免準突破被誤判成「未觸發」
+    # ================================
     if stage == "BREAKOUT_READY":
         return "接近突破，等觸發"
 
@@ -73,7 +77,7 @@ def explain(result, conditions, stage):
 
 
 # ================================
-# 🔥 工具
+# 🔥 工具（保留）
 # ================================
 def get_market_phase():
     now = datetime.now(tz)
@@ -133,11 +137,18 @@ def stage_to_text(stage):
     }.get(stage)
 
 
+# ================================
+# 🔥 訊號顯示（修正避免衝突）
+# ================================
 def build_signals(result, conditions):
 
     decision = result.get("decision")
 
-    # 🔴 NO_TRADE → 只顯示致命問題
+    # 🔥 修正：BUY 不顯示負面訊號（避免邏輯打架）
+    if decision == "BUY":
+        return []
+
+    # 🔴 NO_TRADE → 致命
     if decision == "NO_TRADE":
         keys = ["market", "trend", "volume"]
     else:
@@ -205,26 +216,24 @@ def generate():
         decisions.append(result.get("decision"))
         results_map[name] = result
 
-        # 🔥 行動
         action = get_action(result)
 
         msg += f"【{name}】{action}\n"
 
-        # 🌍 市場
         if result.get("market_grade"):
             msg += f"🌍 市場：{result.get('market_grade')} ｜ {stage_to_text(stage)}\n"
 
-        # 💡 解釋（完全對齊 decision）
         msg += f"💡 {explain(result, conditions, stage)}\n"
 
-        # 🟢 BUY 顯示
+        # ================================
+        # 🔥 BUY 顯示（保留）
+        # ================================
         if result.get("decision") == "BUY":
 
             msg += f"📍 Buy: {safe_round(result.get('buy'))}\n"
             msg += f"🛑 Stop: {safe_round(result.get('stop'))}\n"
             msg += f"🎯 RR: {safe_round(result.get('rr'),2)}\n"
 
-        # ⚪ WAIT / ❌ NO_TRADE
         else:
             signals = build_signals(result, conditions)
             for r in signals:
@@ -233,7 +242,7 @@ def generate():
         msg += f"💰 {safe_round(price)}（{safe_round(change,2)}%）\n\n"
 
     # ================================
-    # 🔥 最強股
+    # 🔥 最強股（保留）
     # ================================
     best, score = pick_best_stock(results_map)
 
