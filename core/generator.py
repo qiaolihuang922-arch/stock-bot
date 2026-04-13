@@ -64,7 +64,7 @@ def safe_round(val, n=1):
 
 
 # ================================
-# 🔥 基本翻譯（保留）
+# 🔥 基本翻譯
 # ================================
 def translate_conditions(cond_list):
 
@@ -83,13 +83,12 @@ def translate_conditions(cond_list):
 
 
 # ================================
-# 🔥 NEW：Edge細節翻譯（核心升級）
+# 🔥 Edge翻譯（核心）
 # ================================
 def explain_edge(result, decision_type):
 
     reasons = []
 
-    # ===== breakout =====
     if decision_type == "breakout":
 
         if result.get("event_breakout") is False:
@@ -104,7 +103,6 @@ def explain_edge(result, decision_type):
         if result.get("edge_fake_breakout") is True:
             reasons.append("疑似假突破")
 
-    # ===== pullback =====
     elif decision_type == "pullback":
 
         if result.get("event_pullback") is False:
@@ -224,6 +222,16 @@ def generate():
         risk = result.get("risk", 0)
         rr = result.get("rr", 0)
 
+        # 🔥 修正：補 decision_type
+        if decision_type == "none":
+            if result.get("event_breakout"):
+                decision_type = "breakout"
+            elif result.get("event_pullback"):
+                decision_type = "pullback"
+
+        # 🔥 新增：市場評級
+        grade = result.get("market_grade")
+
         market = result.get("market_signal")
         trend = result.get("trend")
         structure = result.get("structure_state")
@@ -237,27 +245,11 @@ def generate():
         conditions = condition_engine(result)
         summary = summarize_conditions(conditions, decision)
 
-        # ===== learning =====
-        if decision == "BUY" and buy and stop and buy > stop:
-            try:
-                record_trade(
-                    name, "buy", buy, buy, stop,
-                    ma5, ma20, "-", "-",
-                    extra_data={
-                        "rr": rr,
-                        "decision_type": decision_type,
-                        "market": market,
-                        "structure_state": structure,
-                        "momentum_state": momentum
-                    }
-                )
-            except:
-                pass
-
-        if decision == "BUY":
-            candidates.append((decision_type, rr, risk, name, buy, stop, score))
-
         msg += f"【{name}】{score_text}\n"
+
+        # 🔥 顯示市場強度
+        if grade:
+            msg += f"🌍 市場：{grade}\n"
 
         # ================= BUY =================
         if decision == "BUY":
@@ -280,19 +272,17 @@ def generate():
             if diff > 0.02:
                 msg += "❗ 已偏離進場點，避免追高\n"
 
-        # ================= WAIT（升級） =================
+        # ================= WAIT =================
         elif decision == "WAIT":
 
             msg += "👉 還不能做\n"
 
-            # 🔥 先顯示 Edge（重點升級）
             edge_reasons = explain_edge(result, decision_type)
 
             if edge_reasons:
                 for r in edge_reasons[:3]:
                     msg += f"- {r}\n"
             else:
-                # fallback（舊機制）
                 reasons = translate_conditions(summary)
                 for r in reasons[:3]:
                     msg += f"- {r}\n"
@@ -305,13 +295,18 @@ def generate():
 
             msg += "👉 不要做\n"
 
-            priority = ["market", "trend", "volume"]
-            reasons = [r for r in summary if r in priority]
+            edge_reasons = explain_edge(result, decision_type)
 
-            reasons = translate_conditions(reasons)
+            if edge_reasons:
+                for r in edge_reasons:
+                    msg += f"- {r}\n"
+            else:
+                priority = ["market", "trend", "volume"]
+                reasons = [r for r in summary if r in priority]
+                reasons = translate_conditions(reasons)
 
-            for r in reasons:
-                msg += f"- {r}\n"
+                for r in reasons:
+                    msg += f"- {r}\n"
 
         msg += f"💰 現價 {safe_round(price)}（{safe_round(change,2)}%）\n\n"
 
@@ -321,18 +316,5 @@ def generate():
         msg += "🟢 今天有機會，可以挑著做\n"
     else:
         msg += "⏳ 今天沒好機會，先觀望\n"
-
-    if candidates:
-        best = sorted(candidates, key=lambda x: (
-            x[0] == "breakout",
-            x[1],
-            -x[2]
-        ), reverse=True)[0]
-
-        _, rr, risk, name, buy, stop, score = best
-
-        msg += "\n🔥 今天最值得看的\n"
-        msg += f"{name}\n"
-        msg += f"👉 {safe_round(buy)} 附近優先觀察\n"
 
     return msg
