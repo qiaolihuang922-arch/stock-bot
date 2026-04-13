@@ -4,8 +4,6 @@ import pytz
 from services.learning import record_trade
 from services.stock_api import get_twse, get_yahoo, get_realtime_price
 from services.analysis import strategy
-
-# ✅ 新增
 from core.condition_engine import condition_engine, summarize_conditions
 
 tz = pytz.timezone("Asia/Taipei")
@@ -40,6 +38,25 @@ def score_to_text(score):
 
 def safe_round(val, n=1):
     return round(val, n) if isinstance(val, (int, float)) else "-"
+
+
+# ================================
+# 🔥 人話翻譯
+# ================================
+def translate_conditions(cond_list):
+
+    mapping = {
+        "market": "大盤不對",
+        "trend": "趨勢不對",
+        "structure": "結構不夠強",
+        "volume": "量能不夠",
+        "event": "沒有進場訊號",
+        "edge": "型態不漂亮",
+        "risk": "風險太高",
+        "rr": "報酬不夠"
+    }
+
+    return [mapping.get(c, c) for c in cond_list]
 
 
 # ================================
@@ -136,15 +153,11 @@ def generate():
 
         decisions.append(decision)
 
-        # ================================
-        # 🔥 condition_engine（唯一條件來源）
-        # ================================
+        # ===== 條件引擎 =====
         conditions = condition_engine(result)
         summary = summarize_conditions(conditions, decision)
 
-        # ================================
-        # 🔥 learning（不影響 decision）
-        # ================================
+        # ===== learning =====
         if decision == "BUY" and buy and stop and buy > stop:
             try:
                 record_trade(
@@ -166,43 +179,57 @@ def generate():
             candidates.append((decision_type, rr, risk, name, buy, stop, score))
 
         # ================================
-        # 🔥 顯示層（完全遵守 v8）
+        # 🔥 顯示層（人話實戰版）
         # ================================
         msg += f"【{name}】{score_text}\n"
 
         # ===== BUY =====
         if decision == "BUY":
 
-            msg += "👉 進場條件成立\n"
+            msg += "👉 可以進場\n"
 
             if decision_type == "breakout":
-                msg += "→ 突破成立\n"
+                msg += "→ 已突破（強勢）\n"
             elif decision_type == "pullback":
-                msg += "→ 回踩成立\n"
+                msg += "→ 回踩撐住（低風險）\n"
 
-            msg += f"🎯 {safe_round(buy)} / {safe_round(stop)}\n"
-            msg += f"RR {rr} ｜ {risk_to_text(risk)}\n"
+            msg += f"🎯 進場 {safe_round(buy)} ｜ 停損 {safe_round(stop)}\n"
+            msg += f"📊 RR {rr} ｜ {risk_to_text(risk)}\n"
+
+            # 價格位置
+            if price > buy:
+                msg += "⚠️ 已高於進場點（勿追）\n"
+            elif abs(price - buy) / buy < 0.01:
+                msg += "👉 接近進場點\n"
 
             if summary:
-                msg += f"✅ 條件：{' / '.join(summary)}\n"
+                msg += "✅ 條件完整\n"
 
         # ===== WAIT =====
         elif decision == "WAIT":
 
-            msg += "👉 尚未觸發\n"
+            msg += "👉 還不能做\n"
 
-            if summary:
-                msg += f"缺少：{' / '.join(summary)}\n"
+            reasons = translate_conditions(summary)
+
+            for r in reasons[:3]:
+                msg += f"- {r}\n"
+
+            if "event" in summary:
+                msg += "👉 等突破 / 訊號出現\n"
 
         # ===== NO TRADE =====
         else:
 
-            msg += "👉 禁止交易\n"
+            msg += "👉 不要做\n"
 
-            if summary:
-                msg += f"原因：{' / '.join(summary)}\n"
+            reasons = translate_conditions(summary)
 
-        msg += f"💰 {safe_round(price)}（{safe_round(change,2)}%）\n\n"
+            for r in reasons:
+                msg += f"- {r}\n"
+
+        # ===== 價格 =====
+        msg += f"💰 現價 {safe_round(price)}（{safe_round(change,2)}%）\n\n"
 
     # ================================
     # 🔥 總結
@@ -215,13 +242,13 @@ def generate():
         msg += "⏳ 今天沒好機會，先觀望\n"
 
     # ================================
-    # 🔥 最佳標的（符合 v8排序）
+    # 🔥 最佳標的
     # ================================
     if candidates:
         best = sorted(candidates, key=lambda x: (
-            x[0] == "breakout",  # breakout優先
-            x[1],                # RR
-            -x[2]                # risk（越小越好）
+            x[0] == "breakout",
+            x[1],
+            -x[2]
         ), reverse=True)[0]
 
         _, rr, risk, name, buy, stop, score = best
