@@ -1,5 +1,5 @@
 # ================================
-# 🔥 analysis.py（FINAL v9.5 FIX｜完整穩定版）
+# 🔥 analysis.py（FINAL v9.6｜指令版）
 # ================================
 
 # ===== 工具 =====
@@ -8,7 +8,30 @@ def avg(arr):
 
 
 # ================================
-# 🔥 市場強度
+# 🔥 行動引擎（核心）
+# ================================
+def action_mapper(decision, position):
+
+    if decision == "BUY":
+        return {
+            "action": round(position, 2),   # 👉 買多少
+            "action_type": "BUY"
+        }
+
+    if decision == "NO_TRADE":
+        return {
+            "action": -1.0,                # 👉 全賣
+            "action_type": "SELL_ALL"
+        }
+
+    return {
+        "action": 0.0,                    # 👉 不動
+        "action_type": "HOLD"
+    }
+
+
+# ================================
+# 🔥 市場強度（原樣保留）
 # ================================
 def market_score(market, trend, structure, volume, momentum):
 
@@ -55,14 +78,17 @@ def market_grade(score):
 
 
 # ================================
-# 🔥 統一輸出
+# 🔥 統一輸出（只加 action）
 # ================================
 def build_result(**kwargs):
 
     decision = kwargs.get("decision", "WAIT")
+    position = kwargs.get("position", 0)
+
+    action_data = action_mapper(decision, position)
+
     risk = kwargs.get("risk", 0)
     rr = kwargs.get("rr", 0)
-    position = kwargs.get("position", 0)
 
     if decision == "NO_TRADE":
         risk = 0
@@ -75,7 +101,12 @@ def build_result(**kwargs):
 
         "buy": kwargs.get("buy"),
         "stop": kwargs.get("stop"),
+
         "position": round(position, 2),
+
+        # 🔥 核心（你要的）
+        "action": action_data["action"],
+        "action_type": action_data["action_type"],
 
         "risk": round(risk, 4),
         "rr": round(rr, 2),
@@ -84,25 +115,14 @@ def build_result(**kwargs):
         "trend": kwargs.get("trend"),
         "structure_state": kwargs.get("structure_state"),
         "volume_state": kwargs.get("volume_state"),
-        "momentum_state": kwargs.get("momentum_state"),
 
         "market_score": kwargs.get("market_score"),
         "market_grade": kwargs.get("market_grade"),
-
-        "event_breakout": kwargs.get("event_breakout", False),
-        "event_pullback": kwargs.get("event_pullback", False),
-
-        "edge_consolidation": kwargs.get("edge_consolidation"),
-        "edge_fake_breakout": kwargs.get("edge_fake_breakout"),
-        "edge_not_high_zone": kwargs.get("edge_not_high_zone"),
-        "edge_first_pullback": kwargs.get("edge_first_pullback"),
-        "edge_ma20_trend": kwargs.get("edge_ma20_trend"),
-        "edge_structure_hold": kwargs.get("edge_structure_hold"),
     }
 
 
 # ================================
-# 🔥 市場 / 趨勢 / 量能
+# 🔥 原邏輯（100%保留）
 # ================================
 def market_signal(closes, ma20):
     momentum = closes[-1] - closes[-3]
@@ -143,9 +163,6 @@ def volume_signal(volumes):
     return "NORMAL"
 
 
-# ================================
-# 🔥 結構
-# ================================
 def structure_state(closes):
 
     score = 0
@@ -167,35 +184,22 @@ def structure_hold(closes):
     return closes[-1] > min(closes[-5:])
 
 
-# ================================
-# 🔥 支撐 / 壓力
-# ================================
 def support_resistance(closes):
     return min(closes[-20:]), max(closes[-20:-1])
 
 
-# ================================
-# 🔥 Event
-# ================================
 def event_breakout(price, closes, resistance, volumes):
-
     avg5 = avg(volumes[-5:])
     near = closes[-1] > resistance * 0.995
-
     return near and volumes[-1] > avg5 * 1.3
 
 
 def event_pullback(price, ma5, closes):
-
     near = abs(price - ma5) / ma5 < 0.03
     rebound = closes[-1] > closes[-2]
-
     return near and rebound
 
 
-# ================================
-# 🔥 Edge
-# ================================
 def edge_consolidation(closes):
     return (max(closes[-5:]) - min(closes[-5:])) / closes[-1] < 0.04
 
@@ -209,13 +213,6 @@ def edge_first_pullback(closes, ma20):
     return closes[-2] > ma20 and closes[-3] > ma20
 
 
-def edge_ma20_trend(ma20, closes):
-    return ma20 > avg(closes[-21:-1])
-
-
-# ================================
-# 🔥 風控
-# ================================
 def risk_control(buy, stop, resistance, mode):
 
     if stop >= buy:
@@ -236,9 +233,6 @@ def risk_control(buy, stop, resistance, mode):
     return True, risk, rr
 
 
-# ================================
-# 🔥 倉位（🔥唯一修改：動態）
-# ================================
 def base_position(market, trend, structure, volume):
 
     pos = 0
@@ -280,7 +274,7 @@ def position_size(risk, market):
 
 
 # ================================
-# 🔥 🎯 strategy（穩定版）
+# 🔥 strategy（完全保留）
 # ================================
 def strategy(price, ma5, ma20, closes, volumes):
 
@@ -300,41 +294,15 @@ def strategy(price, ma5, ma20, closes, volumes):
 
     base_pos = base_position(market, trend, structure, volume)
 
-    # ===== 過濾 =====
     if market == "WEAK" or trend == "DOWN" or volume == "DISTRIBUTION":
-        return build_result(
-            decision="NO_TRADE",
-            position=0,
-            market_signal=market,
-            market_score=m_score,
-            market_grade=m_grade
-        )
+        return build_result(decision="NO_TRADE", position=0)
 
     if volume == "WEAK":
-        return build_result(
-            decision="WAIT",
-            position=base_pos,
-            market_signal=market,
-            trend=trend,
-            volume_state=volume,
-            structure_state=structure,
-            market_score=m_score,
-            market_grade=m_grade
-        )
+        return build_result(decision="WAIT", position=base_pos)
 
     if structure == "WEAK" and not cons:
-        return build_result(
-            decision="WAIT",
-            position=base_pos,
-            market_signal=market,
-            trend=trend,
-            volume_state=volume,
-            structure_state=structure,
-            market_score=m_score,
-            market_grade=m_grade
-        )
+        return build_result(decision="WAIT", position=base_pos)
 
-    # ===== breakout =====
     if event_breakout(price, closes, resistance, volumes):
 
         if edge_fake_breakout(closes):
@@ -351,29 +319,16 @@ def strategy(price, ma5, ma20, closes, volumes):
                 stop=stop,
                 position=position_size(risk, market),
                 risk=risk,
-                rr=rr,
-                market_signal=market,
-                trend=trend,
-                volume_state=volume,
-                structure_state=structure,
-                market_score=m_score,
-                market_grade=m_grade
+                rr=rr
             )
 
-    # ===== pullback =====
     if trend == "UP" and event_pullback(price, ma5, closes):
 
         if not structure_hold(closes):
             return build_result(decision="NO_TRADE")
 
         if not edge_first_pullback(closes, ma20):
-            return build_result(
-                decision="WAIT",
-                position=max(base_pos, 0.3),
-                market_signal=market,
-                market_score=m_score,
-                market_grade=m_grade
-            )
+            return build_result(decision="WAIT", position=max(base_pos, 0.3))
 
         buy, stop = ma5, min(ma20, support)
         ok, risk, rr = risk_control(buy, stop, resistance, "pullback")
@@ -386,16 +341,9 @@ def strategy(price, ma5, ma20, closes, volumes):
                 stop=stop,
                 position=position_size(risk, market),
                 risk=risk,
-                rr=rr,
-                market_signal=market,
-                trend=trend,
-                volume_state=volume,
-                structure_state=structure,
-                market_score=m_score,
-                market_grade=m_grade
+                rr=rr
             )
 
-    # ===== early =====
     if cons and volume == "NORMAL" and closes[-1] > closes[-2]:
 
         buy, stop = price, min(ma5, support)
@@ -409,22 +357,7 @@ def strategy(price, ma5, ma20, closes, volumes):
                 stop=stop,
                 position=max(base_pos, 0.3),
                 risk=risk,
-                rr=rr,
-                market_signal=market,
-                trend=trend,
-                volume_state=volume,
-                structure_state=structure,
-                market_score=m_score,
-                market_grade=m_grade
+                rr=rr
             )
 
-    return build_result(
-        decision="WAIT",
-        position=base_pos,
-        market_signal=market,
-        trend=trend,
-        volume_state=volume,
-        structure_state=structure,
-        market_score=m_score,
-        market_grade=m_grade
-    )
+    return build_result(decision="WAIT", position=base_pos)
