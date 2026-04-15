@@ -1,10 +1,10 @@
 # ================================
-# 🔥 analysis.py（FINAL v14.1｜LOCKED｜完整穩定版）
+# 🔥 analysis.py（FINAL v14.2｜LOCKED｜完整最終版）
 # ================================
 
 # 🔒 VERSION LOCK
-# - 基於 v14
-# - 修正：base_position缺失 + 真量過濾 + 假突破精準化
+# - 基於 v14.1
+# - 修正：add_on 市場分級（防止錯誤重倉）
 # - ❗禁止刪減 / 重構 / 簡化
 # ================================
 
@@ -138,12 +138,7 @@ def build_result(**kwargs):
 
     action_data = action_mapper(decision, position)
 
-    risk = kwargs.get("risk", 0)
-    rr = kwargs.get("rr", 0)
-
     if decision == "NO_TRADE":
-        risk = 0
-        rr = 0
         position = 0
 
     result = {
@@ -154,14 +149,11 @@ def build_result(**kwargs):
         "position": round(position, 2),
         "action": action_data["action"],
         "action_type": action_data["action_type"],
-        "risk": round(risk, 4),
-        "rr": round(rr, 2),
-        "market_signal": kwargs.get("market_signal"),
+        "market_score": kwargs.get("market_score"),
+        "market_grade": kwargs.get("market_grade"),
         "trend": kwargs.get("trend"),
         "structure_state": kwargs.get("structure_state"),
         "volume_state": kwargs.get("volume_state"),
-        "market_score": kwargs.get("market_score"),
-        "market_grade": kwargs.get("market_grade"),
     }
 
     result["strength"] = strength_score(result)
@@ -199,7 +191,6 @@ def volume_signal(volumes):
     avg10 = avg(volumes[-10:])
     ratio = volumes[-1] / avg10 if avg10 else 1
 
-    # 🔥 避免垃圾量
     if avg10 < 1:
         return "WEAK"
 
@@ -257,7 +248,7 @@ def edge_fake_breakout(closes):
 
 
 # ================================
-# 🔥 strategy（v14.1）
+# 🔥 strategy（v14.2）
 # ================================
 def strategy(price, ma5, ma20, closes, volumes):
 
@@ -283,14 +274,24 @@ def strategy(price, ma5, ma20, closes, volumes):
     if market == "WEAK" or trend == "DOWN" or volume == "DISTRIBUTION":
         return build_result(decision="NO_TRADE", position=0)
 
-    # 🔥 加碼優先
+    # 🔥 加碼（市場分級）
     if event_breakout(price, closes, resistance, volumes):
+
+        if m_grade == "A":
+            pos = 0.7
+        elif m_grade == "B":
+            pos = 0.5
+        elif m_grade == "C":
+            return build_result(decision="WAIT", position=base_pos)
+        else:
+            return build_result(decision="NO_TRADE", position=0)
+
         return build_result(
             decision="BUY",
             decision_type="add_on",
             buy=price,
             stop=min(ma5, support),
-            position=0.7,
+            position=pos,
             market_score=m_score,
             market_grade=m_grade,
             trend=trend,
