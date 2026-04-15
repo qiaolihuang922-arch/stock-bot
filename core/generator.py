@@ -1,10 +1,10 @@
 # ================================
-# 🔥 FINAL（顯示層 v11｜LOCKED｜完全對齊 v12 strategy）
+# 🔥 FINAL（顯示層 v12｜LOCKED｜完全對齊 v12 strategy）
 # ================================
 
 # 🔒 VERSION LOCK
-# - 基於 v10 顯示層
-# - 對齊 strategy v12（fail_exit 修正 + fake_break）
+# - 基於 v11 顯示層
+# - 修正：stage 與 market 衝突問題
 # - ❗禁止刪減 / 重構 / 簡化
 # ================================
 
@@ -26,7 +26,6 @@ stocks = {
     "華邦電": "2344",
     "技嘉": "2376",
 
-    # 🔥 新增
     "廣達": "2382",
     "英業達": "2356",
     "仁寶": "2324",
@@ -52,7 +51,7 @@ def get_action(result):
 
 
 # ================================
-# 🔥 解釋（🔥升級：精準語意）
+# 🔥 解釋（保留）
 # ================================
 def explain(result, conditions, stage):
 
@@ -74,13 +73,9 @@ def explain(result, conditions, stage):
 
         return "訊號成立"
 
-    # 🔥 fail_exit（升級語意）
     if decision_type == "fail_exit":
         return "趨勢破壞，強制出場"
 
-    # ================================
-    # 🔥 原邏輯（保留）
-    # ================================
     if stage == "BREAKOUT_READY":
         return "接近突破，等觸發"
 
@@ -128,7 +123,10 @@ def safe_list(data, n=20):
     return data
 
 
-def stage_detection(price, closes):
+# ================================
+# 🔥 🔥 修正核心（這裡）
+# ================================
+def stage_detection(price, closes, market_grade=None):
     closes = safe_list(closes)
 
     try:
@@ -137,6 +135,10 @@ def stage_detection(price, closes):
         return "FAR"
 
     dist = (resistance - price) / price if price else 0
+
+    # 🔥 市場過弱 → 禁止突破判定
+    if market_grade == "D":
+        return "FAR"
 
     if dist < 0.02:
         return "BREAKOUT_READY"
@@ -155,22 +157,19 @@ def stage_to_text(stage):
 
 
 # ================================
-# 🔥 訊號顯示（🔥微優化）
+# 🔥 訊號顯示（保留）
 # ================================
 def build_signals(result, conditions):
 
     decision = result.get("decision")
     decision_type = result.get("decision_type")
 
-    # 🔥 BUY 不顯示負面
     if decision == "BUY":
         return []
 
-    # 🔥 fail_exit → 顯示核心原因（避免誤導）
     if decision_type == "fail_exit":
         return ["趨勢不對", "結構轉弱"]
 
-    # 🔴 NO_TRADE
     if decision == "NO_TRADE":
         keys = ["market", "trend", "volume"]
     else:
@@ -233,7 +232,9 @@ def generate():
 
         result = strategy(price, ma5, ma20, closes, volumes)
         conditions = condition_engine(result)
-        stage = stage_detection(price, closes)
+
+        # 🔥 傳入 market_grade（修正點）
+        stage = stage_detection(price, closes, result.get("market_grade"))
 
         decisions.append(result.get("decision"))
         results_map[name] = result
@@ -247,9 +248,6 @@ def generate():
 
         msg += f"💡 {explain(result, conditions, stage)}\n"
 
-        # ================================
-        # 🔥 BUY 顯示
-        # ================================
         if result.get("decision") == "BUY":
 
             msg += f"📍 Buy: {safe_round(result.get('buy'))}\n"
@@ -263,9 +261,6 @@ def generate():
 
         msg += f"💰 {safe_round(price)}（{safe_round(change,2)}%）\n\n"
 
-    # ================================
-    # 🔥 最強股
-    # ================================
     best, score = pick_best_stock(results_map)
 
     msg += "====================\n"
