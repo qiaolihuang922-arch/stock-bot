@@ -1,10 +1,10 @@
 # ================================
-# 🔥 analysis.py（FINAL v12｜LOCKED｜不可簡化版）
+# 🔥 analysis.py（FINAL v13｜LOCKED｜不可簡化版）
 # ================================
 
 # 🔒 VERSION LOCK
-# - 基於 v11 完整版本
-# - 僅優化：fail_exit 精準化 + fake_break 保護
+# - 基於 v12 完整版本
+# - 僅新增：市場分級倉位控制（解決亂試單）
 # - ❗禁止刪減 / 重構 / 簡化
 # ================================
 
@@ -247,7 +247,7 @@ def base_position(market, trend, structure, volume):
 
 
 # ================================
-# 🔥 strategy（v12 強化版）
+# 🔥 strategy（v13｜加入市場倉位控制）
 # ================================
 def strategy(price, ma5, ma20, closes, volumes):
 
@@ -264,12 +264,9 @@ def strategy(price, ma5, ma20, closes, volumes):
     m_grade = market_grade(m_score)
 
     cons = edge_consolidation(closes)
-    fake_break = edge_fake_breakout(closes)  # 🔥 新增
+    fake_break = edge_fake_breakout(closes)
     base_pos = base_position(market, trend, structure, volume)
 
-    # ================================
-    # 🔥 假突破保護（避免被洗掉）
-    # ================================
     if fake_break:
         return build_result(
             decision="WAIT",
@@ -281,15 +278,9 @@ def strategy(price, ma5, ma20, closes, volumes):
             structure_state=structure
         )
 
-    # ================================
-    # ❌ 原排除
-    # ================================
     if market == "WEAK" or trend == "DOWN" or volume == "DISTRIBUTION":
         return build_result(decision="NO_TRADE", position=0)
 
-    # ================================
-    # 🔥 失敗退出（修正版：真正破壞才砍）
-    # ================================
     if trend == "DOWN" and price < ma5 and structure == "WEAK":
         return build_result(
             decision="NO_TRADE",
@@ -304,15 +295,25 @@ def strategy(price, ma5, ma20, closes, volumes):
         return build_result(decision="WAIT", position=base_pos)
 
     # ================================
-    # 🔥 試單
+    # 🔥 試單（🔥市場分級控制）
     # ================================
     if trend == "UP" and volume != "WEAK" and price > resistance * 0.97:
+
+        if m_grade == "A":
+            pos = 0.3
+        elif m_grade == "B":
+            pos = 0.2
+        elif m_grade == "C":
+            return build_result(decision="WAIT", position=base_pos)
+        else:
+            return build_result(decision="NO_TRADE", position=0)
+
         return build_result(
             decision="BUY",
             decision_type="pre_breakout",
             buy=price,
             stop=min(ma5, support),
-            position=0.3,
+            position=pos,
             market_score=m_score,
             market_grade=m_grade,
             trend=trend,
@@ -337,9 +338,6 @@ def strategy(price, ma5, ma20, closes, volumes):
             structure_state=structure
         )
 
-    # ================================
-    # 🔥 early
-    # ================================
     if cons and volume == "NORMAL" and closes[-1] > closes[-2] and trend == "UP":
         return build_result(
             decision="BUY",
