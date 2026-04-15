@@ -1,10 +1,10 @@
 # ================================
-# 🔥 analysis.py（FINAL v14.2｜LOCKED｜完整最終版）
+# 🔥 analysis.py（FINAL v14.3｜LOCKED｜市場修復版）
 # ================================
 
 # 🔒 VERSION LOCK
-# - 基於 v14.1
-# - 修正：add_on 市場分級（防止錯誤重倉）
+# - 基於 v14.2
+# - 修正：market_signal 誤判（避免正常回檔變 WEAK）
 # - ❗禁止刪減 / 重構 / 簡化
 # ================================
 
@@ -162,23 +162,33 @@ def build_result(**kwargs):
 
 
 # ================================
-# 🔥 訊號
+# 🔥 市場判斷（🔥修復重點）
 # ================================
 def market_signal(closes, ma20):
+
     momentum = closes[-1] - closes[-3]
 
-    if closes[-1] < ma20 and momentum < 0:
+    # 🔥 關鍵：看最近5天在MA20上的比例
+    above_ma20_ratio = sum(1 for c in closes[-5:] if c > ma20) / 5
+
+    # ❌ 真弱勢（多條件）
+    if closes[-1] < ma20 and momentum < 0 and above_ma20_ratio < 0.4:
         return "WEAK"
 
+    # 🔄 盤整
     if (max(closes[-10:]) - min(closes[-10:])) / closes[-1] < 0.04:
         return "CHOPPY"
 
-    if closes[-1] > ma20 and momentum > 0:
+    # 🔥 真強勢（不是單根）
+    if closes[-1] > ma20 and above_ma20_ratio > 0.6:
         return "STRONG"
 
     return "NORMAL"
 
 
+# ================================
+# 🔥 其他訊號（完全保留）
+# ================================
 def trend_signal(price, ma5, ma20):
     if price > ma5 > ma20:
         return "UP"
@@ -223,7 +233,7 @@ def structure_state(closes):
 
 
 # ================================
-# 🔥 壓力 / 事件
+# 🔥 壓力 / 事件（保留）
 # ================================
 def support_resistance(closes):
     return min(closes[-20:]), max(closes[-20:-3])
@@ -248,7 +258,7 @@ def edge_fake_breakout(closes):
 
 
 # ================================
-# 🔥 strategy（v14.2）
+# 🔥 strategy（完全保留 v14.2）
 # ================================
 def strategy(price, ma5, ma20, closes, volumes):
 
@@ -274,7 +284,6 @@ def strategy(price, ma5, ma20, closes, volumes):
     if market == "WEAK" or trend == "DOWN" or volume == "DISTRIBUTION":
         return build_result(decision="NO_TRADE", position=0)
 
-    # 🔥 加碼（市場分級）
     if event_breakout(price, closes, resistance, volumes):
 
         if m_grade == "A":
@@ -299,7 +308,6 @@ def strategy(price, ma5, ma20, closes, volumes):
             structure_state=structure
         )
 
-    # 🔥 試單
     if trend == "UP" and volume != "WEAK" and price > resistance * 0.97:
 
         if m_grade == "A":
