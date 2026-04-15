@@ -1,10 +1,10 @@
 # ================================
-# 🔥 analysis.py（FINAL v11｜LOCKED｜不可簡化版）
+# 🔥 analysis.py（FINAL v12｜LOCKED｜不可簡化版）
 # ================================
 
 # 🔒 VERSION LOCK
-# - 基於 v10.2 完整版本
-# - 僅新增：加碼機制 / 失敗退出
+# - 基於 v11 完整版本
+# - 僅優化：fail_exit 精準化 + fake_break 保護
 # - ❗禁止刪減 / 重構 / 簡化
 # ================================
 
@@ -54,7 +54,7 @@ def strength_score(result):
 
 
 # ================================
-# 🔥 市場評分（補回）
+# 🔥 市場評分
 # ================================
 def market_score(market, trend, structure, volume, momentum):
 
@@ -247,7 +247,7 @@ def base_position(market, trend, structure, volume):
 
 
 # ================================
-# 🔥 strategy（🔥升級：加碼 + 失敗退出）
+# 🔥 strategy（v12 強化版）
 # ================================
 def strategy(price, ma5, ma20, closes, volumes):
 
@@ -264,17 +264,21 @@ def strategy(price, ma5, ma20, closes, volumes):
     m_grade = market_grade(m_score)
 
     cons = edge_consolidation(closes)
+    fake_break = edge_fake_breakout(closes)  # 🔥 新增
     base_pos = base_position(market, trend, structure, volume)
 
     # ================================
-    # ❌ 失敗退出（🔥新增：比 NO_TRADE 更早）
+    # 🔥 假突破保護（避免被洗掉）
     # ================================
-    if trend != "UP" and price < ma5:
-        # 🔥 跌破短趨勢直接砍（防止試單被套）
+    if fake_break:
         return build_result(
-            decision="NO_TRADE",
-            decision_type="fail_exit",  # 🔥 新類型
-            position=0
+            decision="WAIT",
+            position=base_pos,
+            market_score=m_score,
+            market_grade=m_grade,
+            trend=trend,
+            volume_state=volume,
+            structure_state=structure
         )
 
     # ================================
@@ -283,6 +287,16 @@ def strategy(price, ma5, ma20, closes, volumes):
     if market == "WEAK" or trend == "DOWN" or volume == "DISTRIBUTION":
         return build_result(decision="NO_TRADE", position=0)
 
+    # ================================
+    # 🔥 失敗退出（修正版：真正破壞才砍）
+    # ================================
+    if trend == "DOWN" and price < ma5 and structure == "WEAK":
+        return build_result(
+            decision="NO_TRADE",
+            decision_type="fail_exit",
+            position=0
+        )
+
     if volume == "WEAK":
         return build_result(decision="WAIT", position=base_pos)
 
@@ -290,7 +304,7 @@ def strategy(price, ma5, ma20, closes, volumes):
         return build_result(decision="WAIT", position=base_pos)
 
     # ================================
-    # 🔥 試單（保留）
+    # 🔥 試單
     # ================================
     if trend == "UP" and volume != "WEAK" and price > resistance * 0.97:
         return build_result(
@@ -307,15 +321,15 @@ def strategy(price, ma5, ma20, closes, volumes):
         )
 
     # ================================
-    # 🔥🔥 加碼（新增）
+    # 🔥 加碼
     # ================================
     if event_breakout(price, closes, resistance, volumes):
         return build_result(
             decision="BUY",
-            decision_type="add_on",  # 🔥 新類型
+            decision_type="add_on",
             buy=price,
             stop=min(ma5, support),
-            position=0.7,  # 🔥 加碼到重倉
+            position=0.7,
             market_score=m_score,
             market_grade=m_grade,
             trend=trend,
@@ -324,7 +338,7 @@ def strategy(price, ma5, ma20, closes, volumes):
         )
 
     # ================================
-    # 🔥 early（保留）
+    # 🔥 early
     # ================================
     if cons and volume == "NORMAL" and closes[-1] > closes[-2] and trend == "UP":
         return build_result(
