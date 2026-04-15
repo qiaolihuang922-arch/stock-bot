@@ -1,10 +1,10 @@
 # ================================
-# 🔥 FINAL（顯示層 v10｜LOCKED｜完全對齊 v11 strategy）
+# 🔥 FINAL（顯示層 v11｜LOCKED｜完全對齊 v12 strategy）
 # ================================
 
 # 🔒 VERSION LOCK
-# - 基於 v9.1 顯示層
-# - 對齊 strategy v11（add_on / fail_exit）
+# - 基於 v10 顯示層
+# - 對齊 strategy v12（fail_exit 修正 + fake_break）
 # - ❗禁止刪減 / 重構 / 簡化
 # ================================
 
@@ -26,7 +26,7 @@ stocks = {
     "華邦電": "2344",
     "技嘉": "2376",
 
-    # 🔥 新增（全部 10-300 且適合策略）
+    # 🔥 新增
     "廣達": "2382",
     "英業達": "2356",
     "仁寶": "2324",
@@ -52,32 +52,31 @@ def get_action(result):
 
 
 # ================================
-# 🔥 解釋（🔥升級：對齊 v11）
+# 🔥 解釋（🔥升級：精準語意）
 # ================================
 def explain(result, conditions, stage):
 
     decision = result.get("decision")
+    decision_type = result.get("decision_type")
 
     if decision == "BUY":
 
-        t = result.get("decision_type")
-
-        if t == "breakout":
+        if decision_type == "breakout":
             return "突破壓力"
-        elif t == "pullback":
+        elif decision_type == "pullback":
             return "回踩轉強"
-        elif t == "early":
+        elif decision_type == "early":
             return "提前卡位"
-        elif t == "pre_breakout":
+        elif decision_type == "pre_breakout":
             return "突破前試單"
-        elif t == "add_on":  # 🔥 新增（加碼）
+        elif decision_type == "add_on":
             return "突破確認，加碼"
-        
+
         return "訊號成立"
 
-    # 🔥 新增：失敗退出顯示
-    if result.get("decision_type") == "fail_exit":
-        return "跌破趨勢，強制出場"
+    # 🔥 fail_exit（升級語意）
+    if decision_type == "fail_exit":
+        return "趨勢破壞，強制出場"
 
     # ================================
     # 🔥 原邏輯（保留）
@@ -156,17 +155,22 @@ def stage_to_text(stage):
 
 
 # ================================
-# 🔥 訊號顯示（保留）
+# 🔥 訊號顯示（🔥微優化）
 # ================================
 def build_signals(result, conditions):
 
     decision = result.get("decision")
+    decision_type = result.get("decision_type")
 
-    # 🔥 BUY 不顯示負面訊號
+    # 🔥 BUY 不顯示負面
     if decision == "BUY":
         return []
 
-    # 🔴 NO_TRADE → 致命
+    # 🔥 fail_exit → 顯示核心原因（避免誤導）
+    if decision_type == "fail_exit":
+        return ["趨勢不對", "結構轉弱"]
+
+    # 🔴 NO_TRADE
     if decision == "NO_TRADE":
         keys = ["market", "trend", "volume"]
     else:
@@ -244,7 +248,7 @@ def generate():
         msg += f"💡 {explain(result, conditions, stage)}\n"
 
         # ================================
-        # 🔥 BUY 顯示（保留）
+        # 🔥 BUY 顯示
         # ================================
         if result.get("decision") == "BUY":
 
@@ -260,7 +264,7 @@ def generate():
         msg += f"💰 {safe_round(price)}（{safe_round(change,2)}%）\n\n"
 
     # ================================
-    # 🔥 最強股（保留）
+    # 🔥 最強股
     # ================================
     best, score = pick_best_stock(results_map)
 
