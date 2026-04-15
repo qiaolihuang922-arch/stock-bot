@@ -1,11 +1,11 @@
 # ================================
-# 🔥 FINAL（顯示層 v13｜LOCKED｜完全對齊 v14.1 strategy）
+# 🔥 FINAL（顯示層 v13.1｜LOCKED｜穩定補強版）
 # ================================
 
 # 🔒 VERSION LOCK
-# - 基於 v12
-# - 修正：假數據來源 + 完全對齊 strategy v14.1
-# - ❗禁止刪減 / 重構 / 簡化
+# - 基於 v13（完全保留原邏輯）
+# - ❗未修改任何策略 / 判斷流程
+# - ✅ 僅補強：防呆（空數據 / None / 崩潰保護）
 # ================================
 
 from datetime import datetime
@@ -25,7 +25,6 @@ stocks = {
     "群創": "3481",
     "華邦電": "2344",
     "技嘉": "2376",
-
     "廣達": "2382",
     "英業達": "2356",
     "仁寶": "2324",
@@ -124,7 +123,7 @@ def safe_list(data, n=20):
 
 
 # ================================
-# 🔥 stage（對齊 strategy）
+# 🔥 stage
 # ================================
 def stage_detection(price, closes, market_grade=None):
 
@@ -213,7 +212,6 @@ def generate():
         twse = get_twse(code)
         yahoo = get_yahoo(code)
 
-        # 🔥 沒有真數據 → 直接跳過
         if not twse and not yahoo:
             continue
 
@@ -227,12 +225,9 @@ def generate():
                 price, change = yahoo
             else:
                 price, change = t_price, t_change
-
         else:
-            # ❌ 禁止假數據
             continue
 
-        # 🔥 沒有 closes / volumes → 跳過
         if not closes or not volumes:
             continue
 
@@ -266,12 +261,20 @@ def generate():
 
         msg += f"💰 {safe_round(price)}（{safe_round(change,2)}%）\n\n"
 
+    # 🔥 防呆：沒有任何有效股票
+    if not results_map:
+        return msg + "⚠ 無有效數據"
+
     best, score = pick_best_stock(results_map)
 
     msg += "====================\n"
-    msg += f"🔥 今日最強：{best}（強度 {score}）\n\n"
 
-    if any(d == "BUY" for d in decisions):
+    if best:
+        msg += f"🔥 今日最強：{best}（強度 {score}）\n\n"
+    else:
+        msg += "⚠ 無最強股\n\n"
+
+    if decisions and any(d == "BUY" for d in decisions):
         msg += "🟢 有交易機會"
     else:
         msg += "⏳ 市場觀望"
