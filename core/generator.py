@@ -1,10 +1,10 @@
 # ================================
-# 🔥 FINAL（顯示層 v12｜LOCKED｜完全對齊 v12 strategy）
+# 🔥 FINAL（顯示層 v13｜LOCKED｜完全對齊 v14.1 strategy）
 # ================================
 
 # 🔒 VERSION LOCK
-# - 基於 v11 顯示層
-# - 修正：stage 與 market 衝突問題
+# - 基於 v12
+# - 修正：假數據來源 + 完全對齊 strategy v14.1
 # - ❗禁止刪減 / 重構 / 簡化
 # ================================
 
@@ -34,7 +34,7 @@ stocks = {
 
 
 # ================================
-# 🔥 行動（保留）
+# 🔥 行動
 # ================================
 def get_action(result):
 
@@ -51,7 +51,7 @@ def get_action(result):
 
 
 # ================================
-# 🔥 解釋（保留）
+# 🔥 解釋
 # ================================
 def explain(result, conditions, stage):
 
@@ -89,7 +89,7 @@ def explain(result, conditions, stage):
 
 
 # ================================
-# 🔥 工具（保留）
+# 🔥 工具
 # ================================
 def get_market_phase():
     now = datetime.now(tz)
@@ -117,17 +117,21 @@ def safe_round(val, n=1):
 
 def safe_list(data, n=20):
     if not data:
-        return [0] * n
+        return None
     if len(data) < n:
         return data + [data[-1]] * (n - len(data))
     return data
 
 
 # ================================
-# 🔥 🔥 修正核心（這裡）
+# 🔥 stage（對齊 strategy）
 # ================================
 def stage_detection(price, closes, market_grade=None):
+
     closes = safe_list(closes)
+
+    if not closes:
+        return "FAR"
 
     try:
         resistance = max(closes[-20:-3])
@@ -136,7 +140,6 @@ def stage_detection(price, closes, market_grade=None):
 
     dist = (resistance - price) / price if price else 0
 
-    # 🔥 市場過弱 → 禁止突破判定
     if market_grade == "D":
         return "FAR"
 
@@ -157,7 +160,7 @@ def stage_to_text(stage):
 
 
 # ================================
-# 🔥 訊號顯示（保留）
+# 🔥 訊號顯示
 # ================================
 def build_signals(result, conditions):
 
@@ -193,7 +196,7 @@ def build_signals(result, conditions):
 
 
 # ================================
-# 🔥 主流程（穩定版）
+# 🔥 主流程
 # ================================
 def generate():
 
@@ -210,6 +213,7 @@ def generate():
         twse = get_twse(code)
         yahoo = get_yahoo(code)
 
+        # 🔥 沒有真數據 → 直接跳過
         if not twse and not yahoo:
             continue
 
@@ -223,17 +227,18 @@ def generate():
                 price, change = yahoo
             else:
                 price, change = t_price, t_change
+
         else:
-            price, change = yahoo
-            closes = [price] * 20
-            volumes = [1] * 20
-            ma5 = price
-            ma20 = price
+            # ❌ 禁止假數據
+            continue
+
+        # 🔥 沒有 closes / volumes → 跳過
+        if not closes or not volumes:
+            continue
 
         result = strategy(price, ma5, ma20, closes, volumes)
         conditions = condition_engine(result)
 
-        # 🔥 傳入 market_grade（修正點）
         stage = stage_detection(price, closes, result.get("market_grade"))
 
         decisions.append(result.get("decision"))
