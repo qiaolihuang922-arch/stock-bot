@@ -1,12 +1,25 @@
 # ================================
-# 🔥 FINAL（顯示層 v13.1｜LOCKED｜穩定補強版）
+# 🔥 FINAL（顯示層 v13.1｜LOCKED｜強化防破壞版）
 # ================================
 
-# 🔒 VERSION LOCK
+# 🔒🔒🔒 VERSION LOCK（極重要｜不可隨意修改）
 # - 基於 v13（完全保留原邏輯）
-# - ❗未修改任何策略 / 判斷流程
-# - ✅ 僅補強：防呆（空數據 / None / 崩潰保護）
+# - ❗嚴禁修改 strategy / condition_engine 相關資料流
+# - ❗嚴禁重新計算 stage / conditions（必須使用第一輪結果）
+# - ❗嚴禁使用 fake price / fake closes
+# - ✅ 僅允許修改：顯示內容 / 倉位分配（action）
+#
+# 🔥 核心原則（不可違反）
+# 1️⃣ strategy = 決策（不能動）
+# 2️⃣ generate = 顯示 + 資金分配（只能動 action）
+# 3️⃣ 市場資料（price / closes / stage）只能用「第一輪計算結果」
+#
+# ⚠️ 違反以上任何一條 → 會導致：
+# - 市場等級錯誤（A → D）
+# - stage 判斷錯誤
+# - 訊號失真
 # ================================
+
 
 from datetime import datetime
 import pytz
@@ -17,6 +30,8 @@ from core.condition_engine import condition_engine
 
 tz = pytz.timezone("Asia/Taipei")
 
+
+# 🔒 股票池（允許修改）
 stocks = {
     "緯創": "3231",
     "建準": "2421",
@@ -33,7 +48,7 @@ stocks = {
 
 
 # ================================
-# 🔥 行動
+# 🔥 行動（顯示層｜允許修改）
 # ================================
 def get_action(result):
 
@@ -50,7 +65,7 @@ def get_action(result):
 
 
 # ================================
-# 🔥 解釋（修正）
+# 🔥 解釋（顯示層｜允許修改）
 # ================================
 def explain(result, conditions, stage):
 
@@ -88,7 +103,7 @@ def explain(result, conditions, stage):
 
 
 # ================================
-# 🔥 工具（不變）
+# 🔥 工具（不可動）
 # ================================
 def get_market_phase():
     now = datetime.now(tz)
@@ -123,7 +138,7 @@ def safe_list(data, n=20):
 
 
 # ================================
-# 🔥 stage（不變）
+# 🔥 stage（不可動｜依賴真實 closes）
 # ================================
 def stage_detection(price, closes, market_grade=None):
 
@@ -159,7 +174,7 @@ def stage_to_text(stage):
 
 
 # ================================
-# 🔥 訊號顯示（不變）
+# 🔥 訊號顯示（不可動）
 # ================================
 def build_signals(result, conditions):
 
@@ -195,7 +210,7 @@ def build_signals(result, conditions):
 
 
 # ================================
-# 🔥 主流程（加入最強股分配）
+# 🔥 主流程（核心｜部分可動）
 # ================================
 def generate():
 
@@ -207,6 +222,7 @@ def generate():
     decisions = []
     results_map = {}
 
+    # 🔒 第一輪：取得「唯一真實市場資料」
     for name, code in stocks.items():
 
         twse = get_twse(code)
@@ -233,22 +249,29 @@ def generate():
 
         result = strategy(price, ma5, ma20, closes, volumes)
         conditions = condition_engine(result)
-
         stage = stage_detection(price, closes, result.get("market_grade"))
 
         decisions.append(result.get("decision"))
-        results_map[name] = result
 
-    # 🔥 防呆
+        # 🔒 不可破壞資料結構
+        results_map[name] = {
+            "result": result,
+            "conditions": conditions,
+            "stage": stage,
+            "price": price,
+            "change": change,
+            "closes": closes
+        }
+
     if not results_map:
         return msg + "⚠ 無有效數據"
 
     # ================================
-    # 🔥 最強股優先分配（核心）
+    # 🔥 資金分配（唯一允許修改區）
     # ================================
     buy_list = [
-        (n, r) for n, r in results_map.items()
-        if r.get("decision") == "BUY"
+        (n, d["result"]) for n, d in results_map.items()
+        if d["result"].get("decision") == "BUY"
     ]
 
     buy_list.sort(key=lambda x: x[1].get("strength", 0), reverse=True)
@@ -265,14 +288,14 @@ def generate():
 
     # ================================
 
-    # 🔥 開始輸出
-    for name, result in results_map.items():
+    # 🔒 第二輪：只允許「讀取」資料（禁止重算）
+    for name, data in results_map.items():
 
-        conditions = condition_engine(result)
-        price = result.get("buy") or 0  # fallback
+        result = data["result"]
+        conditions = data["conditions"]
+        stage = data["stage"]
 
         action = get_action(result)
-        stage = stage_detection(price, [price]*20, result.get("market_grade"))
 
         msg += f"【{name}】{action}\n"
 
@@ -292,9 +315,9 @@ def generate():
             for r in signals:
                 msg += f"- {r}\n"
 
-        msg += f"\n"
+        msg += f"💰 {safe_round(data['price'])}（{safe_round(data['change'],2)}%）\n\n"
 
-    best, score = pick_best_stock(results_map)
+    best, score = pick_best_stock({k: v["result"] for k, v in results_map.items()})
 
     msg += "====================\n"
 
