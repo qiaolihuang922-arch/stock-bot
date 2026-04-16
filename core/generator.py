@@ -50,7 +50,7 @@ def get_action(result):
 
 
 # ================================
-# 🔥 解釋
+# 🔥 解釋（修正）
 # ================================
 def explain(result, conditions, stage):
 
@@ -76,7 +76,7 @@ def explain(result, conditions, stage):
         return "趨勢破壞，強制出場"
 
     if stage == "BREAKOUT_READY":
-        return "接近突破，等觸發"
+        return "接近突破（尚未進場）"   # 🔥 修正
 
     if not conditions.get("event"):
         return "等待觸發"
@@ -88,7 +88,7 @@ def explain(result, conditions, stage):
 
 
 # ================================
-# 🔥 工具
+# 🔥 工具（不變）
 # ================================
 def get_market_phase():
     now = datetime.now(tz)
@@ -123,7 +123,7 @@ def safe_list(data, n=20):
 
 
 # ================================
-# 🔥 stage
+# 🔥 stage（不變）
 # ================================
 def stage_detection(price, closes, market_grade=None):
 
@@ -159,7 +159,7 @@ def stage_to_text(stage):
 
 
 # ================================
-# 🔥 訊號顯示
+# 🔥 訊號顯示（不變）
 # ================================
 def build_signals(result, conditions):
 
@@ -195,7 +195,7 @@ def build_signals(result, conditions):
 
 
 # ================================
-# 🔥 主流程
+# 🔥 主流程（只改最強股提示）
 # ================================
 def generate():
 
@@ -261,7 +261,6 @@ def generate():
 
         msg += f"💰 {safe_round(price)}（{safe_round(change,2)}%）\n\n"
 
-    # 🔥 防呆：沒有任何有效股票
     if not results_map:
         return msg + "⚠ 無有效數據"
 
@@ -270,7 +269,8 @@ def generate():
     msg += "====================\n"
 
     if best:
-        msg += f"🔥 今日最強：{best}（強度 {score}）\n\n"
+        msg += f"🔥 今日最強：{best}（強度 {score}）\n"
+        msg += "👉 可優先關注此標的\n\n"   # 🔥 新增
     else:
         msg += "⚠ 無最強股\n\n"
 
