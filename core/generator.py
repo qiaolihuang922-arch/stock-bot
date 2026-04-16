@@ -76,7 +76,7 @@ def explain(result, conditions, stage):
         return "趨勢破壞，強制出場"
 
     if stage == "BREAKOUT_READY":
-        return "接近突破（尚未進場）"   # 🔥 修正
+        return "接近突破（尚未進場）"
 
     if not conditions.get("event"):
         return "等待觸發"
@@ -195,7 +195,7 @@ def build_signals(result, conditions):
 
 
 # ================================
-# 🔥 主流程（只改最強股提示）
+# 🔥 主流程（加入最強股分配）
 # ================================
 def generate():
 
@@ -239,7 +239,40 @@ def generate():
         decisions.append(result.get("decision"))
         results_map[name] = result
 
+    # 🔥 防呆
+    if not results_map:
+        return msg + "⚠ 無有效數據"
+
+    # ================================
+    # 🔥 最強股優先分配（核心）
+    # ================================
+    buy_list = [
+        (n, r) for n, r in results_map.items()
+        if r.get("decision") == "BUY"
+    ]
+
+    buy_list.sort(key=lambda x: x[1].get("strength", 0), reverse=True)
+
+    allocation = [0.5, 0.3, 0.2]
+
+    for i, (n, r) in enumerate(buy_list):
+
+        if i < len(allocation):
+            r["action"] = allocation[i]
+        else:
+            r["action"] = 0
+            r["action_type"] = "HOLD"
+
+    # ================================
+
+    # 🔥 開始輸出
+    for name, result in results_map.items():
+
+        conditions = condition_engine(result)
+        price = result.get("buy") or 0  # fallback
+
         action = get_action(result)
+        stage = stage_detection(price, [price]*20, result.get("market_grade"))
 
         msg += f"【{name}】{action}\n"
 
@@ -259,10 +292,7 @@ def generate():
             for r in signals:
                 msg += f"- {r}\n"
 
-        msg += f"💰 {safe_round(price)}（{safe_round(change,2)}%）\n\n"
-
-    if not results_map:
-        return msg + "⚠ 無有效數據"
+        msg += f"\n"
 
     best, score = pick_best_stock(results_map)
 
@@ -270,7 +300,7 @@ def generate():
 
     if best:
         msg += f"🔥 今日最強：{best}（強度 {score}）\n"
-        msg += "👉 可優先關注此標的\n\n"   # 🔥 新增
+        msg += "👉 可優先關注此標的\n\n"
     else:
         msg += "⚠ 無最強股\n\n"
 
