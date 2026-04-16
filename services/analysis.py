@@ -65,7 +65,6 @@ def decision_score(market, trend, structure, volume):
 
     score = 0
 
-    # 市場（影響中等）
     if market == "STRONG":
         score += 2
     elif market == "NORMAL":
@@ -73,19 +72,16 @@ def decision_score(market, trend, structure, volume):
     elif market == "WEAK":
         score -= 2
 
-    # 趨勢（最重要）
     if trend == "UP":
         score += 3
     elif trend == "DOWN":
         score -= 3
 
-    # 結構
     if structure == "STRONG":
         score += 2
     elif structure == "WEAK":
         score -= 2
 
-    # 量能
     if volume == "STRONG":
         score += 2
     elif volume == "DISTRIBUTION":
@@ -267,7 +263,7 @@ def structure_state(closes):
 
 
 # ================================
-# 🔥 壓力 / 事件（原版）
+# 🔥 壓力 / 事件（⚠唯一改動）
 # ================================
 def support_resistance(closes):
     return min(closes[-20:]), max(closes[-20:-3])
@@ -276,8 +272,8 @@ def support_resistance(closes):
 def event_breakout(price, closes, resistance, volumes):
     avg5 = avg(volumes[-5:])
     return (
-        closes[-1] > resistance * 0.99
-        and volumes[-1] > avg5 * 1.2
+        closes[-1] > resistance * 1.01   # 🔥 修正（避免假突破）
+        and volumes[-1] > avg5 * 1.3
         and volumes[-1] > volumes[-2]
     )
 
@@ -288,7 +284,7 @@ def edge_fake_breakout(closes):
 
 
 # ================================
-# 🔥 strategy（權重融合版）
+# 🔥 strategy（⚠最小修改）
 # ================================
 def strategy(price, ma5, ma20, closes, volumes):
 
@@ -313,7 +309,7 @@ def strategy(price, ma5, ma20, closes, volumes):
     if fake_break:
         return build_result(
             decision="WAIT",
-            position=base_pos,
+            position=0,   # 🔥 修正
             market_score=m_score,
             market_grade=m_grade,
             trend=trend,
@@ -333,10 +329,15 @@ def strategy(price, ma5, ma20, closes, volumes):
             structure_state=structure
         )
 
-    # 🔥 加碼（更嚴格）
+    # 🔥 加碼（⚠只改倉位計算）
     if event_breakout(price, closes, resistance, volumes) and score >= 4:
 
-        pos = 0.7 if m_grade == "A" else 0.5
+        if score >= 6:
+            pos = 0.7
+        elif score >= 5:
+            pos = 0.6
+        else:
+            pos = 0.5
 
         return build_result(
             decision="BUY",
@@ -351,10 +352,15 @@ def strategy(price, ma5, ma20, closes, volumes):
             structure_state=structure
         )
 
-    # 🔥 試單（更乾淨）
+    # 🔥 試單（⚠只改倉位計算）
     if trend == "UP" and volume != "WEAK" and price > resistance * 0.97 and score >= 2:
 
-        pos = 0.3 if m_grade == "A" else 0.2
+        if score >= 4:
+            pos = 0.4
+        elif score >= 3:
+            pos = 0.3
+        else:
+            pos = 0.2
 
         return build_result(
             decision="BUY",
@@ -371,7 +377,7 @@ def strategy(price, ma5, ma20, closes, volumes):
 
     return build_result(
         decision="WAIT",
-        position=base_pos,
+        position=0,   # 🔥 修正
         market_score=m_score,
         market_grade=m_grade,
         trend=trend,
@@ -381,7 +387,7 @@ def strategy(price, ma5, ma20, closes, volumes):
 
 
 # ================================
-# 🔥 最強股
+# 🔥 最強股（原版）
 # ================================
 def pick_best_stock(results_dict):
 
