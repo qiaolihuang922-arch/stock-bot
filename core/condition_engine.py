@@ -1,5 +1,5 @@
 # ================================
-# 🔥 condition_engine.py（FINAL v9.0｜對齊策略版）
+# 🔥 condition_engine.py（FINAL v9.1｜對齊 v15）
 # ================================
 
 def condition_engine(result):
@@ -17,16 +17,22 @@ def condition_engine(result):
 
     decision = result.get("decision")
 
+    # 🔥 v15：改用 market_grade
+    market_grade = result.get("market_grade")
+    structure = result.get("structure_state")
+    trend = result.get("trend")
+    volume = result.get("volume_state")
+
+    decision_type = result.get("decision_type")
+    risk = result.get("risk")
+    rr = result.get("rr")
+
     # ================================
-    # 🔥 NO_TRADE（保留）
+    # 🔥 NO_TRADE（對齊）
     # ================================
     if decision == "NO_TRADE":
 
-        market = result.get("market_signal")
-        trend = result.get("trend")
-        volume = result.get("volume_state")
-
-        if market and market != "WEAK":
+        if market_grade and market_grade != "D":
             conditions["market"] = True
 
         if trend == "UP":
@@ -38,18 +44,9 @@ def condition_engine(result):
         return conditions
 
     # ================================
-    # 🔥 基礎映射（保留）
+    # 🔥 基礎映射（v15）
     # ================================
-    market = result.get("market_signal")
-    structure = result.get("structure_state")
-    trend = result.get("trend")
-    volume = result.get("volume_state")
-
-    decision_type = result.get("decision_type")
-    risk = result.get("risk")
-    rr = result.get("rr")
-
-    if market and market != "WEAK":
+    if market_grade and market_grade in ["A", "B"]:
         conditions["market"] = True
 
     if structure in ["STRONG", "NORMAL"]:
@@ -62,41 +59,39 @@ def condition_engine(result):
         conditions["volume"] = True
 
     # ================================
-    # 🔥 修正 1：支援新 decision_type
+    # 🔥 decision_type 對齊
     # ================================
-    # breakout / pullback / early / pre_breakout 都納入
-
-    if decision_type in ["breakout", "pre_breakout"]:
+    if decision_type in ["breakout", "pre_breakout", "add_on"]:
         conditions["event"] = True
 
-    if decision_type in ["pullback"]:
+    if decision_type == "pullback":
         conditions["event"] = True
 
-    if decision_type in ["early"]:
+    if decision_type == "early":
         conditions["edge"] = True
 
     # ================================
-    # 🔥 修正 2：風控（對齊策略）
+    # 🔥 風控（保留）
     # ================================
     if risk is not None and 0 < risk <= 0.08:
         conditions["risk"] = True
 
     # ================================
-    # 🔥 修正 3：RR 對齊 strategy
+    # 🔥 RR（保留）
     # ================================
     if rr is not None:
-        if decision_type in ["breakout", "pre_breakout"] and rr >= 1.5:
+        if decision_type in ["breakout", "pre_breakout", "add_on"] and rr >= 1.5:
             conditions["rr"] = True
         elif decision_type == "pullback" and rr >= 1.3:
             conditions["rr"] = True
         elif decision_type == "early":
-            conditions["rr"] = True  # 🔥 early 不再限制
+            conditions["rr"] = True
 
     return conditions
 
 
 # ================================
-# 🔥 summarize（保留）
+# 🔥 summarize（不動）
 # ================================
 def summarize_conditions(c, decision):
 
