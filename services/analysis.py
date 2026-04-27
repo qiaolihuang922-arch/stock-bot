@@ -1,10 +1,11 @@
 # ================================
-# 🔥 analysis.py（FINAL v15.3｜LOCKED｜主升段強化版）
+# 🔥 analysis.py（FINAL v15.3｜LOCKED｜主升段強化版｜FIXED）
 # ================================
 
 # 🔒 VERSION LOCK（重要）
 # - 基於 v15.1
 # - ❗未刪除任何原有策略邏輯
+# - ✅ 修復：補上 build_result（避免 NameError）
 # - ✅ 強化：market（更嚴格）
 # - ✅ 新增：strong（真強段）
 # - ✅ 完整三階段：試單 → 確認 → 主升段
@@ -56,6 +57,40 @@ def action_mapper(decision, position):
         return {"action": -1.0, "action_type": "SELL_ALL"}
 
     return {"action": 0.0, "action_type": "HOLD"}
+
+
+# ================================
+# 🔥 🔥🔥（補回來的關鍵）統一輸出
+# ================================
+def build_result(**kwargs):
+
+    decision = kwargs.get("decision", "WAIT")
+    position = kwargs.get("position", 0)
+
+    action_data = action_mapper(decision, position)
+
+    if decision == "NO_TRADE":
+        position = 0
+
+    result = {
+        "decision": decision,
+        "decision_type": kwargs.get("decision_type", "none"),
+        "buy": kwargs.get("buy"),
+        "stop": kwargs.get("stop"),
+        "position": round(position, 2),
+        "action": action_data["action"],
+        "action_type": action_data["action_type"],
+        "market_score": kwargs.get("market_score"),
+        "market_grade": kwargs.get("market_grade"),
+        "trend": kwargs.get("trend"),
+        "structure_state": kwargs.get("structure_state"),
+        "volume_state": kwargs.get("volume_state"),
+        "rr": kwargs.get("rr", 0),
+    }
+
+    result["strength"] = strength_score(result)
+
+    return result
 
 
 # ================================
@@ -116,7 +151,7 @@ def strength_score(result):
 
 
 # ================================
-# 🔥 市場評分（🔥拉開差距）
+# 🔥 市場評分（拉開差距）
 # ================================
 def market_score(market, trend, structure, volume, momentum):
 
@@ -167,7 +202,7 @@ def market_grade(score):
 
 
 # ================================
-# 🔥 市場判斷（🔥更嚴格）
+# 🔥 市場判斷（更嚴格）
 # ================================
 def market_signal(closes, ma20):
 
@@ -261,7 +296,7 @@ def edge_fake_breakout(closes):
 
 
 # ================================
-# 🔥 真強判斷（🔥新增核心）
+# 🔥 真強判斷（新增核心）
 # ================================
 def strong_follow(closes, resistance, volume):
 
@@ -273,7 +308,7 @@ def strong_follow(closes, resistance, volume):
 
 
 # ================================
-# 🔥 strategy（🔥三階段完成）
+# 🔥 strategy（三階段完成）
 # ================================
 def strategy(price, ma5, ma20, closes, volumes):
 
@@ -295,45 +330,25 @@ def strategy(price, ma5, ma20, closes, volumes):
     base_pos = base_position(market, trend, structure, volume)
 
     if fake_break:
-        return build_result(
-            decision="WAIT",
-            position=0,
-            market_score=m_score,
-            market_grade=m_grade,
-            trend=trend,
-            volume_state=volume,
-            structure_state=structure
-        )
+        return build_result(decision="WAIT", position=0,
+            market_score=m_score, market_grade=m_grade,
+            trend=trend, volume_state=volume, structure_state=structure)
 
     if score <= -3:
-        return build_result(
-            decision="NO_TRADE",
-            position=0,
-            market_score=m_score,
-            market_grade=m_grade,
-            trend=trend,
-            volume_state=volume,
-            structure_state=structure
-        )
+        return build_result(decision="NO_TRADE", position=0,
+            market_score=m_score, market_grade=m_grade,
+            trend=trend, volume_state=volume, structure_state=structure)
 
-    # 🔥 真強（最高優先）
+    # 🔥 真強
     if strong_follow(closes, resistance, volume) and score >= 6:
 
         pos = max(base_pos, 0.7)
         pos = min(pos + 0.1, 0.9)
 
-        return build_result(
-            decision="BUY",
-            decision_type="strong",
-            buy=price,
-            stop=min(ma5, support),
-            position=pos,
-            market_score=m_score,
-            market_grade=m_grade,
-            trend=trend,
-            volume_state=volume,
-            structure_state=structure
-        )
+        return build_result(decision="BUY", decision_type="strong",
+            buy=price, stop=min(ma5, support), position=pos,
+            market_score=m_score, market_grade=m_grade,
+            trend=trend, volume_state=volume, structure_state=structure)
 
     # 🔥 確認
     if event_breakout(price, closes, resistance, volumes) and score >= 4:
@@ -343,46 +358,24 @@ def strategy(price, ma5, ma20, closes, volumes):
         if score >= 6:
             pos = max(pos, 0.7)
 
-        return build_result(
-            decision="BUY",
-            decision_type="add_on",
-            buy=price,
-            stop=min(ma5, support),
-            position=pos,
-            market_score=m_score,
-            market_grade=m_grade,
-            trend=trend,
-            volume_state=volume,
-            structure_state=structure
-        )
+        return build_result(decision="BUY", decision_type="add_on",
+            buy=price, stop=min(ma5, support), position=pos,
+            market_score=m_score, market_grade=m_grade,
+            trend=trend, volume_state=volume, structure_state=structure)
 
     # 🔥 試單
     if trend == "UP" and volume != "WEAK" and price > resistance * 0.97 and score >= 2:
 
         pos = max(base_pos, 0.2)
 
-        return build_result(
-            decision="BUY",
-            decision_type="pre_breakout",
-            buy=price,
-            stop=min(ma5, support),
-            position=pos,
-            market_score=m_score,
-            market_grade=m_grade,
-            trend=trend,
-            volume_state=volume,
-            structure_state=structure
-        )
+        return build_result(decision="BUY", decision_type="pre_breakout",
+            buy=price, stop=min(ma5, support), position=pos,
+            market_score=m_score, market_grade=m_grade,
+            trend=trend, volume_state=volume, structure_state=structure)
 
-    return build_result(
-        decision="WAIT",
-        position=0,
-        market_score=m_score,
-        market_grade=m_grade,
-        trend=trend,
-        volume_state=volume,
-        structure_state=structure
-    )
+    return build_result(decision="WAIT", position=0,
+        market_score=m_score, market_grade=m_grade,
+        trend=trend, volume_state=volume, structure_state=structure)
 
 
 # ================================
