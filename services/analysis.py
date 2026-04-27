@@ -1,13 +1,13 @@
 # ================================
-# 🔥 analysis.py（FINAL v15.1｜LOCKED｜主升段修正版）
+# 🔥 analysis.py（FINAL v15.3｜LOCKED｜主升段強化版）
 # ================================
 
 # 🔒 VERSION LOCK（重要）
-# - 基於 v14.4
+# - 基於 v15.1
 # - ❗未刪除任何原有策略邏輯
-# - ✅ 修正：market_signal（主升段識別）
-# - ✅ 強化：decision_score（市場權重）
-# - ✅ 補齊：base_position → 決策流（🔥關鍵修復）
+# - ✅ 強化：market（更嚴格）
+# - ✅ 新增：strong（真強段）
+# - ✅ 完整三階段：試單 → 確認 → 主升段
 # ================================
 
 
@@ -59,13 +59,12 @@ def action_mapper(decision, position):
 
 
 # ================================
-# 🔥 權重模型（🔥v15.1強化）
+# 🔥 權重模型（原版）
 # ================================
 def decision_score(market, trend, structure, volume):
 
     score = 0
 
-    # 🔥 市場權重放大
     if market == "STRONG":
         score += 3
     elif market == "NORMAL":
@@ -73,19 +72,16 @@ def decision_score(market, trend, structure, volume):
     elif market == "WEAK":
         score -= 3
 
-    # 🔥 趨勢主導（核心）
     if trend == "UP":
         score += 3
     elif trend == "DOWN":
         score -= 3
 
-    # 結構
     if structure == "STRONG":
         score += 2
     elif structure == "WEAK":
         score -= 2
 
-    # 量能
     if volume == "STRONG":
         score += 2
     elif volume == "DISTRIBUTION":
@@ -120,88 +116,58 @@ def strength_score(result):
 
 
 # ================================
-# 🔥 市場評分（原版）
+# 🔥 市場評分（🔥拉開差距）
 # ================================
 def market_score(market, trend, structure, volume, momentum):
 
     score = 0
 
     if market == "STRONG":
-        score += 2
+        score += 3
     elif market == "CHOPPY":
-        score += 1
+        score += 0
     elif market == "WEAK":
-        score -= 2
+        score -= 3
 
     if trend == "UP":
-        score += 2
+        score += 3
     elif trend == "DOWN":
-        score -= 2
+        score -= 3
 
     if structure == "STRONG":
         score += 2
     elif structure == "WEAK":
-        score -= 1
+        score -= 2
 
     if volume == "STRONG":
         score += 2
     elif volume == "DISTRIBUTION":
-        score -= 2
+        score -= 3
+    elif volume == "WEAK":
+        score -= 1
 
     if momentum == "ACCELERATING":
-        score += 1
+        score += 2
     else:
-        score -= 0.5
+        score -= 1
 
     return score
 
 
 def market_grade(score):
-    if score >= 6:
+    if score >= 11:
+        return "A+"
+    elif score >= 8:
         return "A"
-    elif score >= 3:
+    elif score >= 5:
         return "B"
-    elif score >= 0:
+    elif score >= 2:
         return "C"
     return "D"
 
 
 # ================================
-# 🔥 統一輸出（原版）
-# ================================
-def build_result(**kwargs):
-
-    decision = kwargs.get("decision", "WAIT")
-    position = kwargs.get("position", 0)
-
-    action_data = action_mapper(decision, position)
-
-    if decision == "NO_TRADE":
-        position = 0
-
-    result = {
-        "decision": decision,
-        "decision_type": kwargs.get("decision_type", "none"),
-        "buy": kwargs.get("buy"),
-        "stop": kwargs.get("stop"),
-        "position": round(position, 2),
-        "action": action_data["action"],
-        "action_type": action_data["action_type"],
-        "market_score": kwargs.get("market_score"),
-        "market_grade": kwargs.get("market_grade"),
-        "trend": kwargs.get("trend"),
-        "structure_state": kwargs.get("structure_state"),
-        "volume_state": kwargs.get("volume_state"),
-        "rr": kwargs.get("rr", 0),
-    }
-
-    result["strength"] = strength_score(result)
-
-    return result
-
-
-# ================================
-# 🔥 市場判斷（🔥v15.1）
+# 🔥 市場判斷（🔥更嚴格）
 # ================================
 def market_signal(closes, ma20):
 
@@ -211,15 +177,17 @@ def market_signal(closes, ma20):
     if closes[-1] < ma20 and momentum < 0 and above_ma20_ratio < 0.4:
         return "WEAK"
 
-    # 🔥 修正CHOPPY誤判
     if (
-        (max(closes[-10:]) - min(closes[-10:])) / closes[-1] < 0.04
-        and closes[-1] < closes[-3]
+        (max(closes[-10:]) - min(closes[-10:])) / closes[-1] < 0.03
+        and abs(momentum) < closes[-1] * 0.01
     ):
         return "CHOPPY"
 
-    # 🔥 主升段識別（關鍵）
-    if closes[-1] > ma20 or (closes[-1] > closes[-3] and momentum > 0):
+    if (
+        closes[-1] > ma20
+        and closes[-1] > closes[-3]
+        and above_ma20_ratio > 0.6
+    ):
         return "STRONG"
 
     return "NORMAL"
@@ -293,7 +261,19 @@ def edge_fake_breakout(closes):
 
 
 # ================================
-# 🔥 strategy（🔥只補邏輯，不改結構）
+# 🔥 真強判斷（🔥新增核心）
+# ================================
+def strong_follow(closes, resistance, volume):
+
+    return (
+        closes[-1] > resistance
+        and closes[-1] > closes[-2] > closes[-3]
+        and volume in ["STRONG", "NORMAL"]
+    )
+
+
+# ================================
+# 🔥 strategy（🔥三階段完成）
 # ================================
 def strategy(price, ma5, ma20, closes, volumes):
 
@@ -336,7 +316,26 @@ def strategy(price, ma5, ma20, closes, volumes):
             structure_state=structure
         )
 
-    # 🔥 加碼（用 base_pos 放大）
+    # 🔥 真強（最高優先）
+    if strong_follow(closes, resistance, volume) and score >= 6:
+
+        pos = max(base_pos, 0.7)
+        pos = min(pos + 0.1, 0.9)
+
+        return build_result(
+            decision="BUY",
+            decision_type="strong",
+            buy=price,
+            stop=min(ma5, support),
+            position=pos,
+            market_score=m_score,
+            market_grade=m_grade,
+            trend=trend,
+            volume_state=volume,
+            structure_state=structure
+        )
+
+    # 🔥 確認
     if event_breakout(price, closes, resistance, volumes) and score >= 4:
 
         pos = max(base_pos, 0.5)
@@ -357,7 +356,7 @@ def strategy(price, ma5, ma20, closes, volumes):
             structure_state=structure
         )
 
-    # 🔥 試單（用 base_pos）
+    # 🔥 試單
     if trend == "UP" and volume != "WEAK" and price > resistance * 0.97 and score >= 2:
 
         pos = max(base_pos, 0.2)
