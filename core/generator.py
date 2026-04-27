@@ -1,23 +1,12 @@
 # ================================
-# 🔥 FINAL（顯示層 v13.1｜LOCKED｜強化防破壞版）
+# 🔥 FINAL（顯示層 v13.3｜v15.3完全對齊版）
 # ================================
 
-# 🔒🔒🔒 VERSION LOCK（極重要｜不可隨意修改）
+# 🔒 VERSION LOCK（重要）
 # - 基於 v13（完全保留原邏輯）
-# - ❗嚴禁修改 strategy / condition_engine 相關資料流
-# - ❗嚴禁重新計算 stage / conditions（必須使用第一輪結果）
-# - ❗嚴禁使用 fake price / fake closes
-# - ✅ 僅允許修改：顯示內容 / 倉位分配（action）
-#
-# 🔥 核心原則（不可違反）
-# 1️⃣ strategy = 決策（不能動）
-# 2️⃣ generate = 顯示 + 資金分配（只能動 action）
-# 3️⃣ 市場資料（price / closes / stage）只能用「第一輪計算結果」
-#
-# ⚠️ 違反以上任何一條 → 會導致：
-# - 市場等級錯誤（A → D）
-# - stage 判斷錯誤
-# - 訊號失真
+# - ❗不修改 strategy / condition_engine 資料流
+# - ❗不重新計算 stage / conditions
+# - ✅ 強化：資金分配（v15.3完整邏輯）
 # ================================
 
 
@@ -48,7 +37,7 @@ stocks = {
 
 
 # ================================
-# 🔥 行動（顯示層｜允許修改）
+# 🔥 行動（不動）
 # ================================
 def get_action(result):
 
@@ -65,7 +54,7 @@ def get_action(result):
 
 
 # ================================
-# 🔥 解釋（顯示層｜允許修改）
+# 🔥 解釋（🔥補強 strong）
 # ================================
 def explain(result, conditions, stage):
 
@@ -74,16 +63,14 @@ def explain(result, conditions, stage):
 
     if decision == "BUY":
 
-        if decision_type == "breakout":
-            return "突破壓力"
-        elif decision_type == "pullback":
-            return "回踩轉強"
-        elif decision_type == "early":
-            return "提前卡位"
-        elif decision_type == "pre_breakout":
+        if decision_type == "pre_breakout":
             return "突破前試單"
         elif decision_type == "add_on":
             return "突破確認，加碼"
+        elif decision_type == "strong":
+            return "主升段（強勢延續）"  # 🔥新增
+        elif decision_type == "breakout":
+            return "突破壓力"
 
         return "訊號成立"
 
@@ -103,7 +90,7 @@ def explain(result, conditions, stage):
 
 
 # ================================
-# 🔥 工具（不可動）
+# 🔥 工具（不動）
 # ================================
 def get_market_phase():
     now = datetime.now(tz)
@@ -138,7 +125,7 @@ def safe_list(data, n=20):
 
 
 # ================================
-# 🔥 stage（不可動｜依賴真實 closes）
+# 🔥 stage（不動）
 # ================================
 def stage_detection(price, closes, market_grade=None):
 
@@ -174,7 +161,7 @@ def stage_to_text(stage):
 
 
 # ================================
-# 🔥 訊號顯示（不可動）
+# 🔥 訊號顯示（不動）
 # ================================
 def build_signals(result, conditions):
 
@@ -210,7 +197,7 @@ def build_signals(result, conditions):
 
 
 # ================================
-# 🔥 主流程（核心｜部分可動）
+# 🔥 主流程（核心）
 # ================================
 def generate():
 
@@ -222,7 +209,7 @@ def generate():
     decisions = []
     results_map = {}
 
-    # 🔒 第一輪：取得「唯一真實市場資料」
+    # 🔒 第一輪（不動）
     for name, code in stocks.items():
 
         twse = get_twse(code)
@@ -253,7 +240,6 @@ def generate():
 
         decisions.append(result.get("decision"))
 
-        # 🔒 不可破壞資料結構
         results_map[name] = {
             "result": result,
             "conditions": conditions,
@@ -267,7 +253,7 @@ def generate():
         return msg + "⚠ 無有效數據"
 
     # ================================
-    # 🔥 資金分配（唯一允許修改區｜v15對齊）
+    # 🔥🔥🔥 v15.3 核心（完整對齊）
     # ================================
     buy_list = [
         (n, d["result"]) for n, d in results_map.items()
@@ -278,46 +264,58 @@ def generate():
 
     if buy_list:
 
-        # 🔥 使用 strategy 原始倉位（核心）
-        base_positions = [r.get("position", 0) for _, r in buy_list]
+        scaled = []
 
-        # 🔥 市場環境（只讀）
+        for _, r in buy_list:
+
+            base = r.get("position", 0)
+            dtype = r.get("decision_type")
+            strength = r.get("strength", 0)
+
+            # 🔥 1️⃣ 階段控制（關鍵）
+            if dtype == "pre_breakout":
+                stage_factor = 0.6
+            elif dtype == "add_on":
+                stage_factor = 1.0
+            else:
+                stage_factor = 1.2   # 🔥 當作 strong
+
+            # 🔥 2️⃣ 強度控制（關鍵）
+            if strength >= 11:
+                strength_factor = 1.3
+            elif strength >= 9:
+                strength_factor = 1.1
+            else:
+                strength_factor = 0.9
+
+            scaled.append(base * stage_factor * strength_factor)
+
+        # 🔥 3️⃣ 市場過熱控制
         grades = [
             d["result"].get("market_grade")
             for d in results_map.values()
-            if d["result"].get("market_grade")
         ]
 
-        market_bias = "C"
-        if grades.count("A") >= 3:
-            market_bias = "A"
-        elif grades.count("A") + grades.count("B") >= 4:
-            market_bias = "B"
+        if grades.count("A") >= 5:
+            scaled = [p * 0.7 for p in scaled]
 
-        # 🔥 市場倍率（只放大/縮小）
-        multiplier = 1.3 if market_bias == "A" else 1.1 if market_bias == "B" else 0.8
-
-        scaled = [min(p * multiplier, 1.0) for p in base_positions]
-
-        # 🔥 強股集中
+        # 🔥 4️⃣ 強股集中（安全版）
         if len(buy_list) >= 2:
             gap = buy_list[0][1]["strength"] - buy_list[1][1]["strength"]
             if gap >= 2:
-                scaled[0] *= 1.3
+                scaled[0] *= 1.2
 
-        # 🔥 正規化（總倉位 <= 1）
+        # 🔥 5️⃣ 正規化（風控）
         total = sum(scaled)
         if total > 1:
             scaled = [p / total for p in scaled]
 
         for i, (n, r) in enumerate(buy_list):
             r["action"] = round(scaled[i], 2)
-            if r["action"] == 0:
-                r["action_type"] = "HOLD"
 
     # ================================
 
-    # 🔒 第二輪：只允許「讀取」資料（禁止重算）
+    # 🔒 第二輪（不動）
     for name, data in results_map.items():
 
         result = data["result"]
