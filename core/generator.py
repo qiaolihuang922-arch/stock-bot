@@ -267,7 +267,7 @@ def generate():
         return msg + "⚠ 無有效數據"
 
     # ================================
-    # 🔥 資金分配（唯一允許修改區）
+    # 🔥 資金分配（唯一允許修改區｜v15對齊）
     # ================================
     buy_list = [
         (n, d["result"]) for n, d in results_map.items()
@@ -276,15 +276,44 @@ def generate():
 
     buy_list.sort(key=lambda x: x[1].get("strength", 0), reverse=True)
 
-    allocation = [0.5, 0.3, 0.2]
+    if buy_list:
 
-    for i, (n, r) in enumerate(buy_list):
+        # 🔥 使用 strategy 原始倉位（核心）
+        base_positions = [r.get("position", 0) for _, r in buy_list]
 
-        if i < len(allocation):
-            r["action"] = allocation[i]
-        else:
-            r["action"] = 0
-            r["action_type"] = "HOLD"
+        # 🔥 市場環境（只讀）
+        grades = [
+            d["result"].get("market_grade")
+            for d in results_map.values()
+            if d["result"].get("market_grade")
+        ]
+
+        market_bias = "C"
+        if grades.count("A") >= 3:
+            market_bias = "A"
+        elif grades.count("A") + grades.count("B") >= 4:
+            market_bias = "B"
+
+        # 🔥 市場倍率（只放大/縮小）
+        multiplier = 1.3 if market_bias == "A" else 1.1 if market_bias == "B" else 0.8
+
+        scaled = [min(p * multiplier, 1.0) for p in base_positions]
+
+        # 🔥 強股集中
+        if len(buy_list) >= 2:
+            gap = buy_list[0][1]["strength"] - buy_list[1][1]["strength"]
+            if gap >= 2:
+                scaled[0] *= 1.3
+
+        # 🔥 正規化（總倉位 <= 1）
+        total = sum(scaled)
+        if total > 1:
+            scaled = [p / total for p in scaled]
+
+        for i, (n, r) in enumerate(buy_list):
+            r["action"] = round(scaled[i], 2)
+            if r["action"] == 0:
+                r["action_type"] = "HOLD"
 
     # ================================
 
