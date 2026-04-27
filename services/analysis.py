@@ -1,13 +1,13 @@
 # ================================
-# 🔥 analysis.py（FINAL v14.4｜LOCKED｜權重融合穩定版）
+# 🔥 analysis.py（FINAL v15.1｜LOCKED｜主升段修正版）
 # ================================
 
 # 🔒 VERSION LOCK（重要）
-# - 基於 v14.3.1（完整穩定版）
+# - 基於 v14.4
 # - ❗未刪除任何原有策略邏輯
-# - ✅ 新增：decision_score（權重模型）
-# - ✅ 僅作為「進出場濾網」，不改原本策略架構
-# - ✅ 保證 UI / condition_engine / 強度分數 完整
+# - ✅ 修正：market_signal（主升段識別）
+# - ✅ 強化：decision_score（市場權重）
+# - ✅ 補齊：base_position → 決策流（🔥關鍵修復）
 # ================================
 
 
@@ -59,29 +59,33 @@ def action_mapper(decision, position):
 
 
 # ================================
-# 🔥 權重模型（🔥新增核心）
+# 🔥 權重模型（🔥v15.1強化）
 # ================================
 def decision_score(market, trend, structure, volume):
 
     score = 0
 
+    # 🔥 市場權重放大
     if market == "STRONG":
-        score += 2
+        score += 3
     elif market == "NORMAL":
         score += 1
     elif market == "WEAK":
-        score -= 2
+        score -= 3
 
+    # 🔥 趨勢主導（核心）
     if trend == "UP":
         score += 3
     elif trend == "DOWN":
         score -= 3
 
+    # 結構
     if structure == "STRONG":
         score += 2
     elif structure == "WEAK":
         score -= 2
 
+    # 量能
     if volume == "STRONG":
         score += 2
     elif volume == "DISTRIBUTION":
@@ -197,7 +201,7 @@ def build_result(**kwargs):
 
 
 # ================================
-# 🔥 市場判斷（原版）
+# 🔥 市場判斷（🔥v15.1）
 # ================================
 def market_signal(closes, ma20):
 
@@ -207,10 +211,15 @@ def market_signal(closes, ma20):
     if closes[-1] < ma20 and momentum < 0 and above_ma20_ratio < 0.4:
         return "WEAK"
 
-    if (max(closes[-10:]) - min(closes[-10:])) / closes[-1] < 0.04:
+    # 🔥 修正CHOPPY誤判
+    if (
+        (max(closes[-10:]) - min(closes[-10:])) / closes[-1] < 0.04
+        and closes[-1] < closes[-3]
+    ):
         return "CHOPPY"
 
-    if closes[-1] > ma20 and above_ma20_ratio > 0.6:
+    # 🔥 主升段識別（關鍵）
+    if closes[-1] > ma20 or (closes[-1] > closes[-3] and momentum > 0):
         return "STRONG"
 
     return "NORMAL"
@@ -263,7 +272,7 @@ def structure_state(closes):
 
 
 # ================================
-# 🔥 壓力 / 事件（⚠唯一改動）
+# 🔥 壓力 / 事件（原版）
 # ================================
 def support_resistance(closes):
     return min(closes[-20:]), max(closes[-20:-3])
@@ -272,7 +281,7 @@ def support_resistance(closes):
 def event_breakout(price, closes, resistance, volumes):
     avg5 = avg(volumes[-5:])
     return (
-        closes[-1] > resistance * 1.01   # 🔥 修正（避免假突破）
+        closes[-1] > resistance * 1.01
         and volumes[-1] > avg5 * 1.3
         and volumes[-1] > volumes[-2]
     )
@@ -284,7 +293,7 @@ def edge_fake_breakout(closes):
 
 
 # ================================
-# 🔥 strategy（⚠最小修改）
+# 🔥 strategy（🔥只補邏輯，不改結構）
 # ================================
 def strategy(price, ma5, ma20, closes, volumes):
 
@@ -305,11 +314,10 @@ def strategy(price, ma5, ma20, closes, volumes):
     fake_break = edge_fake_breakout(closes)
     base_pos = base_position(market, trend, structure, volume)
 
-    # ❌ 假突破
     if fake_break:
         return build_result(
             decision="WAIT",
-            position=0,   # 🔥 修正
+            position=0,
             market_score=m_score,
             market_grade=m_grade,
             trend=trend,
@@ -317,7 +325,6 @@ def strategy(price, ma5, ma20, closes, volumes):
             structure_state=structure
         )
 
-    # ❌ 權重出場（新增）
     if score <= -3:
         return build_result(
             decision="NO_TRADE",
@@ -329,15 +336,13 @@ def strategy(price, ma5, ma20, closes, volumes):
             structure_state=structure
         )
 
-    # 🔥 加碼（⚠只改倉位計算）
+    # 🔥 加碼（用 base_pos 放大）
     if event_breakout(price, closes, resistance, volumes) and score >= 4:
 
+        pos = max(base_pos, 0.5)
+
         if score >= 6:
-            pos = 0.7
-        elif score >= 5:
-            pos = 0.6
-        else:
-            pos = 0.5
+            pos = max(pos, 0.7)
 
         return build_result(
             decision="BUY",
@@ -352,15 +357,10 @@ def strategy(price, ma5, ma20, closes, volumes):
             structure_state=structure
         )
 
-    # 🔥 試單（⚠只改倉位計算）
+    # 🔥 試單（用 base_pos）
     if trend == "UP" and volume != "WEAK" and price > resistance * 0.97 and score >= 2:
 
-        if score >= 4:
-            pos = 0.4
-        elif score >= 3:
-            pos = 0.3
-        else:
-            pos = 0.2
+        pos = max(base_pos, 0.2)
 
         return build_result(
             decision="BUY",
@@ -377,7 +377,7 @@ def strategy(price, ma5, ma20, closes, volumes):
 
     return build_result(
         decision="WAIT",
-        position=0,   # 🔥 修正
+        position=0,
         market_score=m_score,
         market_grade=m_grade,
         trend=trend,
