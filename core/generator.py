@@ -1,13 +1,13 @@
 # ================================
-# 🔥 FINAL（顯示層 v17.2｜ENTRY FLOW）
+# 🔥 FINAL（顯示層 v17.3｜TURN / CONFIRM｜ALIGNED）
 # ================================
 
 # 🔒 VERSION LOCK
-# - ✅ 完全對齊 strategy v17.2
-# - ❌ 不改任何交易邏輯（只讀 result）
-# - ✅ 新增：entry_stage 顯示（Day1 / Day2）
-# - ✅ 修正：stage 與距離完全一致
-# - ✅ 修正：突破判斷 dist < 0
+# - ✅ 完全對齊 strategy v17.3（TURN / CONFIRM / REJECT）
+# - ❌ 不修改任何交易決策（只讀 result）
+# - ✅ 修正：entry_stage 真實反映兩日結構
+# - ✅ 修正：突破 / 距離 / stage 完全一致
+# - ✅ 強化：顯示「轉強 vs 延續」差異
 # - ✅ 強化：容錯（避免 None / crash）
 # ================================
 
@@ -81,7 +81,7 @@ def volume_ratio(volumes):
 # ================================
 def translate_status(dist, struct, vol):
 
-    # === 距離（含突破）===
+    # === 距離 ===
     if dist is None:
         d_text = "無資料"
     elif dist < 0:
@@ -95,7 +95,7 @@ def translate_status(dist, struct, vol):
     else:
         d_text = "很遠"
 
-    # === 型態 ===
+    # === 結構 ===
     s_text = ["弱", "剛啟動", "成形中", "強勢"][min(struct, 3)]
 
     # === 量能 ===
@@ -125,7 +125,7 @@ def get_action(result):
 
 
 # ================================
-# 🔥 進場階段（v17.2 新增）
+# 🔥 entry_stage 顯示（v17.3 核心）
 # ================================
 def get_entry_stage_label(result):
 
@@ -134,30 +134,35 @@ def get_entry_stage_label(result):
 
     stage = result.get("entry_stage")
 
-    if stage == "SIGNAL":
-        return "（Day1 訊號）"
+    # 🔥 TURN（轉強第一天）
+    if stage == "TURN":
+        return "（Day1 轉強）"
+
+    # 🔥 CONFIRM（第二天延續）
     elif stage == "CONFIRM":
         return "（Day2 確認）"
+
+    # 🔥 REJECT（轉弱）
     elif stage == "REJECT":
-        return "（❌ 開盤轉弱）"
+        return "（❌ 轉弱）"
 
     return ""
 
 
 # ================================
-# 🔥 最終標籤（不干擾 decision）
+# 🔥 最終標籤（不干擾策略）
 # ================================
 def get_final_label(result, struct, vol):
 
     decision = result.get("decision")
 
-    # 🔥 完全尊重策略
     if decision == "BUY":
         return "🔥 進場"
+
     if decision == "NO_TRADE":
         return "❌ 不用看"
 
-    # 🔥 WAIT 才顯示輔助
+    # WAIT 輔助
     if struct <= 0 and vol < 0.8:
         return "❌ 不用看"
 
@@ -168,7 +173,7 @@ def get_final_label(result, struct, vol):
 
 
 # ================================
-# 🔥 stage（完全對齊 breakout）
+# 🔥 stage（與突破完全一致）
 # ================================
 def stage_detection(price, closes):
 
@@ -266,7 +271,7 @@ def generate():
         if not closes or not volumes:
             continue
 
-        # 🔥 注意：v17.2 可支援 open_price（但這裡不強制）
+        # 🔥 v17.3：只用 closes 判斷 entry_stage（無假資料）
         result = strategy(price, ma5, ma20, closes, volumes)
 
         decisions.append(result.get("decision"))
@@ -294,7 +299,6 @@ def generate():
         vol = volume_ratio(data["volumes"])
 
         d_text, s_text, v_text = translate_status(dist, struct, vol)
-
         stage = stage_detection(data["price"], data["closes"])
 
         final = get_final_label(result, struct, vol)
