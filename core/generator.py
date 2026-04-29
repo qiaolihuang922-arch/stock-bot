@@ -1,13 +1,14 @@
 # ================================
-# 🔥 FINAL（顯示層 v15.9 FINAL LOCK）
+# 🔥 FINAL（顯示層 v16｜ALIGN v17｜STABLE）
 # ================================
 
 # 🔒 VERSION LOCK
-# - ✅ 完整保留 v15.3 / v15.6 / v15.7 所有交易邏輯
-# - ❌ 不動 strategy / condition_engine / 資金分配
-# - ✅ 新增：距離細化（更準）
-# - ✅ 新增：先過濾垃圾（只影響顯示）
-# - ✅ 優化：UI 排版（決策優先）
+# - ✅ 完整保留 strategy（v17）
+# - ❌ 不動決策邏輯
+# - ✅ 修正：UI 與 decision 對齊
+# - ✅ 修正：距離 / stage 一致
+# - ✅ 修正：顯示不再覆蓋交易結果
+# - ✅ 強化：容錯（避免 crash）
 # ================================
 
 from datetime import datetime
@@ -40,7 +41,7 @@ stocks = {
 
 
 # ================================
-# 🔥 距離（優化版）
+# 🔥 距離（與 stage 對齊）
 # ================================
 def breakout_distance(price, closes):
     try:
@@ -52,128 +53,107 @@ def breakout_distance(price, closes):
 
 
 # ================================
-# 🔥 型態
+# 🔥 型態（顯示用）
 # ================================
 def structure_progress(closes):
-    score = 0
-    if closes[-1] > closes[-2]: score += 1
-    if closes[-2] > closes[-3]: score += 1
-    if closes[-1] > sum(closes[-5:]) / 5: score += 1
-    return score
+    try:
+        score = 0
+        if closes[-1] > closes[-2]: score += 1
+        if closes[-2] > closes[-3]: score += 1
+        if closes[-1] > sum(closes[-5:]) / 5: score += 1
+        return score
+    except:
+        return 0
 
 
 # ================================
-# 🔥 量能
+# 🔥 量能（顯示用）
 # ================================
 def volume_ratio(volumes):
-    avg10 = sum(volumes[-10:]) / len(volumes[-10:])
-    if avg10 == 0:
+    try:
+        avg10 = sum(volumes[-10:]) / len(volumes[-10:])
+        if avg10 == 0:
+            return 1
+        return round(volumes[-1] / avg10, 2)
+    except:
         return 1
-    return round(volumes[-1] / avg10, 2)
 
 
 # ================================
-# 🔥 狀態翻譯（🔥核心優化）
+# 🔥 顯示評分（不影響交易）
 # ================================
 def translate_status(dist, struct, vol):
 
-    # === 距離（重新分級）===
+    # 距離
     if dist is None:
-        d_text, d_score = "無資料", 0
+        d_text = "無資料"
     elif dist > 6:
-        d_text, d_score = "很遠", 0
+        d_text = "很遠"
     elif dist > 3:
-        d_text, d_score = "接近", 1
+        d_text = "接近"
     elif dist > 1.5:
-        d_text, d_score = "很近", 2
+        d_text = "很近"
     else:
-        d_text, d_score = "臨界", 3
+        d_text = "臨界"
 
-    # === 型態 ===
-    if struct == 3:
-        s_text, s_score = "強勢", 3
-    elif struct == 2:
-        s_text, s_score = "成形中", 2
-    elif struct == 1:
-        s_text, s_score = "剛啟動", 1
-    else:
-        s_text, s_score = "弱", 0
+    # 型態
+    s_text = ["弱", "剛啟動", "成形中", "強勢"][min(struct, 3)]
 
-    # === 量能 ===
+    # 量能
     if vol > 1.5:
-        v_text, v_score = "爆量", 3
+        v_text = "爆量"
     elif vol > 1.2:
-        v_text, v_score = "放量", 2
+        v_text = "放量"
     elif vol > 0.8:
-        v_text, v_score = "普通", 1
+        v_text = "普通"
     else:
-        v_text, v_score = "無量", 0
+        v_text = "無量"
 
-    # ================================
-    # 🔥 核心優化：先過濾垃圾（只影響顯示）
-    # ================================
-    if struct <= 1:
-        return d_text, s_text, v_text, "❌ 不用看"
-
-    if vol < 0.8:
-        return d_text, s_text, v_text, "👀 觀察"
-
-    # ================================
-    # 🔥 再評分
-    # ================================
-    total = d_score + s_score + v_score
-
-    if total >= 7:
-        final = "🔥 可進場"
-    elif total >= 5:
-        final = "🟢 可試單"
-    else:
-        final = "👀 觀察"
-
-    return d_text, s_text, v_text, final
+    return d_text, s_text, v_text
 
 
 # ================================
-# 🔥 原有函數（完全不動）
+# 🔥 行為顯示（完全以 strategy 為準）
 # ================================
 def get_action(result):
-    action = result.get("action", 0)
     action_type = result.get("action_type")
 
     if action_type == "SELL_ALL":
         return "🔴 賣出 100%"
     if action_type == "BUY":
-        return f"🟢 買進 {round(action*100)}%"
+        return f"🟢 買進 {round(result.get('action', 0)*100)}%"
     return "⏳ 不動"
 
 
-def explain(result, conditions, stage):
+# ================================
+# 🔥 決策顯示（關鍵修正）
+# ================================
+def get_final_label(result, market_grade, struct, vol):
 
     decision = result.get("decision")
-    decision_type = result.get("decision_type")
 
+    # 🔥 完全對齊 strategy（優先）
     if decision == "BUY":
-        if decision_type == "pre_breakout":
-            return "突破前試單"
-        elif decision_type == "add_on":
-            return "突破確認，加碼"
-        elif decision_type == "strong":
-            return "主升段（強勢延續）"
-        elif decision_type == "breakout":
-            return "突破壓力"
-        return "訊號成立"
+        return "🔥 進場"
+    if decision == "NO_TRADE":
+        return "❌ 不用看"
 
-    if decision_type == "fail_exit":
-        return "趨勢破壞，強制出場"
+    # 🔥 顯示輔助（僅 WAIT）
+    if market_grade == "D":
+        return "❌ 不用看"
 
-    if stage == "BREAKOUT_READY":
-        return "接近突破"
-    if stage == "APPROACH":
-        return "接近壓力"
+    if struct <= 1:
+        return "❌ 不用看"
 
-    return "尚未形成"
+    if vol < 0.8:
+        return "👀 觀察"
+
+    return "👀 觀察"
 
 
+# ================================
+# 🔥 市場階段
+# ================================
 def get_market_phase():
     now = datetime.now(tz)
     h, m = now.hour, now.minute
@@ -190,6 +170,9 @@ def get_market_phase():
     return "盤後"
 
 
+# ================================
+# 🔥 安全處理
+# ================================
 def safe_round(val, n=1):
     try:
         return round(float(val), n)
@@ -205,6 +188,9 @@ def safe_list(data, n=20):
     return data
 
 
+# ================================
+# 🔥 stage（與距離一致）
+# ================================
 def stage_detection(price, closes, market_grade=None):
 
     closes = safe_list(closes)
@@ -212,12 +198,8 @@ def stage_detection(price, closes, market_grade=None):
     if not closes:
         return "FAR"
 
-    try:
-        resistance = max(closes[-20:-3])
-    except:
-        return "FAR"
-
-    dist = (resistance - price) / price if price else 0
+    resistance = max(closes[-20:-3])
+    dist = (resistance - price) / price
 
     if market_grade == "D":
         return "FAR"
@@ -226,8 +208,7 @@ def stage_detection(price, closes, market_grade=None):
         return "BREAKOUT_READY"
     elif dist < 0.05:
         return "APPROACH"
-    else:
-        return "FAR"
+    return "FAR"
 
 
 def stage_to_text(stage):
@@ -238,19 +219,13 @@ def stage_to_text(stage):
     }.get(stage)
 
 
-def build_signals(result, conditions):
-    return []
-
-
 # ================================
-# 🔥 主流程（排版優化）
+# 🔥 主流程
 # ================================
 def generate():
 
     now = datetime.now(tz)
-    phase = get_market_phase()
-
-    msg = f"【{now.strftime('%m/%d')} {phase}】\n\n"
+    msg = f"【{now.strftime('%m/%d')} {get_market_phase()}】\n\n"
 
     decisions = []
     results_map = {}
@@ -260,35 +235,29 @@ def generate():
         twse = get_twse(code)
         yahoo = get_yahoo(code)
 
-        if not twse and not yahoo:
+        if not twse:
             continue
 
-        if twse:
-            t_price, t_change, ma5, ma20, closes, volumes = twse
-            realtime = get_realtime_price(code)
+        t_price, t_change, ma5, ma20, closes, volumes = twse
 
-            if realtime:
-                price, change = realtime
-            elif yahoo:
-                price, change = yahoo
-            else:
-                price, change = t_price, t_change
+        realtime = get_realtime_price(code)
+
+        if realtime:
+            price, change = realtime
+        elif yahoo:
+            price, change = yahoo
         else:
-            continue
+            price, change = t_price, t_change
 
         if not closes or not volumes:
             continue
 
         result = strategy(price, ma5, ma20, closes, volumes)
-        conditions = condition_engine(result)
-        stage = stage_detection(price, closes, result.get("market_grade"))
 
         decisions.append(result.get("decision"))
 
         results_map[name] = {
             "result": result,
-            "conditions": conditions,
-            "stage": stage,
             "price": price,
             "change": change,
             "closes": closes,
@@ -304,38 +273,30 @@ def generate():
     for name, data in results_map.items():
 
         result = data["result"]
-        stage = data["stage"]
-
-        action = get_action(result)
 
         dist = breakout_distance(data["price"], data["closes"])
         struct = structure_progress(data["closes"])
         vol = volume_ratio(data["volumes"])
 
-        d_text, s_text, v_text, final = translate_status(dist, struct, vol)
+        d_text, s_text, v_text = translate_status(dist, struct, vol)
 
-        # 🔥 主顯示（重點）
-        msg += f"【{name}】{action}｜{final}\n"
+        final = get_final_label(
+            result,
+            result.get("market_grade"),
+            struct,
+            vol
+        )
 
-        if result.get("market_grade"):
-            msg += f"🌍 {result.get('market_grade')}｜{stage_to_text(stage)}\n"
-
-        # 🔥 核心數據
+        msg += f"【{name}】{get_action(result)}｜{final}\n"
+        msg += f"🌍 {result.get('market_grade')}｜{stage_to_text(stage_detection(data['price'], data['closes'], result.get('market_grade')))}\n"
         msg += f"📊 {dist}%｜{struct}/3｜{vol}x\n"
         msg += f"   → {d_text} / {s_text} / {v_text}\n"
-
-        # 🔥 價格
         msg += f"💰 {safe_round(data['price'])}（{safe_round(data['change'],2)}%）\n\n"
 
     best, score = pick_best_stock({k: v["result"] for k, v in results_map.items()})
 
     msg += "====================\n"
-
-    if best:
-        msg += f"🔥 最強：{best}（{score}）\n"
-    else:
-        msg += "⚠ 無最強股\n"
-
+    msg += f"🔥 最強：{best}（{score}）\n" if best else "⚠ 無最強股\n"
     msg += "🟢 有機會" if any(d == "BUY" for d in decisions) else "⏳ 觀望"
 
     return msg
