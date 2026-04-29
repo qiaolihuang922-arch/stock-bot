@@ -1,15 +1,14 @@
 # ================================
-# 🔥 FINAL（顯示層 v17｜ALIGNED｜PRODUCTION）
+# 🔥 FINAL（顯示層 v17.1｜ALIGNED｜STABLE）
 # ================================
 
 # 🔒 VERSION LOCK
-# - ✅ 完全對齊 strategy v17（決策層）
-# - ❌ 不動任何交易邏輯
-# - ✅ 修正：突破判斷（dist < 0）
-# - ✅ 修正：stage 增加「已突破」
-# - ✅ 修正：UI 不覆蓋 decision
-# - ✅ 修正：市場 D 不再誤砍
-# - ✅ 強化：容錯（避免 None / crash）
+# - ✅ 完全對齊 strategy v17.1（決策層）
+# - ❌ 不改任何交易邏輯
+# - ✅ 修正：突破 / stage 完全一致
+# - ✅ 修正：UI 不干擾 decision
+# - ✅ 修正：市場 D 不誤砍
+# - ✅ 強化：容錯（避免 crash）
 # ================================
 
 
@@ -18,7 +17,6 @@ import pytz
 
 from services.stock_api import get_twse, get_yahoo, get_realtime_price
 from services.analysis import strategy, pick_best_stock
-from core.condition_engine import condition_engine
 
 tz = pytz.timezone("Asia/Taipei")
 
@@ -43,19 +41,18 @@ stocks = {
 
 
 # ================================
-# 🔥 距離（核心修正：支援突破）
+# 🔥 距離（與策略一致）
 # ================================
 def breakout_distance(price, closes):
     try:
         resistance = max(closes[-20:-3])
-        dist = (resistance - price) / price * 100
-        return round(dist, 2)
+        return round((resistance - price) / price * 100, 2)
     except:
         return None
 
 
 # ================================
-# 🔥 型態（純顯示）
+# 🔥 型態（顯示用）
 # ================================
 def structure_progress(closes):
     try:
@@ -69,24 +66,22 @@ def structure_progress(closes):
 
 
 # ================================
-# 🔥 量能（純顯示）
+# 🔥 量能（顯示用）
 # ================================
 def volume_ratio(volumes):
     try:
         avg10 = sum(volumes[-10:]) / len(volumes[-10:])
-        if avg10 == 0:
-            return 1
-        return round(volumes[-1] / avg10, 2)
+        return round(volumes[-1] / avg10, 2) if avg10 else 1
     except:
         return 1
 
 
 # ================================
-# 🔥 狀態翻譯（修正突破）
+# 🔥 狀態翻譯（純顯示）
 # ================================
 def translate_status(dist, struct, vol):
 
-    # === 距離（含突破）===
+    # 距離（含突破）
     if dist is None:
         d_text = "無資料"
     elif dist < 0:
@@ -100,10 +95,8 @@ def translate_status(dist, struct, vol):
     else:
         d_text = "很遠"
 
-    # === 型態 ===
     s_text = ["弱", "剛啟動", "成形中", "強勢"][min(struct, 3)]
 
-    # === 量能 ===
     if vol > 1.5:
         v_text = "爆量"
     elif vol > 1.2:
@@ -117,7 +110,7 @@ def translate_status(dist, struct, vol):
 
 
 # ================================
-# 🔥 行為（完全由 strategy 控制）
+# 🔥 行為（完全由 strategy 決定）
 # ================================
 def get_action(result):
     t = result.get("action_type")
@@ -130,23 +123,20 @@ def get_action(result):
 
 
 # ================================
-# 🔥 最終標籤（核心修正）
+# 🔥 最終標籤（只輔助，不干擾）
 # ================================
-def get_final_label(result, market_grade, struct, vol):
+def get_final_label(result, struct, vol):
 
     decision = result.get("decision")
 
-    # === 完全服從 strategy ===
+    # 🔥 完全尊重策略
     if decision == "BUY":
         return "🔥 進場"
     if decision == "NO_TRADE":
         return "❌ 不用看"
 
-    # === WAIT 才做顯示判讀 ===
-    if market_grade == "D" and struct <= 1:
-        return "❌ 不用看"
-
-    if struct <= 1:
+    # 🔥 WAIT 才顯示輔助
+    if struct <= 0 and vol < 0.8:
         return "❌ 不用看"
 
     if vol < 0.8:
@@ -156,9 +146,9 @@ def get_final_label(result, market_grade, struct, vol):
 
 
 # ================================
-# 🔥 市場階段（加入突破）
+# 🔥 stage（與距離完全一致）
 # ================================
-def stage_detection(price, closes, market_grade=None):
+def stage_detection(price, closes):
 
     closes = safe_list(closes)
 
@@ -168,14 +158,9 @@ def stage_detection(price, closes, market_grade=None):
     resistance = max(closes[-20:-3])
     dist = (resistance - price) / price
 
-    # 🔥 新增：已突破
     if dist < 0:
         return "BREAKOUT_DONE"
-
-    if market_grade == "D":
-        return "FAR"
-
-    if dist < 0.02:
+    elif dist < 0.02:
         return "BREAKOUT_READY"
     elif dist < 0.05:
         return "APPROACH"
@@ -194,6 +179,21 @@ def stage_to_text(stage):
 # ================================
 # 🔥 工具
 # ================================
+def safe_round(val, n=1):
+    try:
+        return round(float(val), n)
+    except:
+        return "-"
+
+
+def safe_list(data, n=20):
+    if not data:
+        return None
+    if len(data) < n:
+        return data + [data[-1]] * (n - len(data))
+    return data
+
+
 def get_market_phase():
     now = datetime.now(tz)
     h, m = now.hour, now.minute
@@ -210,21 +210,6 @@ def get_market_phase():
     return "盤後"
 
 
-def safe_round(val, n=1):
-    try:
-        return round(float(val), n)
-    except:
-        return "-"
-
-
-def safe_list(data, n=20):
-    if not data:
-        return None
-    if len(data) < n:
-        return data + [data[-1]] * (n - len(data))
-    return data
-
-
 # ================================
 # 🔥 主流程
 # ================================
@@ -239,14 +224,12 @@ def generate():
     for name, code in stocks.items():
 
         twse = get_twse(code)
-        yahoo = get_yahoo(code)
-
         if not twse:
             continue
 
         t_price, t_change, ma5, ma20, closes, volumes = twse
-
         realtime = get_realtime_price(code)
+        yahoo = get_yahoo(code)
 
         if realtime:
             price, change = realtime
@@ -286,18 +269,9 @@ def generate():
 
         d_text, s_text, v_text = translate_status(dist, struct, vol)
 
-        final = get_final_label(
-            result,
-            result.get("market_grade"),
-            struct,
-            vol
-        )
+        stage = stage_detection(data["price"], data["closes"])
 
-        stage = stage_detection(
-            data["price"],
-            data["closes"],
-            result.get("market_grade")
-        )
+        final = get_final_label(result, struct, vol)
 
         msg += f"【{name}】{get_action(result)}｜{final}\n"
         msg += f"🌍 {result.get('market_grade')}｜{stage_to_text(stage)}\n"
