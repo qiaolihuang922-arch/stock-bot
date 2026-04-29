@@ -1,14 +1,15 @@
 # ================================
-# 🔥 analysis.py（FINAL v17.2｜ENTRY CONTROL PATCH）
+# 🔥 analysis.py（FINAL v17.3｜TURN + CONFIRM｜NO FAKE STATE）
 # ================================
 
 # 🔒 VERSION LOCK
-# - ✅ 完整保留 v17.1 所有策略邏輯
-# - ❗不刪除任何 BUY / WAIT / NO_TRADE 分支
-# - ✅ 新增：entry_stage（Day1 / Day2 機制）
-# - ✅ 支援：open_price（可選，不影響舊系統）
-# - ✅ 強化：進場流程（不再直接衝）
-# - ✅ 保持：所有風控 / RR / 結構邏輯不變
+# - ✅ 保留 v17.2 所有策略結構（不刪分支）
+# - ❌ 移除：open_price 作為 Day2 判斷（避免假訊號）
+# - ✅ 新增：TURN（轉強）判斷（昨天弱 → 今天強）
+# - ✅ 重構：entry_stage（REJECT / TURN / CONFIRM）
+# - ✅ 強化：entry_stage 影響倉位（Day1 / Day2）
+# - ✅ 強化：RR 成為交易門檻（避免亂進）
+# - ✅ 保持：所有風控 / 結構 / 趨勢邏輯不變
 # ================================
 
 
@@ -18,7 +19,7 @@ def avg(arr):
 
 
 # ================================
-# 🔥 倉位（維持原版）
+# 🔥 倉位（原版保留）
 # ================================
 def base_position(market, trend, structure, volume):
 
@@ -46,7 +47,7 @@ def base_position(market, trend, structure, volume):
 
 
 # ================================
-# 🔥 行動轉換（維持）
+# 🔥 行動轉換（原版保留）
 # ================================
 def action_mapper(decision, position):
 
@@ -60,7 +61,7 @@ def action_mapper(decision, position):
 
 
 # ================================
-# 🔥 統一輸出（新增 entry_stage）
+# 🔥 統一輸出（加入 entry_stage）
 # ================================
 def build_result(**kwargs):
 
@@ -87,7 +88,7 @@ def build_result(**kwargs):
         "volume_state": kwargs.get("volume_state"),
         "rr": kwargs.get("rr", 0),
 
-        # 🔥 v17.2 新增（進場階段）
+        # 🔥 v17.3 核心：進場階段
         "entry_stage": kwargs.get("entry_stage", None)
     }
 
@@ -131,7 +132,7 @@ def decision_score(market, trend, structure, volume):
 
 
 # ================================
-# 🔥 強度分數（維持 RR）
+# 🔥 強度分數（維持）
 # ================================
 def strength_score(result):
 
@@ -287,7 +288,7 @@ def support_resistance(closes):
 
 
 # ================================
-# 🔥 突破判斷
+# 🔥 突破 / 假突破
 # ================================
 def event_breakout(price, closes, resistance, volumes):
     avg5 = avg(volumes[-5:])
@@ -304,7 +305,7 @@ def edge_fake_breakout(closes):
 
 
 # ================================
-# 🔥 主升段
+# 🔥 主升段（強制爆量）
 # ================================
 def strong_follow(closes, resistance, volume, structure, trend):
 
@@ -318,9 +319,9 @@ def strong_follow(closes, resistance, volume, structure, trend):
 
 
 # ================================
-# 🔥 strategy（v17.2）
+# 🔥 strategy（v17.3 核心）
 # ================================
-def strategy(price, ma5, ma20, closes, volumes, open_price=None):
+def strategy(price, ma5, ma20, closes, volumes):
 
     support, resistance = support_resistance(closes)
 
@@ -339,7 +340,9 @@ def strategy(price, ma5, ma20, closes, volumes, open_price=None):
     fake_break = edge_fake_breakout(closes)
     base_pos = base_position(market, trend, structure, volume)
 
-    # RR
+    # ================================
+    # 🔥 RR（變成門檻）
+    # ================================
     try:
         stop_candidate = min(ma5, avg(closes[-3:]))
         rr = (price - stop_candidate) / price
@@ -347,36 +350,58 @@ def strategy(price, ma5, ma20, closes, volumes, open_price=None):
         rr = 0
 
     # ================================
-    # 🔥 進場階段判斷（v17.2 核心）
+    # 🔥 entry_stage（核心：用兩日數據）
     # ================================
-    entry_stage = "SIGNAL"
-
-    if open_price is not None:
-        if open_price >= closes[-1]:
-            entry_stage = "CONFIRM"
-        else:
-            entry_stage = "REJECT"
+    if closes[-1] > closes[-2] > closes[-3]:
+        entry_stage = "CONFIRM"   # 延續（Day2）
+    elif closes[-1] > closes[-2]:
+        entry_stage = "TURN"      # 轉強（Day1）
+    else:
+        entry_stage = "REJECT"
 
     # ================================
-    # 🔥 風控
+    # 🔥 RR 過濾
+    # ================================
+    if rr < 0.02:
+        return build_result(decision="WAIT", position=0,
+            market_score=m_score, market_grade=m_grade,
+            trend=trend, volume_state=volume,
+            structure_state=structure, rr=rr,
+            entry_stage=entry_stage)
+
+    # ================================
+    # 🔥 REJECT 直接不交易
+    # ================================
+    if entry_stage == "REJECT":
+        return build_result(decision="WAIT", position=0,
+            market_score=m_score, market_grade=m_grade,
+            trend=trend, volume_state=volume,
+            structure_state=structure, rr=rr,
+            entry_stage=entry_stage)
+
+    # ================================
+    # 🔥 原有風控
     # ================================
     if market == "WEAK" or trend == "DOWN":
         return build_result(decision="NO_TRADE", position=0,
             market_score=m_score, market_grade=m_grade,
             trend=trend, volume_state=volume,
-            structure_state=structure, rr=rr)
+            structure_state=structure, rr=rr,
+            entry_stage=entry_stage)
 
     if fake_break:
         return build_result(decision="WAIT", position=0,
             market_score=m_score, market_grade=m_grade,
             trend=trend, volume_state=volume,
-            structure_state=structure, rr=rr)
+            structure_state=structure, rr=rr,
+            entry_stage=entry_stage)
 
     if score <= -3:
         return build_result(decision="NO_TRADE", position=0,
             market_score=m_score, market_grade=m_grade,
             trend=trend, volume_state=volume,
-            structure_state=structure, rr=rr)
+            structure_state=structure, rr=rr,
+            entry_stage=entry_stage)
 
     # ================================
     # 🔥 主升段
@@ -384,6 +409,10 @@ def strategy(price, ma5, ma20, closes, volumes, open_price=None):
     if strong_follow(closes, resistance, volume, structure, trend) and score >= 6:
 
         pos = min(max(base_pos, 0.7) + 0.1, 0.9)
+
+        # 🔥 TURN 限倉
+        if entry_stage == "TURN":
+            pos = min(pos, 0.4)
 
         return build_result(decision="BUY", decision_type="strong",
             buy=price, stop=stop_candidate, position=pos,
@@ -398,8 +427,9 @@ def strategy(price, ma5, ma20, closes, volumes, open_price=None):
     if event_breakout(price, closes, resistance, volumes) and score >= 4:
 
         pos = max(base_pos, 0.5)
-        if score >= 6:
-            pos = max(pos, 0.7)
+
+        if entry_stage == "TURN":
+            pos = min(pos, 0.4)
 
         return build_result(decision="BUY", decision_type="add_on",
             buy=price, stop=stop_candidate, position=pos,
@@ -420,6 +450,9 @@ def strategy(price, ma5, ma20, closes, volumes, open_price=None):
     ):
         pos = max(base_pos, 0.2)
 
+        if entry_stage == "TURN":
+            pos = min(pos, 0.3)
+
         return build_result(decision="BUY", decision_type="pre_breakout",
             buy=price, stop=stop_candidate, position=pos,
             market_score=m_score, market_grade=m_grade,
@@ -430,7 +463,8 @@ def strategy(price, ma5, ma20, closes, volumes, open_price=None):
     return build_result(decision="WAIT", position=0,
         market_score=m_score, market_grade=m_grade,
         trend=trend, volume_state=volume,
-        structure_state=structure, rr=rr)
+        structure_state=structure, rr=rr,
+        entry_stage=entry_stage)
 
 
 # ================================
