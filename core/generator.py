@@ -1,14 +1,14 @@
 # ================================
-# 🔥 FINAL（顯示層 v17.1｜ALIGNED｜STABLE）
+# 🔥 FINAL（顯示層 v17.2｜ENTRY FLOW）
 # ================================
 
 # 🔒 VERSION LOCK
-# - ✅ 完全對齊 strategy v17.1（決策層）
-# - ❌ 不改任何交易邏輯
-# - ✅ 修正：突破 / stage 完全一致
-# - ✅ 修正：UI 不干擾 decision
-# - ✅ 修正：市場 D 不誤砍
-# - ✅ 強化：容錯（避免 crash）
+# - ✅ 完全對齊 strategy v17.2
+# - ❌ 不改任何交易邏輯（只讀 result）
+# - ✅ 新增：entry_stage 顯示（Day1 / Day2）
+# - ✅ 修正：stage 與距離完全一致
+# - ✅ 修正：突破判斷 dist < 0
+# - ✅ 強化：容錯（避免 None / crash）
 # ================================
 
 
@@ -81,7 +81,7 @@ def volume_ratio(volumes):
 # ================================
 def translate_status(dist, struct, vol):
 
-    # 距離（含突破）
+    # === 距離（含突破）===
     if dist is None:
         d_text = "無資料"
     elif dist < 0:
@@ -95,8 +95,10 @@ def translate_status(dist, struct, vol):
     else:
         d_text = "很遠"
 
+    # === 型態 ===
     s_text = ["弱", "剛啟動", "成形中", "強勢"][min(struct, 3)]
 
+    # === 量能 ===
     if vol > 1.5:
         v_text = "爆量"
     elif vol > 1.2:
@@ -123,7 +125,27 @@ def get_action(result):
 
 
 # ================================
-# 🔥 最終標籤（只輔助，不干擾）
+# 🔥 進場階段（v17.2 新增）
+# ================================
+def get_entry_stage_label(result):
+
+    if result.get("decision") != "BUY":
+        return ""
+
+    stage = result.get("entry_stage")
+
+    if stage == "SIGNAL":
+        return "（Day1 訊號）"
+    elif stage == "CONFIRM":
+        return "（Day2 確認）"
+    elif stage == "REJECT":
+        return "（❌ 開盤轉弱）"
+
+    return ""
+
+
+# ================================
+# 🔥 最終標籤（不干擾 decision）
 # ================================
 def get_final_label(result, struct, vol):
 
@@ -146,7 +168,7 @@ def get_final_label(result, struct, vol):
 
 
 # ================================
-# 🔥 stage（與距離完全一致）
+# 🔥 stage（完全對齊 breakout）
 # ================================
 def stage_detection(price, closes):
 
@@ -177,7 +199,7 @@ def stage_to_text(stage):
 
 
 # ================================
-# 🔥 工具
+# 🔥 安全工具
 # ================================
 def safe_round(val, n=1):
     try:
@@ -194,6 +216,9 @@ def safe_list(data, n=20):
     return data
 
 
+# ================================
+# 🔥 市場時間
+# ================================
 def get_market_phase():
     now = datetime.now(tz)
     h, m = now.hour, now.minute
@@ -241,6 +266,7 @@ def generate():
         if not closes or not volumes:
             continue
 
+        # 🔥 注意：v17.2 可支援 open_price（但這裡不強制）
         result = strategy(price, ma5, ma20, closes, volumes)
 
         decisions.append(result.get("decision"))
@@ -272,8 +298,9 @@ def generate():
         stage = stage_detection(data["price"], data["closes"])
 
         final = get_final_label(result, struct, vol)
+        entry_stage = get_entry_stage_label(result)
 
-        msg += f"【{name}】{get_action(result)}｜{final}\n"
+        msg += f"【{name}】{get_action(result)}｜{final}{entry_stage}\n"
         msg += f"🌍 {result.get('market_grade')}｜{stage_to_text(stage)}\n"
         msg += f"📊 {safe_round(dist,2)}%｜{struct}/3｜{vol}x\n"
         msg += f"   → {d_text} / {s_text} / {v_text}\n"
