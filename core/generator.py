@@ -1,12 +1,13 @@
 # ================================
-# 🔥 FINAL（顯示層 v13.4｜v15.7 CLEAN UI LOCK）
+# 🔥 FINAL（顯示層 v15.9 FINAL LOCK）
 # ================================
 
 # 🔒 VERSION LOCK
-# - ✅ 完整保留 v15.3 + v15.6 所有交易邏輯（逐行未動）
-# - ❌ 僅移除「舊訊號顯示」（尚未觸發 / 型態未完成 / 量能不足）
-# - ✅ 保留 build_signals / condition_engine（不影響策略）
-# - ✅ 僅優化 UI 顯示（單一交易語言）
+# - ✅ 完整保留 v15.3 / v15.6 / v15.7 所有交易邏輯
+# - ❌ 不動 strategy / condition_engine / 資金分配
+# - ✅ 新增：距離細化（更準）
+# - ✅ 新增：先過濾垃圾（只影響顯示）
+# - ✅ 優化：UI 排版（決策優先）
 # ================================
 
 from datetime import datetime
@@ -38,16 +39,20 @@ stocks = {
 
 
 # ================================
-# 🔥 NEW：輔助計算（不影響原邏輯）
+# 🔥 距離（優化版）
 # ================================
 def breakout_distance(price, closes):
     try:
         resistance = max(closes[-20:-3])
-        return round((resistance - price) / price * 100, 2)
+        dist = (resistance - price) / price * 100
+        return round(dist, 2)
     except:
         return None
 
 
+# ================================
+# 🔥 型態
+# ================================
 def structure_progress(closes):
     score = 0
     if closes[-1] > closes[-2]: score += 1
@@ -56,6 +61,9 @@ def structure_progress(closes):
     return score
 
 
+# ================================
+# 🔥 量能
+# ================================
 def volume_ratio(volumes):
     avg10 = sum(volumes[-10:]) / len(volumes[-10:])
     if avg10 == 0:
@@ -64,68 +72,68 @@ def volume_ratio(volumes):
 
 
 # ================================
-# 🔥 NEW：翻譯（只顯示用）
+# 🔥 狀態翻譯（🔥核心優化）
 # ================================
 def translate_status(dist, struct, vol):
 
+    # === 距離（重新分級）===
     if dist is None:
-        d_text = "無資料"
-        d_score = 0
-    elif dist > 5:
-        d_text = "很遠"
-        d_score = 0
-    elif dist > 2:
-        d_text = "接近"
-        d_score = 1
-    elif dist > 1:
-        d_text = "很近"
-        d_score = 2
+        d_text, d_score = "無資料", 0
+    elif dist > 6:
+        d_text, d_score = "很遠", 0
+    elif dist > 3:
+        d_text, d_score = "接近", 1
+    elif dist > 1.5:
+        d_text, d_score = "很近", 2
     else:
-        d_text = "幾乎突破"
-        d_score = 3
+        d_text, d_score = "臨界", 3
 
+    # === 型態 ===
     if struct == 3:
-        s_text = "強勢"
-        s_score = 3
+        s_text, s_score = "強勢", 3
     elif struct == 2:
-        s_text = "成形中"
-        s_score = 2
+        s_text, s_score = "成形中", 2
     elif struct == 1:
-        s_text = "剛啟動"
-        s_score = 1
+        s_text, s_score = "剛啟動", 1
     else:
-        s_text = "弱"
-        s_score = 0
+        s_text, s_score = "弱", 0
 
+    # === 量能 ===
     if vol > 1.5:
-        v_text = "爆量"
-        v_score = 3
+        v_text, v_score = "爆量", 3
     elif vol > 1.2:
-        v_text = "放量"
-        v_score = 2
+        v_text, v_score = "放量", 2
     elif vol > 0.8:
-        v_text = "普通"
-        v_score = 1
+        v_text, v_score = "普通", 1
     else:
-        v_text = "無量"
-        v_score = 0
+        v_text, v_score = "無量", 0
 
+    # ================================
+    # 🔥 核心優化：先過濾垃圾（只影響顯示）
+    # ================================
+    if struct <= 1:
+        return d_text, s_text, v_text, "❌ 不用看"
+
+    if vol < 0.8:
+        return d_text, s_text, v_text, "👀 觀察"
+
+    # ================================
+    # 🔥 再評分
+    # ================================
     total = d_score + s_score + v_score
 
     if total >= 7:
         final = "🔥 可進場"
     elif total >= 5:
         final = "🟢 可試單"
-    elif total >= 3:
-        final = "👀 觀察"
     else:
-        final = "❌ 不用看"
+        final = "👀 觀察"
 
     return d_text, s_text, v_text, final
 
 
 # ================================
-# 🔥 原有函數（完全保留）
+# 🔥 原有函數（完全不動）
 # ================================
 def get_action(result):
     action = result.get("action", 0)
@@ -158,8 +166,7 @@ def explain(result, conditions, stage):
         return "趨勢破壞，強制出場"
 
     if stage == "BREAKOUT_READY":
-        return "接近突破（尚未進場）"
-
+        return "接近突破"
     if stage == "APPROACH":
         return "接近壓力"
 
@@ -231,12 +238,11 @@ def stage_to_text(stage):
 
 
 def build_signals(result, conditions):
-    # 🔒 保留（不刪邏輯）
     return []
 
 
 # ================================
-# 🔥 主流程（乾淨顯示）
+# 🔥 主流程（排版優化）
 # ================================
 def generate():
 
@@ -291,6 +297,9 @@ def generate():
     if not results_map:
         return msg + "⚠ 無有效數據"
 
+    # ================================
+    # 🔥 顯示
+    # ================================
     for name, data in results_map.items():
 
         result = data["result"]
@@ -298,33 +307,23 @@ def generate():
 
         action = get_action(result)
 
-        msg += f"【{name}】{action}\n"
+        dist = breakout_distance(data["price"], data["closes"])
+        struct = structure_progress(data["closes"])
+        vol = volume_ratio(data["volumes"])
+
+        d_text, s_text, v_text, final = translate_status(dist, struct, vol)
+
+        # 🔥 主顯示（重點）
+        msg += f"【{name}】{action}｜{final}\n"
 
         if result.get("market_grade"):
-            msg += f"🌍 市場：{result.get('market_grade')} ｜ {stage_to_text(stage)}\n"
+            msg += f"🌍 {result.get('market_grade')}｜{stage_to_text(stage)}\n"
 
-        msg += f"💡 {explain(result, data['conditions'], stage)}\n"
+        # 🔥 核心數據
+        msg += f"📊 {dist}%｜{struct}/3｜{vol}x\n"
+        msg += f"   → {d_text} / {s_text} / {v_text}\n"
 
-        if result.get("decision") == "BUY":
-
-            msg += f"📍 Buy: {safe_round(result.get('buy'))}\n"
-            msg += f"🛑 Stop: {safe_round(result.get('stop'))}\n"
-            msg += f"🎯 RR: {safe_round(result.get('rr'),2)}\n"
-
-        else:
-            # 🔥 新唯一判讀
-            dist = breakout_distance(data["price"], data["closes"])
-            struct = structure_progress(data["closes"])
-            vol = volume_ratio(data["volumes"])
-
-            d_text, s_text, v_text, final = translate_status(dist, struct, vol)
-
-            msg += f"\n📊 狀態判讀：\n"
-            msg += f"- 距突破：{dist}%（{d_text}）\n"
-            msg += f"- 型態：{struct}/3（{s_text}）\n"
-            msg += f"- 量能：{vol}x（{v_text}）\n"
-            msg += f"👉 判斷：{final}\n"
-
+        # 🔥 價格
         msg += f"💰 {safe_round(data['price'])}（{safe_round(data['change'],2)}%）\n\n"
 
     best, score = pick_best_stock({k: v["result"] for k, v in results_map.items()})
@@ -332,14 +331,10 @@ def generate():
     msg += "====================\n"
 
     if best:
-        msg += f"🔥 今日最強：{best}（強度 {score}）\n"
-        msg += "👉 可優先關注此標的\n\n"
+        msg += f"🔥 最強：{best}（{score}）\n"
     else:
-        msg += "⚠ 無最強股\n\n"
+        msg += "⚠ 無最強股\n"
 
-    if decisions and any(d == "BUY" for d in decisions):
-        msg += "🟢 有交易機會"
-    else:
-        msg += "⏳ 市場觀望"
+    msg += "🟢 有機會" if any(d == "BUY" for d in decisions) else "⏳ 觀望"
 
     return msg
