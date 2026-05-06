@@ -1,25 +1,26 @@
 # ================================
-# 🔥 analysis.py（FINAL v17.5｜REAL DAY1 / DAY2 STATE MACHINE）
+# 🔥 analysis.py（FINAL v17.6｜STATE ENGINE + REAL LIFECYCLE）
 # ================================
 
 # 🔒 VERSION LOCK
-# - ✅ 保留 v17.4 所有主架構
-# - ✅ 新增：真正 Day1 / Day2（fresh breakout）
-# - ✅ 新增：previous breakout comparison
-# - ✅ 新增：BREAKOUT_FAIL
-# - ✅ 新增：minimum stop distance（避免 RR 爆炸）
-# - ✅ 新增：setup RR 分級
-# - ✅ 新增：volume-price lifecycle
-# - ✅ 新增：WAIT state
-# - ✅ 修正：EXTENDED 不再禁止交易（只降倉）
-# - ✅ 修正：NO_TRADE 不再 SELL_ALL
-# - ✅ 修正：structure 不再只看短線紅K
-# - ✅ 保持：BUY / WAIT / NO_TRADE 主結構
+# - ✅ 保留 v17.5 主結構
+# - ✅ 重構：真正 lifecycle state machine
+# - ✅ 修正：REJECT → BASE
+# - ✅ 修正：真 Day1 / Day2（昨日 resistance）
+# - ✅ 修正：FAIL 不再直接 SELL_ALL
+# - ✅ 新增：setup_score / execution_score
+# - ✅ 新增：extended_level
+# - ✅ 新增：WAIT_EXECUTION / WAIT_CONFIRM
+# - ✅ 新增：PULLBACK / RECLAIM
+# - ✅ 修正：volume lifecycle 誤判
+# - ✅ 修正：structure_state 穩定化
+# - ✅ 修正：RR target 使用 air_space
+# - ✅ 保持：BUY / WAIT / NO_TRADE
 # ================================
 
 
 # ================================
-# 🔥 常數（v17.5）
+# 🔥 常數（v17.6）
 # ================================
 BREAKOUT_THRESHOLD = 0.005
 
@@ -28,6 +29,10 @@ MIN_RR_PREBREAK = 1.0
 MIN_RR_STRONG = 2.0
 
 MIN_STOP_BUFFER = 0.015
+
+EXTENDED_LV1 = 1.08
+EXTENDED_LV2 = 1.15
+EXTENDED_LV3 = 1.22
 
 
 # ================================
@@ -52,11 +57,8 @@ def base_position(
     if market == "STRONG":
         pos += 0.3
 
-    elif market == "CHOPPY":
-        pos += 0.2
-
     elif market == "NORMAL":
-        pos += 0.1
+        pos += 0.15
 
     if trend == "UP":
         pos += 0.2
@@ -77,11 +79,10 @@ def base_position(
 
 
 # ================================
-# 🔥 行動轉換（v17.5）
+# 🔥 行動轉換（v17.6）
 # ================================
 def action_mapper(decision, position):
 
-    # 🔥 BUY
     if decision == "BUY":
 
         return {
@@ -89,15 +90,14 @@ def action_mapper(decision, position):
             "action_type": "BUY"
         }
 
-    # 🔥 EXIT（真正離場）
-    if decision == "EXIT":
+    # 🔥 FAIL 不直接 SELL
+    if decision == "FAIL":
 
         return {
-            "action": -1.0,
-            "action_type": "SELL_ALL"
+            "action": 0.0,
+            "action_type": "FAIL"
         }
 
-    # 🔥 WAIT / HOLD
     return {
         "action": 0.0,
         "action_type": "HOLD"
@@ -117,9 +117,6 @@ def build_result(**kwargs):
         decision,
         position
     )
-
-    if decision == "EXIT":
-        position = 0
 
     result = {
 
@@ -154,6 +151,16 @@ def build_result(**kwargs):
             "market_grade"
         ),
 
+        "setup_score": kwargs.get(
+            "setup_score",
+            0
+        ),
+
+        "execution_score": kwargs.get(
+            "execution_score",
+            0
+        ),
+
         "trend": kwargs.get("trend"),
 
         "structure_state": kwargs.get(
@@ -170,14 +177,24 @@ def build_result(**kwargs):
 
         "rr": kwargs.get("rr", 0),
 
-        # 🔥 v17.5 state machine
+        # 🔥 lifecycle
         "entry_stage": kwargs.get(
             "entry_stage"
+        ),
+
+        "lifecycle": kwargs.get(
+            "lifecycle",
+            "BASE"
         ),
 
         "extended": kwargs.get(
             "extended",
             False
+        ),
+
+        "extended_level": kwargs.get(
+            "extended_level",
+            0
         ),
 
         "fresh_breakout": kwargs.get(
@@ -199,63 +216,20 @@ def build_result(**kwargs):
 
 
 # ================================
-# 🔥 decision_score
-# ================================
-def decision_score(
-    market,
-    trend,
-    structure,
-    volume
-):
-
-    score = 0
-
-    if market == "STRONG":
-        score += 4
-
-    elif market == "NORMAL":
-        score += 1
-
-    elif market == "WEAK":
-        score -= 4
-
-    if trend == "UP":
-        score += 3
-
-    elif trend == "DOWN":
-        score -= 4
-
-    if structure == "STRONG":
-        score += 2
-
-    elif structure == "WEAK":
-        score -= 2
-
-    if volume in [
-        "STRONG",
-        "EXPLOSIVE"
-    ]:
-        score += 2
-
-    elif volume == "DISTRIBUTION":
-        score -= 3
-
-    elif volume == "WEAK":
-        score -= 1
-
-    return score
-
-
-# ================================
-# 🔥 strength_score（v17.5）
+# 🔥 strength_score（v17.6）
 # ================================
 def strength_score(result):
 
     score = 0
 
     score += (
-        result.get("market_score", 0)
+        result.get("setup_score", 0)
         * 0.6
+    )
+
+    score += (
+        result.get("execution_score", 0)
+        * 0.4
     )
 
     score += min(
@@ -263,32 +237,17 @@ def strength_score(result):
         3
     )
 
-    if result.get("trend") == "UP":
-        score += 1
-
-    if (
-        result.get("structure_state")
-        == "STRONG"
-    ):
-        score += 1
-
-    if (
-        result.get("volume_state")
-        in ["STRONG", "EXPLOSIVE"]
-    ):
-        score += 1
-
-    # 🔥 真 Day1
     if result.get("entry_stage") == "BREAKOUT_DAY1":
         score += 2
 
-    # 🔥 真 Day2
     elif result.get("entry_stage") == "CONFIRM_DAY2":
         score += 1.5
 
-    # 🔥 fail
     if result.get("breakout_fail"):
         score -= 4
+
+    if result.get("extended_level", 0) >= 2:
+        score -= 1.5
 
     return round(score, 2)
 
@@ -412,7 +371,7 @@ def trend_signal(
 
 
 # ================================
-# 🔥 volume_signal（v17.5）
+# 🔥 volume_signal
 # ================================
 def volume_signal(volumes):
 
@@ -436,7 +395,7 @@ def volume_signal(volumes):
 
 
 # ================================
-# 🔥 volume_price_state（新增）
+# 🔥 volume_price_state（v17.6）
 # ================================
 def volume_price_state(
     closes,
@@ -450,16 +409,17 @@ def volume_price_state(
         if avg10 else 1
     )
 
-    price_up = (
-        closes[-1] > closes[-2]
+    price_change = (
+        (closes[-1] - closes[-2])
+        / closes[-2]
     )
 
-    # 🔥 爆量上漲
-    if ratio > 1.5 and price_up:
+    # 🔥 量價擴張
+    if ratio > 1.5 and price_change > 0.015:
         return "EXPANSION"
 
-    # 🔥 爆量不漲
-    if ratio > 1.5 and not price_up:
+    # 🔥 出貨
+    if ratio > 1.5 and price_change < -0.02:
         return "DISTRIBUTION"
 
     # 🔥 縮量整理
@@ -470,7 +430,7 @@ def volume_price_state(
 
 
 # ================================
-# 🔥 structure_state（v17.5）
+# 🔥 structure_state（v17.6）
 # ================================
 def structure_state(
     closes,
@@ -480,16 +440,22 @@ def structure_state(
 
     score = 0
 
+    recent_high = max(closes[-5:])
+    old_high = max(closes[-10:-5])
+
+    recent_low = min(closes[-5:])
+    old_low = min(closes[-10:-5])
+
+    # 🔥 higher high
+    if recent_high > old_high:
+        score += 1
+
     # 🔥 higher low
-    if min(closes[-3:]) > min(closes[-6:-3]):
+    if recent_low > old_low:
         score += 1
 
     # 🔥 ma alignment
     if ma5 > ma20:
-        score += 1
-
-    # 🔥 above average
-    if closes[-1] > avg(closes[-5:]):
         score += 1
 
     # 🔥 above ma20
@@ -534,7 +500,7 @@ def is_breakout(
 
 
 # ================================
-# 🔥 fresh breakout（新增）
+# 🔥 fresh breakout
 # ================================
 def is_fresh_breakout(
     closes,
@@ -555,7 +521,7 @@ def is_fresh_breakout(
 
 
 # ================================
-# 🔥 breakout fail（新增）
+# 🔥 breakout fail
 # ================================
 def breakout_fail(
     closes,
@@ -625,7 +591,7 @@ def strong_follow(
 
 
 # ================================
-# 🔥 detect_entry_stage（v17.5 核心）
+# 🔥 detect_entry_stage（v17.6）
 # ================================
 def detect_entry_stage(
     closes,
@@ -634,18 +600,14 @@ def detect_entry_stage(
     volume
 ):
 
-    # ================================
     # 🔥 真 Day1
-    # ================================
     if is_fresh_breakout(
         closes,
         resistance
     ):
         return "BREAKOUT_DAY1"
 
-    # ================================
     # 🔥 真 Day2
-    # ================================
     yesterday_breakout = is_breakout(
         closes[-2],
         resistance
@@ -658,23 +620,33 @@ def detect_entry_stage(
     ):
         return "CONFIRM_DAY2"
 
-    # ================================
-    # 🔥 TURN
-    # ================================
+    # 🔥 reclaim
+    if (
+        closes[-2] < ma5
+        and closes[-1] > ma5
+    ):
+        return "RECLAIM"
+
+    # 🔥 pullback
+    if (
+        closes[-1] > ma20
+        and closes[-1] < ma5
+    ):
+        return "PULLBACK"
+
+    # 🔥 turn
     if (
         closes[-1] > closes[-2]
         and closes[-1] > ma5
         and volume != "WEAK"
-        and closes[-1]
-        > avg(closes[-3:])
     ):
         return "TURN"
 
-    return "REJECT"
+    return "BASE"
 
 
 # ================================
-# 🔥 calc_rr（v17.5）
+# 🔥 calc_rr（v17.6）
 # ================================
 def calc_rr(
     price,
@@ -683,7 +655,6 @@ def calc_rr(
     setup_type="breakout"
 ):
 
-    # 🔥 minimum stop
     min_risk = (
         price * MIN_STOP_BUFFER
     )
@@ -698,20 +669,22 @@ def calc_rr(
     if risk <= 0:
         return 0
 
-    # 🔥 setup RR
+    # 🔥 air space
+    air_space = (
+        resistance * 1.20
+    ) - price
+
     if setup_type == "pre_breakout":
 
-        target = resistance * 1.05
+        reward = air_space * 0.5
 
     elif setup_type == "strong_follow":
 
-        target = resistance * 1.15
+        reward = air_space
 
     else:
 
-        target = resistance * 1.10
-
-    reward = target - price
+        reward = air_space * 0.7
 
     if reward <= 0:
         return 0
@@ -723,16 +696,25 @@ def calc_rr(
 
 
 # ================================
-# 🔥 EXTENDED（v17.5）
+# 🔥 extended
 # ================================
-def is_extended(
+def extended_level(
     price,
     ma20
 ):
 
-    return (
-        price > ma20 * 1.15
-    )
+    ratio = price / ma20
+
+    if ratio >= EXTENDED_LV3:
+        return 3
+
+    elif ratio >= EXTENDED_LV2:
+        return 2
+
+    elif ratio >= EXTENDED_LV1:
+        return 1
+
+    return 0
 
 
 # ================================
@@ -741,11 +723,11 @@ def is_extended(
 def get_wait_reason(
     volume,
     rr,
-    extended,
-    breakout_ready=False
+    ext_level,
+    entry_stage
 ):
 
-    if extended:
+    if ext_level >= 2:
         return "WAIT_EXTENDED"
 
     if rr < 1:
@@ -754,14 +736,79 @@ def get_wait_reason(
     if volume == "WEAK":
         return "WAIT_VOLUME"
 
-    if breakout_ready:
-        return "WAIT_BREAKOUT"
+    if entry_stage == "CONFIRM_DAY2":
+        return "WAIT_CONFIRM"
 
-    return "WAIT"
+    return "WAIT_EXECUTION"
 
 
 # ================================
-# 🔥 strategy（v17.5）
+# 🔥 setup score
+# ================================
+def setup_score(
+    market,
+    trend,
+    structure,
+    volume
+):
+
+    score = 0
+
+    if market == "STRONG":
+        score += 3
+
+    if trend == "UP":
+        score += 3
+
+    if structure == "STRONG":
+        score += 2
+
+    if volume in [
+        "STRONG",
+        "EXPLOSIVE"
+    ]:
+        score += 2
+
+    return score
+
+
+# ================================
+# 🔥 execution score
+# ================================
+def execution_score(
+    entry_stage,
+    rr,
+    vp_state
+):
+
+    score = 0
+
+    if entry_stage == "BREAKOUT_DAY1":
+        score += 4
+
+    elif entry_stage == "CONFIRM_DAY2":
+        score += 3
+
+    elif entry_stage == "TURN":
+        score += 2
+
+    if rr >= 2:
+        score += 2
+
+    elif rr >= 1:
+        score += 1
+
+    if vp_state == "EXPANSION":
+        score += 2
+
+    elif vp_state == "DISTRIBUTION":
+        score -= 2
+
+    return score
+
+
+# ================================
+# 🔥 strategy（v17.6）
 # ================================
 def strategy(
     price,
@@ -820,13 +867,6 @@ def strategy(
         m_score
     )
 
-    score = decision_score(
-        market,
-        trend,
-        structure,
-        volume
-    )
-
     fake_break = edge_fake_breakout(
         closes
     )
@@ -836,24 +876,11 @@ def strategy(
         resistance
     )
 
-    base_pos = base_position(
-        market,
-        trend,
-        structure,
-        volume
-    )
-
-    # ================================
-    # 🔥 stop
-    # ================================
     stop_candidate = min(
         ma5,
         avg(closes[-3:])
     )
 
-    # ================================
-    # 🔥 stage
-    # ================================
     entry_stage = detect_entry_stage(
         closes,
         ma5,
@@ -861,13 +888,34 @@ def strategy(
         volume
     )
 
-    # ================================
-    # 🔥 extended
-    # ================================
-    extended = is_extended(
+    ext_level = extended_level(
         price,
         ma20
     )
+
+    extended = ext_level >= 2
+
+    rr = calc_rr(
+        price,
+        stop_candidate,
+        resistance,
+        "breakout"
+    )
+
+    setup = setup_score(
+        market,
+        trend,
+        structure,
+        volume
+    )
+
+    execute = execution_score(
+        entry_stage,
+        rr,
+        vp_state
+    )
+
+    lifecycle = entry_stage
 
     # ================================
     # 🔥 breakout fail
@@ -876,13 +924,15 @@ def strategy(
 
         return build_result(
 
-            decision="EXIT",
-
-            position=0,
+            decision="FAIL",
 
             market_score=m_score,
 
             market_grade=m_grade,
+
+            setup_score=setup,
+
+            execution_score=execute,
 
             trend=trend,
 
@@ -896,13 +946,17 @@ def strategy(
 
             entry_stage="BREAKOUT_FAIL",
 
+            lifecycle="FAIL",
+
             extended=extended,
+
+            extended_level=ext_level,
 
             breakout_fail=True
         )
 
     # ================================
-    # 🔥 WEAK
+    # 🔥 weak market
     # ================================
     if (
         market == "WEAK"
@@ -913,11 +967,13 @@ def strategy(
 
             decision="NO_TRADE",
 
-            position=0,
-
             market_score=m_score,
 
             market_grade=m_grade,
+
+            setup_score=setup,
+
+            execution_score=execute,
 
             trend=trend,
 
@@ -927,11 +983,15 @@ def strategy(
 
             structure_state=structure,
 
-            rr=0,
+            rr=rr,
 
             entry_stage=entry_stage,
 
+            lifecycle=lifecycle,
+
             extended=extended,
+
+            extended_level=ext_level,
 
             wait_reason="WAIT_TREND"
         )
@@ -945,11 +1005,13 @@ def strategy(
 
             decision="WAIT",
 
-            position=0,
-
             market_score=m_score,
 
             market_grade=m_grade,
+
+            setup_score=setup,
+
+            execution_score=execute,
 
             trend=trend,
 
@@ -959,11 +1021,15 @@ def strategy(
 
             structure_state=structure,
 
-            rr=0,
+            rr=rr,
 
             entry_stage=entry_stage,
 
+            lifecycle="FAKE_BREAK",
+
             extended=extended,
+
+            extended_level=ext_level,
 
             wait_reason="WAIT_FAKE_BREAK"
         )
@@ -979,59 +1045,30 @@ def strategy(
             structure,
             trend
         )
-        and score >= 6
+        and rr >= MIN_RR_STRONG
     ):
 
-        rr = calc_rr(
-            price,
-            stop_candidate,
-            resistance,
-            "strong_follow"
-        )
-
-        if rr < MIN_RR_STRONG:
-
-            return build_result(
-
-                decision="WAIT",
-
-                position=0,
-
-                market_score=m_score,
-
-                market_grade=m_grade,
-
-                trend=trend,
-
-                volume_state=volume,
-
-                volume_price_state=vp_state,
-
-                structure_state=structure,
-
-                rr=rr,
-
-                entry_stage=entry_stage,
-
-                extended=extended,
-
-                wait_reason="WAIT_RR"
-            )
-
         pos = min(
-            max(base_pos, 0.7),
+            max(
+                base_position(
+                    market,
+                    trend,
+                    structure,
+                    volume
+                ),
+                0.7
+            ),
             0.9
         )
 
-        # 🔥 extended 降倉
-        if extended:
+        if ext_level >= 2:
             pos *= 0.5
 
         return build_result(
 
             decision="BUY",
 
-            decision_type="strong",
+            decision_type="strong_follow",
 
             buy=price,
 
@@ -1042,6 +1079,10 @@ def strategy(
             market_score=m_score,
 
             market_grade=m_grade,
+
+            setup_score=setup,
+
+            execution_score=execute,
 
             trend=trend,
 
@@ -1055,7 +1096,11 @@ def strategy(
 
             entry_stage=entry_stage,
 
-            extended=extended
+            lifecycle="EXPANSION",
+
+            extended=extended,
+
+            extended_level=ext_level
         )
 
     # ================================
@@ -1066,51 +1111,23 @@ def strategy(
             closes[-1],
             resistance
         )
-        and score >= 4
+        and rr >= MIN_RR_BREAKOUT
     ):
 
-        rr = calc_rr(
-            price,
-            stop_candidate,
-            resistance,
-            "breakout"
+        pos = max(
+            base_position(
+                market,
+                trend,
+                structure,
+                volume
+            ),
+            0.5
         )
-
-        if rr < MIN_RR_BREAKOUT:
-
-            return build_result(
-
-                decision="WAIT",
-
-                position=0,
-
-                market_score=m_score,
-
-                market_grade=m_grade,
-
-                trend=trend,
-
-                volume_state=volume,
-
-                volume_price_state=vp_state,
-
-                structure_state=structure,
-
-                rr=rr,
-
-                entry_stage=entry_stage,
-
-                extended=extended,
-
-                wait_reason="WAIT_RR"
-            )
-
-        pos = max(base_pos, 0.5)
 
         if entry_stage == "TURN":
             pos = min(pos, 0.4)
 
-        if extended:
+        if ext_level >= 2:
             pos *= 0.5
 
         return build_result(
@@ -1129,6 +1146,10 @@ def strategy(
 
             market_grade=m_grade,
 
+            setup_score=setup,
+
+            execution_score=execute,
+
             trend=trend,
 
             volume_state=volume,
@@ -1141,7 +1162,11 @@ def strategy(
 
             entry_stage=entry_stage,
 
+            lifecycle="BREAKOUT",
+
             extended=extended,
+
+            extended_level=ext_level,
 
             fresh_breakout=is_fresh_breakout(
                 closes,
@@ -1161,49 +1186,18 @@ def strategy(
         and volume != "WEAK"
         and structure != "WEAK"
         and breakout_ready
-        and score >= 2
+        and rr >= MIN_RR_PREBREAK
     ):
 
-        rr = calc_rr(
-            price,
-            stop_candidate,
-            resistance,
-            "pre_breakout"
+        pos = max(
+            base_position(
+                market,
+                trend,
+                structure,
+                volume
+            ),
+            0.2
         )
-
-        if rr < MIN_RR_PREBREAK:
-
-            return build_result(
-
-                decision="WAIT",
-
-                position=0,
-
-                market_score=m_score,
-
-                market_grade=m_grade,
-
-                trend=trend,
-
-                volume_state=volume,
-
-                volume_price_state=vp_state,
-
-                structure_state=structure,
-
-                rr=rr,
-
-                entry_stage=entry_stage,
-
-                extended=extended,
-
-                wait_reason="WAIT_RR"
-            )
-
-        pos = max(base_pos, 0.2)
-
-        if entry_stage == "TURN":
-            pos = min(pos, 0.3)
 
         return build_result(
 
@@ -1221,6 +1215,10 @@ def strategy(
 
             market_grade=m_grade,
 
+            setup_score=setup,
+
+            execution_score=execute,
+
             trend=trend,
 
             volume_state=volume,
@@ -1233,28 +1231,27 @@ def strategy(
 
             entry_stage=entry_stage,
 
-            extended=extended
+            lifecycle="PRE_BREAKOUT",
+
+            extended=extended,
+
+            extended_level=ext_level
         )
 
     # ================================
-    # 🔥 default WAIT
+    # 🔥 WAIT
     # ================================
-    rr = calc_rr(
-        price,
-        stop_candidate,
-        resistance,
-        "breakout"
-    )
-
     return build_result(
 
         decision="WAIT",
 
-        position=0,
-
         market_score=m_score,
 
         market_grade=m_grade,
+
+        setup_score=setup,
+
+        execution_score=execute,
 
         trend=trend,
 
@@ -1268,22 +1265,23 @@ def strategy(
 
         entry_stage=entry_stage,
 
+        lifecycle=lifecycle,
+
         extended=extended,
+
+        extended_level=ext_level,
 
         wait_reason=get_wait_reason(
             volume,
             rr,
-            extended,
-            breakout_ready=(
-                price >
-                resistance * 0.985
-            )
+            ext_level,
+            entry_stage
         )
     )
 
 
 # ================================
-# 🔥 pick_best_stock（v17.5）
+# 🔥 pick_best_stock（v17.6）
 # ================================
 def pick_best_stock(results_dict):
 
