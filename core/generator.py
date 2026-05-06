@@ -1,9 +1,9 @@
 # ================================
-# 🔥 FINAL（顯示層 v17.6｜STATE ENGINE UI REWORK）
+# 🔥 FINAL（顯示層 v17.7｜UI NORMALIZATION）
 # ================================
 
 # 🔒 VERSION LOCK
-# - ✅ 完全對齊 strategy v17.6
+# - ✅ 完全對齊 strategy v17.7
 # - ✅ 修復：FAIL / BASE / RECLAIM 對齊
 # - ✅ 修復：extended_level 顯示
 # - ✅ 修復：lifecycle fallback
@@ -12,7 +12,10 @@
 # - ✅ 修復：score 顯示 crash
 # - ✅ 修復：volume ratio division
 # - ✅ 修復：stage detection 空資料
-# - ✅ UI 重構（區塊化）
+# - ✅ 修復：結構顯示與 strategy 對齊
+# - ✅ 修復：Strength 顯示過度膨脹
+# - ✅ 修復：重複 lifecycle / stage 顯示
+# - ✅ UI 重構（資訊降噪）
 # - ✅ 保持：不干擾 strategy
 # ================================
 
@@ -105,7 +108,7 @@ def safe_text(val, fallback="-"):
 
 
 # ================================
-# 🔥 breakout_distance（v17.6）
+# 🔥 breakout_distance（v17.7）
 # ================================
 def breakout_distance(price, closes):
 
@@ -138,7 +141,8 @@ def breakout_distance(price, closes):
 
 
 # ================================
-# 🔥 structure_progress（v17.6）
+# 🔥 structure_progress（v17.7）
+# 🔥 對齊 strategy v17.7
 # ================================
 def structure_progress(
     closes,
@@ -171,6 +175,10 @@ def structure_progress(
 
         # 🔥 ma alignment
         if ma5 > ma20:
+            score += 1
+
+        # 🔥 close above ma5
+        if closes[-1] > ma5:
             score += 1
 
         # 🔥 above ma20
@@ -239,17 +247,18 @@ def volume_price_text(state):
 
 
 # ================================
-# 🔥 lifecycle text
+# 🔥 lifecycle text（v17.7）
+# 🔥 降低英文感
 # ================================
 def lifecycle_text(state):
 
     mapping = {
 
         "BREAKOUT":
-            "🚀 Breakout",
+            "🚀 突破",
 
         "EXPANSION":
-            "🔥 主升段",
+            "🔥 主升",
 
         "PRE_BREAKOUT":
             "⏳ 突破前",
@@ -275,6 +284,9 @@ def lifecycle_text(state):
         "FAKE_BREAK":
             "⚠ 假突破",
 
+        "EXTREME":
+            "🚨 極熱",
+
         "BASE":
             "⏳ 整理"
     }
@@ -286,7 +298,7 @@ def lifecycle_text(state):
 
 
 # ================================
-# 🔥 translate_status（v17.6）
+# 🔥 translate_status（v17.7）
 # ================================
 def translate_status(
     dist,
@@ -300,7 +312,7 @@ def translate_status(
     # ================================
     if ext_level >= 3:
 
-        d_text = "極度過熱"
+        d_text = "極熱"
 
     elif ext_level >= 2:
 
@@ -333,11 +345,11 @@ def translate_status(
     # ================================
     # 🔥 結構
     # ================================
-    if struct >= 4:
+    if struct >= 5:
 
-        s_text = "強勢"
+        s_text = "強"
 
-    elif struct >= 2:
+    elif struct >= 3:
 
         s_text = "成形"
 
@@ -372,7 +384,7 @@ def translate_status(
 
 
 # ================================
-# 🔥 action（v17.6）
+# 🔥 action（v17.7）
 # ================================
 def get_action(result):
 
@@ -387,7 +399,7 @@ def get_action(result):
     # 🔥 FAIL
     if decision == "FAIL":
 
-        return "❌ 失敗"
+        return "❌"
 
     # 🔥 BUY
     if action_type == "BUY":
@@ -397,12 +409,12 @@ def get_action(result):
             f"{round(result.get('action', 0)*100)}%"
         )
 
-    # 🔥 WAIT
     return "⏳"
 
 
 # ================================
 # 🔥 entry stage label
+# 🔥 避免與 lifecycle 重複
 # ================================
 def get_entry_stage_label(result):
 
@@ -428,15 +440,12 @@ def get_entry_stage_label(result):
             "↗ 收復",
 
         "BREAKOUT_FAIL":
-            "❌ 失敗",
-
-        "BASE":
-            "⏳ 整理"
+            "❌ 失敗"
     }
 
     return mapping.get(
         stage,
-        "⏳ 整理"
+        ""
     )
 
 
@@ -486,15 +495,15 @@ def get_final_label(result):
 
     if decision == "BUY":
 
-        return "🔥 進場"
+        return "進場"
 
     if decision == "FAIL":
 
-        return "❌ 失敗"
+        return "失敗"
 
     if decision == "NO_TRADE":
 
-        return "❌ 不交易"
+        return "不交易"
 
     return wait_reason_text(
         result.get("wait_reason")
@@ -531,7 +540,6 @@ def stage_detection(
             breakout_price - price
         ) / price
 
-        # 🔥 EXTENDED
         if ext_level >= 3:
 
             return "EXTREME"
@@ -540,7 +548,6 @@ def stage_detection(
 
             return "EXTENDED"
 
-        # 🔥 breakout
         if price > breakout_price:
 
             return "BREAKOUT_DONE"
@@ -574,16 +581,16 @@ def stage_to_text(stage):
             "🔥 突破前",
 
         "APPROACH":
-            "👀 接近壓力",
+            "👀 接近",
 
         "FAR":
-            "⏳ 遠離壓力",
+            "⏳ 遠離",
 
         "EXTENDED":
             "⚠ 過熱",
 
         "EXTREME":
-            "🚨 極度過熱"
+            "🚨 極熱"
     }
 
     return mapping.get(
@@ -646,7 +653,6 @@ def get_live_price_data(
             yahoo[1]
         )
 
-    # 🔥 fallback
     return (
         twse_price,
         twse_change
@@ -654,7 +660,7 @@ def get_live_price_data(
 
 
 # ================================
-# 🔥 主流程（v17.6 UI）
+# 🔥 主流程（v17.7 UI）
 # ================================
 def generate():
 
@@ -711,7 +717,6 @@ def generate():
             if not closes or not volumes:
                 continue
 
-            # 🔥 strategy
             result = strategy(
                 price,
                 ma5,
@@ -839,28 +844,36 @@ def generate():
             )
 
             # ================================
-            # 🔥 區塊輸出
+            # 🔥 標題列（降噪）
             # ================================
-            msg += (
+            header = (
                 f"【{name}】"
                 f"{get_action(result)} "
-                f"{final}\n"
+                f"{final}"
             )
 
-            msg += (
-                f"├─ 階段："
-                f"{entry_stage}"
-                f" ｜{lifecycle}\n"
-            )
+            if entry_stage:
+                header += f" ｜{entry_stage}"
 
+            msg += header + "\n"
+
+            # ================================
+            # 🔥 lifecycle / market
+            # ================================
             msg += (
-                f"├─ 市場："
+                f"├─ "
+                f"{lifecycle}"
+                f" ｜"
                 f"{safe_text(result.get('market_grade'))}"
-                f" ｜{stage_to_text(stage)}\n"
+                f" ｜"
+                f"{stage_to_text(stage)}\n"
             )
 
+            # ================================
+            # 🔥 structure
+            # ================================
             msg += (
-                f"├─ 結構："
+                f"├─ "
                 f"{d_text}"
                 f" / "
                 f"{s_text}"
@@ -870,30 +883,40 @@ def generate():
                 f"{vp_state}\n"
             )
 
+            # ================================
+            # 🔥 data（精簡）
+            # ================================
             msg += (
-                f"├─ 數據："
+                f"├─ "
                 f"Dist {safe_round(dist,2)}%"
-                f" ｜S {struct}/4"
-                f" ｜V {vol}x"
-                f" ｜RR {safe_round(result.get('rr'),2)}\n"
+                f" ｜RR {safe_round(result.get('rr'),2)}"
+                f" ｜S {struct}/5"
+                f" ｜V {vol}x\n"
             )
 
+            # ================================
+            # 🔥 score（簡化）
+            # ================================
             msg += (
-                f"├─ 評分："
+                f"├─ "
                 f"Setup {setup_score}"
                 f" ｜Exec {exec_score}"
-                f" ｜Strength {strength}\n"
+                f" ｜★ {strength}\n"
             )
 
-            # 🔥 EXTENDED LEVEL
+            # ================================
+            # 🔥 過熱
+            # ================================
             if ext_level > 0:
 
                 msg += (
-                    f"├─ 過熱："
-                    f"Lv.{ext_level}\n"
+                    f"├─ "
+                    f"過熱 Lv.{ext_level}\n"
                 )
 
+            # ================================
             # 🔥 price
+            # ================================
             msg += (
                 f"└─ 💰 "
                 f"{safe_round(data['price'],2)}"
@@ -926,7 +949,7 @@ def generate():
         msg += (
             f"🔥 最強："
             f"{best}"
-            f"（{safe_round(score,2)}）\n"
+            f"（★{safe_round(score,2)}）\n"
         )
 
     else:
