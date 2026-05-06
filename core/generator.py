@@ -1,5 +1,5 @@
 # ================================
-# 🔥 FINAL（顯示層 v17.7.1｜UI NORMALIZATION FIX）
+# 🔥 FINAL（顯示層 v17.7.2｜UI NORMALIZATION FINAL）
 # ================================
 
 # 🔒 VERSION LOCK
@@ -19,6 +19,11 @@
 # - ✅ 修復：BREAKOUT_DONE 與 lifecycle 衝突
 # - ✅ 修復：Setup / Exec 缺少滿分資訊
 # - ✅ 修復：header 空白與重複符號
+# - ✅ 修復：過熱污染 pressure 欄位
+# - ✅ 修復：structure 重複 distance 語義
+# - ✅ 修復：WAIT reason header 噪音
+# - ✅ 修復：market_grade 缺少語義
+# - ✅ 修復：極熱與壓力重複顯示
 # - ✅ UI 重構（資訊降噪）
 # - ✅ 保持：不干擾 strategy
 # ================================
@@ -112,7 +117,37 @@ def safe_text(val, fallback="-"):
 
 
 # ================================
-# 🔥 breakout_distance（v17.7.1）
+# 🔥 market text（v17.7.2）
+# 🔥 市場等級語義化
+# ================================
+def market_text(grade):
+
+    mapping = {
+
+        "A+":
+            "🟢 A+",
+
+        "A":
+            "🟢 A",
+
+        "B":
+            "🟡 B",
+
+        "C":
+            "🟠 C",
+
+        "D":
+            "🔴 D"
+    }
+
+    return mapping.get(
+        grade,
+        grade
+    )
+
+
+# ================================
+# 🔥 breakout_distance
 # ================================
 def breakout_distance(price, closes):
 
@@ -145,7 +180,7 @@ def breakout_distance(price, closes):
 
 
 # ================================
-# 🔥 structure_progress（v17.7.1）
+# 🔥 structure_progress
 # 🔥 對齊 strategy v17.7
 # ================================
 def structure_progress(
@@ -251,7 +286,7 @@ def volume_price_text(state):
 
 
 # ================================
-# 🔥 lifecycle text（v17.7.1）
+# 🔥 lifecycle text（v17.7.2）
 # 🔥 RR 太低時不再顯示主升
 # ================================
 def lifecycle_text(
@@ -259,7 +294,7 @@ def lifecycle_text(
     rr=0
 ):
 
-    # 🔥 RR 太低代表沒有空間
+    # 🔥 RR 太低代表延伸過度
     if rr <= 0.3:
 
         return "🚨 延伸過度"
@@ -296,9 +331,6 @@ def lifecycle_text(
         "FAKE_BREAK":
             "⚠ 假突破",
 
-        "EXTREME":
-            "🚨 極熱",
-
         "BASE":
             "⏳ 整理"
     }
@@ -310,54 +342,23 @@ def lifecycle_text(
 
 
 # ================================
-# 🔥 translate_status（v17.7.1）
+# 🔥 translate_status（v17.7.2）
+# 🔥 移除 distance 重複語義
 # ================================
 def translate_status(
-    dist,
     struct,
     vol,
     ext_level=0
 ):
 
     # ================================
-    # 🔥 距離
+    # 🔥 結構
     # ================================
     if ext_level >= 3:
 
-        d_text = "極熱"
+        s_text = "極熱"
 
-    elif ext_level >= 2:
-
-        d_text = "過熱"
-
-    elif dist is None:
-
-        d_text = "無資料"
-
-    elif dist < 0:
-
-        d_text = "已突破"
-
-    elif dist <= 1.5:
-
-        d_text = "臨界"
-
-    elif dist <= 3:
-
-        d_text = "很近"
-
-    elif dist <= 6:
-
-        d_text = "接近"
-
-    else:
-
-        d_text = "很遠"
-
-    # ================================
-    # 🔥 結構
-    # ================================
-    if struct >= 5:
+    elif struct >= 5:
 
         s_text = "強"
 
@@ -392,11 +393,11 @@ def translate_status(
 
         v_text = "無量"
 
-    return d_text, s_text, v_text
+    return s_text, v_text
 
 
 # ================================
-# 🔥 action（v17.7.1）
+# 🔥 action
 # ================================
 def get_action(result):
 
@@ -418,7 +419,7 @@ def get_action(result):
 
         return (
             f"🟢 "
-            f"{round(result.get('action', 0)*100)}%"
+            f"{round(result.get('action', 0) * 100)}%"
         )
 
     return "⏳"
@@ -463,36 +464,37 @@ def get_entry_stage_label(result):
 
 # ================================
 # 🔥 WAIT reason
+# 🔥 header 降噪
 # ================================
 def wait_reason_text(reason):
 
     mapping = {
 
         "WAIT_EXTENDED":
-            "⚠ 過熱",
+            "過熱",
 
         "WAIT_RR":
-            "⚠ RR低",
+            "RR低",
 
         "WAIT_VOLUME":
-            "⏳ 等量",
+            "等量",
 
         "WAIT_CONFIRM":
-            "⏳ 等確認",
+            "等確認",
 
         "WAIT_EXECUTION":
-            "⏳ 等進場",
+            "等進場",
 
         "WAIT_TREND":
-            "❌ 弱勢",
+            "弱勢",
 
         "WAIT_FAKE_BREAK":
-            "⚠ 假突破"
+            "假突破"
     }
 
     return mapping.get(
         reason,
-        "⏳ 觀察"
+        "觀察"
     )
 
 
@@ -524,12 +526,12 @@ def get_final_label(result):
 
 # ================================
 # 🔥 stage detection
-# 🔥 只表示位置
+# 🔥 只表示壓力位置
+# 🔥 過熱不再污染 pressure
 # ================================
 def stage_detection(
     price,
-    closes,
-    ext_level=0
+    closes
 ):
 
     try:
@@ -552,14 +554,6 @@ def stage_detection(
         dist = (
             breakout_price - price
         ) / price
-
-        if ext_level >= 3:
-
-            return "EXTREME"
-
-        elif ext_level >= 2:
-
-            return "EXTENDED"
 
         if price > breakout_price:
 
@@ -598,13 +592,7 @@ def stage_to_text(stage):
             "👀 接近",
 
         "FAR":
-            "⏳ 遠離",
-
-        "EXTENDED":
-            "⚠ 過熱",
-
-        "EXTREME":
-            "🚨 極熱"
+            "⏳ 遠離"
     }
 
     return mapping.get(
@@ -674,7 +662,7 @@ def get_live_price_data(
 
 
 # ================================
-# 🔥 主流程（v17.7.1 UI）
+# 🔥 主流程（v17.7.2 UI）
 # ================================
 def generate():
 
@@ -799,9 +787,8 @@ def generate():
                 data["volumes"]
             )
 
-            d_text, s_text, v_text = (
+            s_text, v_text = (
                 translate_status(
-                    dist,
                     struct,
                     vol,
                     ext_level
@@ -810,8 +797,7 @@ def generate():
 
             stage = stage_detection(
                 data["price"],
-                data["closes"],
-                ext_level
+                data["closes"]
             )
 
             final = get_final_label(
@@ -867,23 +853,31 @@ def generate():
                 f"{final}"
             )
 
+            # 🔥 entry_stage 有值才顯示
             if entry_stage:
                 header += f" ｜{entry_stage}"
 
             msg += header + "\n"
 
             # ================================
-            # 🔥 lifecycle / market / pressure
+            # 🔥 lifecycle
             # ================================
             msg += (
-                f"├─ 型態：{lifecycle}\n"
+                f"├─ 型態："
+                f"{lifecycle}\n"
             )
 
+            # ================================
+            # 🔥 market
+            # ================================
             msg += (
                 f"├─ 市場："
-                f"{safe_text(result.get('market_grade'))}\n"
+                f"{market_text(result.get('market_grade'))}\n"
             )
 
+            # ================================
+            # 🔥 pressure
+            # ================================
             msg += (
                 f"├─ 壓力："
                 f"{stage_to_text(stage)}\n"
@@ -891,11 +885,10 @@ def generate():
 
             # ================================
             # 🔥 structure
+            # 🔥 移除重複 distance 語義
             # ================================
             msg += (
                 f"├─ 結構："
-                f"{d_text}"
-                f" / "
                 f"{s_text}"
                 f" / "
                 f"{v_text}"
@@ -904,18 +897,18 @@ def generate():
             )
 
             # ================================
-            # 🔥 data（精簡）
+            # 🔥 data
             # ================================
             msg += (
                 f"├─ 數據："
-                f"Dist {safe_round(dist,2)}%"
-                f" ｜RR {safe_round(result.get('rr'),2)}"
+                f"Dist {safe_round(dist, 2)}%"
+                f" ｜RR {safe_round(result.get('rr'), 2)}"
                 f" ｜S {struct}/5"
                 f" ｜V {vol}x\n"
             )
 
             # ================================
-            # 🔥 score（加滿分）
+            # 🔥 score
             # ================================
             msg += (
                 f"├─ 評分："
@@ -926,8 +919,9 @@ def generate():
 
             # ================================
             # 🔥 過熱
+            # 🔥 Lv2 以上才顯示
             # ================================
-            if ext_level > 0:
+            if ext_level >= 2:
 
                 msg += (
                     f"├─ 過熱："
@@ -939,9 +933,9 @@ def generate():
             # ================================
             msg += (
                 f"└─ 💰 "
-                f"{safe_round(data['price'],2)}"
+                f"{safe_round(data['price'], 2)}"
                 f"（"
-                f"{safe_round(data['change'],2)}%"
+                f"{safe_round(data['change'], 2)}%"
                 f"）\n\n"
             )
 
@@ -969,7 +963,7 @@ def generate():
         msg += (
             f"🔥 最強："
             f"{best}"
-            f"（★{safe_round(score,2)}）\n"
+            f"（★{safe_round(score, 2)}）\n"
         )
 
     else:
