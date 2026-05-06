@@ -1,15 +1,19 @@
 # ================================
-# 🔥 FINAL（顯示層 v17.4｜REAL TURN + REAL BREAKOUT）
+# 🔥 FINAL（顯示層 v17.5｜REAL DAY1 / DAY2 STATE MACHINE）
 # ================================
 
 # 🔒 VERSION LOCK
-# - ✅ 完全對齊 strategy v17.4
+# - ✅ 完全對齊 strategy v17.5
+# - ✅ 顯示真正 Day1 / Day2
+# - ✅ 顯示 BREAKOUT_FAIL
+# - ✅ 顯示 WAIT reason
+# - ✅ 顯示 volume-price lifecycle
+# - ✅ 顯示 EXTENDED（降倉模式）
 # - ✅ breakout threshold 全系統一致
-# - ✅ 顯示 EXTENDED（過熱）
-# - ✅ 顯示真實 RR
-# - ✅ 顯示 volume 新分級
-# - ✅ 修正：即時價格顯示
-# - ✅ 修正：WAIT 分類
+# - ✅ 顯示真正即時價格
+# - ✅ 顯示真 RR（minimum stop）
+# - ✅ 修正：NO_TRADE 不再顯示 SELL_ALL
+# - ✅ 修正：state machine 顯示
 # - ✅ 保持：不干擾 strategy
 # ================================
 
@@ -64,7 +68,11 @@ def safe_list(data, n=20):
         return None
 
     if len(data) < n:
-        return data + [data[-1]] * (n - len(data))
+
+        return (
+            data
+            + [data[-1]] * (n - len(data))
+        )
 
     return data
 
@@ -82,47 +90,66 @@ def safe_round(val, n=2):
 
 
 # ================================
-# 🔥 breakout_distance（v17.4）
+# 🔥 breakout_distance（v17.5）
 # ================================
 def breakout_distance(price, closes):
 
     try:
 
-        resistance = max(closes[-20:-3])
+        resistance = max(
+            closes[-20:-3]
+        )
+
+        breakout_price = (
+            resistance
+            * (1 + BREAKOUT_THRESHOLD)
+        )
 
         return round(
-            (resistance - price) / price * 100,
+            (
+                breakout_price - price
+            ) / price * 100,
             2
         )
 
     except:
+
         return None
 
 
 # ================================
-# 🔥 structure_progress（v17.4）
+# 🔥 structure_progress（v17.5）
 # ================================
-def structure_progress(closes, ma5, ma20):
+def structure_progress(
+    closes,
+    ma5,
+    ma20
+):
 
     try:
 
         score = 0
 
-        if closes[-1] > closes[-2]:
+        # 🔥 higher low
+        if min(closes[-3:]) > min(closes[-6:-3]):
             score += 1
 
+        # 🔥 ma alignment
         if ma5 > ma20:
             score += 1
 
+        # 🔥 above avg
         if closes[-1] > sum(closes[-5:]) / 5:
             score += 1
 
-        if closes[-2] > closes[-3]:
+        # 🔥 above ma20
+        if closes[-1] > ma20:
             score += 1
 
         return score
 
     except:
+
         return 0
 
 
@@ -144,11 +171,34 @@ def volume_ratio(volumes):
         ) if avg10 else 1
 
     except:
+
         return 1
 
 
 # ================================
-# 🔥 translate_status（v17.4）
+# 🔥 volume_price_text（v17.5）
+# ================================
+def volume_price_text(state):
+
+    mapping = {
+
+        "EXPANSION": "量價擴張",
+
+        "DISTRIBUTION": "放量出貨",
+
+        "COILING": "縮量整理",
+
+        "NORMAL": "正常"
+    }
+
+    return mapping.get(
+        state,
+        "正常"
+    )
+
+
+# ================================
+# 🔥 translate_status（v17.5）
 # ================================
 def translate_status(
     dist,
@@ -192,19 +242,23 @@ def translate_status(
     # 🔥 結構
     # ================================
     if struct >= 4:
+
         s_text = "強勢"
 
     elif struct >= 2:
+
         s_text = "成形中"
 
     elif struct >= 1:
+
         s_text = "剛啟動"
 
     else:
+
         s_text = "弱"
 
     # ================================
-    # 🔥 volume（v17.4）
+    # 🔥 volume
     # ================================
     if vol >= 1.5:
 
@@ -226,61 +280,113 @@ def translate_status(
 
 
 # ================================
-# 🔥 action
+# 🔥 action（v17.5）
 # ================================
 def get_action(result):
 
-    t = result.get("action_type")
+    decision = result.get("decision")
 
-    if t == "SELL_ALL":
+    action_type = result.get(
+        "action_type"
+    )
 
-        return "🔴 賣出 100%"
+    # 🔥 EXIT
+    if decision == "EXIT":
 
-    if t == "BUY":
+        return "🔴 清倉"
+
+    # 🔥 BUY
+    if action_type == "BUY":
 
         return (
             f"🟢 買進 "
             f"{round(result.get('action', 0)*100)}%"
         )
 
+    # 🔥 NO_TRADE / WAIT
     return "⏳ 不動"
 
 
 # ================================
-# 🔥 entry_stage（v17.4）
+# 🔥 state label（v17.5）
 # ================================
 def get_entry_stage_label(result):
 
-    if result.get("decision") != "BUY":
-        return ""
+    stage = result.get(
+        "entry_stage"
+    )
 
-    stage = result.get("entry_stage")
+    mapping = {
 
-    if stage == "TURN":
+        # 🔥 真 Day1
+        "BREAKOUT_DAY1":
+            "（🔥 Day1 突破）",
 
-        return "（Day1 轉強）"
+        # 🔥 真 Day2
+        "CONFIRM_DAY2":
+            "（🚀 Day2 確認）",
 
-    elif stage == "CONFIRM":
+        # 🔥 TURN
+        "TURN":
+            "（↗ 轉強）",
 
-        return "（Day2 延續）"
+        # 🔥 fail
+        "BREAKOUT_FAIL":
+            "（❌ 突破失敗）",
 
-    elif stage == "REJECT":
+        "REJECT":
+            "（⚠ 結構失敗）"
+    }
 
-        return "（❌ 失敗）"
-
-    return ""
+    return mapping.get(
+        stage,
+        ""
+    )
 
 
 # ================================
-# 🔥 WAIT label（v17.4）
+# 🔥 WAIT reason（v17.5）
 # ================================
-def get_final_label(result, struct, vol):
+def wait_reason_text(reason):
 
-    decision = result.get("decision")
+    mapping = {
 
-    extended = result.get("extended")
+        "WAIT_EXTENDED":
+            "⚠ 過熱",
 
-    rr = result.get("rr", 0)
+        "WAIT_RR":
+            "⚠ RR 不佳",
+
+        "WAIT_VOLUME":
+            "👀 等量",
+
+        "WAIT_BREAKOUT":
+            "👀 等突破",
+
+        "WAIT_TREND":
+            "❌ 趨勢差",
+
+        "WAIT_FAKE_BREAK":
+            "⚠ 假突破",
+
+        "WAIT":
+            "👀 觀察"
+    }
+
+    return mapping.get(
+        reason,
+        "👀 觀察"
+    )
+
+
+# ================================
+# 🔥 final label（v17.5）
+# ================================
+def get_final_label(result):
+
+    decision = result.get(
+        "decision"
+    )
 
     # ================================
     # 🔥 BUY
@@ -290,54 +396,45 @@ def get_final_label(result, struct, vol):
         return "🔥 進場"
 
     # ================================
-    # 🔥 NO TRADE
+    # 🔥 EXIT
+    # ================================
+    if decision == "EXIT":
+
+        return "❌ 離場"
+
+    # ================================
+    # 🔥 NO_TRADE
     # ================================
     if decision == "NO_TRADE":
 
-        return "❌ 不用看"
+        return "❌ 不交易"
 
     # ================================
-    # 🔥 過熱
+    # 🔥 WAIT
     # ================================
-    if extended:
-
-        return "⚠ 過熱"
-
-    # ================================
-    # 🔥 RR 太差
-    # ================================
-    if rr < 1:
-
-        return "⚠ RR 不佳"
-
-    # ================================
-    # 🔥 無量
-    # ================================
-    if vol < 0.7:
-
-        return "👀 等量"
-
-    # ================================
-    # 🔥 快突破
-    # ================================
-    if struct >= 3:
-
-        return "👀 等突破"
-
-    return "👀 觀察"
+    return wait_reason_text(
+        result.get("wait_reason")
+    )
 
 
 # ================================
-# 🔥 stage_detection（v17.4）
+# 🔥 stage_detection（v17.5）
 # ================================
-def stage_detection(price, closes):
+def stage_detection(
+    price,
+    closes,
+    extended=False
+):
 
     closes = safe_list(closes)
 
     if not closes:
+
         return "FAR"
 
-    resistance = max(closes[-20:-3])
+    resistance = max(
+        closes[-20:-3]
+    )
 
     breakout_price = (
         resistance
@@ -347,6 +444,13 @@ def stage_detection(price, closes):
     dist = (
         breakout_price - price
     ) / price
+
+    # ================================
+    # 🔥 EXTENDED
+    # ================================
+    if extended:
+
+        return "EXTENDED"
 
     # ================================
     # 🔥 breakout
@@ -367,25 +471,32 @@ def stage_detection(price, closes):
 
 
 # ================================
-# 🔥 stage_to_text
+# 🔥 stage_to_text（v17.5）
 # ================================
-def stage_to_text(stage, extended=False):
+def stage_to_text(stage):
 
-    if extended:
+    mapping = {
 
-        return "⚠ 過熱區"
+        "BREAKOUT_DONE":
+            "🚀 已突破",
 
-    return {
+        "BREAKOUT_READY":
+            "🔥 突破前",
 
-        "BREAKOUT_DONE": "🚀 已突破",
+        "APPROACH":
+            "👀 接近壓力",
 
-        "BREAKOUT_READY": "🔥 突破前",
+        "FAR":
+            "⏳ 尚未接近",
 
-        "APPROACH": "👀 接近壓力",
+        "EXTENDED":
+            "⚠ 過熱區"
+    }
 
-        "FAR": "⏳ 尚未接近"
-
-    }.get(stage)
+    return mapping.get(
+        stage,
+        "⏳ 尚未接近"
+    )
 
 
 # ================================
@@ -417,7 +528,7 @@ def get_market_phase():
 
 
 # ================================
-# 🔥 即時價格（v17.4 修正）
+# 🔥 即時價格
 # ================================
 def get_live_price_data(
     realtime,
@@ -429,19 +540,28 @@ def get_live_price_data(
     # 🔥 realtime 優先
     if realtime:
 
-        return realtime[0], realtime[1]
+        return (
+            realtime[0],
+            realtime[1]
+        )
 
     # 🔥 yahoo 第二
     if yahoo:
 
-        return yahoo[0], yahoo[1]
+        return (
+            yahoo[0],
+            yahoo[1]
+        )
 
     # 🔥 fallback
-    return twse_price, twse_change
+    return (
+        twse_price,
+        twse_change
+    )
 
 
 # ================================
-# 🔥 主流程
+# 🔥 主流程（v17.5）
 # ================================
 def generate():
 
@@ -479,12 +599,14 @@ def generate():
 
         yahoo = get_yahoo(code)
 
-        # 🔥 v17.4：真正即時價格
-        price, change = get_live_price_data(
-            realtime,
-            yahoo,
-            t_price,
-            t_change
+        # 🔥 即時價格
+        price, change = (
+            get_live_price_data(
+                realtime,
+                yahoo,
+                t_price,
+                t_change
+            )
         )
 
         if not closes or not volumes:
@@ -531,6 +653,11 @@ def generate():
 
         result = data["result"]
 
+        extended = result.get(
+            "extended",
+            False
+        )
+
         dist = breakout_distance(
             data["price"],
             data["closes"]
@@ -546,11 +673,6 @@ def generate():
             data["volumes"]
         )
 
-        extended = result.get(
-            "extended",
-            False
-        )
-
         d_text, s_text, v_text = (
             translate_status(
                 dist,
@@ -562,17 +684,24 @@ def generate():
 
         stage = stage_detection(
             data["price"],
-            data["closes"]
+            data["closes"],
+            extended
         )
 
         final = get_final_label(
-            result,
-            struct,
-            vol
+            result
         )
 
         entry_stage = (
-            get_entry_stage_label(result)
+            get_entry_stage_label(
+                result
+            )
+        )
+
+        vp_state = volume_price_text(
+            result.get(
+                "volume_price_state"
+            )
         )
 
         # ================================
@@ -589,7 +718,7 @@ def generate():
             f"🌍 "
             f"{result.get('market_grade')}"
             f"｜"
-            f"{stage_to_text(stage, extended)}\n"
+            f"{stage_to_text(stage)}\n"
         )
 
         msg += (
@@ -597,23 +726,29 @@ def generate():
             f"{safe_round(dist,2)}%"
             f"｜{struct}/4"
             f"｜{vol}x"
-            f"｜RR {safe_round(result.get('rr'),2)}\n"
+            f"｜RR "
+            f"{safe_round(result.get('rr'),2)}\n"
         )
 
+        # 🔥 volume-price lifecycle
         msg += (
             f"   → "
             f"{d_text}"
             f" / "
             f"{s_text}"
             f" / "
-            f"{v_text}\n"
+            f"{v_text}"
+            f" / "
+            f"{vp_state}\n"
         )
 
-        # 🔥 v17.4：顯示真正即時價格
+        # 🔥 即時價格
         msg += (
             f"💰 "
             f"{safe_round(data['price'],2)}"
-            f"（{safe_round(data['change'],2)}%）\n\n"
+            f"（"
+            f"{safe_round(data['change'],2)}%"
+            f"）\n\n"
         )
 
     # ================================
@@ -642,9 +777,12 @@ def generate():
         msg += "⚠ 無最強股\n"
 
     # ================================
-    # 🔥 market summary
+    # 🔥 市場總結
     # ================================
-    if any(d == "BUY" for d in decisions):
+    if any(
+        d == "BUY"
+        for d in decisions
+    ):
 
         msg += "🟢 有機會"
 
