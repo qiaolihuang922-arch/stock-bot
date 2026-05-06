@@ -1,23 +1,21 @@
 # ================================
-# 🔥 FINAL（顯示層 v17.7.5｜SEMANTIC NORMALIZATION UI PATCH）
+# 🔥 FINAL（顯示層 v17.7.6｜STATE HIERARCHY UI PATCH）
 # ================================
 
 # 🔒 VERSION LOCK
-# - ✅ 完全對齊 strategy v17.7.5
-# - ✅ breakout / trade / heat / lifecycle 完全分離
-# - ✅ lifecycle 純趨勢語義
-# - ✅ 新增：LATE_EXPANSION 顯示
-# - ✅ 新增：trend_bias 顯示
-# - ✅ 修正：LOW_RR → LATE_ENTRY
-# - ✅ 修正：trade_state 語義
-# - ✅ 修正：header 噪音
-# - ✅ 修正：EXTREME / HOT 顯示一致
-# - ✅ 修正：壓力與突破語義重疊
-# - ✅ 修正：RR低不再污染 lifecycle
-# - ✅ 修正：FAIL 不再污染 lifecycle
-# - ✅ 修正：breakout_state 優先級
-# - ✅ 修正：heat_state UI 對齊
-# - ✅ UI 資訊降噪
+# - ✅ 完全對齊 strategy v17.7.6
+# - ✅ dominant_state UI hierarchy
+# - ✅ lifecycle semantic normalization
+# - ✅ BREAKOUT_TREND 顯示
+# - ✅ LATE_TREND 顯示
+# - ✅ FAILED lifecycle 顯示
+# - ✅ EXTREME lifecycle 顯示
+# - ✅ heat / trade semantic collision 修正
+# - ✅ pressure / breakout 重複顯示降噪
+# - ✅ RR=0 strength 語義同步
+# - ✅ header state priority
+# - ✅ breakout fail hierarchy
+# - ✅ UI semantic de-duplication
 # ================================
 
 
@@ -38,7 +36,7 @@ from services.analysis import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v17.7.5"
+VERSION = "v17.7.6"
 
 
 # ================================
@@ -165,6 +163,38 @@ def trend_bias_text(state):
     return mapping.get(
         state,
         "🟡 中性"
+    )
+
+
+# ================================
+# 🔥 dominant state text
+# ================================
+def dominant_state_text(state):
+
+    mapping = {
+
+        "FAILED":
+            "❌ 失敗",
+
+        "EXTREME":
+            "🚨 極熱",
+
+        "LATE":
+            "⚠ 末段",
+
+        "BREAKOUT":
+            "🚀 突破",
+
+        "TREND":
+            "📈 趨勢",
+
+        "NORMAL":
+            "⏳ 正常"
+    }
+
+    return mapping.get(
+        state,
+        "⏳ 正常"
     )
 
 
@@ -324,14 +354,14 @@ def lifecycle_text(state):
 
     mapping = {
 
-        "EXPANSION":
-            "🔥 主升",
-
-        "LATE_EXPANSION":
-            "⚠ 延伸末段",
+        "BREAKOUT_TREND":
+            "🚀 主升突破",
 
         "TREND":
             "📈 趨勢",
+
+        "LATE_TREND":
+            "⚠ 趨勢末段",
 
         "BASE":
             "⏳ 整理",
@@ -340,7 +370,13 @@ def lifecycle_text(state):
             "⚠ 弱勢",
 
         "DISTRIBUTION":
-            "📦 出貨"
+            "📦 出貨",
+
+        "FAILED":
+            "❌ 失敗",
+
+        "EXTREME":
+            "🚨 極熱"
     }
 
     return mapping.get(
@@ -733,6 +769,35 @@ def get_live_price_data(
 
 
 # ================================
+# 🔥 semantic pressure
+# ================================
+def semantic_pressure_text(
+    result,
+    price,
+    closes
+):
+
+    breakout_state = result.get(
+        "breakout_state"
+    )
+
+    if breakout_state in [
+        "BREAKOUT",
+        "READY",
+        "FAIL"
+    ]:
+
+        return None
+
+    return stage_to_text(
+        stage_detection(
+            price,
+            closes
+        )
+    )
+
+
+# ================================
 # 🔥 main generate
 # ================================
 def generate():
@@ -917,6 +982,14 @@ def generate():
                 )
             )
 
+            dominant_state = (
+                dominant_state_text(
+                    result.get(
+                        "dominant_state"
+                    )
+                )
+            )
+
             setup_score = safe_round(
                 result.get(
                     "setup_score"
@@ -959,6 +1032,11 @@ def generate():
             # 🔥 semantic layer
             # ================================
             msg += (
+                f"├─ 狀態："
+                f"{dominant_state}\n"
+            )
+
+            msg += (
                 f"├─ 趨勢："
                 f"{lifecycle}\n"
             )
@@ -991,10 +1069,18 @@ def generate():
                 f"{market_text(result.get('market_grade'))}\n"
             )
 
-            msg += (
-                f"├─ 壓力："
-                f"{stage_to_text(stage_detection(data['price'], data['closes']))}\n"
+            pressure_text = semantic_pressure_text(
+                result,
+                data["price"],
+                data["closes"]
             )
+
+            if pressure_text:
+
+                msg += (
+                    f"├─ 壓力："
+                    f"{pressure_text}\n"
+                )
 
             msg += (
                 f"├─ 結構："
