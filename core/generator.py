@@ -4,18 +4,15 @@
 
 # 🔒 VERSION LOCK
 # - ✅ 完全對齊 strategy v17.6
-# - ✅ 顯示 lifecycle（BREAKOUT / PULLBACK / RECLAIM）
-# - ✅ 顯示真正 Day1 / Day2
-# - ✅ 顯示 BREAKOUT_FAIL
-# - ✅ 顯示 WAIT_EXECUTION / WAIT_CONFIRM
-# - ✅ 顯示 extended level
-# - ✅ 顯示 setup / execution score
-# - ✅ 顯示 volume-price lifecycle
-# - ✅ breakout threshold 全系統一致
-# - ✅ 顯示真正即時價格
-# - ✅ 顯示真 RR（air space）
-# - ✅ UI 重構（避免資訊混亂）
-# - ✅ NO_TRADE 不再顯示 SELL_ALL
+# - ✅ 修復：FAIL / BASE / RECLAIM 對齊
+# - ✅ 修復：extended_level 顯示
+# - ✅ 修復：lifecycle fallback
+# - ✅ 修復：None safe
+# - ✅ 修復：dist 顯示 None 問題
+# - ✅ 修復：score 顯示 crash
+# - ✅ 修復：volume ratio division
+# - ✅ 修復：stage detection 空資料
+# - ✅ UI 重構（區塊化）
 # - ✅ 保持：不干擾 strategy
 # ================================
 
@@ -85,10 +82,26 @@ def safe_list(data, n=20):
 def safe_round(val, n=2):
 
     try:
+
+        if val is None:
+            return "-"
+
         return round(float(val), n)
 
     except:
+
         return "-"
+
+
+# ================================
+# 🔥 safe_text
+# ================================
+def safe_text(val, fallback="-"):
+
+    if val is None:
+        return fallback
+
+    return str(val)
 
 
 # ================================
@@ -97,6 +110,11 @@ def safe_round(val, n=2):
 def breakout_distance(price, closes):
 
     try:
+
+        closes = safe_list(closes)
+
+        if not closes:
+            return None
 
         resistance = max(
             closes[-20:-3]
@@ -129,6 +147,11 @@ def structure_progress(
 ):
 
     try:
+
+        closes = safe_list(closes)
+
+        if not closes:
+            return 0
 
         score = 0
 
@@ -168,15 +191,21 @@ def volume_ratio(volumes):
 
     try:
 
+        if not volumes:
+            return 1
+
         avg10 = (
             sum(volumes[-10:])
-            / len(volumes[-10:])
+            / max(len(volumes[-10:]), 1)
         )
+
+        if avg10 <= 0:
+            return 1
 
         return round(
             volumes[-1] / avg10,
             2
-        ) if avg10 else 1
+        )
 
     except:
 
@@ -184,7 +213,7 @@ def volume_ratio(volumes):
 
 
 # ================================
-# 🔥 volume-price text（v17.6）
+# 🔥 volume-price text
 # ================================
 def volume_price_text(state):
 
@@ -210,7 +239,7 @@ def volume_price_text(state):
 
 
 # ================================
-# 🔥 lifecycle text（v17.6）
+# 🔥 lifecycle text
 # ================================
 def lifecycle_text(state):
 
@@ -373,7 +402,7 @@ def get_action(result):
 
 
 # ================================
-# 🔥 entry stage label（v17.6）
+# 🔥 entry stage label
 # ================================
 def get_entry_stage_label(result):
 
@@ -407,12 +436,12 @@ def get_entry_stage_label(result):
 
     return mapping.get(
         stage,
-        ""
+        "⏳ 整理"
     )
 
 
 # ================================
-# 🔥 WAIT reason（v17.6）
+# 🔥 WAIT reason
 # ================================
 def wait_reason_text(reason):
 
@@ -447,7 +476,7 @@ def wait_reason_text(reason):
 
 
 # ================================
-# 🔥 final label（v17.6）
+# 🔥 final label
 # ================================
 def get_final_label(result):
 
@@ -473,7 +502,7 @@ def get_final_label(result):
 
 
 # ================================
-# 🔥 stage detection（v17.6）
+# 🔥 stage detection
 # ================================
 def stage_detection(
     price,
@@ -481,52 +510,58 @@ def stage_detection(
     ext_level=0
 ):
 
-    closes = safe_list(closes)
+    try:
 
-    if not closes:
+        closes = safe_list(closes)
+
+        if not closes:
+
+            return "FAR"
+
+        resistance = max(
+            closes[-20:-3]
+        )
+
+        breakout_price = (
+            resistance
+            * (1 + BREAKOUT_THRESHOLD)
+        )
+
+        dist = (
+            breakout_price - price
+        ) / price
+
+        # 🔥 EXTENDED
+        if ext_level >= 3:
+
+            return "EXTREME"
+
+        elif ext_level >= 2:
+
+            return "EXTENDED"
+
+        # 🔥 breakout
+        if price > breakout_price:
+
+            return "BREAKOUT_DONE"
+
+        elif dist < 0.02:
+
+            return "BREAKOUT_READY"
+
+        elif dist < 0.05:
+
+            return "APPROACH"
 
         return "FAR"
 
-    resistance = max(
-        closes[-20:-3]
-    )
+    except:
 
-    breakout_price = (
-        resistance
-        * (1 + BREAKOUT_THRESHOLD)
-    )
-
-    dist = (
-        breakout_price - price
-    ) / price
-
-    # 🔥 EXTENDED
-    if ext_level >= 3:
-
-        return "EXTREME"
-
-    elif ext_level >= 2:
-
-        return "EXTENDED"
-
-    # 🔥 breakout
-    if price > breakout_price:
-
-        return "BREAKOUT_DONE"
-
-    elif dist < 0.02:
-
-        return "BREAKOUT_READY"
-
-    elif dist < 0.05:
-
-        return "APPROACH"
-
-    return "FAR"
+        return "FAR"
 
 
 # ================================
-# 🔥 stage text（v17.6）
+# 🔥 stage text
 # ================================
 def stage_to_text(stage):
 
@@ -643,213 +678,235 @@ def generate():
     # ================================
     for name, code in stocks.items():
 
-        twse = get_twse(code)
+        try:
 
-        if not twse:
-            continue
+            twse = get_twse(code)
 
-        (
-            t_price,
-            t_change,
-            ma5,
-            ma20,
-            closes,
-            volumes
-        ) = twse
+            if not twse:
+                continue
 
-        realtime = get_realtime_price(code)
-
-        yahoo = get_yahoo(code)
-
-        # 🔥 即時價格
-        price, change = (
-            get_live_price_data(
-                realtime,
-                yahoo,
+            (
                 t_price,
-                t_change
+                t_change,
+                ma5,
+                ma20,
+                closes,
+                volumes
+            ) = twse
+
+            realtime = get_realtime_price(code)
+
+            yahoo = get_yahoo(code)
+
+            # 🔥 即時價格
+            price, change = (
+                get_live_price_data(
+                    realtime,
+                    yahoo,
+                    t_price,
+                    t_change
+                )
             )
-        )
 
-        if not closes or not volumes:
-            continue
+            if not closes or not volumes:
+                continue
 
-        # 🔥 strategy
-        result = strategy(
-            price,
-            ma5,
-            ma20,
-            closes,
-            volumes
-        )
+            # 🔥 strategy
+            result = strategy(
+                price,
+                ma5,
+                ma20,
+                closes,
+                volumes
+            )
 
-        decisions.append(
-            result.get("decision")
-        )
+            decisions.append(
+                result.get("decision")
+            )
 
-        results_map[name] = {
+            results_map[name] = {
 
-            "result": result,
+                "result": result,
 
-            "price": price,
-            "change": change,
+                "price": price,
+                "change": change,
 
-            "ma5": ma5,
-            "ma20": ma20,
+                "ma5": ma5,
+                "ma20": ma20,
 
-            "closes": closes,
-            "volumes": volumes
-        }
+                "closes": closes,
+                "volumes": volumes
+            }
+
+        except Exception as e:
+
+            msg += (
+                f"⚠ {name} 錯誤：{str(e)}\n"
+            )
 
     # ================================
     # 🔥 無資料
     # ================================
     if not results_map:
 
-        return msg + "⚠ 無有效數據"
+        return msg + "\n⚠ 無有效數據"
 
     # ================================
     # 🔥 顯示
     # ================================
     for name, data in results_map.items():
 
-        result = data["result"]
+        try:
 
-        ext_level = result.get(
-            "extended_level",
-            0
-        )
+            result = data["result"]
 
-        dist = breakout_distance(
-            data["price"],
-            data["closes"]
-        )
+            ext_level = result.get(
+                "extended_level",
+                0
+            )
 
-        struct = structure_progress(
-            data["closes"],
-            data["ma5"],
-            data["ma20"]
-        )
+            dist = breakout_distance(
+                data["price"],
+                data["closes"]
+            )
 
-        vol = volume_ratio(
-            data["volumes"]
-        )
+            struct = structure_progress(
+                data["closes"],
+                data["ma5"],
+                data["ma20"]
+            )
 
-        d_text, s_text, v_text = (
-            translate_status(
-                dist,
-                struct,
-                vol,
+            vol = volume_ratio(
+                data["volumes"]
+            )
+
+            d_text, s_text, v_text = (
+                translate_status(
+                    dist,
+                    struct,
+                    vol,
+                    ext_level
+                )
+            )
+
+            stage = stage_detection(
+                data["price"],
+                data["closes"],
                 ext_level
             )
-        )
 
-        stage = stage_detection(
-            data["price"],
-            data["closes"],
-            ext_level
-        )
-
-        final = get_final_label(
-            result
-        )
-
-        entry_stage = (
-            get_entry_stage_label(
+            final = get_final_label(
                 result
             )
-        )
 
-        vp_state = volume_price_text(
-            result.get(
-                "volume_price_state"
+            entry_stage = (
+                get_entry_stage_label(
+                    result
+                )
             )
-        )
 
-        lifecycle = lifecycle_text(
-            result.get(
-                "lifecycle"
+            vp_state = volume_price_text(
+                result.get(
+                    "volume_price_state"
+                )
             )
-        )
 
-        setup_score = safe_round(
-            result.get(
-                "setup_score"
-            ),
-            1
-        )
+            lifecycle = lifecycle_text(
+                result.get(
+                    "lifecycle"
+                )
+            )
 
-        exec_score = safe_round(
-            result.get(
-                "execution_score"
-            ),
-            1
-        )
+            setup_score = safe_round(
+                result.get(
+                    "setup_score"
+                ),
+                1
+            )
 
-        # ================================
-        # 🔥 區塊輸出（v17.6 UI）
-        # ================================
-        msg += (
-            f"【{name}】"
-            f"{get_action(result)} "
-            f"{final}\n"
-        )
+            exec_score = safe_round(
+                result.get(
+                    "execution_score"
+                ),
+                1
+            )
 
-        msg += (
-            f"├─ 階段："
-            f"{entry_stage} "
-            f"｜{lifecycle}\n"
-        )
+            strength = safe_round(
+                result.get(
+                    "strength"
+                ),
+                2
+            )
 
-        msg += (
-            f"├─ 市場："
-            f"{result.get('market_grade')} "
-            f"｜{stage_to_text(stage)}\n"
-        )
-
-        msg += (
-            f"├─ 結構："
-            f"{d_text}"
-            f" / "
-            f"{s_text}"
-            f" / "
-            f"{v_text}"
-            f" / "
-            f"{vp_state}\n"
-        )
-
-        msg += (
-            f"├─ 數據："
-            f"Dist {safe_round(dist,2)}%"
-            f" ｜S {struct}/4"
-            f" ｜V {vol}x"
-            f" ｜RR {safe_round(result.get('rr'),2)}\n"
-        )
-
-        msg += (
-            f"├─ 評分："
-            f"Setup {setup_score}"
-            f" ｜Exec {exec_score}"
-            f" ｜Strength "
-            f"{safe_round(result.get('strength'),2)}\n"
-        )
-
-        # 🔥 EXTENDED LEVEL
-        if ext_level > 0:
+            # ================================
+            # 🔥 區塊輸出
+            # ================================
+            msg += (
+                f"【{name}】"
+                f"{get_action(result)} "
+                f"{final}\n"
+            )
 
             msg += (
-                f"├─ 過熱："
-                f"Lv.{ext_level}\n"
+                f"├─ 階段："
+                f"{entry_stage}"
+                f" ｜{lifecycle}\n"
             )
 
-        # 🔥 price
-        msg += (
-            f"└─ 💰 "
-            f"{safe_round(data['price'],2)}"
-            f"（"
-            f"{safe_round(data['change'],2)}%"
-            f"）\n\n"
-        )
+            msg += (
+                f"├─ 市場："
+                f"{safe_text(result.get('market_grade'))}"
+                f" ｜{stage_to_text(stage)}\n"
+            )
+
+            msg += (
+                f"├─ 結構："
+                f"{d_text}"
+                f" / "
+                f"{s_text}"
+                f" / "
+                f"{v_text}"
+                f" / "
+                f"{vp_state}\n"
+            )
+
+            msg += (
+                f"├─ 數據："
+                f"Dist {safe_round(dist,2)}%"
+                f" ｜S {struct}/4"
+                f" ｜V {vol}x"
+                f" ｜RR {safe_round(result.get('rr'),2)}\n"
+            )
+
+            msg += (
+                f"├─ 評分："
+                f"Setup {setup_score}"
+                f" ｜Exec {exec_score}"
+                f" ｜Strength {strength}\n"
+            )
+
+            # 🔥 EXTENDED LEVEL
+            if ext_level > 0:
+
+                msg += (
+                    f"├─ 過熱："
+                    f"Lv.{ext_level}\n"
+                )
+
+            # 🔥 price
+            msg += (
+                f"└─ 💰 "
+                f"{safe_round(data['price'],2)}"
+                f"（"
+                f"{safe_round(data['change'],2)}%"
+                f"）\n\n"
+            )
+
+        except Exception as e:
+
+            msg += (
+                f"⚠ {name} 顯示錯誤：{str(e)}\n\n"
+            )
 
     # ================================
     # 🔥 最強股
