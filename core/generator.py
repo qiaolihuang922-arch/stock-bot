@@ -1,5 +1,5 @@
 # ================================
-# 🔥 FINAL（顯示層 v17.7｜UI NORMALIZATION）
+# 🔥 FINAL（顯示層 v17.7.1｜UI NORMALIZATION FIX）
 # ================================
 
 # 🔒 VERSION LOCK
@@ -15,6 +15,10 @@
 # - ✅ 修復：結構顯示與 strategy 對齊
 # - ✅ 修復：Strength 顯示過度膨脹
 # - ✅ 修復：重複 lifecycle / stage 顯示
+# - ✅ 修復：RR=0 仍顯示主升段
+# - ✅ 修復：BREAKOUT_DONE 與 lifecycle 衝突
+# - ✅ 修復：Setup / Exec 缺少滿分資訊
+# - ✅ 修復：header 空白與重複符號
 # - ✅ UI 重構（資訊降噪）
 # - ✅ 保持：不干擾 strategy
 # ================================
@@ -108,7 +112,7 @@ def safe_text(val, fallback="-"):
 
 
 # ================================
-# 🔥 breakout_distance（v17.7）
+# 🔥 breakout_distance（v17.7.1）
 # ================================
 def breakout_distance(price, closes):
 
@@ -141,7 +145,7 @@ def breakout_distance(price, closes):
 
 
 # ================================
-# 🔥 structure_progress（v17.7）
+# 🔥 structure_progress（v17.7.1）
 # 🔥 對齊 strategy v17.7
 # ================================
 def structure_progress(
@@ -247,10 +251,18 @@ def volume_price_text(state):
 
 
 # ================================
-# 🔥 lifecycle text（v17.7）
-# 🔥 降低英文感
+# 🔥 lifecycle text（v17.7.1）
+# 🔥 RR 太低時不再顯示主升
 # ================================
-def lifecycle_text(state):
+def lifecycle_text(
+    state,
+    rr=0
+):
+
+    # 🔥 RR 太低代表沒有空間
+    if rr <= 0.3:
+
+        return "🚨 延伸過度"
 
     mapping = {
 
@@ -298,7 +310,7 @@ def lifecycle_text(state):
 
 
 # ================================
-# 🔥 translate_status（v17.7）
+# 🔥 translate_status（v17.7.1）
 # ================================
 def translate_status(
     dist,
@@ -384,7 +396,7 @@ def translate_status(
 
 
 # ================================
-# 🔥 action（v17.7）
+# 🔥 action（v17.7.1）
 # ================================
 def get_action(result):
 
@@ -463,13 +475,13 @@ def wait_reason_text(reason):
             "⚠ RR低",
 
         "WAIT_VOLUME":
-            "👀 等量",
+            "⏳ 等量",
 
         "WAIT_CONFIRM":
-            "👀 等確認",
+            "⏳ 等確認",
 
         "WAIT_EXECUTION":
-            "👀 等進場",
+            "⏳ 等進場",
 
         "WAIT_TREND":
             "❌ 弱勢",
@@ -480,7 +492,7 @@ def wait_reason_text(reason):
 
     return mapping.get(
         reason,
-        "👀 觀察"
+        "⏳ 觀察"
     )
 
 
@@ -512,6 +524,7 @@ def get_final_label(result):
 
 # ================================
 # 🔥 stage detection
+# 🔥 只表示位置
 # ================================
 def stage_detection(
     price,
@@ -569,6 +582,7 @@ def stage_detection(
 
 # ================================
 # 🔥 stage text
+# 🔥 只表示壓力位置
 # ================================
 def stage_to_text(stage):
 
@@ -660,7 +674,7 @@ def get_live_price_data(
 
 
 # ================================
-# 🔥 主流程（v17.7 UI）
+# 🔥 主流程（v17.7.1 UI）
 # ================================
 def generate():
 
@@ -819,7 +833,8 @@ def generate():
             lifecycle = lifecycle_text(
                 result.get(
                     "lifecycle"
-                )
+                ),
+                result.get("rr", 0)
             )
 
             setup_score = safe_round(
@@ -847,7 +862,7 @@ def generate():
             # 🔥 標題列（降噪）
             # ================================
             header = (
-                f"【{name}】"
+                f"【{name}】 "
                 f"{get_action(result)} "
                 f"{final}"
             )
@@ -858,14 +873,19 @@ def generate():
             msg += header + "\n"
 
             # ================================
-            # 🔥 lifecycle / market
+            # 🔥 lifecycle / market / pressure
             # ================================
             msg += (
-                f"├─ "
-                f"{lifecycle}"
-                f" ｜"
-                f"{safe_text(result.get('market_grade'))}"
-                f" ｜"
+                f"├─ 型態：{lifecycle}\n"
+            )
+
+            msg += (
+                f"├─ 市場："
+                f"{safe_text(result.get('market_grade'))}\n"
+            )
+
+            msg += (
+                f"├─ 壓力："
                 f"{stage_to_text(stage)}\n"
             )
 
@@ -873,7 +893,7 @@ def generate():
             # 🔥 structure
             # ================================
             msg += (
-                f"├─ "
+                f"├─ 結構："
                 f"{d_text}"
                 f" / "
                 f"{s_text}"
@@ -887,7 +907,7 @@ def generate():
             # 🔥 data（精簡）
             # ================================
             msg += (
-                f"├─ "
+                f"├─ 數據："
                 f"Dist {safe_round(dist,2)}%"
                 f" ｜RR {safe_round(result.get('rr'),2)}"
                 f" ｜S {struct}/5"
@@ -895,12 +915,12 @@ def generate():
             )
 
             # ================================
-            # 🔥 score（簡化）
+            # 🔥 score（加滿分）
             # ================================
             msg += (
-                f"├─ "
-                f"Setup {setup_score}"
-                f" ｜Exec {exec_score}"
+                f"├─ 評分："
+                f"Setup {setup_score}/10"
+                f" ｜Exec {exec_score}/8"
                 f" ｜★ {strength}\n"
             )
 
@@ -910,8 +930,8 @@ def generate():
             if ext_level > 0:
 
                 msg += (
-                    f"├─ "
-                    f"過熱 Lv.{ext_level}\n"
+                    f"├─ 過熱："
+                    f"Lv.{ext_level}\n"
                 )
 
             # ================================
