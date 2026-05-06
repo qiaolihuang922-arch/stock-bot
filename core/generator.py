@@ -1,9 +1,9 @@
 # ================================
-# 🔥 FINAL（顯示層 v17.7.3｜STATE PRIORITY UI PATCH）
+# 🔥 FINAL（顯示層 v17.7.4｜SEMANTIC SEPARATION UI PATCH）
 # ================================
 
 # 🔒 VERSION LOCK
-# - ✅ 完全對齊 strategy v17.7.3
+# - ✅ 完全對齊 strategy v17.7.4
 # - ✅ 修復：FAIL / BASE / RECLAIM 對齊
 # - ✅ 修復：extended_level 顯示
 # - ✅ 修復：lifecycle fallback
@@ -27,6 +27,14 @@
 # - ✅ 修復：EXTREME 顯示優先級
 # - ✅ 修復：WAIT_EXTREME 顯示
 # - ✅ 修復：version display
+# - ✅ 新增：breakout_state UI
+# - ✅ 新增：trade_state UI
+# - ✅ 新增：heat_state UI
+# - ✅ 修正：lifecycle 純趨勢顯示
+# - ✅ 修正：突破 / 交易 / 過熱 語義分離
+# - ✅ 修正：EXTREME 不再污染 lifecycle
+# - ✅ 修正：RR低不再污染 lifecycle
+# - ✅ 修正：FAIL 不再污染 lifecycle
 # - ✅ UI 重構（資訊降噪）
 # - ✅ 保持：不干擾 strategy
 # ================================
@@ -49,7 +57,7 @@ from services.analysis import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v17.7.3"
+VERSION = "v17.7.4"
 
 
 # ================================
@@ -122,8 +130,7 @@ def safe_text(val, fallback="-"):
 
 
 # ================================
-# 🔥 market text（v17.7.3）
-# 🔥 市場等級語義化
+# 🔥 market text（v17.7.4）
 # ================================
 def market_text(grade):
 
@@ -186,7 +193,6 @@ def breakout_distance(price, closes):
 
 # ================================
 # 🔥 structure_progress
-# 🔥 對齊 strategy v17.7.3
 # ================================
 def structure_progress(
     closes,
@@ -209,23 +215,18 @@ def structure_progress(
         recent_low = min(closes[-5:])
         old_low = min(closes[-10:-5])
 
-        # 🔥 higher high
         if recent_high > old_high:
             score += 1
 
-        # 🔥 higher low
         if recent_low > old_low:
             score += 1
 
-        # 🔥 ma alignment
         if ma5 > ma20:
             score += 1
 
-        # 🔥 close above ma5
         if closes[-1] > ma5:
             score += 1
 
-        # 🔥 above ma20
         if closes[-1] > ma20:
             score += 1
 
@@ -291,58 +292,55 @@ def volume_price_text(state):
 
 
 # ================================
-# 🔥 lifecycle text（v17.7.3）
-# 🔥 RR 太低時不再顯示主升
-# 🔥 EXTREME 優先顯示
+# 🔥 lifecycle text（v17.7.4）
+# 🔥 lifecycle 純趨勢語義
 # ================================
-def lifecycle_text(
-    state,
-    rr=0
-):
-
-    # 🔥 EXTREME 優先
-    if state == "EXTREME":
-
-        return "🚨 極熱"
-
-    # 🔥 RR 太低代表延伸過度
-    if rr <= 0.3:
-
-        return "🚨 延伸過度"
+def lifecycle_text(state):
 
     mapping = {
-
-        "BREAKOUT":
-            "🚀 突破",
 
         "EXPANSION":
             "🔥 主升",
 
-        "PRE_BREAKOUT":
-            "⏳ 突破前",
+        "TREND":
+            "📈 趨勢",
 
-        "PULLBACK":
-            "↘ 拉回",
+        "BASE":
+            "⏳ 整理",
 
-        "RECLAIM":
-            "↗ 收復",
+        "WEAK":
+            "⚠ 弱勢",
 
-        "TURN":
-            "↗ 轉強",
+        "DISTRIBUTION":
+            "📦 出貨"
+    }
 
-        "CONFIRM_DAY2":
-            "🚀 Day2",
+    return mapping.get(
+        state,
+        "⏳ 整理"
+    )
 
-        "BREAKOUT_DAY1":
-            "🔥 Day1",
+
+# ================================
+# 🔥 breakout text（新增）
+# ================================
+def breakout_state_text(state):
+
+    mapping = {
+
+        "BREAKOUT":
+            "🚀 已突破",
+
+        "READY":
+            "🔥 突破前",
 
         "FAIL":
-            "❌ 失敗",
+            "❌ 突破失敗",
 
         "FAKE_BREAK":
             "⚠ 假突破",
 
-        "BASE":
+        "NONE":
             "⏳ 整理"
     }
 
@@ -353,23 +351,66 @@ def lifecycle_text(
 
 
 # ================================
-# 🔥 translate_status（v17.7.3）
-# 🔥 移除 distance 重複語義
+# 🔥 trade state text（新增）
+# ================================
+def trade_state_text(state):
+
+    mapping = {
+
+        "TRADEABLE":
+            "✅ 可交易",
+
+        "LOW_RR":
+            "⚠ RR低",
+
+        "NO_VOLUME":
+            "⚠ 無量",
+
+        "EXTENDED":
+            "🌡 過熱",
+
+        "AVOID":
+            "🚨 禁追"
+    }
+
+    return mapping.get(
+        state,
+        "觀察"
+    )
+
+
+# ================================
+# 🔥 heat state text（新增）
+# ================================
+def heat_state_text(state):
+
+    mapping = {
+
+        "NORMAL":
+            "正常",
+
+        "HOT":
+            "過熱",
+
+        "EXTREME":
+            "極熱"
+    }
+
+    return mapping.get(
+        state,
+        "正常"
+    )
+
+
+# ================================
+# 🔥 translate_status（v17.7.4）
 # ================================
 def translate_status(
     struct,
-    vol,
-    ext_level=0
+    vol
 ):
 
-    # ================================
-    # 🔥 結構
-    # ================================
-    if ext_level >= 3:
-
-        s_text = "極熱"
-
-    elif struct >= 5:
+    if struct >= 5:
 
         s_text = "強"
 
@@ -385,9 +426,6 @@ def translate_status(
 
         s_text = "弱"
 
-    # ================================
-    # 🔥 volume
-    # ================================
     if vol >= 1.5:
 
         v_text = "爆量"
@@ -420,12 +458,10 @@ def get_action(result):
         "action_type"
     )
 
-    # 🔥 FAIL
     if decision == "FAIL":
 
         return "❌"
 
-    # 🔥 BUY
     if action_type == "BUY":
 
         return (
@@ -438,21 +474,12 @@ def get_action(result):
 
 # ================================
 # 🔥 entry stage label
-# 🔥 避免與 lifecycle 重複
 # ================================
 def get_entry_stage_label(result):
 
     stage = result.get(
         "entry_stage"
     )
-
-    lifecycle = result.get(
-        "lifecycle"
-    )
-
-    # 🔥 避免重複
-    if lifecycle == "EXTREME":
-        return ""
 
     mapping = {
 
@@ -483,7 +510,6 @@ def get_entry_stage_label(result):
 
 # ================================
 # 🔥 WAIT reason
-# 🔥 header 降噪
 # ================================
 def wait_reason_text(reason):
 
@@ -548,8 +574,6 @@ def get_final_label(result):
 
 # ================================
 # 🔥 stage detection
-# 🔥 只表示壓力位置
-# 🔥 過熱不再污染 pressure
 # ================================
 def stage_detection(
     price,
@@ -598,7 +622,6 @@ def stage_detection(
 
 # ================================
 # 🔥 stage text
-# 🔥 只表示壓力位置
 # ================================
 def stage_to_text(stage):
 
@@ -661,7 +684,6 @@ def get_live_price_data(
     twse_change
 ):
 
-    # 🔥 realtime 優先
     if realtime:
 
         return (
@@ -669,7 +691,6 @@ def get_live_price_data(
             realtime[1]
         )
 
-    # 🔥 yahoo 第二
     if yahoo:
 
         return (
@@ -684,7 +705,7 @@ def get_live_price_data(
 
 
 # ================================
-# 🔥 主流程（v17.7.3 UI）
+# 🔥 主流程（v17.7.4 UI）
 # ================================
 def generate():
 
@@ -728,7 +749,6 @@ def generate():
 
             yahoo = get_yahoo(code)
 
-            # 🔥 即時價格
             price, change = (
                 get_live_price_data(
                     realtime,
@@ -812,8 +832,7 @@ def generate():
             s_text, v_text = (
                 translate_status(
                     struct,
-                    vol,
-                    ext_level
+                    vol
                 )
             )
 
@@ -841,8 +860,31 @@ def generate():
             lifecycle = lifecycle_text(
                 result.get(
                     "lifecycle"
-                ),
-                result.get("rr", 0)
+                )
+            )
+
+            breakout_state = (
+                breakout_state_text(
+                    result.get(
+                        "breakout_state"
+                    )
+                )
+            )
+
+            trade_state = (
+                trade_state_text(
+                    result.get(
+                        "trade_state"
+                    )
+                )
+            )
+
+            heat_state = (
+                heat_state_text(
+                    result.get(
+                        "heat_state"
+                    )
+                )
             )
 
             setup_score = safe_round(
@@ -867,7 +909,7 @@ def generate():
             )
 
             # ================================
-            # 🔥 標題列（降噪）
+            # 🔥 標題列
             # ================================
             header = (
                 f"【{name}】 "
@@ -875,7 +917,6 @@ def generate():
                 f"{final}"
             )
 
-            # 🔥 entry_stage 有值才顯示
             if entry_stage:
                 header += f" ｜{entry_stage}"
 
@@ -885,8 +926,24 @@ def generate():
             # 🔥 lifecycle
             # ================================
             msg += (
-                f"├─ 型態："
+                f"├─ 趨勢："
                 f"{lifecycle}\n"
+            )
+
+            # ================================
+            # 🔥 breakout
+            # ================================
+            msg += (
+                f"├─ 突破："
+                f"{breakout_state}\n"
+            )
+
+            # ================================
+            # 🔥 trade
+            # ================================
+            msg += (
+                f"├─ 交易："
+                f"{trade_state}\n"
             )
 
             # ================================
@@ -918,6 +975,14 @@ def generate():
             )
 
             # ================================
+            # 🔥 heat
+            # ================================
+            msg += (
+                f"├─ 熱度："
+                f"{heat_state}\n"
+            )
+
+            # ================================
             # 🔥 data
             # ================================
             msg += (
@@ -940,7 +1005,6 @@ def generate():
 
             # ================================
             # 🔥 過熱
-            # 🔥 Lv2 以上才顯示
             # ================================
             if ext_level >= 2:
 
