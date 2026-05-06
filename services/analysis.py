@@ -15,6 +15,10 @@
 # - ✅ 修正：volume lifecycle 誤判
 # - ✅ 修正：structure_state 穩定化
 # - ✅ 修正：RR target 使用 air_space
+# - ✅ 修正：detect_entry_stage ma20 漏傳
+# - ✅ 修正：Day2 必須站穩 breakout_price
+# - ✅ 修正：fake breakout 使用 breakout_price
+# - ✅ 修正：air_space 避免負值 RR 爆炸
 # - ✅ 保持：BUY / WAIT / NO_TRADE
 # ================================
 
@@ -500,6 +504,16 @@ def is_breakout(
 
 
 # ================================
+# 🔥 breakout_price
+# ================================
+def breakout_price(resistance):
+
+    return resistance * (
+        1 + BREAKOUT_THRESHOLD
+    )
+
+
+# ================================
 # 🔥 fresh breakout
 # ================================
 def is_fresh_breakout(
@@ -534,7 +548,8 @@ def breakout_fail(
     )
 
     today_fail = (
-        closes[-1] < resistance
+        closes[-1]
+        < breakout_price(resistance)
     )
 
     return (
@@ -546,15 +561,19 @@ def breakout_fail(
 # ================================
 # 🔥 fake breakout
 # ================================
-def edge_fake_breakout(closes):
+def edge_fake_breakout(
+    closes,
+    resistance
+):
 
-    prev_high = max(
-        closes[-21:-1]
+    breakout_lv = breakout_price(
+        resistance
     )
 
     return (
-        closes[-2] > prev_high
-        and closes[-1] < prev_high * 0.985
+        closes[-2] > breakout_lv
+        and closes[-1]
+        < breakout_lv * 0.985
     )
 
 
@@ -591,14 +610,19 @@ def strong_follow(
 
 
 # ================================
-# 🔥 detect_entry_stage（v17.6）
+# 🔥 detect_entry_stage（v17.6 FIX）
 # ================================
 def detect_entry_stage(
     closes,
     ma5,
+    ma20,
     resistance,
     volume
 ):
+
+    breakout_lv = breakout_price(
+        resistance
+    )
 
     # 🔥 真 Day1
     if is_fresh_breakout(
@@ -616,7 +640,7 @@ def detect_entry_stage(
     if (
         yesterday_breakout
         and closes[-1] > closes[-2]
-        and closes[-1] > resistance
+        and closes[-1] > breakout_lv
     ):
         return "CONFIRM_DAY2"
 
@@ -638,6 +662,7 @@ def detect_entry_stage(
     if (
         closes[-1] > closes[-2]
         and closes[-1] > ma5
+        and closes[-1] > ma20
         and volume != "WEAK"
     ):
         return "TURN"
@@ -670,9 +695,10 @@ def calc_rr(
         return 0
 
     # 🔥 air space
-    air_space = (
-        resistance * 1.20
-    ) - price
+    air_space = max(
+        (resistance * 1.20) - price,
+        0
+    )
 
     if setup_type == "pre_breakout":
 
@@ -792,6 +818,9 @@ def execution_score(
     elif entry_stage == "TURN":
         score += 2
 
+    elif entry_stage == "RECLAIM":
+        score += 1
+
     if rr >= 2:
         score += 2
 
@@ -868,7 +897,8 @@ def strategy(
     )
 
     fake_break = edge_fake_breakout(
-        closes
+        closes,
+        resistance
     )
 
     failed_breakout = breakout_fail(
@@ -881,9 +911,11 @@ def strategy(
         avg(closes[-3:])
     )
 
+    # 🔥 FIX：ma20 傳入
     entry_stage = detect_entry_stage(
         closes,
         ma5,
+        ma20,
         resistance,
         volume
     )
