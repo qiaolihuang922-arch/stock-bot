@@ -1,9 +1,9 @@
 # ================================
-# 🔥 analysis.py（FINAL v17.7｜NORMALIZATION PATCH）
+# 🔥 analysis.py（FINAL v17.7.3｜STATE PRIORITY PATCH）
 # ================================
 
 # 🔒 VERSION LOCK
-# - ✅ 保留 v17.6 lifecycle engine
+# - ✅ 保留 v17.7 lifecycle engine
 # - ✅ 不新增功能（只做穩定化）
 # - ✅ 修正：setup_score 正規化
 # - ✅ 修正：execution_score 過熱扣分
@@ -14,12 +14,16 @@
 # - ✅ 修正：structure_state 穩定化
 # - ✅ 修正：lifecycle 與 entry_stage 分離
 # - ✅ 修正：breakout_ready 全系統一致
+# - ✅ 修正：EXTREME state 優先級
+# - ✅ 修正：過熱股 BUY 壓倉
+# - ✅ 修正：Day1 灌分問題
+# - ✅ 修正：EXPANSION 優先級衝突
 # - ✅ 保持：BUY / WAIT / NO_TRADE
 # ================================
 
 
 # ================================
-# 🔥 常數（v17.7）
+# 🔥 常數（v17.7.3）
 # ================================
 BREAKOUT_THRESHOLD = 0.005
 
@@ -38,6 +42,7 @@ EXTENDED_LV3 = 1.22
 # 🔥 工具
 # ================================
 def avg(arr):
+
     return sum(arr) / len(arr) if arr else 0
 
 
@@ -84,7 +89,7 @@ def base_position(
 
 
 # ================================
-# 🔥 行動轉換（v17.7）
+# 🔥 行動轉換（v17.7.3）
 # ================================
 def action_mapper(decision, position):
 
@@ -222,8 +227,11 @@ def build_result(**kwargs):
 
 
 # ================================
-# 🔥 strength_score（v17.7）
-# 🔥 修正：避免 RR 主導排名
+# 🔥 strength_score（v17.7.3）
+# 🔥 修正：
+# - RR 不再主導排名
+# - Day1 降低灌分
+# - EXTREME 強制降權
 # ================================
 def strength_score(result):
 
@@ -251,28 +259,28 @@ def strength_score(result):
     elif rr >= 1:
         score += 0.5
 
-    # 🔥 Day1 / Day2 加成
+    # 🔥 Day1 / Day2 降低加權
     if result.get("entry_stage") == "BREAKOUT_DAY1":
-        score += 2
+        score += 1.5
 
     elif result.get("entry_stage") == "CONFIRM_DAY2":
-        score += 1.5
+        score += 1
 
     # 🔥 FAIL 降低懲罰（避免假跌破被打爛）
     if result.get("breakout_fail"):
         score -= 2
 
-    # 🔥 過熱扣分
+    # 🔥 過熱強制降權
     ext_level = result.get(
         "extended_level",
         0
     )
 
     if ext_level >= 3:
-        score -= 3
+        score -= 5
 
     elif ext_level >= 2:
-        score -= 1.5
+        score -= 2
 
     return round(score, 2)
 
@@ -420,8 +428,9 @@ def volume_signal(volumes):
 
 
 # ================================
-# 🔥 volume_price_state（v17.7）
+# 🔥 volume_price_state（v17.7.3）
 # 🔥 修正：避免小漲也被判 expansion
+# 🔥 修正：量價擴張需結構同步
 # ================================
 def volume_price_state(
     closes,
@@ -441,11 +450,17 @@ def volume_price_state(
     )
 
     # 🔥 真正主升
-    if ratio > 1.5 and price_change > 0.03:
+    if (
+        ratio > 1.5
+        and price_change > 0.03
+    ):
         return "EXPANSION"
 
     # 🔥 放量下跌
-    if ratio > 1.5 and price_change < -0.02:
+    if (
+        ratio > 1.5
+        and price_change < -0.02
+    ):
         return "DISTRIBUTION"
 
     # 🔥 縮量整理
@@ -456,7 +471,7 @@ def volume_price_state(
 
 
 # ================================
-# 🔥 structure_state（v17.7）
+# 🔥 structure_state（v17.7.3）
 # 🔥 修正：穩定化
 # ================================
 def structure_state(
@@ -698,8 +713,10 @@ def detect_entry_stage(
 
 
 # ================================
-# 🔥 detect_lifecycle（v17.7）
-# 🔥 修正：entry_stage 與 lifecycle 分離
+# 🔥 detect_lifecycle（v17.7.3）
+# 🔥 修正：
+# - EXTREME 優先級最高
+# - breakout 與 expansion 分離
 # ================================
 def detect_lifecycle(
     price,
@@ -713,17 +730,19 @@ def detect_lifecycle(
     if failed_breakout:
         return "FAIL"
 
+    # 🔥 EXTREME 優先級最高
     if ext_level >= 3:
         return "EXTREME"
 
-    if vp_state == "EXPANSION":
-        return "EXPANSION"
-
+    # 🔥 breakout 優先於 expansion
     if is_breakout(
         price,
         resistance
     ):
         return "BREAKOUT"
+
+    if vp_state == "EXPANSION":
+        return "EXPANSION"
 
     if breakout_ready:
         return "PRE_BREAKOUT"
@@ -732,7 +751,7 @@ def detect_lifecycle(
 
 
 # ================================
-# 🔥 calc_rr（v17.7）
+# 🔥 calc_rr（v17.7.3）
 # 🔥 修正：RR 合理化
 # ================================
 def calc_rr(
@@ -828,7 +847,7 @@ def get_wait_reason(
 
 
 # ================================
-# 🔥 setup score（v17.7）
+# 🔥 setup score（v17.7.3）
 # 🔥 修正：NORMAL 不再 0 分
 # ================================
 def setup_score(
@@ -871,8 +890,10 @@ def setup_score(
 
 
 # ================================
-# 🔥 execution score（v17.7）
-# 🔥 修正：過熱扣分
+# 🔥 execution score（v17.7.3）
+# 🔥 修正：
+# - Day1 灌分
+# - EXTREME 過熱強制扣分
 # ================================
 def execution_score(
     entry_stage,
@@ -883,11 +904,12 @@ def execution_score(
 
     score = 0
 
+    # 🔥 Day1 降低灌分
     if entry_stage == "BREAKOUT_DAY1":
-        score += 4
+        score += 3
 
     elif entry_stage == "CONFIRM_DAY2":
-        score += 3
+        score += 2.5
 
     elif entry_stage == "TURN":
         score += 2
@@ -902,14 +924,14 @@ def execution_score(
         score += 1
 
     if vp_state == "EXPANSION":
-        score += 2
+        score += 1.5
 
     elif vp_state == "DISTRIBUTION":
         score -= 2
 
     # 🔥 過熱扣分
     if ext_level >= 3:
-        score -= 4
+        score -= 5
 
     elif ext_level >= 2:
         score -= 2
@@ -918,7 +940,7 @@ def execution_score(
 
 
 # ================================
-# 🔥 strategy（v17.7）
+# 🔥 strategy（v17.7.3）
 # ================================
 def strategy(
     price,
@@ -1122,6 +1144,7 @@ def strategy(
 
     # ================================
     # 🔥 fake breakout
+    # 🔥 提高優先級避免追高
     # ================================
     if fake_break:
 
@@ -1159,6 +1182,45 @@ def strategy(
         )
 
     # ================================
+    # 🔥 EXTREME 過熱
+    # 🔥 強制不追
+    # ================================
+    if ext_level >= 3:
+
+        return build_result(
+
+            decision="WAIT",
+
+            market_score=m_score,
+
+            market_grade=m_grade,
+
+            setup_score=setup,
+
+            execution_score=execute,
+
+            trend=trend,
+
+            volume_state=volume,
+
+            volume_price_state=vp_state,
+
+            structure_state=structure,
+
+            rr=rr,
+
+            entry_stage=entry_stage,
+
+            lifecycle="EXTREME",
+
+            extended=extended,
+
+            extended_level=ext_level,
+
+            wait_reason="WAIT_EXTREME"
+        )
+
+    # ================================
     # 🔥 strong follow
     # ================================
     if (
@@ -1185,8 +1247,9 @@ def strategy(
             0.9
         )
 
+        # 🔥 過熱壓倉
         if ext_level >= 2:
-            pos *= 0.5
+            pos *= 0.4
 
         return build_result(
 
@@ -1251,8 +1314,9 @@ def strategy(
         if entry_stage == "TURN":
             pos = min(pos, 0.4)
 
+        # 🔥 過熱壓倉
         if ext_level >= 2:
-            pos *= 0.5
+            pos *= 0.4
 
         return build_result(
 
@@ -1318,6 +1382,10 @@ def strategy(
             ),
             0.2
         )
+
+        # 🔥 PRE_BREAKOUT 過熱壓倉
+        if ext_level >= 2:
+            pos *= 0.5
 
         return build_result(
 
@@ -1401,7 +1469,7 @@ def strategy(
 
 
 # ================================
-# 🔥 pick_best_stock（v17.7）
+# 🔥 pick_best_stock（v17.7.3）
 # ================================
 def pick_best_stock(results_dict):
 
@@ -1415,6 +1483,13 @@ def pick_best_stock(results_dict):
             "strength",
             0
         )
+
+        # 🔥 FAIL / EXTREME 降權
+        if result.get("lifecycle") in [
+            "FAIL",
+            "EXTREME"
+        ]:
+            score -= 3
 
         if score > best_score:
 
