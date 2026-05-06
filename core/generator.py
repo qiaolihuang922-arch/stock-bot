@@ -1,9 +1,9 @@
 # ================================
-# 🔥 FINAL（顯示層 v17.7.2｜UI NORMALIZATION FINAL）
+# 🔥 FINAL（顯示層 v17.7.3｜STATE PRIORITY UI PATCH）
 # ================================
 
 # 🔒 VERSION LOCK
-# - ✅ 完全對齊 strategy v17.7
+# - ✅ 完全對齊 strategy v17.7.3
 # - ✅ 修復：FAIL / BASE / RECLAIM 對齊
 # - ✅ 修復：extended_level 顯示
 # - ✅ 修復：lifecycle fallback
@@ -24,6 +24,9 @@
 # - ✅ 修復：WAIT reason header 噪音
 # - ✅ 修復：market_grade 缺少語義
 # - ✅ 修復：極熱與壓力重複顯示
+# - ✅ 修復：EXTREME 顯示優先級
+# - ✅ 修復：WAIT_EXTREME 顯示
+# - ✅ 修復：version display
 # - ✅ UI 重構（資訊降噪）
 # - ✅ 保持：不干擾 strategy
 # ================================
@@ -45,6 +48,8 @@ from services.analysis import (
 )
 
 tz = pytz.timezone("Asia/Taipei")
+
+VERSION = "v17.7.3"
 
 
 # ================================
@@ -117,7 +122,7 @@ def safe_text(val, fallback="-"):
 
 
 # ================================
-# 🔥 market text（v17.7.2）
+# 🔥 market text（v17.7.3）
 # 🔥 市場等級語義化
 # ================================
 def market_text(grade):
@@ -181,7 +186,7 @@ def breakout_distance(price, closes):
 
 # ================================
 # 🔥 structure_progress
-# 🔥 對齊 strategy v17.7
+# 🔥 對齊 strategy v17.7.3
 # ================================
 def structure_progress(
     closes,
@@ -286,13 +291,19 @@ def volume_price_text(state):
 
 
 # ================================
-# 🔥 lifecycle text（v17.7.2）
+# 🔥 lifecycle text（v17.7.3）
 # 🔥 RR 太低時不再顯示主升
+# 🔥 EXTREME 優先顯示
 # ================================
 def lifecycle_text(
     state,
     rr=0
 ):
+
+    # 🔥 EXTREME 優先
+    if state == "EXTREME":
+
+        return "🚨 極熱"
 
     # 🔥 RR 太低代表延伸過度
     if rr <= 0.3:
@@ -342,7 +353,7 @@ def lifecycle_text(
 
 
 # ================================
-# 🔥 translate_status（v17.7.2）
+# 🔥 translate_status（v17.7.3）
 # 🔥 移除 distance 重複語義
 # ================================
 def translate_status(
@@ -435,6 +446,14 @@ def get_entry_stage_label(result):
         "entry_stage"
     )
 
+    lifecycle = result.get(
+        "lifecycle"
+    )
+
+    # 🔥 避免重複
+    if lifecycle == "EXTREME":
+        return ""
+
     mapping = {
 
         "BREAKOUT_DAY1":
@@ -472,6 +491,9 @@ def wait_reason_text(reason):
 
         "WAIT_EXTENDED":
             "過熱",
+
+        "WAIT_EXTREME":
+            "極熱",
 
         "WAIT_RR":
             "RR低",
@@ -662,7 +684,7 @@ def get_live_price_data(
 
 
 # ================================
-# 🔥 主流程（v17.7.2 UI）
+# 🔥 主流程（v17.7.3 UI）
 # ================================
 def generate():
 
@@ -670,7 +692,7 @@ def generate():
 
     msg = (
         f"【{now.strftime('%m/%d')} "
-        f"{get_market_phase()}】\n"
+        f"{get_market_phase()}｜{VERSION}】\n"
     )
 
     msg += (
@@ -885,7 +907,6 @@ def generate():
 
             # ================================
             # 🔥 structure
-            # 🔥 移除重複 distance 語義
             # ================================
             msg += (
                 f"├─ 結構："
