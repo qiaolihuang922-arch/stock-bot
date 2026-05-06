@@ -1,30 +1,25 @@
 # ================================
-# 🔥 analysis.py（FINAL v17.6｜STATE ENGINE + REAL LIFECYCLE）
+# 🔥 analysis.py（FINAL v17.7｜NORMALIZATION PATCH）
 # ================================
 
 # 🔒 VERSION LOCK
-# - ✅ 保留 v17.5 主結構
-# - ✅ 重構：真正 lifecycle state machine
-# - ✅ 修正：REJECT → BASE
-# - ✅ 修正：真 Day1 / Day2（昨日 resistance）
-# - ✅ 修正：FAIL 不再直接 SELL_ALL
-# - ✅ 新增：setup_score / execution_score
-# - ✅ 新增：extended_level
-# - ✅ 新增：WAIT_EXECUTION / WAIT_CONFIRM
-# - ✅ 新增：PULLBACK / RECLAIM
-# - ✅ 修正：volume lifecycle 誤判
+# - ✅ 保留 v17.6 lifecycle engine
+# - ✅ 不新增功能（只做穩定化）
+# - ✅ 修正：setup_score 正規化
+# - ✅ 修正：execution_score 過熱扣分
+# - ✅ 修正：strength_score 不再被 RR 主導
+# - ✅ 修正：RR target 回歸合理區間
+# - ✅ 修正：FAIL 不再扣分過重
+# - ✅ 修正：volume expansion 誤判
 # - ✅ 修正：structure_state 穩定化
-# - ✅ 修正：RR target 使用 air_space
-# - ✅ 修正：detect_entry_stage ma20 漏傳
-# - ✅ 修正：Day2 必須站穩 breakout_price
-# - ✅ 修正：fake breakout 使用 breakout_price
-# - ✅ 修正：air_space 避免負值 RR 爆炸
+# - ✅ 修正：lifecycle 與 entry_stage 分離
+# - ✅ 修正：breakout_ready 全系統一致
 # - ✅ 保持：BUY / WAIT / NO_TRADE
 # ================================
 
 
 # ================================
-# 🔥 常數（v17.6）
+# 🔥 常數（v17.7）
 # ================================
 BREAKOUT_THRESHOLD = 0.005
 
@@ -67,8 +62,14 @@ def base_position(
     if trend == "UP":
         pos += 0.2
 
+    elif trend == "SIDE":
+        pos += 0.05
+
     if structure == "STRONG":
         pos += 0.2
+
+    elif structure == "NORMAL":
+        pos += 0.1
 
     if volume == "EXPLOSIVE":
         pos += 0.25
@@ -83,7 +84,7 @@ def base_position(
 
 
 # ================================
-# 🔥 行動轉換（v17.6）
+# 🔥 行動轉換（v17.7）
 # ================================
 def action_mapper(decision, position):
 
@@ -181,11 +182,12 @@ def build_result(**kwargs):
 
         "rr": kwargs.get("rr", 0),
 
-        # 🔥 lifecycle
+        # 🔥 entry
         "entry_stage": kwargs.get(
             "entry_stage"
         ),
 
+        # 🔥 lifecycle
         "lifecycle": kwargs.get(
             "lifecycle",
             "BASE"
@@ -220,7 +222,8 @@ def build_result(**kwargs):
 
 
 # ================================
-# 🔥 strength_score（v17.6）
+# 🔥 strength_score（v17.7）
+# 🔥 修正：避免 RR 主導排名
 # ================================
 def strength_score(result):
 
@@ -236,21 +239,39 @@ def strength_score(result):
         * 0.4
     )
 
-    score += min(
-        result.get("rr", 0),
-        3
-    )
+    rr = result.get("rr", 0)
 
+    # 🔥 RR 正規化（不再直接加 rr）
+    if rr >= 3:
+        score += 1.5
+
+    elif rr >= 2:
+        score += 1
+
+    elif rr >= 1:
+        score += 0.5
+
+    # 🔥 Day1 / Day2 加成
     if result.get("entry_stage") == "BREAKOUT_DAY1":
         score += 2
 
     elif result.get("entry_stage") == "CONFIRM_DAY2":
         score += 1.5
 
+    # 🔥 FAIL 降低懲罰（避免假跌破被打爛）
     if result.get("breakout_fail"):
-        score -= 4
+        score -= 2
 
-    if result.get("extended_level", 0) >= 2:
+    # 🔥 過熱扣分
+    ext_level = result.get(
+        "extended_level",
+        0
+    )
+
+    if ext_level >= 3:
+        score -= 3
+
+    elif ext_level >= 2:
         score -= 1.5
 
     return round(score, 2)
@@ -399,7 +420,8 @@ def volume_signal(volumes):
 
 
 # ================================
-# 🔥 volume_price_state（v17.6）
+# 🔥 volume_price_state（v17.7）
+# 🔥 修正：避免小漲也被判 expansion
 # ================================
 def volume_price_state(
     closes,
@@ -418,11 +440,11 @@ def volume_price_state(
         / closes[-2]
     )
 
-    # 🔥 量價擴張
-    if ratio > 1.5 and price_change > 0.015:
+    # 🔥 真正主升
+    if ratio > 1.5 and price_change > 0.03:
         return "EXPANSION"
 
-    # 🔥 出貨
+    # 🔥 放量下跌
     if ratio > 1.5 and price_change < -0.02:
         return "DISTRIBUTION"
 
@@ -434,7 +456,8 @@ def volume_price_state(
 
 
 # ================================
-# 🔥 structure_state（v17.6）
+# 🔥 structure_state（v17.7）
+# 🔥 修正：穩定化
 # ================================
 def structure_state(
     closes,
@@ -462,14 +485,18 @@ def structure_state(
     if ma5 > ma20:
         score += 1
 
+    # 🔥 close above ma5
+    if closes[-1] > ma5:
+        score += 1
+
     # 🔥 above ma20
     if closes[-1] > ma20:
         score += 1
 
-    if score >= 4:
+    if score >= 5:
         return "STRONG"
 
-    elif score >= 2:
+    elif score >= 3:
         return "NORMAL"
 
     return "WEAK"
@@ -610,7 +637,7 @@ def strong_follow(
 
 
 # ================================
-# 🔥 detect_entry_stage（v17.6 FIX）
+# 🔥 detect_entry_stage
 # ================================
 def detect_entry_stage(
     closes,
@@ -671,7 +698,42 @@ def detect_entry_stage(
 
 
 # ================================
-# 🔥 calc_rr（v17.6）
+# 🔥 detect_lifecycle（v17.7）
+# 🔥 修正：entry_stage 與 lifecycle 分離
+# ================================
+def detect_lifecycle(
+    price,
+    resistance,
+    vp_state,
+    ext_level,
+    breakout_ready,
+    failed_breakout
+):
+
+    if failed_breakout:
+        return "FAIL"
+
+    if ext_level >= 3:
+        return "EXTREME"
+
+    if vp_state == "EXPANSION":
+        return "EXPANSION"
+
+    if is_breakout(
+        price,
+        resistance
+    ):
+        return "BREAKOUT"
+
+    if breakout_ready:
+        return "PRE_BREAKOUT"
+
+    return "BASE"
+
+
+# ================================
+# 🔥 calc_rr（v17.7）
+# 🔥 修正：RR 合理化
 # ================================
 def calc_rr(
     price,
@@ -694,23 +756,20 @@ def calc_rr(
     if risk <= 0:
         return 0
 
-    # 🔥 air space
-    air_space = max(
-        (resistance * 1.20) - price,
-        0
-    )
-
+    # 🔥 target 正規化
     if setup_type == "pre_breakout":
 
-        reward = air_space * 0.5
+        target = resistance * 1.05
 
     elif setup_type == "strong_follow":
 
-        reward = air_space
+        target = resistance * 1.12
 
     else:
 
-        reward = air_space * 0.7
+        target = resistance * 1.08
+
+    reward = target - price
 
     if reward <= 0:
         return 0
@@ -769,7 +828,8 @@ def get_wait_reason(
 
 
 # ================================
-# 🔥 setup score
+# 🔥 setup score（v17.7）
+# 🔥 修正：NORMAL 不再 0 分
 # ================================
 def setup_score(
     market,
@@ -783,11 +843,20 @@ def setup_score(
     if market == "STRONG":
         score += 3
 
+    elif market == "NORMAL":
+        score += 1
+
     if trend == "UP":
         score += 3
 
+    elif trend == "SIDE":
+        score += 1
+
     if structure == "STRONG":
         score += 2
+
+    elif structure == "NORMAL":
+        score += 1
 
     if volume in [
         "STRONG",
@@ -795,16 +864,21 @@ def setup_score(
     ]:
         score += 2
 
+    elif volume == "NORMAL":
+        score += 1
+
     return score
 
 
 # ================================
-# 🔥 execution score
+# 🔥 execution score（v17.7）
+# 🔥 修正：過熱扣分
 # ================================
 def execution_score(
     entry_stage,
     rr,
-    vp_state
+    vp_state,
+    ext_level
 ):
 
     score = 0
@@ -833,11 +907,18 @@ def execution_score(
     elif vp_state == "DISTRIBUTION":
         score -= 2
 
+    # 🔥 過熱扣分
+    if ext_level >= 3:
+        score -= 4
+
+    elif ext_level >= 2:
+        score -= 2
+
     return score
 
 
 # ================================
-# 🔥 strategy（v17.6）
+# 🔥 strategy（v17.7）
 # ================================
 def strategy(
     price,
@@ -911,7 +992,6 @@ def strategy(
         avg(closes[-3:])
     )
 
-    # 🔥 FIX：ma20 傳入
     entry_stage = detect_entry_stage(
         closes,
         ma5,
@@ -926,6 +1006,19 @@ def strategy(
     )
 
     extended = ext_level >= 2
+
+    breakout_ready = (
+        price > resistance * 0.985
+    )
+
+    lifecycle = detect_lifecycle(
+        price,
+        resistance,
+        vp_state,
+        ext_level,
+        breakout_ready,
+        failed_breakout
+    )
 
     rr = calc_rr(
         price,
@@ -944,10 +1037,9 @@ def strategy(
     execute = execution_score(
         entry_stage,
         rr,
-        vp_state
+        vp_state,
+        ext_level
     )
-
-    lifecycle = entry_stage
 
     # ================================
     # 🔥 breakout fail
@@ -1209,10 +1301,6 @@ def strategy(
     # ================================
     # 🔥 pre breakout
     # ================================
-    breakout_ready = (
-        price > resistance * 0.985
-    )
-
     if (
         trend == "UP"
         and volume != "WEAK"
@@ -1313,7 +1401,7 @@ def strategy(
 
 
 # ================================
-# 🔥 pick_best_stock（v17.6）
+# 🔥 pick_best_stock（v17.7）
 # ================================
 def pick_best_stock(results_dict):
 
