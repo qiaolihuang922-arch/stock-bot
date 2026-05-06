@@ -1,19 +1,21 @@
 # ================================
-# 🔥 FINAL（顯示層 v17.5｜REAL DAY1 / DAY2 STATE MACHINE）
+# 🔥 FINAL（顯示層 v17.6｜STATE ENGINE UI REWORK）
 # ================================
 
 # 🔒 VERSION LOCK
-# - ✅ 完全對齊 strategy v17.5
+# - ✅ 完全對齊 strategy v17.6
+# - ✅ 顯示 lifecycle（BREAKOUT / PULLBACK / RECLAIM）
 # - ✅ 顯示真正 Day1 / Day2
 # - ✅ 顯示 BREAKOUT_FAIL
-# - ✅ 顯示 WAIT reason
+# - ✅ 顯示 WAIT_EXECUTION / WAIT_CONFIRM
+# - ✅ 顯示 extended level
+# - ✅ 顯示 setup / execution score
 # - ✅ 顯示 volume-price lifecycle
-# - ✅ 顯示 EXTENDED（降倉模式）
 # - ✅ breakout threshold 全系統一致
 # - ✅ 顯示真正即時價格
-# - ✅ 顯示真 RR（minimum stop）
-# - ✅ 修正：NO_TRADE 不再顯示 SELL_ALL
-# - ✅ 修正：state machine 顯示
+# - ✅ 顯示真 RR（air space）
+# - ✅ UI 重構（避免資訊混亂）
+# - ✅ NO_TRADE 不再顯示 SELL_ALL
 # - ✅ 保持：不干擾 strategy
 # ================================
 
@@ -90,7 +92,7 @@ def safe_round(val, n=2):
 
 
 # ================================
-# 🔥 breakout_distance（v17.5）
+# 🔥 breakout_distance（v17.6）
 # ================================
 def breakout_distance(price, closes):
 
@@ -118,7 +120,7 @@ def breakout_distance(price, closes):
 
 
 # ================================
-# 🔥 structure_progress（v17.5）
+# 🔥 structure_progress（v17.6）
 # ================================
 def structure_progress(
     closes,
@@ -130,16 +132,22 @@ def structure_progress(
 
         score = 0
 
+        recent_high = max(closes[-5:])
+        old_high = max(closes[-10:-5])
+
+        recent_low = min(closes[-5:])
+        old_low = min(closes[-10:-5])
+
+        # 🔥 higher high
+        if recent_high > old_high:
+            score += 1
+
         # 🔥 higher low
-        if min(closes[-3:]) > min(closes[-6:-3]):
+        if recent_low > old_low:
             score += 1
 
         # 🔥 ma alignment
         if ma5 > ma20:
-            score += 1
-
-        # 🔥 above avg
-        if closes[-1] > sum(closes[-5:]) / 5:
             score += 1
 
         # 🔥 above ma20
@@ -176,19 +184,23 @@ def volume_ratio(volumes):
 
 
 # ================================
-# 🔥 volume_price_text（v17.5）
+# 🔥 volume-price text（v17.6）
 # ================================
 def volume_price_text(state):
 
     mapping = {
 
-        "EXPANSION": "量價擴張",
+        "EXPANSION":
+            "量價擴張",
 
-        "DISTRIBUTION": "放量出貨",
+        "DISTRIBUTION":
+            "放量出貨",
 
-        "COILING": "縮量整理",
+        "COILING":
+            "縮量整理",
 
-        "NORMAL": "正常"
+        "NORMAL":
+            "正常"
     }
 
     return mapping.get(
@@ -198,19 +210,70 @@ def volume_price_text(state):
 
 
 # ================================
-# 🔥 translate_status（v17.5）
+# 🔥 lifecycle text（v17.6）
+# ================================
+def lifecycle_text(state):
+
+    mapping = {
+
+        "BREAKOUT":
+            "🚀 Breakout",
+
+        "EXPANSION":
+            "🔥 主升段",
+
+        "PRE_BREAKOUT":
+            "⏳ 突破前",
+
+        "PULLBACK":
+            "↘ 拉回",
+
+        "RECLAIM":
+            "↗ 收復",
+
+        "TURN":
+            "↗ 轉強",
+
+        "CONFIRM_DAY2":
+            "🚀 Day2",
+
+        "BREAKOUT_DAY1":
+            "🔥 Day1",
+
+        "FAIL":
+            "❌ 失敗",
+
+        "FAKE_BREAK":
+            "⚠ 假突破",
+
+        "BASE":
+            "⏳ 整理"
+    }
+
+    return mapping.get(
+        state,
+        "⏳ 整理"
+    )
+
+
+# ================================
+# 🔥 translate_status（v17.6）
 # ================================
 def translate_status(
     dist,
     struct,
     vol,
-    extended=False
+    ext_level=0
 ):
 
     # ================================
     # 🔥 距離
     # ================================
-    if extended:
+    if ext_level >= 3:
+
+        d_text = "極度過熱"
+
+    elif ext_level >= 2:
 
         d_text = "過熱"
 
@@ -247,11 +310,11 @@ def translate_status(
 
     elif struct >= 2:
 
-        s_text = "成形中"
+        s_text = "成形"
 
     elif struct >= 1:
 
-        s_text = "剛啟動"
+        s_text = "啟動"
 
     else:
 
@@ -280,35 +343,37 @@ def translate_status(
 
 
 # ================================
-# 🔥 action（v17.5）
+# 🔥 action（v17.6）
 # ================================
 def get_action(result):
 
-    decision = result.get("decision")
+    decision = result.get(
+        "decision"
+    )
 
     action_type = result.get(
         "action_type"
     )
 
-    # 🔥 EXIT
-    if decision == "EXIT":
+    # 🔥 FAIL
+    if decision == "FAIL":
 
-        return "🔴 清倉"
+        return "❌ 失敗"
 
     # 🔥 BUY
     if action_type == "BUY":
 
         return (
-            f"🟢 買進 "
+            f"🟢 "
             f"{round(result.get('action', 0)*100)}%"
         )
 
-    # 🔥 NO_TRADE / WAIT
-    return "⏳ 不動"
+    # 🔥 WAIT
+    return "⏳"
 
 
 # ================================
-# 🔥 state label（v17.5）
+# 🔥 entry stage label（v17.6）
 # ================================
 def get_entry_stage_label(result):
 
@@ -318,24 +383,26 @@ def get_entry_stage_label(result):
 
     mapping = {
 
-        # 🔥 真 Day1
         "BREAKOUT_DAY1":
-            "（🔥 Day1 突破）",
+            "🔥 Day1",
 
-        # 🔥 真 Day2
         "CONFIRM_DAY2":
-            "（🚀 Day2 確認）",
+            "🚀 Day2",
 
-        # 🔥 TURN
         "TURN":
-            "（↗ 轉強）",
+            "↗ 轉強",
 
-        # 🔥 fail
+        "PULLBACK":
+            "↘ 拉回",
+
+        "RECLAIM":
+            "↗ 收復",
+
         "BREAKOUT_FAIL":
-            "（❌ 突破失敗）",
+            "❌ 失敗",
 
-        "REJECT":
-            "（⚠ 結構失敗）"
+        "BASE":
+            "⏳ 整理"
     }
 
     return mapping.get(
@@ -345,7 +412,7 @@ def get_entry_stage_label(result):
 
 
 # ================================
-# 🔥 WAIT reason（v17.5）
+# 🔥 WAIT reason（v17.6）
 # ================================
 def wait_reason_text(reason):
 
@@ -355,22 +422,22 @@ def wait_reason_text(reason):
             "⚠ 過熱",
 
         "WAIT_RR":
-            "⚠ RR 不佳",
+            "⚠ RR低",
 
         "WAIT_VOLUME":
             "👀 等量",
 
-        "WAIT_BREAKOUT":
-            "👀 等突破",
+        "WAIT_CONFIRM":
+            "👀 等確認",
+
+        "WAIT_EXECUTION":
+            "👀 等進場",
 
         "WAIT_TREND":
-            "❌ 趨勢差",
+            "❌ 弱勢",
 
         "WAIT_FAKE_BREAK":
-            "⚠ 假突破",
-
-        "WAIT":
-            "👀 觀察"
+            "⚠ 假突破"
     }
 
     return mapping.get(
@@ -380,7 +447,7 @@ def wait_reason_text(reason):
 
 
 # ================================
-# 🔥 final label（v17.5）
+# 🔥 final label（v17.6）
 # ================================
 def get_final_label(result):
 
@@ -388,42 +455,30 @@ def get_final_label(result):
         "decision"
     )
 
-    # ================================
-    # 🔥 BUY
-    # ================================
     if decision == "BUY":
 
         return "🔥 進場"
 
-    # ================================
-    # 🔥 EXIT
-    # ================================
-    if decision == "EXIT":
+    if decision == "FAIL":
 
-        return "❌ 離場"
+        return "❌ 失敗"
 
-    # ================================
-    # 🔥 NO_TRADE
-    # ================================
     if decision == "NO_TRADE":
 
         return "❌ 不交易"
 
-    # ================================
-    # 🔥 WAIT
-    # ================================
     return wait_reason_text(
         result.get("wait_reason")
     )
 
 
 # ================================
-# 🔥 stage_detection（v17.5）
+# 🔥 stage detection（v17.6）
 # ================================
 def stage_detection(
     price,
     closes,
-    extended=False
+    ext_level=0
 ):
 
     closes = safe_list(closes)
@@ -445,16 +500,16 @@ def stage_detection(
         breakout_price - price
     ) / price
 
-    # ================================
     # 🔥 EXTENDED
-    # ================================
-    if extended:
+    if ext_level >= 3:
+
+        return "EXTREME"
+
+    elif ext_level >= 2:
 
         return "EXTENDED"
 
-    # ================================
     # 🔥 breakout
-    # ================================
     if price > breakout_price:
 
         return "BREAKOUT_DONE"
@@ -471,7 +526,7 @@ def stage_detection(
 
 
 # ================================
-# 🔥 stage_to_text（v17.5）
+# 🔥 stage text（v17.6）
 # ================================
 def stage_to_text(stage):
 
@@ -487,15 +542,18 @@ def stage_to_text(stage):
             "👀 接近壓力",
 
         "FAR":
-            "⏳ 尚未接近",
+            "⏳ 遠離壓力",
 
         "EXTENDED":
-            "⚠ 過熱區"
+            "⚠ 過熱",
+
+        "EXTREME":
+            "🚨 極度過熱"
     }
 
     return mapping.get(
         stage,
-        "⏳ 尚未接近"
+        "⏳ 整理"
     )
 
 
@@ -561,7 +619,7 @@ def get_live_price_data(
 
 
 # ================================
-# 🔥 主流程（v17.5）
+# 🔥 主流程（v17.6 UI）
 # ================================
 def generate():
 
@@ -569,7 +627,11 @@ def generate():
 
     msg = (
         f"【{now.strftime('%m/%d')} "
-        f"{get_market_phase()}】\n\n"
+        f"{get_market_phase()}】\n"
+    )
+
+    msg += (
+        "====================\n\n"
     )
 
     decisions = []
@@ -653,9 +715,9 @@ def generate():
 
         result = data["result"]
 
-        extended = result.get(
-            "extended",
-            False
+        ext_level = result.get(
+            "extended_level",
+            0
         )
 
         dist = breakout_distance(
@@ -678,14 +740,14 @@ def generate():
                 dist,
                 struct,
                 vol,
-                extended
+                ext_level
             )
         )
 
         stage = stage_detection(
             data["price"],
             data["closes"],
-            extended
+            ext_level
         )
 
         final = get_final_label(
@@ -704,35 +766,49 @@ def generate():
             )
         )
 
+        lifecycle = lifecycle_text(
+            result.get(
+                "lifecycle"
+            )
+        )
+
+        setup_score = safe_round(
+            result.get(
+                "setup_score"
+            ),
+            1
+        )
+
+        exec_score = safe_round(
+            result.get(
+                "execution_score"
+            ),
+            1
+        )
+
         # ================================
-        # 🔥 output
+        # 🔥 區塊輸出（v17.6 UI）
         # ================================
         msg += (
             f"【{name}】"
-            f"{get_action(result)}"
-            f"｜{final}"
-            f"{entry_stage}\n"
+            f"{get_action(result)} "
+            f"{final}\n"
         )
 
         msg += (
-            f"🌍 "
-            f"{result.get('market_grade')}"
-            f"｜"
-            f"{stage_to_text(stage)}\n"
+            f"├─ 階段："
+            f"{entry_stage} "
+            f"｜{lifecycle}\n"
         )
 
         msg += (
-            f"📊 "
-            f"{safe_round(dist,2)}%"
-            f"｜{struct}/4"
-            f"｜{vol}x"
-            f"｜RR "
-            f"{safe_round(result.get('rr'),2)}\n"
+            f"├─ 市場："
+            f"{result.get('market_grade')} "
+            f"｜{stage_to_text(stage)}\n"
         )
 
-        # 🔥 volume-price lifecycle
         msg += (
-            f"   → "
+            f"├─ 結構："
             f"{d_text}"
             f" / "
             f"{s_text}"
@@ -742,9 +818,33 @@ def generate():
             f"{vp_state}\n"
         )
 
-        # 🔥 即時價格
         msg += (
-            f"💰 "
+            f"├─ 數據："
+            f"Dist {safe_round(dist,2)}%"
+            f" ｜S {struct}/4"
+            f" ｜V {vol}x"
+            f" ｜RR {safe_round(result.get('rr'),2)}\n"
+        )
+
+        msg += (
+            f"├─ 評分："
+            f"Setup {setup_score}"
+            f" ｜Exec {exec_score}"
+            f" ｜Strength "
+            f"{safe_round(result.get('strength'),2)}\n"
+        )
+
+        # 🔥 EXTENDED LEVEL
+        if ext_level > 0:
+
+            msg += (
+                f"├─ 過熱："
+                f"Lv.{ext_level}\n"
+            )
+
+        # 🔥 price
+        msg += (
+            f"└─ 💰 "
             f"{safe_round(data['price'],2)}"
             f"（"
             f"{safe_round(data['change'],2)}%"
@@ -779,12 +879,29 @@ def generate():
     # ================================
     # 🔥 市場總結
     # ================================
-    if any(
-        d == "BUY"
+    buy_count = sum(
+        1
         for d in decisions
-    ):
+        if d == "BUY"
+    )
 
-        msg += "🟢 有機會"
+    fail_count = sum(
+        1
+        for d in decisions
+        if d == "FAIL"
+    )
+
+    if buy_count >= 3:
+
+        msg += "🟢 市場偏強"
+
+    elif buy_count > 0:
+
+        msg += "🟡 局部機會"
+
+    elif fail_count > 0:
+
+        msg += "🔴 突破失敗增多"
 
     else:
 
