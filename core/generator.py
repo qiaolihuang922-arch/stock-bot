@@ -1,42 +1,23 @@
 # ================================
-# 🔥 FINAL（顯示層 v17.7.4｜SEMANTIC SEPARATION UI PATCH）
+# 🔥 FINAL（顯示層 v17.7.5｜SEMANTIC NORMALIZATION UI PATCH）
 # ================================
 
 # 🔒 VERSION LOCK
-# - ✅ 完全對齊 strategy v17.7.4
-# - ✅ 修復：FAIL / BASE / RECLAIM 對齊
-# - ✅ 修復：extended_level 顯示
-# - ✅ 修復：lifecycle fallback
-# - ✅ 修復：None safe
-# - ✅ 修復：dist 顯示 None 問題
-# - ✅ 修復：score 顯示 crash
-# - ✅ 修復：volume ratio division
-# - ✅ 修復：stage detection 空資料
-# - ✅ 修復：結構顯示與 strategy 對齊
-# - ✅ 修復：Strength 顯示過度膨脹
-# - ✅ 修復：重複 lifecycle / stage 顯示
-# - ✅ 修復：RR=0 仍顯示主升段
-# - ✅ 修復：BREAKOUT_DONE 與 lifecycle 衝突
-# - ✅ 修復：Setup / Exec 缺少滿分資訊
-# - ✅ 修復：header 空白與重複符號
-# - ✅ 修復：過熱污染 pressure 欄位
-# - ✅ 修復：structure 重複 distance 語義
-# - ✅ 修復：WAIT reason header 噪音
-# - ✅ 修復：market_grade 缺少語義
-# - ✅ 修復：極熱與壓力重複顯示
-# - ✅ 修復：EXTREME 顯示優先級
-# - ✅ 修復：WAIT_EXTREME 顯示
-# - ✅ 修復：version display
-# - ✅ 新增：breakout_state UI
-# - ✅ 新增：trade_state UI
-# - ✅ 新增：heat_state UI
-# - ✅ 修正：lifecycle 純趨勢顯示
-# - ✅ 修正：突破 / 交易 / 過熱 語義分離
-# - ✅ 修正：EXTREME 不再污染 lifecycle
+# - ✅ 完全對齊 strategy v17.7.5
+# - ✅ breakout / trade / heat / lifecycle 完全分離
+# - ✅ lifecycle 純趨勢語義
+# - ✅ 新增：LATE_EXPANSION 顯示
+# - ✅ 新增：trend_bias 顯示
+# - ✅ 修正：LOW_RR → LATE_ENTRY
+# - ✅ 修正：trade_state 語義
+# - ✅ 修正：header 噪音
+# - ✅ 修正：EXTREME / HOT 顯示一致
+# - ✅ 修正：壓力與突破語義重疊
 # - ✅ 修正：RR低不再污染 lifecycle
 # - ✅ 修正：FAIL 不再污染 lifecycle
-# - ✅ UI 重構（資訊降噪）
-# - ✅ 保持：不干擾 strategy
+# - ✅ 修正：breakout_state 優先級
+# - ✅ 修正：heat_state UI 對齊
+# - ✅ UI 資訊降噪
 # ================================
 
 
@@ -57,7 +38,7 @@ from services.analysis import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v17.7.4"
+VERSION = "v17.7.5"
 
 
 # ================================
@@ -84,7 +65,7 @@ stocks = {
 
 
 # ================================
-# 🔥 safe_list
+# 🔥 safe list
 # ================================
 def safe_list(data, n=20):
 
@@ -102,7 +83,7 @@ def safe_list(data, n=20):
 
 
 # ================================
-# 🔥 safe_round
+# 🔥 safe round
 # ================================
 def safe_round(val, n=2):
 
@@ -111,7 +92,10 @@ def safe_round(val, n=2):
         if val is None:
             return "-"
 
-        return round(float(val), n)
+        return round(
+            float(val),
+            n
+        )
 
     except:
 
@@ -119,9 +103,12 @@ def safe_round(val, n=2):
 
 
 # ================================
-# 🔥 safe_text
+# 🔥 safe text
 # ================================
-def safe_text(val, fallback="-"):
+def safe_text(
+    val,
+    fallback="-"
+):
 
     if val is None:
         return fallback
@@ -130,7 +117,7 @@ def safe_text(val, fallback="-"):
 
 
 # ================================
-# 🔥 market text（v17.7.4）
+# 🔥 market text
 # ================================
 def market_text(grade):
 
@@ -159,9 +146,35 @@ def market_text(grade):
 
 
 # ================================
-# 🔥 breakout_distance
+# 🔥 trend bias text
 # ================================
-def breakout_distance(price, closes):
+def trend_bias_text(state):
+
+    mapping = {
+
+        "STRONG":
+            "🟢 強勢",
+
+        "NORMAL":
+            "🟡 中性",
+
+        "WEAK":
+            "🔴 弱勢"
+    }
+
+    return mapping.get(
+        state,
+        "🟡 中性"
+    )
+
+
+# ================================
+# 🔥 breakout distance
+# ================================
+def breakout_distance(
+    price,
+    closes
+):
 
     try:
 
@@ -180,9 +193,11 @@ def breakout_distance(price, closes):
         )
 
         return round(
+
             (
                 breakout_price - price
             ) / price * 100,
+
             2
         )
 
@@ -192,7 +207,7 @@ def breakout_distance(price, closes):
 
 
 # ================================
-# 🔥 structure_progress
+# 🔥 structure progress
 # ================================
 def structure_progress(
     closes,
@@ -209,11 +224,21 @@ def structure_progress(
 
         score = 0
 
-        recent_high = max(closes[-5:])
-        old_high = max(closes[-10:-5])
+        recent_high = max(
+            closes[-5:]
+        )
 
-        recent_low = min(closes[-5:])
-        old_low = min(closes[-10:-5])
+        old_high = max(
+            closes[-10:-5]
+        )
+
+        recent_low = min(
+            closes[-5:]
+        )
+
+        old_low = min(
+            closes[-10:-5]
+        )
 
         if recent_high > old_high:
             score += 1
@@ -238,7 +263,7 @@ def structure_progress(
 
 
 # ================================
-# 🔥 volume_ratio
+# 🔥 volume ratio
 # ================================
 def volume_ratio(volumes):
 
@@ -248,6 +273,7 @@ def volume_ratio(volumes):
             return 1
 
         avg10 = (
+
             sum(volumes[-10:])
             / max(len(volumes[-10:]), 1)
         )
@@ -266,7 +292,7 @@ def volume_ratio(volumes):
 
 
 # ================================
-# 🔥 volume-price text
+# 🔥 volume price text
 # ================================
 def volume_price_text(state):
 
@@ -292,8 +318,7 @@ def volume_price_text(state):
 
 
 # ================================
-# 🔥 lifecycle text（v17.7.4）
-# 🔥 lifecycle 純趨勢語義
+# 🔥 lifecycle text
 # ================================
 def lifecycle_text(state):
 
@@ -301,6 +326,9 @@ def lifecycle_text(state):
 
         "EXPANSION":
             "🔥 主升",
+
+        "LATE_EXPANSION":
+            "⚠ 延伸末段",
 
         "TREND":
             "📈 趨勢",
@@ -322,7 +350,7 @@ def lifecycle_text(state):
 
 
 # ================================
-# 🔥 breakout text（新增）
+# 🔥 breakout state text
 # ================================
 def breakout_state_text(state):
 
@@ -351,7 +379,7 @@ def breakout_state_text(state):
 
 
 # ================================
-# 🔥 trade state text（新增）
+# 🔥 trade state text
 # ================================
 def trade_state_text(state):
 
@@ -360,7 +388,7 @@ def trade_state_text(state):
         "TRADEABLE":
             "✅ 可交易",
 
-        "LOW_RR":
+        "LATE_ENTRY":
             "⚠ RR低",
 
         "NO_VOLUME":
@@ -380,7 +408,7 @@ def trade_state_text(state):
 
 
 # ================================
-# 🔥 heat state text（新增）
+# 🔥 heat state text
 # ================================
 def heat_state_text(state):
 
@@ -403,7 +431,7 @@ def heat_state_text(state):
 
 
 # ================================
-# 🔥 translate_status（v17.7.4）
+# 🔥 translate status
 # ================================
 def translate_status(
     struct,
@@ -509,7 +537,7 @@ def get_entry_stage_label(result):
 
 
 # ================================
-# 🔥 WAIT reason
+# 🔥 wait reason
 # ================================
 def wait_reason_text(reason):
 
@@ -573,7 +601,7 @@ def get_final_label(result):
 
 
 # ================================
-# 🔥 stage detection
+# 🔥 pressure stage
 # ================================
 def stage_detection(
     price,
@@ -585,7 +613,6 @@ def stage_detection(
         closes = safe_list(closes)
 
         if not closes:
-
             return "FAR"
 
         resistance = max(
@@ -593,6 +620,7 @@ def stage_detection(
         )
 
         breakout_price = (
+
             resistance
             * (1 + BREAKOUT_THRESHOLD)
         )
@@ -621,7 +649,7 @@ def stage_detection(
 
 
 # ================================
-# 🔥 stage text
+# 🔥 pressure text
 # ================================
 def stage_to_text(stage):
 
@@ -647,7 +675,7 @@ def stage_to_text(stage):
 
 
 # ================================
-# 🔥 市場時間
+# 🔥 market phase
 # ================================
 def get_market_phase():
 
@@ -675,7 +703,7 @@ def get_market_phase():
 
 
 # ================================
-# 🔥 即時價格
+# 🔥 realtime price
 # ================================
 def get_live_price_data(
     realtime,
@@ -705,13 +733,14 @@ def get_live_price_data(
 
 
 # ================================
-# 🔥 主流程（v17.7.4 UI）
+# 🔥 main generate
 # ================================
 def generate():
 
     now = datetime.now(tz)
 
     msg = (
+
         f"【{now.strftime('%m/%d')} "
         f"{get_market_phase()}｜{VERSION}】\n"
     )
@@ -750,6 +779,7 @@ def generate():
             yahoo = get_yahoo(code)
 
             price, change = (
+
                 get_live_price_data(
                     realtime,
                     yahoo,
@@ -793,15 +823,12 @@ def generate():
                 f"⚠ {name} 錯誤：{str(e)}\n"
             )
 
-    # ================================
-    # 🔥 無資料
-    # ================================
     if not results_map:
 
         return msg + "\n⚠ 無有效數據"
 
     # ================================
-    # 🔥 顯示
+    # 🔥 render
     # ================================
     for name, data in results_map.items():
 
@@ -834,11 +861,6 @@ def generate():
                     struct,
                     vol
                 )
-            )
-
-            stage = stage_detection(
-                data["price"],
-                data["closes"]
             )
 
             final = get_final_label(
@@ -887,6 +909,14 @@ def generate():
                 )
             )
 
+            trend_bias = (
+                trend_bias_text(
+                    result.get(
+                        "trend_bias"
+                    )
+                )
+            )
+
             setup_score = safe_round(
                 result.get(
                     "setup_score"
@@ -909,62 +939,63 @@ def generate():
             )
 
             # ================================
-            # 🔥 標題列
+            # 🔥 header
             # ================================
             header = (
+
                 f"【{name}】 "
                 f"{get_action(result)} "
                 f"{final}"
             )
 
             if entry_stage:
-                header += f" ｜{entry_stage}"
+                header += (
+                    f" ｜{entry_stage}"
+                )
 
             msg += header + "\n"
 
             # ================================
-            # 🔥 lifecycle
+            # 🔥 semantic layer
             # ================================
             msg += (
                 f"├─ 趨勢："
                 f"{lifecycle}\n"
             )
 
-            # ================================
-            # 🔥 breakout
-            # ================================
+            msg += (
+                f"├─ 強度："
+                f"{trend_bias}\n"
+            )
+
             msg += (
                 f"├─ 突破："
                 f"{breakout_state}\n"
             )
 
-            # ================================
-            # 🔥 trade
-            # ================================
             msg += (
                 f"├─ 交易："
                 f"{trade_state}\n"
             )
 
+            msg += (
+                f"├─ 熱度："
+                f"{heat_state}\n"
+            )
+
             # ================================
-            # 🔥 market
+            # 🔥 structure
             # ================================
             msg += (
                 f"├─ 市場："
                 f"{market_text(result.get('market_grade'))}\n"
             )
 
-            # ================================
-            # 🔥 pressure
-            # ================================
             msg += (
                 f"├─ 壓力："
-                f"{stage_to_text(stage)}\n"
+                f"{stage_to_text(stage_detection(data['price'], data['closes']))}\n"
             )
 
-            # ================================
-            # 🔥 structure
-            # ================================
             msg += (
                 f"├─ 結構："
                 f"{s_text}"
@@ -975,17 +1006,10 @@ def generate():
             )
 
             # ================================
-            # 🔥 heat
-            # ================================
-            msg += (
-                f"├─ 熱度："
-                f"{heat_state}\n"
-            )
-
-            # ================================
             # 🔥 data
             # ================================
             msg += (
+
                 f"├─ 數據："
                 f"Dist {safe_round(dist, 2)}%"
                 f" ｜RR {safe_round(result.get('rr'), 2)}"
@@ -993,19 +1017,14 @@ def generate():
                 f" ｜V {vol}x\n"
             )
 
-            # ================================
-            # 🔥 score
-            # ================================
             msg += (
+
                 f"├─ 評分："
                 f"Setup {setup_score}/10"
                 f" ｜Exec {exec_score}/8"
                 f" ｜★ {strength}\n"
             )
 
-            # ================================
-            # 🔥 過熱
-            # ================================
             if ext_level >= 2:
 
                 msg += (
@@ -1013,10 +1032,8 @@ def generate():
                     f"Lv.{ext_level}\n"
                 )
 
-            # ================================
-            # 🔥 price
-            # ================================
             msg += (
+
                 f"└─ 💰 "
                 f"{safe_round(data['price'], 2)}"
                 f"（"
@@ -1031,7 +1048,7 @@ def generate():
             )
 
     # ================================
-    # 🔥 最強股
+    # 🔥 best stock
     # ================================
     best, score = pick_best_stock({
 
@@ -1056,15 +1073,17 @@ def generate():
         msg += "⚠ 無最強股\n"
 
     # ================================
-    # 🔥 市場總結
+    # 🔥 market summary
     # ================================
     buy_count = sum(
+
         1
         for d in decisions
         if d == "BUY"
     )
 
     fail_count = sum(
+
         1
         for d in decisions
         if d == "FAIL"
