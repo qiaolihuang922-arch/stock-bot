@@ -1,31 +1,25 @@
 # ================================
-# 🔥 analysis.py（FINAL v17.7.5｜SEMANTIC NORMALIZATION PATCH）
+# 🔥 analysis.py（FINAL v17.7.6｜STATE HIERARCHY PATCH）
 # ================================
 
 # 🔒 VERSION LOCK
-# - ✅ 保留 v17.7.4 semantic engine
+# - ✅ 保留 v17.7.5 semantic engine
 # - ✅ breakout / trade / heat state 分離
-# - ✅ lifecycle 純趨勢化
-# - ✅ setup_score 正規化
-# - ✅ execution_score 過熱扣分
-# - ✅ RR 不再主導 strength
-# - ✅ breakout_ready 全系統一致
-# - ✅ EXTREME / HOT 語義分離
-# - ✅ fake breakout 優先級修正
-# - ✅ breakout fail 不污染 lifecycle
-# - ✅ RR低 / 無量 不污染 lifecycle
-# - ✅ Day1 灌分修正
-# - ✅ 過熱股 BUY 壓倉
-# - ✅ pick_best_stock 降低 late-entry 權重
-# - ✅ 新增：LATE_EXPANSION lifecycle
-# - ✅ 新增：trend_bias
-# - ✅ 修正：trade_state 語義
-# - ✅ 修正：WAIT reason 對齊 trade_state
+# - ✅ lifecycle hierarchy 正式建立
+# - ✅ strength ceiling system
+# - ✅ dominant state normalization
+# - ✅ RR=0 ceiling 修正
+# - ✅ LATE_ENTRY 優先級修正
+# - ✅ EXTREME state hierarchy
+# - ✅ breakout trend phase
+# - ✅ late trend phase
+# - ✅ pick_best_stock contextual ranking
+# - ✅ semantic collision 修正
 # ================================
 
 
 # ================================
-# 🔥 常數（v17.7.5）
+# 🔥 常數
 # ================================
 BREAKOUT_THRESHOLD = 0.005
 
@@ -113,6 +107,69 @@ def action_mapper(decision, position):
         "action": 0.0,
         "action_type": "HOLD"
     }
+
+
+# ================================
+# 🔥 dominant state
+# ================================
+def dominant_state(
+    lifecycle,
+    breakout_state,
+    trade_state,
+    heat_state
+):
+
+    if breakout_state == "FAIL":
+        return "FAILED"
+
+    if heat_state == "EXTREME":
+        return "EXTREME"
+
+    if trade_state == "LATE_ENTRY":
+        return "LATE"
+
+    if breakout_state == "BREAKOUT":
+        return "BREAKOUT"
+
+    if lifecycle in [
+        "TREND",
+        "BREAKOUT_TREND"
+    ]:
+        return "TREND"
+
+    return "NORMAL"
+
+
+# ================================
+# 🔥 lifecycle strength ceiling
+# ================================
+def lifecycle_strength_ceiling(
+    lifecycle
+):
+
+    mapping = {
+
+        "FAILED": 1.5,
+
+        "DISTRIBUTION": 3,
+
+        "EXTREME": 4,
+
+        "LATE_TREND": 5.5,
+
+        "WEAK": 4.5,
+
+        "BASE": 6,
+
+        "TREND": 8,
+
+        "BREAKOUT_TREND": 10
+    }
+
+    return mapping.get(
+        lifecycle,
+        6
+    )
 
 
 # ================================
@@ -223,6 +280,11 @@ def build_result(**kwargs):
             "NORMAL"
         ),
 
+        "dominant_state": kwargs.get(
+            "dominant_state",
+            "NORMAL"
+        ),
+
         "extended": kwargs.get(
             "extended",
             False
@@ -319,6 +381,19 @@ def strength_score(result):
 
     elif heat_state == "HOT":
         score -= 2
+
+    lifecycle = result.get(
+        "lifecycle"
+    )
+
+    ceiling = lifecycle_strength_ceiling(
+        lifecycle
+    )
+
+    score = min(score, ceiling)
+
+    if rr <= 0:
+        score = min(score, 3)
 
     return round(score, 2)
 
@@ -809,11 +884,11 @@ def detect_trade_state(
     if ext_level >= 2:
         return "EXTENDED"
 
+    if rr < 0.5:
+        return "LATE_ENTRY"
+
     if volume == "WEAK":
         return "NO_VOLUME"
-
-    if rr < 1:
-        return "LATE_ENTRY"
 
     return "TRADEABLE"
 
@@ -841,23 +916,31 @@ def detect_lifecycle(
     vp_state,
     structure,
     trend,
-    rr
+    rr,
+    breakout_state,
+    heat_state
 ):
+
+    if breakout_state == "FAIL":
+        return "FAILED"
 
     if vp_state == "DISTRIBUTION":
         return "DISTRIBUTION"
+
+    if heat_state == "EXTREME":
+        return "EXTREME"
 
     if (
         vp_state == "EXPANSION"
         and rr < 0.5
     ):
-        return "LATE_EXPANSION"
+        return "LATE_TREND"
 
     if (
-        vp_state == "EXPANSION"
+        breakout_state == "BREAKOUT"
         and trend == "UP"
     ):
-        return "EXPANSION"
+        return "BREAKOUT_TREND"
 
     if (
         structure == "STRONG"
@@ -1200,12 +1283,18 @@ def strategy(
         vp_state,
         structure,
         trend,
-        rr
+        rr,
+        breakout_state,
+        heat_state
     )
 
-    # ================================
-    # 🔥 trend bias
-    # ================================
+    dominant = dominant_state(
+        lifecycle,
+        breakout_state,
+        trade_state,
+        heat_state
+    )
+
     if market == "STRONG":
 
         trend_bias = "STRONG"
@@ -1257,6 +1346,8 @@ def strategy(
 
             heat_state=heat_state,
 
+            dominant_state=dominant,
+
             extended=extended,
 
             extended_level=ext_level,
@@ -1306,6 +1397,8 @@ def strategy(
 
             heat_state=heat_state,
 
+            dominant_state=dominant,
+
             extended=extended,
 
             extended_level=ext_level,
@@ -1354,6 +1447,8 @@ def strategy(
 
             heat_state=heat_state,
 
+            dominant_state=dominant,
+
             extended=extended,
 
             extended_level=ext_level,
@@ -1399,6 +1494,8 @@ def strategy(
             trade_state="AVOID",
 
             heat_state="EXTREME",
+
+            dominant_state=dominant,
 
             extended=extended,
 
@@ -1479,6 +1576,8 @@ def strategy(
 
             heat_state=heat_state,
 
+            dominant_state=dominant,
+
             extended=extended,
 
             extended_level=ext_level
@@ -1549,6 +1648,8 @@ def strategy(
             trade_state=trade_state,
 
             heat_state=heat_state,
+
+            dominant_state=dominant,
 
             extended=extended,
 
@@ -1626,6 +1727,8 @@ def strategy(
 
             heat_state=heat_state,
 
+            dominant_state=dominant,
+
             extended=extended,
 
             extended_level=ext_level
@@ -1668,6 +1771,8 @@ def strategy(
 
         heat_state=heat_state,
 
+        dominant_state=dominant,
+
         extended=extended,
 
         extended_level=ext_level,
@@ -1694,6 +1799,10 @@ def pick_best_stock(results_dict):
             0
         )
 
+        lifecycle = result.get(
+            "lifecycle"
+        )
+
         if result.get(
             "breakout_state"
         ) == "FAIL":
@@ -1704,7 +1813,7 @@ def pick_best_stock(results_dict):
             "heat_state"
         ) == "EXTREME":
 
-            score -= 3
+            score -= 4
 
         if result.get(
             "trade_state"
@@ -1712,11 +1821,14 @@ def pick_best_stock(results_dict):
 
             score -= 2
 
-        if result.get(
-            "lifecycle"
-        ) == "LATE_EXPANSION":
+        if lifecycle == "BREAKOUT_TREND":
+            score += 1
 
+        elif lifecycle == "LATE_TREND":
             score -= 2
+
+        elif lifecycle == "EXTREME":
+            score -= 4
 
         if score > best_score:
 
