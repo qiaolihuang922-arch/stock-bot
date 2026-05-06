@@ -1,5 +1,5 @@
 # ================================
-# 🔥 FINAL UI（v18.0 Semantic UI Compression）
+# 🔥 FINAL UI（v17.7.7｜Semantic Scanner）
 # ================================
 
 from datetime import datetime
@@ -19,7 +19,7 @@ from services.analysis import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v18.0"
+VERSION = "v17.7.7"
 
 
 # ================================
@@ -73,91 +73,37 @@ def safe_round(val, n=2):
 
 
 # ================================
-# 🔥 semantic maps
+# 🔥 market map
 # ================================
 MARKET_MAP = {
 
-    "A+": "🟢 A+",
-    "A": "🟢 A",
-    "B": "🟡 B",
-    "C": "🟠 C",
-    "D": "🔴 D"
+    "A+": "🟢 極強",
+    "A": "🟢 極強",
+    "B": "🟡 偏強",
+    "C": "🟠 中性",
+    "D": "🔴 弱勢"
 }
 
-TREND_MAP = {
 
-    "STRONG": "🟢 強勢",
-    "NORMAL": "🟡 中性",
-    "WEAK": "🔴 弱勢"
-}
-
-DOMINANT_MAP = {
-
-    "FAILED": "❌ 失敗",
-    "EXTREME": "🚨 極熱",
-    "LATE": "⚠ 末段",
-    "BREAKOUT": "🚀 突破",
-    "TREND": "📈 趨勢",
-    "NORMAL": "⏳ 正常"
-}
-
-LIFECYCLE_MAP = {
-
-    "BREAKOUT_TREND": "🚀 主升突破",
-    "TREND": "📈 趨勢",
-    "LATE_TREND": "⚠ 趨勢末段",
-    "BASE": "⏳ 整理",
-    "WEAK": "⚠ 弱勢",
-    "DISTRIBUTION": "📦 出貨",
-    "FAILED": "❌ 失敗",
-    "EXTREME": "🚨 極熱"
-}
-
-BREAKOUT_MAP = {
-
-    "BREAKOUT": "🚀 已突破",
-    "READY": "🔥 突破前",
-    "FAIL": "❌ 突破失敗",
-    "FAKE_BREAK": "⚠ 假突破",
-    "NONE": "⏳ 整理"
-}
-
-TRADE_MAP = {
-
-    "TRADEABLE": "✅ 可交易",
-    "LATE_ENTRY": "⚠ RR低",
-    "NO_VOLUME": "⚠ 無量",
-    "EXTENDED": "🌡 過熱",
-    "AVOID": "🚨 禁追"
-}
-
-HEAT_MAP = {
-
-    "NORMAL": "正常",
-    "HOT": "過熱",
-    "EXTREME": "極熱"
-}
-
-VP_MAP = {
-
-    "EXPANSION": "🚀 擴張",
-    "DISTRIBUTION": "📦 出貨",
-    "COILING": "🔹 收縮",
-    "NORMAL": "正常"
-}
-
+# ================================
+# 🔥 wait map
+# ================================
 WAIT_MAP = {
 
     "WAIT_EXTENDED": "過熱",
-    "WAIT_EXTREME": "極熱",
-    "WAIT_RR": "RR低",
+    "WAIT_EXTREME": "禁追",
+    "WAIT_RR": "RR不足",
     "WAIT_VOLUME": "等量",
     "WAIT_CONFIRM": "等確認",
-    "WAIT_EXECUTION": "等進場",
+    "WAIT_EXECUTION": "觀察",
     "WAIT_TREND": "弱勢",
     "WAIT_FAKE_BREAK": "假突破"
 }
 
+
+# ================================
+# 🔥 entry map
+# ================================
 ENTRY_MAP = {
 
     "BREAKOUT_DAY1": "🔥 Day1",
@@ -213,7 +159,8 @@ def get_live_price_data(
 
 
 # ================================
-# 🔥 semantic structure
+# 🔥 結構進度
+# 用來計算 S x/5
 # ================================
 def structure_progress(
     closes,
@@ -251,6 +198,10 @@ def structure_progress(
         return 0
 
 
+# ================================
+# 🔥 volume ratio
+# V x倍率
+# ================================
 def volume_ratio(volumes):
 
     try:
@@ -272,36 +223,9 @@ def volume_ratio(volumes):
         return 1
 
 
-def structure_text(score):
-
-    if score >= 5:
-        return "強"
-
-    if score >= 3:
-        return "成形"
-
-    if score >= 1:
-        return "啟動"
-
-    return "弱"
-
-
-def volume_text(vol):
-
-    if vol >= 1.5:
-        return "爆量"
-
-    if vol >= 1.0:
-        return "放量"
-
-    if vol >= 0.7:
-        return "普通"
-
-    return "無量"
-
-
 # ================================
 # 🔥 breakout distance
+# 距離突破百分比
 # ================================
 def breakout_distance(
     price,
@@ -335,53 +259,191 @@ def breakout_distance(
 
 
 # ================================
-# 🔥 semantic pressure
+# 🔥 semantic state
+# 合併：
+# dominant_state
+# lifecycle
+# breakout phase
 # ================================
-def semantic_pressure(
-    result,
-    price,
-    closes
-):
+def semantic_state(result):
 
-    if result.get(
-        "breakout_state"
-    ) in [
-        "BREAKOUT",
-        "READY",
-        "FAIL"
-    ]:
+    dominant = result.get(
+        "dominant_state"
+    )
+
+    lifecycle = result.get(
+        "lifecycle"
+    )
+
+    # breakout fail
+    if dominant == "FAILED":
+        return "❌ 突破失敗"
+
+    # extreme
+    if dominant == "EXTREME":
+        return "🚨 極熱加速"
+
+    # late trend
+    if dominant == "LATE":
+        return "⚠ 主升末段"
+
+    # breakout trend
+    if lifecycle == "BREAKOUT_TREND":
+
+        if result.get("fresh_breakout"):
+            return "🚀 主升突破（初期）"
+
+        return "🚀 主升突破"
+
+    # normal trend
+    if lifecycle == "TREND":
+        return "📈 趨勢延續"
+
+    # distribution
+    if lifecycle == "DISTRIBUTION":
+        return "📦 高位出貨"
+
+    # base
+    if lifecycle == "BASE":
+        return "⏳ 整理蓄勢"
+
+    return "⚠ 弱勢"
+
+
+# ================================
+# 🔥 semantic trade
+# 合併：
+# trade_state
+# heat_state
+# ================================
+def semantic_trade(result):
+
+    trade = result.get(
+        "trade_state"
+    )
+
+    heat = result.get(
+        "heat_state"
+    )
+
+    if heat == "EXTREME":
+        return "🚨 禁追"
+
+    if trade == "EXTENDED":
+        return "🌡 過熱觀察"
+
+    if trade == "LATE_ENTRY":
+        return "⚠ RR不足"
+
+    if trade == "NO_VOLUME":
+        return "⚠ 無量"
+
+    return "✅ 可交易"
+
+
+# ================================
+# 🔥 semantic structure
+# 合併：
+# structure
+# volume
+# vp_state
+# ================================
+def semantic_structure(result):
+
+    vp = result.get(
+        "volume_price_state"
+    )
+
+    volume = result.get(
+        "volume_state"
+    )
+
+    structure = result.get(
+        "structure_state"
+    )
+
+    # 出貨
+    if vp == "DISTRIBUTION":
+        return "📦 高檔出貨"
+
+    # 攻擊量
+    if (
+        vp == "EXPANSION"
+        and volume in [
+            "STRONG",
+            "EXPLOSIVE"
+        ]
+    ):
+        return "🚀 攻擊量"
+
+    # 收縮
+    if vp == "COILING":
+        return "🔹 收縮整理"
+
+    # 趨勢量
+    if structure == "STRONG":
+        return "📈 趨勢量"
+
+    return "⏳ 普通"
+
+
+# ================================
+# 🔥 semantic position
+# semantic + numeric coexist
+# ================================
+def semantic_position(dist):
+
+    if dist is None:
         return None
 
-    try:
+    if dist < 0:
+        return f"🚀 已突破（{dist}%）"
 
-        closes = safe_list(closes)
+    if dist < 1:
+        return f"🔥 臨界突破（{dist}%）"
 
-        resistance = max(
-            closes[-20:-3]
-        )
+    if dist < 4:
+        return f"👀 接近突破（{dist}%）"
 
-        breakout_price = (
-            resistance
-            * (1 + BREAKOUT_THRESHOLD)
-        )
+    return f"⏳ 遠離突破（{dist}%）"
 
-        dist = (
-            breakout_price - price
-        ) / price
 
-        if price > breakout_price:
-            return "🚀 已突破"
+# ================================
+# 🔥 semantic reason
+# 評級原因
+# ================================
+def semantic_reason(result):
 
-        if dist < 0.02:
-            return "🔥 突破前"
+    rr = result.get("rr", 0)
 
-        if dist < 0.05:
-            return "👀 接近"
+    trade = result.get(
+        "trade_state"
+    )
 
-        return "⏳ 遠離"
+    vp = result.get(
+        "volume_price_state"
+    )
 
-    except:
-        return None
+    heat = result.get(
+        "heat_state"
+    )
+
+    if heat == "EXTREME":
+        return "過熱風險"
+
+    if rr >= 3:
+        return "高RR"
+
+    if vp == "EXPANSION":
+        return "突破量能"
+
+    if trade == "LATE_ENTRY":
+        return "末段弱RR"
+
+    if trade == "NO_VOLUME":
+        return "量能不足"
+
+    return "結構正常"
 
 
 # ================================
@@ -445,26 +507,31 @@ def render_stock(
     price = data["price"]
     change = data["change"]
 
+    # S 分數
     struct = structure_progress(
         data["closes"],
         data["ma5"],
         data["ma20"]
     )
 
+    # V 倍率
     vol = volume_ratio(
         data["volumes"]
     )
 
+    # breakout 距離
     dist = breakout_distance(
         price,
         data["closes"]
     )
 
+    # entry stage
     entry = ENTRY_MAP.get(
         result.get("entry_stage"),
         ""
     )
 
+    # header
     header = (
 
         f"【{name}】 "
@@ -477,98 +544,83 @@ def render_stock(
 
     msg = header + "\n"
 
-    semantic_rows = [
-
-        ("狀態",
-         DOMINANT_MAP.get(
-             result.get(
-                 "dominant_state"
-             ),
-             "⏳ 正常"
-         )),
-
-        ("趨勢",
-         LIFECYCLE_MAP.get(
-             result.get(
-                 "lifecycle"
-             ),
-             "⏳ 整理"
-         )),
-
-        ("強度",
-         TREND_MAP.get(
-             result.get(
-                 "trend_bias"
-             ),
-             "🟡 中性"
-         )),
-
-        ("突破",
-         BREAKOUT_MAP.get(
-             result.get(
-                 "breakout_state"
-             ),
-             "⏳ 整理"
-         )),
-
-        ("交易",
-         TRADE_MAP.get(
-             result.get(
-                 "trade_state"
-             ),
-             "觀察"
-         )),
-
-        ("熱度",
-         HEAT_MAP.get(
-             result.get(
-                 "heat_state"
-             ),
-             "正常"
-         ))
-    ]
-
-    for k, v in semantic_rows:
-        msg += f"├─ {k}：{v}\n"
-
-    pressure = semantic_pressure(
-        result,
-        price,
-        data["closes"]
+    # ================================
+    # 🔥 型態
+    # ================================
+    msg += (
+        f"├─ 型態："
+        f"{semantic_state(result)}\n"
     )
 
-    if pressure:
-        msg += f"├─ 壓力：{pressure}\n"
-
+    # ================================
+    # 🔥 市場
+    # ================================
     msg += (
         f"├─ 市場："
-        f"{MARKET_MAP.get(result.get('market_grade'), '🟡 B')}\n"
+        f"{MARKET_MAP.get(result.get('market_grade'), '🟡 偏強')}\n"
     )
 
+    # ================================
+    # 🔥 結構
+    # ================================
     msg += (
         f"├─ 結構："
-        f"{structure_text(struct)}"
-        f" / "
-        f"{volume_text(vol)}"
-        f" / "
-        f"{VP_MAP.get(result.get('volume_price_state'), '正常')}\n"
+        f"{semantic_structure(result)}\n"
     )
 
+    # ================================
+    # 🔥 位置
+    # 只在未明確 breakout fail 顯示
+    # ================================
+    if result.get(
+        "breakout_state"
+    ) not in [
+        "FAIL"
+    ]:
+
+        pos = semantic_position(dist)
+
+        if pos:
+            msg += f"├─ 位置：{pos}\n"
+
+    # ================================
+    # 🔥 交易
+    # 不再分 heat/trade
+    # ================================
+    trade_text = semantic_trade(
+        result
+    )
+
+    if trade_text != "✅ 可交易":
+
+        msg += (
+            f"├─ 交易："
+            f"{trade_text}\n"
+        )
+
+    # ================================
+    # 🔥 數據
+    # 核心交易資訊
+    # ================================
     msg += (
         f"├─ 數據："
-        f"Dist {safe_round(dist)}%"
-        f" ｜RR {safe_round(result.get('rr'))}"
+        f"RR {safe_round(result.get('rr'))}"
         f" ｜S {struct}/5"
         f" ｜V {vol}x\n"
     )
 
+    # ================================
+    # 🔥 評級
+    # ================================
     msg += (
-        f"├─ 評分："
-        f"Setup {safe_round(result.get('setup_score'),1)}"
-        f" ｜Exec {safe_round(result.get('execution_score'),1)}"
-        f" ｜★ {safe_round(result.get('strength'))}\n"
+        f"├─ 評級："
+        f"★ {safe_round(result.get('strength'))}"
+        f" ｜{semantic_reason(result)}\n"
     )
 
+    # ================================
+    # 🔥 extreme level
+    # ================================
     if result.get(
         "extended_level",
         0
@@ -579,6 +631,9 @@ def render_stock(
             f"Lv.{result.get('extended_level')}\n"
         )
 
+    # ================================
+    # 🔥 price
+    # ================================
     msg += (
         f"└─ 💰 "
         f"{safe_round(price)}"
