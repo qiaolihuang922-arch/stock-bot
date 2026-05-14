@@ -1,9 +1,9 @@
 # ================================
-# 🔥 analysis.py（FINAL v17.7.6｜STATE HIERARCHY PATCH）
+# 🔥 analysis.py（FINAL v18.2｜CONFLICT GUARD）
 # ================================
 
 # 🔒 VERSION LOCK
-# - ✅ 保留 v17.7.5 semantic engine
+# - ✅ 保留既有 semantic engine
 # - ✅ breakout / trade / heat state 分離
 # - ✅ lifecycle hierarchy 正式建立
 # - ✅ strength ceiling system
@@ -15,6 +15,13 @@
 # - ✅ late trend phase
 # - ✅ pick_best_stock contextual ranking
 # - ✅ semantic collision 修正
+# - ✅ risk 欄位回補，對齊 condition_engine
+# - ✅ 短資料保護，避免 K 線不足時誤判
+# - ✅ rank_score 與 strength 分離
+# - ✅ v18.1 盤中即時價寫入策略 K 線
+# - ✅ v18.1 3 / 5 / 10 日多週期趨勢判斷
+# - ✅ v18.1 breakout 狀態改用持續天數，降低單日重複誤報
+# - ✅ v18.2 弱勢 / 過熱 / BASE 交易衝突防護
 # ================================
 
 
@@ -22,6 +29,7 @@
 # 🔥 常數
 # ================================
 BREAKOUT_THRESHOLD = 0.005
+MIN_DATA_POINTS = 20
 
 MIN_RR_BREAKOUT = 1.5
 MIN_RR_PREBREAK = 1.0
@@ -40,6 +48,119 @@ EXTENDED_LV3 = 1.22
 def avg(arr):
 
     return sum(arr) / len(arr) if arr else 0
+
+
+# ================================
+# 🔥 v18.1 資料保護 / 多週期工具
+# ================================
+def normalize_series(arr, n=MIN_DATA_POINTS):
+
+    if not arr:
+        return []
+
+    data = list(arr)
+
+    if len(data) < n:
+        # 中文註釋：K 線不足時用最早資料補前段，保留最新價格位置不變。
+        data = [data[0]] * (n - len(data)) + data
+
+    return data
+
+
+def merge_live_close(closes, price):
+
+    data = normalize_series(
+        closes
+    )
+
+    if not data:
+        return []
+
+    if price is None:
+        return data
+
+    # 中文註釋：v18.1 將盤中即時價覆蓋最後一根 K，讓策略判斷與報文價格一致。
+    return data[:-1] + [
+        float(price)
+    ]
+
+
+def pct_change(arr, days):
+
+    if not arr or len(arr) <= days:
+        return 0
+
+    base = arr[-1 - days]
+
+    if not base:
+        return 0
+
+    return (
+        arr[-1] - base
+    ) / base
+
+
+def multi_period_metrics(closes, volumes):
+
+    avg5_volume = avg(
+        volumes[-5:]
+    )
+
+    avg10_volume = avg(
+        volumes[-10:]
+    )
+
+    ratio5 = (
+        volumes[-1] / avg5_volume
+        if avg5_volume else 1
+    )
+
+    ratio10 = (
+        volumes[-1] / avg10_volume
+        if avg10_volume else 1
+    )
+
+    # 中文註釋：v18.1 統一輸出 1 / 3 / 5 / 10 日變化，避免單日訊號反覆誤判。
+    return {
+        "chg_1d": pct_change(closes, 1),
+        "chg_3d": pct_change(closes, 3),
+        "chg_5d": pct_change(closes, 5),
+        "chg_10d": pct_change(closes, 10),
+        "vol_ratio_5": ratio5,
+        "vol_ratio_10": ratio10,
+        "avg3": avg(closes[-3:]),
+        "avg5": avg(closes[-5:]),
+        "avg10": avg(closes[-10:])
+    }
+
+
+def momentum_signal(metrics):
+
+    chg3 = metrics.get(
+        "chg_3d",
+        0
+    )
+
+    chg5 = metrics.get(
+        "chg_5d",
+        0
+    )
+
+    chg10 = metrics.get(
+        "chg_10d",
+        0
+    )
+
+    if chg3 > 0 and chg5 > 0:
+        return "ACCELERATING"
+
+    if chg5 > 0 and chg10 >= 0:
+        return "STABLE_UP"
+
+    if chg3 < 0 and chg5 < 0:
+        return "REVERSING"
+
+    return "DECELERATING"
 
 
 # ================================
@@ -209,6 +330,14 @@ def build_result(**kwargs):
 
         "stop": kwargs.get("stop"),
 
+        "risk": kwargs.get(
+            "risk",
+            0 if decision in [
+                "NO_TRADE",
+                "FAIL"
+            ] else None
+        ),
+
         "position": round(position, 2),
 
         "action": action_data["action"],
@@ -252,6 +381,11 @@ def build_result(**kwargs):
 
         "volume_price_state": kwargs.get(
             "volume_price_state"
+        ),
+
+        "period_metrics": kwargs.get(
+            "period_metrics",
+            {}
         ),
 
         "rr": kwargs.get("rr", 0),
@@ -303,6 +437,16 @@ def build_result(**kwargs):
         "breakout_fail": kwargs.get(
             "breakout_fail",
             False
+        ),
+
+        "breakout_days": kwargs.get(
+            "breakout_days",
+            0
+        ),
+
+        "breakout_hold_days": kwargs.get(
+            "breakout_hold_days",
+            0
         )
     }
 
@@ -441,6 +585,12 @@ def market_score(
     if momentum == "ACCELERATING":
         score += 2
 
+    elif momentum == "STABLE_UP":
+        score += 1
+
+    elif momentum == "REVERSING":
+        score -= 2
+
     else:
         score -= 1
 
@@ -472,12 +622,23 @@ def market_grade(score):
 # ================================
 def market_signal(
     closes,
-    ma20
+    ma20,
+    metrics=None
 ):
 
-    momentum = (
-        closes[-1]
-        - closes[-3]
+    metrics = metrics or multi_period_metrics(
+        closes,
+        [1] * len(closes)
+    )
+
+    chg3 = metrics.get(
+        "chg_3d",
+        0
+    )
+
+    chg5 = metrics.get(
+        "chg_5d",
+        0
     )
 
     above_ma20_ratio = (
@@ -490,14 +651,16 @@ def market_signal(
 
     if (
         closes[-1] < ma20
-        and momentum < 0
+        and chg3 < 0
+        and chg5 < 0
         and above_ma20_ratio < 0.4
     ):
         return "WEAK"
 
     if (
         closes[-1] > ma20
-        and closes[-1] > closes[-3]
+        and chg3 > 0
+        and chg5 >= 0
         and above_ma20_ratio > 0.6
     ):
         return "STRONG"
@@ -554,32 +717,41 @@ def volume_signal(volumes):
 # ================================
 def volume_price_state(
     closes,
-    volumes
+    volumes,
+    metrics=None
 ):
 
-    avg10 = avg(
-        volumes[-10:]
+    metrics = metrics or multi_period_metrics(
+        closes,
+        volumes
     )
 
-    ratio = (
-        volumes[-1] / avg10
-        if avg10 else 1
+    ratio = metrics.get(
+        "vol_ratio_10",
+        1
     )
 
-    price_change = (
-        (closes[-1] - closes[-2])
-        / closes[-2]
+    chg3 = metrics.get(
+        "chg_3d",
+        0
+    )
+
+    chg5 = metrics.get(
+        "chg_5d",
+        0
     )
 
     if (
         ratio > 1.5
-        and price_change > 0.03
+        and chg3 > 0.03
+        and chg5 >= 0
     ):
         return "EXPANSION"
 
     if (
         ratio > 1.5
-        and price_change < -0.02
+        and chg3 < -0.02
+        and chg5 < 0
     ):
         return "DISTRIBUTION"
 
@@ -693,20 +865,53 @@ def is_fresh_breakout(
     resistance
 ):
 
-    today = is_breakout(
-        closes[-1],
-        resistance
-    )
-
-    yesterday = is_breakout(
-        closes[-2],
-        resistance
-    )
-
+    # 中文註釋：v18.1 Day1 改看最近 5 日是否首次站上，避免昨天/今天反覆切換。
     return (
-        today
-        and not yesterday
+        is_breakout(
+            closes[-1],
+            resistance
+        )
+        and breakout_days(
+            closes[:-1],
+            resistance,
+            5
+        ) == 0
     )
+
+
+def breakout_days(
+    closes,
+    resistance,
+    window=5
+):
+
+    return sum(
+        1 for c in closes[-window:]
+        if is_breakout(
+            c,
+            resistance
+        )
+    )
+
+
+def breakout_hold_days(
+    closes,
+    resistance
+):
+
+    count = 0
+
+    for close in reversed(closes):
+
+        if not is_breakout(
+            close,
+            resistance
+        ):
+            break
+
+        count += 1
+
+    return count
 
 
 # ================================
@@ -717,21 +922,23 @@ def breakout_fail(
     resistance
 ):
 
-    yesterday_breakout = is_breakout(
-        closes[-2],
+    breakout_lv = breakout_price(
         resistance
     )
 
-    today_fail = (
+    recent_breakout = breakout_days(
+        closes[:-1],
+        resistance,
+        3
+    ) > 0
 
-        closes[-1]
-        < breakout_price(
-            resistance
-        )
+    today_fail = (
+        closes[-1] < breakout_lv * 0.99
     )
 
+    # 中文註釋：v18.1 失敗需最近 3 日曾突破且今日跌回突破價下方，降低單日誤報。
     return (
-        yesterday_breakout
+        recent_breakout
         and today_fail
     )
 
@@ -750,7 +957,7 @@ def edge_fake_breakout(
 
     return (
 
-        closes[-2] > breakout_lv
+        max(closes[-4:-1]) > breakout_lv
         and closes[-1]
         < breakout_lv * 0.985
     )
@@ -764,8 +971,14 @@ def strong_follow(
     resistance,
     volume,
     structure,
-    trend
+    trend,
+    metrics=None
 ):
+
+    metrics = metrics or multi_period_metrics(
+        closes,
+        [1] * len(closes)
+    )
 
     return (
 
@@ -774,8 +987,10 @@ def strong_follow(
             resistance
         )
 
-        and closes[-1]
-        >= closes[-2] * 0.995
+        and metrics.get(
+            "chg_3d",
+            0
+        ) >= -0.015
 
         and volume in [
             "STRONG",
@@ -796,11 +1011,22 @@ def detect_entry_stage(
     ma5,
     ma20,
     resistance,
-    volume
+    volume,
+    metrics=None
 ):
 
     breakout_lv = breakout_price(
         resistance
+    )
+
+    hold_days = breakout_hold_days(
+        closes,
+        resistance
+    )
+
+    metrics = metrics or multi_period_metrics(
+        closes,
+        [1] * len(closes)
     )
 
     if is_fresh_breakout(
@@ -809,17 +1035,11 @@ def detect_entry_stage(
     ):
         return "BREAKOUT_DAY1"
 
-    yesterday_breakout = is_breakout(
-        closes[-2],
-        resistance
-    )
+    if hold_days >= 5:
+        return "BREAKOUT_CONFIRM_5D"
 
-    if (
-        yesterday_breakout
-        and closes[-1] > closes[-2]
-        and closes[-1] > breakout_lv
-    ):
-        return "CONFIRM_DAY2"
+    if hold_days >= 3:
+        return "BREAKOUT_HOLD_3D"
 
     if (
         closes[-2] < ma5
@@ -834,7 +1054,7 @@ def detect_entry_stage(
         return "PULLBACK"
 
     if (
-        closes[-1] > closes[-2]
+        metrics.get("chg_3d", 0) > 0
         and closes[-1] > ma5
         and closes[-1] > ma20
         and volume != "WEAK"
@@ -955,8 +1175,30 @@ def detect_lifecycle(
 
 
 # ================================
-# 🔥 calc rr
+# 🔥 calc risk / rr
 # ================================
+def calc_risk(
+    price,
+    stop
+):
+
+    if not price or not stop:
+        return 0
+
+    risk = (
+        price - stop
+    ) / price
+
+    if risk <= 0:
+        return 0
+
+    # 中文註釋：risk 用比例輸出，condition_engine 以 8% 作為硬上限。
+    return round(
+        risk,
+        4
+    )
+
+
 def calc_rr(
     price,
     stop,
@@ -1055,6 +1297,60 @@ def get_wait_reason(
     )
 
 
+def wait_decision_type(
+    breakout_state,
+    rr,
+    volume
+):
+
+    if breakout_state == "BREAKOUT":
+
+        if rr < MIN_RR_BREAKOUT:
+            return "wait_breakout_low_rr"
+
+        return "wait_breakout_confirm"
+
+    if breakout_state == "READY":
+
+        if rr < MIN_RR_PREBREAK:
+            return "wait_pre_breakout_low_rr"
+
+        return "wait_pre_breakout"
+
+    if volume == "WEAK":
+        return "wait_volume"
+
+    # 中文註釋：v18.2 WAIT 也保留語義類型，避免顯示層誤判事件與 Edge 全缺。
+    return "none"
+
+
+def can_buy(
+    lifecycle,
+    heat_state,
+    trade_state,
+    breakout_state,
+    distance
+):
+
+    if heat_state == "EXTREME":
+        return False
+
+    if trade_state == "AVOID":
+        return False
+
+    if lifecycle == "BASE" and breakout_state not in [
+        "BREAKOUT",
+        "READY"
+    ]:
+        return False
+
+    if distance is not None and distance > 4:
+        return False
+
+    # 中文註釋：v18.2 集中交易閘門，避免整理 / 過熱 / 遠離突破仍被 BUY。
+    return True
+
+
 # ================================
 # 🔥 setup score
 # ================================
@@ -1115,6 +1411,12 @@ def execution_score(
     elif entry_stage == "CONFIRM_DAY2":
         score += 2.5
 
+    elif entry_stage == "BREAKOUT_HOLD_3D":
+        score += 2.2
+
+    elif entry_stage == "BREAKOUT_CONFIRM_5D":
+        score += 1.8
+
     elif entry_stage == "TURN":
         score += 2
 
@@ -1153,13 +1455,39 @@ def strategy(
     volumes
 ):
 
+    # 中文註釋：v18.1 在策略入口統一補齊資料，避免後面 [-20:] / [-10:-5] 空窗。
+    closes = normalize_series(
+        closes
+    )
+
+    volumes = normalize_series(
+        volumes
+    )
+
+    if not closes or not volumes:
+        return build_result(
+            decision="NO_TRADE",
+            wait_reason="WAIT_DATA"
+        )
+
+    closes = merge_live_close(
+        closes,
+        price
+    )
+
+    metrics = multi_period_metrics(
+        closes,
+        volumes
+    )
+
     support, resistance = (
         support_resistance(closes)
     )
 
     market = market_signal(
         closes,
-        ma20
+        ma20,
+        metrics
     )
 
     trend = trend_signal(
@@ -1174,7 +1502,8 @@ def strategy(
 
     vp_state = volume_price_state(
         closes,
-        volumes
+        volumes,
+        metrics
     )
 
     structure = structure_state(
@@ -1183,14 +1512,8 @@ def strategy(
         ma20
     )
 
-    momentum = (
-
-        "ACCELERATING"
-
-        if avg(closes[-3:])
-        > avg(closes[-6:-3])
-
-        else "DECELERATING"
+    momentum = momentum_signal(
+        metrics
     )
 
     m_score = market_score(
@@ -1215,6 +1538,17 @@ def strategy(
         resistance
     )
 
+    b_days = breakout_days(
+        closes,
+        resistance,
+        5
+    )
+
+    b_hold_days = breakout_hold_days(
+        closes,
+        resistance
+    )
+
     stop_candidate = min(
         ma5,
         avg(closes[-3:])
@@ -1225,7 +1559,8 @@ def strategy(
         ma5,
         ma20,
         resistance,
-        volume
+        volume,
+        metrics
     )
 
     ext_level = extended_level(
@@ -1241,11 +1576,24 @@ def strategy(
         price > resistance * 0.985
     )
 
+    breakout_dist = round(
+        (
+            breakout_price(resistance)
+            - price
+        ) / price * 100,
+        2
+    )
+
     rr = calc_rr(
         price,
         stop_candidate,
         resistance,
         "breakout"
+    )
+
+    risk = calc_risk(
+        price,
+        stop_candidate
     )
 
     setup = setup_score(
@@ -1308,54 +1656,6 @@ def strategy(
         trend_bias = "NORMAL"
 
     # ================================
-    # 🔥 breakout fail
-    # ================================
-    if failed_breakout:
-
-        return build_result(
-
-            decision="FAIL",
-
-            market_score=m_score,
-
-            market_grade=m_grade,
-
-            setup_score=setup,
-
-            execution_score=execute,
-
-            trend=trend,
-
-            trend_bias=trend_bias,
-
-            volume_state=volume,
-
-            volume_price_state=vp_state,
-
-            structure_state=structure,
-
-            rr=0,
-
-            entry_stage="BREAKOUT_FAIL",
-
-            lifecycle=lifecycle,
-
-            breakout_state="FAIL",
-
-            trade_state=trade_state,
-
-            heat_state=heat_state,
-
-            dominant_state=dominant,
-
-            extended=extended,
-
-            extended_level=ext_level,
-
-            breakout_fail=True
-        )
-
-    # ================================
     # 🔥 weak market
     # ================================
     if (
@@ -1387,6 +1687,8 @@ def strategy(
 
             rr=rr,
 
+            risk=risk,
+
             entry_stage=entry_stage,
 
             lifecycle=lifecycle,
@@ -1403,9 +1705,71 @@ def strategy(
 
             extended_level=ext_level,
 
+            period_metrics=metrics,
+
+            breakout_days=b_days,
+
+            breakout_hold_days=b_hold_days,
+
             wait_reason=get_wait_reason(
                 trade_state
             )
+        )
+
+    # ================================
+    # 🔥 breakout fail
+    # ================================
+    if failed_breakout:
+
+        return build_result(
+
+            decision="FAIL",
+
+            market_score=m_score,
+
+            market_grade=m_grade,
+
+            setup_score=setup,
+
+            execution_score=execute,
+
+            trend=trend,
+
+            trend_bias=trend_bias,
+
+            volume_state=volume,
+
+            volume_price_state=vp_state,
+
+            structure_state=structure,
+
+            rr=0,
+
+            risk=0,
+
+            entry_stage="BREAKOUT_FAIL",
+
+            lifecycle=lifecycle,
+
+            breakout_state="FAIL",
+
+            trade_state=trade_state,
+
+            heat_state=heat_state,
+
+            dominant_state=dominant,
+
+            extended=extended,
+
+            extended_level=ext_level,
+
+            period_metrics=metrics,
+
+            breakout_days=b_days,
+
+            breakout_hold_days=b_hold_days,
+
+            breakout_fail=True
         )
 
     # ================================
@@ -1416,6 +1780,8 @@ def strategy(
         return build_result(
 
             decision="WAIT",
+
+            decision_type="fake_breakout",
 
             market_score=m_score,
 
@@ -1436,6 +1802,8 @@ def strategy(
             structure_state=structure,
 
             rr=rr,
+
+            risk=risk,
 
             entry_stage=entry_stage,
 
@@ -1453,6 +1821,12 @@ def strategy(
 
             extended_level=ext_level,
 
+            period_metrics=metrics,
+
+            breakout_days=b_days,
+
+            breakout_hold_days=b_hold_days,
+
             wait_reason="WAIT_FAKE_BREAK"
         )
 
@@ -1464,6 +1838,8 @@ def strategy(
         return build_result(
 
             decision="WAIT",
+
+            decision_type="extended",
 
             market_score=m_score,
 
@@ -1485,6 +1861,8 @@ def strategy(
 
             rr=rr,
 
+            risk=risk,
+
             entry_stage=entry_stage,
 
             lifecycle=lifecycle,
@@ -1501,6 +1879,12 @@ def strategy(
 
             extended_level=ext_level,
 
+            period_metrics=metrics,
+
+            breakout_days=b_days,
+
+            breakout_hold_days=b_hold_days,
+
             wait_reason="WAIT_EXTREME"
         )
 
@@ -1513,9 +1897,17 @@ def strategy(
             resistance,
             volume,
             structure,
-            trend
+            trend,
+            metrics
         )
         and rr >= MIN_RR_STRONG
+        and can_buy(
+            lifecycle,
+            heat_state,
+            trade_state,
+            breakout_state,
+            breakout_dist
+        )
     ):
 
         pos = min(
@@ -1566,6 +1958,8 @@ def strategy(
 
             rr=rr,
 
+            risk=risk,
+
             entry_stage=entry_stage,
 
             lifecycle=lifecycle,
@@ -1580,7 +1974,13 @@ def strategy(
 
             extended=extended,
 
-            extended_level=ext_level
+            extended_level=ext_level,
+
+        period_metrics=metrics,
+
+        breakout_days=b_days,
+
+        breakout_hold_days=b_hold_days
         )
 
     # ================================
@@ -1589,6 +1989,13 @@ def strategy(
     if (
         breakout_state == "BREAKOUT"
         and rr >= MIN_RR_BREAKOUT
+        and can_buy(
+            lifecycle,
+            heat_state,
+            trade_state,
+            breakout_state,
+            breakout_dist
+        )
     ):
 
         pos = max(
@@ -1639,6 +2046,8 @@ def strategy(
 
             rr=rr,
 
+            risk=risk,
+
             entry_stage=entry_stage,
 
             lifecycle=lifecycle,
@@ -1655,6 +2064,12 @@ def strategy(
 
             extended_level=ext_level,
 
+            period_metrics=metrics,
+
+            breakout_days=b_days,
+
+            breakout_hold_days=b_hold_days,
+
             fresh_breakout=is_fresh_breakout(
                 closes,
                 resistance
@@ -1669,7 +2084,15 @@ def strategy(
         and volume != "WEAK"
         and structure != "WEAK"
         and breakout_ready
+        and breakout_dist <= 3
         and rr >= MIN_RR_PREBREAK
+        and can_buy(
+            lifecycle,
+            heat_state,
+            trade_state,
+            breakout_state,
+            breakout_dist
+        )
     ):
 
         pos = max(
@@ -1717,6 +2140,8 @@ def strategy(
 
             rr=rr,
 
+            risk=risk,
+
             entry_stage=entry_stage,
 
             lifecycle=lifecycle,
@@ -1731,7 +2156,13 @@ def strategy(
 
             extended=extended,
 
-            extended_level=ext_level
+            extended_level=ext_level,
+
+        period_metrics=metrics,
+
+        breakout_days=b_days,
+
+        breakout_hold_days=b_hold_days
         )
 
     # ================================
@@ -1740,6 +2171,12 @@ def strategy(
     return build_result(
 
         decision="WAIT",
+
+        decision_type=wait_decision_type(
+            breakout_state,
+            rr,
+            volume
+        ),
 
         market_score=m_score,
 
@@ -1761,6 +2198,8 @@ def strategy(
 
         rr=rr,
 
+        risk=risk,
+
         entry_stage=entry_stage,
 
         lifecycle=lifecycle,
@@ -1776,6 +2215,12 @@ def strategy(
         extended=extended,
 
         extended_level=ext_level,
+
+            period_metrics=metrics,
+
+            breakout_days=b_days,
+
+            breakout_hold_days=b_hold_days,
 
         wait_reason=get_wait_reason(
             trade_state
@@ -1793,6 +2238,24 @@ def pick_best_stock(results_dict):
     best_score = -999
 
     for name, result in results_dict.items():
+
+        if result.get("decision") != "BUY":
+            continue
+
+        if result.get("heat_state") == "EXTREME":
+            continue
+
+        if result.get("trade_state") == "AVOID":
+            continue
+
+        if result.get("volume_state") == "WEAK":
+            continue
+
+        if result.get("lifecycle") == "BASE":
+            continue
+
+        if result.get("rr", 0) < 1:
+            continue
 
         score = result.get(
             "strength",
@@ -1829,6 +2292,12 @@ def pick_best_stock(results_dict):
 
         elif lifecycle == "EXTREME":
             score -= 4
+
+        # 中文註釋：v18.2 最強股只從有效 BUY 候選中挑選，不讓禁追 / 弱量 / BASE 混入。
+        result["rank_score"] = round(
+            score,
+            2
+        )
 
         if score > best_score:
 
