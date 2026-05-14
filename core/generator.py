@@ -1,5 +1,5 @@
 # ================================
-# 🔥 FINAL UI（v17.7.7｜Semantic Scanner）
+# 🔥 FINAL UI（v18.2｜Semantic Scanner）
 # ================================
 
 from datetime import datetime
@@ -17,9 +17,14 @@ from services.analysis import (
     BREAKOUT_THRESHOLD
 )
 
+from core.condition_engine import (
+    condition_engine,
+    summarize_conditions
+)
+
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v17.7.7"
+VERSION = "v18.2"
 
 
 # ================================
@@ -54,7 +59,8 @@ def safe_list(data, n=20):
         return None
 
     if len(data) < n:
-        return data + [data[-1]] * (n - len(data))
+        # 中文註釋：短資料補在前段，避免最新價格被重複放大。
+        return [data[0]] * (n - len(data)) + data
 
     return data
 
@@ -97,7 +103,24 @@ WAIT_MAP = {
     "WAIT_CONFIRM": "等確認",
     "WAIT_EXECUTION": "觀察",
     "WAIT_TREND": "弱勢",
-    "WAIT_FAKE_BREAK": "假突破"
+    "WAIT_FAKE_BREAK": "假突破",
+    "WAIT_DATA": "資料不足"
+}
+
+
+# ================================
+# 🔥 condition label
+# ================================
+CONDITION_LABELS = {
+
+    "market": "市場",
+    "structure": "結構",
+    "trend": "趨勢",
+    "volume": "量能",
+    "event": "事件",
+    "edge": "Edge",
+    "risk": "風控",
+    "rr": "RR"
 }
 
 
@@ -108,6 +131,8 @@ ENTRY_MAP = {
 
     "BREAKOUT_DAY1": "🔥 Day1",
     "CONFIRM_DAY2": "🚀 Day2",
+    "BREAKOUT_HOLD_3D": "🚀 站穩3日",
+    "BREAKOUT_CONFIRM_5D": "🚀 確認5日",
     "TURN": "↗ 轉強",
     "PULLBACK": "↘ 拉回",
     "RECLAIM": "↗ 收復",
@@ -149,13 +174,23 @@ def get_live_price_data(
     twse_change
 ):
 
+    if realtime and yahoo:
+
+        y_price = yahoo[0]
+
+        if y_price and abs(realtime[0] - y_price) / y_price <= 0.02:
+            # 中文註釋：v18.2 即時價與 Yahoo 差距 2% 內才採用，降低異常報價誤判。
+            return realtime[0], realtime[1], "realtime"
+
+        return yahoo[0], yahoo[1], "yahoo"
+
     if realtime:
-        return realtime[0], realtime[1]
+        return realtime[0], realtime[1], "realtime"
 
     if yahoo:
-        return yahoo[0], yahoo[1]
+        return yahoo[0], yahoo[1], "yahoo"
 
-    return twse_price, twse_change
+    return twse_price, twse_change, "twse"
 
 
 # ================================
@@ -416,6 +451,10 @@ def semantic_reason(result):
 
     rr = result.get("rr", 0)
 
+    decision = result.get(
+        "decision"
+    )
+
     trade = result.get(
         "trade_state"
     )
@@ -428,8 +467,26 @@ def semantic_reason(result):
         "heat_state"
     )
 
+    dist = result.get(
+        "breakout_distance"
+    )
+
     if heat == "EXTREME":
         return "過熱風險"
+
+    if decision == "NO_TRADE":
+
+        if trade == "NO_VOLUME":
+            return "量能不足"
+
+        if result.get("trend") == "DOWN":
+            return "趨勢轉弱"
+
+        # 中文註釋：v18.2 NO_TRADE 不再用高 RR 當評級原因，避免弱勢股被誤解成機會。
+        return "不交易"
+
+    if dist is not None and dist > 4:
+        return "遠離觸發"
 
     if rr >= 3:
         return "高RR"
@@ -480,6 +537,9 @@ def final_label(result):
     )
 
     if decision == "BUY":
+        if result.get("extended_level", 0) == 2:
+            return "小倉觀察"
+
         return "進場"
 
     if decision == "FAIL":
@@ -506,6 +566,20 @@ def render_stock(
 
     price = data["price"]
     change = data["change"]
+    price_source = data.get(
+        "price_source",
+        "twse"
+    )
+
+    # 中文註釋：v18.2 顯示層只讀 condition_engine 映射結果，不自行判斷交易條件。
+    conditions = condition_engine(
+        result
+    )
+
+    condition_items = summarize_conditions(
+        conditions,
+        result.get("decision")
+    )
 
     # S 分數
     struct = structure_progress(
@@ -524,6 +598,8 @@ def render_stock(
         price,
         data["closes"]
     )
+
+    result["breakout_distance"] = dist
 
     # entry stage
     entry = ENTRY_MAP.get(
@@ -598,15 +674,55 @@ def render_stock(
             f"{trade_text}\n"
         )
 
+    if result.get("heat_state") == "EXTREME":
+
+        # 中文註釋：v18.2 禁追用過熱原因呈現，不再列風控 / RR 缺口造成誤解。
+        msg += (
+            f"├─ 原因："
+            f"過熱 Lv.{result.get('extended_level')}\n"
+        )
+
+    # ================================
+    # 🔥 條件
+    # WAIT / NO_TRADE 顯示缺口，BUY 顯示已成立條件
+    # ================================
+    if condition_items and result.get("heat_state") != "EXTREME":
+
+        if result.get("decision") == "BUY":
+            label_title = "成立"
+            labels = [
+                CONDITION_LABELS.get(k, k)
+                for k in condition_items
+            ]
+        else:
+            label_title = "缺口"
+            labels = [
+                CONDITION_LABELS.get(k, k)
+                for k in condition_items[:3]
+            ]
+
+        msg += (
+            f"├─ {label_title}："
+            f"{'、'.join(labels)}\n"
+        )
+
     # ================================
     # 🔥 數據
     # 核心交易資訊
     # ================================
+    rr_text = (
+        "-"
+        if result.get("decision") in ["NO_TRADE"]
+        or result.get("heat_state") == "EXTREME"
+        else safe_round(result.get("rr"))
+    )
+
+    # 中文註釋：v18.2 NO_TRADE / EXTREME 隱藏 RR 數字，避免禁止或禁追標的被 RR 誤導。
     msg += (
         f"├─ 數據："
-        f"RR {safe_round(result.get('rr'))}"
+        f"RR {rr_text}"
         f" ｜S {struct}/5"
-        f" ｜V {vol}x\n"
+        f" ｜V {vol}x（日線）\n"
     )
 
     # ================================
@@ -624,7 +740,7 @@ def render_stock(
     if result.get(
         "extended_level",
         0
-    ) >= 2:
+    ) >= 2 and result.get("heat_state") != "EXTREME":
 
         msg += (
             f"├─ 過熱："
@@ -634,8 +750,17 @@ def render_stock(
     # ================================
     # 🔥 price
     # ================================
+    phase = get_market_phase()
+
+    # 中文註釋：v18.2 盤中價格標示資料來源，避免即時 / Yahoo / 日線混用造成誤解。
+    price_label = (
+        f"盤中即時({price_source})"
+        if phase == "盤中"
+        else f"價格({price_source})"
+    )
+
     msg += (
-        f"└─ 💰 "
+        f"└─ 💰 {price_label}："
         f"{safe_round(price)}"
         f"（{safe_round(change)}%）\n\n"
     )
@@ -685,7 +810,7 @@ def generate():
             realtime = get_realtime_price(code)
             yahoo = get_yahoo(code)
 
-            price, change = (
+            price, change, price_source = (
 
                 get_live_price_data(
                     realtime,
@@ -706,6 +831,12 @@ def generate():
                 volumes
             )
 
+            # 中文註釋：v18.1 顯示層也用盤中即時價覆蓋最後一根 K，與 analysis.py 判斷保持一致。
+            display_closes = (
+                closes[:-1] + [price]
+                if closes else closes
+            )
+
             decisions.append(
                 result.get("decision")
             )
@@ -716,11 +847,12 @@ def generate():
 
                 "price": price,
                 "change": change,
+                "price_source": price_source,
 
                 "ma5": ma5,
                 "ma20": ma20,
 
-                "closes": closes,
+                "closes": display_closes,
                 "volumes": volumes
             }
 
@@ -767,15 +899,27 @@ def generate():
 
     if best:
 
+        best_result = results_map[best]["result"]
+
+        rank_score = safe_round(
+            score
+        )
+
+        strength_score = safe_round(
+            best_result.get("strength")
+        )
+
+        # 中文註釋：v18.2 最強股只從有效 BUY 候選挑選，並同時顯示排序分與評級分。
         msg += (
             f"🔥 最強："
             f"{best}"
-            f"（★{safe_round(score)}）\n"
+            f"（排序★{rank_score}"
+            f"｜評級★{strength_score}）\n"
         )
 
     else:
 
-        msg += "⚠ 無最強股\n"
+        msg += "🔥 最強：無有效進場標的\n"
 
     # ================================
     # 🔥 market summary
@@ -790,17 +934,35 @@ def generate():
         if d == "FAIL"
     )
 
-    if buy_count >= 3:
+    extreme_count = sum(
+        1 for data in results_map.values()
+        if data["result"].get("heat_state") == "EXTREME"
+    )
+
+    no_trade_count = sum(
+        1 for d in decisions
+        if d == "NO_TRADE"
+    )
+
+    if extreme_count >= 3:
+
+        msg += "🚨 過熱分歧"
+
+    elif no_trade_count >= 6:
+
+        msg += "⏳ 觀望"
+
+    elif fail_count >= 2:
+
+        msg += "🔴 突破失敗增多"
+
+    elif buy_count >= 3:
 
         msg += "🟢 市場偏強"
 
     elif buy_count > 0:
 
         msg += "🟡 局部機會"
-
-    elif fail_count > 0:
-
-        msg += "🔴 突破失敗增多"
 
     else:
 
