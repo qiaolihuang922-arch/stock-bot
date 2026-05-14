@@ -2,10 +2,15 @@ import requests
 import time
 from config import TOKEN, CHAT_ID
 
+# ================================
+# 🔥 notifier.py（v18.1｜Telegram 發送層）
+# ================================
+
 def send(msg):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
 
     if len(msg) > 3500:
+        # 中文註釋：Telegram 長訊息保守截斷，避免整次通知因超長失敗。
         msg = msg[:3500] + "\n\n⚠ 訊息過長已截斷"
 
     for i in range(3):
