@@ -3,14 +3,25 @@ from datetime import datetime, timedelta
 import pytz
 import time
 
+# ================================
+# 🔥 stock_api.py（v18.1｜行情資料層）
+# ================================
+
 tz = pytz.timezone("Asia/Taipei")
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
 def get_realtime_price(code):
     try:
-        url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_{code}.tw"
-        r = requests.get(url, timeout=10).json()
+        r = None
+
+        # 中文註釋：v18.1 先查上市 tse，再查上櫃 otc，保留未來股票池擴充彈性。
+        for market in ["tse", "otc"]:
+            url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch={market}_{code}.tw"
+            r = requests.get(url, timeout=10).json()
+
+            if r.get("msgArray"):
+                break
 
         data = r.get("msgArray")
         if not data:
