@@ -1,5 +1,5 @@
 # ================================
-# 🔥 condition_engine.py（FINAL v18.2｜條件映射層）
+# 🔥 condition_engine.py（FINAL v18.3｜條件映射層）
 # ================================
 
 def condition_engine(result):
@@ -17,7 +17,7 @@ def condition_engine(result):
 
     decision = result.get("decision")
 
-    # 🔥 v18.2：只映射 analysis.py 的結果，不反推 decision
+    # 🔥 v18.3：只映射 analysis.py 的結果，不反推 decision
     market_grade = result.get("market_grade")
     structure = result.get("structure_state")
     trend = result.get("trend")
@@ -29,7 +29,7 @@ def condition_engine(result):
     heat_state = result.get("heat_state")
 
     if heat_state == "EXTREME":
-        # 中文註釋：v18.2 禁追由過熱主導，不再把風控 / RR 顯示成主要缺口。
+        # 中文註釋：v18.3 禁追由過熱主導，不再把風控 / RR 顯示成主要缺口。
         return {
             **conditions,
             "market": bool(market_grade and market_grade != "D"),
@@ -59,7 +59,7 @@ def condition_engine(result):
         return conditions
 
     # ================================
-    # 🔥 基礎映射（v18.2）
+    # 🔥 基礎映射（v18.3）
     # ================================
     if market_grade and market_grade in ["A+", "A", "B"]:
         conditions["market"] = True
