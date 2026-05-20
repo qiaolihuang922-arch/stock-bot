@@ -1,5 +1,5 @@
 # ================================
-# 🔥 FINAL UI（v18.2｜Semantic Scanner）
+# 🔥 FINAL UI（v18.4｜Semantic Scanner）
 # ================================
 
 from datetime import datetime
@@ -24,7 +24,7 @@ from core.condition_engine import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v18.2"
+VERSION = "v18.4"
 
 
 # ================================
@@ -47,6 +47,33 @@ stocks = {
 
     "光寶科": "2301",
     "旺宏": "2337"
+}
+
+
+# ================================
+# 🔒 持倉
+# ================================
+holdings = {
+
+    "旺宏": {
+        "shares": 70,
+        "avg_price": 141.5
+    },
+
+    "英業達": {
+        "shares": 1100,
+        "avg_price": 50.22
+    },
+
+    "建準": {
+        "shares": 190,
+        "avg_price": 146.24
+    },
+
+    "緯創": {
+        "shares": 440,
+        "avg_price": 140.92
+    }
 }
 
 
@@ -76,6 +103,27 @@ def safe_round(val, n=2):
 
     except:
         return "-"
+
+
+def signed_pct(val):
+
+    try:
+        return f"{float(val):+.2f}%"
+
+    except:
+        return "-"
+
+
+def calc_shares(shares, ratio):
+
+    try:
+        return max(
+            int(round(shares * ratio)),
+            1
+        )
+
+    except:
+        return 0
 
 
 # ================================
@@ -179,7 +227,7 @@ def get_live_price_data(
         y_price = yahoo[0]
 
         if y_price and abs(realtime[0] - y_price) / y_price <= 0.02:
-            # 中文註釋：v18.2 即時價與 Yahoo 差距 2% 內才採用，降低異常報價誤判。
+            # 中文註釋：v18.4 即時價與 Yahoo 差距 2% 內才採用，降低異常報價誤判。
             return realtime[0], realtime[1], "realtime"
 
         return yahoo[0], yahoo[1], "yahoo"
@@ -191,6 +239,27 @@ def get_live_price_data(
         return yahoo[0], yahoo[1], "yahoo"
 
     return twse_price, twse_change, "twse"
+
+
+def price_label_for_source(source):
+
+    phase = get_market_phase()
+
+    if phase == "盤中":
+
+        if source == "twse":
+            return "盤中參考(twse)"
+
+        if source == "yahoo":
+            return "盤中參考(yahoo)"
+
+        return f"盤中即時({source})"
+
+    # 中文註釋：v18.4 twse 不是盤中即時價，避免報文誤導。
+    if source == "twse":
+        return "日線(twse)"
+
+    return f"價格({source})"
 
 
 # ================================
@@ -482,7 +551,7 @@ def semantic_reason(result):
         if result.get("trend") == "DOWN":
             return "趨勢轉弱"
 
-        # 中文註釋：v18.2 NO_TRADE 不再用高 RR 當評級原因，避免弱勢股被誤解成機會。
+        # 中文註釋：v18.4 NO_TRADE 不再用高 RR 當評級原因，避免弱勢股被誤解成機會。
         return "不交易"
 
     if dist is not None and dist > 4:
@@ -519,6 +588,12 @@ def get_action(result):
         "action_type"
     ) == "BUY":
 
+        if result.get("extended_level", 0) == 2:
+            return (
+                f"🟡 "
+                f"{round(result.get('action', 0) * 100)}%"
+            )
+
         return (
             f"🟢 "
             f"{round(result.get('action', 0) * 100)}%"
@@ -554,6 +629,200 @@ def final_label(result):
     )
 
 
+def holding_status(
+    result,
+    price,
+    avg_price,
+    shares,
+    price_source="realtime"
+):
+
+    pnl = (
+        (price - avg_price)
+        / avg_price
+        * 100
+        if avg_price else 0
+    )
+
+    warning_price = avg_price * 0.95
+    hard_stop_price = avg_price * 0.92
+
+    if (
+        pnl <= -8
+        or price <= hard_stop_price
+    ):
+        return {
+            "action": "停損 100%",
+            "shares": shares,
+            "note": "硬停損觸發",
+            "level": "STOP_100",
+            "warning_price": warning_price,
+            "hard_stop_price": hard_stop_price
+        }
+
+    if result.get("volume_price_state") == "DISTRIBUTION":
+        ratio = 0.5 if pnl <= 0 else 0.25
+        return {
+            "action": f"減碼 {int(ratio * 100)}%",
+            "shares": calc_shares(shares, ratio),
+            "note": "出貨風險",
+            "level": "REDUCE",
+            "warning_price": warning_price,
+            "hard_stop_price": hard_stop_price
+        }
+
+    if result.get("heat_state") == "EXTREME":
+        return {
+            "action": "減碼 25%",
+            "shares": calc_shares(shares, 0.25),
+            "note": "過熱鎖利",
+            "level": "REDUCE_25",
+            "warning_price": warning_price,
+            "hard_stop_price": hard_stop_price
+        }
+
+    if (
+        result.get("decision") == "FAIL"
+        and pnl <= 0
+    ):
+        return {
+            "action": "減碼 50%",
+            "shares": calc_shares(shares, 0.5),
+            "note": "突破失敗且未獲利",
+            "level": "REDUCE_50",
+            "warning_price": warning_price,
+            "hard_stop_price": hard_stop_price
+        }
+
+    weak_combo = (
+        result.get("market_grade") == "D"
+        or result.get("trend") == "DOWN"
+        or result.get("volume_state") == "WEAK"
+    )
+
+    if pnl <= -5 and weak_combo:
+        return {
+            "action": "減碼 50%",
+            "shares": calc_shares(shares, 0.5),
+            "note": "弱勢中虧",
+            "level": "REDUCE_50",
+            "warning_price": warning_price,
+            "hard_stop_price": hard_stop_price
+        }
+
+    if pnl <= -3 and weak_combo:
+        return {
+            "action": "減碼 25%",
+            "shares": calc_shares(shares, 0.25),
+            "note": "弱勢轉弱",
+            "level": "REDUCE_25",
+            "warning_price": warning_price,
+            "hard_stop_price": hard_stop_price
+        }
+
+    if pnl < 0 and weak_combo:
+        return {
+            "action": "警戒",
+            "shares": 0,
+            "note": "輕虧不加碼",
+            "level": "WATCH",
+            "warning_price": warning_price,
+            "hard_stop_price": hard_stop_price
+        }
+
+    if (
+        result.get("decision") == "BUY"
+        and result.get("extended_level", 0) < 2
+        and pnl >= 2
+        and result.get("market_grade") in ["A+", "A"]
+        and result.get("trend") == "UP"
+        and result.get("structure_state") == "STRONG"
+        and result.get("volume_state") in ["STRONG", "EXPLOSIVE"]
+        and result.get("rr", 0) >= 1.5
+        and result.get("breakout_distance", 99) <= 2
+        and price_source != "twse"
+    ):
+        return {
+            "action": "加碼 30%",
+            "shares": calc_shares(shares, 0.3),
+            "note": "強勢突破確認",
+            "level": "ADD_30",
+            "warning_price": warning_price,
+            "hard_stop_price": hard_stop_price
+        }
+
+    if (
+        result.get("decision") == "BUY"
+        and result.get("extended_level", 0) < 2
+        and pnl >= 1
+        and result.get("market_grade") in ["A+", "A", "B"]
+        and result.get("trend") == "UP"
+        and result.get("volume_state") != "WEAK"
+        and result.get("rr", 0) >= 1.3
+        and result.get("breakout_distance", 99) <= 3
+        and price_source != "twse"
+    ):
+        return {
+            "action": "加碼 20%",
+            "shares": calc_shares(shares, 0.2),
+            "note": "趨勢延續",
+            "level": "ADD_20",
+            "warning_price": warning_price,
+            "hard_stop_price": hard_stop_price
+        }
+
+    if (
+        result.get("decision") == "BUY"
+        and pnl >= 0
+        and result.get("market_grade") != "D"
+        and result.get("volume_state") != "WEAK"
+        and price_source != "twse"
+    ):
+        return {
+            "action": "加碼 10%",
+            "shares": calc_shares(shares, 0.1),
+            "note": "小幅轉強",
+            "level": "ADD_10",
+            "warning_price": warning_price,
+            "hard_stop_price": hard_stop_price
+        }
+
+    if pnl >= 0 and weak_combo:
+        return {
+            "action": "續抱",
+            "shares": 0,
+            "note": "保成本，不加碼",
+            "level": "HOLD",
+            "warning_price": warning_price,
+            "hard_stop_price": hard_stop_price
+        }
+
+    # 中文註釋：v18.4 持倉依市場 / 趨勢 / 量能 / 盈虧決定加減碼股數，不再只看虧損%。
+    return {
+        "action": "續抱",
+        "shares": 0,
+        "note": "不加碼",
+        "level": "HOLD",
+        "warning_price": warning_price,
+        "hard_stop_price": hard_stop_price
+    }
+
+
+def holding_risk_text(
+    decision
+):
+
+    warning = safe_round(
+        decision.get("warning_price")
+    )
+
+    hard_stop = safe_round(
+        decision.get("hard_stop_price")
+    )
+
+    return f"警戒 {warning} ｜停損 {hard_stop}"
+
+
 # ================================
 # 🔥 render stock
 # ================================
@@ -570,8 +839,9 @@ def render_stock(
         "price_source",
         "twse"
     )
+    holding = data.get("holding")
 
-    # 中文註釋：v18.2 顯示層只讀 condition_engine 映射結果，不自行判斷交易條件。
+    # 中文註釋：v18.4 顯示層只讀 condition_engine 映射結果，不自行判斷交易條件。
     conditions = condition_engine(
         result
     )
@@ -607,18 +877,73 @@ def render_stock(
         ""
     )
 
-    # header
-    header = (
+    holding_decision = None
+    pnl = None
 
-        f"【{name}】 "
-        f"{get_action(result)} "
-        f"{final_label(result)}"
-    )
+    if holding:
+
+        pnl = (
+            (price - holding["avg_price"])
+            / holding["avg_price"]
+            * 100
+        )
+
+        holding_decision = holding_status(
+            result,
+            price,
+            holding["avg_price"],
+            holding["shares"],
+            price_source
+        )
+
+    # header
+    if holding:
+
+        header = (
+            f"【{name}】 "
+            f"📌 持倉 ｜{holding_decision['action']}"
+        )
+
+    else:
+
+        header = (
+
+            f"【{name}】 "
+            f"{get_action(result)} "
+            f"{final_label(result)}"
+        )
 
     if entry:
         header += f" ｜{entry}"
 
     msg = header + "\n"
+
+    if holding:
+
+        # 中文註釋：v18.4 只對已持有股票增加持倉管理資訊，其餘原始技術資料全部保留。
+        msg += (
+            f"├─ 持倉："
+            f"{holding['shares']}股"
+            f" ｜均價 {safe_round(holding['avg_price'])}"
+            f" ｜損益 {signed_pct(pnl)}\n"
+        )
+
+        msg += (
+            f"├─ 操作："
+            f"{holding_decision['action']}"
+        )
+
+        if holding_decision["shares"] > 0:
+            msg += f" {holding_decision['shares']}股"
+
+        msg += (
+            f" ｜{holding_decision['note']}\n"
+        )
+
+        msg += (
+            f"├─ 風控："
+            f"{holding_risk_text(holding_decision)}\n"
+        )
 
     # ================================
     # 🔥 型態
@@ -676,7 +1001,7 @@ def render_stock(
 
     if result.get("heat_state") == "EXTREME":
 
-        # 中文註釋：v18.2 禁追用過熱原因呈現，不再列風控 / RR 缺口造成誤解。
+        # 中文註釋：v18.4 禁追用過熱原因呈現，不再列風控 / RR 缺口造成誤解。
         msg += (
             f"├─ 原因："
             f"過熱 Lv.{result.get('extended_level')}\n"
@@ -690,10 +1015,7 @@ def render_stock(
 
         if result.get("decision") == "BUY":
             label_title = "成立"
-            labels = [
-                CONDITION_LABELS.get(k, k)
-                for k in condition_items
-            ]
+            labels = ["完整", "風控", "RR OK"]
         else:
             label_title = "缺口"
             labels = [
@@ -717,7 +1039,7 @@ def render_stock(
         else safe_round(result.get("rr"))
     )
 
-    # 中文註釋：v18.2 NO_TRADE / EXTREME 隱藏 RR 數字，避免禁止或禁追標的被 RR 誤導。
+    # 中文註釋：v18.4 NO_TRADE / EXTREME 隱藏 RR 數字，避免禁止或禁追標的被 RR 誤導。
     msg += (
         f"├─ 數據："
         f"RR {rr_text}"
@@ -750,13 +1072,8 @@ def render_stock(
     # ================================
     # 🔥 price
     # ================================
-    phase = get_market_phase()
-
-    # 中文註釋：v18.2 盤中價格標示資料來源，避免即時 / Yahoo / 日線混用造成誤解。
-    price_label = (
-        f"盤中即時({price_source})"
-        if phase == "盤中"
-        else f"價格({price_source})"
+    price_label = price_label_for_source(
+        price_source
     )
 
     msg += (
@@ -853,7 +1170,9 @@ def generate():
                 "ma20": ma20,
 
                 "closes": display_closes,
-                "volumes": volumes
+                "volumes": volumes,
+
+                "holding": holdings.get(name)
             }
 
         except Exception as e:
@@ -909,7 +1228,7 @@ def generate():
             best_result.get("strength")
         )
 
-        # 中文註釋：v18.2 最強股只從有效 BUY 候選挑選，並同時顯示排序分與評級分。
+        # 中文註釋：v18.4 最強股只從有效 BUY 候選挑選，並同時顯示排序分與評級分。
         msg += (
             f"🔥 最強："
             f"{best}"
@@ -920,6 +1239,41 @@ def generate():
     else:
 
         msg += "🔥 最強：無有效進場標的\n"
+
+    holding_actions = []
+
+    for name, data in results_map.items():
+
+        if not data.get("holding"):
+            continue
+
+        h_decision = holding_status(
+            data["result"],
+            data["price"],
+            data["holding"]["avg_price"],
+            data["holding"]["shares"],
+            data.get("price_source", "twse")
+        )
+
+        if h_decision["level"] in [
+            "STOP_100",
+            "REDUCE_50",
+            "REDUCE_25",
+            "ADD_30",
+            "ADD_20",
+            "ADD_10",
+            "WATCH"
+        ]:
+            holding_actions.append(
+                f"{name}{h_decision['action']}"
+            )
+
+    if holding_actions:
+        # 中文註釋：v18.4 底部提示需要處理的持倉與明確加減碼等級。
+        msg += (
+            f"📌 持倉處理："
+            f"{'、'.join(holding_actions[:3])}\n"
+        )
 
     # ================================
     # 🔥 market summary
