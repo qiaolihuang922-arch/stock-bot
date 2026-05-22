@@ -1,5 +1,5 @@
 # ================================
-# 🔥 condition_engine.py（FINAL v18.3｜條件映射層）
+# 🔥 condition_engine.py（FINAL v18.8.1｜品質條件映射層）
 # ================================
 
 def condition_engine(result):
@@ -27,6 +27,31 @@ def condition_engine(result):
     risk = result.get("risk")
     rr = result.get("rr")
     heat_state = result.get("heat_state")
+    price_behavior = result.get("price_behavior")
+    structure_phase = result.get("structure_phase")
+    entry_quality = result.get("entry_quality")
+    entry_profile = result.get("entry_profile")
+
+    if price_behavior in ["LIMIT_LOCK", "LIMIT_REBOUND"]:
+        # 中文註釋：v18.7 漲停鎖價 / 漲停反彈是已辨識價格行為，不再顯示事件與 Edge 全缺。
+        conditions["event"] = True
+        conditions["edge"] = True
+
+    if structure_phase in ["SHAKEOUT", "HEALTHY_PULLBACK"]:
+        # 中文註釋：v18.7 洗盤 / 健康回踩屬於持倉觀察條件，量能弱不直接視為交易錯誤。
+        conditions["event"] = True
+        conditions["edge"] = True
+
+    if entry_quality in ["A+", "A", "B"]:
+        # 中文註釋：v18.8 入場品質達 B 以上代表證據鏈已成形，條件映射不再只看單一 RR。
+        conditions["edge"] = True
+
+    if entry_profile in [
+        "WAIT_LIMIT_REBOUND",
+        "WAIT_WEAK_REBOUND",
+        "WAIT_DISTANCE"
+    ]:
+        conditions["risk"] = False
 
     if heat_state == "EXTREME":
         # 中文註釋：v18.3 禁追由過熱主導，不再把風控 / RR 顯示成主要缺口。
