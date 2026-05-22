@@ -1,5 +1,5 @@
 # ================================
-# 🔥 FINAL UI（v18.4｜Semantic Scanner）
+# 🔥 FINAL UI（v18.8.1｜Quality Conflict Fix）
 # ================================
 
 from datetime import datetime
@@ -14,7 +14,8 @@ from services.stock_api import (
 from services.analysis import (
     strategy,
     pick_best_stock,
-    BREAKOUT_THRESHOLD
+    BREAKOUT_THRESHOLD,
+    holding_signal as strategy_holding_signal
 )
 
 from core.condition_engine import (
@@ -24,7 +25,7 @@ from core.condition_engine import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v18.4"
+VERSION = "v18.8.1"
 
 
 # ================================
@@ -117,6 +118,10 @@ def signed_pct(val):
 def calc_shares(shares, ratio):
 
     try:
+        if ratio <= 0:
+            # 中文註釋：v18.8 續抱 / 警戒不應顯示 1 股，0 比例直接回傳 0。
+            return 0
+
         return max(
             int(round(shares * ratio)),
             1
@@ -224,11 +229,27 @@ def get_live_price_data(
 
     if realtime and yahoo:
 
+        r_price = realtime[0]
+        r_change = realtime[1]
         y_price = yahoo[0]
+        y_change = yahoo[1]
 
-        if y_price and abs(realtime[0] - y_price) / y_price <= 0.02:
+        if abs(r_change) >= 8:
+            # 中文註釋：v18.5 接近漲跌停時 Yahoo 常有延遲或昨收價，優先採用 TWSE 即時成交 / 盘口價。
+            return r_price, r_change, "realtime"
+
+        if (
+            y_price
+            and y_change is not None
+            and abs(y_change) < 0.3
+            and abs(r_change) >= 3
+        ):
+            # 中文註釋：v18.5 Yahoo 幾乎不動但 TWSE 即時價明顯變動時，視為 Yahoo 舊價。
+            return r_price, r_change, "realtime"
+
+        if y_price and abs(r_price - y_price) / y_price <= 0.02:
             # 中文註釋：v18.4 即時價與 Yahoo 差距 2% 內才採用，降低異常報價誤判。
-            return realtime[0], realtime[1], "realtime"
+            return r_price, r_change, "realtime"
 
         return yahoo[0], yahoo[1], "yahoo"
 
@@ -371,6 +392,28 @@ def breakout_distance(
 # ================================
 def semantic_state(result):
 
+    phase = result.get("structure_phase")
+
+    phase_map = {
+        "LOCK_LIMIT": "🚀 漲停鎖價",
+        "LIMIT_REBOUND": "↗ 漲停反彈",
+        "BREAKOUT_CONFIRM": "🚀 突破確認",
+        "BREAKOUT": "🚀 主升突破",
+        "BREAKOUT_WATCH": "👀 突破觀察",
+        "SHAKEOUT": "🧽 洗盤回測",
+        "HEALTHY_PULLBACK": "↘ 健康回踩",
+        "WEAK_REBOUND": "↗ 弱勢反彈",
+        "FAILED_BREAKOUT": "❌ 突破失敗",
+        "DISTRIBUTION": "📦 高位出貨",
+        "EXTENDED_RISK": "🚨 極熱加速",
+        "BASE": "⏳ 整理蓄勢",
+        "WEAK": "⚠ 弱勢"
+    }
+
+    if phase in phase_map:
+        # 中文註釋：v18.7 型態主語改讀策略層 structure_phase，避免顯示層自行推論漲停 / 洗盤。
+        return phase_map[phase]
+
     dominant = result.get(
         "dominant_state"
     )
@@ -422,6 +465,12 @@ def semantic_state(result):
 # ================================
 def semantic_trade(result):
 
+    decision = result.get(
+        "decision"
+    )
+
+    behavior = result.get("price_behavior")
+
     trade = result.get(
         "trade_state"
     )
@@ -429,6 +478,16 @@ def semantic_trade(result):
     heat = result.get(
         "heat_state"
     )
+
+    if decision == "FAIL":
+        # 中文註釋：v18.5 突破失敗優先於禁追 / 無量，避免同一檔同時顯示兩種互斥交易狀態。
+        return "✅ 可交易"
+
+    if behavior == "LIMIT_LOCK":
+        return "🚨 不追高"
+
+    if behavior == "LIMIT_REBOUND":
+        return "👀 隔日確認"
 
     if heat == "EXTREME":
         return "🚨 禁追"
@@ -536,9 +595,61 @@ def semantic_reason(result):
         "heat_state"
     )
 
+    behavior = result.get("price_behavior")
+    phase = result.get("structure_phase")
+    quality = result.get("entry_quality")
+    confidence = result.get("confidence_score")
+    holding_decision = result.get("_holding_decision")
+
+    if holding_decision:
+        level = holding_decision.get("level")
+
+        if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]:
+            return "持倉停利"
+
+        if level in ["REDUCE_25", "REDUCE_50", "STOP_100"]:
+            return "持倉風控"
+
+        if level == "SHAKEOUT":
+            return "縮量洗盤"
+
+        if level in ["HOLD", "HOLD_CORE"]:
+            return "持倉續抱"
+
+        if level == "WATCH":
+            return "持倉警戒"
+
+        if level in ["ADD_10", "ADD_20", "ADD_30"]:
+            return "持倉加碼"
+
     dist = result.get(
         "breakout_distance"
     )
+
+    if decision == "FAIL":
+        # 中文註釋：v18.5 失敗股評級原因固定為突破失敗，不再被過熱或遠離觸發覆蓋。
+        return "突破失敗"
+
+    if quality in ["A+", "A"] and confidence:
+        return f"高品質{quality}"
+
+    if quality == "B":
+        return "小倉品質"
+
+    if quality == "C":
+        return "等待確認"
+
+    if quality == "D":
+        return "不交易"
+
+    if behavior == "LIMIT_LOCK":
+        return "漲停鎖價"
+
+    if behavior == "LIMIT_REBOUND":
+        return "弱勢漲停"
+
+    if phase == "SHAKEOUT":
+        return "縮量洗盤"
 
     if heat == "EXTREME":
         return "過熱風險"
@@ -552,6 +663,20 @@ def semantic_reason(result):
             return "趨勢轉弱"
 
         # 中文註釋：v18.4 NO_TRADE 不再用高 RR 當評級原因，避免弱勢股被誤解成機會。
+        return "不交易"
+
+    if should_hide_rr(result):
+
+        # 中文註釋：v18.5 RR 被隱藏時，評級原因同步回到市場 / 趨勢 / 量能主因，避免文字仍提示高 RR。
+        if result.get("market_grade") == "D":
+            return "市場弱勢"
+
+        if trade == "NO_VOLUME" or result.get("volume_state") == "WEAK":
+            return "量能不足"
+
+        if dist is not None and dist > 4:
+            return "遠離觸發"
+
         return "不交易"
 
     if dist is not None and dist > 4:
@@ -572,6 +697,149 @@ def semantic_reason(result):
     return "結構正常"
 
 
+def semantic_condition_labels(
+    result,
+    condition_items
+):
+
+    holding_decision = result.get("_holding_decision")
+    holding_add_ready = (
+        holding_decision
+        and holding_decision.get("level") in [
+            "ADD_30",
+            "ADD_20",
+            "ADD_10"
+        ]
+    )
+
+    if (
+        result.get("decision") == "BUY"
+        and result.get("action", 0) > 0
+        and (not holding_decision or holding_add_ready)
+    ):
+        quality = result.get("entry_quality", "D")
+        return ["完整", "風控", f"品質{quality}"]
+
+    labels = []
+    dist = result.get("breakout_distance")
+    profile = result.get("entry_profile")
+
+    profile_reason = {
+        "WAIT_LIMIT_REBOUND": "漲停反彈待確認",
+        "WAIT_WEAK_REBOUND": "弱反彈待確認",
+        "WAIT_DISTANCE": "遠離觸發",
+        "WAIT_RISK": "風控不足",
+        "WAIT_BREAKOUT_CONFIRM": "等突破確認",
+        "WAIT_LIMIT_LOCK": "漲停不追高"
+    }
+
+    if profile in profile_reason:
+        labels.append(profile_reason[profile])
+
+    holding_decision = result.get("_holding_decision")
+
+    if holding_decision and holding_decision.get("level") == "HOLD":
+        note = holding_decision.get("note")
+
+        if "RR不足" in note:
+            return ["RR不足，不加碼"]
+
+        return ["持倉續抱"]
+
+    if holding_decision and holding_decision.get("level") == "WATCH":
+        return ["持倉警戒"]
+
+    # 中文註釋：v18.5 缺口改成交易語意，避免直接露出 event / Edge 造成報文像假錯誤。
+    for item in condition_items:
+
+        if item == "market":
+            if result.get("market_grade") == "D":
+                label = "市場弱"
+            else:
+                # 中文註釋：v18.7 中性盤不是弱勢盤，缺口文字改成未轉強避免顯示衝突。
+                label = "市場未強"
+        elif item == "trend":
+            label = "趨勢未轉強"
+        elif item == "volume":
+            label = "量能不足"
+        elif item in ["event", "edge"] and dist is not None and dist > 4:
+            label = "遠離觸發"
+        elif item == "event":
+            label = "事件不足"
+        elif item == "edge":
+            label = "Edge不足"
+        elif item == "risk":
+            label = "風控不足"
+        elif item == "rr":
+            label = "RR不足"
+        elif item == "structure":
+            label = "結構不足"
+        else:
+            label = CONDITION_LABELS.get(item, item)
+
+        if label not in labels:
+            labels.append(label)
+
+    return labels[:3]
+
+
+def should_hide_rr(result):
+
+    decision = result.get("decision")
+    dist = result.get("breakout_distance")
+
+    if decision in ["NO_TRADE", "FAIL"]:
+        return True
+
+    if result.get("heat_state") == "EXTREME":
+        return True
+
+    if result.get("price_behavior") in [
+        "LIMIT_LOCK",
+        "LIMIT_REBOUND",
+        "WEAK_REBOUND"
+    ]:
+        return True
+
+    if result.get("market_grade") == "D":
+        return True
+
+    if result.get("volume_state") == "WEAK":
+        return True
+
+    if dist is not None and dist > 4:
+        return True
+
+    # 中文註釋：v18.5 弱勢 / 遠離 / 無量時 RR 只作內部判斷，不在報文顯示成可交易誘因。
+    return False
+
+
+def should_show_entry_suffix(
+    result,
+    holding_decision
+):
+
+    if result.get("decision") == "FAIL":
+        # 中文註釋：v18.5 失敗標題已經表達主狀態，不再追加 BREAKOUT_FAIL 後綴造成重複。
+        return False
+
+    if not holding_decision:
+        return True
+
+    if holding_decision.get("level") in [
+        "ADD_30",
+        "ADD_20",
+        "ADD_10"
+    ]:
+        return True
+
+    if result.get("decision") == "BUY":
+        return True
+
+    # 中文註釋：v18.5 持倉股以持倉動作為主，非加碼情境不顯示收復 / 站穩等短線後綴。
+    return False
+
+
 # ================================
 # 🔥 action
 # ================================
@@ -584,19 +852,29 @@ def get_action(result):
     if decision == "FAIL":
         return "❌"
 
-    if result.get(
-        "action_type"
-    ) == "BUY":
+    if result.get("action_type") == "BUY":
+
+        quality = result.get("entry_quality", "D")
+        position = result.get("action", 0)
+
+        if position <= 0:
+            return "⏳"
+
+        if quality == "B":
+            return f"🟡 {round(position * 100)}%"
+
+        if quality in ["C", "D"]:
+            return f"⏳ {round(position * 100)}%"
 
         if result.get("extended_level", 0) == 2:
             return (
                 f"🟡 "
-                f"{round(result.get('action', 0) * 100)}%"
+                f"{round(position * 100)}%"
             )
 
         return (
             f"🟢 "
-            f"{round(result.get('action', 0) * 100)}%"
+            f"{round(position * 100)}%"
         )
 
     return "⏳"
@@ -611,7 +889,23 @@ def final_label(result):
         "decision"
     )
 
+    behavior = result.get("price_behavior")
+
+    if behavior == "LIMIT_LOCK":
+        return "漲停鎖價"
+
+    if behavior == "LIMIT_REBOUND":
+        return "漲停反彈"
+
     if decision == "BUY":
+        quality = result.get("entry_quality", "D")
+
+        if quality == "B":
+            return "小倉觀察"
+
+        if quality in ["C", "D"]:
+            return "觀察"
+
         if result.get("extended_level", 0) == 2:
             return "小倉觀察"
 
@@ -634,179 +928,37 @@ def holding_status(
     price,
     avg_price,
     shares,
-    price_source="realtime"
+    price_source="realtime",
+    change=None
 ):
 
-    pnl = (
-        (price - avg_price)
-        / avg_price
-        * 100
-        if avg_price else 0
+    signal = strategy_holding_signal(
+        result,
+        price,
+        avg_price,
+        price_source,
+        change
     )
 
-    warning_price = avg_price * 0.95
-    hard_stop_price = avg_price * 0.92
-
-    if (
-        pnl <= -8
-        or price <= hard_stop_price
-    ):
-        return {
-            "action": "停損 100%",
-            "shares": shares,
-            "note": "硬停損觸發",
-            "level": "STOP_100",
-            "warning_price": warning_price,
-            "hard_stop_price": hard_stop_price
-        }
-
-    if result.get("volume_price_state") == "DISTRIBUTION":
-        ratio = 0.5 if pnl <= 0 else 0.25
-        return {
-            "action": f"減碼 {int(ratio * 100)}%",
-            "shares": calc_shares(shares, ratio),
-            "note": "出貨風險",
-            "level": "REDUCE",
-            "warning_price": warning_price,
-            "hard_stop_price": hard_stop_price
-        }
-
-    if result.get("heat_state") == "EXTREME":
-        return {
-            "action": "減碼 25%",
-            "shares": calc_shares(shares, 0.25),
-            "note": "過熱鎖利",
-            "level": "REDUCE_25",
-            "warning_price": warning_price,
-            "hard_stop_price": hard_stop_price
-        }
-
-    if (
-        result.get("decision") == "FAIL"
-        and pnl <= 0
-    ):
-        return {
-            "action": "減碼 50%",
-            "shares": calc_shares(shares, 0.5),
-            "note": "突破失敗且未獲利",
-            "level": "REDUCE_50",
-            "warning_price": warning_price,
-            "hard_stop_price": hard_stop_price
-        }
-
-    weak_combo = (
-        result.get("market_grade") == "D"
-        or result.get("trend") == "DOWN"
-        or result.get("volume_state") == "WEAK"
+    ratio = signal.get("ratio", 0)
+    action_shares = (
+        shares
+        if ratio >= 1
+        else calc_shares(shares, ratio)
     )
 
-    if pnl <= -5 and weak_combo:
-        return {
-            "action": "減碼 50%",
-            "shares": calc_shares(shares, 0.5),
-            "note": "弱勢中虧",
-            "level": "REDUCE_50",
-            "warning_price": warning_price,
-            "hard_stop_price": hard_stop_price
-        }
-
-    if pnl <= -3 and weak_combo:
-        return {
-            "action": "減碼 25%",
-            "shares": calc_shares(shares, 0.25),
-            "note": "弱勢轉弱",
-            "level": "REDUCE_25",
-            "warning_price": warning_price,
-            "hard_stop_price": hard_stop_price
-        }
-
-    if pnl < 0 and weak_combo:
-        return {
-            "action": "警戒",
-            "shares": 0,
-            "note": "輕虧不加碼",
-            "level": "WATCH",
-            "warning_price": warning_price,
-            "hard_stop_price": hard_stop_price
-        }
-
-    if (
-        result.get("decision") == "BUY"
-        and result.get("extended_level", 0) < 2
-        and pnl >= 2
-        and result.get("market_grade") in ["A+", "A"]
-        and result.get("trend") == "UP"
-        and result.get("structure_state") == "STRONG"
-        and result.get("volume_state") in ["STRONG", "EXPLOSIVE"]
-        and result.get("rr", 0) >= 1.5
-        and result.get("breakout_distance", 99) <= 2
-        and price_source != "twse"
-    ):
-        return {
-            "action": "加碼 30%",
-            "shares": calc_shares(shares, 0.3),
-            "note": "強勢突破確認",
-            "level": "ADD_30",
-            "warning_price": warning_price,
-            "hard_stop_price": hard_stop_price
-        }
-
-    if (
-        result.get("decision") == "BUY"
-        and result.get("extended_level", 0) < 2
-        and pnl >= 1
-        and result.get("market_grade") in ["A+", "A", "B"]
-        and result.get("trend") == "UP"
-        and result.get("volume_state") != "WEAK"
-        and result.get("rr", 0) >= 1.3
-        and result.get("breakout_distance", 99) <= 3
-        and price_source != "twse"
-    ):
-        return {
-            "action": "加碼 20%",
-            "shares": calc_shares(shares, 0.2),
-            "note": "趨勢延續",
-            "level": "ADD_20",
-            "warning_price": warning_price,
-            "hard_stop_price": hard_stop_price
-        }
-
-    if (
-        result.get("decision") == "BUY"
-        and pnl >= 0
-        and result.get("market_grade") != "D"
-        and result.get("volume_state") != "WEAK"
-        and price_source != "twse"
-    ):
-        return {
-            "action": "加碼 10%",
-            "shares": calc_shares(shares, 0.1),
-            "note": "小幅轉強",
-            "level": "ADD_10",
-            "warning_price": warning_price,
-            "hard_stop_price": hard_stop_price
-        }
-
-    if pnl >= 0 and weak_combo:
-        return {
-            "action": "續抱",
-            "shares": 0,
-            "note": "保成本，不加碼",
-            "level": "HOLD",
-            "warning_price": warning_price,
-            "hard_stop_price": hard_stop_price
-        }
-
-    # 中文註釋：v18.4 持倉依市場 / 趨勢 / 量能 / 盈虧決定加減碼股數，不再只看虧損%。
+    # 中文註釋：v18.7 持倉策略由 analysis.py 輸出，generator.py 只換算股數與維持既有報文格式。
     return {
-        "action": "續抱",
-        "shares": 0,
-        "note": "不加碼",
-        "level": "HOLD",
-        "warning_price": warning_price,
-        "hard_stop_price": hard_stop_price
+        "action": signal.get("action", "續抱"),
+        "shares": action_shares,
+        "note": signal.get("reason", "不加碼"),
+        "level": signal.get("level", "HOLD"),
+        "warning_price": signal.get("warning_price"),
+        "hard_stop_price": signal.get("hard_stop_price"),
+        "phase": signal.get("phase"),
+        "allow_add": signal.get("allow_add", False),
+        "risk_level": signal.get("risk_level", 1)
     }
-
 
 def holding_risk_text(
     decision
@@ -821,6 +973,47 @@ def holding_risk_text(
     )
 
     return f"警戒 {warning} ｜停損 {hard_stop}"
+
+
+def holding_position_text(
+    decision,
+    current_shares
+):
+
+    action_shares = decision.get("shares", 0)
+    level = decision.get("level")
+
+    if level == "STOP_100":
+        return "清倉後 0股"
+
+    if level in [
+        "REDUCE_50",
+        "REDUCE_25",
+        "TAKE_PROFIT_50",
+        "TAKE_PROFIT_25"
+    ]:
+        remain = max(
+            current_shares - action_shares,
+            0
+        )
+        return f"剩餘 {remain}股 ｜保留核心倉"
+
+    if level in [
+        "ADD_30",
+        "ADD_20",
+        "ADD_10"
+    ]:
+        target = current_shares + action_shares
+        return f"目標 {target}股 ｜分批加碼"
+
+    if level == "SHAKEOUT":
+        return f"維持 {current_shares}股 ｜等量價確認"
+
+    if level == "HOLD_CORE":
+        return f"維持 {current_shares}股 ｜不追高加碼"
+
+    # 中文註釋：v18.7 持倉輸出補上倉位結果，讓加碼 / 減碼 / 洗盤觀察後的股數更清楚。
+    return f"維持 {current_shares}股 ｜不加碼"
 
 
 # ================================
@@ -893,8 +1086,32 @@ def render_stock(
             price,
             holding["avg_price"],
             holding["shares"],
-            price_source
+            price_source,
+            change
         )
+
+        result["_holding_decision"] = holding_decision
+
+    holding_add_ready = (
+        holding_decision
+        and holding_decision.get("level") in [
+            "ADD_30",
+            "ADD_20",
+            "ADD_10"
+        ]
+    )
+
+    if holding_decision and not holding_add_ready:
+        # 中文註釋：v18.7 持倉非加碼時不再顯示新進場 RR / Edge 缺口，避免持倉管理與買點條件衝突。
+        condition_items = [
+            item for item in condition_items
+            if item in [
+                "market",
+                "structure",
+                "trend",
+                "volume"
+            ]
+        ]
 
     # header
     if holding:
@@ -913,7 +1130,18 @@ def render_stock(
             f"{final_label(result)}"
         )
 
-    if entry:
+    if (
+        entry
+        and result.get("decision") != "NO_TRADE"
+        and not (
+            result.get("entry_quality") == "D"
+            and result.get("market_grade") == "D"
+        )
+        and should_show_entry_suffix(
+        result,
+        holding_decision
+        )
+    ):
         header += f" ｜{entry}"
 
     msg = header + "\n"
@@ -938,6 +1166,11 @@ def render_stock(
 
         msg += (
             f" ｜{holding_decision['note']}\n"
+        )
+
+        msg += (
+            f"├─ 倉位："
+            f"{holding_position_text(holding_decision, holding['shares'])}\n"
         )
 
         msg += (
@@ -999,9 +1232,12 @@ def render_stock(
             f"{trade_text}\n"
         )
 
-    if result.get("heat_state") == "EXTREME":
+    if (
+        result.get("heat_state") == "EXTREME"
+        and result.get("decision") != "FAIL"
+    ):
 
-        # 中文註釋：v18.4 禁追用過熱原因呈現，不再列風控 / RR 缺口造成誤解。
+        # 中文註釋：v18.5 只有非失敗的過熱股顯示禁追原因，避免 FAIL + EXTREME 雙主因衝突。
         msg += (
             f"├─ 原因："
             f"過熱 Lv.{result.get('extended_level')}\n"
@@ -1013,15 +1249,19 @@ def render_stock(
     # ================================
     if condition_items and result.get("heat_state") != "EXTREME":
 
-        if result.get("decision") == "BUY":
+        if (
+            result.get("decision") == "BUY"
+            and result.get("action", 0) > 0
+            and (not holding_decision or holding_add_ready)
+        ):
             label_title = "成立"
-            labels = ["完整", "風控", "RR OK"]
         else:
             label_title = "缺口"
-            labels = [
-                CONDITION_LABELS.get(k, k)
-                for k in condition_items[:3]
-            ]
+
+        labels = semantic_condition_labels(
+            result,
+            condition_items
+        )
 
         msg += (
             f"├─ {label_title}："
@@ -1034,18 +1274,30 @@ def render_stock(
     # ================================
     rr_text = (
         "-"
-        if result.get("decision") in ["NO_TRADE"]
-        or result.get("heat_state") == "EXTREME"
+        if should_hide_rr(result)
+        or (holding_decision and not holding_add_ready)
         else safe_round(result.get("rr"))
     )
 
-    # 中文註釋：v18.4 NO_TRADE / EXTREME 隱藏 RR 數字，避免禁止或禁追標的被 RR 誤導。
+    # 中文註釋：v18.8 持倉非加碼時隱藏新進場 RR，避免用買點 RR 反向干擾續抱 / 停利判斷。
     msg += (
         f"├─ 數據："
         f"RR {rr_text}"
         f" ｜S {struct}/5"
         f" ｜V {vol}x（日線）\n"
     )
+
+    quality = result.get("entry_quality")
+    confidence = result.get("confidence_score")
+
+    if quality and confidence and quality != "D" and (
+        not holding_decision or holding_add_ready
+    ):
+        # 中文註釋：v18.8 品質分只用於新進場 / 持倉加碼，停利與續抱不混用入場品質。
+        msg += (
+            f"├─ 品質："
+            f"{quality} ｜C {confidence}\n"
+        )
 
     # ================================
     # 🔥 評級
@@ -1142,6 +1394,7 @@ def generate():
 
             result = strategy(
                 price,
+                change,
                 ma5,
                 ma20,
                 closes,
@@ -1212,6 +1465,7 @@ def generate():
         k: v["result"]
 
         for k, v in results_map.items()
+        if not v.get("holding")
     })
 
     msg += "====================\n"
@@ -1252,17 +1506,21 @@ def generate():
             data["price"],
             data["holding"]["avg_price"],
             data["holding"]["shares"],
-            data.get("price_source", "twse")
+            data.get("price_source", "twse"),
+            data.get("change")
         )
 
         if h_decision["level"] in [
             "STOP_100",
             "REDUCE_50",
             "REDUCE_25",
+            "TAKE_PROFIT_50",
+            "TAKE_PROFIT_25",
             "ADD_30",
             "ADD_20",
             "ADD_10",
-            "WATCH"
+            "WATCH",
+            "SHAKEOUT"
         ]:
             holding_actions.append(
                 f"{name}{h_decision['action']}"
@@ -1298,13 +1556,19 @@ def generate():
         if d == "NO_TRADE"
     )
 
-    if extreme_count >= 3:
+    weak_count = sum(
+        1 for data in results_map.values()
+        if data["result"].get("market_grade") == "D"
+    )
+
+    if no_trade_count >= 6 or weak_count >= 6:
+
+        # 中文註釋：v18.5 全局弱勢優先於局部失敗數，避免底部總結只看兩檔 FAIL 而誤判盤面。
+        msg += "⏳ 弱勢觀望"
+
+    elif extreme_count >= 3:
 
         msg += "🚨 過熱分歧"
-
-    elif no_trade_count >= 6:
-
-        msg += "⏳ 觀望"
 
     elif fail_count >= 2:
 
