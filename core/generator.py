@@ -65,6 +65,11 @@ holdings = {
         "avg_price": 209
     },
 
+    "光寶科": {
+        "shares": 50,
+        "avg_price": 208.5
+    },
+
     "緯創": {
         "shares": 440,
         "avg_price": 140.92
