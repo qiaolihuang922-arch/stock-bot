@@ -1,5 +1,5 @@
 # ================================
-# 🔥 analysis.py（FINAL v18.2｜CONFLICT GUARD）
+# 🔥 analysis.py（FINAL v18.8.1｜ENTRY QUALITY FIX）
 # ================================
 
 # 🔒 VERSION LOCK
@@ -161,6 +161,304 @@ def momentum_signal(metrics):
         return "REVERSING"
 
     return "DECELERATING"
+
+
+def multi_day_bias(metrics):
+
+    chg3 = metrics.get("chg_3d", 0)
+    chg5 = metrics.get("chg_5d", 0)
+    chg10 = metrics.get("chg_10d", 0)
+
+    if chg3 > 0 and chg5 > 0 and chg10 >= 0:
+        return "UP_CONFIRM"
+
+    if chg3 < 0 and chg5 >= 0 and chg10 >= 0:
+        return "SHAKEOUT"
+
+    if chg3 > 0 and chg5 < 0:
+        return "UP_WEAKENING"
+
+    if chg3 < 0 and chg5 < 0 and chg10 < 0:
+        return "DOWN_CONFIRM"
+
+    # 中文註釋：v18.7 將 3 / 5 / 10 日趨勢壓成單一偏向，供洗盤與弱反彈判斷使用。
+    return "MIXED"
+
+
+def market_regime(market, trend, heat_state, m_grade):
+
+    if heat_state == "EXTREME":
+        return "OVERHEAT"
+
+    if market == "STRONG" and trend == "UP":
+        return "RISK_ON"
+
+    if market == "WEAK" or trend == "DOWN" or m_grade == "D":
+        return "RISK_OFF"
+
+    # 中文註釋：v18.7 中性市場獨立成 regime，不再與弱勢混用。
+    return "NEUTRAL"
+
+
+def price_behavior_signal(
+    change,
+    market,
+    trend,
+    volume,
+    vp_state,
+    momentum
+):
+
+    if change >= 9.5:
+        if market == "STRONG" and trend == "UP" and vp_state != "DISTRIBUTION":
+            return "LIMIT_LOCK"
+
+        return "LIMIT_REBOUND"
+
+    if change >= 3 and trend != "UP":
+        return "WEAK_REBOUND"
+
+    if vp_state == "DISTRIBUTION":
+        return "DISTRIBUTION_SPIKE"
+
+    if change <= -3 and volume != "WEAK":
+        return "VOLUME_DROP"
+
+    if change < 0 and volume == "WEAK" and momentum != "REVERSING":
+        return "LOW_VOLUME_PULLBACK"
+
+    if vp_state == "EXPANSION" and trend == "UP":
+        return "VOLUME_BREAKOUT"
+
+    return "NORMAL"
+
+
+def structure_phase_signal(
+    price_behavior,
+    lifecycle,
+    breakout_state,
+    heat_state,
+    trend,
+    volume,
+    structure,
+    market,
+    dist,
+    bias
+):
+
+    if breakout_state == "FAIL":
+        return "FAILED_BREAKOUT"
+
+    if price_behavior == "LIMIT_LOCK":
+        return "LOCK_LIMIT"
+
+    if price_behavior == "LIMIT_REBOUND":
+        return "LIMIT_REBOUND"
+
+    if heat_state == "EXTREME":
+        return "EXTENDED_RISK"
+
+    if price_behavior == "DISTRIBUTION_SPIKE":
+        return "DISTRIBUTION"
+
+    if price_behavior == "LOW_VOLUME_PULLBACK" or bias == "SHAKEOUT":
+        if trend == "UP" and structure != "WEAK":
+            return "SHAKEOUT"
+
+        return "HEALTHY_PULLBACK"
+
+    if price_behavior == "WEAK_REBOUND":
+        return "WEAK_REBOUND"
+
+    if breakout_state == "BREAKOUT" and trend == "UP":
+        if dist is not None and dist <= 1:
+            return "BREAKOUT_CONFIRM"
+
+        return "BREAKOUT"
+
+    if breakout_state == "READY":
+        return "BREAKOUT_WATCH"
+
+    if market == "WEAK" or trend == "DOWN":
+        return "WEAK"
+
+    if lifecycle == "BASE":
+        return "BASE"
+
+    # 中文註釋：v18.7 structure_phase 作為策略層主語，讓顯示層不再自行猜型態。
+    return lifecycle or "BASE"
+
+
+def entry_profile_signal(
+    phase,
+    behavior,
+    breakout_state,
+    entry_stage,
+    rr,
+    risk,
+    dist
+):
+
+    if behavior == "LIMIT_REBOUND":
+        return "WAIT_LIMIT_REBOUND"
+
+    if behavior == "LIMIT_LOCK":
+        return "WAIT_LIMIT_LOCK"
+
+    if behavior == "WEAK_REBOUND":
+        return "WAIT_WEAK_REBOUND"
+
+    if phase in ["SHAKEOUT", "HEALTHY_PULLBACK"]:
+        return "BUY_PULLBACK_CONFIRM"
+
+    if phase == "BREAKOUT_CONFIRM":
+        return "BUY_BREAKOUT_CONFIRM"
+
+    if phase == "BREAKOUT_WATCH":
+        return "WAIT_BREAKOUT_CONFIRM"
+
+    if entry_stage in ["RECLAIM", "TURN"]:
+        return "BUY_RECLAIM_CONFIRM"
+
+    if breakout_state == "BREAKOUT" and rr >= MIN_RR_BREAKOUT:
+        return "BUY_BREAKOUT"
+
+    if dist is not None and dist > 4:
+        return "WAIT_DISTANCE"
+
+    if risk is not None and risk > 0.08:
+        return "WAIT_RISK"
+
+    # 中文註釋：v18.8 entry_profile 拆買點類型，避免所有 WAIT / BUY 都用同一套解釋。
+    return "WAIT_CONFIRM"
+
+
+def entry_quality_score(
+    market_regime_value,
+    phase,
+    behavior,
+    trend,
+    structure,
+    volume,
+    rr,
+    risk,
+    dist,
+    heat_state,
+    bias
+):
+
+    score = 0
+
+    if market_regime_value == "RISK_ON":
+        score += 20
+    elif market_regime_value == "NEUTRAL":
+        score += 10
+    elif market_regime_value == "RISK_OFF":
+        score -= 15
+
+    if phase in ["BREAKOUT_CONFIRM", "LOCK_LIMIT"]:
+        score += 25
+    elif phase in ["BREAKOUT", "BREAKOUT_WATCH", "SHAKEOUT", "HEALTHY_PULLBACK"]:
+        score += 15
+    elif phase in ["WEAK_REBOUND", "LIMIT_REBOUND"]:
+        score -= 15
+    elif phase in ["DISTRIBUTION", "FAILED_BREAKOUT"]:
+        score -= 30
+
+    if behavior in ["VOLUME_BREAKOUT", "LIMIT_LOCK"]:
+        score += 15
+    elif behavior in ["LOW_VOLUME_PULLBACK"]:
+        score += 8
+    elif behavior in ["WEAK_REBOUND", "LIMIT_REBOUND", "DISTRIBUTION_SPIKE"]:
+        score -= 15
+
+    if trend == "UP":
+        score += 12
+    elif trend == "DOWN":
+        score -= 15
+
+    if structure == "STRONG":
+        score += 10
+    elif structure == "NORMAL":
+        score += 5
+    elif structure == "WEAK":
+        score -= 10
+
+    if volume in ["STRONG", "EXPLOSIVE"]:
+        score += 10
+    elif volume == "WEAK" and behavior != "LIMIT_LOCK":
+        score -= 8
+
+    if rr >= 1.8:
+        score += 12
+    elif rr >= 1.2:
+        score += 6
+    elif rr > 0:
+        score -= 4
+
+    if risk is not None and 0 < risk <= 0.06:
+        score += 8
+    elif risk is not None and risk > 0.08:
+        score -= 10
+
+    if dist is not None:
+        if -3 <= dist <= 2:
+            score += 8
+        elif dist > 6:
+            score -= 10
+
+    if heat_state == "EXTREME":
+        score -= 18
+    elif heat_state == "HOT":
+        score -= 8
+
+    if bias == "UP_CONFIRM":
+        score += 8
+    elif bias == "DOWN_CONFIRM":
+        score -= 12
+
+    if rr < 0.8:
+        score = min(score, 49)
+    elif rr < 1.2:
+        score = min(score, 64)
+
+    if heat_state == "HOT" and rr < 1.5:
+        score = min(score, 64)
+
+    # 中文註釋：v18.8.1 RR 是新進場品質硬門檻，低 RR 不允許被市場與突破分數灌成 A 級。
+    return max(0, min(100, round(score)))
+
+
+def entry_quality_label(score):
+
+    if score >= 85:
+        return "A+"
+
+    if score >= 75:
+        return "A"
+
+    if score >= 65:
+        return "B"
+
+    if score >= 50:
+        return "C"
+
+    return "D"
+
+
+def quality_position(position, quality, profile):
+
+    if quality in ["A+", "A"]:
+        return position
+
+    if quality == "B":
+        return min(position, 0.25)
+
+    if quality == "C":
+        return min(position, 0.1)
+
+    # 中文註釋：v18.8 品質分不直接砍掉合理出手，而是把倉位降到對應風險級別。
+    return 0
 
 
 # ================================
@@ -446,6 +744,45 @@ def build_result(**kwargs):
 
         "breakout_hold_days": kwargs.get(
             "breakout_hold_days",
+            0
+        ),
+
+        "price_behavior": kwargs.get(
+            "price_behavior",
+            "NORMAL"
+        ),
+
+        "structure_phase": kwargs.get(
+            "structure_phase",
+            kwargs.get("lifecycle", "BASE")
+        ),
+
+        "market_regime": kwargs.get(
+            "market_regime",
+            "NEUTRAL"
+        ),
+
+        "multi_day_bias": kwargs.get(
+            "multi_day_bias",
+            "MIXED"
+        ),
+
+        "live_change": kwargs.get(
+            "live_change"
+        ),
+
+        "entry_profile": kwargs.get(
+            "entry_profile",
+            "NONE"
+        ),
+
+        "entry_quality": kwargs.get(
+            "entry_quality",
+            "D"
+        ),
+
+        "confidence_score": kwargs.get(
+            "confidence_score",
             0
         )
     }
@@ -1329,8 +1666,17 @@ def can_buy(
     heat_state,
     trade_state,
     breakout_state,
-    distance
+    distance,
+    price_behavior="NORMAL",
+    entry_quality="D"
 ):
+
+    if price_behavior in [
+        "WEAK_REBOUND",
+        "LIMIT_REBOUND",
+        "LIMIT_LOCK"
+    ]:
+        return False
 
     if heat_state == "EXTREME":
         return False
@@ -1347,8 +1693,175 @@ def can_buy(
     if distance is not None and distance > 4:
         return False
 
-    # 中文註釋：v18.2 集中交易閘門，避免整理 / 過熱 / 遠離突破仍被 BUY。
+    if entry_quality == "D":
+        return False
+
+    # 中文註釋：v18.8 集中交易閘門加入價格行為與品質分，不靠少買，而是避免錯誤類型出手。
     return True
+
+
+def holding_signal(
+    result,
+    price,
+    avg_price,
+    price_source="realtime",
+    change=None
+):
+
+    pnl = (
+        (price - avg_price) / avg_price * 100
+        if avg_price else 0
+    )
+
+    warning_price = avg_price * 0.95
+    hard_stop_price = avg_price * 0.92
+
+    if pnl >= 8:
+        warning_price = max(warning_price, price * 0.95)
+
+    if pnl >= 15:
+        hard_stop_price = max(hard_stop_price, avg_price * 1.02)
+
+    phase = result.get("structure_phase")
+    behavior = result.get("price_behavior")
+    regime = result.get("market_regime")
+    bias = result.get("multi_day_bias")
+    decision = result.get("decision")
+    heat = result.get("heat_state")
+    extended = result.get("extended_level", 0)
+    trend = result.get("trend")
+    volume = result.get("volume_state")
+    vp = result.get("volume_price_state")
+    rr = result.get("rr", 0)
+    dist = result.get("breakout_distance")
+    quality = result.get("entry_quality", "D")
+    confidence = result.get("confidence_score", 0)
+    profile = result.get("entry_profile", "NONE")
+
+    def payload(action, ratio, reason, level, signal_phase, allow_add=False, risk_level=2):
+        return {
+            "action": action,
+            "ratio": ratio,
+            "reason": reason,
+            "level": level,
+            "phase": signal_phase,
+            "allow_add": allow_add,
+            "risk_level": risk_level,
+            "warning_price": warning_price,
+            "hard_stop_price": hard_stop_price
+        }
+
+    if pnl <= -8 or price <= hard_stop_price:
+        return payload("停損 100%", 1, "硬停損觸發", "STOP_100", "STOP_LOSS", False, 5)
+
+    if vp == "DISTRIBUTION" or phase == "DISTRIBUTION":
+        ratio = 0.5 if pnl <= 0 else 0.25
+        return payload(
+            f"減碼 {int(ratio * 100)}%",
+            ratio,
+            "出貨風險",
+            "REDUCE_50" if ratio == 0.5 else "REDUCE_25",
+            "RISK_REDUCE",
+            False,
+            4
+        )
+
+    if decision == "FAIL" or phase == "FAILED_BREAKOUT":
+        ratio = 0.5 if pnl <= 0 else 0.25
+        return payload(
+            f"減碼 {int(ratio * 100)}%",
+            ratio,
+            "突破失敗，先降風險",
+            "REDUCE_50" if ratio == 0.5 else "REDUCE_25",
+            "RISK_REDUCE",
+            False,
+            4
+        )
+
+    if pnl >= 15 and behavior == "LIMIT_LOCK" and extended >= 2:
+        return payload(
+            "停利 25%",
+            0.25,
+            "漲停過熱，保留核心倉",
+            "TAKE_PROFIT_25",
+            "LOCK_PROFIT",
+            False,
+            3
+        )
+
+    if pnl >= 8 and heat == "EXTREME":
+        return payload(
+            "停利 50%",
+            0.5,
+            "極熱鎖利，避免末段反轉",
+            "TAKE_PROFIT_50",
+            "LOCK_PROFIT",
+            False,
+            4
+        )
+
+    if behavior == "LIMIT_LOCK":
+        return payload(
+            "續抱核心倉",
+            0,
+            "漲停鎖價，未見出貨",
+            "HOLD_CORE",
+            "CORE_HOLD",
+            False,
+            2
+        )
+
+    if phase in ["SHAKEOUT", "HEALTHY_PULLBACK"] and pnl > -3:
+        return payload(
+            "洗盤觀察",
+            0,
+            "縮量回測，結構未破",
+            "SHAKEOUT",
+            "SHAKEOUT_HOLD",
+            False,
+            2
+        )
+
+    if pnl < 0 and (regime == "RISK_OFF" or trend == "DOWN" or volume == "WEAK"):
+        return payload("警戒", 0, "輕虧不加碼", "WATCH", "WATCH", False, 3)
+
+    addable = (
+        decision == "BUY"
+        and price_source != "twse"
+        and change is not None
+        and change < 9.5
+        and regime == "RISK_ON"
+        and trend == "UP"
+        and volume != "WEAK"
+        and heat != "EXTREME"
+        and behavior not in ["WEAK_REBOUND", "LIMIT_REBOUND", "LIMIT_LOCK"]
+        and quality in ["A+", "A", "B"]
+    )
+
+    if addable and pnl >= 2 and rr >= 1.5 and dist is not None and dist <= 2 and confidence >= 80:
+        return payload("加碼 30%", 0.3, "強勢突破確認", "ADD_30", "ADD_READY", True, 2)
+
+    if addable and pnl >= 1 and rr >= 1.3 and dist is not None and dist <= 3 and confidence >= 72:
+        return payload("加碼 20%", 0.2, "趨勢延續", "ADD_20", "ADD_READY", True, 2)
+
+    if addable and pnl >= 0 and rr >= 1.1 and confidence >= 65:
+        return payload("加碼 10%", 0.1, "小幅轉強", "ADD_10", "ADD_READY", True, 2)
+
+    if decision == "BUY" and pnl >= 0 and rr < 1.3:
+        # 中文註釋：v18.8 持倉加碼需完整證據鏈，RR 不足時續抱等待，不因 BUY 訊號直接加碼。
+        return payload("續抱", 0, "突破成立，RR不足不加碼", "HOLD", "CORE_HOLD", False, 2)
+
+    if phase == "BREAKOUT_WATCH" and pnl >= 0:
+        return payload("續抱", 0, "接近突破，等確認再加碼", "HOLD", "ADD_WATCH", False, 2)
+
+    if phase == "BREAKOUT_CONFIRM" and pnl >= 0:
+        return payload("續抱", 0, "突破成立，等量價確認再加碼", "HOLD", "CORE_HOLD", False, 2)
+
+    if pnl >= 0 and (regime == "RISK_OFF" or volume == "WEAK"):
+        return payload("續抱", 0, "保成本，不加碼", "HOLD", "CORE_HOLD", False, 2)
+
+    # 中文註釋：v18.7 持倉動作由策略層輸出，顯示層只換算股數與排版。
+    return payload("續抱", 0, "不加碼", "HOLD", "CORE_HOLD", False, 1)
 
 
 # ================================
@@ -1449,6 +1962,7 @@ def execution_score(
 # ================================
 def strategy(
     price,
+    change,
     ma5,
     ma20,
     closes,
@@ -1655,6 +2169,78 @@ def strategy(
 
         trend_bias = "NORMAL"
 
+    behavior = price_behavior_signal(
+        change if change is not None else metrics.get("chg_1d", 0) * 100,
+        market,
+        trend,
+        volume,
+        vp_state,
+        momentum
+    )
+
+    bias = multi_day_bias(
+        metrics
+    )
+
+    regime = market_regime(
+        market,
+        trend,
+        heat_state,
+        m_grade
+    )
+
+    phase = structure_phase_signal(
+        behavior,
+        lifecycle,
+        breakout_state,
+        heat_state,
+        trend,
+        volume,
+        structure,
+        market,
+        breakout_dist,
+        bias
+    )
+
+    entry_profile = entry_profile_signal(
+        phase,
+        behavior,
+        breakout_state,
+        entry_stage,
+        rr,
+        risk,
+        breakout_dist
+    )
+
+    confidence = entry_quality_score(
+        regime,
+        phase,
+        behavior,
+        trend,
+        structure,
+        volume,
+        rr,
+        risk,
+        breakout_dist,
+        heat_state,
+        bias
+    )
+
+    quality = entry_quality_label(
+        confidence
+    )
+
+    strategy_tags = {
+        "price_behavior": behavior,
+        "structure_phase": phase,
+        "market_regime": regime,
+        "multi_day_bias": bias,
+        "live_change": change,
+        "entry_profile": entry_profile,
+        "entry_quality": quality,
+        "confidence_score": confidence
+    }
+
     # ================================
     # 🔥 weak market
     # ================================
@@ -1713,7 +2299,9 @@ def strategy(
 
             wait_reason=get_wait_reason(
                 trade_state
-            )
+            ),
+
+            **strategy_tags
         )
 
     # ================================
@@ -1769,7 +2357,9 @@ def strategy(
 
             breakout_hold_days=b_hold_days,
 
-            breakout_fail=True
+            breakout_fail=True,
+
+            **strategy_tags
         )
 
     # ================================
@@ -1828,6 +2418,9 @@ def strategy(
             breakout_hold_days=b_hold_days,
 
             wait_reason="WAIT_FAKE_BREAK"
+            ,
+
+            **strategy_tags
         )
 
     # ================================
@@ -1886,6 +2479,9 @@ def strategy(
             breakout_hold_days=b_hold_days,
 
             wait_reason="WAIT_EXTREME"
+            ,
+
+            **strategy_tags
         )
 
     # ================================
@@ -1906,7 +2502,9 @@ def strategy(
             heat_state,
             trade_state,
             breakout_state,
-            breakout_dist
+            breakout_dist,
+            behavior,
+            quality
         )
     ):
 
@@ -1936,7 +2534,14 @@ def strategy(
 
             stop=stop_candidate,
 
-            position=round(pos, 2),
+            position=round(
+                quality_position(
+                    pos,
+                    quality,
+                    entry_profile
+                ),
+                2
+            ),
 
             market_score=m_score,
 
@@ -1980,7 +2585,9 @@ def strategy(
 
         breakout_days=b_days,
 
-        breakout_hold_days=b_hold_days
+        breakout_hold_days=b_hold_days,
+
+        **strategy_tags
         )
 
     # ================================
@@ -1994,7 +2601,9 @@ def strategy(
             heat_state,
             trade_state,
             breakout_state,
-            breakout_dist
+            breakout_dist,
+            behavior,
+            quality
         )
     ):
 
@@ -2024,7 +2633,14 @@ def strategy(
 
             stop=stop_candidate,
 
-            position=round(pos, 2),
+            position=round(
+                quality_position(
+                    pos,
+                    quality,
+                    entry_profile
+                ),
+                2
+            ),
 
             market_score=m_score,
 
@@ -2073,7 +2689,9 @@ def strategy(
             fresh_breakout=is_fresh_breakout(
                 closes,
                 resistance
-            )
+            ),
+
+            **strategy_tags
         )
 
     # ================================
@@ -2091,7 +2709,9 @@ def strategy(
             heat_state,
             trade_state,
             breakout_state,
-            breakout_dist
+            breakout_dist,
+            behavior,
+            quality
         )
     ):
 
@@ -2118,7 +2738,14 @@ def strategy(
 
             stop=stop_candidate,
 
-            position=round(pos, 2),
+            position=round(
+                quality_position(
+                    pos,
+                    quality,
+                    entry_profile
+                ),
+                2
+            ),
 
             market_score=m_score,
 
@@ -2162,7 +2789,9 @@ def strategy(
 
         breakout_days=b_days,
 
-        breakout_hold_days=b_hold_days
+        breakout_hold_days=b_hold_days,
+
+        **strategy_tags
         )
 
     # ================================
@@ -2224,7 +2853,9 @@ def strategy(
 
         wait_reason=get_wait_reason(
             trade_state
-        )
+        ),
+
+        **strategy_tags
     )
 
 
@@ -2240,6 +2871,19 @@ def pick_best_stock(results_dict):
     for name, result in results_dict.items():
 
         if result.get("decision") != "BUY":
+            continue
+
+        if result.get("action", 0) <= 0:
+            continue
+
+        if result.get("entry_quality") in ["C", "D"]:
+            continue
+
+        if result.get("price_behavior") in [
+            "WEAK_REBOUND",
+            "LIMIT_REBOUND",
+            "LIMIT_LOCK"
+        ]:
             continue
 
         if result.get("heat_state") == "EXTREME":
@@ -2261,6 +2905,8 @@ def pick_best_stock(results_dict):
             "strength",
             0
         )
+
+        score += result.get("confidence_score", 0) / 20
 
         lifecycle = result.get(
             "lifecycle"
@@ -2293,7 +2939,7 @@ def pick_best_stock(results_dict):
         elif lifecycle == "EXTREME":
             score -= 4
 
-        # 中文註釋：v18.2 最強股只從有效 BUY 候選中挑選，不讓禁追 / 弱量 / BASE 混入。
+        # 中文註釋：v18.8 最強股加入入場品質與信心分，不讓弱反彈 / 漲停追價混入。
         result["rank_score"] = round(
             score,
             2
