@@ -1,6 +1,6 @@
 name: Stock Bot Pro
 
-on:
+"on":
   workflow_dispatch: {}
 
 jobs:
