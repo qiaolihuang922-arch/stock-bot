@@ -10,21 +10,11 @@ if str(ROOT) not in sys.path:
 
 from core.signal_snapshot import analyze_ohlcv_snapshot, mark_best_candidate
 from core.signal_validator import validate_snapshots
+from core.watchlist import WATCHLIST_CODES
 from services.stock_api import get_twse_ohlcv_history
 
 
-DEFAULT_WATCHLIST = [
-    "3231",
-    "2421",
-    "3035",
-    "2303",
-    "3481",
-    "2344",
-    "2376",
-    "2408",
-    "2356",
-    "2301"
-]
+DEFAULT_WATCHLIST = WATCHLIST_CODES
 
 
 def parse_date(value):

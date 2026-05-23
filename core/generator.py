@@ -22,6 +22,7 @@ from core.condition_engine import (
     condition_engine,
     summarize_conditions
 )
+from core.watchlist import STOCKS
 
 from services.signal_store import record_daily_signals
 from services.daily_snapshot_store import record_daily_snapshots
@@ -34,24 +35,7 @@ VERSION = "v19.0"
 # ================================
 # 🔒 股票池
 # ================================
-stocks = {
-
-    "緯創": "3231",
-    "建準": "2421",
-    "智原": "3035",
-    "聯電": "2303",
-    "群創": "3481",
-
-    "華邦電": "2344",
-    "技嘉": "2376",
-    "南亞科": "2408",
-
-    "英業達": "2356",
-    "仁寶": "2324",
-
-    "光寶科": "2301",
-    "旺宏": "2337"
-}
+stocks = STOCKS
 
 
 # ================================
