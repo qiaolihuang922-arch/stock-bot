@@ -232,9 +232,6 @@ def structure_phase_signal(
     if price_behavior == "LIMIT_REBOUND":
         return "LIMIT_REBOUND"
 
-    if heat_state == "EXTREME":
-        return "EXTENDED_RISK"
-
     if price_behavior == "DISTRIBUTION_SPIKE":
         return "DISTRIBUTION"
 
@@ -258,6 +255,10 @@ def structure_phase_signal(
 
     if market == "WEAK" or trend == "DOWN":
         return "WEAK"
+
+    if heat_state == "EXTREME":
+        # 中文註釋：v19.0 過熱只作為風險標籤，不能覆蓋漲停、突破、弱勢等原本型態。
+        return "EXTENDED_RISK"
 
     if lifecycle == "BASE":
         return "BASE"
@@ -1585,6 +1586,10 @@ def calc_rr(
     setup_type="breakout"
 ):
 
+    if not price or not stop or not resistance:
+        # 中文註釋：v19.0 RR 底層函式防止 None / 0 造成回測中斷，無效資料直接視為 RR 0。
+        return 0
+
     min_risk = (
         price * MIN_STOP_BUFFER
     )
@@ -1631,6 +1636,10 @@ def extended_level(
     price,
     ma20
 ):
+
+    if not price or not ma20:
+        # 中文註釋：v19.0 過熱判斷遇到缺值時回到 0，避免 replay / 測試資料不完整時報錯。
+        return 0
 
     ratio = (
         price / ma20
