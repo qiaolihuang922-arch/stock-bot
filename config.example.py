@@ -3,8 +3,6 @@
 
 TOKEN = ""
 CHAT_ID = ""
-OPENAI_API_KEY = ""
-GITHUB_TOKEN = ""
 
 SUPABASE_URL = ""
 SUPABASE_KEY = ""

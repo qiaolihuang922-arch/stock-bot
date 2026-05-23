@@ -10,8 +10,6 @@
 
 ## 禁改与慎改
 
-- `services/ai.py`：默认不处理，除非用户明确要求。
-- `services/learning.py`：旧版学习文件，默认不处理；`19.x` 改用 `services/signal_store.py`。
 - `config.py`：包含密钥，不要改、不要在回复中展开敏感内容。
 - 不要做无关重构；只改用户本轮要求相关文件。
 
@@ -22,6 +20,12 @@
 - `core/generator.py`：只做报文显示、排序摘要、格式整理。不得自行推翻 `analysis.py` 的交易结论。
 - `services/stock_api.py`：行情来源、实时价修正、涨跌停价格保护。
 - `services/signal_store.py`：`19.x` Supabase 写入层，只负责收盘信号和结果回填，不参与策略判断。
+
+已删除旧文件：
+
+- `services/ai.py`
+- `services/learning.py`
+- `README_AI.md`
 
 ## 18.x 核心原则
 
@@ -183,7 +187,7 @@
 3. 只读取相关源码，不全仓库扫大段无关文件。
 4. 先说明将改哪些点。
 5. 修改处保留中文注释。
-6. 不碰 `ai.py`、`learning.py`，除非用户明确要求。
+6. 不碰 `config.py`，真实密钥只留在本地或平台环境变量。
 7. 跑语法检查：
 
 ```bash
