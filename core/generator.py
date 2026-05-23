@@ -398,6 +398,12 @@ def breakout_distance(
 # ================================
 def semantic_state(result):
 
+    holding_decision = result.get("_holding_decision") or {}
+
+    if holding_decision.get("level") == "SHAKEOUT":
+        # 中文註釋：v19.0 持倉已判定洗盤時，型態主語優先顯示洗盤，避免和弱勢文字衝突。
+        return "🧽 洗盤回測"
+
     phase = result.get("structure_phase")
 
     phase_map = {
@@ -470,6 +476,12 @@ def semantic_state(result):
 # heat_state
 # ================================
 def semantic_trade(result):
+
+    holding_decision = result.get("_holding_decision") or {}
+
+    if holding_decision.get("level") == "SHAKEOUT":
+        # 中文註釋：v19.0 持倉洗盤的低量是保護條件，不再顯示成一般無量交易缺口。
+        return "🧽 縮量洗盤"
 
     decision = result.get(
         "decision"
