@@ -35,11 +35,11 @@ jobs:
         run: |
           if [ -n "$TELEGRAM_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ] && [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_KEY" ]; then
             cat > config.py <<PY
-TOKEN = "$TELEGRAM_TOKEN"
-CHAT_ID = "$TELEGRAM_CHAT_ID"
-SUPABASE_URL = "$SUPABASE_URL"
-SUPABASE_KEY = "$SUPABASE_KEY"
-PY
+          TOKEN = "$TELEGRAM_TOKEN"
+          CHAT_ID = "$TELEGRAM_CHAT_ID"
+          SUPABASE_URL = "$SUPABASE_URL"
+          SUPABASE_KEY = "$SUPABASE_KEY"
+          PY
           elif [ -n "$STOCK_CONFIG" ]; then
             # 中文註釋：v19.0 兼容舊的 STOCK secret，但優先使用拆分後的明確設定。
             printf '%s\n' "$STOCK_CONFIG" > config.py
