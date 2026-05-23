@@ -1,5 +1,5 @@
 # ================================
-# 🔥 FINAL UI（v18.8.1｜Quality Conflict Fix）
+# FINAL UI（v18.9.4｜Global Cleanup）
 # ================================
 
 from datetime import datetime
@@ -25,7 +25,7 @@ from core.condition_engine import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v18.8.1"
+VERSION = "v18.9.4"
 
 
 # ================================
@@ -265,6 +265,10 @@ def get_live_price_data(
 def price_label_for_source(source):
 
     phase = get_market_phase()
+
+    if phase == "假日":
+        # 中文註釋：v18.8.4 假日不顯示 realtime/yahoo/twse 來源，避免被誤解為即時成交。
+        return "最近價格"
 
     if phase == "盤中":
 
@@ -718,11 +722,76 @@ def semantic_condition_labels(
         and (not holding_decision or holding_add_ready)
     ):
         quality = result.get("entry_quality", "D")
-        return ["完整", "風控", f"品質{quality}"]
+        metrics = result.get(
+            "period_metrics",
+            {}
+        )
+        ratio5 = metrics.get(
+            "vol_ratio_5",
+            1
+        )
+        ratio10 = metrics.get(
+            "vol_ratio_10",
+            ratio5
+        )
+        vol_ratio = min(
+            ratio5,
+            ratio10
+        )
+
+        if result.get("heat_state") == "HOT" or vol_ratio < 0.8:
+            labels = ["風控"]
+            if vol_ratio < 0.8:
+                labels.append("RR足夠")
+                labels.append("低量觀察")
+            elif result.get("heat_state") == "HOT":
+                labels.append("RR足夠")
+                labels.append("過熱觀察")
+            # 中文註釋：v18.8.4 觀察型買點明確標出 RR 足夠但量能/過熱未確認。
+            return labels
+
+        if quality in ["A+", "A"]:
+            return ["完整", "風控", f"品質{quality}"]
+
+        return ["風控", "RR", "觀察"]
 
     labels = []
     dist = result.get("breakout_distance")
     profile = result.get("entry_profile")
+
+    if result.get("decision_type") == "watch_quality_c":
+        watch_labels = []
+        metrics = result.get(
+            "period_metrics",
+            {}
+        )
+        ratio5 = metrics.get(
+            "vol_ratio_5",
+            1
+        )
+        ratio10 = metrics.get(
+            "vol_ratio_10",
+            ratio5
+        )
+        vol_ratio = min(
+            ratio5,
+            ratio10
+        )
+
+        if result.get("rr", 0) >= 1:
+            watch_labels.append("RR足夠")
+
+        if vol_ratio < 0.8:
+            watch_labels.append("低量觀察")
+
+        if result.get("heat_state") == "HOT":
+            watch_labels.append("過熱觀察")
+
+        if not watch_labels:
+            watch_labels.append("品質待確認")
+
+        # 中文註釋：v18.9.3 WATCH_C 改用觀察條件，不再顯示事件 / Edge / RR 不足假缺口。
+        return watch_labels[:3]
 
     profile_reason = {
         "WAIT_LIMIT_REBOUND": "漲停反彈待確認",
@@ -744,10 +813,10 @@ def semantic_condition_labels(
         if "RR不足" in note:
             return ["RR不足，不加碼"]
 
-        return ["持倉續抱"]
+        return []
 
     if holding_decision and holding_decision.get("level") == "WATCH":
-        return ["持倉警戒"]
+        return []
 
     # 中文註釋：v18.5 缺口改成交易語意，避免直接露出 event / Edge 造成報文像假錯誤。
     for item in condition_items:
@@ -823,6 +892,22 @@ def should_show_entry_suffix(
         # 中文註釋：v18.5 失敗標題已經表達主狀態，不再追加 BREAKOUT_FAIL 後綴造成重複。
         return False
 
+    if result.get("entry_profile") in [
+        "WAIT_LIMIT_REBOUND",
+        "WAIT_WEAK_REBOUND",
+        "WAIT_DISTANCE",
+        "WAIT_LIMIT_LOCK"
+    ]:
+        # 中文註釋：v18.9.3 觀察 / 不交易型態不掛 Day1，避免弱反彈被誤看成有效突破日。
+        return False
+
+    if result.get("structure_phase") in [
+        "WEAK_REBOUND",
+        "LIMIT_REBOUND"
+    ]:
+        # 中文註釋：v18.9.3 弱勢反彈和漲停反彈需要隔日確認，不顯示突破日後綴。
+        return False
+
     if not holding_decision:
         return True
 
@@ -864,7 +949,8 @@ def get_action(result):
             return f"🟡 {round(position * 100)}%"
 
         if quality in ["C", "D"]:
-            return f"⏳ {round(position * 100)}%"
+            # 中文註釋：v18.8.4 C/D 品質只顯示觀察，不顯示倉位比例避免被當成買進指令。
+            return "⏳"
 
         if result.get("extended_level", 0) == 2:
             return (
@@ -910,6 +996,10 @@ def final_label(result):
             return "小倉觀察"
 
         return "進場"
+
+    if result.get("decision_type") == "watch_quality_c":
+        # 中文註釋：v18.9.3 C 品質是策略層觀察，不顯示成「等確認」以免像缺少資料。
+        return "觀察"
 
     if decision == "FAIL":
         return "失敗"
@@ -1102,16 +1192,8 @@ def render_stock(
     )
 
     if holding_decision and not holding_add_ready:
-        # 中文註釋：v18.7 持倉非加碼時不再顯示新進場 RR / Edge 缺口，避免持倉管理與買點條件衝突。
-        condition_items = [
-            item for item in condition_items
-            if item in [
-                "market",
-                "structure",
-                "trend",
-                "volume"
-            ]
-        ]
+        # 中文註釋：v18.9.3 持倉非加碼完全隱藏買點條件，避免「RR -」卻顯示 RR 足夠或洗盤又顯示量能不足。
+        condition_items = []
 
     # header
     if holding:
@@ -1247,14 +1329,32 @@ def render_stock(
     # 🔥 條件
     # WAIT / NO_TRADE 顯示缺口，BUY 顯示已成立條件
     # ================================
-    if condition_items and result.get("heat_state") != "EXTREME":
+    show_condition_line = (
+        not holding_decision
+        or holding_add_ready
+    ) and (
+        condition_items
+        or result.get("decision_type") == "watch_quality_c"
+    )
+
+    if show_condition_line and result.get("heat_state") != "EXTREME":
 
         if (
             result.get("decision") == "BUY"
             and result.get("action", 0) > 0
             and (not holding_decision or holding_add_ready)
         ):
-            label_title = "成立"
+            if (
+                result.get("heat_state") == "HOT"
+                or result.get("entry_quality") not in ["A+", "A"]
+            ):
+                # 中文註釋：v18.8.3 觀察型買點改用「條件」，避免和強買點「成立」混在一起。
+                label_title = "條件"
+            else:
+                label_title = "成立"
+        elif result.get("decision_type") == "watch_quality_c":
+            # 中文註釋：v18.9.3 C 品質觀察即使缺口清單為空，也要顯示策略觀察條件。
+            label_title = "條件"
         else:
             label_title = "缺口"
 
@@ -1263,10 +1363,11 @@ def render_stock(
             condition_items
         )
 
-        msg += (
-            f"├─ {label_title}："
-            f"{'、'.join(labels)}\n"
-        )
+        if labels:
+            msg += (
+                f"├─ {label_title}："
+                f"{'、'.join(labels)}\n"
+            )
 
     # ================================
     # 🔥 數據
@@ -1296,7 +1397,7 @@ def render_stock(
         # 中文註釋：v18.8 品質分只用於新進場 / 持倉加碼，停利與續抱不混用入場品質。
         msg += (
             f"├─ 品質："
-            f"{quality} ｜C {confidence}\n"
+            f"{quality} ｜信心 {confidence}\n"
         )
 
     # ================================
@@ -1536,9 +1637,14 @@ def generate():
     # ================================
     # 🔥 market summary
     # ================================
+    # 中文註釋：底部局部機會只統計未持倉新進場，避免持倉 BUY 訊號誤導成新買點。
     buy_count = sum(
-        1 for d in decisions
-        if d == "BUY"
+        1 for data in results_map.values()
+        if not data.get("holding")
+        and data["result"].get("decision") == "BUY"
+        and data["result"].get("action", 0) > 0
+        and data["result"].get("entry_quality") in ["A+", "A", "B"]
+        and data["result"].get("heat_state") not in ["HOT", "EXTREME"]
     )
 
     fail_count = sum(
