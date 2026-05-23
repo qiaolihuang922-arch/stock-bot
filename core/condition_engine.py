@@ -1,5 +1,5 @@
 # ================================
-# 🔥 condition_engine.py（FINAL v18.8.1｜品質條件映射層）
+# condition_engine.py（v18.9.4｜WATCH 條件映射層）
 # ================================
 
 def condition_engine(result):
@@ -52,6 +52,20 @@ def condition_engine(result):
         "WAIT_DISTANCE"
     ]:
         conditions["risk"] = False
+
+    if decision_type == "watch_quality_c":
+        # 中文註釋：v18.9.3 C 品質觀察是已辨識的策略狀態，RR 足夠時不再顯示 RR 不足。
+        return {
+            **conditions,
+            "market": bool(market_grade and market_grade != "D"),
+            "structure": structure in ["STRONG", "NORMAL"],
+            "trend": trend == "UP",
+            "volume": bool(volume and volume not in ["WEAK", "DISTRIBUTION"]),
+            "event": True,
+            "edge": True,
+            "risk": bool(risk is not None and 0 < risk <= 0.08),
+            "rr": bool(rr is not None and rr >= 1.0)
+        }
 
     if heat_state == "EXTREME":
         # 中文註釋：v18.3 禁追由過熱主導，不再把風控 / RR 顯示成主要缺口。
