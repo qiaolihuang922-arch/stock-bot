@@ -36,39 +36,39 @@ def home():
             time.sleep(0.3)
 
         now = datetime.now(tz)
+        test_mode = request.args.get("test")
 
-        if now.weekday() >= 5:
+        # 中文註釋：v19.0 Render 測試模式優先於假日判斷，方便週末驗證排程與 GitHub Actions 觸發。
+        if test_mode == "1":
+            tag = now.strftime("%Y%m%d_test_%H%M%S")
+            reason = "測試"
+        else:
+            tag = None
+            reason = ""
+
+        if not test_mode and now.weekday() >= 5:
             return "📴 假日"
 
         hour = now.hour
         minute = now.minute
-        test_mode = request.args.get("test")
-
-        tag = None
-        reason = ""
-
-        # 測試
-        if test_mode == "1":
-            tag = now.strftime("%Y%m%d_test_%H%M%S")
-            reason = "測試"
 
         # 盤前（不補發）
-        elif hour == 8 and 30 <= minute < 40:
+        if not tag and hour == 8 and 30 <= minute < 40:
             tag = now.strftime("%Y%m%d_pre")
             reason = "盤前"
 
         # 收盤（允許補發）
-        elif hour == 13 and minute >= 20:
+        elif not tag and hour == 13 and minute >= 20:
             tag = now.strftime("%Y%m%d_close")
             reason = "收盤"
 
         # 盤中（不補發）
-        elif 9 <= hour < 13:
+        elif not tag and 9 <= hour < 13:
             bucket = minute // 10
             tag = f"{now.strftime('%Y%m%d_%H')}_{bucket}"
             reason = "盤中"
 
-        else:
+        elif not tag:
             return "⏭️ Skip"
 
         if already_sent(tag):
