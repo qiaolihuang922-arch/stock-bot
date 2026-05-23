@@ -1,29 +1,6 @@
 # ================================
-# 🔥 analysis.py（FINAL v18.8.1｜ENTRY QUALITY FIX）
+# analysis.py（v18.9.4｜WATCH AND SHAKEOUT FIX）
 # ================================
-
-# 🔒 VERSION LOCK
-# - ✅ 保留既有 semantic engine
-# - ✅ breakout / trade / heat state 分離
-# - ✅ lifecycle hierarchy 正式建立
-# - ✅ strength ceiling system
-# - ✅ dominant state normalization
-# - ✅ RR=0 ceiling 修正
-# - ✅ LATE_ENTRY 優先級修正
-# - ✅ EXTREME state hierarchy
-# - ✅ breakout trend phase
-# - ✅ late trend phase
-# - ✅ pick_best_stock contextual ranking
-# - ✅ semantic collision 修正
-# - ✅ risk 欄位回補，對齊 condition_engine
-# - ✅ 短資料保護，避免 K 線不足時誤判
-# - ✅ rank_score 與 strength 分離
-# - ✅ v18.1 盤中即時價寫入策略 K 線
-# - ✅ v18.1 3 / 5 / 10 日多週期趨勢判斷
-# - ✅ v18.1 breakout 狀態改用持續天數，降低單日重複誤報
-# - ✅ v18.2 弱勢 / 過熱 / BASE 交易衝突防護
-# ================================
-
 
 # ================================
 # 🔥 常數
@@ -446,6 +423,70 @@ def entry_quality_label(score):
     return "D"
 
 
+def guard_low_volume_quality(
+    score,
+    metrics,
+    structure,
+    behavior,
+    phase,
+    heat_state
+):
+
+    ratio5 = metrics.get(
+        "vol_ratio_5",
+        1
+    )
+
+    ratio10 = metrics.get(
+        "vol_ratio_10",
+        ratio5
+    )
+
+    vol_ratio = min(
+        ratio5,
+        ratio10
+    )
+
+    if (
+        vol_ratio < 0.8
+        and heat_state == "HOT"
+    ):
+        # 中文註釋：v18.8.3 過熱觀察又低量時只保留觀察分，避免顯示成 A+ 強買點。
+        return min(
+            score,
+            64
+        )
+
+    if (
+        vol_ratio < 0.8
+        and structure != "STRONG"
+        and behavior not in [
+            "LIMIT_LOCK",
+            "VOLUME_BREAKOUT"
+        ]
+    ):
+        # 中文註釋：v18.8.3 品質分與報文 V 倍率共用 5/10 日較低口徑，避免低量仍顯示 A+。
+        return min(
+            score,
+            74
+        )
+
+    if (
+        vol_ratio < 0.65
+        and phase not in [
+            "SHAKEOUT",
+            "HEALTHY_PULLBACK"
+        ]
+    ):
+        # 中文註釋：v18.8.3 極低量能只允許洗盤 / 健康回踩保留觀察分，其餘不得成為高品質進場。
+        return min(
+            score,
+            64
+        )
+
+    return score
+
+
 def quality_position(position, quality, profile):
 
     if quality in ["A+", "A"]:
@@ -455,7 +496,8 @@ def quality_position(position, quality, profile):
         return min(position, 0.25)
 
     if quality == "C":
-        return min(position, 0.1)
+        # 中文註釋：v18.9 C 品質只做觀察，不產生實際買入倉位，避免顯示觀察但策略仍下單。
+        return 0
 
     # 中文註釋：v18.8 品質分不直接砍掉合理出手，而是把倉位降到對應風險級別。
     return 0
@@ -1661,6 +1703,64 @@ def wait_decision_type(
     return "none"
 
 
+def watch_result(
+    reason,
+    m_score,
+    m_grade,
+    setup,
+    execute,
+    trend,
+    trend_bias,
+    volume,
+    vp_state,
+    structure,
+    rr,
+    risk,
+    entry_stage,
+    lifecycle,
+    breakout_state,
+    trade_state,
+    heat_state,
+    dominant,
+    extended,
+    ext_level,
+    metrics,
+    b_days,
+    b_hold_days,
+    strategy_tags
+):
+
+    # 中文註釋：v18.9 WATCH 是策略層觀察，不再用 BUY+0 倉位假裝可買。
+    return build_result(
+        decision="WAIT",
+        decision_type=reason,
+        market_score=m_score,
+        market_grade=m_grade,
+        setup_score=setup,
+        execution_score=execute,
+        trend=trend,
+        trend_bias=trend_bias,
+        volume_state=volume,
+        volume_price_state=vp_state,
+        structure_state=structure,
+        rr=rr,
+        risk=risk,
+        entry_stage=entry_stage,
+        lifecycle=lifecycle,
+        breakout_state=breakout_state,
+        trade_state=trade_state,
+        heat_state=heat_state,
+        dominant_state=dominant,
+        extended=extended,
+        extended_level=ext_level,
+        period_metrics=metrics,
+        breakout_days=b_days,
+        breakout_hold_days=b_hold_days,
+        wait_reason="WAIT_CONFIRM",
+        **strategy_tags
+    )
+
+
 def can_buy(
     lifecycle,
     heat_state,
@@ -1694,6 +1794,10 @@ def can_buy(
         return False
 
     if entry_quality == "D":
+        return False
+
+    if entry_quality == "C":
+        # 中文註釋：v18.9 C 品質歸入 WATCH，不進 BUY；B 以上才允許小倉或正常出手。
         return False
 
     # 中文註釋：v18.8 集中交易閘門加入價格行為與品質分，不靠少買，而是避免錯誤類型出手。
@@ -1738,6 +1842,47 @@ def holding_signal(
     confidence = result.get("confidence_score", 0)
     profile = result.get("entry_profile", "NONE")
 
+    structure_broken = (
+        phase in ["FAILED_BREAKOUT", "DISTRIBUTION"]
+        or vp == "DISTRIBUTION"
+        or (
+            trend == "DOWN"
+            and volume != "WEAK"
+            and bias == "DOWN_CONFIRM"
+        )
+    )
+
+    shakeout_protected = (
+        phase in ["SHAKEOUT", "HEALTHY_PULLBACK"]
+        or (
+            behavior == "LOW_VOLUME_PULLBACK"
+            and trend != "DOWN"
+            and vp != "DISTRIBUTION"
+            and bias != "DOWN_CONFIRM"
+        )
+        or (
+            volume == "WEAK"
+            and vp == "COILING"
+            and phase not in ["FAILED_BREAKOUT", "DISTRIBUTION"]
+            and trend != "DOWN"
+            and bias != "DOWN_CONFIRM"
+            and pnl > -5
+        )
+    )
+
+    if pnl >= 15:
+        hard_stop_price = max(
+            hard_stop_price,
+            price * 0.9,
+            avg_price * 1.05
+        )
+
+    elif pnl >= 8:
+        hard_stop_price = max(
+            hard_stop_price,
+            avg_price * 1.02
+        )
+
     def payload(action, ratio, reason, level, signal_phase, allow_add=False, risk_level=2):
         return {
             "action": action,
@@ -1751,15 +1896,26 @@ def holding_signal(
             "hard_stop_price": hard_stop_price
         }
 
-    if pnl <= -8 or price <= hard_stop_price:
+    if (
+        price <= hard_stop_price
+        and not shakeout_protected
+    ):
+        # 中文註釋：v18.9 硬停損需避開縮量洗盤，只有非洗盤情境跌破保護線才清倉。
         return payload("停損 100%", 1, "硬停損觸發", "STOP_100", "STOP_LOSS", False, 5)
 
-    if vp == "DISTRIBUTION" or phase == "DISTRIBUTION":
+    if (
+        pnl <= -8
+        and structure_broken
+    ):
+        # 中文註釋：v18.9 大幅虧損且結構已破才全停損，避免單靠虧損百分比被洗出去。
+        return payload("停損 100%", 1, "破位轉弱", "STOP_100", "STOP_LOSS", False, 5)
+
+    if structure_broken:
         ratio = 0.5 if pnl <= 0 else 0.25
         return payload(
             f"減碼 {int(ratio * 100)}%",
             ratio,
-            "出貨風險",
+            "結構破壞，先降風險",
             "REDUCE_50" if ratio == 0.5 else "REDUCE_25",
             "RISK_REDUCE",
             False,
@@ -1811,11 +1967,11 @@ def holding_signal(
             2
         )
 
-    if phase in ["SHAKEOUT", "HEALTHY_PULLBACK"] and pnl > -3:
+    if shakeout_protected and pnl > -5:
         return payload(
             "洗盤觀察",
             0,
-            "縮量回測，結構未破",
+            "縮量回測，未見出貨",
             "SHAKEOUT",
             "SHAKEOUT_HOLD",
             False,
@@ -2226,6 +2382,15 @@ def strategy(
         bias
     )
 
+    confidence = guard_low_volume_quality(
+        confidence,
+        metrics,
+        structure,
+        behavior,
+        phase,
+        heat_state
+    )
+
     quality = entry_quality_label(
         confidence
     )
@@ -2482,6 +2647,35 @@ def strategy(
             ,
 
             **strategy_tags
+        )
+
+    if quality == "C":
+        # 中文註釋：v18.9 C 品質在排除弱勢 / 失敗 / 假突破 / 極熱後才轉觀察，避免覆蓋更高優先級風險。
+        return watch_result(
+            "watch_quality_c",
+            m_score,
+            m_grade,
+            setup,
+            execute,
+            trend,
+            trend_bias,
+            volume,
+            vp_state,
+            structure,
+            rr,
+            risk,
+            entry_stage,
+            lifecycle,
+            breakout_state,
+            trade_state,
+            heat_state,
+            dominant,
+            extended,
+            ext_level,
+            metrics,
+            b_days,
+            b_hold_days,
+            strategy_tags
         )
 
     # ================================
@@ -2879,6 +3073,9 @@ def pick_best_stock(results_dict):
         if result.get("entry_quality") in ["C", "D"]:
             continue
 
+        if result.get("entry_quality") not in ["A+", "A"]:
+            continue
+
         if result.get("price_behavior") in [
             "WEAK_REBOUND",
             "LIMIT_REBOUND",
@@ -2886,13 +3083,41 @@ def pick_best_stock(results_dict):
         ]:
             continue
 
-        if result.get("heat_state") == "EXTREME":
+        if result.get("heat_state") in ["HOT", "EXTREME"]:
             continue
 
         if result.get("trade_state") == "AVOID":
             continue
 
         if result.get("volume_state") == "WEAK":
+            continue
+
+        metrics = result.get(
+            "period_metrics",
+            {}
+        )
+
+        ratio5 = metrics.get(
+            "vol_ratio_5",
+            1
+        )
+
+        ratio10 = metrics.get(
+            "vol_ratio_10",
+            ratio5
+        )
+
+        vol_ratio = min(
+            ratio5,
+            ratio10
+        )
+
+        if (
+            vol_ratio < 0.8
+            and result.get("structure_state") != "STRONG"
+            and result.get("price_behavior") != "VOLUME_BREAKOUT"
+        ):
+            # 中文註釋：v18.8.3 最強股需有足夠量能或攻擊結構，避免低量小倉觀察被選成最強。
             continue
 
         if result.get("lifecycle") == "BASE":
