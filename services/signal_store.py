@@ -49,8 +49,16 @@ def should_record_daily(phase, now=None):
     if now.weekday() >= 5:
         return False
 
-    # 中文註釋：v19.0 只保留收盤/盤後穩定資料，盤前與盤中波動不入庫。
-    return phase in ["收盤", "盤後"]
+    after_close = (
+        now.hour > 13
+        or (
+            now.hour == 13
+            and now.minute >= 20
+        )
+    )
+
+    # 中文註釋：v19.0 入庫必須是工作日 13:20 之後，避免早盤手動執行被「盤後」字樣誤寫成收盤樣本。
+    return after_close and phase in ["收盤", "盤後"]
 
 
 def _existing_run(run_date):
