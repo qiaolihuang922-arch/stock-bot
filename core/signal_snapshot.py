@@ -170,6 +170,32 @@ def analyze_ohlcv_snapshot(stock_id, trade_date, closes, volumes, version="v19.0
     }
 
 
+def snapshot_from_result(stock_id, trade_date, version, result, close, volume_ratio, position_state=None):
+    reasons = _reason_labels(result)
+    is_tradeable = is_tradeable_result(result)
+
+    # 中文註釋：v19.0 每日正式寫入與 backfill 共用同一個 snapshot 格式，避免兩套口徑分裂。
+    return {
+        "stock_id": stock_id,
+        "trade_date": trade_date,
+        "version": version,
+        "close": _safe_round(close),
+        "volume_ratio": _safe_round(volume_ratio),
+        "pattern": result.get("structure_phase"),
+        "market_state": result.get("market_grade"),
+        "structure_state": result.get("structure_state"),
+        "position_state": position_state or _position_state(result.get("breakout_distance")),
+        "rr": _safe_round(result.get("rr")),
+        "score": _safe_round(result.get("strength")),
+        "heat_level": result.get("extended_level", 0),
+        "action": result.get("decision"),
+        "reasons": reasons,
+        "is_tradeable": is_tradeable,
+        "is_best_candidate": False,
+        "raw_result": result
+    }
+
+
 def mark_best_candidate(snapshots):
     candidates = {
         item["stock_id"]: item["raw_result"]

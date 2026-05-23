@@ -24,6 +24,7 @@ from core.condition_engine import (
 )
 
 from services.signal_store import record_daily_signals
+from services.daily_snapshot_store import record_daily_snapshots
 
 tz = pytz.timezone("Asia/Taipei")
 
@@ -1721,6 +1722,14 @@ def generate():
             best,
             market_summary
         )
+        # 中文註釋：v19.0 同步寫入 daily_price / daily_signal_snapshot，供 backfill 與每日樣本共用同一套口徑。
+        snapshot_result = record_daily_snapshots(
+            VERSION,
+            get_market_phase(),
+            results_map
+        )
+        if snapshot_result.get("reason") == "validation_failed":
+            msg += "\n⚠ Snapshot驗證失敗，未寫入每日快照"
     except Exception as e:
         msg += f"\n⚠ DB記錄失敗：{str(e)}"
 
