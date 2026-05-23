@@ -3,7 +3,7 @@ import time
 from config import TOKEN, CHAT_ID
 
 # ================================
-# 🔥 notifier.py（v18.1｜Telegram 發送層）
+# 🔥 notifier.py（v19.0｜Telegram 發送層）
 # ================================
 
 def send(msg):
@@ -22,7 +22,7 @@ def send(msg):
 
             if r.status_code == 200:
                 print("✅ 發送成功")
-                return
+                return True
             else:
                 print("❌ 發送失敗", r.text)
 
@@ -30,3 +30,6 @@ def send(msg):
             print("❌ 發送錯誤", e)
 
         time.sleep(2)
+
+    # 中文註釋：v19.0 Telegram 三次都失敗時回傳 False，讓 GitHub Actions 不再假成功。
+    return False
