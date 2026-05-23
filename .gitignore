@@ -1,0 +1,13 @@
+.DS_Store
+.venv/
+__pycache__/
+*.pyc
+.pycache/
+
+# 本機密鑰設定，不可提交到 GitHub。
+config.py
+.env
+.env.*
+
+# 執行期間產生的防重複/暫存檔。
+sent_*.txt

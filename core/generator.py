@@ -1,5 +1,5 @@
 # ================================
-# FINAL UI（v18.9.4｜Global Cleanup）
+# FINAL UI（v19.0｜Daily Signal Database）
 # ================================
 
 from datetime import datetime
@@ -23,9 +23,11 @@ from core.condition_engine import (
     summarize_conditions
 )
 
+from services.signal_store import record_daily_signals
+
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v18.9.4"
+VERSION = "v19.0"
 
 
 # ================================
@@ -1140,17 +1142,20 @@ def render_stock(
         data["ma5"],
         data["ma20"]
     )
+    data["structure_score"] = struct
 
     # V 倍率
     vol = volume_ratio(
         data["volumes"]
     )
+    data["volume_ratio"] = vol
 
     # breakout 距離
     dist = breakout_distance(
         price,
         data["closes"]
     )
+    data["breakout_distance"] = dist
 
     result["breakout_distance"] = dist
 
@@ -1181,6 +1186,7 @@ def render_stock(
         )
 
         result["_holding_decision"] = holding_decision
+        data["holding_decision"] = holding_decision
 
     holding_add_ready = (
         holding_decision
@@ -1519,6 +1525,7 @@ def generate():
                 "price": price,
                 "change": change,
                 "price_source": price_source,
+                "stock_code": code,
 
                 "ma5": ma5,
                 "ma20": ma20,
@@ -1667,29 +1674,42 @@ def generate():
         if data["result"].get("market_grade") == "D"
     )
 
+    market_summary = "⏳ 觀望"
+
     if no_trade_count >= 6 or weak_count >= 6:
 
         # 中文註釋：v18.5 全局弱勢優先於局部失敗數，避免底部總結只看兩檔 FAIL 而誤判盤面。
-        msg += "⏳ 弱勢觀望"
+        market_summary = "⏳ 弱勢觀望"
 
     elif extreme_count >= 3:
 
-        msg += "🚨 過熱分歧"
+        market_summary = "🚨 過熱分歧"
 
     elif fail_count >= 2:
 
-        msg += "🔴 突破失敗增多"
+        market_summary = "🔴 突破失敗增多"
 
     elif buy_count >= 3:
 
-        msg += "🟢 市場偏強"
+        market_summary = "🟢 市場偏強"
 
     elif buy_count > 0:
 
-        msg += "🟡 局部機會"
+        market_summary = "🟡 局部機會"
 
-    else:
+    msg += market_summary
 
-        msg += "⏳ 觀望"
+    try:
+        # 中文註釋：v19.0 只在收盤/盤後把每日穩定訊號寫入 Supabase，盤中不入庫。
+        record_daily_signals(
+            VERSION,
+            get_market_phase(),
+            msg,
+            results_map,
+            best,
+            market_summary
+        )
+    except Exception as e:
+        msg += f"\n⚠ DB記錄失敗：{str(e)}"
 
     return msg

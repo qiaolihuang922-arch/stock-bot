@@ -22,6 +22,17 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Create runtime config
+        run: |
+          cat > config.py <<'PY'
+          TOKEN = "${{ secrets.TELEGRAM_TOKEN }}"
+          CHAT_ID = "${{ secrets.TELEGRAM_CHAT_ID }}"
+          OPENAI_API_KEY = "${{ secrets.OPENAI_API_KEY }}"
+          GITHUB_TOKEN = "${{ secrets.BOT_GITHUB_TOKEN }}"
+          SUPABASE_URL = "${{ secrets.SUPABASE_URL }}"
+          SUPABASE_KEY = "${{ secrets.SUPABASE_KEY }}"
+          PY
+
       - name: Run bot (retry 3 times)
         run: |
           for i in 1 2 3

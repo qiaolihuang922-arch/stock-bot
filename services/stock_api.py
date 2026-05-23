@@ -11,6 +11,22 @@ tz = pytz.timezone("Asia/Taipei")
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
+def parse_quote_level(raw):
+    if not raw:
+        return None
+
+    for item in str(raw).split("_"):
+        try:
+            price = float(item)
+        except:
+            continue
+
+        if price > 0:
+            return price
+
+    return None
+
+
 def get_realtime_price(code):
     try:
         r = None
@@ -44,8 +60,9 @@ def get_realtime_price(code):
             price = float(z)
         else:
             try:
-                bid = float(b.split("_")[0]) if b else None
-                ask = float(a.split("_")[0]) if a else None
+                # 中文註釋：v18.5 漲停 / 跌停時第一檔可能是 "-" 或 0，逐檔找有效價格避免退回昨收。
+                bid = parse_quote_level(b)
+                ask = parse_quote_level(a)
 
                 if bid and ask:
                     price = (bid + ask) / 2
@@ -59,7 +76,8 @@ def get_realtime_price(code):
         if not price:
             return None
 
-        if price > prev_close * 1.1 or price < prev_close * 0.9:
+        # 中文註釋：v18.5 漲跌停價有 tick rounding，放寬到 10.5% 避免合法漲停價被誤判異常。
+        if price > prev_close * 1.105 or price < prev_close * 0.895:
             return None
 
         change = (price - prev_close) / prev_close * 100
