@@ -2,6 +2,7 @@ import unittest
 from datetime import date
 
 from scripts.dry_run_replay import build_replay_rows
+from core.signal_validator import validate_snapshots
 
 
 class DryRunReplayTest(unittest.TestCase):
@@ -42,6 +43,16 @@ class DryRunReplayTest(unittest.TestCase):
                 sum(1 for row in daily if row["is_best_candidate"]),
                 1
             )
+
+    def test_replay_validation_passes(self):
+        rows = build_replay_rows(
+            ["3231", "2421", "3035"],
+            date(2026, 5, 11),
+            date(2026, 5, 13),
+            "v19.0",
+            "synthetic"
+        )
+        self.assertEqual(validate_snapshots(rows), [])
 
 
 if __name__ == "__main__":

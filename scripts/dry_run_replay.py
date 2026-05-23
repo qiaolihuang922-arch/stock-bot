@@ -9,6 +9,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.signal_snapshot import analyze_ohlcv_snapshot, mark_best_candidate
+from core.signal_validator import validate_snapshots
 from services.stock_api import get_twse_ohlcv_history
 
 
@@ -198,6 +199,23 @@ def emit_csv(rows):
         writer.writerow(output)
 
 
+def emit_validation(rows):
+    errors = validate_snapshots(rows)
+
+    if not errors:
+        print("VALIDATION OK", file=sys.stderr)
+        return
+
+    print("VALIDATION FAILED", file=sys.stderr)
+    for error in errors[:50]:
+        print(f"- {error}", file=sys.stderr)
+
+    if len(errors) > 50:
+        print(f"... {len(errors) - 50} more errors", file=sys.stderr)
+
+    raise SystemExit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(description="v19 dry-run replay without database writes")
     parser.add_argument("--start-date")
@@ -207,6 +225,7 @@ def main():
     parser.add_argument("--source", choices=["synthetic", "twse"], default="synthetic")
     parser.add_argument("--version", default="v19.0")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--validate", action="store_true")
     args = parser.parse_args()
 
     if not args.dry_run:
@@ -228,6 +247,8 @@ def main():
         stock_ids = DEFAULT_WATCHLIST
 
     rows = build_replay_rows(stock_ids, start_date, end_date, args.version, args.source)
+    if args.validate:
+        emit_validation(rows)
     emit_csv(rows)
 
 
