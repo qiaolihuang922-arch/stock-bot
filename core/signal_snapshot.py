@@ -97,6 +97,12 @@ def _reason_labels(result):
     if result.get("heat_state") == "EXTREME":
         labels = ["過熱 Lv.3", "不追高"]
 
+    if (
+        result.get("breakout_state") == "FAIL"
+        or result.get("structure_phase") == "FAILED_BREAKOUT"
+    ):
+        labels.insert(0, "突破失敗")
+
     if result.get("trade_state") == "NO_VOLUME" and "量能不足" not in labels:
         labels.append("量能不足")
 

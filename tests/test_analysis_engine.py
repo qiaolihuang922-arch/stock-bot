@@ -129,6 +129,11 @@ class AnalysisEngineTest(unittest.TestCase):
         mark_best_candidate(snapshots)
         self.assertFalse(any(item["is_best_candidate"] for item in snapshots))
 
+    def test_failed_breakout_has_reason(self):
+        item = snap("fail", [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 124, 125, 123, 116], VOL_ATTACK)
+        self.assertEqual(item["pattern"], "FAILED_BREAKOUT")
+        self.assertIn("突破失敗", item["reasons"])
+
 
 if __name__ == "__main__":
     unittest.main()

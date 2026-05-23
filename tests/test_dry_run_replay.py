@@ -10,7 +10,8 @@ class DryRunReplayTest(unittest.TestCase):
             ["3231", "2421"],
             date(2026, 5, 11),
             date(2026, 5, 15),
-            "v19.0"
+            "v19.0",
+            "synthetic"
         )
 
         self.assertEqual(len(rows), 10)
@@ -31,7 +32,8 @@ class DryRunReplayTest(unittest.TestCase):
             ["3231", "2421", "3035"],
             date(2026, 5, 11),
             date(2026, 5, 13),
-            "v19.0"
+            "v19.0",
+            "synthetic"
         )
 
         for trade_date in {row["trade_date"] for row in rows}:

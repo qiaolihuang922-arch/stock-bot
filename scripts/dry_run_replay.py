@@ -9,6 +9,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.signal_snapshot import analyze_ohlcv_snapshot, mark_best_candidate
+from services.stock_api import get_twse_ohlcv_history
 
 
 DEFAULT_WATCHLIST = [
@@ -90,10 +91,49 @@ def synthetic_history(stock_id, dates):
     return closes, volumes
 
 
-def build_replay_rows(stock_ids, start_date, end_date, version):
+def history_from_ohlcv(ohlcv_rows, all_days):
+    by_date = {
+        row["trade_date"]: row
+        for row in ohlcv_rows
+    }
+    closes = []
+    volumes = []
+    aligned_days = []
+
+    for trade_date in all_days:
+        row = by_date.get(trade_date)
+        if not row:
+            continue
+        closes.append(row["close"])
+        volumes.append(row["volume"])
+        aligned_days.append(trade_date)
+
+    return aligned_days, closes, volumes
+
+
+def load_history(stock_id, all_days, source):
+    if source == "synthetic":
+        return all_days, *synthetic_history(stock_id, all_days)
+
+    if source == "twse":
+        ohlcv = get_twse_ohlcv_history(
+            stock_id,
+            min(all_days),
+            max(all_days)
+        )
+        return history_from_ohlcv(ohlcv, all_days)
+
+    raise ValueError(f"Unsupported source: {source}")
+
+
+def build_replay_rows(stock_ids, start_date, end_date, version, source="synthetic"):
     warmup_start = start_date - timedelta(days=45)
     all_days = trading_days(warmup_start, end_date)
     replay_days = set(trading_days(start_date, end_date))
+    histories = {
+        stock_id: load_history(stock_id, all_days, source)
+        for stock_id in stock_ids
+    }
     rows = []
 
     for trade_date in all_days:
@@ -103,8 +143,12 @@ def build_replay_rows(stock_ids, start_date, end_date, version):
         daily = []
 
         for stock_id in stock_ids:
-            closes, volumes = synthetic_history(stock_id, all_days)
-            cutoff = all_days.index(trade_date) + 1
+            history_days, closes, volumes = histories[stock_id]
+
+            if trade_date not in history_days:
+                continue
+
+            cutoff = history_days.index(trade_date) + 1
 
             if cutoff < 20:
                 continue
@@ -160,6 +204,7 @@ def main():
     parser.add_argument("--end-date")
     parser.add_argument("--stock-id")
     parser.add_argument("--watchlist")
+    parser.add_argument("--source", choices=["synthetic", "twse"], default="synthetic")
     parser.add_argument("--version", default="v19.0")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
@@ -182,7 +227,7 @@ def main():
     else:
         stock_ids = DEFAULT_WATCHLIST
 
-    rows = build_replay_rows(stock_ids, start_date, end_date, args.version)
+    rows = build_replay_rows(stock_ids, start_date, end_date, args.version, args.source)
     emit_csv(rows)
 
 

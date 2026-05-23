@@ -1,14 +1,51 @@
-import requests
 from datetime import datetime, timedelta
-import pytz
 import time
+
+try:
+    import requests
+except ImportError:
+    requests = None
+
+try:
+    import pytz
+except ImportError:
+    pytz = None
 
 # ================================
 # 🔥 stock_api.py（v18.1｜行情資料層）
 # ================================
 
-tz = pytz.timezone("Asia/Taipei")
+tz = pytz.timezone("Asia/Taipei") if pytz else None
 HEADERS = {"User-Agent": "Mozilla/5.0"}
+
+
+def parse_twse_date(value):
+    try:
+        parts = str(value).split("/")
+        if len(parts) != 3:
+            return None
+
+        year = int(parts[0])
+        if year < 1911:
+            year += 1911
+
+        return datetime(
+            year,
+            int(parts[1]),
+            int(parts[2])
+        ).date()
+    except:
+        return None
+
+
+def parse_twse_number(value):
+    try:
+        text = str(value).replace(",", "").strip()
+        if text in ["", "--", "-"]:
+            return None
+        return float(text)
+    except:
+        return None
 
 
 def parse_quote_level(raw):
@@ -29,6 +66,9 @@ def parse_quote_level(raw):
 
 def get_realtime_price(code):
     try:
+        if requests is None:
+            return None
+
         r = None
 
         # 中文註釋：v18.1 先查上市 tse，再查上櫃 otc，保留未來股票池擴充彈性。
@@ -89,6 +129,9 @@ def get_realtime_price(code):
 
 def get_yahoo(code):
     try:
+        if requests is None:
+            return None
+
         url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={code}.TW"
         r = requests.get(url, headers=HEADERS, timeout=10).json()
         d = r["quoteResponse"]["result"]
@@ -101,10 +144,13 @@ def get_yahoo(code):
 
 
 def get_twse(code):
+    if requests is None:
+        return None
+
     for _ in range(3):
         try:
             rows = []
-            now = datetime.now(tz)
+            now = datetime.now(tz) if tz else datetime.now()
 
             for i in range(6):
                 date = now - timedelta(days=30*i)
@@ -154,3 +200,63 @@ def get_twse(code):
             time.sleep(2)
 
     return None
+
+
+def get_twse_ohlcv_history(code, start_date, end_date):
+    if requests is None:
+        raise RuntimeError("requests is required for --source twse")
+
+    rows = {}
+    cursor = datetime(end_date.year, end_date.month, 1).date()
+    first_month = datetime(start_date.year, start_date.month, 1).date()
+
+    while cursor >= first_month:
+        url = (
+            "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
+            f"?response=json&date={cursor.strftime('%Y%m01')}&stockNo={code}"
+        )
+
+        try:
+            payload = requests.get(url, headers=HEADERS, timeout=10).json()
+        except:
+            payload = {}
+
+        if payload.get("stat") == "OK":
+            for item in payload.get("data", []):
+                trade_date = parse_twse_date(item[0])
+
+                if not trade_date or trade_date < start_date or trade_date > end_date:
+                    continue
+
+                open_price = parse_twse_number(item[3])
+                high = parse_twse_number(item[4])
+                low = parse_twse_number(item[5])
+                close = parse_twse_number(item[6])
+                volume = parse_twse_number(item[1])
+
+                if close is None or volume is None:
+                    continue
+
+                rows[trade_date] = {
+                    "stock_id": str(code),
+                    "trade_date": trade_date,
+                    "open": open_price,
+                    "high": high,
+                    "low": low,
+                    "close": close,
+                    "volume": volume,
+                    "source": "twse"
+                }
+
+        # 中文註釋：v19.0 歷史 OHLCV 逐月往回抓，供 dry-run replay 使用；不在此函式寫入資料庫。
+        if cursor.month == 1:
+            cursor = datetime(cursor.year - 1, 12, 1).date()
+        else:
+            cursor = datetime(cursor.year, cursor.month - 1, 1).date()
+
+        time.sleep(0.2)
+
+    return [
+        rows[trade_date]
+        for trade_date in sorted(rows)
+    ]
