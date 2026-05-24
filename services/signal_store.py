@@ -57,7 +57,7 @@ def should_record_daily(phase, now=None):
         )
     )
 
-    # 中文註釋：v19.0 入庫必須是工作日 13:20 之後，避免早盤手動執行被「盤後」字樣誤寫成收盤樣本。
+    # 中文註釋：v19.1.3 入庫必須是工作日 13:20 之後，避免早盤手動執行被「盤後」字樣誤寫成收盤樣本。
     return after_close and phase in ["收盤", "盤後"]
 
 
@@ -118,7 +118,7 @@ def _item_payload(run_id, name, data):
         "heat_state": result.get("heat_state"),
         "trade_state": result.get("trade_state"),
         "breakout_distance": _num(result.get("breakout_distance")),
-        # 中文註釋：v19.0 raw_result 只存策略核心欄位，不保存完整 K 線，避免免費資料庫膨脹。
+        # 中文註釋：v19.1.3 raw_result 只存策略核心欄位，不保存完整 K 線，避免免費資料庫膨脹。
         "raw_result": _json_safe({
             "entry_stage": result.get("entry_stage"),
             "entry_profile": result.get("entry_profile"),
@@ -144,7 +144,7 @@ def record_daily_signals(version, phase, message, results_map, best_stock, marke
     existing_id = _existing_run(run_date)
 
     if existing_id:
-        # 中文註釋：v19.0 同一天收盤訊號只記一次，避免盤後重跑造成重複樣本。
+        # 中文註釋：v19.1.3 同一天收盤訊號只記一次，避免盤後重跑造成重複樣本。
         update_due_outcomes(results_map, now)
         return {
             "recorded": False,
@@ -243,7 +243,7 @@ def _due_items(horizon, today):
         run = row.get("signal_runs") or {}
         run_date = run.get("run_date")
 
-        # 中文註釋：v19.0 outcome 以已入庫的收盤交易日序列計算，不用自然日避免週末污染 1/3/5/10 日結果。
+        # 中文註釋：v19.1.3 outcome 以已入庫的收盤交易日序列計算，不用自然日避免週末污染 1/3/5/10 日結果。
         if run_date in due_dates:
             items.append(row)
 

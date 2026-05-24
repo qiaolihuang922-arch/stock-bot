@@ -6,7 +6,9 @@
 
 - 当前稳定线：`v19.1.3`
 - 旧版策略升级已完成：策略层、显示层、持仓逻辑、行情显示冲突修复。
-- `19.x` 当前目标：可验证、可重跑、可回放、可避免污染的数据库写入流程。
+- 第一版回测已完成：每日 snapshot、replay/backfill、相对表现验证、持仓/新进场显示边界已接入。
+- 后续阶段进入更深度的研究与开发：扩大历史样本、强化回测分层、评估策略参数与持仓管理效果。
+- `19.x` 当前底线：可验证、可重跑、可回放、可避免污染的数据库写入流程。
 - 不要直接大量 backfill。必须先 dry-run、validate、人工或自动检查无误后，才允许正式写入。
 
 ## 禁改与慎改
@@ -46,13 +48,13 @@
 - `core/generator.py`：报文显示、排序摘要、Telegram 输出内容。不得自行推翻 `analysis.py` 的交易结论。
 - `services/stock_api.py`：行情来源、实时价修正、涨跌停价格保护、TWSE OHLCV 历史资料。
 - `services/signal_store.py`：原始 3 表写入层，负责 `signal_runs / signal_items / signal_outcomes`。
-- `services/daily_snapshot_store.py`：v19 每日快照写入层，负责每日 `daily_signal_snapshot`；只有拿到完整 OHLCV 时才写 `daily_price`，写入前必须验证。
+- `services/daily_snapshot_store.py`：v19.1.3 每日快照写入层，负责每日 `daily_signal_snapshot`；只有拿到完整 OHLCV 时才写 `daily_price`，写入前必须验证。
 - `core/signal_snapshot.py`：把策略结果或 OHLCV 转成统一可回测 snapshot。
 - `core/signal_validator.py`：检查 snapshot 逻辑冲突，防止错误资料入库。
 - `core/holdings.py`：当前持仓清单与持仓股票代码集合，供 generator / replay / backfill 共用持仓边界。
 - `scripts/dry_run_replay.py`：dry-run replay，不写数据库。
 - `scripts/backfill_signals.py`：受保护 backfill，默认不写数据库。
-- `docs/v19_backfill_schema.sql`：v19 两张新表建表 SQL。
+- `docs/v19_backfill_schema.sql`：v19.1.3 回测/回放两张新表建表 SQL。
 
 ## 数据库边界
 
@@ -62,7 +64,7 @@
 - `signal_items`
 - `signal_outcomes`
 
-v19 回测/回放 2 表：
+v19.1.3 回测/回放 2 表：
 
 - `daily_price`
 - `daily_signal_snapshot`

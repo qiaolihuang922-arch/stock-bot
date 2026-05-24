@@ -119,7 +119,7 @@ def _reason_labels(result):
     if result.get("trade_state") == "LATE_ENTRY" and "RR不足" not in labels:
         labels.append("RR不足")
 
-    # 中文註釋：v19.0 snapshot reasons 只保留去重後的策略原因，供 dry-run 與 unit test 驗證。
+    # 中文註釋：v19.1.3 snapshot reasons 只保留去重後的策略原因，供 dry-run 與 unit test 驗證。
     return list(dict.fromkeys(labels))
 
 
@@ -186,7 +186,7 @@ def snapshot_from_result(stock_id, trade_date, version, result, close, volume_ra
     reasons = _reason_labels(result)
     is_tradeable = is_tradeable_result(result)
 
-    # 中文註釋：v19.0 每日正式寫入與 backfill 共用同一個 snapshot 格式，避免兩套口徑分裂。
+    # 中文註釋：v19.1.3 每日正式寫入與 backfill 共用同一個 snapshot 格式，避免兩套口徑分裂。
     return {
         "stock_id": stock_id,
         "trade_date": trade_date,

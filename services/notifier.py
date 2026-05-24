@@ -3,7 +3,7 @@ import time
 from config import TOKEN, CHAT_ID
 
 # ================================
-# 🔥 notifier.py（v19.0｜Telegram 發送層）
+# 🔥 notifier.py（v19.1.3｜Telegram 發送層）
 # ================================
 
 def send(msg):
@@ -31,5 +31,5 @@ def send(msg):
 
         time.sleep(2)
 
-    # 中文註釋：v19.0 Telegram 三次都失敗時回傳 False，讓 GitHub Actions 不再假成功。
+    # 中文註釋：v19.1.3 Telegram 三次都失敗時回傳 False，讓 GitHub Actions 不再假成功。
     return False

@@ -119,7 +119,7 @@ def load_history(stock_id, all_days, source):
 
 
 def build_replay_rows(stock_ids, start_date, end_date, version, source="synthetic"):
-    # 中文註釋：v19.0 replay warmup 與 backfill 對齊 90 天，避免同區間 dry-run 樣本不足。
+    # 中文註釋：v19.1.3 replay warmup 與 backfill 對齊 90 天，避免同區間 dry-run 樣本不足。
     warmup_start = start_date - timedelta(days=90)
     all_days = trading_days(warmup_start, end_date)
     replay_days = set(trading_days(start_date, end_date))
@@ -146,7 +146,7 @@ def build_replay_rows(stock_ids, start_date, end_date, version, source="syntheti
             if cutoff < 20:
                 continue
 
-            # 中文註釋：v19.0 replay 每日只傳入當天以前含當天資料，避免未來資料污染回測。
+            # 中文註釋：v19.1.3 replay 每日只傳入當天以前含當天資料，避免未來資料污染回測。
             daily.append(
                 analyze_ohlcv_snapshot(
                     stock_id,

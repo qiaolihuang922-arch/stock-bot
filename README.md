@@ -13,9 +13,11 @@
 - 条件映射：`core/condition_engine.py`
 - 行情来源：`services/stock_api.py`
 - 每日信号记录：`services/signal_store.py`
-- v19 回测快照：`core/signal_snapshot.py`
-- v19 信号验证：`core/signal_validator.py`
+- v19.1.3 回测快照：`core/signal_snapshot.py`
+- v19.1.3 信号验证：`core/signal_validator.py`
 - 当前持仓边界：`core/holdings.py`
+
+第一版回测已经完成：当前报文已接入 snapshot 样本、同型态/量能/位置验证、相对表现评估，以及持仓/新进场分离显示。后续工作进入更深度的策略研究与开发。
 
 ## Runtime Config
 
@@ -78,7 +80,7 @@ backfill dry-run，不写入数据库：
 - `signal_items`
 - `signal_outcomes`
 
-v19 回放/回测表：
+v19.1.3 回放/回测表：
 
 - `daily_price`
 - `daily_signal_snapshot`

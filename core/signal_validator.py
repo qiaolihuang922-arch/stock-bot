@@ -106,5 +106,5 @@ def validate_snapshots(rows, expected_stock_ids=None, expected_trade_dates=None)
     for trade_date in sorted(expected_trade_dates - set(by_date)):
         errors.append(f"{trade_date}: missing all stock snapshots")
 
-    # 中文註釋：v19.0 replay / backfill 前先檢查策略快照一致性，避免錯誤訊號批量入庫。
+    # 中文註釋：v19.1.3 replay / backfill 前先檢查策略快照一致性，避免錯誤訊號批量入庫。
     return errors

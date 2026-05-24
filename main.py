@@ -12,5 +12,5 @@ if __name__ == "__main__":
     if not already_sent(tag):
         msg = generate()
         if not send(msg):
-            # 中文註釋：v19.0 發送失敗要讓排程失敗，方便從 GitHub Actions 直接看出問題。
+            # 中文註釋：v19.1.3 發送失敗要讓排程失敗，方便從 GitHub Actions 直接看出問題。
             raise SystemExit(1)

@@ -26,7 +26,7 @@ def should_record_daily_snapshot(phase, now=None):
         )
     )
 
-    # 中文註釋：v19.0 每日快照與 signal_store 採同一收盤後入庫規則，但避免匯入 DB client 造成測試污染。
+    # 中文註釋：v19.1.3 每日快照與 signal_store 採同一收盤後入庫規則，但避免匯入 DB client 造成測試污染。
     return after_close and phase in ["收盤", "盤後"]
 
 
@@ -144,7 +144,7 @@ def build_daily_snapshot_payloads(version, phase, results_map, now=None):
             "signal_rows": [_signal_payload(item) for item in snapshots]
         }
 
-    # 中文註釋：v19.0 每日 snapshot 寫入前先建 payload 並驗證；daily_price 沒有完整 OHLCV 時不寫。
+    # 中文註釋：v19.1.3 每日 snapshot 寫入前先建 payload 並驗證；daily_price 沒有完整 OHLCV 時不寫。
     return {
         "recorded": True,
         "reason": "ready",

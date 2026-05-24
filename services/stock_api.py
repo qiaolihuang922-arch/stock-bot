@@ -12,7 +12,7 @@ except ImportError:
     pytz = None
 
 # ================================
-# 🔥 stock_api.py（v19.0｜行情資料層）
+# 🔥 stock_api.py（v19.1.3｜行情資料層）
 # ================================
 
 tz = pytz.timezone("Asia/Taipei") if pytz else None
@@ -103,7 +103,7 @@ def get_realtime_price(code):
 
         r = None
 
-        # 中文註釋：v19.0 先查上市 tse，再查上櫃 otc，保留未來股票池擴充彈性。
+        # 中文註釋：v19.1.3 先查上市 tse，再查上櫃 otc，保留未來股票池擴充彈性。
         for market in ["tse", "otc"]:
             url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch={market}_{code}.tw"
             r = requests.get(url, timeout=10).json()
@@ -132,7 +132,7 @@ def get_realtime_price(code):
             price = float(z)
         else:
             try:
-                # 中文註釋：v19.0 漲停 / 跌停時第一檔可能是 "-" 或 0，逐檔找有效價格避免退回昨收。
+                # 中文註釋：v19.1.3 漲停 / 跌停時第一檔可能是 "-" 或 0，逐檔找有效價格避免退回昨收。
                 bid = parse_quote_level(b)
                 ask = parse_quote_level(a)
 
@@ -148,7 +148,7 @@ def get_realtime_price(code):
         if not price:
             return None
 
-        # 中文註釋：v19.0 漲跌停價有 tick rounding，放寬到 10.5% 避免合法漲停價被誤判異常。
+        # 中文註釋：v19.1.3 漲跌停價有 tick rounding，放寬到 10.5% 避免合法漲停價被誤判異常。
         if price > prev_close * 1.105 or price < prev_close * 0.895:
             return None
 
@@ -297,7 +297,7 @@ def get_twse_ohlcv_history(code, start_date, end_date):
                     "source": "twse"
                 }
 
-        # 中文註釋：v19.0 歷史 OHLCV 逐月往回抓，供 dry-run replay 使用；不在此函式寫入資料庫。
+        # 中文註釋：v19.1.3 歷史 OHLCV 逐月往回抓，供 dry-run replay 使用；不在此函式寫入資料庫。
         if cursor.month == 1:
             cursor = datetime(cursor.year - 1, 12, 1).date()
         else:

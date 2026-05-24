@@ -38,7 +38,7 @@ def home():
         now = datetime.now(tz)
         test_mode = request.args.get("test")
 
-        # 中文註釋：v19.0 Render 測試模式優先於假日判斷，方便週末驗證排程與 GitHub Actions 觸發。
+        # 中文註釋：v19.1.3 Render 測試模式優先於假日判斷，方便週末驗證排程與 GitHub Actions 觸發。
         if test_mode == "1":
             tag = now.strftime("%Y%m%d_test_%H%M%S")
             reason = "測試"
@@ -78,7 +78,7 @@ def home():
         if not token:
             return "❌ No Token"
 
-        # 中文註釋：v19.0 改用新的 workflow 檔名，避開 GitHub 舊 workflow ID 無法手動觸發的問題。
+        # 中文註釋：v19.1.3 改用新的 workflow 檔名，避開 GitHub 舊 workflow ID 無法手動觸發的問題。
         url = "https://api.github.com/repos/qiaolihuang922-arch/stock-bot/actions/workflows/stock-bot.yml/dispatches"
 
         r = requests.post(

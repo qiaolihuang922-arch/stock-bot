@@ -79,7 +79,7 @@ def build_rows(stock_ids, start_date, end_date, version, source):
             if cutoff < 20:
                 continue
 
-            # 中文註釋：v19.0 backfill 每日只使用該日以前含當日資料，嚴禁未來資料污染。
+            # 中文註釋：v19.1.3 backfill 每日只使用該日以前含當日資料，嚴禁未來資料污染。
             snapshot = analyze_ohlcv_snapshot(
                 stock_id,
                 trade_date.isoformat(),
@@ -278,7 +278,7 @@ def main():
         raise SystemExit(1)
 
     if args.write:
-        # 中文註釋：v19.0 正式寫入必須通過 validation 且同時帶 --write --confirm-write。
+        # 中文註釋：v19.1.3 正式寫入必須通過 validation 且同時帶 --write --confirm-write。
         upsert_rows(price_rows, signal_rows)
         print("WRITE OK")
     else:

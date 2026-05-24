@@ -1,4 +1,4 @@
--- v19.0 backfill schema draft only.
+-- v19.1.3 backfill schema draft only.
 -- Do not run this until unit tests and dry-run replay are reviewed.
 
 create table if not exists daily_price (
