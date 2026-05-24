@@ -130,6 +130,12 @@ def build_daily_snapshot_payloads(version, phase, results_map, now=None):
         if data.get("holding")
     }
 
+    for item in snapshots:
+        if item["stock_id"] in holding_stock_ids:
+            # 中文註釋：持倉股只代表持倉管理，不可污染新進場 tradeable / 勝率統計。
+            item["is_tradeable"] = False
+            item["is_best_candidate"] = False
+
     mark_best_candidate(
         [
             item for item in snapshots

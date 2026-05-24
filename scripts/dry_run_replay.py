@@ -118,7 +118,8 @@ def load_history(stock_id, all_days, source):
 
 
 def build_replay_rows(stock_ids, start_date, end_date, version, source="synthetic"):
-    warmup_start = start_date - timedelta(days=45)
+    # 中文註釋：v19.0 replay warmup 與 backfill 對齊 90 天，避免同區間 dry-run 樣本不足。
+    warmup_start = start_date - timedelta(days=90)
     all_days = trading_days(warmup_start, end_date)
     replay_days = set(trading_days(start_date, end_date))
     histories = {

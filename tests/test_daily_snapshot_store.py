@@ -98,6 +98,33 @@ class DailySnapshotStoreTest(unittest.TestCase):
         self.assertEqual(payloads["price_rows"][0]["open"], 118)
         self.assertEqual(payloads["price_rows"][0]["source"], "twse")
 
+    def test_holding_snapshot_is_not_new_entry_tradeable(self):
+        result, closes, volumes = sample_result()
+        payloads = build_daily_snapshot_payloads(
+            "v19.0",
+            "收盤",
+            {
+                "持倉股": {
+                    "stock_code": "9999",
+                    "result": result,
+                    "price": 119,
+                    "price_source": "twse",
+                    "volume_ratio": 1.8,
+                    "volumes": volumes,
+                    "closes": closes,
+                    "holding": {
+                        "shares": 100,
+                        "avg_price": 110
+                    }
+                }
+            },
+            datetime(2026, 5, 22, 13, 30)
+        )
+
+        self.assertTrue(payloads["recorded"])
+        self.assertFalse(payloads["signal_rows"][0]["is_tradeable"])
+        self.assertFalse(payloads["signal_rows"][0]["is_best_candidate"])
+
 
 if __name__ == "__main__":
     unittest.main()
