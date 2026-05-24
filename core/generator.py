@@ -106,7 +106,7 @@ def calc_shares(shares, ratio):
 
     try:
         if ratio <= 0:
-            # 中文註釋：v18.8 續抱 / 警戒不應顯示 1 股，0 比例直接回傳 0。
+            # 中文註釋：v19.0 續抱 / 警戒不應顯示 1 股，0 比例直接回傳 0。
             return 0
 
         return max(
@@ -226,7 +226,7 @@ def get_live_price_data(
         y_change = yahoo[1]
 
         if abs(r_change) >= 8:
-            # 中文註釋：v18.5 接近漲跌停時 Yahoo 常有延遲或昨收價，優先採用 TWSE 即時成交 / 盘口價。
+            # 中文註釋：v19.0 接近漲跌停時 Yahoo 常有延遲或昨收價，優先採用 TWSE 即時成交 / 盘口價。
             return r_price, r_change, "realtime"
 
         if (
@@ -235,11 +235,11 @@ def get_live_price_data(
             and abs(y_change) < 0.3
             and abs(r_change) >= 3
         ):
-            # 中文註釋：v18.5 Yahoo 幾乎不動但 TWSE 即時價明顯變動時，視為 Yahoo 舊價。
+            # 中文註釋：v19.0 Yahoo 幾乎不動但 TWSE 即時價明顯變動時，視為 Yahoo 舊價。
             return r_price, r_change, "realtime"
 
         if y_price and abs(r_price - y_price) / y_price <= 0.02:
-            # 中文註釋：v18.4 即時價與 Yahoo 差距 2% 內才採用，降低異常報價誤判。
+            # 中文註釋：v19.0 即時價與 Yahoo 差距 2% 內才採用，降低異常報價誤判。
             return r_price, r_change, "realtime"
 
         return yahoo[0], yahoo[1], "yahoo"
@@ -258,7 +258,7 @@ def price_label_for_source(source):
     phase = get_market_phase()
 
     if phase == "假日":
-        # 中文註釋：v18.8.4 假日不顯示 realtime/yahoo/twse 來源，避免被誤解為即時成交。
+        # 中文註釋：v19.0 假日不顯示 realtime/yahoo/twse 來源，避免被誤解為即時成交。
         return "最近價格"
 
     if phase == "盤中":
@@ -271,7 +271,7 @@ def price_label_for_source(source):
 
         return f"盤中即時({source})"
 
-    # 中文註釋：v18.4 twse 不是盤中即時價，避免報文誤導。
+    # 中文註釋：v19.0 twse 不是盤中即時價，避免報文誤導。
     if source == "twse":
         return "日線(twse)"
 
@@ -412,7 +412,7 @@ def semantic_state(result):
     }
 
     if phase in phase_map:
-        # 中文註釋：v18.7 型態主語改讀策略層 structure_phase，避免顯示層自行推論漲停 / 洗盤。
+        # 中文註釋：v19.0 型態主語改讀策略層 structure_phase，避免顯示層自行推論漲停 / 洗盤。
         return phase_map[phase]
 
     dominant = result.get(
@@ -487,7 +487,7 @@ def semantic_trade(result):
     )
 
     if decision == "FAIL":
-        # 中文註釋：v18.5 突破失敗優先於禁追 / 無量，避免同一檔同時顯示兩種互斥交易狀態。
+        # 中文註釋：v19.0 突破失敗優先於禁追 / 無量，避免同一檔同時顯示兩種互斥交易狀態。
         return "✅ 可交易"
 
     if behavior == "LIMIT_LOCK":
@@ -634,7 +634,7 @@ def semantic_reason(result):
     )
 
     if decision == "FAIL":
-        # 中文註釋：v18.5 失敗股評級原因固定為突破失敗，不再被過熱或遠離觸發覆蓋。
+        # 中文註釋：v19.0 失敗股評級原因固定為突破失敗，不再被過熱或遠離觸發覆蓋。
         return "突破失敗"
 
     if quality in ["A+", "A"] and confidence:
@@ -669,12 +669,12 @@ def semantic_reason(result):
         if result.get("trend") == "DOWN":
             return "趨勢轉弱"
 
-        # 中文註釋：v18.4 NO_TRADE 不再用高 RR 當評級原因，避免弱勢股被誤解成機會。
+        # 中文註釋：v19.0 NO_TRADE 不再用高 RR 當評級原因，避免弱勢股被誤解成機會。
         return "不交易"
 
     if should_hide_rr(result):
 
-        # 中文註釋：v18.5 RR 被隱藏時，評級原因同步回到市場 / 趨勢 / 量能主因，避免文字仍提示高 RR。
+        # 中文註釋：v19.0 RR 被隱藏時，評級原因同步回到市場 / 趨勢 / 量能主因，避免文字仍提示高 RR。
         if result.get("market_grade") == "D":
             return "市場弱勢"
 
@@ -750,7 +750,7 @@ def semantic_condition_labels(
             elif result.get("heat_state") == "HOT":
                 labels.append("RR足夠")
                 labels.append("過熱觀察")
-            # 中文註釋：v18.8.4 觀察型買點明確標出 RR 足夠但量能/過熱未確認。
+            # 中文註釋：v19.0 觀察型買點明確標出 RR 足夠但量能/過熱未確認。
             return labels
 
         if quality in ["A+", "A"]:
@@ -793,7 +793,7 @@ def semantic_condition_labels(
         if not watch_labels:
             watch_labels.append("品質待確認")
 
-        # 中文註釋：v18.9.3 WATCH_C 改用觀察條件，不再顯示事件 / Edge / RR 不足假缺口。
+        # 中文註釋：v19.0 WATCH_C 改用觀察條件，不再顯示事件 / Edge / RR 不足假缺口。
         return watch_labels[:3]
 
     profile_reason = {
@@ -821,14 +821,14 @@ def semantic_condition_labels(
     if holding_decision and holding_decision.get("level") == "WATCH":
         return []
 
-    # 中文註釋：v18.5 缺口改成交易語意，避免直接露出 event / Edge 造成報文像假錯誤。
+    # 中文註釋：v19.0 缺口改成交易語意，避免直接露出 event / Edge 造成報文像假錯誤。
     for item in condition_items:
 
         if item == "market":
             if result.get("market_grade") == "D":
                 label = "市場弱"
             else:
-                # 中文註釋：v18.7 中性盤不是弱勢盤，缺口文字改成未轉強避免顯示衝突。
+                # 中文註釋：v19.0 中性盤不是弱勢盤，缺口文字改成未轉強避免顯示衝突。
                 label = "市場未強"
         elif item == "trend":
             label = "趨勢未轉強"
@@ -882,7 +882,7 @@ def should_hide_rr(result):
     if dist is not None and dist > 4:
         return True
 
-    # 中文註釋：v18.5 弱勢 / 遠離 / 無量時 RR 只作內部判斷，不在報文顯示成可交易誘因。
+    # 中文註釋：v19.0 弱勢 / 遠離 / 無量時 RR 只作內部判斷，不在報文顯示成可交易誘因。
     return False
 
 
@@ -892,7 +892,7 @@ def should_show_entry_suffix(
 ):
 
     if result.get("decision") == "FAIL":
-        # 中文註釋：v18.5 失敗標題已經表達主狀態，不再追加 BREAKOUT_FAIL 後綴造成重複。
+        # 中文註釋：v19.0 失敗標題已經表達主狀態，不再追加 BREAKOUT_FAIL 後綴造成重複。
         return False
 
     if result.get("entry_profile") in [
@@ -901,14 +901,14 @@ def should_show_entry_suffix(
         "WAIT_DISTANCE",
         "WAIT_LIMIT_LOCK"
     ]:
-        # 中文註釋：v18.9.3 觀察 / 不交易型態不掛 Day1，避免弱反彈被誤看成有效突破日。
+        # 中文註釋：v19.0 觀察 / 不交易型態不掛 Day1，避免弱反彈被誤看成有效突破日。
         return False
 
     if result.get("structure_phase") in [
         "WEAK_REBOUND",
         "LIMIT_REBOUND"
     ]:
-        # 中文註釋：v18.9.3 弱勢反彈和漲停反彈需要隔日確認，不顯示突破日後綴。
+        # 中文註釋：v19.0 弱勢反彈和漲停反彈需要隔日確認，不顯示突破日後綴。
         return False
 
     if not holding_decision:
@@ -924,7 +924,7 @@ def should_show_entry_suffix(
     if result.get("decision") == "BUY":
         return True
 
-    # 中文註釋：v18.5 持倉股以持倉動作為主，非加碼情境不顯示收復 / 站穩等短線後綴。
+    # 中文註釋：v19.0 持倉股以持倉動作為主，非加碼情境不顯示收復 / 站穩等短線後綴。
     return False
 
 
@@ -952,7 +952,7 @@ def get_action(result):
             return f"🟡 {round(position * 100)}%"
 
         if quality in ["C", "D"]:
-            # 中文註釋：v18.8.4 C/D 品質只顯示觀察，不顯示倉位比例避免被當成買進指令。
+            # 中文註釋：v19.0 C/D 品質只顯示觀察，不顯示倉位比例避免被當成買進指令。
             return "⏳"
 
         if result.get("extended_level", 0) == 2:
@@ -1001,7 +1001,7 @@ def final_label(result):
         return "進場"
 
     if result.get("decision_type") == "watch_quality_c":
-        # 中文註釋：v18.9.3 C 品質是策略層觀察，不顯示成「等確認」以免像缺少資料。
+        # 中文註釋：v19.0 C 品質是策略層觀察，不顯示成「等確認」以免像缺少資料。
         return "觀察"
 
     if decision == "FAIL":
@@ -1040,7 +1040,7 @@ def holding_status(
         else calc_shares(shares, ratio)
     )
 
-    # 中文註釋：v18.7 持倉策略由 analysis.py 輸出，generator.py 只換算股數與維持既有報文格式。
+    # 中文註釋：v19.0 持倉策略由 analysis.py 輸出，generator.py 只換算股數與維持既有報文格式。
     return {
         "action": signal.get("action", "續抱"),
         "shares": action_shares,
@@ -1105,7 +1105,7 @@ def holding_position_text(
     if level == "HOLD_CORE":
         return f"維持 {current_shares}股 ｜不追高加碼"
 
-    # 中文註釋：v18.7 持倉輸出補上倉位結果，讓加碼 / 減碼 / 洗盤觀察後的股數更清楚。
+    # 中文註釋：v19.0 持倉輸出補上倉位結果，讓加碼 / 減碼 / 洗盤觀察後的股數更清楚。
     return f"維持 {current_shares}股 ｜不加碼"
 
 
@@ -1127,7 +1127,7 @@ def render_stock(
     )
     holding = data.get("holding")
 
-    # 中文註釋：v18.4 顯示層只讀 condition_engine 映射結果，不自行判斷交易條件。
+    # 中文註釋：v19.0 顯示層只讀 condition_engine 映射結果，不自行判斷交易條件。
     conditions = condition_engine(
         result
     )
@@ -1199,7 +1199,7 @@ def render_stock(
     )
 
     if holding_decision and not holding_add_ready:
-        # 中文註釋：v18.9.3 持倉非加碼完全隱藏買點條件，避免「RR -」卻顯示 RR 足夠或洗盤又顯示量能不足。
+        # 中文註釋：v19.0 持倉非加碼完全隱藏買點條件，避免「RR -」卻顯示 RR 足夠或洗盤又顯示量能不足。
         condition_items = []
 
     # header
@@ -1237,7 +1237,7 @@ def render_stock(
 
     if holding:
 
-        # 中文註釋：v18.4 只對已持有股票增加持倉管理資訊，其餘原始技術資料全部保留。
+        # 中文註釋：v19.0 只對已持有股票增加持倉管理資訊，其餘原始技術資料全部保留。
         msg += (
             f"├─ 持倉："
             f"{holding['shares']}股"
@@ -1326,7 +1326,7 @@ def render_stock(
         and result.get("decision") != "FAIL"
     ):
 
-        # 中文註釋：v18.5 只有非失敗的過熱股顯示禁追原因，避免 FAIL + EXTREME 雙主因衝突。
+        # 中文註釋：v19.0 只有非失敗的過熱股顯示禁追原因，避免 FAIL + EXTREME 雙主因衝突。
         msg += (
             f"├─ 原因："
             f"過熱 Lv.{result.get('extended_level')}\n"
@@ -1355,12 +1355,12 @@ def render_stock(
                 result.get("heat_state") == "HOT"
                 or result.get("entry_quality") not in ["A+", "A"]
             ):
-                # 中文註釋：v18.8.3 觀察型買點改用「條件」，避免和強買點「成立」混在一起。
+                # 中文註釋：v19.0 觀察型買點改用「條件」，避免和強買點「成立」混在一起。
                 label_title = "條件"
             else:
                 label_title = "成立"
         elif result.get("decision_type") == "watch_quality_c":
-            # 中文註釋：v18.9.3 C 品質觀察即使缺口清單為空，也要顯示策略觀察條件。
+            # 中文註釋：v19.0 C 品質觀察即使缺口清單為空，也要顯示策略觀察條件。
             label_title = "條件"
         else:
             label_title = "缺口"
@@ -1387,7 +1387,7 @@ def render_stock(
         else safe_round(result.get("rr"))
     )
 
-    # 中文註釋：v18.8 持倉非加碼時隱藏新進場 RR，避免用買點 RR 反向干擾續抱 / 停利判斷。
+    # 中文註釋：v19.0 持倉非加碼時隱藏新進場 RR，避免用買點 RR 反向干擾續抱 / 停利判斷。
     msg += (
         f"├─ 數據："
         f"RR {rr_text}"
@@ -1401,7 +1401,7 @@ def render_stock(
     if quality and confidence and quality != "D" and (
         not holding_decision or holding_add_ready
     ):
-        # 中文註釋：v18.8 品質分只用於新進場 / 持倉加碼，停利與續抱不混用入場品質。
+        # 中文註釋：v19.0 品質分只用於新進場 / 持倉加碼，停利與續抱不混用入場品質。
         msg += (
             f"├─ 品質："
             f"{quality} ｜信心 {confidence}\n"
@@ -1509,7 +1509,7 @@ def generate():
                 volumes
             )
 
-            # 中文註釋：v18.1 顯示層也用盤中即時價覆蓋最後一根 K，與 analysis.py 判斷保持一致。
+            # 中文註釋：v19.0 顯示層也用盤中即時價覆蓋最後一根 K，與 analysis.py 判斷保持一致。
             display_closes = (
                 closes[:-1] + [price]
                 if closes else closes
@@ -1591,7 +1591,7 @@ def generate():
             best_result.get("strength")
         )
 
-        # 中文註釋：v18.4 最強股只從有效 BUY 候選挑選，並同時顯示排序分與評級分。
+        # 中文註釋：v19.0 最強股只從有效 BUY 候選挑選，並同時顯示排序分與評級分。
         msg += (
             f"🔥 最強："
             f"{best}"
@@ -1636,7 +1636,7 @@ def generate():
             )
 
     if holding_actions:
-        # 中文註釋：v18.4 底部提示需要處理的持倉與明確加減碼等級。
+        # 中文註釋：v19.0 底部提示需要處理的持倉與明確加減碼等級。
         msg += (
             f"📌 持倉處理："
             f"{'、'.join(holding_actions[:3])}\n"
@@ -1679,7 +1679,7 @@ def generate():
 
     if no_trade_count >= 6 or weak_count >= 6:
 
-        # 中文註釋：v18.5 全局弱勢優先於局部失敗數，避免底部總結只看兩檔 FAIL 而誤判盤面。
+        # 中文註釋：v19.0 全局弱勢優先於局部失敗數，避免底部總結只看兩檔 FAIL 而誤判盤面。
         market_summary = "⏳ 弱勢觀望"
 
     elif extreme_count >= 3:

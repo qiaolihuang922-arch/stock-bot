@@ -28,7 +28,7 @@ def avg(arr):
 
 
 # ================================
-# 🔥 v18.1 資料保護 / 多週期工具
+# 🔥 v19.0 資料保護 / 多週期工具
 # ================================
 def normalize_series(arr, n=MIN_DATA_POINTS):
 
@@ -56,7 +56,7 @@ def merge_live_close(closes, price):
     if price is None:
         return data
 
-    # 中文註釋：v18.1 將盤中即時價覆蓋最後一根 K，讓策略判斷與報文價格一致。
+    # 中文註釋：v19.0 將盤中即時價覆蓋最後一根 K，讓策略判斷與報文價格一致。
     return data[:-1] + [
         float(price)
     ]
@@ -97,7 +97,7 @@ def multi_period_metrics(closes, volumes):
         if avg10_volume else 1
     )
 
-    # 中文註釋：v18.1 統一輸出 1 / 3 / 5 / 10 日變化，避免單日訊號反覆誤判。
+    # 中文註釋：v19.0 統一輸出 1 / 3 / 5 / 10 日變化，避免單日訊號反覆誤判。
     return {
         "chg_1d": pct_change(closes, 1),
         "chg_3d": pct_change(closes, 3),
@@ -158,7 +158,7 @@ def multi_day_bias(metrics):
     if chg3 < 0 and chg5 < 0 and chg10 < 0:
         return "DOWN_CONFIRM"
 
-    # 中文註釋：v18.7 將 3 / 5 / 10 日趨勢壓成單一偏向，供洗盤與弱反彈判斷使用。
+    # 中文註釋：v19.0 將 3 / 5 / 10 日趨勢壓成單一偏向，供洗盤與弱反彈判斷使用。
     return "MIXED"
 
 
@@ -173,7 +173,7 @@ def market_regime(market, trend, heat_state, m_grade):
     if market == "WEAK" or trend == "DOWN" or m_grade == "D":
         return "RISK_OFF"
 
-    # 中文註釋：v18.7 中性市場獨立成 regime，不再與弱勢混用。
+    # 中文註釋：v19.0 中性市場獨立成 regime，不再與弱勢混用。
     return "NEUTRAL"
 
 
@@ -263,7 +263,7 @@ def structure_phase_signal(
     if lifecycle == "BASE":
         return "BASE"
 
-    # 中文註釋：v18.7 structure_phase 作為策略層主語，讓顯示層不再自行猜型態。
+    # 中文註釋：v19.0 structure_phase 作為策略層主語，讓顯示層不再自行猜型態。
     return lifecycle or "BASE"
 
 
@@ -307,7 +307,7 @@ def entry_profile_signal(
     if risk is not None and risk > 0.08:
         return "WAIT_RISK"
 
-    # 中文註釋：v18.8 entry_profile 拆買點類型，避免所有 WAIT / BUY 都用同一套解釋。
+    # 中文註釋：v19.0 entry_profile 拆買點類型，避免所有 WAIT / BUY 都用同一套解釋。
     return "WAIT_CONFIRM"
 
 
@@ -403,7 +403,7 @@ def entry_quality_score(
     if heat_state == "HOT" and rr < 1.5:
         score = min(score, 64)
 
-    # 中文註釋：v18.8.1 RR 是新進場品質硬門檻，低 RR 不允許被市場與突破分數灌成 A 級。
+    # 中文註釋：v19.0 RR 是新進場品質硬門檻，低 RR 不允許被市場與突破分數灌成 A 級。
     return max(0, min(100, round(score)))
 
 
@@ -452,7 +452,7 @@ def guard_low_volume_quality(
         vol_ratio < 0.8
         and heat_state == "HOT"
     ):
-        # 中文註釋：v18.8.3 過熱觀察又低量時只保留觀察分，避免顯示成 A+ 強買點。
+        # 中文註釋：v19.0 過熱觀察又低量時只保留觀察分，避免顯示成 A+ 強買點。
         return min(
             score,
             64
@@ -466,7 +466,7 @@ def guard_low_volume_quality(
             "VOLUME_BREAKOUT"
         ]
     ):
-        # 中文註釋：v18.8.3 品質分與報文 V 倍率共用 5/10 日較低口徑，避免低量仍顯示 A+。
+        # 中文註釋：v19.0 品質分與報文 V 倍率共用 5/10 日較低口徑，避免低量仍顯示 A+。
         return min(
             score,
             74
@@ -479,7 +479,7 @@ def guard_low_volume_quality(
             "HEALTHY_PULLBACK"
         ]
     ):
-        # 中文註釋：v18.8.3 極低量能只允許洗盤 / 健康回踩保留觀察分，其餘不得成為高品質進場。
+        # 中文註釋：v19.0 極低量能只允許洗盤 / 健康回踩保留觀察分，其餘不得成為高品質進場。
         return min(
             score,
             64
@@ -497,10 +497,10 @@ def quality_position(position, quality, profile):
         return min(position, 0.25)
 
     if quality == "C":
-        # 中文註釋：v18.9 C 品質只做觀察，不產生實際買入倉位，避免顯示觀察但策略仍下單。
+        # 中文註釋：v19.0 C 品質只做觀察，不產生實際買入倉位，避免顯示觀察但策略仍下單。
         return 0
 
-    # 中文註釋：v18.8 品質分不直接砍掉合理出手，而是把倉位降到對應風險級別。
+    # 中文註釋：v19.0 品質分不直接砍掉合理出手，而是把倉位降到對應風險級別。
     return 0
 
 
@@ -1245,7 +1245,7 @@ def is_fresh_breakout(
     resistance
 ):
 
-    # 中文註釋：v18.1 Day1 改看最近 5 日是否首次站上，避免昨天/今天反覆切換。
+    # 中文註釋：v19.0 Day1 改看最近 5 日是否首次站上，避免昨天/今天反覆切換。
     return (
         is_breakout(
             closes[-1],
@@ -1316,7 +1316,7 @@ def breakout_fail(
         closes[-1] < breakout_lv * 0.99
     )
 
-    # 中文註釋：v18.1 失敗需最近 3 日曾突破且今日跌回突破價下方，降低單日誤報。
+    # 中文註釋：v19.0 失敗需最近 3 日曾突破且今日跌回突破價下方，降低單日誤報。
     return (
         recent_breakout
         and today_fail
@@ -1708,7 +1708,7 @@ def wait_decision_type(
     if volume == "WEAK":
         return "wait_volume"
 
-    # 中文註釋：v18.2 WAIT 也保留語義類型，避免顯示層誤判事件與 Edge 全缺。
+    # 中文註釋：v19.0 WAIT 也保留語義類型，避免顯示層誤判事件與 Edge 全缺。
     return "none"
 
 
@@ -1739,7 +1739,7 @@ def watch_result(
     strategy_tags
 ):
 
-    # 中文註釋：v18.9 WATCH 是策略層觀察，不再用 BUY+0 倉位假裝可買。
+    # 中文註釋：v19.0 WATCH 是策略層觀察，不再用 BUY+0 倉位假裝可買。
     return build_result(
         decision="WAIT",
         decision_type=reason,
@@ -1806,10 +1806,10 @@ def can_buy(
         return False
 
     if entry_quality == "C":
-        # 中文註釋：v18.9 C 品質歸入 WATCH，不進 BUY；B 以上才允許小倉或正常出手。
+        # 中文註釋：v19.0 C 品質歸入 WATCH，不進 BUY；B 以上才允許小倉或正常出手。
         return False
 
-    # 中文註釋：v18.8 集中交易閘門加入價格行為與品質分，不靠少買，而是避免錯誤類型出手。
+    # 中文註釋：v19.0 集中交易閘門加入價格行為與品質分，不靠少買，而是避免錯誤類型出手。
     return True
 
 
@@ -1909,14 +1909,14 @@ def holding_signal(
         price <= hard_stop_price
         and not shakeout_protected
     ):
-        # 中文註釋：v18.9 硬停損需避開縮量洗盤，只有非洗盤情境跌破保護線才清倉。
+        # 中文註釋：v19.0 硬停損需避開縮量洗盤，只有非洗盤情境跌破保護線才清倉。
         return payload("停損 100%", 1, "硬停損觸發", "STOP_100", "STOP_LOSS", False, 5)
 
     if (
         pnl <= -8
         and structure_broken
     ):
-        # 中文註釋：v18.9 大幅虧損且結構已破才全停損，避免單靠虧損百分比被洗出去。
+        # 中文註釋：v19.0 大幅虧損且結構已破才全停損，避免單靠虧損百分比被洗出去。
         return payload("停損 100%", 1, "破位轉弱", "STOP_100", "STOP_LOSS", False, 5)
 
     if structure_broken:
@@ -2013,7 +2013,7 @@ def holding_signal(
         return payload("加碼 10%", 0.1, "小幅轉強", "ADD_10", "ADD_READY", True, 2)
 
     if decision == "BUY" and pnl >= 0 and rr < 1.3:
-        # 中文註釋：v18.8 持倉加碼需完整證據鏈，RR 不足時續抱等待，不因 BUY 訊號直接加碼。
+        # 中文註釋：v19.0 持倉加碼需完整證據鏈，RR 不足時續抱等待，不因 BUY 訊號直接加碼。
         return payload("續抱", 0, "突破成立，RR不足不加碼", "HOLD", "CORE_HOLD", False, 2)
 
     if phase == "BREAKOUT_WATCH" and pnl >= 0:
@@ -2025,7 +2025,7 @@ def holding_signal(
     if pnl >= 0 and (regime == "RISK_OFF" or volume == "WEAK"):
         return payload("續抱", 0, "保成本，不加碼", "HOLD", "CORE_HOLD", False, 2)
 
-    # 中文註釋：v18.7 持倉動作由策略層輸出，顯示層只換算股數與排版。
+    # 中文註釋：v19.0 持倉動作由策略層輸出，顯示層只換算股數與排版。
     return payload("續抱", 0, "不加碼", "HOLD", "CORE_HOLD", False, 1)
 
 
@@ -2134,7 +2134,7 @@ def strategy(
     volumes
 ):
 
-    # 中文註釋：v18.1 在策略入口統一補齊資料，避免後面 [-20:] / [-10:-5] 空窗。
+    # 中文註釋：v19.0 在策略入口統一補齊資料，避免後面 [-20:] / [-10:-5] 空窗。
     closes = normalize_series(
         closes
     )
@@ -2659,7 +2659,7 @@ def strategy(
         )
 
     if quality == "C":
-        # 中文註釋：v18.9 C 品質在排除弱勢 / 失敗 / 假突破 / 極熱後才轉觀察，避免覆蓋更高優先級風險。
+        # 中文註釋：v19.0 C 品質在排除弱勢 / 失敗 / 假突破 / 極熱後才轉觀察，避免覆蓋更高優先級風險。
         return watch_result(
             "watch_quality_c",
             m_score,
@@ -3126,7 +3126,7 @@ def pick_best_stock(results_dict):
             and result.get("structure_state") != "STRONG"
             and result.get("price_behavior") != "VOLUME_BREAKOUT"
         ):
-            # 中文註釋：v18.8.3 最強股需有足夠量能或攻擊結構，避免低量小倉觀察被選成最強。
+            # 中文註釋：v19.0 最強股需有足夠量能或攻擊結構，避免低量小倉觀察被選成最強。
             continue
 
         if result.get("lifecycle") == "BASE":
@@ -3173,7 +3173,7 @@ def pick_best_stock(results_dict):
         elif lifecycle == "EXTREME":
             score -= 4
 
-        # 中文註釋：v18.8 最強股加入入場品質與信心分，不讓弱反彈 / 漲停追價混入。
+        # 中文註釋：v19.0 最強股加入入場品質與信心分，不讓弱反彈 / 漲停追價混入。
         result["rank_score"] = round(
             score,
             2
