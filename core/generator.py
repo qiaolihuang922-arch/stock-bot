@@ -1,5 +1,5 @@
 # ================================
-# FINAL UI（v19.1.2｜Daily Signal Database）
+# FINAL UI（v19.1.3｜Daily Signal Database）
 # ================================
 
 from datetime import datetime, timedelta
@@ -33,7 +33,7 @@ from services.daily_snapshot_store import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v19.1.2"
+VERSION = "v19.1.3"
 
 
 # ================================
@@ -590,8 +590,8 @@ def entry_conclusion(result):
     if not blockers and result.get("decision") == "BUY" and result.get("action", 0) > 0:
         return "可新進場"
 
-    if "RR不足" in blockers and result.get("market_grade") in ["A+", "A"]:
-        return "強勢但風報不夠，不追"
+    if "突破失敗" in blockers:
+        return "失敗訊號，不交易"
 
     if "漲停不追" in blockers:
         return "漲停鎖價，不追高"
@@ -611,8 +611,11 @@ def entry_conclusion(result):
     if "遠離觸發" in blockers:
         return "位置太遠，等接近觸發"
 
-    if "突破失敗" in blockers:
-        return "失敗訊號，不交易"
+    if "RR不足" in blockers and result.get("market_grade") in ["A+", "A"]:
+        return "強勢但風報不夠，不追"
+
+    if "RR不足" in blockers:
+        return "RR不足，不進場"
 
     return "觀察，不急進場"
 
@@ -1236,6 +1239,46 @@ def holding_add_text(decision):
 
 def holding_blocker_text(decision):
 
+    level = decision.get("level")
+
+    if level == "ADD_30":
+        return "強勢突破、RR足夠、品質達標"
+
+    if level == "ADD_20":
+        return "趨勢延續、RR足夠、品質達標"
+
+    if level == "ADD_10":
+        return "小幅轉強、RR達標、信心達標"
+
+    if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]:
+        return "已達停利區、過熱/急漲、保留核心倉"
+
+    if level == "STOP_100":
+        return "停損優先、避免虧損擴大"
+
+    if level in ["REDUCE_25", "REDUCE_50"]:
+        return "結構轉弱、先降風險"
+
+    if level == "WATCH":
+        return "輕虧或盤勢弱、暫不加碼"
+
+    if level == "SHAKEOUT":
+        return "縮量回測、未見出貨、等量價確認"
+
+    if level == "HOLD_CORE":
+        return "漲停不追、保留核心倉"
+
+    if level == "HOLD":
+        note = decision.get("note") or ""
+
+        if "RR不足" in note:
+            return "RR不足、續抱不加碼"
+
+        if "突破成立" in note:
+            return "浮盈不足、等量價確認"
+
+        return "買點未成立、暫不加碼"
+
     blockers = decision.get("add_blockers") or []
 
     if not blockers:
@@ -1449,17 +1492,18 @@ def load_backtest_context(results_map):
         stock_id = data.get("stock_code")
 
         if data.get("holding"):
-            summary = summarize_validation(
-                stock_buy_returns.get(stock_id, []),
-                "buy"
-            )
+            holding_decision = data.get("holding_decision") or result.get("_holding_decision") or {}
+
+            if holding_decision.get("level") not in ["ADD_10", "ADD_20", "ADD_30"]:
+                continue
+
+            summary = summarize_validation(stock_buy_returns.get(stock_id, []), "buy")
 
             if summary:
-                context[name] = f"{history_version}本股買點 {summary}"
+                context[name] = f"{history_version}本股加碼 {summary}"
 
             continue
 
-        bucket = snapshot_bucket_from_result(result)
         mode = (
             "buy"
             if result.get("decision") == "BUY"
@@ -1467,6 +1511,11 @@ def load_backtest_context(results_map):
             and not entry_blockers(result)
             else "blocked"
         )
+
+        if mode != "buy":
+            continue
+
+        bucket = snapshot_bucket_from_result(result)
         summary = summarize_validation(bucket_returns.get(bucket, []), mode)
 
         if summary:
@@ -1638,8 +1687,10 @@ def render_stock(
             f"{holding_add_text(holding_decision)}\n"
         )
 
+        blocker_label = "依據" if holding_add_ready else "阻斷"
+
         msg += (
-            f"├─ 阻斷："
+            f"├─ {blocker_label}："
             f"{holding_blocker_text(holding_decision)}\n"
         )
 

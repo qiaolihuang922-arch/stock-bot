@@ -245,7 +245,7 @@ def main():
     parser.add_argument("--stock-id")
     parser.add_argument("--watchlist")
     parser.add_argument("--source", choices=["synthetic", "twse"], default="twse")
-    parser.add_argument("--version", default="v19.1.2")
+    parser.add_argument("--version", default="v19.1.3")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--write", action="store_true")
     parser.add_argument("--confirm-write", action="store_true")

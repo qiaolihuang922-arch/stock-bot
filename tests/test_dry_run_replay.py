@@ -11,12 +11,12 @@ class DryRunReplayTest(unittest.TestCase):
             ["3231", "2421"],
             date(2026, 5, 11),
             date(2026, 5, 15),
-            "v19.1.2",
+            "v19.1.3",
             "synthetic"
         )
 
         self.assertEqual(len(rows), 10)
-        self.assertEqual({row["version"] for row in rows}, {"v19.1.2"})
+        self.assertEqual({row["version"] for row in rows}, {"v19.1.3"})
         self.assertEqual(
             sorted({row["trade_date"] for row in rows}),
             [
@@ -33,7 +33,7 @@ class DryRunReplayTest(unittest.TestCase):
             ["3231", "2421", "3035"],
             date(2026, 5, 11),
             date(2026, 5, 13),
-            "v19.1.2",
+            "v19.1.3",
             "synthetic"
         )
 
@@ -49,7 +49,7 @@ class DryRunReplayTest(unittest.TestCase):
             ["3231", "2421", "3035"],
             date(2026, 5, 11),
             date(2026, 5, 13),
-            "v19.1.2",
+            "v19.1.3",
             "synthetic"
         )
         self.assertEqual(validate_snapshots(rows), [])
@@ -59,7 +59,7 @@ class DryRunReplayTest(unittest.TestCase):
             ["2356"],
             date(2026, 5, 11),
             date(2026, 5, 11),
-            "v19.1.2",
+            "v19.1.3",
             "synthetic"
         )
 
