@@ -214,9 +214,27 @@ def _existing_outcome_item_ids(horizon):
 def _due_items(horizon, today):
     cutoff = today.strftime("%Y-%m-%d")
 
+    run_res = supabase.table("signal_runs") \
+        .select("run_date") \
+        .eq("run_phase", "daily_close") \
+        .lte("run_date", cutoff) \
+        .order("run_date") \
+        .execute()
+
+    trading_dates = [
+        row.get("run_date")
+        for row in (run_res.data or [])
+        if row.get("run_date")
+    ]
+
+    if len(trading_dates) <= horizon:
+        return []
+
+    due_dates = set(trading_dates[:-horizon])
+
     res = supabase.table("signal_items") \
         .select("id,stock_name,price,signal_runs!inner(run_date)") \
-        .lte("signal_runs.run_date", cutoff) \
+        .in_("signal_runs.run_date", list(due_dates)) \
         .execute()
 
     items = []
@@ -225,15 +243,8 @@ def _due_items(horizon, today):
         run = row.get("signal_runs") or {}
         run_date = run.get("run_date")
 
-        if not run_date:
-            continue
-
-        try:
-            start = datetime.strptime(run_date, "%Y-%m-%d").date()
-        except:
-            continue
-
-        if (today.date() - start).days >= horizon:
+        # 中文註釋：v19.0 outcome 以已入庫的收盤交易日序列計算，不用自然日避免週末污染 1/3/5/10 日結果。
+        if run_date in due_dates:
             items.append(row)
 
     return items

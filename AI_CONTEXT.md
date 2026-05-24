@@ -44,7 +44,7 @@
 - `core/generator.py`：报文显示、排序摘要、Telegram 输出内容。不得自行推翻 `analysis.py` 的交易结论。
 - `services/stock_api.py`：行情来源、实时价修正、涨跌停价格保护、TWSE OHLCV 历史资料。
 - `services/signal_store.py`：原始 3 表写入层，负责 `signal_runs / signal_items / signal_outcomes`。
-- `services/daily_snapshot_store.py`：v19 每日快照写入层，负责 `daily_price / daily_signal_snapshot`，写入前必须验证。
+- `services/daily_snapshot_store.py`：v19 每日快照写入层，负责每日 `daily_signal_snapshot`；只有拿到完整 OHLCV 时才写 `daily_price`，写入前必须验证。
 - `core/signal_snapshot.py`：把策略结果或 OHLCV 转成统一可回测 snapshot。
 - `core/signal_validator.py`：检查 snapshot 逻辑冲突，防止错误资料入库。
 - `scripts/dry_run_replay.py`：dry-run replay，不写数据库。
@@ -68,6 +68,7 @@ v19 回测/回放 2 表：
 
 - 盘前、盘中、假日不写入每日稳定样本。
 - 收盘/盘后才允许记录稳定信号。
+- 每日报文路径不得用 realtime/yahoo/twse 单价补写 `daily_price`；`daily_price` 只接受完整 OHLCV。
 - backfill 必须使用 upsert，可重复执行，不得产生重复资料。
 - replay/backfill 某一天时，只能使用当天及之前资料，禁止未来数据污染。
 - 默认只处理 `core/watchlist.py` 的 12 档股票。

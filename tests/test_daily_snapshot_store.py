@@ -61,10 +61,42 @@ class DailySnapshotStoreTest(unittest.TestCase):
         )
 
         self.assertTrue(payloads["recorded"])
-        self.assertEqual(len(payloads["price_rows"]), 1)
+        self.assertEqual(len(payloads["price_rows"]), 0)
         self.assertEqual(len(payloads["signal_rows"]), 1)
-        self.assertEqual(payloads["price_rows"][0]["stock_id"], "9999")
         self.assertEqual(payloads["signal_rows"][0]["version"], "v19.0")
+
+    def test_daily_price_requires_complete_ohlcv(self):
+        result, closes, volumes = sample_result()
+        payloads = build_daily_snapshot_payloads(
+            "v19.0",
+            "收盤",
+            {
+                "測試": {
+                    "stock_code": "9999",
+                    "result": result,
+                    "price": 119,
+                    "price_source": "twse",
+                    "volume_ratio": 1.8,
+                    "volumes": volumes,
+                    "closes": closes,
+                    "ohlcv": {
+                        "open": 118,
+                        "high": 120,
+                        "low": 117,
+                        "close": 119,
+                        "volume": 1800,
+                        "source": "twse"
+                    }
+                }
+            },
+            datetime(2026, 5, 22, 13, 30)
+        )
+
+        self.assertTrue(payloads["recorded"])
+        self.assertEqual(len(payloads["price_rows"]), 1)
+        self.assertEqual(payloads["price_rows"][0]["stock_id"], "9999")
+        self.assertEqual(payloads["price_rows"][0]["open"], 118)
+        self.assertEqual(payloads["price_rows"][0]["source"], "twse")
 
 
 if __name__ == "__main__":

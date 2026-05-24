@@ -44,17 +44,22 @@ def _date_text(now):
 
 
 def _price_payload(stock_id, trade_date, data):
-    volumes = data.get("volumes") or []
+    ohlcv = data.get("ohlcv") or {}
+    required = ["open", "high", "low", "close", "volume"]
 
+    if not all(_num(ohlcv.get(field)) is not None for field in required):
+        return None
+
+    # 中文註釋：daily_price 只接受完整 OHLCV，避免每日報文用即時價污染回測價格表。
     return {
         "stock_id": stock_id,
         "trade_date": trade_date,
-        "open": None,
-        "high": None,
-        "low": None,
-        "close": _num(data.get("price")),
-        "volume": _num(volumes[-1]) if volumes else None,
-        "source": data.get("price_source", "daily")
+        "open": _num(ohlcv.get("open")),
+        "high": _num(ohlcv.get("high")),
+        "low": _num(ohlcv.get("low")),
+        "close": _num(ohlcv.get("close")),
+        "volume": _num(ohlcv.get("volume")),
+        "source": ohlcv.get("source", "daily_close")
     }
 
 
@@ -111,13 +116,13 @@ def build_daily_snapshot_payloads(version, phase, results_map, now=None):
                 data.get("volume_ratio")
             )
         )
-        price_rows.append(
-            _price_payload(
-                stock_id,
-                trade_date,
-                data
-            )
+        price_payload = _price_payload(
+            stock_id,
+            trade_date,
+            data
         )
+        if price_payload:
+            price_rows.append(price_payload)
 
     holding_stock_ids = {
         data.get("stock_code")
@@ -143,7 +148,7 @@ def build_daily_snapshot_payloads(version, phase, results_map, now=None):
             "signal_rows": [_signal_payload(item) for item in snapshots]
         }
 
-    # 中文註釋：v19.0 每日 snapshot 寫入前先建 payload 並驗證，正式 upsert 放在獨立函式。
+    # 中文註釋：v19.0 每日 snapshot 寫入前先建 payload 並驗證；daily_price 沒有完整 OHLCV 時不寫。
     return {
         "recorded": True,
         "reason": "ready",
