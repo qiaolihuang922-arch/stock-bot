@@ -3,6 +3,7 @@
 # ================================
 
 from datetime import datetime, timedelta
+from concurrent.futures import ThreadPoolExecutor
 import pytz
 
 from services.stock_api import (
@@ -1537,7 +1538,6 @@ def summarize_validation(returns, mode):
     wins = sum(1 for value in returns if value > 0)
     win_rate = wins / len(returns) * 100
     avg_return = sum(returns) / len(returns)
-    text = f"n={len(returns)}｜3日相對勝率{round(win_rate)}%｜均{avg_return:+.1f}%"
 
     if mode == "blocked":
         if avg_return <= 0.3 and win_rate < 55:
@@ -1568,7 +1568,52 @@ def summarize_validation(returns, mode):
         else:
             verdict = "風控優先，不改判"
 
-    return f"{text}｜{verdict}"
+    return {
+        "sample": len(returns),
+        "win_rate": round(win_rate),
+        "avg_return": round(avg_return, 1),
+        "verdict": verdict
+    }
+
+
+def backtest_context(version, scope, summary, setup_label=None):
+
+    if not summary:
+        return None
+
+    label = scope
+
+    if setup_label:
+        label = f"{scope} {setup_label}"
+
+    return {
+        "version": version,
+        "label": label,
+        "sample": summary["sample"],
+        "win_rate": summary["win_rate"],
+        "avg_return": summary["avg_return"],
+        "verdict": summary["verdict"]
+    }
+
+
+def render_backtest_context(context):
+
+    if not context:
+        return ""
+
+    if isinstance(context, str):
+        return f"├─ 驗證：{context}\n"
+
+    return (
+        f"├─ 回測："
+        f"{context.get('version')}｜"
+        f"{context.get('label')}｜"
+        f"樣本 {context.get('sample')}｜"
+        f"3日相對 {context.get('avg_return'):+.1f}%｜"
+        f"勝率 {context.get('win_rate')}%\n"
+        f"├─ 解讀："
+        f"{context.get('verdict')}\n"
+    )
 
 
 def load_backtest_context(results_map):
@@ -1662,10 +1707,11 @@ def load_backtest_context(results_map):
                 summary = summarize_validation(setup_returns.get(setup_bucket, []), mode)
 
                 if summary:
-                    context[name] = (
-                        f"{history_version}持倉同型「"
-                        f"{setup_bucket_label(*setup_bucket)}"
-                        f"」{summary}"
+                    context[name] = backtest_context(
+                        history_version,
+                        "持倉同型",
+                        summary,
+                        setup_bucket_label(*setup_bucket)
                     )
 
                 continue
@@ -1673,7 +1719,11 @@ def load_backtest_context(results_map):
             summary = summarize_validation(stock_buy_returns.get(stock_id, []), "buy")
 
             if summary:
-                context[name] = f"{history_version}本股加碼 {summary}"
+                context[name] = backtest_context(
+                    history_version,
+                    "本股加碼",
+                    summary
+                )
 
             continue
 
@@ -1689,10 +1739,11 @@ def load_backtest_context(results_map):
         summary = summarize_validation(setup_returns.get(setup_bucket, []), mode)
 
         if summary:
-            context[name] = (
-                f"{history_version}同型「"
-                f"{setup_bucket_label(*setup_bucket)}"
-                f"」{summary}"
+            context[name] = backtest_context(
+                history_version,
+                "同型",
+                summary,
+                setup_bucket_label(*setup_bucket)
             )
 
     return context
@@ -2034,9 +2085,8 @@ def render_stock(
         )
 
     if data.get("backtest_context"):
-        msg += (
-            f"├─ 驗證："
-            f"{data.get('backtest_context')}\n"
+        msg += render_backtest_context(
+            data.get("backtest_context")
         )
 
     # ================================
@@ -2077,6 +2127,77 @@ def render_stock(
     return msg
 
 
+def load_stock_signal(name, code):
+
+    try:
+        twse = get_twse(code)
+
+        if not twse:
+            return name, None, None, f"{name}({code}) {get_last_error(code) or 'twse: no data'}"
+
+        (
+            t_price,
+            t_change,
+            ma5,
+            ma20,
+            closes,
+            volumes
+        ) = twse
+
+        realtime = get_realtime_price(code)
+        yahoo = get_yahoo(code)
+
+        price, change, price_source = (
+            get_live_price_data(
+                realtime,
+                yahoo,
+                t_price,
+                t_change
+            )
+        )
+
+        if not closes or not volumes:
+            return name, None, None, f"{name}({code}) twse: empty kline"
+
+        result = strategy(
+            price,
+            change,
+            ma5,
+            ma20,
+            closes,
+            volumes
+        )
+
+        display_closes = (
+            closes[:-1] + [price]
+            if closes else closes
+        )
+        result["breakout_distance"] = breakout_distance(
+            price,
+            display_closes
+        )
+
+        return name, {
+            "result": result,
+
+            "price": price,
+            "change": change,
+            "price_source": price_source,
+            "stock_code": code,
+
+            "ma5": ma5,
+            "ma20": ma20,
+
+            "closes": display_closes,
+            "volumes": volumes,
+
+            "holding": holdings.get(name)
+        }, result.get("decision"), None
+
+    except Exception as exc:
+        return name, None, None, f"{name} 錯誤：{exc}"
+
+
 # ================================
 # 🔥 generate
 # ================================
@@ -2099,88 +2220,25 @@ def generate():
     # ================================
     # 🔥 scan
     # ================================
-    for name, code in stocks.items():
+    with ThreadPoolExecutor(max_workers=min(8, max(len(stocks), 1))) as executor:
+        futures = {
+            name: executor.submit(load_stock_signal, name, code)
+            for name, code in stocks.items()
+        }
 
-        try:
+        for name in stocks:
+            loaded_name, data, decision, error = futures[name].result()
 
-            twse = get_twse(code)
-
-            if not twse:
-                data_errors.append(f"{name}({code}) {get_last_error(code) or 'twse: no data'}")
+            if error:
+                data_errors.append(error)
                 continue
 
-            (
-                t_price,
-                t_change,
-                ma5,
-                ma20,
-                closes,
-                volumes
-            ) = twse
-
-            realtime = get_realtime_price(code)
-            yahoo = get_yahoo(code)
-
-            price, change, price_source = (
-
-                get_live_price_data(
-                    realtime,
-                    yahoo,
-                    t_price,
-                    t_change
-                )
-            )
-
-            if not closes or not volumes:
+            if not data:
+                data_errors.append(f"{loaded_name} 無有效數據")
                 continue
 
-            result = strategy(
-                price,
-                change,
-                ma5,
-                ma20,
-                closes,
-                volumes
-            )
-
-            # 中文註釋：v19.1.3 顯示層也用盤中即時價覆蓋最後一根 K，與 analysis.py 判斷保持一致。
-            display_closes = (
-                closes[:-1] + [price]
-                if closes else closes
-            )
-            result["breakout_distance"] = breakout_distance(
-                price,
-                display_closes
-            )
-
-            decisions.append(
-                result.get("decision")
-            )
-
-            results_map[name] = {
-
-                "result": result,
-
-                "price": price,
-                "change": change,
-                "price_source": price_source,
-                "stock_code": code,
-
-                "ma5": ma5,
-                "ma20": ma20,
-
-                "closes": display_closes,
-                "volumes": volumes,
-
-                "holding": holdings.get(name)
-            }
-
-        except Exception as e:
-
-            msg += (
-                f"⚠ {name} 錯誤："
-                f"{str(e)}\n"
-            )
+            decisions.append(decision)
+            results_map[loaded_name] = data
 
     if not results_map:
         if data_errors:

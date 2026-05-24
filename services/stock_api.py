@@ -175,7 +175,7 @@ def get_yahoo(code):
         return None
 
 
-def get_twse(code):
+def get_twse(code, months=3, retries=1):
     if requests is None:
         record_error(code, "twse", "requests unavailable")
         return None
@@ -183,12 +183,12 @@ def get_twse(code):
     clear_error(code)
     last_error = None
 
-    for _ in range(3):
+    for _ in range(max(1, retries)):
         try:
             rows = []
             now = datetime.now(tz) if tz else datetime.now()
 
-            for i in range(6):
+            for i in range(max(1, months)):
                 date = now - timedelta(days=30*i)
                 url = f"https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date={date.strftime('%Y%m01')}&stockNo={code}"
 
@@ -219,7 +219,6 @@ def get_twse(code):
 
             if not rows:
                 record_error(code, "twse", last_error or "empty data")
-                time.sleep(2)
                 continue
 
             rows.sort(key=lambda x: x[0])

@@ -203,13 +203,12 @@ class GeneratorReportTest(unittest.TestCase):
             })
 
         self.assertIn("建準", context)
-        self.assertIn("同型「突破確認/爆量/已突破」", context["建準"])
-        self.assertIn("n=6", context["建準"])
-        self.assertIn("3日相對勝率", context["建準"])
+        self.assertEqual(context["建準"]["label"], "同型 突破確認/爆量/已突破")
+        self.assertEqual(context["建準"]["sample"], 6)
         self.assertTrue(
-            "支持不買" in context["建準"]
-            or "今日阻斷不改判" in context["建準"]
-            or "依今日阻斷" in context["建準"]
+            context["建準"]["verdict"] == "支持不買"
+            or "今日阻斷不改判" in context["建準"]["verdict"]
+            or "依今日阻斷" in context["建準"]["verdict"]
         )
 
     def test_setup_bucket_falls_back_to_price_position(self):
@@ -311,12 +310,25 @@ class GeneratorReportTest(unittest.TestCase):
             })
 
         self.assertIn("智原", context)
-        self.assertIn("持倉同型", context["智原"])
+        self.assertEqual(context["智原"]["label"], "持倉同型 突破確認/放量/已突破")
         self.assertTrue(
-            "支持續抱" in context["智原"]
-            or "依風控續抱" in context["智原"]
-            or "依持倉規則" in context["智原"]
+            "支持續抱" in context["智原"]["verdict"]
+            or "依風控續抱" in context["智原"]["verdict"]
+            or "依持倉規則" in context["智原"]["verdict"]
         )
+
+    def test_backtest_context_renders_data_and_explanation(self):
+        text = generator.render_backtest_context({
+            "version": "v19.1",
+            "label": "同型 突破確認/爆量/已突破",
+            "sample": 15,
+            "win_rate": 60,
+            "avg_return": 1.8,
+            "verdict": "歷史偏強，今日阻斷不改判"
+        })
+
+        self.assertIn("├─ 回測：v19.1｜同型 突破確認/爆量/已突破｜樣本 15｜3日相對 +1.8%｜勝率 60%", text)
+        self.assertIn("├─ 解讀：歷史偏強，今日阻斷不改判", text)
 
 
 if __name__ == "__main__":

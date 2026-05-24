@@ -1,10 +1,12 @@
 import unittest
 from datetime import date
+from unittest.mock import patch
 
 from services.stock_api import (
     clear_error,
     compact_error,
     get_last_error,
+    get_twse,
     parse_twse_date,
     parse_twse_number,
     record_error
@@ -34,6 +36,32 @@ class StockApiHistoryTest(unittest.TestCase):
             compact_error("HTTPSConnectionPool failed: nodename nor servname provided"),
             "DNS failed"
         )
+
+    def test_get_twse_uses_requested_month_count(self):
+        calls = []
+
+        class FakeResponse:
+            def json(self):
+                return {
+                    "stat": "OK",
+                    "data": [
+                        ["115/05/01", "1,000", "0", "0", "0", "0", "10"],
+                        ["115/05/02", "1,000", "0", "0", "0", "0", "11"],
+                        ["115/05/03", "1,000", "0", "0", "0", "0", "12"],
+                        ["115/05/04", "1,000", "0", "0", "0", "0", "13"],
+                        ["115/05/05", "1,000", "0", "0", "0", "0", "14"],
+                    ]
+                }
+
+        def fake_get(url, **_kwargs):
+            calls.append(url)
+            return FakeResponse()
+
+        with patch("services.stock_api.requests.get", side_effect=fake_get):
+            result = get_twse("3231", months=2)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(len(calls), 2)
 
 
 if __name__ == "__main__":
