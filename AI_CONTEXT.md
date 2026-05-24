@@ -1,149 +1,168 @@
 # Stock Bot AI Context
 
-本文件是给 AI 维护本专案用的最小上下文。每次继续升级前，先读这个文件，再按需要读取相关源码，避免重复扫描全专案。
+本文件是给 AI 维护本专案用的最小上下文。新对话接手时，先读这个文件，再按需要读取相关源码，避免重复扫描全专案。
 
 ## 当前阶段
 
 - 当前稳定线：`v19.0`
-- `18.x` 目标：稳定策略层、显示层、行情准确性。
-- `19.x` 目标：线上信号数据库、每日收盘记录、结果回填、胜率统计。
+- `18.x` 已完成：策略层、显示层、持仓逻辑、行情显示冲突修复。
+- `19.x` 当前目标：可验证、可重跑、可回放、可避免污染的数据库写入流程。
+- 不要直接大量 backfill。必须先 dry-run、validate、人工或自动检查无误后，才允许正式写入。
 
 ## 禁改与慎改
 
-- `config.py`：包含密钥，不要改、不要在回复中展开敏感内容。
+- `config.py`：包含本地密钥，不要改、不要打印、不要提交。
+- 不要把 Supabase、Telegram、GitHub token 写进代码或 Markdown。
 - 不要做无关重构；只改用户本轮要求相关文件。
+- `services/ai.py`、`services/learning.py` 已不参与当前主流程，除非用户明确要求，否则不要恢复旧逻辑。
+
+## 12 档股票清单
+
+唯一配置来源：`core/watchlist.py`。
+
+当前只处理这 12 档：
+
+- `3231` 緯創
+- `2421` 建準
+- `3035` 智原
+- `2303` 聯電
+- `3481` 群創
+- `2344` 華邦電
+- `2376` 技嘉
+- `2408` 南亞科
+- `2356` 英業達
+- `2324` 仁寶
+- `2301` 光寶科
+- `2337` 旺宏
+
+`core/generator.py`、`scripts/dry_run_replay.py`、`scripts/backfill_signals.py` 都应从 `core.watchlist` 读取默认清单。不要在脚本里另写一份股票清单。
 
 ## 文件职责
 
 - `services/analysis.py`：唯一策略来源。负责 `BUY / WAIT / NO_TRADE / FAIL`、品质分、持仓策略、最强候选过滤。
-- `core/condition_engine.py`：只做条件映射，不反推策略，不产生新买卖判断。
-- `core/generator.py`：只做报文显示、排序摘要、格式整理。不得自行推翻 `analysis.py` 的交易结论。
-- `services/stock_api.py`：行情来源、实时价修正、涨跌停价格保护。
-- `services/signal_store.py`：`19.x` Supabase 写入层，只负责收盘信号和结果回填，不参与策略判断。
+- `core/condition_engine.py`：条件映射层。只整理 `market / trend / volume / event / edge / rr` 等条件，不反推策略。
+- `core/generator.py`：报文显示、排序摘要、Telegram 输出内容。不得自行推翻 `analysis.py` 的交易结论。
+- `services/stock_api.py`：行情来源、实时价修正、涨跌停价格保护、TWSE OHLCV 历史资料。
+- `services/signal_store.py`：原始 3 表写入层，负责 `signal_runs / signal_items / signal_outcomes`。
+- `services/daily_snapshot_store.py`：v19 每日快照写入层，负责 `daily_price / daily_signal_snapshot`，写入前必须验证。
+- `core/signal_snapshot.py`：把策略结果或 OHLCV 转成统一可回测 snapshot。
+- `core/signal_validator.py`：检查 snapshot 逻辑冲突，防止错误资料入库。
+- `scripts/dry_run_replay.py`：dry-run replay，不写数据库。
+- `scripts/backfill_signals.py`：受保护 backfill，默认不写数据库。
+- `docs/v19_backfill_schema.sql`：v19 两张新表建表 SQL。
 
-已删除旧文件：
+## 数据库边界
 
-- `services/ai.py`
-- `services/learning.py`
-- `README_AI.md`
+原始 3 表：
 
-## 18.x 核心原则
+- `signal_runs`
+- `signal_items`
+- `signal_outcomes`
 
-- 策略层和显示层必须一致。
-- 持仓逻辑和未持仓新进场逻辑分开。
+v19 回测/回放 2 表：
+
+- `daily_price`
+- `daily_signal_snapshot`
+
+写入原则：
+
+- 盘前、盘中、假日不写入每日稳定样本。
+- 收盘/盘后才允许记录稳定信号。
+- backfill 必须使用 upsert，可重复执行，不得产生重复资料。
+- replay/backfill 某一天时，只能使用当天及之前资料，禁止未来数据污染。
+- 默认只处理 `core/watchlist.py` 的 12 档股票。
+- 当前已经测试过 2024 少量写入和重复 upsert，随后已删除测试资料。不要误以为正式 backfill 已完成。
+
+## v19 表结构
+
+`daily_price`：
+
+- `stock_id`
+- `trade_date`
+- `open`
+- `high`
+- `low`
+- `close`
+- `volume`
+- `source`
+- `created_at`
+- `updated_at`
+
+唯一键：`stock_id + trade_date`
+
+`daily_signal_snapshot`：
+
+- `stock_id`
+- `trade_date`
+- `version`
+- `close`
+- `volume_ratio`
+- `pattern`
+- `market_state`
+- `structure_state`
+- `position_state`
+- `rr`
+- `score`
+- `heat_level`
+- `action`
+- `reasons`
+- `is_tradeable`
+- `is_best_candidate`
+- `created_at`
+- `updated_at`
+
+唯一键：`stock_id + trade_date + version`
+
+`reasons` 使用 JSON/JSONB。
+
+## 策略层硬规则
+
+- 持仓逻辑和未持仓新进场逻辑必须分离。
+- 持仓股可以：`续抱 / 洗盘观察 / 停利 / 停损 / 减码 / 加码`。
+- 非持仓股只能：`观察 / 等量 / 不交易 / 等确认 / 不追高`。
 - 持仓非加码时，不显示新进场 RR / Edge 缺口。
-- `过热观察` 不是强买点，不能显示成 `成立：完整`。
-- 低量能不能给 `A+ / C95` 这类高品质。
+- `overheat` 只能作为风险标签，不应覆盖原本型态。
 - 涨停锁价不追高；已持仓可停利一部分并保留核心仓。
 - 最强股只能从有效新进场候选挑选，不能从持仓、过热、低量、小仓观察中选。
-- 假日价格不能标成 `realtime`，应显示为最近价格。
+- 强势但 RR 不足，不应被选为最佳进场标的。
 
-## 当前关键版本
+## lifecycle 优先级
 
-### v18.8.1
+型态优先级：
 
-- 修复低 RR 却高品质的问题。
-- 持仓非加码隐藏新进场品质行。
-- 最强股排除持仓。
+1. 涨停锁价
+2. 突破确认
+3. 接近突破
+4. 弱势反弹
+5. 弱势
 
-### v18.8.2
+`overheat` 是风险标签，不是 lifecycle 主状态。
 
-- 增加低量能品质保护。
-- 初步排除低量候选进入最强股。
+## RR 与交易限制
 
-### v18.8.3
+- RR 不可除以 0。
+- RR 不可因 `None` 报错。
+- RR `< 1` 时必须标记 `RR不足`。
+- 已持仓股票没有新进场 RR 时，不应误判成可加码。
+- `RR不足 / 过热 Lv3 / 漲停鎖價 / 不追高 / 無量 / 市場弱` 都必须限制交易。
 
-- 品质评分同时看 `vol_ratio_5` 与 `vol_ratio_10`，取较低值，和报文 V 倍率对齐。
-- `V < 0.8` 且 `HOT` 时，最高只给 `C / 64`。
-- 最强股排除 `HOT / EXTREME`、低量、小仓观察、`B/C/D` 品质。
-- 观察型买点显示 `条件`，不显示 `成立：完整`。
-- 持仓续抱/警戒不再显示成 `缺口：持仓续抱`、`缺口：持仓警戒`。
-- 假日价格显示为 `最近价格`。
+## 最强股规则
 
-### v18.8.4
+候选必须满足：
 
-- 假日价格去掉来源括号，只显示 `最近价格`。
-- `C/D` 品质观察股不显示仓位百分比，避免误解为买进指令。
-- 品质行改成 `品质：等级 ｜信心 分数`。
-- 观察型条件改成 `RR足够、低量观察/过热观察`，减少 `RR` 语义不清。
+- `decision == BUY`
+- `action > 0`
+- 未持仓
+- `entry_quality` 为 `A` 或 `A+`
+- 非 `HOT / EXTREME`
+- 非 `WEAK_REBOUND / LIMIT_REBOUND / LIMIT_LOCK`
+- 非低量且非攻击结构
+- `rr >= 1`
+- `is_tradeable == true`
 
-### v18.9
+否则底部应显示 `无有效进场标的`，或由其他合格候选胜出。
 
-- `C` 品质在策略层降为 `WAIT`，不再用 `BUY + 0/10%` 伪装观察。
-- `B` 以上才允许小仓或正常出手，`A/A+` 才进入最强股候选。
-- 底部市场总结只统计真正可执行买点，不再用原始 `BUY` 数量。
-- 持仓新增洗盘保护：缩量回测、未见出货、趋势未破时不因单一亏损比例清仓。
-- 持仓新增结构破坏处理：出货、失败、放量破位时减码或停损更果断。
-- 获利持仓提高保护线，避免大幅获利后回吐过多。
-
-### v18.9.1
-
-- `watch_quality_c` 改用观察条件显示，不再出现 `RR 充足` 却显示 `RR不足`。
-- C 品质观察显示 `RR足够 / 低量观察 / 过热观察`。
-- 缩量回测、未出货、趋势未破且亏损小于 5% 时，持仓优先显示 `洗盘观察`。
-
-### v18.9.2
-
-- 修复 `watch_quality_c` 条件清单为空时整行不显示的问题。
-- C 品质观察标题统一显示 `观察`，不再显示成 `等确认`。
-
-### v18.9.3
-
-- 持仓非加码不显示买点条件，避免 `RR -` 却出现 `RR足够`。
-- 洗盘观察不再额外显示普通买点缺口 `量能不足`。
-- 弱势反弹、涨停反弹、远离触发等观察状态不再追加 `Day1` 后缀。
-
-### v18.9.4
-
-- 清理旧 `README_AI.md` v8.6 规则，避免 AI 读取过期策略。
-- 底部 `局部机会` 只统计未持仓新进场，避免持仓 BUY 误导市场摘要。
-- 同步过期维护说明与版本注释。
-
-### v19.0
-
-- 新增 `services/signal_store.py` 作为 Supabase 写入层，不沿用旧 `learning.py`。
-- 只在交易日 `收盘 / 盘后` 写入每日稳定信号，盘前、盘中、假日不入库。
-- 写入 `signal_runs` 与 `signal_items`，同日已记录则跳过，避免盘后重复样本。
-- 每次收盘记录时顺手回填已到期的 `1 / 3 / 5 / 10` 日结果到 `signal_outcomes`。
-- 数据库写入失败只追加报文警告，不阻断原本 Telegram 输出。
-
-## 报文结构
-
-常规未持仓：
-
-```text
-【股票】 动作 ｜状态
-├─ 型态：...
-├─ 市场：...
-├─ 结构：...
-├─ 位置：...
-├─ 交易：...
-├─ 条件/缺口/成立：...
-├─ 数据：RR ... ｜S ... ｜V ...x（日线）
-├─ 品质：...
-├─ 评级：...
-└─ 💰 价格：...
-```
-
-持仓：
-
-```text
-【股票】 📌 持仓 ｜动作
-├─ 持仓：股数 ｜均价 ｜损益
-├─ 操作：...
-├─ 仓位：...
-├─ 风控：...
-├─ 型态：...
-├─ 市场：...
-├─ 结构：...
-├─ 位置：...
-├─ 交易：...
-├─ 数据：RR - ｜S ... ｜V ...x（日线）
-├─ 评级：...
-└─ 💰 价格：...
-```
-
-## 禁止出现的冲突
+## 禁止出现的报文冲突
 
 - `V < 0.8x` 但显示 `A+ / C95`。
 - `过热观察` 同时显示 `成立：完整`。
@@ -154,57 +173,85 @@
 - 涨停锁价建议追高。
 - RR 隐藏后，评级原因还写 `高RR`。
 - `FAIL` 同时显示禁追、过热、可交易等互斥状态。
+- `action = 不交易`，但 reasons 显示可进场。
+- `action = 停利`，但没有过热、涨停、急涨或风控原因。
+- `action = 续抱`，同时出现停损讯号。
 
 ## 持仓策略边界
 
 - 持仓处理优先看结构、量能、市场、价格行为，不只看盈亏百分比。
 - `续抱`：没有破坏结构，或弱势但尚未触发风控。
+- `洗盘观察`：缩量回测、未见出货、趋势未破，避免被假卖点洗掉。
 - `警戒`：轻亏、市场弱、量能弱、趋势未转强。
 - `减码`：出货风险、突破失败、弱势中亏扩大。
 - `停损 100%`：硬停损或明显破位。
 - `停利 25% / 50%`：获利明显且过热，保留核心仓，避免假卖掉真主升。
 - `加码`：只允许在持仓盈利、结构转强、市场强、量能不弱、RR 足够、品质达标时出现。
 
-## 最强股规则
+## 常用验证命令
 
-候选必须满足：
+运行全部测试：
 
-- `decision == BUY`
-- `action > 0`
-- 未持仓
-- `entry_quality` 只能是 `A+` 或 `A`
-- 非 `HOT / EXTREME`
-- 非 `WEAK_REBOUND / LIMIT_REBOUND / LIMIT_LOCK`
-- 非低量且非攻击结构
-- `rr >= 1`
+```bash
+.venv/bin/python -m pytest
+```
 
-否则底部应显示 `无有效进场标的` 或由其他合格候选胜出。
+dry-run replay，不写入数据库：
+
+```bash
+.venv/bin/python scripts/dry_run_replay.py \
+  --dry-run \
+  --validate \
+  --source twse \
+  --version v19.0 \
+  --start-date 2026-05-11 \
+  --end-date 2026-05-22
+```
+
+backfill dry-run，不写入数据库：
+
+```bash
+.venv/bin/python scripts/backfill_signals.py \
+  --dry-run \
+  --source twse \
+  --version v19.0 \
+  --start-date 2026-05-11 \
+  --end-date 2026-05-22
+```
+
+正式 backfill 必须显式加：
+
+```bash
+--write --confirm-write
+```
+
+没有这两个参数时，`scripts/backfill_signals.py` 不得写入数据库。
+
+## 已验证事项
+
+- 测试套件已覆盖策略层、dry-run replay、TWSE OHLCV 解析、signal validator、backfill guard、daily snapshot store、watchlist 对齐。
+- 最近一次完整测试为 `34 tests OK`。
+- 2026 TWSE 历史资料可查；之前出现 0 rows 是因为执行环境网络受限，不是 TWSE 没资料。
+- 已确认 `3231` 在 `2026-05-22` 可取到 OHLCV：open `142.5`、high `146.0`、low `139.5`、close `144.5`、volume `70277790`。
+- 已做过 2024 少量 DB 写入、重复 upsert、删除测试资料；两张 v19 表已清空测试样本。
 
 ## 每次升级流程
 
 1. 先读 `AI_CONTEXT.md`。
 2. 根据用户报文定位冲突。
 3. 只读取相关源码，不全仓库扫大段无关文件。
-4. 先说明将改哪些点。
-5. 修改处保留中文注释。
+4. 修改策略层时同时检查显示层是否对齐。
+5. 修改处保留必要中文注释。
 6. 不碰 `config.py`，真实密钥只留在本地或平台环境变量。
-7. 跑语法检查：
-
-```bash
-PYTHONPYCACHEPREFIX=/private/tmp/stock_bot_pycache python3 -m py_compile services/analysis.py core/generator.py core/condition_engine.py services/stock_api.py
-```
-
-8. 用小模拟验证典型冲突。
+7. 跑测试或最小验证。
+8. 若涉及 DB 写入，先 dry-run + validate。
 9. 最后回复改动文件、修复点、验证结果。
 
-## 19.x 预留
+## 部署与触发
 
-19.x 已启用：
+- Render 入口：[app.py](/Users/liveroom/stock-bot-main/app.py)
+- GitHub Actions workflow：[.github/workflows/stock-bot.yml](/Users/liveroom/stock-bot-main/.github/workflows/stock-bot.yml)
+- 正式 URL：`https://stock-bot-ia2o.onrender.com`
+- 测试 URL：`https://stock-bot-ia2o.onrender.com/?test=1`
 
-- Supabase 信号表。
-- 每日信号记录。
-- 1/3/5/10 日结果回填。
-- 胜率统计。
-- 回测报告。
-
-当前 `v19.0` 已完成前三项；胜率统计和回测报告可继续升级。
+UptimeRobot 免费版可能只能用 `HEAD`，`app.py` 需要兼容 `HEAD` 唤醒。
