@@ -1895,12 +1895,7 @@ def holding_signal(
     def add_blockers():
         blockers = []
 
-        if price_source == "twse":
-            blockers.append("日線參考")
-
-        if change is None:
-            blockers.append("缺少即時漲跌")
-        elif change >= 9.5:
+        if change is not None and change >= 9.5:
             blockers.append("漲停不追")
 
         if pnl < 0:
@@ -1909,7 +1904,7 @@ def holding_signal(
             blockers.append("浮盈不足")
 
         if decision != "BUY":
-            blockers.append("策略未給加碼")
+            blockers.append("買點未成立")
 
         if regime != "RISK_ON":
             blockers.append("市場未轉強")
@@ -1924,7 +1919,7 @@ def holding_signal(
             blockers.append("過熱不加碼")
 
         if behavior in ["WEAK_REBOUND", "LIMIT_REBOUND", "LIMIT_LOCK"]:
-            blockers.append("價格行為不追")
+            blockers.append("不追反彈/漲停")
 
         if quality not in ["A+", "A", "B"]:
             blockers.append("品質不足")

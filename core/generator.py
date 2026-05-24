@@ -1,5 +1,5 @@
 # ================================
-# FINAL UI（v19.1.1｜Daily Signal Database）
+# FINAL UI（v19.1.2｜Daily Signal Database）
 # ================================
 
 from datetime import datetime, timedelta
@@ -33,7 +33,7 @@ from services.daily_snapshot_store import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v19.1.1"
+VERSION = "v19.1.2"
 
 
 # ================================
@@ -1316,6 +1316,81 @@ def snapshot_bucket_from_row(row):
     return row.get("action", "其他")
 
 
+def parse_trade_date(value):
+
+    try:
+        return datetime.strptime(str(value), "%Y-%m-%d").date()
+    except:
+        return None
+
+
+def build_price_lookup(price_rows):
+
+    by_stock = {}
+
+    for row in price_rows:
+        stock_id = row.get("stock_id")
+        trade_date = parse_trade_date(row.get("trade_date"))
+        close = row.get("close")
+
+        if not stock_id or trade_date is None or close is None:
+            continue
+
+        by_stock.setdefault(stock_id, []).append((trade_date, float(close)))
+
+    for stock_id in by_stock:
+        by_stock[stock_id].sort(key=lambda item: item[0])
+
+    return by_stock
+
+
+def forward_return(price_lookup, stock_id, trade_date, horizon=3):
+
+    prices = price_lookup.get(stock_id) or []
+
+    for idx, (date_value, close) in enumerate(prices):
+        if date_value != trade_date:
+            continue
+
+        target_idx = idx + horizon
+
+        if target_idx >= len(prices) or not close:
+            return None
+
+        target_close = prices[target_idx][1]
+        return (target_close - close) / close * 100
+
+    return None
+
+
+def summarize_validation(returns, mode):
+
+    if len(returns) < 8:
+        return None
+
+    wins = sum(1 for value in returns if value > 0)
+    win_rate = wins / len(returns) * 100
+    avg_return = sum(returns) / len(returns)
+    text = f"3日勝率{round(win_rate)}%｜均{avg_return:+.1f}%"
+
+    if mode == "blocked":
+        if avg_return <= 0.5 and win_rate < 55:
+            verdict = "阻斷有效"
+        elif avg_return >= 2 or win_rate >= 65:
+            verdict = "常續強，僅列觀察"
+        else:
+            verdict = "樣本中性，依今日條件"
+    else:
+        if avg_return >= 1 and win_rate >= 55:
+            verdict = "買點有效"
+        elif avg_return <= 0 or win_rate < 45:
+            verdict = "買點偏弱"
+        else:
+            verdict = "樣本中性"
+
+    return f"{text}｜{verdict}"
+
+
 def load_backtest_context(results_map):
 
     try:
@@ -1338,44 +1413,64 @@ def load_backtest_context(results_map):
             if rows:
                 history_version = candidate_version
                 break
+
+        price_rows = (
+            client.table("daily_price")
+            .select("stock_id,trade_date,close")
+            .gte("trade_date", since)
+            .execute()
+            .data
+            or []
+        )
     except:
         return {}
 
-    bucket_counts = {}
-    stock_bucket_counts = {}
-    stock_buy_counts = {}
-    stock_best_counts = {}
+    price_lookup = build_price_lookup(price_rows)
+    bucket_returns = {}
+    stock_buy_returns = {}
 
     for row in rows:
         bucket = snapshot_bucket_from_row(row)
         stock_id = row.get("stock_id")
-        bucket_counts[bucket] = bucket_counts.get(bucket, 0) + 1
-        stock_bucket_counts[(stock_id, bucket)] = stock_bucket_counts.get((stock_id, bucket), 0) + 1
+        trade_date = parse_trade_date(row.get("trade_date"))
+        result = forward_return(price_lookup, stock_id, trade_date, 3)
 
-        if row.get("action") == "BUY":
-            stock_buy_counts[stock_id] = stock_buy_counts.get(stock_id, 0) + 1
+        if result is None:
+            continue
 
-        if row.get("is_best_candidate"):
-            stock_best_counts[stock_id] = stock_best_counts.get(stock_id, 0) + 1
+        bucket_returns.setdefault(bucket, []).append(result)
+
+        if row.get("action") == "BUY" and row.get("is_tradeable"):
+            stock_buy_returns.setdefault(stock_id, []).append(result)
 
     context = {}
-
     for name, data in results_map.items():
         result = data.get("result", {})
         stock_id = data.get("stock_code")
 
         if data.get("holding"):
-            context[name] = (
-                f"{history_version}近90日本股BUY {stock_buy_counts.get(stock_id, 0)}次"
-                f"｜最佳 {stock_best_counts.get(stock_id, 0)}次"
+            summary = summarize_validation(
+                stock_buy_returns.get(stock_id, []),
+                "buy"
             )
+
+            if summary:
+                context[name] = f"{history_version}本股買點 {summary}"
+
             continue
 
         bucket = snapshot_bucket_from_result(result)
-        context[name] = (
-            f"{history_version}近90日同類「{bucket}」{bucket_counts.get(bucket, 0)}次"
-            f"｜本股 {stock_bucket_counts.get((stock_id, bucket), 0)}次"
+        mode = (
+            "buy"
+            if result.get("decision") == "BUY"
+            and result.get("action", 0) > 0
+            and not entry_blockers(result)
+            else "blocked"
         )
+        summary = summarize_validation(bucket_returns.get(bucket, []), mode)
+
+        if summary:
+            context[name] = f"{history_version}同類「{bucket}」{summary}"
 
     return context
 
@@ -1715,7 +1810,7 @@ def render_stock(
 
     if data.get("backtest_context"):
         msg += (
-            f"├─ 回測："
+            f"├─ 驗證："
             f"{data.get('backtest_context')}\n"
         )
 
