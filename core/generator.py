@@ -8,7 +8,8 @@ import pytz
 from services.stock_api import (
     get_twse,
     get_yahoo,
-    get_realtime_price
+    get_realtime_price,
+    get_last_error
 )
 
 from services.analysis import (
@@ -1920,6 +1921,7 @@ def generate():
 
     results_map = {}
     decisions = []
+    data_errors = []
 
     # ================================
     # 🔥 scan
@@ -1931,6 +1933,7 @@ def generate():
             twse = get_twse(code)
 
             if not twse:
+                data_errors.append(f"{name}({code}) {get_last_error(code) or 'twse: no data'}")
                 continue
 
             (
@@ -2003,6 +2006,16 @@ def generate():
             )
 
     if not results_map:
+        if data_errors:
+            msg += "⚠ 無有效數據：行情來源未返回可用日線\n"
+            for item in data_errors[:6]:
+                msg += f"├─ {item}\n"
+            if len(data_errors) > 6:
+                msg += f"└─ 其餘 {len(data_errors) - 6} 檔同樣無資料\n"
+            else:
+                msg = msg.rstrip("\n") + "\n"
+            return msg
+
         return msg + "\n⚠ 無有效數據"
 
     backtest_context = load_backtest_context(results_map)

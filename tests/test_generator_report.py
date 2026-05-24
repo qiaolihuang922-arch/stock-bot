@@ -128,6 +128,15 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("├─ 依據：小幅轉強、RR達標、信心達標", report)
         self.assertNotIn("├─ 阻斷：條件成立", report)
 
+    def test_generate_reports_data_source_errors_when_all_quotes_fail(self):
+        with patch.object(generator, "stocks", {"測試": "1234"}), \
+             patch.object(generator, "get_twse", return_value=None), \
+             patch.object(generator, "get_last_error", return_value="twse: DNS failed"):
+            report = generator.generate()
+
+        self.assertIn("⚠ 無有效數據：行情來源未返回可用日線", report)
+        self.assertIn("測試(1234) twse: DNS failed", report)
+
 
 if __name__ == "__main__":
     unittest.main()

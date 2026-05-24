@@ -17,6 +17,38 @@ except ImportError:
 
 tz = pytz.timezone("Asia/Taipei") if pytz else None
 HEADERS = {"User-Agent": "Mozilla/5.0"}
+LAST_ERRORS = {}
+
+
+def compact_error(error):
+    text = str(error)
+
+    if "nodename nor servname" in text or "NameResolutionError" in text:
+        return "DNS failed"
+
+    if "Read timed out" in text or "Timeout" in text:
+        return "timeout"
+
+    if len(text) > 120:
+        return text[:117] + "..."
+
+    return text
+
+
+def record_error(code, source, error):
+    LAST_ERRORS[str(code)] = f"{source}: {compact_error(error)}"
+
+
+def clear_error(code):
+    LAST_ERRORS.pop(str(code), None)
+
+
+def get_last_error(code):
+    return LAST_ERRORS.get(str(code))
+
+
+def get_last_errors():
+    return dict(LAST_ERRORS)
 
 
 def parse_twse_date(value):
@@ -145,7 +177,11 @@ def get_yahoo(code):
 
 def get_twse(code):
     if requests is None:
+        record_error(code, "twse", "requests unavailable")
         return None
+
+    clear_error(code)
+    last_error = None
 
     for _ in range(3):
         try:
@@ -157,11 +193,17 @@ def get_twse(code):
                 url = f"https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date={date.strftime('%Y%m01')}&stockNo={code}"
 
                 try:
-                    r = requests.get(url, headers=HEADERS, timeout=10).json()
-                except:
+                    response = requests.get(url, headers=HEADERS, timeout=10)
+                    r = response.json()
+                except Exception as exc:
+                    last_error = f"{type(exc).__name__}: {exc}"
+                    if "nodename nor servname" in str(exc) or "NameResolutionError" in str(exc):
+                        record_error(code, "twse", last_error)
+                        return None
                     continue
 
                 if r.get("stat") != "OK":
+                    last_error = f"stat={r.get('stat')}"
                     continue
 
                 for d in r.get("data", []):
@@ -171,10 +213,12 @@ def get_twse(code):
                             float(d[6].replace(",", "")),
                             float(d[1].replace(",", ""))
                         ))
-                    except:
+                    except Exception as exc:
+                        last_error = f"parse: {exc}"
                         continue
 
             if not rows:
+                record_error(code, "twse", last_error or "empty data")
                 time.sleep(2)
                 continue
 
@@ -184,6 +228,7 @@ def get_twse(code):
             volumes = [x[2] for x in rows]
 
             if len(closes) < 5:
+                record_error(code, "twse", f"insufficient rows={len(closes)}")
                 return None
 
             price = closes[-1]
@@ -196,8 +241,12 @@ def get_twse(code):
 
             return price, change, ma5, ma20, closes, volumes
 
-        except:
+        except Exception as exc:
+            record_error(code, "twse", f"{type(exc).__name__}: {exc}")
             time.sleep(2)
+
+    if last_error:
+        record_error(code, "twse", last_error)
 
     return None
 
