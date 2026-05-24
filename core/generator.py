@@ -556,7 +556,7 @@ def entry_advantages(result):
     if vp == "EXPANSION":
         labels.append("攻擊量")
 
-    if rr is not None and rr >= 1:
+    if rr is not None and rr >= 1 and not should_hide_rr(result):
         labels.append("RR足夠")
 
     return labels[:4]
@@ -1360,6 +1360,112 @@ def snapshot_bucket_from_row(row):
     return row.get("action", "其他")
 
 
+PATTERN_LABELS = {
+    "BREAKOUT_CONFIRM": "突破確認",
+    "BREAKOUT_WATCH": "接近突破",
+    "LOCK_LIMIT": "漲停鎖價",
+    "LIMIT_REBOUND": "漲停反彈",
+    "WEAK_REBOUND": "弱勢反彈",
+    "WEAK": "弱勢",
+    "BASE": "整理",
+    "SHAKEOUT": "洗盤回測",
+    "FAILED_BREAKOUT": "突破失敗",
+    "DISTRIBUTION": "出貨",
+    "HEALTHY_PULLBACK": "健康回測"
+}
+
+POSITION_LABELS = {
+    "BREAKOUT": "已突破",
+    "NEAR_BREAKOUT": "臨界",
+    "WATCH_BREAKOUT": "接近",
+    "FAR": "遠離",
+    "UNKNOWN": "位置不明"
+}
+
+
+def volume_bucket_label(value):
+
+    try:
+        ratio = float(value)
+    except:
+        return "量能不明"
+
+    if ratio >= 2:
+        return "爆量"
+
+    if ratio >= 1.3:
+        return "放量"
+
+    if ratio >= 0.8:
+        return "正常量"
+
+    return "低量"
+
+
+def position_bucket_from_distance(distance):
+
+    if distance is None:
+        return "UNKNOWN"
+
+    if distance < 0:
+        return "BREAKOUT"
+
+    if distance < 1:
+        return "NEAR_BREAKOUT"
+
+    if distance < 4:
+        return "WATCH_BREAKOUT"
+
+    return "FAR"
+
+
+def setup_bucket_label(pattern, volume_bucket, position_bucket):
+
+    pattern_text = PATTERN_LABELS.get(pattern, pattern or "型態不明")
+    position_text = POSITION_LABELS.get(position_bucket, position_bucket or "位置不明")
+
+    return f"{pattern_text}/{volume_bucket}/{position_text}"
+
+
+def setup_bucket_from_row(row):
+
+    pattern = row.get("pattern")
+    volume_bucket = volume_bucket_label(row.get("volume_ratio"))
+    position_bucket = row.get("position_state") or "UNKNOWN"
+
+    return (
+        pattern,
+        volume_bucket,
+        position_bucket
+    )
+
+
+def setup_bucket_from_result(result, data):
+
+    pattern = result.get("structure_phase")
+    volume_bucket = volume_bucket_label(
+        data.get("volume_ratio")
+        or volume_ratio(data.get("volumes") or [])
+    )
+    distance = result.get("breakout_distance")
+
+    if distance is None:
+        distance = breakout_distance(
+            data.get("price"),
+            data.get("closes") or []
+        )
+
+    position_bucket = position_bucket_from_distance(
+        distance
+    )
+
+    return (
+        pattern,
+        volume_bucket,
+        position_bucket
+    )
+
+
 def parse_trade_date(value):
 
     try:
@@ -1407,23 +1513,39 @@ def forward_return(price_lookup, stock_id, trade_date, horizon=3):
     return None
 
 
+def market_forward_return(price_lookup, trade_date, horizon=3):
+
+    returns = []
+
+    for stock_id in price_lookup:
+        result = forward_return(price_lookup, stock_id, trade_date, horizon)
+
+        if result is not None:
+            returns.append(result)
+
+    if not returns:
+        return None
+
+    return sum(returns) / len(returns)
+
+
 def summarize_validation(returns, mode):
 
-    if len(returns) < 8:
+    if len(returns) < 6:
         return None
 
     wins = sum(1 for value in returns if value > 0)
     win_rate = wins / len(returns) * 100
     avg_return = sum(returns) / len(returns)
-    text = f"3日勝率{round(win_rate)}%｜均{avg_return:+.1f}%"
+    text = f"n={len(returns)}｜3日相對勝率{round(win_rate)}%｜均{avg_return:+.1f}%"
 
     if mode == "blocked":
-        if avg_return <= 0.5 and win_rate < 55:
-            verdict = "阻斷有效"
-        elif avg_return >= 2 or win_rate >= 65:
-            verdict = "常續強，僅列觀察"
+        if avg_return <= 0.3 and win_rate < 55:
+            verdict = "支持不買"
+        elif avg_return >= 1.5 or win_rate >= 65:
+            verdict = "歷史偏強，今日阻斷不改判"
         else:
-            verdict = "樣本中性，依今日條件"
+            verdict = "樣本中性，依今日阻斷"
     else:
         if avg_return >= 1 and win_rate >= 55:
             verdict = "買點有效"
@@ -1431,6 +1553,20 @@ def summarize_validation(returns, mode):
             verdict = "買點偏弱"
         else:
             verdict = "樣本中性"
+
+    if mode == "holding":
+        if avg_return >= 0.5 and win_rate >= 55:
+            verdict = "支持續抱，未達加碼仍不追"
+        elif avg_return <= -0.5 or win_rate < 45:
+            verdict = "加碼樣本偏弱，依風控續抱"
+        else:
+            verdict = "樣本中性，依持倉規則"
+
+    if mode == "risk":
+        if avg_return <= 0.3 and win_rate < 55:
+            verdict = "支持風控"
+        else:
+            verdict = "風控優先，不改判"
 
     return f"{text}｜{verdict}"
 
@@ -1446,7 +1582,7 @@ def load_backtest_context(results_map):
         for candidate_version in [VERSION, "v19.1", "v19.0"]:
             rows = (
                 client.table("daily_signal_snapshot")
-                .select("stock_id,trade_date,version,pattern,market_state,rr,heat_level,action,reasons,is_tradeable,is_best_candidate")
+                .select("stock_id,trade_date,version,pattern,market_state,structure_state,position_state,volume_ratio,rr,heat_level,action,reasons,is_tradeable,is_best_candidate")
                 .eq("version", candidate_version)
                 .gte("trade_date", since)
                 .execute()
@@ -1471,21 +1607,35 @@ def load_backtest_context(results_map):
 
     price_lookup = build_price_lookup(price_rows)
     bucket_returns = {}
+    setup_returns = {}
     stock_buy_returns = {}
+    today = datetime.now(tz).date()
 
     for row in rows:
         bucket = snapshot_bucket_from_row(row)
         stock_id = row.get("stock_id")
         trade_date = parse_trade_date(row.get("trade_date"))
+
+        if trade_date is None or trade_date >= today:
+            continue
+
         result = forward_return(price_lookup, stock_id, trade_date, 3)
 
         if result is None:
             continue
 
-        bucket_returns.setdefault(bucket, []).append(result)
+        market_result = market_forward_return(price_lookup, trade_date, 3)
+
+        if market_result is None:
+            continue
+
+        relative_result = result - market_result
+
+        bucket_returns.setdefault(bucket, []).append(relative_result)
+        setup_returns.setdefault(setup_bucket_from_row(row), []).append(relative_result)
 
         if row.get("action") == "BUY" and row.get("is_tradeable"):
-            stock_buy_returns.setdefault(stock_id, []).append(result)
+            stock_buy_returns.setdefault(stock_id, []).append(relative_result)
 
     context = {}
     for name, data in results_map.items():
@@ -1496,6 +1646,28 @@ def load_backtest_context(results_map):
             holding_decision = data.get("holding_decision") or result.get("_holding_decision") or {}
 
             if holding_decision.get("level") not in ["ADD_10", "ADD_20", "ADD_30"]:
+                setup_bucket = setup_bucket_from_result(result, data)
+                mode = (
+                    "risk"
+                    if holding_decision.get("level") in [
+                        "STOP_100",
+                        "REDUCE_25",
+                        "REDUCE_50",
+                        "TAKE_PROFIT_25",
+                        "TAKE_PROFIT_50",
+                        "HOLD_CORE"
+                    ]
+                    else "holding"
+                )
+                summary = summarize_validation(setup_returns.get(setup_bucket, []), mode)
+
+                if summary:
+                    context[name] = (
+                        f"{history_version}持倉同型「"
+                        f"{setup_bucket_label(*setup_bucket)}"
+                        f"」{summary}"
+                    )
+
                 continue
 
             summary = summarize_validation(stock_buy_returns.get(stock_id, []), "buy")
@@ -1513,14 +1685,15 @@ def load_backtest_context(results_map):
             else "blocked"
         )
 
-        if mode != "buy":
-            continue
-
-        bucket = snapshot_bucket_from_result(result)
-        summary = summarize_validation(bucket_returns.get(bucket, []), mode)
+        setup_bucket = setup_bucket_from_result(result, data)
+        summary = summarize_validation(setup_returns.get(setup_bucket, []), mode)
 
         if summary:
-            context[name] = f"{history_version}同類「{bucket}」{summary}"
+            context[name] = (
+                f"{history_version}同型「"
+                f"{setup_bucket_label(*setup_bucket)}"
+                f"」{summary}"
+            )
 
     return context
 
@@ -1974,6 +2147,10 @@ def generate():
             display_closes = (
                 closes[:-1] + [price]
                 if closes else closes
+            )
+            result["breakout_distance"] = breakout_distance(
+                price,
+                display_closes
             )
 
             decisions.append(

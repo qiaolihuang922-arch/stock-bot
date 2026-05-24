@@ -137,6 +137,187 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("⚠ 無有效數據：行情來源未返回可用日線", report)
         self.assertIn("測試(1234) twse: DNS failed", report)
 
+    def test_hidden_rr_is_not_listed_as_advantage(self):
+        result = {
+            "decision": "NO_TRADE",
+            "structure_phase": "WEAK_REBOUND",
+            "price_behavior": "WEAK_REBOUND",
+            "market_grade": "D",
+            "structure_state": "NORMAL",
+            "volume_price_state": "COILING",
+            "volume_state": "WEAK",
+            "rr": 2.5,
+        }
+
+        self.assertTrue(generator.should_hide_rr(result))
+        self.assertNotIn("RR足夠", generator.entry_advantages(result))
+
+    def test_backtest_context_uses_pattern_volume_and_position(self):
+        result = {
+            "decision": "BUY",
+            "action": 1,
+            "structure_phase": "BREAKOUT_CONFIRM",
+            "price_behavior": "NORMAL",
+            "trade_state": "LATE_ENTRY",
+            "heat_state": "NORMAL",
+            "rr": 0.5,
+            "market_grade": "A+",
+            "breakout_distance": -1,
+        }
+        signal_rows = []
+        price_rows = []
+
+        for day in range(1, 10):
+            price_rows.append({
+                "stock_id": "2421",
+                "trade_date": f"2026-05-{day:02d}",
+                "close": 100 + day,
+            })
+
+        for day in range(1, 7):
+            signal_rows.append({
+                "stock_id": "2421",
+                "trade_date": f"2026-05-{day:02d}",
+                "version": "v19.1",
+                "pattern": "BREAKOUT_CONFIRM",
+                "market_state": "A+",
+                "structure_state": "STRONG",
+                "position_state": "BREAKOUT",
+                "volume_ratio": 2.5,
+                "rr": 0.5,
+                "heat_level": 0,
+                "action": "BUY",
+                "reasons": ["RR不足"],
+                "is_tradeable": False,
+                "is_best_candidate": False,
+            })
+
+        with patch.object(generator, "get_supabase_client", return_value=FakeClient(signal_rows, price_rows)):
+            context = generator.load_backtest_context({
+                "建準": {
+                    "result": result,
+                    "stock_code": "2421",
+                    "volumes": [100] * 9 + [300],
+                    "holding": None,
+                }
+            })
+
+        self.assertIn("建準", context)
+        self.assertIn("同型「突破確認/爆量/已突破」", context["建準"])
+        self.assertIn("n=6", context["建準"])
+        self.assertIn("3日相對勝率", context["建準"])
+        self.assertTrue(
+            "支持不買" in context["建準"]
+            or "今日阻斷不改判" in context["建準"]
+            or "依今日阻斷" in context["建準"]
+        )
+
+    def test_setup_bucket_falls_back_to_price_position(self):
+        closes = [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 122]
+        result = {
+            "structure_phase": "BREAKOUT_CONFIRM",
+        }
+        bucket = generator.setup_bucket_from_result(
+            result,
+            {
+                "price": 122,
+                "closes": closes,
+                "volumes": [100] * 9 + [300],
+            }
+        )
+
+        self.assertEqual(bucket, ("BREAKOUT_CONFIRM", "爆量", "BREAKOUT"))
+
+    def test_market_forward_return_uses_same_day_universe(self):
+        lookup = {
+            "1111": [
+                (generator.parse_trade_date("2026-05-01"), 100),
+                (generator.parse_trade_date("2026-05-02"), 100),
+                (generator.parse_trade_date("2026-05-03"), 100),
+                (generator.parse_trade_date("2026-05-04"), 110),
+            ],
+            "2222": [
+                (generator.parse_trade_date("2026-05-01"), 100),
+                (generator.parse_trade_date("2026-05-02"), 100),
+                (generator.parse_trade_date("2026-05-03"), 100),
+                (generator.parse_trade_date("2026-05-04"), 90),
+            ],
+        }
+
+        self.assertEqual(
+            generator.market_forward_return(
+                lookup,
+                generator.parse_trade_date("2026-05-01"),
+                3
+            ),
+            0
+        )
+
+    def test_holding_context_uses_holding_wording(self):
+        result = {
+            "decision": "WAIT",
+            "action": 0,
+            "structure_phase": "BREAKOUT_CONFIRM",
+            "price_behavior": "NORMAL",
+            "trade_state": "TRADEABLE",
+            "heat_state": "NORMAL",
+            "rr": 1.2,
+            "market_grade": "A+",
+            "breakout_distance": -1,
+            "_holding_decision": {
+                "level": "HOLD"
+            }
+        }
+        signal_rows = []
+        price_rows = []
+
+        for stock_id in ["3035", "9999"]:
+            for day in range(1, 10):
+                price_rows.append({
+                    "stock_id": stock_id,
+                    "trade_date": f"2026-05-{day:02d}",
+                    "close": 100 + day,
+                })
+
+        for day in range(1, 7):
+            signal_rows.append({
+                "stock_id": "3035",
+                "trade_date": f"2026-05-{day:02d}",
+                "version": "v19.1",
+                "pattern": "BREAKOUT_CONFIRM",
+                "market_state": "A+",
+                "structure_state": "NORMAL",
+                "position_state": "BREAKOUT",
+                "volume_ratio": 1.4,
+                "rr": 1.2,
+                "heat_level": 0,
+                "action": "WAIT",
+                "reasons": ["突破確認"],
+                "is_tradeable": False,
+                "is_best_candidate": False,
+            })
+
+        with patch.object(generator, "get_supabase_client", return_value=FakeClient(signal_rows, price_rows)):
+            context = generator.load_backtest_context({
+                "智原": {
+                    "result": result,
+                    "stock_code": "3035",
+                    "volumes": [100] * 9 + [150],
+                    "holding": {
+                        "shares": 50,
+                        "avg_price": 100
+                    },
+                }
+            })
+
+        self.assertIn("智原", context)
+        self.assertIn("持倉同型", context["智原"])
+        self.assertTrue(
+            "支持續抱" in context["智原"]
+            or "依風控續抱" in context["智原"]
+            or "依持倉規則" in context["智原"]
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
