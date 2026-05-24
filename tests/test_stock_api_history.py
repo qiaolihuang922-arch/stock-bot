@@ -37,7 +37,7 @@ class StockApiHistoryTest(unittest.TestCase):
             "DNS failed"
         )
 
-    def test_get_twse_uses_requested_month_count(self):
+    def test_get_twse_stops_when_min_rows_are_met(self):
         calls = []
 
         class FakeResponse:
@@ -45,11 +45,8 @@ class StockApiHistoryTest(unittest.TestCase):
                 return {
                     "stat": "OK",
                     "data": [
-                        ["115/05/01", "1,000", "0", "0", "0", "0", "10"],
-                        ["115/05/02", "1,000", "0", "0", "0", "0", "11"],
-                        ["115/05/03", "1,000", "0", "0", "0", "0", "12"],
-                        ["115/05/04", "1,000", "0", "0", "0", "0", "13"],
-                        ["115/05/05", "1,000", "0", "0", "0", "0", "14"],
+                        [f"115/05/{day:02d}", "1,000", "0", "0", "0", "0", str(10 + day)]
+                        for day in range(1, 24)
                     ]
                 }
 
@@ -58,10 +55,33 @@ class StockApiHistoryTest(unittest.TestCase):
             return FakeResponse()
 
         with patch("services.stock_api.requests.get", side_effect=fake_get):
-            result = get_twse("3231", months=2)
+            result = get_twse("3231", months=2, min_rows=45, max_months=4)
 
         self.assertIsNotNone(result)
         self.assertEqual(len(calls), 2)
+
+    def test_get_twse_adds_month_when_min_rows_are_missing(self):
+        calls = []
+
+        class FakeResponse:
+            def json(self):
+                return {
+                    "stat": "OK",
+                    "data": [
+                        [f"115/05/{day:02d}", "1,000", "0", "0", "0", "0", str(10 + day)]
+                        for day in range(1, 16)
+                    ]
+                }
+
+        def fake_get(url, **_kwargs):
+            calls.append(url)
+            return FakeResponse()
+
+        with patch("services.stock_api.requests.get", side_effect=fake_get):
+            result = get_twse("3231", months=2, min_rows=45, max_months=4)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(len(calls), 3)
 
 
 if __name__ == "__main__":
