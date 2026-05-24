@@ -69,8 +69,10 @@ v19 回测/回放 2 表：
 - 盘前、盘中、假日不写入每日稳定样本。
 - 收盘/盘后才允许记录稳定信号。
 - 每日报文路径不得用 realtime/yahoo/twse 单价补写 `daily_price`；`daily_price` 只接受完整 OHLCV。
+- 每日正式 snapshot 中，持仓股只代表持仓管理，必须排除新进场 `is_tradeable / is_best_candidate` 统计。
 - backfill 必须使用 upsert，可重复执行，不得产生重复资料。
 - replay/backfill 某一天时，只能使用当天及之前资料，禁止未来数据污染。
+- `dry_run_replay.py` 与 `backfill_signals.py` warmup 都应维持 90 天，避免同区间样本数量不一致。
 - 默认只处理 `core/watchlist.py` 的 12 档股票。
 - 当前已经测试过 2024 少量写入和重复 upsert，随后已删除测试资料。不要误以为正式 backfill 已完成。
 
@@ -231,9 +233,10 @@ backfill dry-run，不写入数据库：
 ## 已验证事项
 
 - 测试套件已覆盖策略层、dry-run replay、TWSE OHLCV 解析、signal validator、backfill guard、daily snapshot store、watchlist 对齐。
-- 最近一次完整测试为 `34 tests OK`。
+- 最近一次完整测试为 `36 tests OK`。
 - 2026 TWSE 历史资料可查；之前出现 0 rows 是因为执行环境网络受限，不是 TWSE 没资料。
 - 已确认 `3231` 在 `2026-05-22` 可取到 OHLCV：open `142.5`、high `146.0`、low `139.5`、close `144.5`、volume `70277790`。
+- 已用真实 TWSE 跑过 `2026-05-18` 到 `2026-05-21` dry-run replay，生成 48 条 snapshot，`VALIDATION OK`，未写入数据库。
 - 已做过 2024 少量 DB 写入、重复 upsert、删除测试资料；两张 v19 表已清空测试样本。
 
 ## 每次升级流程

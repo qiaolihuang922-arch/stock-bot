@@ -88,8 +88,11 @@ v19 回放/回测表：
 
 - 盘前、盘中、假日不写入每日稳定样本。
 - 收盘/盘后才记录稳定信号。
+- 每日路径只在有完整 OHLCV 时写 `daily_price`，不会用单一即时价污染价格表。
+- 每日持仓股不会写成新进场 `is_tradeable`。
 - backfill 必须先 dry-run 和 validate。
 - 回放某一天时，只能使用当天及之前的数据，禁止未来数据污染。
+- replay/backfill 默认使用 90 天 warmup。
 - 默认只处理 `core/watchlist.py` 的 12 档股票，不做全市场写入。
 
 ## 部署
