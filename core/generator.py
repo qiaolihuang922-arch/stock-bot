@@ -1,5 +1,5 @@
 # ================================
-# FINAL UI（v19.0｜Daily Signal Database）
+# FINAL UI（v19.1｜Daily Signal Database）
 # ================================
 
 from datetime import datetime
@@ -30,7 +30,7 @@ from services.daily_snapshot_store import record_daily_snapshots
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v19.0"
+VERSION = "v19.1"
 
 
 # ================================

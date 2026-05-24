@@ -43,7 +43,7 @@ class BackfillSignalsTest(unittest.TestCase):
             rows,
             start_date,
             end_date,
-            "v19.0"
+            "v19.1"
         )
 
         self.assertEqual(len(price_rows), 5)
@@ -59,7 +59,7 @@ class BackfillSignalsTest(unittest.TestCase):
             {
                 "stock_id": "3231",
                 "trade_date": "2026-05-22",
-                "version": "v19.0",
+                "version": "v19.1",
                 "close": 100,
                 "volume_ratio": 1,
                 "pattern": "LOCK_LIMIT",
