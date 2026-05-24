@@ -145,7 +145,7 @@ def is_tradeable_result(result):
     return True
 
 
-def analyze_ohlcv_snapshot(stock_id, trade_date, closes, volumes, version="v19.1"):
+def analyze_ohlcv_snapshot(stock_id, trade_date, closes, volumes, version="v19.1.1"):
     if not closes or not volumes:
         raise ValueError("closes and volumes are required")
 

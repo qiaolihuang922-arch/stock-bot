@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-- 当前稳定线：`v19.1`
+- 当前稳定线：`v19.1.1`
 - 旧版策略升级已完成：策略层、显示层、持仓逻辑、行情显示冲突修复。
 - `19.x` 当前目标：可验证、可重跑、可回放、可避免污染的数据库写入流程。
 - 不要直接大量 backfill。必须先 dry-run、validate、人工或自动检查无误后，才允许正式写入。
@@ -212,7 +212,7 @@ dry-run replay，不写入数据库：
   --dry-run \
   --validate \
   --source twse \
-  --version v19.1 \
+  --version v19.1.1 \
   --start-date 2026-05-11 \
   --end-date 2026-05-22
 ```
@@ -223,7 +223,7 @@ backfill dry-run，不写入数据库：
 .venv/bin/python scripts/backfill_signals.py \
   --dry-run \
   --source twse \
-  --version v19.1 \
+  --version v19.1.1 \
   --start-date 2026-05-11 \
   --end-date 2026-05-22
 ```

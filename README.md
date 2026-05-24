@@ -1,12 +1,12 @@
 # stock-bot
 
-台湾股票策略报文机器人。当前稳定版本：`v19.1`。
+台湾股票策略报文机器人。当前稳定版本：`v19.1.1`。
 
 维护本项目时先读 [AI_CONTEXT.md](/Users/liveroom/stock-bot-main/AI_CONTEXT.md)，里面记录了策略边界、数据库写入边界、回测/回放脚本和不能碰的文件。
 
 ## 当前状态
 
-- 报文版本：`v19.1`
+- 报文版本：`v19.1.1`
 - 股票清单：只处理 `core/watchlist.py` 内的 12 档配置股票。
 - 策略层：`services/analysis.py`
 - 显示层：`core/generator.py`
@@ -52,7 +52,7 @@ dry-run replay，不写入数据库：
   --dry-run \
   --validate \
   --source twse \
-  --version v19.1 \
+  --version v19.1.1 \
   --start-date 2026-05-11 \
   --end-date 2026-05-22
 ```
@@ -63,7 +63,7 @@ backfill dry-run，不写入数据库：
 .venv/bin/python scripts/backfill_signals.py \
   --dry-run \
   --source twse \
-  --version v19.1 \
+  --version v19.1.1 \
   --start-date 2026-05-11 \
   --end-date 2026-05-22
 ```

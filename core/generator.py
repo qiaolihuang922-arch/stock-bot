@@ -1,8 +1,8 @@
 # ================================
-# FINAL UI（v19.1｜Daily Signal Database）
+# FINAL UI（v19.1.1｜Daily Signal Database）
 # ================================
 
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 
 from services.stock_api import (
@@ -26,11 +26,14 @@ from core.holdings import HOLDINGS
 from core.watchlist import STOCKS
 
 from services.signal_store import record_daily_signals
-from services.daily_snapshot_store import record_daily_snapshots
+from services.daily_snapshot_store import (
+    get_supabase_client,
+    record_daily_snapshots
+)
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v19.1"
+VERSION = "v19.1.1"
 
 
 # ================================
@@ -468,7 +471,7 @@ def semantic_trade(result):
 
     if decision == "FAIL":
         # 中文註釋：v19.0 突破失敗優先於禁追 / 無量，避免同一檔同時顯示兩種互斥交易狀態。
-        return "✅ 可交易"
+        return "❌ 不交易"
 
     if behavior == "LIMIT_LOCK":
         return "🚨 不追高"
@@ -489,6 +492,129 @@ def semantic_trade(result):
         return "⚠ 無量"
 
     return "✅ 可交易"
+
+
+def entry_blockers(result):
+
+    labels = []
+    behavior = result.get("price_behavior")
+    phase = result.get("structure_phase")
+    trade = result.get("trade_state")
+    heat = result.get("heat_state")
+    rr = result.get("rr", 0)
+    dist = result.get("breakout_distance")
+
+    if result.get("decision") == "FAIL" or phase == "FAILED_BREAKOUT":
+        labels.append("突破失敗")
+
+    if behavior == "LIMIT_LOCK":
+        labels.append("漲停不追")
+    elif behavior == "LIMIT_REBOUND":
+        labels.append("漲停反彈待確認")
+    elif behavior == "WEAK_REBOUND":
+        labels.append("弱反彈待確認")
+
+    if heat == "EXTREME":
+        labels.append(f"過熱 Lv.{result.get('extended_level', 3)}")
+    elif trade == "EXTENDED" or heat == "HOT":
+        labels.append("過熱觀察")
+
+    if rr is not None and rr < 1 and result.get("decision") != "FAIL":
+        labels.append("RR不足")
+
+    if trade == "NO_VOLUME" or result.get("volume_state") == "WEAK":
+        labels.append("量能不足")
+
+    if result.get("market_grade") == "D":
+        labels.append("市場弱")
+
+    if dist is not None and dist > 4:
+        labels.append("遠離觸發")
+
+    return list(dict.fromkeys(labels))
+
+
+def entry_advantages(result):
+
+    labels = []
+    phase = result.get("structure_phase")
+    rr = result.get("rr", 0)
+    vp = result.get("volume_price_state")
+
+    if phase in ["BREAKOUT_CONFIRM", "BREAKOUT"]:
+        labels.append("突破確認")
+    elif phase == "BREAKOUT_WATCH":
+        labels.append("接近突破")
+
+    if result.get("market_grade") in ["A+", "A"]:
+        labels.append("市場強")
+
+    if result.get("structure_state") == "STRONG":
+        labels.append("結構強")
+
+    if vp == "EXPANSION":
+        labels.append("攻擊量")
+
+    if rr is not None and rr >= 1:
+        labels.append("RR足夠")
+
+    return labels[:4]
+
+
+def entry_header(result):
+
+    decision = result.get("decision")
+    blockers = entry_blockers(result)
+
+    if (
+        decision == "BUY"
+        and result.get("action", 0) > 0
+        and not blockers
+        and result.get("entry_quality") in ["A+", "A", "B"]
+    ):
+        return f"{get_action(result)} 可買"
+
+    if blockers:
+        return f"⛔ 不買｜{blockers[0]}"
+
+    if decision == "FAIL":
+        return "❌ 不買｜失敗"
+
+    return f"⏳ {final_label(result)}"
+
+
+def entry_conclusion(result):
+
+    blockers = entry_blockers(result)
+
+    if not blockers and result.get("decision") == "BUY" and result.get("action", 0) > 0:
+        return "可新進場"
+
+    if "RR不足" in blockers and result.get("market_grade") in ["A+", "A"]:
+        return "強勢但風報不夠，不追"
+
+    if "漲停不追" in blockers:
+        return "漲停鎖價，不追高"
+
+    if "過熱觀察" in blockers or any(item.startswith("過熱") for item in blockers):
+        return "過熱風險優先，等待冷卻"
+
+    if "弱反彈待確認" in blockers or "漲停反彈待確認" in blockers:
+        return "反彈先觀察，等隔日確認"
+
+    if "市場弱" in blockers:
+        return "市場弱，不新增"
+
+    if "量能不足" in blockers:
+        return "量能不足，等量"
+
+    if "遠離觸發" in blockers:
+        return "位置太遠，等接近觸發"
+
+    if "突破失敗" in blockers:
+        return "失敗訊號，不交易"
+
+    return "觀察，不急進場"
 
 
 # ================================
@@ -1030,6 +1156,8 @@ def holding_status(
         "hard_stop_price": signal.get("hard_stop_price"),
         "phase": signal.get("phase"),
         "allow_add": signal.get("allow_add", False),
+        "add_status": signal.get("add_status", "BLOCK"),
+        "add_blockers": signal.get("add_blockers", []),
         "risk_level": signal.get("risk_level", 1)
     }
 
@@ -1087,6 +1215,169 @@ def holding_position_text(
 
     # 中文註釋：v19.0 持倉輸出補上倉位結果，讓加碼 / 減碼 / 洗盤觀察後的股數更清楚。
     return f"維持 {current_shares}股 ｜不加碼"
+
+
+def holding_add_text(decision):
+
+    level = decision.get("level")
+
+    if level in [
+        "ADD_30",
+        "ADD_20",
+        "ADD_10"
+    ]:
+        return f"成立 ｜{decision.get('action')}"
+
+    if decision.get("add_status") == "FORBID":
+        return "禁止"
+
+    return "未成立"
+
+
+def holding_blocker_text(decision):
+
+    blockers = decision.get("add_blockers") or []
+
+    if not blockers:
+        if decision.get("add_status") == "ALLOW":
+            return "條件成立"
+        return "持倉管理優先"
+
+    return "、".join(blockers[:4])
+
+
+def snapshot_bucket_from_result(result):
+
+    blockers = entry_blockers(result)
+    phase = result.get("structure_phase")
+
+    if result.get("is_best_candidate"):
+        return "最強候選"
+
+    if result.get("decision") == "BUY" and result.get("action", 0) > 0 and not blockers:
+        return "有效買點"
+
+    if "RR不足" in blockers:
+        return "RR不足"
+
+    if "漲停不追" in blockers:
+        return "漲停不追"
+
+    if "過熱觀察" in blockers or any(item.startswith("過熱") for item in blockers):
+        return "過熱阻斷"
+
+    if phase == "WEAK_REBOUND":
+        return "弱反彈"
+
+    if phase == "LIMIT_REBOUND":
+        return "漲停反彈"
+
+    if "市場弱" in blockers:
+        return "市場弱"
+
+    if result.get("decision") == "FAIL":
+        return "突破失敗"
+
+    return result.get("decision", "其他")
+
+
+def snapshot_bucket_from_row(row):
+
+    reasons = row.get("reasons") or []
+    pattern = row.get("pattern")
+
+    if row.get("is_best_candidate"):
+        return "最強候選"
+
+    if row.get("action") == "BUY" and row.get("is_tradeable"):
+        return "有效買點"
+
+    if "RR不足" in reasons or (row.get("rr") is not None and row.get("rr") < 1):
+        return "RR不足"
+
+    if pattern == "LOCK_LIMIT" or "不追高" in reasons:
+        return "漲停不追"
+
+    if (row.get("heat_level") or 0) >= 2:
+        return "過熱阻斷"
+
+    if pattern == "WEAK_REBOUND":
+        return "弱反彈"
+
+    if pattern == "LIMIT_REBOUND":
+        return "漲停反彈"
+
+    if row.get("market_state") == "D":
+        return "市場弱"
+
+    if row.get("action") == "FAIL":
+        return "突破失敗"
+
+    return row.get("action", "其他")
+
+
+def load_backtest_context(results_map):
+
+    try:
+        client = get_supabase_client()
+        since = (datetime.now(tz).date() - timedelta(days=90)).isoformat()
+        rows = []
+        history_version = VERSION
+
+        for candidate_version in [VERSION, "v19.1", "v19.0"]:
+            rows = (
+                client.table("daily_signal_snapshot")
+                .select("stock_id,trade_date,version,pattern,market_state,rr,heat_level,action,reasons,is_tradeable,is_best_candidate")
+                .eq("version", candidate_version)
+                .gte("trade_date", since)
+                .execute()
+                .data
+                or []
+            )
+
+            if rows:
+                history_version = candidate_version
+                break
+    except:
+        return {}
+
+    bucket_counts = {}
+    stock_bucket_counts = {}
+    stock_buy_counts = {}
+    stock_best_counts = {}
+
+    for row in rows:
+        bucket = snapshot_bucket_from_row(row)
+        stock_id = row.get("stock_id")
+        bucket_counts[bucket] = bucket_counts.get(bucket, 0) + 1
+        stock_bucket_counts[(stock_id, bucket)] = stock_bucket_counts.get((stock_id, bucket), 0) + 1
+
+        if row.get("action") == "BUY":
+            stock_buy_counts[stock_id] = stock_buy_counts.get(stock_id, 0) + 1
+
+        if row.get("is_best_candidate"):
+            stock_best_counts[stock_id] = stock_best_counts.get(stock_id, 0) + 1
+
+    context = {}
+
+    for name, data in results_map.items():
+        result = data.get("result", {})
+        stock_id = data.get("stock_code")
+
+        if data.get("holding"):
+            context[name] = (
+                f"{history_version}近90日本股BUY {stock_buy_counts.get(stock_id, 0)}次"
+                f"｜最佳 {stock_best_counts.get(stock_id, 0)}次"
+            )
+            continue
+
+        bucket = snapshot_bucket_from_result(result)
+        context[name] = (
+            f"{history_version}近90日同類「{bucket}」{bucket_counts.get(bucket, 0)}次"
+            f"｜本股 {stock_bucket_counts.get((stock_id, bucket), 0)}次"
+        )
+
+    return context
 
 
 # ================================
@@ -1195,13 +1486,13 @@ def render_stock(
         header = (
 
             f"【{name}】 "
-            f"{get_action(result)} "
-            f"{final_label(result)}"
+            f"{entry_header(result)}"
         )
 
     if (
         entry
         and result.get("decision") != "NO_TRADE"
+        and (holding or not entry_blockers(result))
         and not (
             result.get("entry_quality") == "D"
             and result.get("market_grade") == "D"
@@ -1245,6 +1536,16 @@ def render_stock(
         msg += (
             f"├─ 風控："
             f"{holding_risk_text(holding_decision)}\n"
+        )
+
+        msg += (
+            f"├─ 加碼："
+            f"{holding_add_text(holding_decision)}\n"
+        )
+
+        msg += (
+            f"├─ 阻斷："
+            f"{holding_blocker_text(holding_decision)}\n"
         )
 
     # ================================
@@ -1312,6 +1613,22 @@ def render_stock(
             f"過熱 Lv.{result.get('extended_level')}\n"
         )
 
+    if not holding:
+        blockers = entry_blockers(result)
+        advantages = entry_advantages(result)
+
+        if blockers:
+            msg += (
+                f"├─ 阻斷："
+                f"{'、'.join(blockers[:4])}\n"
+            )
+
+        if blockers and advantages:
+            msg += (
+                f"├─ 優勢："
+                f"{'、'.join(advantages)}\n"
+            )
+
     # ================================
     # 🔥 條件
     # WAIT / NO_TRADE 顯示缺口，BUY 顯示已成立條件
@@ -1323,6 +1640,9 @@ def render_stock(
         condition_items
         or result.get("decision_type") == "watch_quality_c"
     )
+
+    if not holding and entry_blockers(result):
+        show_condition_line = False
 
     if show_condition_line and result.get("heat_state") != "EXTREME":
 
@@ -1356,6 +1676,12 @@ def render_stock(
                 f"{'、'.join(labels)}\n"
             )
 
+    if not holding:
+        msg += (
+            f"├─ 結論："
+            f"{entry_conclusion(result)}\n"
+        )
+
     # ================================
     # 🔥 數據
     # 核心交易資訊
@@ -1385,6 +1711,12 @@ def render_stock(
         msg += (
             f"├─ 品質："
             f"{quality} ｜信心 {confidence}\n"
+        )
+
+    if data.get("backtest_context"):
+        msg += (
+            f"├─ 回測："
+            f"{data.get('backtest_context')}\n"
         )
 
     # ================================
@@ -1526,6 +1858,12 @@ def generate():
 
     if not results_map:
         return msg + "\n⚠ 無有效數據"
+
+    backtest_context = load_backtest_context(results_map)
+
+    for name, text in backtest_context.items():
+        if name in results_map:
+            results_map[name]["backtest_context"] = text
 
     # ================================
     # 🔥 render

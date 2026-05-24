@@ -1892,7 +1892,82 @@ def holding_signal(
             avg_price * 1.02
         )
 
-    def payload(action, ratio, reason, level, signal_phase, allow_add=False, risk_level=2):
+    def add_blockers():
+        blockers = []
+
+        if price_source == "twse":
+            blockers.append("日線參考")
+
+        if change is None:
+            blockers.append("缺少即時漲跌")
+        elif change >= 9.5:
+            blockers.append("漲停不追")
+
+        if pnl < 0:
+            blockers.append("持倉未轉盈")
+        elif pnl < 1:
+            blockers.append("浮盈不足")
+
+        if decision != "BUY":
+            blockers.append("策略未給加碼")
+
+        if regime != "RISK_ON":
+            blockers.append("市場未轉強")
+
+        if trend != "UP":
+            blockers.append("趨勢未轉強")
+
+        if volume == "WEAK":
+            blockers.append("量能不足")
+
+        if heat in ["HOT", "EXTREME"] or extended >= 2:
+            blockers.append("過熱不加碼")
+
+        if behavior in ["WEAK_REBOUND", "LIMIT_REBOUND", "LIMIT_LOCK"]:
+            blockers.append("價格行為不追")
+
+        if quality not in ["A+", "A", "B"]:
+            blockers.append("品質不足")
+
+        if rr < 1.1:
+            blockers.append("RR不足")
+
+        if dist is None:
+            blockers.append("位置不明")
+        elif dist > 3:
+            blockers.append("離突破太遠")
+
+        if confidence < 65:
+            blockers.append("信心不足")
+
+        return list(dict.fromkeys(blockers))
+
+    def payload(
+        action,
+        ratio,
+        reason,
+        level,
+        signal_phase,
+        allow_add=False,
+        risk_level=2,
+        add_status=None,
+        add_blockers_value=None
+    ):
+        if add_status is None:
+            if allow_add:
+                add_status = "ALLOW"
+            elif level in [
+                "STOP_100",
+                "REDUCE_50",
+                "REDUCE_25",
+                "TAKE_PROFIT_50",
+                "TAKE_PROFIT_25",
+                "WATCH"
+            ]:
+                add_status = "FORBID"
+            else:
+                add_status = "BLOCK"
+
         return {
             "action": action,
             "ratio": ratio,
@@ -1900,6 +1975,8 @@ def holding_signal(
             "level": level,
             "phase": signal_phase,
             "allow_add": allow_add,
+            "add_status": add_status,
+            "add_blockers": add_blockers_value if add_blockers_value is not None else ([] if allow_add else add_blockers()),
             "risk_level": risk_level,
             "warning_price": warning_price,
             "hard_stop_price": hard_stop_price
