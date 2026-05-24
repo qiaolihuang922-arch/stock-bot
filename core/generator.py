@@ -22,6 +22,7 @@ from core.condition_engine import (
     condition_engine,
     summarize_conditions
 )
+from core.holdings import HOLDINGS
 from core.watchlist import STOCKS
 
 from services.signal_store import record_daily_signals
@@ -41,28 +42,7 @@ stocks = STOCKS
 # ================================
 # 🔒 持倉
 # ================================
-holdings = {
-
-    "英業達": {
-        "shares": 1100,
-        "avg_price": 50.22
-    },
-
-    "智原": {
-        "shares": 50,
-        "avg_price": 209
-    },
-
-    "光寶科": {
-        "shares": 50,
-        "avg_price": 208.5
-    },
-
-    "緯創": {
-        "shares": 440,
-        "avg_price": 140.92
-    }
-}
+holdings = HOLDINGS
 
 
 # ================================

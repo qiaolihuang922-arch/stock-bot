@@ -50,6 +50,7 @@ def _reason_labels(result):
     conditions = condition_engine(result)
     decision = result.get("decision")
     items = summarize_conditions(conditions, decision)
+    behavior = result.get("price_behavior")
 
     labels = []
     for item in items:
@@ -96,6 +97,15 @@ def _reason_labels(result):
 
     if result.get("heat_state") == "EXTREME":
         labels = ["過熱 Lv.3", "不追高"]
+
+    if behavior == "LIMIT_LOCK" and decision != "BUY" and result.get("heat_state") != "EXTREME":
+        labels = ["漲停鎖價", "不追高"]
+
+    if behavior == "LIMIT_REBOUND" and decision != "BUY" and result.get("heat_state") != "EXTREME":
+        labels = ["漲停反彈", "隔日確認"]
+
+    if behavior == "WEAK_REBOUND" and decision != "BUY" and result.get("heat_state") != "EXTREME":
+        labels = ["弱勢反彈", "隔日確認"]
 
     if (
         result.get("breakout_state") == "FAIL"
@@ -199,6 +209,9 @@ def snapshot_from_result(stock_id, trade_date, version, result, close, volume_ra
 
 
 def mark_best_candidate(snapshots):
+    for item in snapshots:
+        item["is_best_candidate"] = False
+
     candidates = {
         item["stock_id"]: item["raw_result"]
         for item in snapshots
@@ -208,5 +221,21 @@ def mark_best_candidate(snapshots):
 
     for item in snapshots:
         item["is_best_candidate"] = item["stock_id"] == best
+
+    return snapshots
+
+
+def apply_snapshot_boundaries(snapshots, holding_stock_ids=None):
+    holding_stock_ids = set(holding_stock_ids or [])
+
+    for item in snapshots:
+        if item.get("stock_id") in holding_stock_ids:
+            item["is_tradeable"] = False
+            item["is_best_candidate"] = False
+
+    mark_best_candidate([
+        item for item in snapshots
+        if item.get("stock_id") not in holding_stock_ids
+    ])
 
     return snapshots

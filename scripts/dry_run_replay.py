@@ -8,7 +8,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from core.signal_snapshot import analyze_ohlcv_snapshot, mark_best_candidate
+from core.holdings import HOLDING_CODES
+from core.signal_snapshot import analyze_ohlcv_snapshot, apply_snapshot_boundaries
 from core.signal_validator import validate_snapshots
 from core.watchlist import WATCHLIST_CODES
 from services.stock_api import get_twse_ohlcv_history
@@ -156,7 +157,7 @@ def build_replay_rows(stock_ids, start_date, end_date, version, source="syntheti
                 )
             )
 
-        mark_best_candidate(daily)
+        apply_snapshot_boundaries(daily, HOLDING_CODES)
         rows.extend(daily)
 
     return rows
@@ -190,8 +191,8 @@ def emit_csv(rows):
         writer.writerow(output)
 
 
-def emit_validation(rows):
-    errors = validate_snapshots(rows)
+def emit_validation(rows, expected_stock_ids=None, expected_trade_dates=None):
+    errors = validate_snapshots(rows, expected_stock_ids, expected_trade_dates)
 
     if not errors:
         print("VALIDATION OK", file=sys.stderr)
@@ -239,7 +240,7 @@ def main():
 
     rows = build_replay_rows(stock_ids, start_date, end_date, args.version, args.source)
     if args.validate:
-        emit_validation(rows)
+        emit_validation(rows, stock_ids, [day.isoformat() for day in trading_days(start_date, end_date)])
     emit_csv(rows)
 
 

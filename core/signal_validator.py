@@ -19,9 +19,14 @@ def _has_reason(row, text):
     return text in (row.get("reasons") or [])
 
 
-def validate_snapshots(rows):
+def validate_snapshots(rows, expected_stock_ids=None, expected_trade_dates=None):
     errors = []
     by_date = {}
+    expected_stock_ids = set(expected_stock_ids or [])
+    expected_trade_dates = {
+        str(trade_date)
+        for trade_date in (expected_trade_dates or [])
+    }
 
     for idx, row in enumerate(rows, 1):
         label = f"{row.get('trade_date')} {row.get('stock_id')} row#{idx}"
@@ -68,6 +73,13 @@ def validate_snapshots(rows):
         if pattern == "LOCK_LIMIT" and is_tradeable:
             errors.append(f"{label}: limit-up lock marked tradeable")
 
+        if pattern == "LOCK_LIMIT" and not (
+            _has_reason(row, "漲停鎖價")
+            or _has_reason(row, "不追高")
+            or _has_reason(row, "過熱 Lv.3")
+        ):
+            errors.append(f"{label}: limit-up lock missing blocking reason")
+
         if pattern == "WEAK_REBOUND" and is_tradeable:
             errors.append(f"{label}: weak rebound marked tradeable")
 
@@ -79,6 +91,20 @@ def validate_snapshots(rows):
 
         if best_count > 1:
             errors.append(f"{trade_date}: more than one best candidate ({best_count})")
+
+        if expected_stock_ids:
+            actual_stock_ids = {row.get("stock_id") for row in daily}
+            missing = sorted(expected_stock_ids - actual_stock_ids)
+            extra = sorted(actual_stock_ids - expected_stock_ids)
+
+            if missing:
+                errors.append(f"{trade_date}: missing stock snapshots {','.join(missing)}")
+
+            if extra:
+                errors.append(f"{trade_date}: unexpected stock snapshots {','.join(extra)}")
+
+    for trade_date in sorted(expected_trade_dates - set(by_date)):
+        errors.append(f"{trade_date}: missing all stock snapshots")
 
     # 中文註釋：v19.0 replay / backfill 前先檢查策略快照一致性，避免錯誤訊號批量入庫。
     return errors

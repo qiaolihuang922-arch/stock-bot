@@ -7,7 +7,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from core.signal_snapshot import analyze_ohlcv_snapshot, mark_best_candidate
+from core.holdings import HOLDING_CODES
+from core.signal_snapshot import analyze_ohlcv_snapshot, apply_snapshot_boundaries
 from core.signal_validator import validate_snapshots
 from scripts.dry_run_replay import (
     DEFAULT_WATCHLIST,
@@ -109,7 +110,7 @@ def build_rows(stock_ids, start_date, end_date, version, source):
                 "source": source
             })
 
-        mark_best_candidate(daily_snapshots)
+        apply_snapshot_boundaries(daily_snapshots, HOLDING_CODES)
 
         for snapshot in daily_snapshots:
             signal_rows.append(snapshot_to_payload(snapshot))
@@ -157,7 +158,7 @@ def build_rows_from_ohlcv(stock_id, ohlcv_rows, start_date, end_date, version):
             "source": source_row.get("source", "twse")
         })
 
-    mark_best_candidate(snapshots)
+    apply_snapshot_boundaries(snapshots, HOLDING_CODES)
     return price_rows, [snapshot_to_payload(item) for item in snapshots]
 
 
@@ -182,7 +183,7 @@ def snapshot_to_payload(snapshot):
     }
 
 
-def validate_signal_payloads(signal_rows):
+def validate_signal_payloads(signal_rows, expected_stock_ids=None, expected_trade_dates=None):
     snapshots = [
         {
             **row,
@@ -190,7 +191,7 @@ def validate_signal_payloads(signal_rows):
         }
         for row in signal_rows
     ]
-    return validate_snapshots(snapshots)
+    return validate_snapshots(snapshots, expected_stock_ids, expected_trade_dates)
 
 
 def get_supabase_client():
@@ -266,7 +267,11 @@ def main():
         args.version,
         args.source
     )
-    validation_errors = validate_signal_payloads(signal_rows)
+    validation_errors = validate_signal_payloads(
+        signal_rows,
+        stock_ids,
+        [day.isoformat() for day in trading_days(start_date, end_date)]
+    )
     print_summary(price_rows, signal_rows, validation_errors)
 
     if validation_errors:

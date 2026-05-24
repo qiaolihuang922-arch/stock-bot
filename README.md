@@ -15,6 +15,7 @@
 - 每日信号记录：`services/signal_store.py`
 - v19 回测快照：`core/signal_snapshot.py`
 - v19 信号验证：`core/signal_validator.py`
+- 当前持仓边界：`core/holdings.py`
 
 ## Runtime Config
 
@@ -90,6 +91,8 @@ v19 回放/回测表：
 - 收盘/盘后才记录稳定信号。
 - 每日路径只在有完整 OHLCV 时写 `daily_price`，不会用单一即时价污染价格表。
 - 每日持仓股不会写成新进场 `is_tradeable`。
+- replay/backfill 与每日快照共用持仓边界；持仓股不会进入新进场 `is_tradeable / is_best_candidate`。
+- replay/backfill validate 会检查每日是否完整覆盖预期股票清单，缺档或整日无样本不会通过。
 - backfill 必须先 dry-run 和 validate。
 - 回放某一天时，只能使用当天及之前的数据，禁止未来数据污染。
 - replay/backfill 默认使用 90 天 warmup。

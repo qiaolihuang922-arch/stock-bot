@@ -37,6 +37,8 @@
 
 `core/generator.py`、`scripts/dry_run_replay.py`、`scripts/backfill_signals.py` 都应从 `core.watchlist` 读取默认清单。不要在脚本里另写一份股票清单。
 
+当前持仓清单由 `core/holdings.py` 统一提供；generator、replay、backfill 不应各自维护持仓副本。
+
 ## 文件职责
 
 - `services/analysis.py`：唯一策略来源。负责 `BUY / WAIT / NO_TRADE / FAIL`、品质分、持仓策略、最强候选过滤。
@@ -47,6 +49,7 @@
 - `services/daily_snapshot_store.py`：v19 每日快照写入层，负责每日 `daily_signal_snapshot`；只有拿到完整 OHLCV 时才写 `daily_price`，写入前必须验证。
 - `core/signal_snapshot.py`：把策略结果或 OHLCV 转成统一可回测 snapshot。
 - `core/signal_validator.py`：检查 snapshot 逻辑冲突，防止错误资料入库。
+- `core/holdings.py`：当前持仓清单与持仓股票代码集合，供 generator / replay / backfill 共用持仓边界。
 - `scripts/dry_run_replay.py`：dry-run replay，不写数据库。
 - `scripts/backfill_signals.py`：受保护 backfill，默认不写数据库。
 - `docs/v19_backfill_schema.sql`：v19 两张新表建表 SQL。
@@ -70,9 +73,11 @@ v19 回测/回放 2 表：
 - 收盘/盘后才允许记录稳定信号。
 - 每日报文路径不得用 realtime/yahoo/twse 单价补写 `daily_price`；`daily_price` 只接受完整 OHLCV。
 - 每日正式 snapshot 中，持仓股只代表持仓管理，必须排除新进场 `is_tradeable / is_best_candidate` 统计。
+- replay/backfill snapshot 也必须套用相同持仓边界；持仓股不得成为新进场可交易或最强候选。
 - backfill 必须使用 upsert，可重复执行，不得产生重复资料。
 - replay/backfill 某一天时，只能使用当天及之前资料，禁止未来数据污染。
 - `dry_run_replay.py` 与 `backfill_signals.py` warmup 都应维持 90 天，避免同区间样本数量不一致。
+- `dry_run_replay.py` 与 `backfill_signals.py` 必须验证每日完整覆盖预期股票清单；缺任一档或整日无样本时不得通过 validate。
 - 默认只处理 `core/watchlist.py` 的 12 档股票。
 - 当前已经测试过 2024 少量写入和重复 upsert，随后已删除测试资料。不要误以为正式 backfill 已完成。
 
@@ -128,6 +133,7 @@ v19 回测/回放 2 表：
 - 涨停锁价不追高；已持仓可停利一部分并保留核心仓。
 - 最强股只能从有效新进场候选挑选，不能从持仓、过热、低量、小仓观察中选。
 - 强势但 RR 不足，不应被选为最佳进场标的。
+- `LOCK_LIMIT / LIMIT_REBOUND / WEAK_REBOUND` 这类被限制交易的 WAIT snapshot 必须写出阻断原因，不得空 reasons。
 
 ## lifecycle 优先级
 
@@ -236,7 +242,7 @@ backfill dry-run，不写入数据库：
 - 最近一次完整测试为 `36 tests OK`。
 - 2026 TWSE 历史资料可查；之前出现 0 rows 是因为执行环境网络受限，不是 TWSE 没资料。
 - 已确认 `3231` 在 `2026-05-22` 可取到 OHLCV：open `142.5`、high `146.0`、low `139.5`、close `144.5`、volume `70277790`。
-- 已用真实 TWSE 跑过 `2026-05-18` 到 `2026-05-21` dry-run replay，生成 48 条 snapshot，`VALIDATION OK`，未写入数据库。
+- 已用真实 TWSE 跑过 `2026-05-18` 到 `2026-05-21` dry-run replay，生成 48 条 snapshot，`VALIDATION OK`，未写入数据库。当前 replay/backfill validate 会阻止缺档、整日缺样本、持仓股误入 `is_tradeable / is_best_candidate`，并要求 `LOCK_LIMIT` 有阻断原因。
 - 已做过 2024 少量 DB 写入、重复 upsert、删除测试资料；两张 v19 表已清空测试样本。
 
 ## 每次升级流程

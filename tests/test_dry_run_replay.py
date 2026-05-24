@@ -54,6 +54,19 @@ class DryRunReplayTest(unittest.TestCase):
         )
         self.assertEqual(validate_snapshots(rows), [])
 
+    def test_replay_excludes_current_holdings_from_new_entry_stats(self):
+        rows = build_replay_rows(
+            ["2356"],
+            date(2026, 5, 11),
+            date(2026, 5, 11),
+            "v19.0",
+            "synthetic"
+        )
+
+        self.assertTrue(rows)
+        self.assertFalse(any(row["is_tradeable"] for row in rows))
+        self.assertFalse(any(row["is_best_candidate"] for row in rows))
+
 
 if __name__ == "__main__":
     unittest.main()

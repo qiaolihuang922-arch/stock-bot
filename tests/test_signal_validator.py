@@ -52,6 +52,49 @@ class SignalValidatorTest(unittest.TestCase):
         ])
         self.assertTrue(errors)
 
+    def test_limit_lock_requires_blocking_reason(self):
+        errors = validate_snapshots([
+            {
+                "stock_id": "x",
+                "trade_date": "2026-05-22",
+                "action": "WAIT",
+                "pattern": "LOCK_LIMIT",
+                "rr": 1.2,
+                "heat_level": 1,
+                "reasons": [],
+                "is_tradeable": False,
+                "is_best_candidate": False
+            }
+        ])
+        self.assertTrue(errors)
+
+    def test_expected_stock_ids_require_complete_daily_rows(self):
+        errors = validate_snapshots(
+            [
+                {
+                    "stock_id": "3231",
+                    "trade_date": "2026-05-22",
+                    "action": "WAIT",
+                    "pattern": "BASE",
+                    "rr": 1.2,
+                    "heat_level": 0,
+                    "reasons": ["市場弱"],
+                    "is_tradeable": False,
+                    "is_best_candidate": False
+                }
+            ],
+            expected_stock_ids=["3231", "2356"]
+        )
+        self.assertTrue(errors)
+
+    def test_expected_trade_dates_require_daily_rows(self):
+        errors = validate_snapshots(
+            [],
+            expected_stock_ids=["3231"],
+            expected_trade_dates=["2026-05-22"]
+        )
+        self.assertTrue(errors)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,6 +1,11 @@
 import unittest
 
-from core.signal_snapshot import analyze_ohlcv_snapshot, is_tradeable_result, mark_best_candidate
+from core.signal_snapshot import (
+    analyze_ohlcv_snapshot,
+    apply_snapshot_boundaries,
+    is_tradeable_result,
+    mark_best_candidate
+)
 from services.analysis import calc_rr, extended_level, holding_signal
 
 
@@ -45,6 +50,7 @@ class AnalysisEngineTest(unittest.TestCase):
         item = snap("limit_lock", [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 130], VOL_ATTACK)
         self.assertEqual(item["pattern"], "LOCK_LIMIT")
         self.assertEqual(item["raw_result"]["price_behavior"], "LIMIT_LOCK")
+        self.assertIn("不追高", item["reasons"])
         self.assertFalse(item["is_tradeable"])
 
     def test_rr_insufficient_marks_reason(self):
@@ -129,6 +135,17 @@ class AnalysisEngineTest(unittest.TestCase):
         ]
         mark_best_candidate(snapshots)
         self.assertFalse(any(item["is_best_candidate"] for item in snapshots))
+
+    def test_holding_stock_is_excluded_from_tradeable_and_best(self):
+        snapshots = [
+            snap("2356", [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119], VOL_ATTACK)
+        ]
+        self.assertTrue(snapshots[0]["is_tradeable"])
+
+        apply_snapshot_boundaries(snapshots, {"2356"})
+
+        self.assertFalse(snapshots[0]["is_tradeable"])
+        self.assertFalse(snapshots[0]["is_best_candidate"])
 
     def test_failed_breakout_has_reason(self):
         item = snap("fail", [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 124, 125, 123, 116], VOL_ATTACK)
