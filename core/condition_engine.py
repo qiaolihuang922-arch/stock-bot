@@ -170,6 +170,10 @@ def condition_engine(result):
         elif decision_type == "early":
             conditions["rr"] = True
 
+    if rr is not None and rr >= 1.0:
+        # 中文註釋：v19.0 RR 數值已足夠時，不再因 WAIT 類型未命中特定分支而顯示 RR 不足。
+        conditions["rr"] = True
+
     return conditions
 
 

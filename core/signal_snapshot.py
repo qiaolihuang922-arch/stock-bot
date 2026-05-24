@@ -124,6 +124,8 @@ def is_tradeable_result(result):
         return False
     if result.get("price_behavior") in ["LIMIT_LOCK", "LIMIT_REBOUND", "WEAK_REBOUND"]:
         return False
+    if result.get("structure_phase") == "SHAKEOUT":
+        return False
     if result.get("trade_state") in ["AVOID", "NO_VOLUME", "LATE_ENTRY"]:
         return False
     if result.get("market_grade") == "D":

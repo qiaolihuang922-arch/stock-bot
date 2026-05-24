@@ -3092,6 +3092,10 @@ def pick_best_stock(results_dict):
         ]:
             continue
 
+        if result.get("structure_phase") == "SHAKEOUT":
+            # 中文註釋：v19.0 洗盤是持倉保護語義，未持倉不得被選為最強新進場。
+            continue
+
         if result.get("heat_state") in ["HOT", "EXTREME"]:
             continue
 

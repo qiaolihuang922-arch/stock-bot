@@ -102,6 +102,7 @@ class AnalysisEngineTest(unittest.TestCase):
         signal = holding_signal(item["raw_result"], 116, 117, "realtime", -1.0)
         self.assertEqual(signal["level"], "SHAKEOUT")
         self.assertEqual(signal["action"], "洗盤觀察")
+        self.assertFalse(item["is_tradeable"])
 
     def test_holding_take_profit_25(self):
         item = snap("limit_hold", [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 130], VOL_ATTACK)
