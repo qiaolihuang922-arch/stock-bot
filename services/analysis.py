@@ -1819,7 +1819,10 @@ def holding_signal(
     avg_price,
     price_source="realtime",
     change=None,
-    realized_profit_taken_ratio=0
+    realized_profit_taken_ratio=0,
+    realized_profit_taken_date=None,
+    signal_date=None,
+    realized_profit_taken_price=None
 ):
 
     pnl = (
@@ -1851,6 +1854,11 @@ def holding_signal(
     quality = result.get("entry_quality", "D")
     confidence = result.get("confidence_score", 0)
     profile = result.get("entry_profile", "NONE")
+    same_day_profit_taken = (
+        realized_profit_taken_date is not None
+        and signal_date is not None
+        and str(realized_profit_taken_date) == str(signal_date)
+    )
 
     structure_broken = (
         phase in ["FAILED_BREAKOUT", "DISTRIBUTION"]
@@ -2023,6 +2031,31 @@ def holding_signal(
         and extended >= 2
     ):
         if realized_profit_taken_ratio >= 0.5 and realized_profit_taken_ratio < 0.75 and pnl >= 25:
+            if same_day_profit_taken:
+                return payload(
+                    "續抱核心倉",
+                    0,
+                    "今日已停利50%，同日不連續賣，等收盤/隔日確認",
+                    "HOLD_CORE",
+                    "CORE_HOLD",
+                    False,
+                    2
+                )
+
+            if (
+                realized_profit_taken_price is not None
+                and price < realized_profit_taken_price * 1.03
+            ):
+                return payload(
+                    "續抱核心倉",
+                    0,
+                    "距上次停利價未拉開，暫不連續賣",
+                    "HOLD_CORE",
+                    "CORE_HOLD",
+                    False,
+                    2
+                )
+
             return payload(
                 "停利 25%",
                 0.25,
@@ -2056,6 +2089,31 @@ def holding_signal(
 
     if pnl >= 8 and heat == "EXTREME":
         if realized_profit_taken_ratio >= 0.5 and realized_profit_taken_ratio < 0.75 and pnl >= 25:
+            if same_day_profit_taken:
+                return payload(
+                    "續抱核心倉",
+                    0,
+                    "今日已停利50%，同日不連續賣，等收盤/隔日確認",
+                    "HOLD_CORE",
+                    "CORE_HOLD",
+                    False,
+                    2
+                )
+
+            if (
+                realized_profit_taken_price is not None
+                and price < realized_profit_taken_price * 1.03
+            ):
+                return payload(
+                    "續抱核心倉",
+                    0,
+                    "距上次停利價未拉開，暫不連續賣",
+                    "HOLD_CORE",
+                    "CORE_HOLD",
+                    False,
+                    2
+                )
+
             return payload(
                 "停利 25%",
                 0.25,

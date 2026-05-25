@@ -1134,7 +1134,10 @@ def holding_status(
     shares,
     price_source="realtime",
     change=None,
-    realized_profit_taken_ratio=0
+    realized_profit_taken_ratio=0,
+    realized_profit_taken_date=None,
+    signal_date=None,
+    realized_profit_taken_price=None
 ):
 
     signal = strategy_holding_signal(
@@ -1143,7 +1146,10 @@ def holding_status(
         avg_price,
         price_source,
         change,
-        realized_profit_taken_ratio
+        realized_profit_taken_ratio,
+        realized_profit_taken_date,
+        signal_date,
+        realized_profit_taken_price
     )
 
     ratio = signal.get("ratio", 0)
@@ -1866,7 +1872,10 @@ def render_stock(
             holding["shares"],
             price_source,
             change,
-            holding.get("realized_profit_taken_ratio", 0)
+            holding.get("realized_profit_taken_ratio", 0),
+            holding.get("realized_profit_taken_date"),
+            datetime.now(tz).date().isoformat(),
+            holding.get("realized_profit_taken_price")
         )
 
         result["_holding_decision"] = holding_decision
@@ -2359,11 +2368,15 @@ def generate():
         msg += "🔥 最強：無有效進場標的\n"
 
     holding_actions = []
+    hot_holding_count = 0
 
     for name, data in results_map.items():
 
         if not data.get("holding"):
             continue
+
+        if data["result"].get("heat_state") in ["HOT", "EXTREME"]:
+            hot_holding_count += 1
 
         h_decision = holding_status(
             data["result"],
@@ -2372,7 +2385,10 @@ def generate():
             data["holding"]["shares"],
             data.get("price_source", "twse"),
             data.get("change"),
-            data["holding"].get("realized_profit_taken_ratio", 0)
+            data["holding"].get("realized_profit_taken_ratio", 0),
+            data["holding"].get("realized_profit_taken_date"),
+            now.date().isoformat(),
+            data["holding"].get("realized_profit_taken_price")
         )
 
         if h_decision["level"] in [
@@ -2440,7 +2456,7 @@ def generate():
 
     elif extreme_count >= 3:
 
-        if holding_actions:
+        if hot_holding_count:
             market_summary = "🚨 過熱控倉，先處理持倉"
         else:
             market_summary = "🚨 過熱不追，等冷卻"
