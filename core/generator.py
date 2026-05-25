@@ -2413,12 +2413,72 @@ def holding_summary_line(index, name, data):
     )
 
 
-def watch_summary_line(name, data):
+def unheld_summary_line(name, data):
 
     result = data["result"]
     blocker = entry_blockers(result)
+    if is_valid_entry(result):
+        return f"{name}｜可買｜{entry_size_text(result)}"
+
     label = blocker[0] if blocker else final_label(result)
     return f"{name}｜{label}"
+
+
+def is_valid_entry(result):
+    return (
+        result.get("decision") == "BUY"
+        and result.get("action", 0) > 0
+        and not entry_blockers(result)
+        and result.get("entry_quality") in ["A+", "A", "B"]
+        and result.get("heat_state") not in ["HOT", "EXTREME"]
+    )
+
+
+def entry_size_text(result):
+    action = result.get("action", 0)
+
+    try:
+        if action and action > 0:
+            return f"{round(action * 100)}%倉"
+    except:
+        pass
+
+    return "觀察"
+
+
+def entry_wait_text(result):
+
+    blockers = entry_blockers(result)
+
+    if not blockers:
+        if is_valid_entry(result):
+            return "現在可分批"
+        return "等條件確認"
+
+    first = blockers[0]
+
+    if first == "RR不足":
+        return "等RR達標"
+
+    if first in ["過熱觀察"] or first.startswith("過熱"):
+        return "等冷卻"
+
+    if first == "漲停不追":
+        return "等開板回測"
+
+    if first in ["弱反彈待確認", "漲停反彈待確認"]:
+        return "等隔日確認"
+
+    if first == "量能不足":
+        return "等量能補上"
+
+    if first == "市場弱":
+        return "等市場轉強"
+
+    if first == "遠離觸發":
+        return "等回接近買點"
+
+    return f"等{first}解除"
 
 
 def formatTelegramSummary(results_map, best, score, market_summary, now, position_warning=None):
@@ -2457,8 +2517,8 @@ def formatTelegramSummary(results_map, best, score, market_summary, now, positio
     else:
         lines.append("無")
 
-    lines.extend(["", "觀察/不買："])
-    lines.extend(watch_summary_line(name, data) for name, data in watch_items)
+    lines.extend(["", "未持倉標的："])
+    lines.extend(unheld_summary_line(name, data) for name, data in watch_items)
 
     return "\n".join(lines)
 
@@ -2499,18 +2559,26 @@ def compact_backtest_line(context):
     )
 
 
-def formatTelegramWatchCard(name, data):
+def formatTelegramUnheldCard(name, data):
 
     result = data["result"]
     dist = data.get("breakout_distance", result.get("breakout_distance"))
     blockers = entry_blockers(result)
-    title_label = blockers[0] if blockers else final_label(result)
+    valid_entry = is_valid_entry(result)
+    title_icon = "🟢" if valid_entry else "⛔"
+    title_action = f"可買｜{entry_size_text(result)}" if valid_entry else "不買"
+    title_label = "買點成立" if valid_entry else (blockers[0] if blockers else final_label(result))
     rr_text = "-" if should_hide_rr(result) else safe_round(result.get("rr"))
+    buy_line = (
+        f"買點：可買｜建議 {entry_size_text(result)}｜{entry_wait_text(result)}"
+        if valid_entry
+        else f"買點：不買｜{entry_wait_text(result)}｜{entry_conclusion(result)}"
+    )
 
     return "\n".join([
-        f"【{stock_title(name, data)}】⛔ 不買｜{title_label}",
+        f"【{stock_title(name, data)}】{title_icon} {title_action}｜{title_label}",
         f"盤面：{plain_label(compact_market_line(result, dist))}",
-        f"判斷：{title_label}｜{entry_conclusion(result)}",
+        buy_line,
         f"數據：RR {rr_text}｜S {data.get('structure_score', '-')}/5｜V {data.get('volume_ratio', '-')}x",
         compact_backtest_line(data.get("backtest_context")),
         f"價格：{safe_round(data.get('price'))}（{signed_pct(data.get('change'))}）",
@@ -2556,8 +2624,8 @@ def formatTelegramMessages(results_map, full_msg, best, score, market_summary, n
         for name, data in ordered_items
         if data.get("holding")
     ]
-    watch_cards = [
-        formatTelegramWatchCard(name, data)
+    unheld_cards = [
+        formatTelegramUnheldCard(name, data)
         for name, data in ordered_items
         if not data.get("holding")
     ]
@@ -2565,7 +2633,7 @@ def formatTelegramMessages(results_map, full_msg, best, score, market_summary, n
     messages = [
         formatTelegramSummary(results_map, best, score, market_summary, now, position_warning),
         "【持倉標的】\n\n" + ("\n\n".join(position_cards) if position_cards else "無持倉"),
-        "【觀察 / 不買標的】\n\n" + ("\n\n".join(watch_cards) if watch_cards else "無"),
+        "【未持倉標的】\n\n" + ("\n\n".join(unheld_cards) if unheld_cards else "無"),
     ]
 
     if include_detail:

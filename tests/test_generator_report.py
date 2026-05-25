@@ -420,10 +420,11 @@ class GeneratorReportTest(unittest.TestCase):
 
         self.assertEqual(len(messages), 3)
         self.assertIn("📌 持倉：智原", messages[0])
-        self.assertIn("觀察/不買：", messages[0])
+        self.assertIn("未持倉標的：", messages[0])
         self.assertIn("【持倉標的】", messages[1])
         self.assertIn("倉位：50股", messages[1])
-        self.assertIn("【觀察 / 不買標的】", messages[2])
+        self.assertIn("【未持倉標的】", messages[2])
+        self.assertIn("買點：不買", messages[2])
         self.assertIn("回測：", messages[2])
         self.assertNotIn("完整詳情備份", "\n".join(messages))
 
