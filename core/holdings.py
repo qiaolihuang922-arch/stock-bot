@@ -4,7 +4,8 @@ from core.watchlist import STOCKS
 HOLDINGS = {
     "英業達": {
         "shares": 550,
-        "avg_price": 52.15
+        "avg_price": 52.15,
+        "profit_taken_ratio": 0.5
     },
     "智原": {
         "shares": 50,

@@ -1818,7 +1818,8 @@ def holding_signal(
     price,
     avg_price,
     price_source="realtime",
-    change=None
+    change=None,
+    profit_taken_ratio=0
 ):
 
     pnl = (
@@ -1957,7 +1958,8 @@ def holding_signal(
                 "REDUCE_25",
                 "TAKE_PROFIT_50",
                 "TAKE_PROFIT_25",
-                "WATCH"
+                "WATCH",
+                "HOLD_CORE"
             ]:
                 add_status = "FORBID"
             else:
@@ -2015,7 +2017,23 @@ def holding_signal(
             4
         )
 
-    if pnl >= 15 and behavior == "LIMIT_LOCK" and extended >= 2:
+    if profit_taken_ratio >= 0.5 and pnl >= 0:
+        return payload(
+            "續抱核心倉",
+            0,
+            "已完成50%停利，等待冷卻",
+            "HOLD_CORE",
+            "CORE_HOLD",
+            False,
+            2
+        )
+
+    if (
+        pnl >= 15
+        and behavior == "LIMIT_LOCK"
+        and extended >= 2
+        and profit_taken_ratio < 0.25
+    ):
         return payload(
             "停利 25%",
             0.25,
@@ -2027,6 +2045,17 @@ def holding_signal(
         )
 
     if pnl >= 8 and heat == "EXTREME":
+        if profit_taken_ratio >= 0.25:
+            return payload(
+                "停利 25%",
+                0.25,
+                "已停利部分，極熱再降風險",
+                "TAKE_PROFIT_25",
+                "LOCK_PROFIT",
+                False,
+                4
+            )
+
         return payload(
             "停利 50%",
             0.5,

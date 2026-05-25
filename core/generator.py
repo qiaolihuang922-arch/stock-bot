@@ -1133,7 +1133,8 @@ def holding_status(
     avg_price,
     shares,
     price_source="realtime",
-    change=None
+    change=None,
+    profit_taken_ratio=0
 ):
 
     signal = strategy_holding_signal(
@@ -1141,7 +1142,8 @@ def holding_status(
         price,
         avg_price,
         price_source,
-        change
+        change,
+        profit_taken_ratio
     )
 
     ratio = signal.get("ratio", 0)
@@ -1268,7 +1270,7 @@ def holding_blocker_text(decision):
         return "縮量回測、未見出貨、等量價確認"
 
     if level == "HOLD_CORE":
-        return "漲停不追、保留核心倉"
+        return "保留核心倉、暫不加碼、等待冷卻"
 
     if level == "HOLD":
         note = decision.get("note") or ""
@@ -1863,7 +1865,8 @@ def render_stock(
             holding["avg_price"],
             holding["shares"],
             price_source,
-            change
+            change,
+            holding.get("profit_taken_ratio", 0)
         )
 
         result["_holding_decision"] = holding_decision
@@ -2368,7 +2371,8 @@ def generate():
             data["holding"]["avg_price"],
             data["holding"]["shares"],
             data.get("price_source", "twse"),
-            data.get("change")
+            data.get("change"),
+            data["holding"].get("profit_taken_ratio", 0)
         )
 
         if h_decision["level"] in [

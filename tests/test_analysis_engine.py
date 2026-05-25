@@ -116,6 +116,20 @@ class AnalysisEngineTest(unittest.TestCase):
         self.assertEqual(signal["level"], "TAKE_PROFIT_25")
         self.assertIn("漲停過熱", signal["reason"])
 
+    def test_holding_after_profit_taken_does_not_repeat_take_profit(self):
+        item = snap("profit_taken", [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 130], VOL_ATTACK)
+        signal = holding_signal(
+            item["raw_result"],
+            130,
+            100,
+            "realtime",
+            9.9,
+            profit_taken_ratio=0.5
+        )
+        self.assertEqual(signal["level"], "HOLD_CORE")
+        self.assertEqual(signal["action"], "續抱核心倉")
+        self.assertNotIn("停利", signal["action"])
+
     def test_non_holding_limit_up_not_chasing(self):
         item = snap("limit_no_hold", [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 130], VOL_ATTACK)
         self.assertEqual(item["raw_result"]["price_behavior"], "LIMIT_LOCK")
