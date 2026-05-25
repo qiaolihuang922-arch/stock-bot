@@ -124,6 +124,7 @@ class GeneratorReportTest(unittest.TestCase):
 
         report = generator.render_stock("智原", payload)
 
+        self.assertIn("【智原 3035】", report)
         self.assertIn("├─ 加碼：成立", report)
         self.assertIn("├─ 依據：小幅轉強、RR達標、信心達標", report)
         self.assertNotIn("├─ 阻斷：條件成立", report)

@@ -2001,10 +2001,13 @@ def render_stock(
         condition_items = []
 
     # header
+    stock_code = data.get("stock_code") or stocks.get(name) or ""
+    title_name = f"{name} {stock_code}".strip()
+
     if holding:
 
         header = (
-            f"【{name}】 "
+            f"【{title_name}】 "
             f"📌 持倉 ｜{holding_decision['action']}"
         )
 
@@ -2012,7 +2015,7 @@ def render_stock(
 
         header = (
 
-            f"【{name}】 "
+            f"【{title_name}】 "
             f"{entry_header(result)}"
         )
 
