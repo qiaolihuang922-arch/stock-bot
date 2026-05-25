@@ -551,6 +551,20 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertLess(unheld_msg.index("【聯電 2303】"), unheld_msg.index("【建準 2421】"))
         self.assertLess(unheld_msg.index("【建準 2421】"), unheld_msg.index("【旺宏 2337】"))
 
+    def test_unheld_price_line_keeps_closing_parenthesis(self):
+        payload = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 128.5],
+            None,
+            price=128.5,
+            change=2.8,
+        )
+        payload["stock_code"] = "2344"
+
+        card = generator.formatTelegramUnheldCard("華邦電", payload)
+
+        self.assertIn("價格：128.5（+2.80%）", card)
+        self.assertNotIn("價格：128.5（+2.80%\n", card)
+
     def test_telegram_messages_can_include_detail_when_requested(self):
         payload = render_payload(
             [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119],

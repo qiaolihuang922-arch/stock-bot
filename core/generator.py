@@ -116,6 +116,11 @@ def signed_pct(val):
         return "-"
 
 
+def price_change_line(price, change):
+
+    return f"價格：{safe_round(price)}（{signed_pct(change)}）"
+
+
 def calc_shares(shares, ratio):
 
     try:
@@ -2714,7 +2719,7 @@ def formatTelegramPositionCard(name, data):
         f"條件：{condition_line}",
         f"數據：RR {rr_text}｜S {data.get('structure_score', '-')}/5｜V {data.get('volume_ratio', '-')}x",
         compact_backtest_line(data.get("backtest_context")),
-        f"價格：{safe_round(data.get('price'))}（{signed_pct(data.get('change'))}）",
+        price_change_line(data.get("price"), data.get("change")),
     ]
 
     return "\n".join(lines)
@@ -2805,7 +2810,7 @@ def formatTelegramUnheldCard(name, data):
         buy_line,
         f"數據：RR {rr_text}｜S {data.get('structure_score', '-')}/5｜V {data.get('volume_ratio', '-')}x",
         compact_backtest_line(data.get("backtest_context")),
-        f"價格：{safe_round(data.get('price'))}（{signed_pct(data.get('change'))}）",
+        price_change_line(data.get("price"), data.get("change")),
     ])
 
 

@@ -44,3 +44,28 @@ This file is append-only. Each development change should add a new entry so QA c
 - DB/schema/write risk: no
 - QA focus:
   - Confirm future code changes append records here instead of overwriting old entries.
+
+## 2026-05-25 - batch-002
+
+### Change 1
+- Summary: v19.3.1 formatter bug fix: normalized Telegram card price-line rendering so the closing full-width parenthesis is always included, covering the `價格：128.5（+2.80%）` case.
+- Files changed:
+  - `core/generator.py`
+  - `tests/test_generator_report.py`
+  - `docs/qa_handoff_log.md`
+- Test level: L1
+- Scope: formatter / Telegram
+- Minimal validation run:
+  - `.venv/bin/python -m pytest tests/test_generator_report.py`
+- Skipped tests:
+  - Full regression test suite
+  - Live Telegram delivery test
+  - Live Supabase read/write test
+  - Live TWSE data fetch
+- Reason for skipping: Single formatter-only bug fix; no strategy, sorting, grouping, DB, or external-service logic changed.
+- External services touched: none
+- DB/schema/write risk: no
+- QA focus:
+  - Confirm unheld detail card price lines end with a closing `）`.
+  - Confirm `華邦電` renders as `價格：128.5（+2.80%）`.
+  - Confirm no Telegram structure, sorting, grouping, or strategy wording changed.
