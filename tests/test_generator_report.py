@@ -565,6 +565,35 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("價格：128.5（+2.80%）", card)
         self.assertNotIn("價格：128.5（+2.80%\n", card)
 
+    def test_daily_write_warning_is_in_default_summary_message(self):
+        payload = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119],
+            None,
+            price=119,
+            change=1.4,
+        )
+        payload["stock_code"] = "2344"
+        warning = generator.daily_write_warning_text(
+            {"recorded": False, "missing_stock_ids": ["2421"]},
+            {"recorded": False, "missing_stock_ids": ["3035"]}
+        )
+
+        messages = generator.formatTelegramMessages(
+            {"華邦電": payload},
+            "FULL DETAIL",
+            None,
+            None,
+            "⏳ 觀望",
+            datetime(2026, 5, 25),
+            daily_write_warning=warning,
+        )
+
+        self.assertEqual(len(messages), 3)
+        self.assertIn("每日快照未寫入", messages[0])
+        self.assertIn("缺少 3035, 2421", messages[0])
+        self.assertNotIn("每日快照未寫入", messages[1])
+        self.assertNotIn("每日快照未寫入", messages[2])
+
     def test_telegram_messages_can_include_detail_when_requested(self):
         payload = render_payload(
             [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119],

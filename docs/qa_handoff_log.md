@@ -102,3 +102,27 @@ This file is append-only. Each development change should add a new entry so QA c
   - Confirm `record_daily_signals()` also skips before creating `signal_runs` / `signal_items` when watchlist coverage is incomplete.
   - Confirm Telegram report appends a warning like `每日快照未寫入：缺少 2421, 3035` when daily coverage is incomplete.
   - Confirm holding stocks still cannot become `is_tradeable` or `is_best_candidate`.
+
+### Change 2
+- Summary: Routed daily write warnings into the default Telegram summary message so incomplete-watchlist warnings appear in the first of the standard three messages, not only in the full detail text.
+- Files changed:
+  - `core/generator.py`
+  - `tests/test_generator_report.py`
+  - `docs/qa_handoff_log.md`
+- Test level: L1
+- Scope: formatter / Telegram / DB warning display
+- Minimal validation run:
+  - `.venv/bin/python -m pytest tests/test_generator_report.py`
+- Skipped tests:
+  - Full regression test suite
+  - Replay/backfill dry-run
+  - Live Telegram delivery
+  - Live Supabase write verification
+  - TWSE live fetch
+- Reason for skipping: Display plumbing only; DB guard behavior was already validated in batch-003 Change 1, and this change only passes the existing warning into the default summary formatter.
+- External services touched: none
+- DB/schema/write risk: no
+- QA focus:
+  - Confirm default three-message Telegram output includes `每日快照未寫入` in the first summary message when `missing_stock_ids` is returned.
+  - Confirm the warning is not hidden in detail-only content.
+  - Confirm standard holding/unheld detail messages remain unchanged.

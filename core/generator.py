@@ -2655,7 +2655,25 @@ def entry_wait_text(result):
     return f"等{first}解除"
 
 
-def formatTelegramSummary(results_map, best, score, market_summary, now, position_warning=None):
+def daily_write_warning_text(signal_result=None, snapshot_result=None):
+
+    missing = []
+
+    for result in [snapshot_result or {}, signal_result or {}]:
+        for stock_id in result.get("missing_stock_ids") or []:
+            if stock_id not in missing:
+                missing.append(stock_id)
+
+    if missing:
+        return f"每日快照未寫入：缺少 {', '.join(missing)}"
+
+    if (snapshot_result or {}).get("reason") == "validation_failed":
+        return "Snapshot驗證失敗，未寫入每日快照"
+
+    return None
+
+
+def formatTelegramSummary(results_map, best, score, market_summary, now, position_warning=None, daily_write_warning=None):
 
     holding_items = [
         (name, data)
@@ -2676,6 +2694,9 @@ def formatTelegramSummary(results_map, best, score, market_summary, now, positio
 
     if position_warning:
         lines.append(f"⚠ {position_warning}，持倉狀態不可信")
+
+    if daily_write_warning:
+        lines.append(f"⚠ {daily_write_warning}")
 
     holding_names = "、".join(name for name, _data in holding_items) or "無"
     lines.extend([
@@ -2858,7 +2879,7 @@ def split_message(text, limit=3400):
     return chunks
 
 
-def formatTelegramMessages(results_map, full_msg, best, score, market_summary, now, position_warning=None, include_detail=False):
+def formatTelegramMessages(results_map, full_msg, best, score, market_summary, now, position_warning=None, include_detail=False, daily_write_warning=None):
 
     ordered_items = ordered_result_items(results_map)
     holding_items = sort_position_summary([
@@ -2880,7 +2901,7 @@ def formatTelegramMessages(results_map, full_msg, best, score, market_summary, n
     ]
 
     messages = [
-        formatTelegramSummary(results_map, best, score, market_summary, now, position_warning),
+        formatTelegramSummary(results_map, best, score, market_summary, now, position_warning, daily_write_warning),
         "【持倉標的】\n\n" + ("\n\n".join(position_cards) if position_cards else "無持倉"),
         "【未持倉標的】\n\n" + ("\n\n".join(unheld_cards) if unheld_cards else "無"),
     ]
@@ -3221,17 +3242,12 @@ def generate_report():
             results_map
         )
 
-        missing_daily = (
-            snapshot_result.get("missing_stock_ids")
-            or signal_result.get("missing_stock_ids")
-            or []
-        )
+        daily_write_warning = daily_write_warning_text(signal_result, snapshot_result)
 
-        if missing_daily:
-            msg += f"\n⚠ 每日快照未寫入：缺少 {', '.join(missing_daily)}"
-        elif snapshot_result.get("reason") == "validation_failed":
-            msg += "\n⚠ Snapshot驗證失敗，未寫入每日快照"
+        if daily_write_warning:
+            msg += f"\n⚠ {daily_write_warning}"
     except Exception as e:
+        daily_write_warning = None
         msg += f"\n⚠ DB記錄失敗：{str(e)}"
 
     messages = formatTelegramMessages(
@@ -3241,7 +3257,8 @@ def generate_report():
         score,
         market_summary,
         now,
-        position_warning
+        position_warning,
+        daily_write_warning=daily_write_warning
     )
 
     return messages, execution_reply_markup(results_map)
