@@ -7,6 +7,7 @@ except ImportError:
 
 from core.signal_snapshot import apply_snapshot_boundaries, snapshot_from_result
 from core.signal_validator import validate_snapshots
+from core.watchlist import WATCHLIST_CODES, missing_watchlist_codes
 
 
 tz = pytz.timezone("Asia/Taipei") if pytz else None
@@ -84,13 +85,25 @@ def _signal_payload(snapshot):
     }
 
 
-def build_daily_snapshot_payloads(version, phase, results_map, now=None):
+def build_daily_snapshot_payloads(version, phase, results_map, now=None, expected_stock_ids=None):
     now = now or (datetime.now(tz) if tz else datetime.now())
 
     if not should_record_daily_snapshot(phase, now):
         return {
             "recorded": False,
             "reason": "skip_phase",
+            "price_rows": [],
+            "signal_rows": []
+        }
+
+    expected_stock_ids = expected_stock_ids or WATCHLIST_CODES
+    missing = missing_watchlist_codes(results_map, expected_stock_ids)
+
+    if missing:
+        return {
+            "recorded": False,
+            "reason": "incomplete_watchlist",
+            "missing_stock_ids": missing,
             "price_rows": [],
             "signal_rows": []
         }
@@ -133,7 +146,7 @@ def build_daily_snapshot_payloads(version, phase, results_map, now=None):
     # 中文註釋：持倉股只代表持倉管理，不可污染新進場 tradeable / 勝率統計。
     apply_snapshot_boundaries(snapshots, holding_stock_ids)
 
-    errors = validate_snapshots(snapshots)
+    errors = validate_snapshots(snapshots, expected_stock_ids=[str(item) for item in expected_stock_ids])
 
     if errors:
         return {
@@ -168,7 +181,8 @@ def record_daily_snapshots(version, phase, results_map, now=None):
         version,
         phase,
         results_map,
-        now
+        now,
+        expected_stock_ids=WATCHLIST_CODES
     )
 
     if not payloads.get("recorded"):

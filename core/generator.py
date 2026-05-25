@@ -3206,7 +3206,7 @@ def generate_report():
 
     try:
         # 中文註釋：v19.1.3 只在收盤/盤後把每日穩定訊號寫入 Supabase，盤中不入庫。
-        record_daily_signals(
+        signal_result = record_daily_signals(
             VERSION,
             get_market_phase(),
             msg,
@@ -3220,7 +3220,16 @@ def generate_report():
             get_market_phase(),
             results_map
         )
-        if snapshot_result.get("reason") == "validation_failed":
+
+        missing_daily = (
+            snapshot_result.get("missing_stock_ids")
+            or signal_result.get("missing_stock_ids")
+            or []
+        )
+
+        if missing_daily:
+            msg += f"\n⚠ 每日快照未寫入：缺少 {', '.join(missing_daily)}"
+        elif snapshot_result.get("reason") == "validation_failed":
             msg += "\n⚠ Snapshot驗證失敗，未寫入每日快照"
     except Exception as e:
         msg += f"\n⚠ DB記錄失敗：{str(e)}"

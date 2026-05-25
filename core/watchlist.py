@@ -15,3 +15,18 @@ STOCKS = {
 
 
 WATCHLIST_CODES = list(STOCKS.values())
+
+
+def missing_watchlist_codes(results_map, expected_stock_ids=None):
+    expected = {
+        str(stock_id)
+        for stock_id in (expected_stock_ids or WATCHLIST_CODES)
+        if stock_id
+    }
+    actual = {
+        str(data.get("stock_code"))
+        for data in (results_map or {}).values()
+        if data.get("stock_code")
+    }
+
+    return sorted(expected - actual)

@@ -69,3 +69,36 @@ This file is append-only. Each development change should add a new entry so QA c
   - Confirm unheld detail card price lines end with a closing `）`.
   - Confirm `華邦電` renders as `價格：128.5（+2.80%）`.
   - Confirm no Telegram structure, sorting, grouping, or strategy wording changed.
+
+## 2026-05-25 - batch-003
+
+### Change 1
+- Summary: v19.3.1 release blocker fix: added official daily write guard so online daily writes require complete 12-stock watchlist coverage before writing `daily_signal_snapshot`, `daily_price`, `signal_runs`, or `signal_items`.
+- Files changed:
+  - `core/watchlist.py`
+  - `core/generator.py`
+  - `services/daily_snapshot_store.py`
+  - `services/signal_store.py`
+  - `tests/test_daily_snapshot_store.py`
+  - `docs/qa_handoff_log.md`
+- Test level: L2
+- Scope: snapshot / DB / backfill / formatter warning
+- Minimal validation run:
+  - `.venv/bin/python -m pytest tests/test_daily_snapshot_store.py`
+  - `.venv/bin/python -m pytest`
+  - `.venv/bin/python scripts/dry_run_replay.py --dry-run --validate --source synthetic --version v19.3.1 --start-date 2026-05-18 --end-date 2026-05-22`
+  - `.venv/bin/python scripts/backfill_signals.py --dry-run --source synthetic --version v19.3.1 --start-date 2026-05-18 --end-date 2026-05-22`
+- Skipped tests:
+  - Formal backfill write
+  - Live Telegram delivery
+  - Live Supabase write verification
+  - TWSE live replay/backfill rerun
+- Reason for skipping: Requirement explicitly avoids formal backfill writes; blocker fix is guarded by unit tests and synthetic replay/backfill dry-run, while live external-service checks are reserved for QA regression.
+- External services touched: none
+- DB/schema/write risk: yes
+- QA focus:
+  - Confirm complete 12-stock results write both signal and price payloads.
+  - Confirm missing one watchlist code returns `recorded=False`, reason `incomplete_watchlist`, and empty `price_rows` / `signal_rows`.
+  - Confirm `record_daily_signals()` also skips before creating `signal_runs` / `signal_items` when watchlist coverage is incomplete.
+  - Confirm Telegram report appends a warning like `每日快照未寫入：缺少 2421, 3035` when daily coverage is incomplete.
+  - Confirm holding stocks still cannot become `is_tradeable` or `is_best_candidate`.

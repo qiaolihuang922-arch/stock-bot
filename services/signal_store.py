@@ -5,6 +5,7 @@ import pytz
 from supabase import create_client
 
 from config import SUPABASE_URL, SUPABASE_KEY
+from core.watchlist import WATCHLIST_CODES, missing_watchlist_codes
 
 
 tz = pytz.timezone("Asia/Taipei")
@@ -138,6 +139,15 @@ def record_daily_signals(version, phase, message, results_map, best_stock, marke
         return {
             "recorded": False,
             "reason": "skip_phase"
+        }
+
+    missing = missing_watchlist_codes(results_map, WATCHLIST_CODES)
+
+    if missing:
+        return {
+            "recorded": False,
+            "reason": "incomplete_watchlist",
+            "missing_stock_ids": missing
         }
 
     run_date = now.strftime("%Y-%m-%d")
