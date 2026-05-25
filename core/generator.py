@@ -52,9 +52,6 @@ EXECUTION_LEVELS = {
     "ADD_10": "A10"
 }
 
-POSITION_BUTTON_LOTS = [50, 100]
-
-
 # ================================
 # 🔒 股票池
 # ================================
@@ -1379,72 +1376,13 @@ def holding_blocker_text(decision):
 
 
 def execution_reply_markup(results_map):
-    rows = []
-
-    for name, data in results_map.items():
-        holding = data.get("holding")
-        decision = (
-            data.get("holding_decision")
-            or data.get("result", {}).get("_holding_decision")
-            or {}
-        )
-        level = decision.get("level")
-
-        if not holding or level not in EXECUTION_LEVELS:
-            continue
-
-        shares = int(decision.get("shares") or 0)
-
-        if shares <= 0:
-            continue
-
-        price_value = data.get("price") or 0
-        price_token = int(round(float(price_value) * 100)) if price_value else 0
-
-        rows.append([
-            {
-                "text": f"已執行 {name}{decision.get('action')}",
-                "callback_data": (
-                    f"exec|{data.get('stock_code')}|"
-                    f"{EXECUTION_LEVELS[level]}|{shares}|{price_token}"
-                )
-            }
-        ])
-
-    rows.append([
-        {
-            "text": "── 持倉設定 ──",
-            "callback_data": "noop"
-        }
-    ])
-
-    for name, code in stocks.items():
-        data = results_map.get(name) or {}
-        price_value = data.get("price") or 0
-        price_token = int(round(float(price_value) * 100)) if price_value else 0
-        row = []
-
-        for lot in POSITION_BUTTON_LOTS:
-            row.append({
-                "text": f"{name} 買{lot}" if lot == POSITION_BUTTON_LOTS[0] else f"買{lot}",
-                "callback_data": f"pos|{code}|B|{lot}|{price_token}"
-            })
-
-        for lot in POSITION_BUTTON_LOTS:
-            row.append({
-                "text": f"賣{lot}",
-                "callback_data": f"pos|{code}|S|{lot}|0"
-            })
-
-        row.append({
-            "text": "清倉",
-            "callback_data": f"pos|{code}|C|0|0"
-        })
-
-        rows.append(row)
-
     return {
-        "inline_keyboard": rows
+        "inline_keyboard": [
+            [{"text": "買 3231 300 149.5", "callback_data": "noop"}],
+            [{"text": "賣 3231 500", "callback_data": "noop"}],
+            [{"text": "清倉 3231", "callback_data": "noop"}],
+            [{"text": "設定 3231 440 140.92", "callback_data": "noop"}],
+        ]
     }
 
 

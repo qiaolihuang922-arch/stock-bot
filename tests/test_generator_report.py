@@ -373,30 +373,13 @@ class GeneratorReportTest(unittest.TestCase):
         })
 
         self.assertEqual(
-            markup["inline_keyboard"][0],
-            [{
-                "text": "已執行 英業達停利 25%",
-                "callback_data": "exec|2356|TP25|138|6540"
-            }]
-        )
-        self.assertIn(
-            [{
-                "text": "英業達 買50",
-                "callback_data": "pos|2356|B|50|6540"
-            }, {
-                "text": "買100",
-                "callback_data": "pos|2356|B|100|6540"
-            }, {
-                "text": "賣50",
-                "callback_data": "pos|2356|S|50|0"
-            }, {
-                "text": "賣100",
-                "callback_data": "pos|2356|S|100|0"
-            }, {
-                "text": "清倉",
-                "callback_data": "pos|2356|C|0|0"
-            }],
-            markup["inline_keyboard"]
+            markup["inline_keyboard"],
+            [
+                [{"text": "買 3231 300 149.5", "callback_data": "noop"}],
+                [{"text": "賣 3231 500", "callback_data": "noop"}],
+                [{"text": "清倉 3231", "callback_data": "noop"}],
+                [{"text": "設定 3231 440 140.92", "callback_data": "noop"}],
+            ]
         )
 
 
