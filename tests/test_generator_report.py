@@ -466,9 +466,19 @@ class GeneratorReportTest(unittest.TestCase):
         buy_payload["stock_code"] = "2376"
         buy_payload["position_events"] = {"event_count": 1, "bought_shares": 30}
 
+        weak_payload = render_payload(
+            [300, 301, 302, 303, 304, 305, 306, 307, 308, 309, 310, 311, 312, 313, 314, 315, 316, 317, 318, 296],
+            {"shares": 20, "avg_price": 298},
+            price=296,
+            change=-4.6,
+        )
+        weak_payload["stock_code"] = "2408"
+        weak_payload["result"]["market_grade"] = "D"
+
         messages = generator.formatTelegramMessages(
             {
                 "技嘉": buy_payload,
+                "南亞科": weak_payload,
                 "緯創": bottom_payload,
                 "英業達": core_payload,
             },
@@ -482,11 +492,64 @@ class GeneratorReportTest(unittest.TestCase):
         position_msg = messages[1]
         self.assertLess(position_msg.index("【英業達 2356】"), position_msg.index("【緯創 3231】"))
         self.assertLess(position_msg.index("【緯創 3231】"), position_msg.index("【技嘉 2376】"))
+        self.assertLess(position_msg.index("【技嘉 2376】"), position_msg.index("【南亞科 2408】"))
+        self.assertIn("【英業達 2356】📌 核心續抱", position_msg)
+        self.assertIn("【緯創 3231】📌 底倉續抱", position_msg)
+        self.assertIn("【南亞科 2408】📌 續抱觀察", position_msg)
         self.assertIn("決策：保留核心倉，暫不加碼", position_msg)
         self.assertIn("決策：保留底倉，暫不加碼", position_msg)
         self.assertIn("條件：觀察減碼後是否轉弱，跌破警戒價優先風控", position_msg)
         self.assertIn("決策：續抱，暫不加碼", position_msg)
         self.assertIn("條件：浮盈不足，等量價確認後再評估加碼", position_msg)
+        self.assertIn("決策：弱勢續抱，暫不加碼", position_msg)
+
+    def test_unheld_cards_follow_summary_group_order(self):
+        limit_payload = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 125],
+            None,
+            price=125,
+            change=9.6,
+        )
+        limit_payload["stock_code"] = "2303"
+        limit_payload["result"]["price_behavior"] = "LIMIT_LOCK"
+
+        wait_payload = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119],
+            None,
+            price=119,
+            change=1.4,
+        )
+        wait_payload["stock_code"] = "2421"
+        wait_payload["result"]["rr"] = 0.5
+
+        weak_payload = render_payload(
+            [100, 99, 98, 97, 96, 95, 94, 93, 92, 91, 90, 89, 88, 87, 86, 85, 84, 83, 82, 81],
+            None,
+            price=81,
+            change=-2.0,
+        )
+        weak_payload["stock_code"] = "2337"
+        weak_payload["result"]["market_grade"] = "D"
+
+        messages = generator.formatTelegramMessages(
+            {
+                "旺宏": weak_payload,
+                "建準": wait_payload,
+                "聯電": limit_payload,
+            },
+            "FULL DETAIL",
+            None,
+            None,
+            "⏳ 觀望",
+            datetime(2026, 5, 25),
+        )
+
+        summary_msg = messages[0]
+        unheld_msg = messages[2]
+        self.assertLess(summary_msg.index("【禁止追高 1】聯電"), summary_msg.index("【等待冷卻 1】建準"))
+        self.assertLess(summary_msg.index("【等待冷卻 1】建準"), summary_msg.index("【弱勢/未觸發 1】旺宏"))
+        self.assertLess(unheld_msg.index("【聯電 2303】"), unheld_msg.index("【建準 2421】"))
+        self.assertLess(unheld_msg.index("【建準 2421】"), unheld_msg.index("【旺宏 2337】"))
 
     def test_telegram_messages_can_include_detail_when_requested(self):
         payload = render_payload(

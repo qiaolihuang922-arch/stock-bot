@@ -40,7 +40,7 @@ from services.daily_snapshot_store import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v19.3"
+VERSION = "v19.3.1"
 
 EXECUTION_LEVELS = {
     "TAKE_PROFIT_50": "TP50",
@@ -2493,6 +2493,24 @@ def format_watchlist_summary_grouped(watchlist):
     return lines or ["無"]
 
 
+def sort_watchlist_grouped(watchlist):
+
+    group_rank = {
+        "禁止追高": 0,
+        "等待冷卻": 1,
+        "弱勢/未觸發": 2,
+        "其他觀察": 3,
+    }
+
+    return sorted(
+        enumerate(watchlist),
+        key=lambda item: (
+            group_rank.get(classify_watchlist_group(item[1][0], item[1][1]), 9),
+            item[0],
+        )
+    )
+
+
 def unheld_summary_line(name, data):
 
     result = data["result"]
@@ -2688,7 +2706,7 @@ def formatTelegramPositionCard(name, data):
     rr_text = "-" if should_hide_rr(result) else safe_round(result.get("rr"))
 
     lines = [
-        f"【{stock_title(name, data)}】📌 {decision.get('action')}｜{signed_pct(stock_pnl(data))}",
+        f"【{stock_title(name, data)}】📌 {position_summary_action(name, data)}｜{signed_pct(stock_pnl(data))}",
         f"倉位：{holding['shares']}股｜均價 {price_text(holding.get('avg_price'))}｜今日 {today_text}",
         f"風控：{holding_risk_text(decision)}",
         f"盤面：{plain_label(compact_market_line(result, dist))}",
@@ -2849,8 +2867,11 @@ def formatTelegramMessages(results_map, full_msg, best, score, market_summary, n
     ]
     unheld_cards = [
         formatTelegramUnheldCard(name, data)
-        for name, data in ordered_items
-        if not data.get("holding")
+        for _index, (name, data) in sort_watchlist_grouped([
+            (name, data)
+            for name, data in ordered_items
+            if not data.get("holding")
+        ])
     ]
 
     messages = [
