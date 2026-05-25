@@ -215,6 +215,17 @@ v19.3 回测/回放与持仓执行表：
 
 ## 常用验证命令
 
+测试分层规范先读：[docs/qa_test_strategy.md](/Users/liveroom/stock-bot-main/docs/qa_test_strategy.md)。
+
+维护本项目时必须先判断改动等级：
+
+- L0 展示、formatter、Telegram layout、文案、docs：只跑相关 snapshot/mock/单测，禁止 full pytest、replay、backfill、historical simulation。
+- L1 单一 strategy/scoring/RR/signal/validator：只跑对应 test file 或单个 test case。
+- L2 portfolio、market regime、position sizing、snapshot boundary、store/script guard：跑相关 integration tests，外部服务必须 mock。
+- L3 schema、core engine、execution flow、shared interfaces、persistence contract：才允许 full pytest、短区间 dry-run replay validate 或 backfill dry-run。
+
+默认原则：能局部测试，就禁止全局测试；能 mock，就不要跑真实资料；能 sample，就不要全市场扫描；能 snapshot，就不要 full render。
+
 运行全部测试：
 
 ```bash
