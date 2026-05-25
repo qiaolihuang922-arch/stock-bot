@@ -418,15 +418,35 @@ class GeneratorReportTest(unittest.TestCase):
             datetime(2026, 5, 25),
         )
 
-        self.assertGreaterEqual(len(messages), 4)
+        self.assertEqual(len(messages), 3)
         self.assertIn("📌 持倉：智原", messages[0])
         self.assertIn("觀察/不買：", messages[0])
         self.assertIn("【持倉標的】", messages[1])
         self.assertIn("倉位：50股", messages[1])
         self.assertIn("【觀察 / 不買標的】", messages[2])
         self.assertIn("回測：", messages[2])
-        self.assertIn("【完整詳情備份】", messages[3])
-        self.assertIn("FULL DETAIL", messages[3])
+        self.assertNotIn("完整詳情備份", "\n".join(messages))
+
+    def test_telegram_messages_can_include_detail_when_requested(self):
+        payload = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119],
+            None,
+            price=119,
+            change=1.4,
+        )
+        generator.render_stock("建準", payload)
+        messages = generator.formatTelegramMessages(
+            {"建準": payload},
+            "FULL DETAIL",
+            None,
+            None,
+            "⏳ 觀望",
+            datetime(2026, 5, 25),
+            include_detail=True,
+        )
+
+        self.assertIn("【完整詳情備份】", messages[-1])
+        self.assertIn("FULL DETAIL", messages[-1])
 
 
 if __name__ == "__main__":

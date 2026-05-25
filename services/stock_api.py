@@ -18,6 +18,7 @@ except ImportError:
 tz = pytz.timezone("Asia/Taipei") if pytz else None
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 LAST_ERRORS = {}
+LAST_OHLCV = {}
 
 
 def compact_error(error):
@@ -49,6 +50,10 @@ def get_last_error(code):
 
 def get_last_errors():
     return dict(LAST_ERRORS)
+
+
+def get_last_ohlcv(code):
+    return LAST_OHLCV.get(str(code))
 
 
 def parse_twse_date(value):
@@ -210,11 +215,32 @@ def get_twse(code, months=2, retries=1, min_rows=45, max_months=4):
 
                 for d in r.get("data", []):
                     try:
+                        trade_date = parse_twse_date(d[0])
+                        close = float(d[6].replace(",", ""))
+                        volume = float(d[1].replace(",", ""))
                         rows.append((
                             d[0],
-                            float(d[6].replace(",", "")),
-                            float(d[1].replace(",", ""))
+                            close,
+                            volume
                         ))
+                        open_price = parse_twse_number(d[3])
+                        high = parse_twse_number(d[4])
+                        low = parse_twse_number(d[5])
+                        if trade_date and all(value is not None for value in [open_price, high, low, close, volume]):
+                            cached = LAST_OHLCV.get(str(code)) or {}
+                            cached_date = cached.get("trade_date")
+                            if cached_date and trade_date <= cached_date:
+                                continue
+                            LAST_OHLCV[str(code)] = {
+                                "stock_id": str(code),
+                                "trade_date": trade_date,
+                                "open": open_price,
+                                "high": high,
+                                "low": low,
+                                "close": close,
+                                "volume": volume,
+                                "source": "twse"
+                            }
                     except Exception as exc:
                         last_error = f"parse: {exc}"
                         continue

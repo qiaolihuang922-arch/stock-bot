@@ -17,7 +17,7 @@
 - v19.2.1 信号验证：`core/signal_validator.py`
 - 当前持仓边界：Supabase `positions` 表，经由 `services/position_store.py` 读取
 - Telegram 持仓输入：报文只显示输入格式提示，实际用文字命令写入 `position_events` 并同步 `positions`
-- Telegram 输出：采用总览摘要、持仓卡片、观察卡片、完整详情备份的多讯息格式；资料不删除，只分层展示。
+- Telegram 输出：采用总览摘要、持仓卡片、观察卡片的多讯息格式；完整字段仍在 formatter 组装时保留给写库与测试，不默认推送完整长报文。
 
 第一版回测已经完成：当前报文已接入 snapshot 样本、同型态/量能/位置验证、相对表现评估，以及持仓/新进场分离显示。v19.2.1 起持仓不再靠代码文件手动维护，`shares=0` 走未持仓逻辑，`shares>0` 走持仓逻辑。
 

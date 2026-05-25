@@ -10,7 +10,8 @@ from services.stock_api import (
     get_twse,
     get_yahoo,
     get_realtime_price,
-    get_last_error
+    get_last_error,
+    get_last_ohlcv
 )
 
 from services.analysis import (
@@ -2516,11 +2517,6 @@ def formatTelegramWatchCard(name, data):
     ])
 
 
-def formatTelegramDetail(full_msg):
-
-    return "【完整詳情備份】\n" + full_msg
-
-
 def split_message(text, limit=3400):
 
     if len(text) <= limit:
@@ -2552,7 +2548,7 @@ def split_message(text, limit=3400):
     return chunks
 
 
-def formatTelegramMessages(results_map, full_msg, best, score, market_summary, now, position_warning=None):
+def formatTelegramMessages(results_map, full_msg, best, score, market_summary, now, position_warning=None, include_detail=False):
 
     ordered_items = ordered_result_items(results_map)
     position_cards = [
@@ -2572,8 +2568,9 @@ def formatTelegramMessages(results_map, full_msg, best, score, market_summary, n
         "【觀察 / 不買標的】\n\n" + ("\n\n".join(watch_cards) if watch_cards else "無"),
     ]
 
-    for chunk in split_message(formatTelegramDetail(full_msg)):
-        messages.append(chunk)
+    if include_detail:
+        for chunk in split_message("【完整詳情備份】\n" + full_msg):
+            messages.append(chunk)
 
     return messages
 
@@ -2641,6 +2638,7 @@ def load_stock_signal(name, code):
 
             "closes": display_closes,
             "volumes": volumes,
+            "ohlcv": get_last_ohlcv(code),
 
             "holding": (
                 holdings.get(name)
@@ -2926,5 +2924,5 @@ def generate_report():
 def generate():
     result = generate_report()[0]
     if isinstance(result, list):
-        return result[0]
+        return "\n\n====================\n\n".join(result)
     return result
