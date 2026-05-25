@@ -5,6 +5,7 @@ const SUPABASE_URL = Deno.env.get("PROJECT_URL") ?? Deno.env.get("SUPABASE_URL")
 const SERVICE_ROLE_KEY = Deno.env.get("SERVICE_ROLE_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN") ?? "";
 const WEBHOOK_SECRET = Deno.env.get("TELEGRAM_WEBHOOK_SECRET") ?? "";
+const VERSION = "v19.2.1";
 
 const STOCKS: Record<string, string> = {
   "3231": "緯創",
@@ -49,6 +50,11 @@ function jsonResponse(body: unknown, status = 200) {
     status,
     headers: { "content-type": "application/json; charset=utf-8" },
   });
+}
+
+function round2(value: number) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
 async function answerCallback(callbackId: string, text: string) {
@@ -246,14 +252,14 @@ async function executePositionAction({
   const executionPct = action.sign < 0 && sharesBefore > 0
     ? Math.round(Math.abs(sharesDelta) / sharesBefore * 100)
     : null;
-  const avgBefore = Number(position.avg_price ?? 0);
-  const avgAfter = isSet
+  const avgBefore = round2(Number(position.avg_price ?? 0));
+  const avgAfterRaw = isSet
     ? (sharesAfter > 0 ? tradePrice : 0)
     : (
       action.sign > 0
         ? (
           sharesAfter > 0
-            ? ((avgBefore * sharesBefore) + (tradePrice * actionShares)) / sharesAfter
+            ? ((avgBefore * sharesBefore) + (tradePrice * Math.abs(sharesDelta))) / sharesAfter
             : 0
         )
         : (
@@ -262,6 +268,7 @@ async function executePositionAction({
             : 0
         )
     );
+  const avgAfter = round2(avgAfterRaw);
   const realizedBefore = Number(position.realized_profit_taken_ratio ?? 0);
   const realizedAfter = Math.min(realizedBefore + action.realizedDelta, 1);
   const eventDate = new Date().toLocaleDateString("en-CA", {
@@ -277,7 +284,7 @@ async function executePositionAction({
     shares_delta: sharesDelta,
     shares_before: sharesBefore,
     shares_after: sharesAfter,
-    avg_price_before: position.avg_price,
+    avg_price_before: avgBefore,
     avg_price_after: avgAfter,
     realized_profit_delta: action.realizedDelta,
     realized_profit_taken_ratio_after: realizedAfter,
@@ -312,10 +319,12 @@ async function executePositionAction({
   }
 
   const pctText = executionPct !== null ? `（${executionPct}%）` : "";
-  const text = `已記錄：${position.stock_name}${action.actionLabel} ${Math.abs(sharesDelta)}股${pctText}，目前 ${sharesAfter}股`;
+  const avgText = sharesAfter > 0 ? `，均價 ${avgAfter.toFixed(2)}` : "，均價 0.00";
+  const text = `${VERSION} 已記錄：${position.stock_name}${action.actionLabel} ${Math.abs(sharesDelta)}股${pctText}，目前 ${sharesAfter}股${avgText}`;
 
   return {
     ok: true,
+    version: VERSION,
     text,
     stock_code: stockCode,
     action: action.actionLabel,
@@ -328,18 +337,18 @@ async function executePositionAction({
 
 serve(async (req) => {
   if (req.method !== "POST") {
-    return jsonResponse({ ok: false, error: "method_not_allowed" }, 405);
+    return jsonResponse({ ok: false, version: VERSION, error: "method_not_allowed" }, 405);
   }
 
   if (WEBHOOK_SECRET) {
     const received = req.headers.get("x-telegram-bot-api-secret-token");
     if (received !== WEBHOOK_SECRET) {
-      return jsonResponse({ ok: false, error: "unauthorized" }, 401);
+      return jsonResponse({ ok: false, version: VERSION, error: "unauthorized" }, 401);
     }
   }
 
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
-    return jsonResponse({ ok: false, error: "missing_supabase_env" }, 500);
+    return jsonResponse({ ok: false, version: VERSION, error: "missing_supabase_env" }, 500);
   }
 
   const update = await req.json();
@@ -353,7 +362,7 @@ serve(async (req) => {
     const parsed = parseCommand(String(message.text));
 
     if (!parsed) {
-      return jsonResponse({ ok: true, ignored: true });
+      return jsonResponse({ ok: true, version: VERSION, ignored: true });
     }
 
     const result = await executePositionAction({
@@ -369,16 +378,16 @@ serve(async (req) => {
     });
 
     await sendMessage(chatId, result.text ?? "已處理");
-    return jsonResponse(result, result.ok ? 200 : (result.status ?? 400));
+    return jsonResponse({ version: VERSION, ...result }, result.ok ? 200 : (result.status ?? 400));
   }
 
   if (!callback?.id || !callback?.data) {
-    return jsonResponse({ ok: true, ignored: true });
+    return jsonResponse({ ok: true, version: VERSION, ignored: true });
   }
 
   if (String(callback.data) === "noop") {
     await answerCallback(callback.id, "下方可直接設定持倉");
-    return jsonResponse({ ok: true, noop: true });
+    return jsonResponse({ ok: true, version: VERSION, noop: true });
   }
 
   const [prefix, stockCode, actionCode, sharesText, priceToken] = String(callback.data).split("|");
@@ -388,17 +397,17 @@ serve(async (req) => {
 
   if (!["exec", "pos"].includes(prefix) || !stockCode || !action || !Number.isFinite(actionShares) || actionShares < 0) {
     await answerCallback(callback.id, "無效的執行資料");
-    return jsonResponse({ ok: false, error: "invalid_callback_data" }, 400);
+    return jsonResponse({ ok: false, version: VERSION, error: "invalid_callback_data" }, 400);
   }
 
   if (actionCode !== "C" && actionShares <= 0) {
     await answerCallback(callback.id, "股數不可為0");
-    return jsonResponse({ ok: false, error: "invalid_shares" }, 400);
+    return jsonResponse({ ok: false, version: VERSION, error: "invalid_shares" }, 400);
   }
 
   if (action.sign > 0 && tradePrice <= 0) {
     await answerCallback(callback.id, "缺少買入價格，請重新產生報文");
-    return jsonResponse({ ok: false, error: "missing_trade_price" }, 400);
+    return jsonResponse({ ok: false, version: VERSION, error: "missing_trade_price" }, 400);
   }
 
   const result = await executePositionAction({
@@ -414,5 +423,5 @@ serve(async (req) => {
   });
 
   await answerCallback(callback.id, result.text ?? "已處理");
-  return jsonResponse(result, result.ok ? 200 : (result.status ?? 400));
+  return jsonResponse({ version: VERSION, ...result }, result.ok ? 200 : (result.status ?? 400));
 });

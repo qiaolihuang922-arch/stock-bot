@@ -39,7 +39,7 @@ from services.daily_snapshot_store import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v19.2"
+VERSION = "v19.2.1"
 
 EXECUTION_LEVELS = {
     "TAKE_PROFIT_50": "TP50",
@@ -88,6 +88,19 @@ def safe_round(val, n=2):
             return "-"
 
         return round(float(val), n)
+
+    except:
+        return "-"
+
+
+def price_text(val, n=2):
+
+    try:
+
+        if val is None:
+            return "-"
+
+        return f"{float(val):.{n}f}"
 
     except:
         return "-"
@@ -1254,15 +1267,15 @@ def holding_risk_text(
     decision
 ):
 
-    warning = safe_round(
+    warning = price_text(
         decision.get("warning_price")
     )
 
-    hard_stop = safe_round(
+    hard_stop = price_text(
         decision.get("hard_stop_price")
     )
 
-    return f"警戒 {warning} ｜停損 {hard_stop}"
+    return f"警戒 {warning}｜停損 {hard_stop}"
 
 
 def holding_position_text(
@@ -1321,6 +1334,11 @@ def holding_add_text(decision):
         return "禁止"
 
     return "未成立"
+
+
+def holding_control_text(decision, current_shares):
+
+    return holding_position_text(decision, current_shares).replace(" ｜", "｜")
 
 
 def holding_blocker_text(decision):
@@ -1737,8 +1755,14 @@ def render_backtest_context(context):
 
     verdict = context.get("verdict")
     action = context.get("action")
+    sample = context.get("sample") or 0
+    win_rate = context.get("win_rate")
 
-    if verdict == "歷史偏強，但今日阻斷仍有效":
+    if sample < 10:
+        reading = "樣本少，僅參考"
+    elif verdict == "歷史偏強，但今日阻斷仍有效" and win_rate is not None and win_rate < 50:
+        reading = "報酬偏正但勝率不足"
+    elif verdict == "歷史偏強，但今日阻斷仍有效":
         reading = "偏強但阻斷有效"
     elif verdict == "歷史沒有明顯優勢":
         reading = "無優勢，維持不買"
@@ -1756,9 +1780,10 @@ def render_backtest_context(context):
     return (
         f"├─ 回測："
         f"{condition}"
-        f"｜3日勝率{context.get('win_rate')}%"
-        f"｜平均相對{relative_text}"
-        f"｜樣本{context.get('sample')}"
+        f"｜樣本 {sample}\n"
+        f"├─ 統計："
+        f"3日勝率 {win_rate}%"
+        f"｜相對 {relative_text}"
         f"｜{reading}\n"
     )
 
@@ -1970,6 +1995,8 @@ def render_stock(
             (price - holding["avg_price"])
             / holding["avg_price"]
             * 100
+            if holding.get("avg_price")
+            else 0
         )
 
         holding_decision = holding_status(
@@ -2042,8 +2069,8 @@ def render_stock(
         msg += (
             f"├─ 持倉："
             f"{holding['shares']}股"
-            f" ｜均價 {safe_round(holding['avg_price'])}"
-            f" ｜損益 {signed_pct(pnl)}\n"
+            f"｜均價 {price_text(holding['avg_price'])}"
+            f"｜損益 {signed_pct(pnl)}\n"
         )
 
         today_text = event_summary_text(today_events)
@@ -2053,31 +2080,24 @@ def render_stock(
                 f"{today_text}\n"
             )
 
-        msg += (
-            f"├─ 操作："
-            f"{holding_decision['action']}"
-        )
-
+        action_text = holding_decision["action"]
         if holding_decision["shares"] > 0:
-            msg += f" {holding_decision['shares']}股"
+            action_text += f" {holding_decision['shares']}股"
 
         msg += (
-            f" ｜{holding_decision['note']}\n"
+            f"├─ 決策："
+            f"{action_text}"
+            f"｜{holding_decision['note']}\n"
         )
 
         msg += (
-            f"├─ 倉位："
-            f"{holding_position_text(holding_decision, holding['shares'])}\n"
+            f"├─ 倉控："
+            f"{holding_control_text(holding_decision, holding['shares'])}\n"
         )
 
         msg += (
             f"├─ 風控："
             f"{holding_risk_text(holding_decision)}\n"
-        )
-
-        msg += (
-            f"├─ 加碼："
-            f"{holding_add_text(holding_decision)}\n"
         )
 
         blocker_label = "依據" if holding_add_ready else "阻斷"

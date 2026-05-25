@@ -125,7 +125,8 @@ class GeneratorReportTest(unittest.TestCase):
         report = generator.render_stock("智原", payload)
 
         self.assertIn("【智原 3035】", report)
-        self.assertIn("├─ 加碼：成立", report)
+        self.assertIn("├─ 決策：加碼 10% 5股｜小幅轉強", report)
+        self.assertIn("├─ 倉控：目標 55股｜分批加碼", report)
         self.assertIn("├─ 依據：小幅轉強、RR達標、信心達標", report)
         self.assertNotIn("├─ 阻斷：條件成立", report)
 
@@ -333,7 +334,8 @@ class GeneratorReportTest(unittest.TestCase):
         })
 
         self.assertIn(
-            "├─ 回測：未持倉｜突破確認/爆量/已突破｜3日勝率60%｜平均相對+1.8%｜樣本15｜偏強但阻斷有效",
+            "├─ 回測：未持倉｜突破確認/爆量/已突破｜樣本 15\n"
+            "├─ 統計：3日勝率 60%｜相對 +1.8%｜偏強但阻斷有效",
             text
         )
 
@@ -351,7 +353,8 @@ class GeneratorReportTest(unittest.TestCase):
         })
 
         self.assertIn(
-            "├─ 回測：持倉｜突破確認/放量/已突破｜3日勝率46%｜平均相對-0.6%｜樣本35｜加碼偏弱，不加碼",
+            "├─ 回測：持倉｜突破確認/放量/已突破｜樣本 35\n"
+            "├─ 統計：3日勝率 46%｜相對 -0.6%｜加碼偏弱，不加碼",
             text
         )
 

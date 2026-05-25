@@ -1,4 +1,4 @@
--- v19.2 position execution schema.
+-- v19.2.1 position execution schema.
 -- Run in Supabase SQL Editor before deploying the Telegram Edge Function.
 -- The Edge Function should use the Supabase service role key, not the anon key.
 

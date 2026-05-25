@@ -1,24 +1,24 @@
 # stock-bot
 
-台湾股票策略报文机器人。当前稳定版本：`v19.2`。
+台湾股票策略报文机器人。当前稳定版本：`v19.2.1`。
 
 维护本项目时先读 [AI_CONTEXT.md](/Users/liveroom/stock-bot-main/AI_CONTEXT.md)，里面记录了策略边界、数据库写入边界、回测/回放脚本和不能碰的文件。
 
 ## 当前状态
 
-- 报文版本：`v19.2`
+- 报文版本：`v19.2.1`
 - 股票清单：只处理 `core/watchlist.py` 内的 12 档配置股票。
 - 策略层：`services/analysis.py`
 - 显示层：`core/generator.py`
 - 条件映射：`core/condition_engine.py`
 - 行情来源：`services/stock_api.py`
 - 每日信号记录：`services/signal_store.py`
-- v19.2 回测快照：`core/signal_snapshot.py`
-- v19.2 信号验证：`core/signal_validator.py`
+- v19.2.1 回测快照：`core/signal_snapshot.py`
+- v19.2.1 信号验证：`core/signal_validator.py`
 - 当前持仓边界：Supabase `positions` 表，经由 `services/position_store.py` 读取
-- Telegram 按钮：所有 12 档常驻买入/卖出/清仓按钮，写入 `position_events` 并同步 `positions`
+- Telegram 持仓输入：报文只显示输入格式提示，实际用文字命令写入 `position_events` 并同步 `positions`
 
-第一版回测已经完成：当前报文已接入 snapshot 样本、同型态/量能/位置验证、相对表现评估，以及持仓/新进场分离显示。v19.2 起持仓不再靠代码文件手动维护，`shares=0` 走未持仓逻辑，`shares>0` 走持仓逻辑。
+第一版回测已经完成：当前报文已接入 snapshot 样本、同型态/量能/位置验证、相对表现评估，以及持仓/新进场分离显示。v19.2.1 起持仓不再靠代码文件手动维护，`shares=0` 走未持仓逻辑，`shares>0` 走持仓逻辑。
 
 ## Runtime Config
 
@@ -31,7 +31,7 @@
 - `SUPABASE_SERVICE_ROLE_KEY`
 
 Render / GitHub Actions 使用平台环境变量或 secrets。不要把真实密钥提交到仓库。
-v19.2 持仓读取必须配置 `SUPABASE_SERVICE_ROLE_KEY`；只用 publishable/anon key 时，RLS 可能让 `positions` 查询回传 0 行，报文会明确提示持仓状态不可信。
+v19.2.1 持仓读取必须配置 `SUPABASE_SERVICE_ROLE_KEY`；只用 publishable/anon key 时，RLS 可能让 `positions` 查询回传 0 行，报文会明确提示持仓状态不可信。
 
 ## 常用命令
 
@@ -57,7 +57,7 @@ dry-run replay，不写入数据库：
   --dry-run \
   --validate \
   --source twse \
-  --version v19.2 \
+  --version v19.2.1 \
   --start-date 2026-05-11 \
   --end-date 2026-05-22
 ```
@@ -68,7 +68,7 @@ backfill dry-run，不写入数据库：
 .venv/bin/python scripts/backfill_signals.py \
   --dry-run \
   --source twse \
-  --version v19.2 \
+  --version v19.2.1 \
   --start-date 2026-05-11 \
   --end-date 2026-05-22
 ```
@@ -83,7 +83,7 @@ backfill dry-run，不写入数据库：
 - `signal_items`
 - `signal_outcomes`
 
-v19.2 回放/回测表：
+v19.2.1 回放/回测表：
 
 - `daily_price`
 - `daily_signal_snapshot`
@@ -92,7 +92,7 @@ v19.2 回放/回测表：
 
 建表 SQL 在 [docs/v19_backfill_schema.sql](/Users/liveroom/stock-bot-main/docs/v19_backfill_schema.sql)。
 持仓执行表 SQL 在 [docs/v19_position_execution_schema.sql](/Users/liveroom/stock-bot-main/docs/v19_position_execution_schema.sql)。
-若 `positions` 已经先建立，升级 v19.2 需再执行 [docs/v19_2_position_zero_migration.sql](/Users/liveroom/stock-bot-main/docs/v19_2_position_zero_migration.sql)，补齐 12 档股票与 0 股持仓。
+若 `positions` 已经先建立，升级 v19.2.1 需再执行 [docs/v19_2_position_zero_migration.sql](/Users/liveroom/stock-bot-main/docs/v19_2_position_zero_migration.sql)，补齐 12 档股票与 0 股持仓。
 
 当前原则：
 
@@ -101,6 +101,7 @@ v19.2 回放/回测表：
 - 每日路径只在有完整 OHLCV 时写 `daily_price`，不会用单一即时价污染价格表。
 - 每日持仓股不会写成新进场 `is_tradeable`。
 - 线上报文持仓由 `positions.shares` 决定；`0` 股就是未持仓，非 `0` 股才是持仓。
+- 买入会用库内当前均价加权重算，卖出不改变均价；手动 `設定` 会覆盖股数与均价，后续买入继续以设定后的均价为基准。
 - replay/backfill 仍需遵守持仓边界；历史样本应以当日已知持仓为准，不得用未来持仓污染过去。
 - replay/backfill validate 会检查每日是否完整覆盖预期股票清单，缺档或整日无样本不会通过。
 - backfill 必须先 dry-run 和 validate。
