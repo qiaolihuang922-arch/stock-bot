@@ -35,7 +35,7 @@ from services.daily_snapshot_store import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v19.1.3"
+VERSION = "v19.2"
 
 EXECUTION_LEVELS = {
     "TAKE_PROFIT_50": "TP50",
@@ -47,6 +47,8 @@ EXECUTION_LEVELS = {
     "ADD_20": "A20",
     "ADD_10": "A10"
 }
+
+POSITION_BUTTON_LOTS = [50, 100]
 
 
 # ================================
@@ -1328,21 +1330,53 @@ def execution_reply_markup(results_map):
         if shares <= 0:
             continue
 
+        price_value = data.get("price") or 0
+        price_token = int(round(float(price_value) * 100)) if price_value else 0
+
         rows.append([
             {
                 "text": f"已執行 {name}{decision.get('action')}",
                 "callback_data": (
                     f"exec|{data.get('stock_code')}|"
-                    f"{EXECUTION_LEVELS[level]}|{shares}"
+                    f"{EXECUTION_LEVELS[level]}|{shares}|{price_token}"
                 )
             }
         ])
 
-    if not rows:
-        return None
+    rows.append([
+        {
+            "text": "── 持倉設定 ──",
+            "callback_data": "noop"
+        }
+    ])
+
+    for name, code in stocks.items():
+        data = results_map.get(name) or {}
+        price_value = data.get("price") or 0
+        price_token = int(round(float(price_value) * 100)) if price_value else 0
+        row = []
+
+        for lot in POSITION_BUTTON_LOTS:
+            row.append({
+                "text": f"{name} 買{lot}" if lot == POSITION_BUTTON_LOTS[0] else f"買{lot}",
+                "callback_data": f"pos|{code}|B|{lot}|{price_token}"
+            })
+
+        for lot in POSITION_BUTTON_LOTS:
+            row.append({
+                "text": f"賣{lot}",
+                "callback_data": f"pos|{code}|S|{lot}|0"
+            })
+
+        row.append({
+            "text": "清倉",
+            "callback_data": f"pos|{code}|C|0|0"
+        })
+
+        rows.append(row)
 
     return {
-        "inline_keyboard": rows[:6]
+        "inline_keyboard": rows
     }
 
 
@@ -2289,7 +2323,11 @@ def load_stock_signal(name, code):
             "closes": display_closes,
             "volumes": volumes,
 
-            "holding": holdings.get(name)
+            "holding": (
+                holdings.get(name)
+                if (holdings.get(name) or {}).get("shares", 0) > 0
+                else None
+            )
         }, result.get("decision"), None
 
     except Exception as exc:

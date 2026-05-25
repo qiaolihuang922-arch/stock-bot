@@ -356,6 +356,7 @@ class GeneratorReportTest(unittest.TestCase):
         markup = generator.execution_reply_markup({
             "英業達": {
                 "stock_code": "2356",
+                "price": 65.4,
                 "holding": {
                     "shares": 550,
                     "avg_price": 52.15
@@ -370,13 +371,30 @@ class GeneratorReportTest(unittest.TestCase):
         })
 
         self.assertEqual(
-            markup,
-            {
-                "inline_keyboard": [[{
-                    "text": "已執行 英業達停利 25%",
-                    "callback_data": "exec|2356|TP25|138"
-                }]]
-            }
+            markup["inline_keyboard"][0],
+            [{
+                "text": "已執行 英業達停利 25%",
+                "callback_data": "exec|2356|TP25|138|6540"
+            }]
+        )
+        self.assertIn(
+            [{
+                "text": "英業達 買50",
+                "callback_data": "pos|2356|B|50|6540"
+            }, {
+                "text": "買100",
+                "callback_data": "pos|2356|B|100|6540"
+            }, {
+                "text": "賣50",
+                "callback_data": "pos|2356|S|50|0"
+            }, {
+                "text": "賣100",
+                "callback_data": "pos|2356|S|100|0"
+            }, {
+                "text": "清倉",
+                "callback_data": "pos|2356|C|0|0"
+            }],
+            markup["inline_keyboard"]
         )
 
 

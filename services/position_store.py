@@ -1,7 +1,6 @@
 from supabase import create_client
 
 import config
-from core.holdings import HOLDINGS
 from core.watchlist import STOCKS
 
 
@@ -12,7 +11,15 @@ CODE_TO_NAME = {
 
 
 def _fallback_positions():
-    return HOLDINGS
+    return {
+        name: {
+            "shares": 0,
+            "avg_price": 0,
+            "realized_profit_taken_ratio": 0,
+            "realized_profit_taken_date": None
+        }
+        for name in STOCKS
+    }
 
 
 def _client():
@@ -37,13 +44,12 @@ def load_positions():
     try:
         res = client.table("positions") \
             .select("stock_code,stock_name,shares,avg_price,realized_profit_taken_ratio,last_realized_profit_date,status") \
-            .eq("status", "ACTIVE") \
             .execute()
     except Exception as exc:
         print(f"⚠ 持倉DB讀取失敗，使用本地fallback：{exc}")
         return _fallback_positions()
 
-    positions = {}
+    positions = _fallback_positions()
 
     for row in res.data or []:
         code = row.get("stock_code")
@@ -59,4 +65,4 @@ def load_positions():
             "realized_profit_taken_date": row.get("last_realized_profit_date")
         }
 
-    return positions or _fallback_positions()
+    return positions

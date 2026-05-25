@@ -1,4 +1,4 @@
--- v19.1.3 position execution schema.
+-- v19.2 position execution schema.
 -- Run in Supabase SQL Editor before deploying the Telegram Edge Function.
 -- The Edge Function should use the Supabase service role key, not the anon key.
 
@@ -8,7 +8,7 @@ create table if not exists positions (
     stock_code text primary key,
     stock_name text not null,
     shares integer not null check (shares >= 0),
-    avg_price numeric not null check (avg_price > 0),
+    avg_price numeric not null default 0 check (avg_price >= 0),
     realized_profit_taken_ratio numeric not null default 0
         check (realized_profit_taken_ratio >= 0 and realized_profit_taken_ratio <= 1),
     last_realized_profit_date date,
@@ -88,18 +88,27 @@ insert into positions (
     avg_price,
     realized_profit_taken_ratio,
     last_realized_profit_date,
+    status,
     source
 ) values
-    ('2356', '英業達', 550, 52.15, 0.5, '2026-05-25', 'manual'),
-    ('3035', '智原', 50, 209, 0, null, 'manual'),
-    ('2301', '光寶科', 50, 208.5, 0, null, 'manual'),
-    ('3231', '緯創', 440, 140.92, 0, null, 'manual')
+    ('3231', '緯創', 440, 140.92, 0, null, 'ACTIVE', 'manual'),
+    ('2421', '建準', 0, 0, 0, null, 'CLOSED', 'manual'),
+    ('3035', '智原', 50, 209, 0, null, 'ACTIVE', 'manual'),
+    ('2303', '聯電', 0, 0, 0, null, 'CLOSED', 'manual'),
+    ('3481', '群創', 0, 0, 0, null, 'CLOSED', 'manual'),
+    ('2344', '華邦電', 0, 0, 0, null, 'CLOSED', 'manual'),
+    ('2376', '技嘉', 0, 0, 0, null, 'CLOSED', 'manual'),
+    ('2408', '南亞科', 0, 0, 0, null, 'CLOSED', 'manual'),
+    ('2356', '英業達', 550, 52.15, 0.5, '2026-05-25', 'ACTIVE', 'manual'),
+    ('2324', '仁寶', 0, 0, 0, null, 'CLOSED', 'manual'),
+    ('2301', '光寶科', 50, 208.5, 0, null, 'ACTIVE', 'manual'),
+    ('2337', '旺宏', 0, 0, 0, null, 'CLOSED', 'manual')
 on conflict (stock_code) do update set
     stock_name = excluded.stock_name,
     shares = excluded.shares,
     avg_price = excluded.avg_price,
     realized_profit_taken_ratio = excluded.realized_profit_taken_ratio,
     last_realized_profit_date = excluded.last_realized_profit_date,
-    status = 'ACTIVE',
+    status = excluded.status,
     source = excluded.source,
     updated_at = now();
