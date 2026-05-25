@@ -1,6 +1,7 @@
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
+from datetime import datetime
 
 from core import generator
 from core.signal_snapshot import analyze_ohlcv_snapshot
@@ -385,6 +386,47 @@ class GeneratorReportTest(unittest.TestCase):
                 [{"text": "輸入設定：設定 3231 440 140.92", "callback_data": "noop"}],
             ]
         )
+
+    def test_telegram_messages_use_summary_cards_and_detail(self):
+        holding_payload = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119],
+            {"shares": 50, "avg_price": 118},
+            price=119,
+            change=1.4,
+        )
+        watch_payload = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119],
+            None,
+            price=119,
+            change=1.4,
+        )
+        watch_payload["stock_code"] = "2421"
+        watch_payload["result"]["rr"] = 0.5
+        watch_payload["result"]["trade_state"] = "LATE_ENTRY"
+
+        generator.render_stock("智原", holding_payload)
+        generator.render_stock("建準", watch_payload)
+        messages = generator.formatTelegramMessages(
+            {
+                "智原": holding_payload,
+                "建準": watch_payload,
+            },
+            "FULL DETAIL",
+            None,
+            None,
+            "⏳ 觀望",
+            datetime(2026, 5, 25),
+        )
+
+        self.assertGreaterEqual(len(messages), 4)
+        self.assertIn("📌 持倉：智原", messages[0])
+        self.assertIn("觀察/不買：", messages[0])
+        self.assertIn("【持倉標的】", messages[1])
+        self.assertIn("倉位：50股", messages[1])
+        self.assertIn("【觀察 / 不買標的】", messages[2])
+        self.assertIn("回測：", messages[2])
+        self.assertIn("【完整詳情備份】", messages[3])
+        self.assertIn("FULL DETAIL", messages[3])
 
 
 if __name__ == "__main__":

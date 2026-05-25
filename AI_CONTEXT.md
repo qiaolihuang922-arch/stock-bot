@@ -9,6 +9,7 @@
 - 第一版回测已完成：每日 snapshot、replay/backfill、相对表现验证、持仓/新进场显示边界已接入。
 - v19.2.1 起持仓主来源改为 Supabase `positions`，不再手动修改代码持仓文件；`shares=0` 走未持仓逻辑，`shares>0` 走持仓逻辑。
 - Telegram 报文只显示买入/卖出/清仓/设定的文字输入格式提示；实际持仓变更由用户输入文字命令，Edge Function 写入 `position_events` 并同步 `positions`。
+- Telegram 输出必须保留所有标的与完整字段，但主讯息采用总览摘要、持仓卡片、观察卡片、完整详情备份的多讯息分层格式，避免单则讯息过长。
 - 后续阶段进入更深度的研究与开发：扩大历史样本、强化回测分层、评估策略参数与持仓管理效果。
 - `19.x` 当前底线：可验证、可重跑、可回放、可避免污染的数据库写入流程。
 - 不要直接大量 backfill。必须先 dry-run、validate、人工或自动检查无误后，才允许正式写入。
@@ -48,6 +49,7 @@
 - `services/analysis.py`：唯一策略来源。负责 `BUY / WAIT / NO_TRADE / FAIL`、品质分、持仓策略、最强候选过滤。
 - `core/condition_engine.py`：条件映射层。只整理 `market / trend / volume / event / edge / rr` 等条件，不反推策略。
 - `core/generator.py`：报文显示、排序摘要、Telegram 输出内容。不得自行推翻 `analysis.py` 的交易结论。
+- `core/generator.py` 的 Telegram formatter 只能改展示层；`render_stock()` 仍是完整详情来源，短版卡片不得删除资料，只能把完整资料移到详情备份。
 - `services/stock_api.py`：行情来源、实时价修正、涨跌停价格保护、TWSE OHLCV 历史资料。
 - `services/signal_store.py`：原始 3 表写入层，负责 `signal_runs / signal_items / signal_outcomes`。
 - `services/daily_snapshot_store.py`：v19.2.1 每日快照写入层，负责每日 `daily_signal_snapshot`；只有拿到完整 OHLCV 时才写 `daily_price`，写入前必须验证。

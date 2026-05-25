@@ -42,3 +42,19 @@ def send(msg, reply_markup=None):
 
     # 中文註釋：v19.1.3 Telegram 三次都失敗時回傳 False，讓 GitHub Actions 不再假成功。
     return False
+
+
+def send_many(messages, reply_markup=None):
+    if isinstance(messages, str):
+        return send(messages, reply_markup=reply_markup)
+
+    if not messages:
+        return False
+
+    for index, message in enumerate(messages):
+        markup = reply_markup if index == 0 else None
+        if not send(message, reply_markup=markup):
+            return False
+        time.sleep(0.8)
+
+    return True
