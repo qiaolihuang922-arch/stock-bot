@@ -24,7 +24,10 @@ from core.condition_engine import (
     condition_engine,
     summarize_conditions
 )
-from services.position_store import load_positions
+from services.position_store import (
+    load_positions,
+    load_today_position_events
+)
 from core.watchlist import STOCKS
 
 from services.signal_store import record_daily_signals
@@ -61,6 +64,7 @@ stocks = STOCKS
 # 🔒 持倉
 # ================================
 holdings = {}
+position_events = {}
 
 
 # ================================
@@ -577,16 +581,22 @@ def entry_advantages(result):
 
 
 def compact_market_line(result, dist):
-    parts = [
-        f"型態 {semantic_state(result)}",
-        f"市場 {MARKET_MAP.get(result.get('market_grade'), '🟡 偏強')}",
-        f"結構 {semantic_structure(result)}"
-    ]
+    state = semantic_state(result)
+    market = MARKET_MAP.get(result.get('market_grade'), '🟡 偏強')
+    structure = semantic_structure(result)
+    pos = None
 
     if result.get("breakout_state") not in ["FAIL"]:
         pos = semantic_position(dist)
-        if pos:
-            parts.append(f"位置 {pos}")
+
+    parts = [
+        state,
+        market,
+        structure
+    ]
+
+    if pos:
+        parts.append(pos)
 
     return "｜".join(parts)
 
@@ -598,13 +608,37 @@ def compact_entry_judgement(result):
 
     parts = []
     if blockers:
-        parts.append(f"阻斷 {'、'.join(blockers[:3])}")
+        parts.append(f"阻斷：{'、'.join(blockers[:3])}")
 
     if advantages:
-        parts.append(f"優勢 {'、'.join(advantages[:3])}")
+        parts.append(f"優勢：{'、'.join(advantages[:3])}")
 
     if conclusion:
         parts.append(conclusion)
+
+    return "｜".join(parts)
+
+
+def event_summary_text(events):
+    if not events or not events.get("event_count"):
+        return ""
+
+    parts = []
+
+    if events.get("bought_shares", 0) > 0:
+        parts.append(f"買 {events['bought_shares']}股")
+
+    if events.get("sold_shares", 0) > 0:
+        sold = f"賣 {events['sold_shares']}股"
+        if events.get("sell_pct", 0) > 0:
+            sold += f"（{events['sell_pct']}%）"
+        parts.append(sold)
+
+    if not parts and events.get("labels"):
+        parts.append("、".join(events["labels"][:2]))
+
+    if not parts:
+        return ""
 
     return "｜".join(parts)
 
@@ -1940,6 +1974,7 @@ def render_stock(
         "twse"
     )
     holding = data.get("holding")
+    today_events = data.get("position_events") or {}
 
     # 中文註釋：v19.1.3 顯示層只讀 condition_engine 映射結果，不自行判斷交易條件。
     conditions = condition_engine(
@@ -2062,6 +2097,13 @@ def render_stock(
             f" ｜損益 {signed_pct(pnl)}\n"
         )
 
+        today_text = event_summary_text(today_events)
+        if today_text:
+            msg += (
+                f"├─ 今日："
+                f"{today_text}\n"
+            )
+
         msg += (
             f"├─ 操作："
             f"{holding_decision['action']}"
@@ -2102,6 +2144,13 @@ def render_stock(
     )
 
     if not holding:
+        today_text = event_summary_text(today_events)
+        if today_text:
+            msg += (
+                f"├─ 今日："
+                f"{today_text}｜目前0股\n"
+            )
+
         judgement = compact_entry_judgement(result)
         if judgement:
             msg += (
@@ -2298,7 +2347,8 @@ def load_stock_signal(name, code):
                 holdings.get(name)
                 if (holdings.get(name) or {}).get("shares", 0) > 0
                 else None
-            )
+            ),
+            "position_events": position_events.get(name, {})
         }, result.get("decision"), None
 
     except Exception as exc:
@@ -2310,7 +2360,9 @@ def load_stock_signal(name, code):
 # ================================
 def generate_report():
     global holdings
+    global position_events
     holdings = load_positions()
+    position_events = load_today_position_events()
 
     now = datetime.now(tz)
 
@@ -2361,6 +2413,9 @@ def generate_report():
             return msg, None
 
         return msg + "\n⚠ 無有效數據", None
+
+    if not any((item or {}).get("shares", 0) > 0 for item in holdings.values()):
+        msg += "⚠ 持倉DB目前全為0股，報文依未持倉邏輯顯示\n\n"
 
     backtest_context = load_backtest_context(results_map)
 

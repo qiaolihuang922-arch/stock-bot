@@ -34,6 +34,40 @@ insert into positions (
     ('2337', '旺宏', 0, 0, 0, null, 'CLOSED', 'manual')
 on conflict (stock_code) do nothing;
 
+-- If the table was already seeded as all-zero before v19.2, restore the
+-- current manual holdings. Do not overwrite stocks that already have Telegram
+-- execution history.
+update positions as p
+set shares = seed.shares,
+    avg_price = seed.avg_price,
+    realized_profit_taken_ratio = seed.realized_profit_taken_ratio,
+    last_realized_profit_date = seed.last_realized_profit_date,
+    status = seed.status,
+    source = 'manual',
+    updated_at = now()
+from (
+    values
+        ('3231', 440, 140.92, 0::numeric, null::date, 'ACTIVE'),
+        ('2421', 0, 0, 0::numeric, null::date, 'CLOSED'),
+        ('3035', 50, 209, 0::numeric, null::date, 'ACTIVE'),
+        ('2303', 0, 0, 0::numeric, null::date, 'CLOSED'),
+        ('3481', 0, 0, 0::numeric, null::date, 'CLOSED'),
+        ('2344', 0, 0, 0::numeric, null::date, 'CLOSED'),
+        ('2376', 0, 0, 0::numeric, null::date, 'CLOSED'),
+        ('2408', 0, 0, 0::numeric, null::date, 'CLOSED'),
+        ('2356', 550, 52.15, 0.5::numeric, '2026-05-25'::date, 'ACTIVE'),
+        ('2324', 0, 0, 0::numeric, null::date, 'CLOSED'),
+        ('2301', 50, 208.5, 0::numeric, null::date, 'ACTIVE'),
+        ('2337', 0, 0, 0::numeric, null::date, 'CLOSED')
+) as seed(stock_code, shares, avg_price, realized_profit_taken_ratio, last_realized_profit_date, status)
+where p.stock_code = seed.stock_code
+  and p.source = 'manual'
+  and not exists (
+      select 1
+      from position_events e
+      where e.stock_code = p.stock_code
+  );
+
 update positions
 set status = case when shares > 0 then 'ACTIVE' else 'CLOSED' end,
     updated_at = now();

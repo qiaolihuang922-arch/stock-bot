@@ -131,6 +131,9 @@ serve(async (req) => {
   const sharesAfter = actionCode === "STP"
     ? 0
     : Math.max(sharesBefore + sharesDelta, 0);
+  const executionPct = action.sign < 0 && sharesBefore > 0
+    ? Math.round(Math.abs(sharesDelta) / sharesBefore * 100)
+    : null;
   const avgBefore = Number(position.avg_price ?? 0);
   const avgAfter = action.sign > 0
     ? (
@@ -194,12 +197,17 @@ serve(async (req) => {
     return jsonResponse({ ok: false, error: updateResult.error.message }, 500);
   }
 
-  await answerCallback(callback.id, `已記錄：${position.stock_name}${action.actionLabel}`);
+  const pctText = executionPct !== null ? `（${executionPct}%）` : "";
+  await answerCallback(
+    callback.id,
+    `已記錄：${position.stock_name}${action.actionLabel} ${Math.abs(sharesDelta)}股${pctText}`
+  );
 
   return jsonResponse({
     ok: true,
     stock_code: stockCode,
     action: action.actionLabel,
+    execution_pct: executionPct,
     shares_before: sharesBefore,
     shares_after: sharesAfter,
     realized_profit_taken_ratio_after: realizedAfter,
