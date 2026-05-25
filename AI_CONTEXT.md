@@ -4,10 +4,10 @@
 
 ## 当前阶段
 
-- 当前稳定线：`v19.2.1`
+- 当前稳定线：`v19.3`
 - 旧版策略升级已完成：策略层、显示层、持仓逻辑、行情显示冲突修复。
 - 第一版回测已完成：每日 snapshot、replay/backfill、相对表现验证、持仓/新进场显示边界已接入。
-- v19.2.1 起持仓主来源改为 Supabase `positions`，不再手动修改代码持仓文件；`shares=0` 走未持仓逻辑，`shares>0` 走持仓逻辑。
+- v19.3 起持仓主来源改为 Supabase `positions`，不再手动修改代码持仓文件；`shares=0` 走未持仓逻辑，`shares>0` 走持仓逻辑。
 - Telegram 报文只显示买入/卖出/清仓/设定的文字输入格式提示；实际持仓变更由用户输入文字命令，Edge Function 写入 `position_events` 并同步 `positions`。
 - Telegram 输出必须保留所有标的与完整字段，但默认只推送总览摘要、持仓卡片、观察卡片三段，避免单则讯息过长；完整详情不默认推送。
 - 后续阶段进入更深度的研究与开发：扩大历史样本、强化回测分层、评估策略参数与持仓管理效果。
@@ -52,16 +52,16 @@
 - `core/generator.py` 的 Telegram formatter 只能改展示层；`render_stock()` 仍是完整详情来源，短版卡片不得删除资料，只能把完整资料移到详情备份。
 - `services/stock_api.py`：行情来源、实时价修正、涨跌停价格保护、TWSE OHLCV 历史资料。
 - `services/signal_store.py`：原始 3 表写入层，负责 `signal_runs / signal_items / signal_outcomes`。
-- `services/daily_snapshot_store.py`：v19.2.1 每日快照写入层，负责每日 `daily_signal_snapshot`；只有拿到完整 OHLCV 时才写 `daily_price`，写入前必须验证。
+- `services/daily_snapshot_store.py`：v19.3 每日快照写入层，负责每日 `daily_signal_snapshot`；只有拿到完整 OHLCV 时才写 `daily_price`，写入前必须验证。
 - `core/signal_snapshot.py`：把策略结果或 OHLCV 转成统一可回测 snapshot。
 - `core/signal_validator.py`：检查 snapshot 逻辑冲突，防止错误资料入库。
-- `services/position_store.py`：v19.2.1 线上持仓读取层，从 Supabase `positions` 读取 12 档持仓；缺表或缺环境变量时回落为 12 档 0 股。
+- `services/position_store.py`：v19.3 线上持仓读取层，从 Supabase `positions` 读取 12 档持仓；缺表或缺环境变量时回落为 12 档 0 股。
 - `core/holdings.py`：旧持仓边界兼容文件，不再作为线上持仓来源。
 - `scripts/dry_run_replay.py`：dry-run replay，不写数据库。
 - `scripts/backfill_signals.py`：受保护 backfill，默认不写数据库。
 - `docs/v19_backfill_schema.sql`：回测/回放两张新表建表 SQL。
-- `docs/v19_position_execution_schema.sql`：v19.2.1 持仓执行表 `positions / position_events` 建表与种子资料。
-- `docs/v19_2_position_zero_migration.sql`：既有 `positions` 表升级 v19.2.1 时补齐 12 档 0 股与 avg_price=0 约束。
+- `docs/v19_position_execution_schema.sql`：v19.3 持仓执行表 `positions / position_events` 建表与种子资料。
+- `docs/v19_2_position_zero_migration.sql`：既有 `positions` 表升级 v19.3 时补齐 12 档 0 股与 avg_price=0 约束。
 
 ## 数据库边界
 
@@ -71,7 +71,7 @@
 - `signal_items`
 - `signal_outcomes`
 
-v19.2.1 回测/回放与持仓执行表：
+v19.3 回测/回放与持仓执行表：
 
 - `daily_price`
 - `daily_signal_snapshot`
@@ -85,7 +85,7 @@ v19.2.1 回测/回放与持仓执行表：
 - 每日报文路径不得用 realtime/yahoo/twse 单价补写 `daily_price`；`daily_price` 只接受完整 OHLCV。
 - 每日正式 snapshot 中，持仓股只代表持仓管理，必须排除新进场 `is_tradeable / is_best_candidate` 统计。
 - 线上报文持仓状态只看 `positions.shares`：`0` 股等于未持仓；`>0` 股等于持仓。
-- v19.2.1 持仓读取必须用 `SUPABASE_SERVICE_ROLE_KEY`；anon/publishable key 可能因 RLS 回传 0 行，不能把这种状态当成真实全空仓。
+- v19.3 持仓读取必须用 `SUPABASE_SERVICE_ROLE_KEY`；anon/publishable key 可能因 RLS 回传 0 行，不能把这种状态当成真实全空仓。
 - Telegram 持仓输入不得依赖策略条件才可用；所有 12 档都必须可用文字命令买入、卖出、清仓、设定。
 - 买入命令必须带买入价，Edge Function 以 `旧股数 * 旧均价 + 买入股数 * 买入价` 计算 2 位数加权均价。
 - 卖出命令不改变均价；当前只负责股数状态同步与事件记录。若券商实际均价不同，用户用 `設定 股票 股数 均价` 覆盖，后续买入继续以设定后的均价为基准。
@@ -228,7 +228,7 @@ dry-run replay，不写入数据库：
   --dry-run \
   --validate \
   --source twse \
-  --version v19.2.1 \
+  --version v19.3 \
   --start-date 2026-05-11 \
   --end-date 2026-05-22
 ```
@@ -239,7 +239,7 @@ backfill dry-run，不写入数据库：
 .venv/bin/python scripts/backfill_signals.py \
   --dry-run \
   --source twse \
-  --version v19.2.1 \
+  --version v19.3 \
   --start-date 2026-05-11 \
   --end-date 2026-05-22
 ```

@@ -40,7 +40,7 @@ from services.daily_snapshot_store import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v19.2.1"
+VERSION = "v19.3"
 
 EXECUTION_LEVELS = {
     "TAKE_PROFIT_50": "TP50",
@@ -2356,6 +2356,19 @@ def best_stock_text(results_map, best, score=None):
 
 
 def compact_risk_text(results_map):
+    market_mode, _risk_level = derive_market_state(
+        [
+            (name, data)
+            for name, data in results_map.items()
+            if not data.get("holding")
+        ]
+    )
+
+    if market_mode == "進攻偏熱":
+        return "漲停/過熱股多，新倉禁止追高"
+
+    if market_mode == "轉弱":
+        return "市場轉弱，新倉保守"
 
     limit_or_hot = [
         name for name, data in results_map.items()
@@ -2395,22 +2408,89 @@ def focus_text(results_map, market_summary):
 def holding_summary_line(index, name, data):
 
     decision = ensure_holding_decision(name, data)
-    today_text = event_summary_text(data.get("position_events") or {})
-    note = decision.get("note") if decision else ""
-
-    if today_text and "賣" in today_text:
-        note = "已減碼，保留底倉"
-    elif risk_weight(data) == 0 and decision:
-        note = "過熱，不加碼"
-    elif not note:
-        note = semantic_reason(data["result"])
+    note = position_summary_note(name, data)
 
     return (
         f"{index}. {name}"
         f"｜{signed_pct(stock_pnl(data))}"
-        f"｜{decision.get('action') if decision else '續抱'}"
+        f"｜{position_summary_action(name, data)}"
         f"｜{note}"
     )
+
+
+def derive_market_state(watchlist):
+
+    total = len(watchlist)
+
+    if total <= 0:
+        return "中性觀察", "R2"
+
+    hot_count = 0
+    weak_count = 0
+
+    for _name, data in watchlist:
+        blockers = entry_blockers(data["result"])
+        label = blockers[0] if blockers else final_label(data["result"])
+
+        if label in ["漲停不追", "漲停反彈待確認", "過熱觀察", "RR不足"] or any(
+            item.startswith("過熱") for item in blockers
+        ):
+            hot_count += 1
+
+        if label in ["市場弱", "弱勢", "遠離觸發"]:
+            weak_count += 1
+
+    if hot_count / total >= 0.5:
+        return "進攻偏熱", "R3"
+
+    if weak_count / total >= 0.5:
+        return "轉弱", "R4"
+
+    return "中性觀察", "R2"
+
+
+def classify_watchlist_group(name, data):
+
+    result = data["result"]
+    blocker = entry_blockers(result)
+
+    if is_valid_entry(result):
+        return "其他觀察"
+
+    label = blocker[0] if blocker else final_label(result)
+
+    if label in ["漲停不追", "漲停反彈待確認"]:
+        return "禁止追高"
+
+    if label == "過熱觀察" or label == "RR不足" or any(item.startswith("過熱") for item in blocker):
+        return "等待冷卻"
+
+    if label in ["市場弱", "遠離觸發", "弱勢"]:
+        return "弱勢/未觸發"
+
+    return "其他觀察"
+
+
+def format_watchlist_summary_grouped(watchlist):
+
+    groups = {
+        "禁止追高": [],
+        "等待冷卻": [],
+        "弱勢/未觸發": [],
+        "其他觀察": []
+    }
+
+    for name, data in watchlist:
+        groups[classify_watchlist_group(name, data)].append(name)
+
+    lines = []
+
+    for label in ["禁止追高", "等待冷卻", "弱勢/未觸發", "其他觀察"]:
+        names = groups[label]
+        if names:
+            lines.append(f"【{label}】{'、'.join(names)}")
+
+    return lines or ["無"]
 
 
 def unheld_summary_line(name, data):
@@ -2422,6 +2502,77 @@ def unheld_summary_line(name, data):
 
     label = blocker[0] if blocker else final_label(result)
     return f"{name}｜{label}"
+
+
+def sort_position_summary(positions):
+
+    return sorted(
+        positions,
+        key=lambda item: position_summary_rank(item[0], item[1])
+    )
+
+
+def position_summary_rank(name, data):
+
+    decision = ensure_holding_decision(name, data)
+    today_text = event_summary_text(data.get("position_events") or {})
+    pnl = stock_pnl(data)
+    action = decision.get("action", "") if decision else ""
+    level = decision.get("level", "") if decision else ""
+
+    if "核心" in action or level == "HOLD_CORE":
+        bucket = 0
+    elif "賣" in today_text:
+        bucket = 1
+    elif "買" in today_text and pnl >= 0:
+        bucket = 2
+    elif pnl < 0 or data["result"].get("market_grade") == "D":
+        bucket = 4
+    else:
+        bucket = 3
+
+    return (bucket, -pnl)
+
+
+def position_summary_action(name, data):
+
+    decision = ensure_holding_decision(name, data)
+    today_text = event_summary_text(data.get("position_events") or {})
+    action = decision.get("action", "") if decision else ""
+    level = decision.get("level", "") if decision else ""
+    pnl = stock_pnl(data)
+
+    if "核心" in action or level == "HOLD_CORE":
+        return "核心續抱"
+
+    if "賣" in today_text:
+        return "底倉續抱"
+
+    if pnl < 0 or data["result"].get("market_grade") == "D":
+        return "續抱觀察"
+
+    return "續抱"
+
+
+def position_summary_note(name, data):
+
+    decision = ensure_holding_decision(name, data)
+    today_text = event_summary_text(data.get("position_events") or {})
+    note = decision.get("note") if decision else ""
+
+    if "賣" in today_text:
+        return "已減碼，觀察是否轉弱"
+
+    if risk_weight(data) == 0 and decision:
+        return "過熱，不加碼"
+
+    if position_summary_action(name, data) == "續抱觀察":
+        return "買點未強化，不加碼"
+
+    if "突破成立" in note:
+        return "突破成立，等量價確認"
+
+    return note or semantic_reason(data["result"])
 
 
 def is_valid_entry(result):
@@ -2488,11 +2639,13 @@ def formatTelegramSummary(results_map, best, score, market_summary, now, positio
         for name, data in ordered_result_items(results_map)
         if data.get("holding")
     ]
+    holding_items = sort_position_summary(holding_items)
     watch_items = [
         (name, data)
         for name, data in ordered_result_items(results_map)
         if not data.get("holding")
     ]
+    market_mode, risk_level = derive_market_state(watch_items)
 
     lines = [
         f"【{now.strftime('%m/%d')} {get_market_phase()}｜{VERSION}】",
@@ -2503,6 +2656,7 @@ def formatTelegramSummary(results_map, best, score, market_summary, now, positio
 
     holding_names = "、".join(name for name, _data in holding_items) or "無"
     lines.extend([
+        f"📊 市場：{market_mode}｜{risk_level}",
         f"📌 持倉：{holding_names}",
         f"🔥 最強：{best_stock_text(results_map, best, score)}",
         f"🚨 風險：{compact_risk_text(results_map)}",
@@ -2518,7 +2672,7 @@ def formatTelegramSummary(results_map, best, score, market_summary, now, positio
         lines.append("無")
 
     lines.extend(["", "未持倉標的："])
-    lines.extend(unheld_summary_line(name, data) for name, data in watch_items)
+    lines.extend(format_watchlist_summary_grouped(watch_items))
 
     return "\n".join(lines)
 
@@ -2530,15 +2684,50 @@ def formatTelegramPositionCard(name, data):
     result = data["result"]
     today_text = event_summary_text(data.get("position_events") or {}) or "無"
     dist = data.get("breakout_distance", result.get("breakout_distance"))
+    decision_line, condition_line = holding_detail_decision_lines(decision)
+    rr_text = "-" if should_hide_rr(result) else safe_round(result.get("rr"))
 
-    return "\n".join([
+    lines = [
         f"【{stock_title(name, data)}】📌 {decision.get('action')}｜{signed_pct(stock_pnl(data))}",
         f"倉位：{holding['shares']}股｜均價 {price_text(holding.get('avg_price'))}｜今日 {today_text}",
         f"風控：{holding_risk_text(decision)}",
         f"盤面：{plain_label(compact_market_line(result, dist))}",
-        f"{'依據' if decision.get('allow_add') else '阻斷'}：{holding_blocker_text(decision)}",
+        f"決策：{decision_line}",
+        f"條件：{condition_line}",
+        f"數據：RR {rr_text}｜S {data.get('structure_score', '-')}/5｜V {data.get('volume_ratio', '-')}x",
+        compact_backtest_line(data.get("backtest_context")),
         f"價格：{safe_round(data.get('price'))}（{signed_pct(data.get('change'))}）",
-    ])
+    ]
+
+    return "\n".join(lines)
+
+
+def holding_detail_decision_lines(decision):
+
+    text = holding_blocker_text(decision)
+    parts = [
+        item.strip()
+        for item in text.replace("、", "，").split("，")
+        if item.strip()
+    ]
+
+    condition_keywords = ["等待", "等量", "冷卻", "確認", "RR", "信心", "品質"]
+    condition_parts = [
+        item for item in parts
+        if any(keyword in item for keyword in condition_keywords)
+    ]
+    decision_parts = [
+        item for item in parts
+        if item not in condition_parts
+    ]
+
+    if not decision_parts:
+        decision_parts = parts[:2]
+
+    if not condition_parts:
+        condition_parts = ["後續再評估"]
+
+    return "，".join(decision_parts[:2]), "，".join(condition_parts[:2])
 
 
 def compact_backtest_line(context):
@@ -2569,10 +2758,11 @@ def formatTelegramUnheldCard(name, data):
     title_action = f"可買｜{entry_size_text(result)}" if valid_entry else "不買"
     title_label = "買點成立" if valid_entry else (blockers[0] if blockers else final_label(result))
     rr_text = "-" if should_hide_rr(result) else safe_round(result.get("rr"))
+    risk_label = unheld_buy_risk_label(result, title_label)
     buy_line = (
         f"買點：可買｜建議 {entry_size_text(result)}｜{entry_wait_text(result)}"
         if valid_entry
-        else f"買點：不買｜{entry_wait_text(result)}｜{entry_conclusion(result)}"
+        else f"買點：不買｜{risk_label}｜{entry_wait_text(result)}｜{entry_conclusion(result)}"
     )
 
     return "\n".join([
@@ -2583,6 +2773,19 @@ def formatTelegramUnheldCard(name, data):
         compact_backtest_line(data.get("backtest_context")),
         f"價格：{safe_round(data.get('price'))}（{signed_pct(data.get('change'))}）",
     ])
+
+
+def unheld_buy_risk_label(result, title_label):
+
+    blockers = entry_blockers(result)
+
+    if (
+        title_label in ["漲停不追", "漲停反彈待確認", "過熱觀察", "RR不足"]
+        or any(item.startswith("過熱") for item in blockers)
+    ):
+        return "追價風險"
+
+    return title_label
 
 
 def split_message(text, limit=3400):

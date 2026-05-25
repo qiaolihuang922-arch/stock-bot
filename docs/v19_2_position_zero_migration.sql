@@ -1,4 +1,4 @@
--- v19.2.1 migration for DB-driven positions.
+-- v19.3 migration for DB-driven positions.
 -- Run after v19_position_execution_schema.sql if the table already exists.
 
 alter table positions
@@ -34,7 +34,7 @@ insert into positions (
     ('2337', '旺宏', 0, 0, 0, null, 'CLOSED', 'manual')
 on conflict (stock_code) do nothing;
 
--- If the table was already seeded as all-zero before v19.2.1, restore the
+-- If the table was already seeded as all-zero before v19.3, restore the
 -- current manual holdings. Do not overwrite stocks that already have Telegram
 -- execution history.
 update positions as p
