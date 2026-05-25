@@ -1255,7 +1255,7 @@ def holding_blocker_text(decision):
         return "小幅轉強、RR達標、信心達標"
 
     if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]:
-        return "已達停利區、過熱/急漲、保留核心倉"
+        return "浮盈達標、過熱急漲、分批鎖利"
 
     if level == "STOP_100":
         return "停損優先、避免虧損擴大"
@@ -2440,7 +2440,10 @@ def generate():
 
     elif extreme_count >= 3:
 
-        market_summary = "🚨 過熱分歧"
+        if holding_actions:
+            market_summary = "🚨 過熱控倉，先處理持倉"
+        else:
+            market_summary = "🚨 過熱不追，等冷卻"
 
     elif fail_count >= 2:
 
