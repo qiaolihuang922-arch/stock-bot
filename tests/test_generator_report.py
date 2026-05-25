@@ -375,10 +375,10 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertEqual(
             markup["inline_keyboard"],
             [
-                [{"text": "買 3231 300 149.5", "callback_data": "noop"}],
-                [{"text": "賣 3231 500", "callback_data": "noop"}],
-                [{"text": "清倉 3231", "callback_data": "noop"}],
-                [{"text": "設定 3231 440 140.92", "callback_data": "noop"}],
+                [{"text": "輸入買入：3231 300 149.5", "callback_data": "noop"}],
+                [{"text": "輸入賣出：3231 500", "callback_data": "noop"}],
+                [{"text": "輸入清倉：清倉 3231", "callback_data": "noop"}],
+                [{"text": "輸入設定：設定 3231 440 140.92", "callback_data": "noop"}],
             ]
         )
 

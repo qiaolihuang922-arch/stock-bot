@@ -89,6 +89,31 @@ function parseCommand(text: string) {
     .filter(Boolean);
 
   const verb = parts[0];
+  const directStockCode = STOCKS[verb] ? verb : NAME_TO_CODE[verb];
+
+  if (directStockCode) {
+    const shares = Number.parseInt(parts[1] ?? "", 10);
+    const price = Number.parseFloat(parts[2] ?? "");
+
+    if (Number.isFinite(shares) && shares > 0 && Number.isFinite(price) && price > 0) {
+      return {
+        stockCode: directStockCode,
+        actionCode: "B",
+        shares,
+        price,
+      };
+    }
+
+    if (Number.isFinite(shares) && shares > 0) {
+      return {
+        stockCode: directStockCode,
+        actionCode: "S",
+        shares,
+        price: 0,
+      };
+    }
+  }
+
   const stockText = parts[1];
   const stockCode = STOCKS[stockText] ? stockText : NAME_TO_CODE[stockText];
 
