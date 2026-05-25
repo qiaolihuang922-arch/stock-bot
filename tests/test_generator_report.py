@@ -422,13 +422,71 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("📊 市場：", messages[0])
         self.assertIn("📌 持倉：智原", messages[0])
         self.assertIn("未持倉標的：", messages[0])
-        self.assertIn("【等待冷卻】建準", messages[0])
+        self.assertIn("【等待冷卻 1】建準", messages[0])
         self.assertIn("【持倉標的】", messages[1])
         self.assertIn("倉位：50股", messages[1])
         self.assertIn("【未持倉標的】", messages[2])
         self.assertIn("買點：不買｜追價風險", messages[2])
         self.assertIn("回測：", messages[2])
         self.assertNotIn("完整詳情備份", "\n".join(messages))
+
+    def test_position_cards_follow_summary_order_and_decision_wording(self):
+        core_payload = render_payload(
+            [40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 65],
+            {"shares": 550, "avg_price": 52.15},
+            price=65.4,
+            change=9.9,
+        )
+        core_payload["stock_code"] = "2356"
+        core_payload["result"]["price_behavior"] = "LIMIT_LOCK"
+        core_payload["result"]["heat_state"] = "EXTREME"
+        core_payload["result"]["extended_level"] = 3
+        core_payload["holding_decision"] = {
+            "action": "續抱核心倉",
+            "level": "HOLD_CORE",
+            "warning_price": 62.13,
+            "hard_stop_price": 58.86,
+        }
+
+        bottom_payload = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119],
+            {"shares": 200, "avg_price": 136.8},
+            price=149,
+            change=3.1,
+        )
+        bottom_payload["stock_code"] = "3231"
+        bottom_payload["position_events"] = {"event_count": 1, "sold_shares": 430, "sell_pct": 98}
+
+        buy_payload = render_payload(
+            [300, 301, 302, 303, 304, 305, 306, 307, 308, 309, 310, 311, 312, 313, 314, 315, 316, 317, 318, 336],
+            {"shares": 30, "avg_price": 334.5},
+            price=336.5,
+            change=4.3,
+        )
+        buy_payload["stock_code"] = "2376"
+        buy_payload["position_events"] = {"event_count": 1, "bought_shares": 30}
+
+        messages = generator.formatTelegramMessages(
+            {
+                "技嘉": buy_payload,
+                "緯創": bottom_payload,
+                "英業達": core_payload,
+            },
+            "FULL DETAIL",
+            None,
+            None,
+            "⏳ 觀望",
+            datetime(2026, 5, 25),
+        )
+
+        position_msg = messages[1]
+        self.assertLess(position_msg.index("【英業達 2356】"), position_msg.index("【緯創 3231】"))
+        self.assertLess(position_msg.index("【緯創 3231】"), position_msg.index("【技嘉 2376】"))
+        self.assertIn("決策：保留核心倉，暫不加碼", position_msg)
+        self.assertIn("決策：保留底倉，暫不加碼", position_msg)
+        self.assertIn("條件：觀察減碼後是否轉弱，跌破警戒價優先風控", position_msg)
+        self.assertIn("決策：續抱，暫不加碼", position_msg)
+        self.assertIn("條件：浮盈不足，等量價確認後再評估加碼", position_msg)
 
     def test_telegram_messages_can_include_detail_when_requested(self):
         payload = render_payload(

@@ -2488,7 +2488,7 @@ def format_watchlist_summary_grouped(watchlist):
     for label in ["禁止追高", "等待冷卻", "弱勢/未觸發", "其他觀察"]:
         names = groups[label]
         if names:
-            lines.append(f"【{label}】{'、'.join(names)}")
+            lines.append(f"【{label} {len(names)}】{'、'.join(names)}")
 
     return lines or ["無"]
 
@@ -2684,7 +2684,7 @@ def formatTelegramPositionCard(name, data):
     result = data["result"]
     today_text = event_summary_text(data.get("position_events") or {}) or "無"
     dist = data.get("breakout_distance", result.get("breakout_distance"))
-    decision_line, condition_line = holding_detail_decision_lines(decision)
+    decision_line, condition_line = holding_detail_decision_lines(name, data)
     rr_text = "-" if should_hide_rr(result) else safe_round(result.get("rr"))
 
     lines = [
@@ -2702,7 +2702,23 @@ def formatTelegramPositionCard(name, data):
     return "\n".join(lines)
 
 
-def holding_detail_decision_lines(decision):
+def holding_detail_decision_lines(name, data):
+
+    decision = ensure_holding_decision(name, data)
+    today_text = event_summary_text(data.get("position_events") or {})
+    summary_action = position_summary_action(name, data)
+
+    if summary_action == "核心續抱":
+        return "保留核心倉，暫不加碼", "等待冷卻"
+
+    if summary_action == "底倉續抱":
+        return "保留底倉，暫不加碼", "觀察減碼後是否轉弱，跌破警戒價優先風控"
+
+    if summary_action == "續抱觀察":
+        return "弱勢續抱，暫不加碼", "若無法重新接近買點，降低優先級"
+
+    if "買" in today_text:
+        return "續抱，暫不加碼", "浮盈不足，等量價確認後再評估加碼"
 
     text = holding_blocker_text(decision)
     parts = [
@@ -2822,10 +2838,14 @@ def split_message(text, limit=3400):
 def formatTelegramMessages(results_map, full_msg, best, score, market_summary, now, position_warning=None, include_detail=False):
 
     ordered_items = ordered_result_items(results_map)
-    position_cards = [
-        formatTelegramPositionCard(name, data)
+    holding_items = sort_position_summary([
+        (name, data)
         for name, data in ordered_items
         if data.get("holding")
+    ])
+    position_cards = [
+        formatTelegramPositionCard(name, data)
+        for name, data in holding_items
     ]
     unheld_cards = [
         formatTelegramUnheldCard(name, data)
