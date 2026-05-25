@@ -1134,7 +1134,7 @@ def holding_status(
     shares,
     price_source="realtime",
     change=None,
-    profit_taken_ratio=0
+    realized_profit_taken_ratio=0
 ):
 
     signal = strategy_holding_signal(
@@ -1143,7 +1143,7 @@ def holding_status(
         avg_price,
         price_source,
         change,
-        profit_taken_ratio
+        realized_profit_taken_ratio
     )
 
     ratio = signal.get("ratio", 0)
@@ -1866,7 +1866,7 @@ def render_stock(
             holding["shares"],
             price_source,
             change,
-            holding.get("profit_taken_ratio", 0)
+            holding.get("realized_profit_taken_ratio", 0)
         )
 
         result["_holding_decision"] = holding_decision
@@ -2372,7 +2372,7 @@ def generate():
             data["holding"]["shares"],
             data.get("price_source", "twse"),
             data.get("change"),
-            data["holding"].get("profit_taken_ratio", 0)
+            data["holding"].get("realized_profit_taken_ratio", 0)
         )
 
         if h_decision["level"] in [

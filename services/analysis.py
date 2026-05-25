@@ -1819,7 +1819,7 @@ def holding_signal(
     avg_price,
     price_source="realtime",
     change=None,
-    profit_taken_ratio=0
+    realized_profit_taken_ratio=0
 ):
 
     pnl = (
@@ -2022,7 +2022,7 @@ def holding_signal(
         and behavior == "LIMIT_LOCK"
         and extended >= 2
     ):
-        if profit_taken_ratio >= 0.25:
+        if realized_profit_taken_ratio >= 0.25:
             return payload(
                 "續抱核心倉",
                 0,
@@ -2044,7 +2044,7 @@ def holding_signal(
         )
 
     if pnl >= 8 and heat == "EXTREME":
-        if profit_taken_ratio >= 0.5:
+        if realized_profit_taken_ratio >= 0.5:
             return payload(
                 "續抱核心倉",
                 0,
@@ -2055,7 +2055,7 @@ def holding_signal(
                 2
             )
 
-        if profit_taken_ratio >= 0.25:
+        if realized_profit_taken_ratio >= 0.25:
             return payload(
                 "停利 25%",
                 0.25,

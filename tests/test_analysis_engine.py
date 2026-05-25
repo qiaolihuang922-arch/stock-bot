@@ -124,7 +124,7 @@ class AnalysisEngineTest(unittest.TestCase):
             100,
             "realtime",
             9.9,
-            profit_taken_ratio=0.5
+            realized_profit_taken_ratio=0.5
         )
         self.assertEqual(signal["level"], "HOLD_CORE")
         self.assertEqual(signal["action"], "續抱核心倉")
@@ -138,7 +138,7 @@ class AnalysisEngineTest(unittest.TestCase):
             100,
             "realtime",
             -1.0,
-            profit_taken_ratio=0.5
+            realized_profit_taken_ratio=0.5
         )
         self.assertNotEqual(signal["level"], "HOLD_CORE")
         self.assertNotIn("已完成50%停利", signal["reason"])
