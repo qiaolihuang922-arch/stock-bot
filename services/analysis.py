@@ -1821,8 +1821,7 @@ def holding_signal(
     change=None,
     realized_profit_taken_ratio=0,
     realized_profit_taken_date=None,
-    signal_date=None,
-    realized_profit_taken_price=None
+    signal_date=None
 ):
 
     pnl = (
@@ -2042,20 +2041,6 @@ def holding_signal(
                     2
                 )
 
-            if (
-                realized_profit_taken_price is not None
-                and price < realized_profit_taken_price * 1.03
-            ):
-                return payload(
-                    "續抱核心倉",
-                    0,
-                    "距上次停利價未拉開，暫不連續賣",
-                    "HOLD_CORE",
-                    "CORE_HOLD",
-                    False,
-                    2
-                )
-
             return payload(
                 "停利 25%",
                 0.25,
@@ -2094,20 +2079,6 @@ def holding_signal(
                     "續抱核心倉",
                     0,
                     "今日已停利50%，同日不連續賣，等收盤/隔日確認",
-                    "HOLD_CORE",
-                    "CORE_HOLD",
-                    False,
-                    2
-                )
-
-            if (
-                realized_profit_taken_price is not None
-                and price < realized_profit_taken_price * 1.03
-            ):
-                return payload(
-                    "續抱核心倉",
-                    0,
-                    "距上次停利價未拉開，暫不連續賣",
                     "HOLD_CORE",
                     "CORE_HOLD",
                     False,

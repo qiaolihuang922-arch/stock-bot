@@ -159,22 +159,6 @@ class AnalysisEngineTest(unittest.TestCase):
         self.assertEqual(signal["action"], "續抱核心倉")
         self.assertIn("同日不連續賣", signal["reason"])
 
-    def test_near_last_profit_taken_price_blocks_second_take_profit(self):
-        item = snap("near_profit_taken_price", [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 130], VOL_ATTACK)
-        signal = holding_signal(
-            item["raw_result"],
-            130,
-            100,
-            "realtime",
-            9.9,
-            realized_profit_taken_ratio=0.5,
-            realized_profit_taken_date="2026-05-24",
-            signal_date="2026-05-25",
-            realized_profit_taken_price=128
-        )
-        self.assertEqual(signal["level"], "HOLD_CORE")
-        self.assertIn("未拉開", signal["reason"])
-
     def test_profit_taken_does_not_lock_after_heat_cools(self):
         item = snap("cooled_profit_taken", [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 114], VOL_ATTACK)
         signal = holding_signal(

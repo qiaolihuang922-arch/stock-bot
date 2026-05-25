@@ -1136,8 +1136,7 @@ def holding_status(
     change=None,
     realized_profit_taken_ratio=0,
     realized_profit_taken_date=None,
-    signal_date=None,
-    realized_profit_taken_price=None
+    signal_date=None
 ):
 
     signal = strategy_holding_signal(
@@ -1148,8 +1147,7 @@ def holding_status(
         change,
         realized_profit_taken_ratio,
         realized_profit_taken_date,
-        signal_date,
-        realized_profit_taken_price
+        signal_date
     )
 
     ratio = signal.get("ratio", 0)
@@ -1874,8 +1872,7 @@ def render_stock(
             change,
             holding.get("realized_profit_taken_ratio", 0),
             holding.get("realized_profit_taken_date"),
-            datetime.now(tz).date().isoformat(),
-            holding.get("realized_profit_taken_price")
+            datetime.now(tz).date().isoformat()
         )
 
         result["_holding_decision"] = holding_decision
@@ -2387,8 +2384,7 @@ def generate():
             data.get("change"),
             data["holding"].get("realized_profit_taken_ratio", 0),
             data["holding"].get("realized_profit_taken_date"),
-            now.date().isoformat(),
-            data["holding"].get("realized_profit_taken_price")
+            now.date().isoformat()
         )
 
         if h_decision["level"] in [
