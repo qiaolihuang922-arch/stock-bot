@@ -2017,23 +2017,22 @@ def holding_signal(
             4
         )
 
-    if profit_taken_ratio >= 0.5 and pnl >= 0:
-        return payload(
-            "續抱核心倉",
-            0,
-            "已完成50%停利，等待冷卻",
-            "HOLD_CORE",
-            "CORE_HOLD",
-            False,
-            2
-        )
-
     if (
         pnl >= 15
         and behavior == "LIMIT_LOCK"
         and extended >= 2
-        and profit_taken_ratio < 0.25
     ):
+        if profit_taken_ratio >= 0.25:
+            return payload(
+                "續抱核心倉",
+                0,
+                "已停利部分，漲停過熱不重複賣",
+                "HOLD_CORE",
+                "CORE_HOLD",
+                False,
+                2
+            )
+
         return payload(
             "停利 25%",
             0.25,
@@ -2045,6 +2044,17 @@ def holding_signal(
         )
 
     if pnl >= 8 and heat == "EXTREME":
+        if profit_taken_ratio >= 0.5:
+            return payload(
+                "續抱核心倉",
+                0,
+                "已完成50%停利，過熱未冷卻不重複賣",
+                "HOLD_CORE",
+                "CORE_HOLD",
+                False,
+                2
+            )
+
         if profit_taken_ratio >= 0.25:
             return payload(
                 "停利 25%",
