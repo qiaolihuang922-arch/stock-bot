@@ -331,9 +331,10 @@ class GeneratorReportTest(unittest.TestCase):
             "action": "列觀察，不追價"
         })
 
-        self.assertIn("├─ 回測條件：未持倉同類案例｜型態=突破確認｜量能=爆量｜位置=已突破｜樣本 15", text)
-        self.assertIn("├─ 回測結果：訊號後3日平均比同日股票池多 1.8%｜勝率 60%", text)
-        self.assertIn("├─ 回測判讀：歷史偏強，但今日阻斷仍有效｜列觀察，不追價", text)
+        self.assertIn(
+            "├─ 回測：未持倉同型｜突破確認/爆量/已突破｜n=15｜3日相對+1.8%｜勝率60%｜偏強，仍不追",
+            text
+        )
 
     def test_backtest_context_renders_negative_relative_result(self):
         text = generator.render_backtest_context({
@@ -348,9 +349,10 @@ class GeneratorReportTest(unittest.TestCase):
             "action": "依風控續抱，不加碼"
         })
 
-        self.assertIn("├─ 回測條件：持倉同類案例｜型態=突破確認｜量能=放量｜位置=已突破｜樣本 35", text)
-        self.assertIn("├─ 回測結果：持倉後3日平均比同日股票池少 0.6%｜勝率 46%", text)
-        self.assertIn("├─ 回測判讀：加碼樣本偏弱｜依風控續抱，不加碼", text)
+        self.assertIn(
+            "├─ 回測：持倉同型｜突破確認/放量/已突破｜n=35｜3日相對-0.6%｜勝率46%｜加碼偏弱，不加碼",
+            text
+        )
 
     def test_execution_reply_markup_uses_compact_callback(self):
         markup = generator.execution_reply_markup({

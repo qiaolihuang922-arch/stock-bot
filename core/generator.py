@@ -576,6 +576,39 @@ def entry_advantages(result):
     return labels[:4]
 
 
+def compact_market_line(result, dist):
+    parts = [
+        f"型態 {semantic_state(result)}",
+        f"市場 {MARKET_MAP.get(result.get('market_grade'), '🟡 偏強')}",
+        f"結構 {semantic_structure(result)}"
+    ]
+
+    if result.get("breakout_state") not in ["FAIL"]:
+        pos = semantic_position(dist)
+        if pos:
+            parts.append(f"位置 {pos}")
+
+    return "｜".join(parts)
+
+
+def compact_entry_judgement(result):
+    blockers = entry_blockers(result)
+    advantages = entry_advantages(result)
+    conclusion = entry_conclusion(result)
+
+    parts = []
+    if blockers:
+        parts.append(f"阻斷 {'、'.join(blockers[:3])}")
+
+    if advantages:
+        parts.append(f"優勢 {'、'.join(advantages[:3])}")
+
+    if conclusion:
+        parts.append(conclusion)
+
+    return "｜".join(parts)
+
+
 def entry_header(result):
 
     decision = result.get("decision")
@@ -1713,35 +1746,47 @@ def render_backtest_context(context):
     setup = context.get("setup")
     scope = context.get("scope") or context.get("label")
     if scope == "持倉同型":
-        case_scope = "持倉同類案例"
-        horizon_word = "持倉後3日"
+        case_scope = "持倉同型"
     else:
-        case_scope = "未持倉同類案例"
-        horizon_word = "訊號後3日"
+        case_scope = "未持倉同型"
 
     if setup:
-        setup_parts = str(setup).split("/")
-        if len(setup_parts) == 3:
-            pattern, volume, position = setup_parts
-            condition = (
-                f"{case_scope}｜型態={pattern}｜量能={volume}｜位置={position}"
-            )
-        else:
-            condition = f"{case_scope}｜條件={setup}"
+        condition = f"{case_scope}｜{setup}"
     else:
         condition = case_scope
 
     avg_return = context.get("avg_return", 0)
-    compare_word = "多" if avg_return is not None and avg_return >= 0 else "少"
+    relative_text = (
+        f"{avg_return:+.1f}%"
+        if avg_return is not None
+        else "-"
+    )
+
+    verdict = context.get("verdict")
+    action = context.get("action")
+
+    if verdict == "樣本中性":
+        return ""
+
+    if verdict == "歷史偏強，但今日阻斷仍有效":
+        reading = "偏強，仍不追"
+    elif verdict == "歷史沒有明顯優勢":
+        reading = "無優勢，維持不買"
+    elif verdict == "加碼樣本偏弱":
+        reading = "加碼偏弱，不加碼"
+    elif verdict == "持倉同型相對偏強":
+        reading = "持倉偏強，續抱"
+    elif verdict and action:
+        reading = f"{verdict}，{action}"
+    else:
+        reading = verdict or action or ""
 
     return (
-        f"├─ 回測條件："
-        f"{condition}｜樣本 {context.get('sample')}\n"
-        f"├─ 回測結果："
-        f"{horizon_word}平均比同日股票池{compare_word} {abs(avg_return):.1f}%"
-        f"｜勝率 {context.get('win_rate')}%\n"
-        f"├─ 回測判讀："
-        f"{context.get('verdict')}｜{context.get('action')}\n"
+        f"├─ 回測："
+        f"{condition}｜n={context.get('sample')}"
+        f"｜3日相對{relative_text}"
+        f"｜勝率{context.get('win_rate')}%"
+        f"｜{reading}\n"
     )
 
 
@@ -2051,85 +2096,17 @@ def render_stock(
             f"{holding_blocker_text(holding_decision)}\n"
         )
 
-    # ================================
-    # 🔥 型態
-    # ================================
     msg += (
-        f"├─ 型態："
-        f"{semantic_state(result)}\n"
+        f"├─ 盤面："
+        f"{compact_market_line(result, dist)}\n"
     )
-
-    # ================================
-    # 🔥 市場
-    # ================================
-    msg += (
-        f"├─ 市場："
-        f"{MARKET_MAP.get(result.get('market_grade'), '🟡 偏強')}\n"
-    )
-
-    # ================================
-    # 🔥 結構
-    # ================================
-    msg += (
-        f"├─ 結構："
-        f"{semantic_structure(result)}\n"
-    )
-
-    # ================================
-    # 🔥 位置
-    # 只在未明確 breakout fail 顯示
-    # ================================
-    if result.get(
-        "breakout_state"
-    ) not in [
-        "FAIL"
-    ]:
-
-        pos = semantic_position(dist)
-
-        if pos:
-            msg += f"├─ 位置：{pos}\n"
-
-    # ================================
-    # 🔥 交易
-    # 不再分 heat/trade
-    # ================================
-    trade_text = semantic_trade(
-        result
-    )
-
-    if trade_text != "✅ 可交易":
-
-        msg += (
-            f"├─ 交易："
-            f"{trade_text}\n"
-        )
-
-    if (
-        result.get("heat_state") == "EXTREME"
-        and result.get("decision") != "FAIL"
-    ):
-
-        # 中文註釋：v19.1.3 只有非失敗的過熱股顯示禁追原因，避免 FAIL + EXTREME 雙主因衝突。
-        msg += (
-            f"├─ 原因："
-            f"過熱 Lv.{result.get('extended_level')}\n"
-        )
 
     if not holding:
-        blockers = entry_blockers(result)
-        advantages = entry_advantages(result)
-
-        if blockers:
+        judgement = compact_entry_judgement(result)
+        if judgement:
             msg += (
-                f"├─ 阻斷："
-                f"{'、'.join(blockers[:4])}\n"
-            )
-
-        if blockers and advantages:
-            msg += (
-                f"├─ 優勢："
-                f"{'、'.join(advantages)}\n"
+                f"├─ 判斷："
+                f"{judgement}\n"
             )
 
     # ================================
@@ -2178,12 +2155,6 @@ def render_stock(
                 f"├─ {label_title}："
                 f"{'、'.join(labels)}\n"
             )
-
-    if not holding:
-        msg += (
-            f"├─ 結論："
-            f"{entry_conclusion(result)}\n"
-        )
 
     # ================================
     # 🔥 數據
