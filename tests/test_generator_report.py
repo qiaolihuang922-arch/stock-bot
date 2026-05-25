@@ -204,11 +204,13 @@ class GeneratorReportTest(unittest.TestCase):
 
         self.assertIn("建準", context)
         self.assertEqual(context["建準"]["label"], "同型 突破確認/爆量/已突破")
+        self.assertEqual(context["建準"]["scope"], "同型")
+        self.assertEqual(context["建準"]["setup"], "突破確認/爆量/已突破")
         self.assertEqual(context["建準"]["sample"], 6)
         self.assertTrue(
-            context["建準"]["verdict"] == "支持不買"
-            or "今日阻斷不改判" in context["建準"]["verdict"]
-            or "依今日阻斷" in context["建準"]["verdict"]
+            context["建準"]["action"] == "維持不買"
+            or "不追價" in context["建準"]["action"]
+            or "依今日阻斷" in context["建準"]["action"]
         )
 
     def test_setup_bucket_falls_back_to_price_position(self):
@@ -312,23 +314,43 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("智原", context)
         self.assertEqual(context["智原"]["label"], "持倉同型 突破確認/放量/已突破")
         self.assertTrue(
-            "支持續抱" in context["智原"]["verdict"]
-            or "依風控續抱" in context["智原"]["verdict"]
-            or "依持倉規則" in context["智原"]["verdict"]
+            "續抱" in context["智原"]["action"]
+            or "持倉規則" in context["智原"]["action"]
         )
 
     def test_backtest_context_renders_data_and_explanation(self):
         text = generator.render_backtest_context({
             "version": "v19.1",
-            "label": "同型 突破確認/爆量/已突破",
+            "scope": "同型",
+            "setup": "突破確認/爆量/已突破",
             "sample": 15,
             "win_rate": 60,
             "avg_return": 1.8,
-            "verdict": "歷史偏強，今日阻斷不改判"
+            "metric": "3日相對股票池",
+            "verdict": "歷史偏強，但今日阻斷仍有效",
+            "action": "列觀察，不追價"
         })
 
-        self.assertIn("├─ 回測：v19.1｜同型 突破確認/爆量/已突破｜樣本 15｜3日相對 +1.8%｜勝率 60%", text)
-        self.assertIn("├─ 解讀：歷史偏強，今日阻斷不改判", text)
+        self.assertIn("├─ 回測條件：未持倉同類案例｜型態=突破確認｜量能=爆量｜位置=已突破｜樣本 15", text)
+        self.assertIn("├─ 回測結果：訊號後3日平均比同日股票池多 1.8%｜勝率 60%", text)
+        self.assertIn("├─ 回測判讀：歷史偏強，但今日阻斷仍有效｜列觀察，不追價", text)
+
+    def test_backtest_context_renders_negative_relative_result(self):
+        text = generator.render_backtest_context({
+            "version": "v19.1",
+            "scope": "持倉同型",
+            "setup": "突破確認/放量/已突破",
+            "sample": 35,
+            "win_rate": 46,
+            "avg_return": -0.6,
+            "metric": "3日相對股票池",
+            "verdict": "加碼樣本偏弱",
+            "action": "依風控續抱，不加碼"
+        })
+
+        self.assertIn("├─ 回測條件：持倉同類案例｜型態=突破確認｜量能=放量｜位置=已突破｜樣本 35", text)
+        self.assertIn("├─ 回測結果：持倉後3日平均比同日股票池少 0.6%｜勝率 46%", text)
+        self.assertIn("├─ 回測判讀：加碼樣本偏弱｜依風控續抱，不加碼", text)
 
 
 if __name__ == "__main__":

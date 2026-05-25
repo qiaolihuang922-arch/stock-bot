@@ -1541,38 +1541,51 @@ def summarize_validation(returns, mode):
 
     if mode == "blocked":
         if avg_return <= 0.3 and win_rate < 55:
-            verdict = "支持不買"
+            verdict = "歷史沒有明顯優勢"
+            action = "維持不買"
         elif avg_return >= 1.5 or win_rate >= 65:
-            verdict = "歷史偏強，今日阻斷不改判"
+            verdict = "歷史偏強，但今日阻斷仍有效"
+            action = "列觀察，不追價"
         else:
-            verdict = "樣本中性，依今日阻斷"
+            verdict = "樣本中性"
+            action = "依今日阻斷"
     else:
         if avg_return >= 1 and win_rate >= 55:
             verdict = "買點有效"
+            action = "可依策略執行"
         elif avg_return <= 0 or win_rate < 45:
             verdict = "買點偏弱"
+            action = "降低信心"
         else:
             verdict = "樣本中性"
+            action = "依今日條件"
 
     if mode == "holding":
         if avg_return >= 0.5 and win_rate >= 55:
-            verdict = "支持續抱，未達加碼仍不追"
+            verdict = "持倉同型相對偏強"
+            action = "續抱；未達加碼不追"
         elif avg_return <= -0.5 or win_rate < 45:
-            verdict = "加碼樣本偏弱，依風控續抱"
+            verdict = "加碼樣本偏弱"
+            action = "依風控續抱，不加碼"
         else:
-            verdict = "樣本中性，依持倉規則"
+            verdict = "樣本中性"
+            action = "依持倉規則"
 
     if mode == "risk":
         if avg_return <= 0.3 and win_rate < 55:
             verdict = "支持風控"
+            action = "維持風控"
         else:
-            verdict = "風控優先，不改判"
+            verdict = "樣本未否定風控"
+            action = "風控優先，不改判"
 
     return {
+        "mode": mode,
         "sample": len(returns),
         "win_rate": round(win_rate),
         "avg_return": round(avg_return, 1),
-        "verdict": verdict
+        "verdict": verdict,
+        "action": action
     }
 
 
@@ -1588,11 +1601,15 @@ def backtest_context(version, scope, summary, setup_label=None):
 
     return {
         "version": version,
+        "scope": scope,
+        "setup": setup_label,
         "label": label,
         "sample": summary["sample"],
         "win_rate": summary["win_rate"],
         "avg_return": summary["avg_return"],
-        "verdict": summary["verdict"]
+        "metric": "3日相對股票池",
+        "verdict": summary["verdict"],
+        "action": summary["action"]
     }
 
 
@@ -1604,15 +1621,38 @@ def render_backtest_context(context):
     if isinstance(context, str):
         return f"├─ 驗證：{context}\n"
 
+    setup = context.get("setup")
+    scope = context.get("scope") or context.get("label")
+    if scope == "持倉同型":
+        case_scope = "持倉同類案例"
+        horizon_word = "持倉後3日"
+    else:
+        case_scope = "未持倉同類案例"
+        horizon_word = "訊號後3日"
+
+    if setup:
+        setup_parts = str(setup).split("/")
+        if len(setup_parts) == 3:
+            pattern, volume, position = setup_parts
+            condition = (
+                f"{case_scope}｜型態={pattern}｜量能={volume}｜位置={position}"
+            )
+        else:
+            condition = f"{case_scope}｜條件={setup}"
+    else:
+        condition = case_scope
+
+    avg_return = context.get("avg_return", 0)
+    compare_word = "多" if avg_return is not None and avg_return >= 0 else "少"
+
     return (
-        f"├─ 回測："
-        f"{context.get('version')}｜"
-        f"{context.get('label')}｜"
-        f"樣本 {context.get('sample')}｜"
-        f"3日相對 {context.get('avg_return'):+.1f}%｜"
-        f"勝率 {context.get('win_rate')}%\n"
-        f"├─ 解讀："
-        f"{context.get('verdict')}\n"
+        f"├─ 回測條件："
+        f"{condition}｜樣本 {context.get('sample')}\n"
+        f"├─ 回測結果："
+        f"{horizon_word}平均比同日股票池{compare_word} {abs(avg_return):.1f}%"
+        f"｜勝率 {context.get('win_rate')}%\n"
+        f"├─ 回測判讀："
+        f"{context.get('verdict')}｜{context.get('action')}\n"
     )
 
 
