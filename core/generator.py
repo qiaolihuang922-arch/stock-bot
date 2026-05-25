@@ -1781,9 +1781,9 @@ def render_backtest_context(context):
     setup = context.get("setup")
     scope = context.get("scope") or context.get("label")
     if scope == "持倉同型":
-        case_scope = "持倉同型"
+        case_scope = "持倉"
     else:
-        case_scope = "未持倉同型"
+        case_scope = "未持倉"
 
     if setup:
         condition = f"{case_scope}｜{setup}"
@@ -1800,13 +1800,12 @@ def render_backtest_context(context):
     verdict = context.get("verdict")
     action = context.get("action")
 
-    if verdict == "樣本中性":
-        return ""
-
     if verdict == "歷史偏強，但今日阻斷仍有效":
-        reading = "偏強，仍不追"
+        reading = "偏強但阻斷有效"
     elif verdict == "歷史沒有明顯優勢":
         reading = "無優勢，維持不買"
+    elif verdict == "樣本中性":
+        reading = "中性，依今日條件"
     elif verdict == "加碼樣本偏弱":
         reading = "加碼偏弱，不加碼"
     elif verdict == "持倉同型相對偏強":
@@ -1818,9 +1817,10 @@ def render_backtest_context(context):
 
     return (
         f"├─ 回測："
-        f"{condition}｜n={context.get('sample')}"
-        f"｜3日相對{relative_text}"
-        f"｜勝率{context.get('win_rate')}%"
+        f"{condition}"
+        f"｜3日勝率{context.get('win_rate')}%"
+        f"｜平均相對{relative_text}"
+        f"｜樣本{context.get('sample')}"
         f"｜{reading}\n"
     )
 
@@ -1833,8 +1833,10 @@ def load_backtest_context(results_map):
         rows = []
         history_version = VERSION
 
-        for candidate_version in [VERSION, "v19.1"]:
-            rows = (
+        min_history_rows = max(len(stocks) * 6, 60)
+
+        for candidate_version in [VERSION, "v19.1", "v19.0"]:
+            candidate_rows = (
                 client.table("daily_signal_snapshot")
                 .select("stock_id,trade_date,version,pattern,market_state,structure_state,position_state,volume_ratio,rr,heat_level,action,reasons,is_tradeable,is_best_candidate")
                 .eq("version", candidate_version)
@@ -1844,9 +1846,14 @@ def load_backtest_context(results_map):
                 or []
             )
 
-            if rows:
+            if len(candidate_rows) >= min_history_rows:
+                rows = candidate_rows
                 history_version = candidate_version
                 break
+
+            if not rows and candidate_rows:
+                rows = candidate_rows
+                history_version = candidate_version
 
         price_rows = (
             client.table("daily_price")
