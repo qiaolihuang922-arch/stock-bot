@@ -25,6 +25,7 @@ from core.condition_engine import (
     summarize_conditions
 )
 from services.position_store import (
+    get_position_store_warning,
     load_positions,
     load_today_position_events
 )
@@ -2414,7 +2415,11 @@ def generate_report():
 
         return msg + "\n⚠ 無有效數據", None
 
-    if not any((item or {}).get("shares", 0) > 0 for item in holdings.values()):
+    position_warning = get_position_store_warning()
+
+    if position_warning:
+        msg += f"⚠ {position_warning}，持倉狀態不可信\n\n"
+    elif not any((item or {}).get("shares", 0) > 0 for item in holdings.values()):
         msg += "⚠ 持倉DB目前全為0股，報文依未持倉邏輯顯示\n\n"
 
     backtest_context = load_backtest_context(results_map)

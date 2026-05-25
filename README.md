@@ -31,6 +31,7 @@
 - `SUPABASE_SERVICE_ROLE_KEY`
 
 Render / GitHub Actions 使用平台环境变量或 secrets。不要把真实密钥提交到仓库。
+v19.2 持仓读取必须配置 `SUPABASE_SERVICE_ROLE_KEY`；只用 publishable/anon key 时，RLS 可能让 `positions` 查询回传 0 行，报文会明确提示持仓状态不可信。
 
 ## 常用命令
 

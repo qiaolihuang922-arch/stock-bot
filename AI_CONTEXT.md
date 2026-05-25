@@ -83,6 +83,7 @@ v19.2 回测/回放与持仓执行表：
 - 每日报文路径不得用 realtime/yahoo/twse 单价补写 `daily_price`；`daily_price` 只接受完整 OHLCV。
 - 每日正式 snapshot 中，持仓股只代表持仓管理，必须排除新进场 `is_tradeable / is_best_candidate` 统计。
 - 线上报文持仓状态只看 `positions.shares`：`0` 股等于未持仓；`>0` 股等于持仓。
+- v19.2 持仓读取必须用 `SUPABASE_SERVICE_ROLE_KEY`；anon/publishable key 可能因 RLS 回传 0 行，不能把这种状态当成真实全空仓。
 - Telegram 按钮不得依赖策略条件才出现；所有 12 档都必须可按钮买入、卖出、清仓。
 - 买入按钮必须带报文价格 token，以便 Edge Function 自动计算数据库均价。
 - 卖出按钮不得假设用户卖出价；当前只负责股数状态同步与事件记录。

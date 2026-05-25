@@ -1,4 +1,5 @@
 from datetime import datetime
+import os
 
 import pytz
 from supabase import create_client
@@ -7,6 +8,7 @@ import config
 from core.watchlist import STOCKS
 
 tz = pytz.timezone("Asia/Taipei")
+LAST_POSITION_STORE_WARNING = None
 
 
 CODE_TO_NAME = {
@@ -28,9 +30,14 @@ def _fallback_positions():
 
 
 def _client():
-    supabase_url = getattr(config, "SUPABASE_URL", "")
+    supabase_url = (
+        os.environ.get("SUPABASE_URL")
+        or getattr(config, "SUPABASE_URL", "")
+    )
     supabase_key = (
-        getattr(config, "SUPABASE_SERVICE_ROLE_KEY", "")
+        os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+        or getattr(config, "SUPABASE_SERVICE_ROLE_KEY", "")
+        or os.environ.get("SUPABASE_KEY")
         or getattr(config, "SUPABASE_KEY", "")
     )
 
@@ -40,10 +47,16 @@ def _client():
     return create_client(supabase_url, supabase_key)
 
 
+def get_position_store_warning():
+    return LAST_POSITION_STORE_WARNING
+
+
 def load_positions():
+    global LAST_POSITION_STORE_WARNING
     client = _client()
 
     if not client:
+        LAST_POSITION_STORE_WARNING = "缺少 Supabase 設定，使用 0 股 fallback"
         return _fallback_positions()
 
     try:
@@ -51,9 +64,18 @@ def load_positions():
             .select("stock_code,stock_name,shares,avg_price,realized_profit_taken_ratio,last_realized_profit_date,status") \
             .execute()
     except Exception as exc:
-        print(f"⚠ 持倉DB讀取失敗，使用本地fallback：{exc}")
+        LAST_POSITION_STORE_WARNING = f"持倉DB讀取失敗：{exc}"
+        print(f"⚠ {LAST_POSITION_STORE_WARNING}，使用本地fallback")
         return _fallback_positions()
 
+    if not res.data:
+        LAST_POSITION_STORE_WARNING = (
+            "持倉DB查詢回傳0行，請檢查 SUPABASE_SERVICE_ROLE_KEY / RLS / project"
+        )
+        print(f"⚠ {LAST_POSITION_STORE_WARNING}")
+        return _fallback_positions()
+
+    LAST_POSITION_STORE_WARNING = None
     positions = _fallback_positions()
 
     for row in res.data or []:
@@ -88,6 +110,7 @@ def _empty_event_summary():
 
 
 def load_today_position_events():
+    global LAST_POSITION_STORE_WARNING
     client = _client()
 
     if not client:
