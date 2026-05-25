@@ -352,6 +352,33 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("├─ 回測結果：持倉後3日平均比同日股票池少 0.6%｜勝率 46%", text)
         self.assertIn("├─ 回測判讀：加碼樣本偏弱｜依風控續抱，不加碼", text)
 
+    def test_execution_reply_markup_uses_compact_callback(self):
+        markup = generator.execution_reply_markup({
+            "英業達": {
+                "stock_code": "2356",
+                "holding": {
+                    "shares": 550,
+                    "avg_price": 52.15
+                },
+                "holding_decision": {
+                    "level": "TAKE_PROFIT_25",
+                    "action": "停利 25%",
+                    "shares": 138
+                },
+                "result": {}
+            }
+        })
+
+        self.assertEqual(
+            markup,
+            {
+                "inline_keyboard": [[{
+                    "text": "已執行 英業達停利 25%",
+                    "callback_data": "exec|2356|TP25|138"
+                }]]
+            }
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

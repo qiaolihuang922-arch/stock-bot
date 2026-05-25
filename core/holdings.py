@@ -18,7 +18,7 @@ HOLDINGS = {
     "英業達": {
         "shares": 550,
         "avg_price": 52.15,
-        **realized_take_profit(0.5)
+        **realized_take_profit(0.5, "2026-05-25")
     },
     "智原": {
         "shares": 50,

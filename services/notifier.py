@@ -1,3 +1,4 @@
+import json
 import requests
 import time
 from config import TOKEN, CHAT_ID
@@ -6,7 +7,7 @@ from config import TOKEN, CHAT_ID
 # 🔥 notifier.py（v19.1.3｜Telegram 發送層）
 # ================================
 
-def send(msg):
+def send(msg, reply_markup=None):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
 
     if len(msg) > 3500:
@@ -15,10 +16,18 @@ def send(msg):
 
     for i in range(3):
         try:
-            r = requests.post(url, data={
+            payload = {
                 "chat_id": CHAT_ID,
                 "text": msg
-            }, timeout=10)
+            }
+
+            if reply_markup:
+                payload["reply_markup"] = json.dumps(
+                    reply_markup,
+                    ensure_ascii=False
+                )
+
+            r = requests.post(url, data=payload, timeout=10)
 
             if r.status_code == 200:
                 print("✅ 發送成功")

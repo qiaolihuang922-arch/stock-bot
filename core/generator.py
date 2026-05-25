@@ -24,7 +24,7 @@ from core.condition_engine import (
     condition_engine,
     summarize_conditions
 )
-from core.holdings import HOLDINGS
+from services.position_store import load_positions
 from core.watchlist import STOCKS
 
 from services.signal_store import record_daily_signals
@@ -37,6 +37,17 @@ tz = pytz.timezone("Asia/Taipei")
 
 VERSION = "v19.1.3"
 
+EXECUTION_LEVELS = {
+    "TAKE_PROFIT_50": "TP50",
+    "TAKE_PROFIT_25": "TP25",
+    "REDUCE_50": "R50",
+    "REDUCE_25": "R25",
+    "STOP_100": "STP",
+    "ADD_30": "A30",
+    "ADD_20": "A20",
+    "ADD_10": "A10"
+}
+
 
 # ================================
 # 🔒 股票池
@@ -47,7 +58,7 @@ stocks = STOCKS
 # ================================
 # 🔒 持倉
 # ================================
-holdings = HOLDINGS
+holdings = {}
 
 
 # ================================
@@ -1297,6 +1308,44 @@ def holding_blocker_text(decision):
     return "、".join(blockers[:4])
 
 
+def execution_reply_markup(results_map):
+    rows = []
+
+    for name, data in results_map.items():
+        holding = data.get("holding")
+        decision = (
+            data.get("holding_decision")
+            or data.get("result", {}).get("_holding_decision")
+            or {}
+        )
+        level = decision.get("level")
+
+        if not holding or level not in EXECUTION_LEVELS:
+            continue
+
+        shares = int(decision.get("shares") or 0)
+
+        if shares <= 0:
+            continue
+
+        rows.append([
+            {
+                "text": f"已執行 {name}{decision.get('action')}",
+                "callback_data": (
+                    f"exec|{data.get('stock_code')}|"
+                    f"{EXECUTION_LEVELS[level]}|{shares}"
+                )
+            }
+        ])
+
+    if not rows:
+        return None
+
+    return {
+        "inline_keyboard": rows[:6]
+    }
+
+
 def snapshot_bucket_from_result(result):
 
     blockers = entry_blockers(result)
@@ -2250,7 +2299,9 @@ def load_stock_signal(name, code):
 # ================================
 # 🔥 generate
 # ================================
-def generate():
+def generate_report():
+    global holdings
+    holdings = load_positions()
 
     now = datetime.now(tz)
 
@@ -2298,9 +2349,9 @@ def generate():
                 msg += f"└─ 其餘 {len(data_errors) - 6} 檔同樣無資料\n"
             else:
                 msg = msg.rstrip("\n") + "\n"
-            return msg
+            return msg, None
 
-        return msg + "\n⚠ 無有效數據"
+        return msg + "\n⚠ 無有效數據", None
 
     backtest_context = load_backtest_context(results_map)
 
@@ -2492,4 +2543,8 @@ def generate():
     except Exception as e:
         msg += f"\n⚠ DB記錄失敗：{str(e)}"
 
-    return msg
+    return msg, execution_reply_markup(results_map)
+
+
+def generate():
+    return generate_report()[0]
