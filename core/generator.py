@@ -42,7 +42,7 @@ from services.daily_snapshot_store import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v19.3.2"
+VERSION = "v19.3.3"
 
 EXECUTION_LEVELS = {
     "TAKE_PROFIT_50": "TP50",
@@ -2502,7 +2502,7 @@ def classify_watchlist_group(name, data):
     blockers = entry_blockers(result)
 
     if is_valid_entry(result):
-        return "可觀察但不可買"
+        return "可買"
 
     label = blockers[0] if blockers else final_label(result)
     behavior = result.get("price_behavior")
@@ -2551,6 +2551,7 @@ def classify_watchlist_group(name, data):
 def format_watchlist_summary_grouped(watchlist):
 
     groups = {
+        "可買": [],
         "禁止追高": [],
         "等待冷卻": [],
         "可觀察但不可買": [],
@@ -2562,7 +2563,7 @@ def format_watchlist_summary_grouped(watchlist):
 
     lines = []
 
-    for label in ["禁止追高", "等待冷卻", "可觀察但不可買", "弱勢淘汰"]:
+    for label in ["可買", "禁止追高", "等待冷卻", "可觀察但不可買", "弱勢淘汰"]:
         names = groups[label]
         if names:
             lines.append(f"【{label} {len(names)}】{'、'.join(names)}")
@@ -2575,10 +2576,11 @@ def watchlist_item_sort_key(index, name, data):
     result = data["result"]
     group = classify_watchlist_group(name, data)
     group_rank = {
-        "禁止追高": 0,
-        "等待冷卻": 1,
-        "可觀察但不可買": 2,
-        "弱勢淘汰": 3,
+        "可買": 0,
+        "禁止追高": 1,
+        "等待冷卻": 2,
+        "可觀察但不可買": 3,
+        "弱勢淘汰": 4,
     }
     stock_order = list(STOCKS).index(name) if name in STOCKS else index
 
@@ -2630,18 +2632,24 @@ def position_summary_rank(name, data):
     action = decision.get("action", "") if decision else ""
     level = decision.get("level", "") if decision else ""
 
-    if "核心" in action or level == "HOLD_CORE":
+    if level == "STOP_100":
         bucket = 0
-    elif "賣" in today_text:
+    elif level in ["REDUCE_50", "REDUCE_25", "TAKE_PROFIT_50", "TAKE_PROFIT_25"]:
         bucket = 1
-    elif level in ["SHAKEOUT", "HOLD_WATCH", "SHAKEOUT_WARN", "RISK_WATCH"]:
+    elif level in ["ADD_30", "ADD_20", "ADD_10"]:
         bucket = 2
-    elif "買" in today_text and pnl >= 0:
-        bucket = 2
-    elif pnl < 0 or data["result"].get("market_grade") == "D":
-        bucket = 4
-    else:
+    elif "核心" in action or level == "HOLD_CORE":
         bucket = 3
+    elif "賣" in today_text:
+        bucket = 4
+    elif level in ["SHAKEOUT", "HOLD_WATCH", "SHAKEOUT_WARN", "RISK_WATCH"]:
+        bucket = 5
+    elif "買" in today_text and pnl >= 0:
+        bucket = 5
+    elif pnl < 0 or data["result"].get("market_grade") == "D":
+        bucket = 7
+    else:
+        bucket = 6
 
     return (bucket, -pnl)
 
@@ -2654,11 +2662,23 @@ def position_summary_action(name, data):
     level = decision.get("level", "") if decision else ""
     pnl = stock_pnl(data)
 
+    if level == "STOP_100":
+        return "停損"
+
     if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]:
         return "停利"
 
-    if level in ["REDUCE_25", "REDUCE_50", "STOP_100"]:
+    if level in ["REDUCE_25", "REDUCE_50"]:
         return "減碼"
+
+    if level == "ADD_30":
+        return "加碼30"
+
+    if level == "ADD_20":
+        return "加碼20"
+
+    if level == "ADD_10":
+        return "加碼10"
 
     if level == "RISK_WATCH":
         return "風控觀察"
@@ -2715,6 +2735,18 @@ def position_summary_note(name, data):
         return "已減碼，觀察是否轉弱"
 
     action = position_summary_action(name, data)
+
+    if action in ["加碼10", "加碼20", "加碼30"]:
+        return f"{decision.get('action')}，{decision.get('note') or '條件成立'}"
+
+    if action == "停損":
+        return decision.get("note") or "停損優先，避免虧損擴大"
+
+    if action == "停利":
+        return f"{decision.get('action')}，鎖定部分獲利"
+
+    if action == "減碼":
+        return f"{decision.get('action')}，降低風險"
 
     if action == "核心續抱":
         return decision.get("note") or "高浮盈回落，暫不加碼"
@@ -2920,6 +2952,27 @@ def holding_detail_decision_lines(name, data):
     decision = ensure_holding_decision(name, data)
     today_text = event_summary_text(data.get("position_events") or {})
     summary_action = position_summary_action(name, data)
+    level = decision.get("level") if decision else ""
+    action_text = decision.get("action") if decision else ""
+    note = decision.get("note") if decision else ""
+
+    if level == "ADD_30":
+        return f"{action_text}，{note or '強勢突破確認'}", "RR足夠，品質達標"
+
+    if level == "ADD_20":
+        return f"{action_text}，{note or '趨勢延續'}", "RR足夠，品質達標"
+
+    if level == "ADD_10":
+        return f"{action_text}，{note or '小幅轉強'}", "RR達標，信心達標"
+
+    if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]:
+        return f"{action_text}，鎖定部分獲利", "高浮盈或過熱延伸，保留核心倉"
+
+    if level in ["REDUCE_25", "REDUCE_50"]:
+        return f"{action_text}，降低風險", "結構轉弱或突破失敗，先降風險"
+
+    if level == "STOP_100":
+        return f"{action_text}，{note or '硬停損觸發'}", "停損優先，避免虧損擴大"
 
     if summary_action == "核心續抱":
         return "核心續抱，暫不加碼", "跌破警戒價優先風控，等待冷卻"

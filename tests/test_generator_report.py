@@ -555,6 +555,12 @@ class GeneratorReportTest(unittest.TestCase):
         )
         bottom_payload["stock_code"] = "3231"
         bottom_payload["position_events"] = {"event_count": 1, "sold_shares": 430, "sell_pct": 98}
+        bottom_payload["holding_decision"] = {
+            "action": "續抱",
+            "level": "HOLD",
+            "warning_price": 141.55,
+            "hard_stop_price": 139.54,
+        }
 
         buy_payload = render_payload(
             [300, 301, 302, 303, 304, 305, 306, 307, 308, 309, 310, 311, 312, 313, 314, 315, 316, 317, 318, 336],
@@ -773,7 +779,7 @@ class GeneratorReportTest(unittest.TestCase):
                 datetime(2026, 5, 26),
             )
 
-        self.assertIn("v19.3.2", messages[0])
+        self.assertIn("v19.3.3", messages[0])
         self.assertIn("📡 資料：即時價 realtime｜日線 yahoo", messages[0])
         self.assertIn("1. 英業達｜+19.37%｜核心續抱｜高浮盈回落，暫不加碼", messages[0])
         self.assertIn("2. 緯創｜+7.27%｜洗盤續抱｜縮量回測，未見出貨", messages[0])
@@ -845,6 +851,122 @@ class GeneratorReportTest(unittest.TestCase):
             }),
             "0.00（不足）"
         )
+
+    def test_v19_3_3_valid_buy_is_summary_buy_group_not_watch_group(self):
+        payload = {
+            "stock_code": "2421",
+            "price": 120,
+            "change": 1.2,
+            "price_source": "realtime",
+            "daily_source": "yahoo",
+            "result": {
+                "decision": "BUY",
+                "action": 0.1,
+                "action_type": "BUY",
+                "rr": 2.0,
+                "heat_state": "NORMAL",
+                "trade_state": "WAIT",
+                "structure_phase": "BREAKOUT_CONFIRM",
+                "price_behavior": "NORMAL",
+                "market_grade": "A",
+                "volume_state": "STRONG",
+                "volume_price_state": "EXPANSION",
+                "structure_state": "STRONG",
+                "entry_quality": "A",
+                "confidence_score": 86,
+                "breakout_distance": 0.5,
+            },
+            "holding": None,
+            "structure_score": 5,
+            "volume_ratio": 1.4,
+        }
+
+        messages = generator.formatTelegramMessages(
+            {"建準": payload},
+            "FULL DETAIL",
+            "建準",
+            9.2,
+            "🟢 市場偏強",
+            datetime(2026, 5, 26),
+        )
+
+        self.assertIn("【可買 1】建準", messages[0])
+        self.assertNotIn("【可觀察但不可買 1】建準", messages[0])
+        self.assertIn("【建準 2421】🟢 可買｜10%倉｜買點成立", messages[2])
+        self.assertIn("買點：可買｜建議 10%倉｜現在可分批", messages[2])
+
+    def test_v19_3_3_holding_add_levels_display_explicit_add_actions(self):
+        payload = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 122],
+            {"shares": 100, "avg_price": 110},
+            price=122,
+            change=2.1,
+        )
+        payload["stock_code"] = "2376"
+        payload["holding_decision"] = {
+            "action": "加碼 20%",
+            "level": "ADD_20",
+            "note": "趨勢延續",
+            "warning_price": 115,
+            "hard_stop_price": 108,
+            "allow_add": True,
+        }
+
+        card = generator.formatTelegramPositionCard("技嘉", payload)
+
+        self.assertIn("【技嘉 2376】📌 加碼20", card)
+        self.assertIn("決策：加碼 20%，趨勢延續", card)
+        self.assertIn("條件：RR足夠，品質達標", card)
+
+    def test_v19_3_3_profit_reduce_stop_detail_lines_are_direct_actions(self):
+        base = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119],
+            {"shares": 100, "avg_price": 120},
+            price=108,
+            change=-4,
+        )
+        base["stock_code"] = "3035"
+
+        stop_payload = dict(base)
+        stop_payload["holding_decision"] = {
+            "action": "停損 100%",
+            "level": "STOP_100",
+            "note": "硬停損觸發",
+            "warning_price": 114,
+            "hard_stop_price": 110,
+        }
+        stop_card = generator.formatTelegramPositionCard("智原", stop_payload)
+        self.assertIn("【智原 3035】📌 停損", stop_card)
+        self.assertIn("決策：停損 100%，硬停損觸發", stop_card)
+        self.assertIn("條件：停損優先，避免虧損擴大", stop_card)
+
+        reduce_payload = dict(base)
+        reduce_payload["holding_decision"] = {
+            "action": "減碼 25%",
+            "level": "REDUCE_25",
+            "note": "結構破壞，先降風險",
+            "warning_price": 114,
+            "hard_stop_price": 110,
+        }
+        reduce_card = generator.formatTelegramPositionCard("智原", reduce_payload)
+        self.assertIn("【智原 3035】📌 減碼", reduce_card)
+        self.assertIn("決策：減碼 25%，降低風險", reduce_card)
+        self.assertIn("條件：結構轉弱或突破失敗，先降風險", reduce_card)
+
+        profit_payload = dict(base)
+        profit_payload["price"] = 140
+        profit_payload["holding"] = {"shares": 100, "avg_price": 110}
+        profit_payload["holding_decision"] = {
+            "action": "停利 25%",
+            "level": "TAKE_PROFIT_25",
+            "note": "漲停過熱，保留核心倉",
+            "warning_price": 133,
+            "hard_stop_price": 126,
+        }
+        profit_card = generator.formatTelegramPositionCard("智原", profit_payload)
+        self.assertIn("【智原 3035】📌 停利", profit_card)
+        self.assertIn("決策：停利 25%，鎖定部分獲利", profit_card)
+        self.assertIn("條件：高浮盈或過熱延伸，保留核心倉", profit_card)
 
     def test_telegram_messages_can_include_detail_when_requested(self):
         payload = render_payload(
