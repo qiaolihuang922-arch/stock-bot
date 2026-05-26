@@ -4,11 +4,11 @@
 
 ## Current Task
 
-- task_id: `v19.4.1-telegram-order`
-- task_name: `Telegram 推送順序調整`
+- task_id: `v19.5-report-summary-execution`
+- task_name: `v19.5 收盤決策壓縮與執行清單升級`
 - task_type: `development`
-- version_level: `patch`
-- qa_level: `L1`
+- version_level: `minor`
+- qa_level: `L2`
 - owner_status: `requested`
 - architect_status: `qa_accepted`
 - pm_status: `task_ready`
@@ -17,35 +17,28 @@
 
 ## Next Action
 
-- Architect: 已確認 Tech 補修 `reply_markup` 綁定位置；本輪不再要求 QA 重跑，由 Architect 收口檢查後提交。
-- PM: 已交付 `TASK.md`，定義 Telegram 多段推送順序需求與驗收條件。
-- Tech: 已補修 Telegram `reply_markup` 綁定位置，並更新 `CHANGELOG.md`。
-- QA: 第一輪 L1 已通過；QA 強化規則從下一次任務開始執行。
+- Architect: 已吸收 v19.5 `TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`，本輪 L2 QA 通過。
+- PM: 已改寫 `TASK.md`，合併 PM / Tech / QA / Owner 約束。
+- Tech: 已交付 `CHANGELOG.md`，實作 v19.5 收盤決策壓縮與執行清單升級。
+- QA: 已交付 `QA_REPORT.md`，v19.5 L2 驗證通過，包含關聯風險掃描、直接消費者檢查、質疑與反證。
 - Owner: 交由 Architect 檢查 diff、重跑必要驗證、commit 並 push。
 
 ## Task Brief
 
 Owner 反馈：
 
-- Telegram 報文是多段疊加推送。
-- 使用者打開 Telegram 時，最下面的新訊息最容易直接看到。
-- 目前最重要的摘要在第一段，會被後續詳情訊息往上推。
-- 需求：調整多段訊息送出順序，讓最重要的總覽摘要最後送出、顯示在最下面。
-- 版本由 Architect 判定，本輪定為 `v19.4.1` patch。
-
-PM 需定義：
-
-- 三段預設訊息的目標順序。
-- `include_detail=True` 時完整備份是否應排在摘要前，避免摘要被擋住。
-- 哪些內容屬於「最重要」並應位於最後一段。
-- 是否只改 Telegram 多段訊息排序，不改每段內部排序與策略文案。
-- 驗收條件：summary 必須是最後一段；持倉/未持倉詳情仍保留；版本顯示更新策略。
-- 收口補充：若 Telegram inline keyboard / reply_markup 存在，需確認它是否應綁定最後的總覽摘要，而不是第一段詳情。
+- v19.4.1 收盤報文已能把總覽摘要放在最後，但報文仍偏長。
+- v19.5 研究已完成，正式進入開發。
+- PM 已在 `TASK.md` 定義「今日結論」、「明日執行清單」、「未持倉漏斗」、「詳情索引」。
+- Tech 需限定在顯示 / 排序 / summary view model 層實作，避免改策略 action。
+- QA 後續需強化質疑：檢查是否會讓使用者漏看風控、誤解等待標的、低優先級不可追溯，或讓 Telegram summary/reply_markup 契約回退。
+- Owner 補充：明日執行清單中的持倉項必須保留目前收益百分比，不能為了壓縮刪除盈虧資訊。
+- Tech 自檢只需跑與修改直接相關的最小 formatter / contract / 策略不變性 smoke；QA 之後做獨立 L2 驗證與風險掃描，避免把 QA 工作前移到 Tech。
 
 不可變更：
 
-- PM 不改代碼。
-- 本輪 Architect 不直接實作。
+- PM 已完成 `TASK.md`；下一步 Tech 實作。
+- 本輪 Architect 只分派與整理，不直接實作。
 - 不改策略層、不改買賣判斷、不改 DB、不改 replay/backfill。
 - 不做全 repo 分析。
 - 不跑全局測試。
@@ -92,7 +85,7 @@ Owner 對 PM：
 Owner 對 Tech：
 
 ```text
-讀取 AGENTS.md、DISPATCH.md、CURRENT_STATE.md、TASK.md、RESEARCH.md，按 Tech 職責處理；如果 tech_status 是 todo 且 TASK.md 已 ready，就實作當前任務，完成後改寫 CHANGELOG.md。
+讀取 AGENTS.md、DISPATCH.md、CURRENT_STATE.md、TASK.md、RESEARCH.md，按 Tech 職責處理；如果 tech_status 是 todo 且 TASK.md 已 ready，就實作 v19.5 收盤決策壓縮與執行清單升級，完成後改寫 CHANGELOG.md。
 ```
 
 Owner 對 QA：

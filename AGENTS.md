@@ -82,6 +82,30 @@ QA 套用規則：
 - 若任務改變函式回傳順序、回傳結構、訊息 list、payload shape 或外部呼叫契約，即使是 `L1`，QA 也必須檢查直接呼叫方與邊界契約。
 - PM 在需求中需列出「被改輸出」的直接消費者；Tech 在 `CHANGELOG.md` 需列出是否已同步直接呼叫方。
 
+## Tech 自檢與 QA 驗證邊界
+
+Tech 可以在交付前做「自檢」，目的只是避免把明顯壞掉的實作交給 QA。
+
+Tech 自檢允許：
+
+- 跑與本輪修改檔案直接相關的最小測試。
+- 跑 formatter / helper / contract 的局部單元測試。
+- 若任務要求不改策略，可跑少量策略不變性 smoke test 證明未破壞硬規則。
+- 在 `CHANGELOG.md` 記錄已跑命令與結果。
+
+Tech 自檢禁止：
+
+- 做 QA 的完整驗收矩陣。
+- 做關聯風險掃描、質疑與反證。
+- 宣告整體 QA 通過。
+- 跑 full pytest / replay / backfill，除非 `DISPATCH.md` 或 Owner 明確要求。
+
+QA 驗證職責：
+
+- 根據 `TASK.md` / `CHANGELOG.md` 獨立驗證結果。
+- 可重跑 Tech 的最小命令，但不能只重複 Tech 測試；必須補直接消費者、負面案例、契約風險或使用者誤判風險。
+- 若 QA 只重跑 Tech 命令而沒有新增風險判斷，視為 QA 不完整。
+
 ## 對話窗啟動方式
 
 獨立對話窗不會自動收到通知。Owner 只需要對每個對話窗發固定啟動句，該角色再依 `DISPATCH.md` 判斷是否工作。
@@ -126,6 +150,7 @@ QA 套用規則：
 - `CHANGELOG.md` 必須包含：修改內容、修改檔案、未影響模組。
 - 只讀與 `TASK.md` 相關的局部源碼。
 - 不重新分析全專案，不修改產品方向。
+- 可做最小本地自檢，但不得替代 QA 驗收。
 
 ### QA / 測試
 
@@ -137,6 +162,7 @@ QA 套用規則：
 - 若變更涉及 formatter output、messages list、Telegram payload、DB payload 或任一公開函式回傳契約，QA 必須補測直接消費者，不得只測產出函式本身。
 - QA 必須主動質疑 PM / Tech 的影響範圍，列出「可能漏掉的直接消費者、間接依賴、邊界情境、負面案例」。
 - QA 若發現 `TASK.md` 或 `CHANGELOG.md` 未列出必要關聯模組，不得直接判定通過；必須在 `QA_REPORT.md` 標記 blocked 或 conditional pass。
+- QA 不應只重複 Tech 自檢；必須補充 Tech 沒覆蓋的風險與反證。
 
 QA_REPORT 固定章節：
 
@@ -163,6 +189,26 @@ Architect 狀態輸出固定為：
 - `CURRENT_STATE.md`
 - `AGENTS.md`
 - `CLEANUP_PLAN.md`
+
+## 文件寫入權限
+
+開發任務：
+
+- PM 只改寫 `TASK.md`。
+- Tech 只改寫 `CHANGELOG.md`，並修改 `TASK.md` 指定範圍內的代碼 / 測試。
+- QA 只改寫 `QA_REPORT.md`。
+- Architect 改寫 `DISPATCH.md`、`CURRENT_STATE.md`、`AGENTS.md`、`CLEANUP_PLAN.md`，並在研究收口時整理 `RESEARCH.md`。
+
+研究任務例外：
+
+- `RESEARCH.md` 是共享研究文件，不屬於 PM 單獨所有。
+- PM 可在 `PM Findings` 區塊寫入產品研究。
+- Tech 可在 `Tech Findings` 區塊寫入可行性與影響模組研究。
+- QA 可在 `QA Findings` 區塊寫入風險掃描、質疑與反證。
+- Architect 可改寫 `Question`、`Evidence`、`Architect Conclusion`、`Next Action`，並可壓縮舊研究內容。
+- 各角色不得改寫其他角色 Findings，除非 `DISPATCH.md` 明確要求覆蓋舊區塊或重跑該角色輸出。
+
+若任務已從研究進入開發，角色必須回到開發任務文件權限，不再繼續改 `RESEARCH.md`。
 
 ## 模組歸屬速查
 

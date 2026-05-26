@@ -106,6 +106,14 @@
 - v19.4.1 任務狀態：PM / Tech / QA 第一輪已完成；Architect 收口發現 `reply_markup` 綁定風險後，Tech 已補修；本輪不再要求 QA 重跑，由 Architect 收口驗證。
 - 流程修正：若任務改變函式回傳順序、messages list、payload shape 或外部呼叫契約，即使是 L1，QA 也必須檢查直接消費者。
 - 流程修正：QA 不只是驗證清單，必須主動質疑 PM / Tech 影響範圍，`QA_REPORT.md` 固定包含關聯風險掃描、質疑與反證、未測項目與明確結論。
+- 新研究任務已分派：`v19.5-report-strategy-research`。
+- v19.5 PM 研究結論：建議定位為「收盤決策壓縮與執行清單升級」，重點是今日結論、明日執行清單、未持倉漏斗、詳情索引。
+- v19.5 Tech 研究結論：MVP 可主要落在 `core/generator.py` 的顯示 / 排序 / summary view model，不改 `services/analysis.py`、DB schema、股票池、replay/backfill；建議建立結構化 summary view model，避免 formatter 字串堆疊失控。
+- v19.5 QA 研究結論：conditional approval；TASK 必須包含風控不可漏看、等待不可誤解、低優先級可追溯、summary/reply_markup 不回退。
+- Owner 補充：v19.5 不得刪除持倉目前收益百分比；明日執行清單中的持倉項必須顯示目前盈虧，例如 `英業達｜+20.04%｜核心風控｜守 59.0`。
+- v19.5 正式 `TASK.md` 已完成，Tech 已交付 `CHANGELOG.md`，QA 已交付 L2 驗證通過報告。
+- 流程修正：`RESEARCH.md` 是研究任務共享文件，PM / Tech / QA 可各自寫入自己的 Findings；進入開發後才回到 `TASK.md` / `CHANGELOG.md` / `QA_REPORT.md` 專屬交付。
+- 流程修正：Tech 自檢只負責最小本地驗證，不做 QA 完整驗收；QA 必須在 Tech 自檢之外補關聯風險、負面案例與契約反證。
 
 ## 影響模組判斷規則
 
@@ -118,11 +126,13 @@
 
 ## 當前交付檢查
 
-- `DISPATCH.md`：已更新為 `v19.4.1-telegram-order` patch 任務，狀態為 QA accepted。
-- `TASK.md`：PM 已改寫為 v19.4.1 Telegram 推送順序調整需求。
-- `CHANGELOG.md`：Tech 已改寫為 v19.4.1 Telegram 推送順序調整實作摘要。
-- `QA_REPORT.md`：QA 已改寫為 v19.4.1 第一輪 L1 驗證結論；`reply_markup` 補修由 Tech 摘要與 Architect 收口驗證承接。
-- Architect 結論：本輪可進入 diff 檢查、必要驗證、commit / push；QA 強化規則從下一次任務開始執行。
+- `DISPATCH.md`：已更新為 `v19.5-report-summary-execution` 開發任務，狀態為 QA accepted。
+- `RESEARCH.md`：PM 已寫入 v19.5 報文與策略體驗強化研究。
+- `RESEARCH.md`：Tech 已寫入 v19.5 實作可行性研究；QA 已寫入 v19.5 風險掃描；Architect 已寫入結論與 Owner 補充。
+- `TASK.md`：PM 已正式改寫為 v19.5 收盤決策壓縮與執行清單升級需求。
+- `CHANGELOG.md`：Tech 已改寫為 v19.5 實作摘要。
+- `QA_REPORT.md`：QA 已改寫為 v19.5 L2 驗證摘要，結論通過。
+- Architect 結論：v19.5 摘要鏈路已完成；可進入 diff 檢查、必要驗證、commit / push。
 
 ## 對話窗啟動規則
 

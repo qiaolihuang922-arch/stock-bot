@@ -4,633 +4,743 @@
 
 ## Question
 
-- 任務類型：產品研究
+- 任務類型：跨角色研究
 - 任務日期：2026-05-26
-- 研究對象：v19.4 顯著功能升級方向
-- 背景：v19.3.4 報文解釋力已接近穩定。Owner 認為 v19.4 不應只是小幅 formatter / label 更新，需要有明顯功能升級感。
+- 研究對象：v19.5 報文與策略體驗強化方向
+- 背景：v19.4.1 已完成 Telegram 摘要最後推送與按鈕綁定修正。Owner 提供最新收盤報文，要求研究下一版強化方向。
 - 核心問題：
-  - v19.4 是否需要強化策略門檻，而不只是 formatter。
-  - 買入訊號稀少是否應改善，如何避免變成追高。
-  - 持倉處理是否需要更完整的升級 / 降級 / 隔日追蹤規則。
-  - 回測資訊是否應從顯示解釋進一步進入決策權重。
-  - v19.3.4 是否還有必須先補的顯示殘留問題。
-  - v19.4 應新增哪些明顯可見能力，讓使用者感覺不是又一個小版本。
+  - v19.5 是否應把收盤報文從完整資料展示升級為決策壓縮與執行清單。
+  - 如何減少持倉處理優先級、隔日追蹤、待確認候選之間的重複。
+  - 如何讓持倉與未持倉的明日觸發更像可執行清單，而不是說明文。
+  - 回測、RR、S、V 等資料應如何保留，但不干擾第一屏決策。
+  - Tech 需評估是否可只在顯示 / 排序層完成，不改策略 action。
+  - QA 需主動質疑 PM / Tech 可能漏掉的關聯與使用者誤判風險。
 
 ## Evidence
 
-- v19.3.4 已能顯示：
+- v19.4.1 已能顯示：
   - R3 不新增原因。
   - 回測參考度與判讀。
   - 今日新倉浮虧風控語氣。
   - 減碼 / 停利 / 停損原因與下一步。
-- Owner 認為 v19.3.4 已接近穩定。
-- 最新貼文仍出現一個疑似殘留顯示風險：
-  - 旺宏價格行疑似少全形右括號：`價格：159.75（+4.75%`
-  - 需判斷是複製截斷、Telegram split 問題，還是 formatter 未完全覆蓋。
+- Owner 最新貼文顯示 v19.4.1 已達成摘要最後推送。
+- 報文仍偏長，且詳情與摘要間有語意重複。
+- Owner 要求研究下一版強化方向，不直接開發。
 
 ## PM Findings
 
 ### PM 結論
 
-v19.4 應定位為「交易閉環升級」，不是 formatter 小修，也不是單純放寬策略。v19.3.4 已經把報文讀得懂；v19.4 要讓使用者每天看完報文後知道「今天做什麼、明天追什麼、持倉若沒修復怎麼辦」。
+v19.4.1 已完成「摘要最後推送」後，報文第一眼可見性已改善。v19.5 不應再只是新增區塊，而應解決 Owner 最新 v19.4.1 收盤報文暴露出的下一層問題：資訊仍然偏多、決策重點仍分散、持倉與未持倉的下一步雖然存在但還不夠像一張可執行交易清單。
 
-v19.4 最小但顯著的功能組合應包含三件事：
+v19.5 建議定位為「收盤決策壓縮與執行清單升級」。
 
-1. `隔日追蹤`：把今天不能買但值得明天重看的標的獨立出來。
-2. `持倉處理優先級`：把持倉從普通清單升級為待處理隊列。
-3. `明日觸發條件`：每個追蹤標的和風控持倉都要有明確的次日檢查條件。
+核心目標：
 
-這三件事會讓版本從「更會解釋」升級為「能管理明天的交易流程」。
+1. 把收盤報文壓縮成「先看 30 秒就能決策」。
+2. 把持倉變成可排序的處理隊列。
+3. 把未持倉從資料清單變成候選漏斗。
+4. 把明日觸發條件從說明文變成可掃讀的觸發卡。
+5. 保留完整資料，但降低其對主閱讀流的干擾。
 
-### v19.4 升級定位
+### 對 Owner 最新 v19.4.1 收盤報文的產品判斷
 
-v19.4 不應直接放寬 RR / 過熱 / 加碼 / 減碼門檻。直接放寬會讓系統從「不追高」變成「找理由追高」，這不符合目前產品方向。
+基於 v19.4.1 的產品形態，最新收盤報文已具備：
 
-v19.4 應新增一層「交易流程狀態」，讓策略不只輸出買或不買，而是輸出：
+- 總覽摘要最後送出，Telegram 打開時優先看見摘要。
+- 持倉處理優先級。
+- 隔日追蹤。
+- 待確認候選。
+- 持倉 / 未持倉詳情保留。
 
-- 今天是否能交易。
-- 如果不能，明天是否要追蹤。
-- 追蹤的觸發條件是什麼。
-- 持倉是否要升級風控。
-- 今天的狀態明天如何驗證。
+但仍有四個產品問題：
 
-### v19.4 必做能力
+1. 摘要區塊變多後，第一屏仍可能過長。
+2. 持倉摘要、持倉處理優先級、持倉詳情存在語意重複。
+3. 未持倉分組、隔日追蹤、待確認候選有重疊，使用者可能不知道以哪個為主。
+4. 回測、RR、S、V、盤面等指標仍在詳情中佔據較多注意力，但不是所有標的都值得同等閱讀。
 
-#### 1. 隔日追蹤
+### v19.5 產品方向
 
-`隔日追蹤` 是 v19.4 主功能，必做。
-
-目的：
-
-- 解決「今天都不買，使用者不知道明天看什麼」。
-- 將 `等待冷卻 / 等RR修復 / 等量能 / 隔日確認` 從未持倉詳情中拉出來。
-- 讓報文從當日結論變成次日交易計畫。
-
-建議區塊：
+v19.5 應新增「決策壓縮層」，把總覽摘要拆成三個可掃讀區塊：
 
 ```text
-🕒 隔日追蹤
-1. 光寶科｜等冷卻｜明日觸發：回測不破且過熱降溫
-2. 建準｜等RR修復｜明日觸發：價格回落或目標空間打開
-3. 仁寶｜隔日確認｜明日觸發：站回今日高點且量能不失控
+1. 今日結論
+2. 明日執行清單
+3. 詳情索引
 ```
 
-追蹤分類：
-
-- `等冷卻`
-- `等回測`
-- `等RR修復`
-- `等量能`
-- `隔日確認`
-
-#### 2. 待確認候選
-
-`待確認候選` 應從未持倉清單中獨立出來，必做。
-
-目的：
-
-- 避免所有非買點標的都停留在 `不買 / 觀察`。
-- 讓使用者知道哪些標的是「不買但值得排隊」。
-
-建議摘要：
+使用者第一眼應看到：
 
 ```text
-待確認候選：
-【等回測 2】光寶科、聯電
-【等RR修復 2】建準、仁寶
-【等量能 1】技嘉
+今天不新增 / 持倉優先 / 明天只追 3 檔 / 2 檔需風控
 ```
 
-弱勢淘汰仍保留，但不進待確認候選。
+而不是先看到一串完整分類。
 
-#### 3. 持倉處理優先級
+### 報文壓縮方式
 
-`持倉處理優先級` 應新增為摘要區塊，必做。
+#### 1. 新增「今日結論」單行
 
-目的：
-
-- 解決持倉多時，使用者不知道先看哪一檔。
-- 將風控、停利、減碼、新倉浮虧放在普通續抱前面。
-
-建議區塊：
+總覽摘要最上方新增一行交易結論：
 
 ```text
-📌 持倉處理優先級
-1. 智原｜新倉風控｜明日未修復降級
-2. 英業達｜核心風控觀察｜守警戒價
-3. 緯創｜洗盤續抱｜跌破警戒升級風控
+🧭 今日結論：R3 偏熱，不新增；持倉優先，明日只追 3 檔
 ```
 
-排序原則：
+或：
 
 ```text
-停損 / 清倉
-減碼 / 停利
-新倉風控
-核心風控觀察
-減碼後觀察
-洗盤警戒
-洗盤續抱
-核心續抱
-普通續抱
+🧭 今日結論：進攻仍在，但追價風險高；新倉只等回測
 ```
 
-#### 4. 明日觸發條件
+這行要取代部分冗長的市場解釋，不新增大量文字。
 
-`明日觸發條件` 應成為每個追蹤標的與風控持倉的必備文案，必做。
+#### 2. 新增「明日執行清單」
+
+將持倉處理優先級與隔日追蹤合併成一個更短的執行清單。
 
 範例：
 
 ```text
-明日觸發：回測不破且量能回升
-明日觸發：RR 修復至達標，不追高
-明日觸發：站回突破區，否則降級
-明日觸發：跌破警戒價，升級風控
+✅ 明日執行清單
+1. 智原｜新倉風控｜未修復降級
+2. 英業達｜核心風控｜守警戒價
+3. 光寶科｜等回測｜不破再評估
+4. 建準｜等RR修復｜不追價
 ```
 
-這是 v19.4 可感知升級的核心。沒有明日觸發條件，隔日追蹤只是另一個觀察清單。
+原本的 `📌 持倉處理優先級` 與 `🕒 隔日追蹤` 可在 v19.5 轉為執行清單的子來源，不必都完整展開在第一屏。
 
-#### 5. 今日狀態 -> 明日檢查閉環
+#### 3. 詳情層改為「只列需要看的」
 
-v19.4 必須加入「今日狀態 -> 明日檢查」閉環。
+詳情仍保留，但摘要應提供索引：
+
+```text
+📎 詳情索引：持倉 5 檔｜追蹤 3 檔｜淘汰 4 檔
+```
+
+如果 Telegram 長度壓力大，未持倉弱勢淘汰只列摘要，不必每檔都完整卡片。
+
+### 持倉決策可讀性
+
+v19.5 持倉應改成「處理狀態 + 明日檢查 + 失效條件」三段式。
+
+持倉摘要建議格式：
+
+```text
+英業達｜核心風控｜守 59.0｜跌破升級風控
+智原｜新倉風控｜站回 211.5｜否則降級
+緯創｜洗盤續抱｜守警戒｜跌破轉風控
+```
 
 產品規則：
 
-- 今日 `等冷卻`：明日檢查是否降溫與回測不破。
-- 今日 `等RR修復`：明日檢查價格是否回落或目標空間是否打開。
-- 今日 `新倉風控觀察`：明日檢查是否站回買點 / 成本 / 突破區。
-- 今日 `減碼後觀察`：明日檢查是否修復，否則降低優先級。
-- 今日 `核心風控觀察`：明日檢查是否守警戒價。
+- `續抱` 不能單獨出現，需搭配原因或下一步。
+- `核心續抱` 應說明守什麼價或什麼條件轉弱。
+- `新倉風控` 必須顯示成本 / 買點 / 警戒其中一個明確參考。
+- `減碼後觀察` 必須顯示修復條件。
 
-### 回測資訊如何進入 v19.4
+### 未持倉決策可讀性
 
-回測資訊應進入 `追蹤優先級`，不直接改交易 decision。
+v19.5 未持倉應從「分組展示」升級成「候選漏斗」。
+
+建議漏斗：
+
+```text
+未持倉漏斗：
+可買：0
+可準備：2
+等回測：1
+等RR修復：2
+淘汰：4
+```
+
+並只把前 3-5 檔列入明日執行清單。其餘只保留統計或詳情。
+
+未持倉標題建議：
+
+```text
+【可準備】股票｜明日觸發：...
+【等回測】股票｜回測不破再評估
+【等RR修復】股票｜RR不足，不追
+【淘汰】股票｜弱勢 / 遠離觸發
+```
 
 產品規則：
 
+- `不買` 不應作為主標題反覆出現。
+- `不買` 可以保留在買點行，但標題應顯示等待類型。
+- `弱勢淘汰` 不應佔用主決策版面。
+
+### 策略體驗強化方向
+
+v19.5 不建議直接改大策略門檻，但可以研究「策略體驗層」：
+
+1. `可準備分數`
+   - 不等於買入分數。
+   - 用於明日追蹤排序。
+   - 由 RR 接近度、過熱降溫、回測位置、回測參考度組成。
+
+2. `持倉風控分級`
+   - R1：正常續抱
+   - R2：洗盤續抱
+   - R3：新倉風控 / 核心風控
+   - R4：減碼後觀察 / 轉弱
+   - R5：停損 / 清倉
+
+3. `明日觸發類型`
+   - 價格觸發：站回 / 跌破 / 回測不破
+   - 風報觸發：RR 修復
+   - 量能觸發：量能回升或不失控
+   - 風險觸發：過熱降溫
+
+這些可以先作為顯示與排序層，不直接改交易 action。
+
+### Edge Cases
+
+- 沒有任何隔日追蹤標的時，顯示：
+
 ```text
-參考度低：只顯示，不加權
-參考度中：可影響隔日追蹤排序
-參考度高：可影響隔日追蹤排序與候選順位
-相對略優：追蹤順位上調
-無明顯優勢：不調整
-偏弱：追蹤順位下調
+✅ 明日執行清單：僅處理持倉，無新追蹤
 ```
 
-禁止：
-
-- 回測略優不能直接產生 `可買`。
-- 回測偏弱不能覆蓋既有停損 / 風控。
-- 回測不能取消 RR、過熱、漲停不追。
-
-### 買入訊號稀少的產品解法
-
-v19.4 不應靠放寬買入條件解決。更好的產品解法是增加買入前序狀態：
+- 沒有持倉時，執行清單應以候選為主：
 
 ```text
-可準備：條件接近，明日可重看
-等回測：強勢但過熱，不追高
-等RR修復：強勢但風報不夠
-等量能：結構可看但量未跟上
-隔日確認：今日不成立，明天確認
+✅ 明日執行清單：無持倉，僅追蹤 3 檔待確認
 ```
 
-使用者感知上的改善：
+- 有停損 / 減碼 / 停利時，必須排在執行清單最前面。
 
-- v19.3.4：今天不能買。
-- v19.4：今天不能買，但明天看這幾檔，符合這些條件才動。
+- 合格可買出現時，必須覆蓋等待狀態，進入執行清單第一組：
 
-### 持倉管理強化方向
+```text
+1. 股票｜可買｜分批，不追價
+```
 
-v19.4 必須讓持倉有生命週期。
+- 回測參考度低的標的不能因為相對略優排到高優先級。
 
-新增或強化狀態：
+- 弱勢淘汰若數量很多，只顯示統計，不展開詳情：
 
-- `新倉風控觀察`
-- `隔日未修復`
-- `減碼後觀察`
-- `減碼後修復`
-- `核心風控觀察`
-- `停利後核心倉`
+```text
+弱勢淘汰：5 檔｜主因：市場弱、遠離觸發
+```
 
-產品語意：
+- 如果 Telegram 多段訊息仍過長，總覽摘要必須優先完整，詳情可拆分。
 
-- 新倉浮虧不是普通續抱，要進風控觀察。
-- 減碼後不是結束，要追蹤是否修復。
-- 核心倉高浮盈回落不是普通續抱，要有守利潤邏輯。
+### v19.5 建議新增使用者可見區塊
 
-### 殘留顯示風險
+必做：
 
-旺宏價格行疑似少右括號：`價格：159.75（+4.75%`
+```text
+🧭 今日結論
+✅ 明日執行清單
+未持倉漏斗
+📎 詳情索引
+```
 
-PM 判斷：
+可選：
 
-- 這是 v19.3.x 顯示穩定性風險，不應混入 v19.4 策略升級。
-- Architect 應先讓 Tech / QA 判斷是否為複製截斷、Telegram split 或 formatter 漏測。
-- 若不能排除，應先開 v19.3.5 顯示穩定性小修。
+```text
+⚠ 風控焦點
+📉 淘汰統計
+```
 
-### v19.4 必做 / 延後
+不建議：
 
-v19.4 必做：
+```text
+再新增完整長卡片
+再新增另一組星等
+把所有回測細節拉到摘要
+```
 
-- `隔日追蹤`
-- `待確認候選`
-- `持倉處理優先級`
-- `明日觸發條件`
-- `今日狀態 -> 明日檢查`
-- 回測影響追蹤排序
+### v19.5 報文範例
 
-留到 v19.5 / v20：
+```text
+【05/26 收盤｜v19.5】
+📊 市場：進攻偏熱｜R3
+🧭 今日結論：不新增，持倉優先；明日只追 3 檔
+🧭 原因：強勢股多過熱，RR不足，不追高
 
-- 直接放寬 RR 門檻。
-- 動態過熱門檻。
-- 自動跨多日追蹤資料庫。
-- 多日任務狀態持久化。
-- 擴大股票池。
-- 讓回測直接改交易 decision。
+✅ 明日執行清單
+1. 智原｜新倉風控｜站回 211.5，否則降級
+2. 英業達｜核心風控｜守 59.0，跌破升級風控
+3. 光寶科｜等回測｜回測不破且降溫再評估
+4. 建準｜等RR修復｜不追價
+
+未持倉漏斗：
+可買 0｜可準備 0｜等回測 1｜等RR修復 2｜淘汰 4
+
+📎 詳情索引：持倉 5｜追蹤 3｜淘汰 4
+```
+
+### v19.5 是否要改策略門檻
+
+PM 建議：
+
+- 不在 v19.5 直接放寬 BUY / STOP / TAKE_PROFIT 硬門檻。
+- 可以新增「可準備分數」與「風控分級」，但只能用於排序、壓縮與追蹤，不直接產生交易 action。
+- 若 Owner 要真正調整 RR / 過熱 / 加碼門檻，應另開 v20 或 v19.6 策略研究。
 
 ### 可直接放入 TASK.md 的產品文案
 
 ```text
-# TASK: v19.4 交易閉環升級
+# TASK: v19.5 收盤決策壓縮與執行清單升級
 
 ## 需求目標
 
-v19.4 要從「當日報文」升級為「當日決策 + 隔日追蹤」。
+v19.5 要把 v19.4.1 的交易閉環報文壓縮成更像「收盤後執行清單」的產品。
 
-使用者看完報文後，必須知道：
-- 今天不能買的股票，明天哪些要重看。
-- 每個待確認標的的觸發條件是什麼。
-- 持倉中哪些需要優先處理。
-- 今日新倉、減碼後、核心倉回落，明天如何檢查。
+使用者打開 Telegram 最下面的摘要時，30 秒內要知道：
+- 今天是否新增。
+- 明天最重要的 3-5 件事。
+- 哪些持倉要處理。
+- 哪些未持倉值得追蹤。
+- 哪些標的只是淘汰統計，不需要細看。
 
-## 新增區塊
+## 新增 / 調整區塊
 
-1. 持倉處理優先級
-2. 待確認候選
-3. 隔日追蹤
-4. 明日觸發條件
+1. 新增 `🧭 今日結論`
+2. 新增 `✅ 明日執行清單`
+3. 新增 `未持倉漏斗`
+4. 新增 `📎 詳情索引`
+5. 壓縮弱勢淘汰與低優先級未持倉詳情
 
 ## 報文範例
 
-【05/26 盤中｜v19.4】
+【05/26 收盤｜v19.5】
 📊 市場：進攻偏熱｜R3
-🎯 今日重點：持倉優先，新倉只進待確認
+🧭 今日結論：不新增，持倉優先；明日只追 3 檔
 🧭 原因：強勢股多過熱，RR不足，不追高
 
-📌 持倉處理優先級
-1. 智原｜新倉風控｜明日未修復降級
-2. 英業達｜核心風控觀察｜守警戒價
-3. 緯創｜洗盤續抱｜跌破警戒升級風控
+✅ 明日執行清單
+1. 智原｜新倉風控｜站回 211.5，否則降級
+2. 英業達｜核心風控｜守 59.0，跌破升級風控
+3. 光寶科｜等回測｜回測不破且降溫再評估
+4. 建準｜等RR修復｜不追價
 
-🕒 隔日追蹤
-1. 光寶科｜等冷卻｜明日觸發：回測不破且過熱降溫
-2. 建準｜等RR修復｜明日觸發：RR修復，不追價
-3. 仁寶｜隔日確認｜明日觸發：站回突破區且量能不失控
+未持倉漏斗：
+可買 0｜可準備 0｜等回測 1｜等RR修復 2｜淘汰 4
 
-待確認候選：
-【等回測 1】光寶科
-【等RR修復 2】建準、仁寶
-【弱勢淘汰 1】旺宏
+📎 詳情索引：持倉 5｜追蹤 3｜淘汰 4
 ```
 
 ### 可直接放入 TASK.md 的驗收標準
 
 ```text
-v19.4 驗收標準：
+v19.5 驗收標準：
 
-1. 報文新增「持倉處理優先級」區塊。
-2. 報文新增「隔日追蹤」區塊。
-3. 報文新增「待確認候選」分組。
-4. 每個隔日追蹤標的都有「明日觸發」文案。
-5. R3 市場下，強勢但過熱標的不進可買，進等冷卻 / 等回測 / 隔日追蹤。
-6. RR 不足但結構強的標的不進可買，進等RR修復。
-7. 量能不足但非弱勢的標的不進弱勢淘汰，進等量能。
-8. 弱勢 / 遠離觸發標的不進隔日追蹤優先清單。
-9. 今日新倉浮虧進新倉風控觀察，並有明日檢查條件。
-10. 減碼後持倉進減碼後觀察，並有修復 / 未修復邏輯文案。
-11. 核心倉高浮盈回落顯示核心風控觀察或等效語意。
-12. 回測參考度可影響隔日追蹤排序，但不得直接產生 BUY。
-13. 隔日追蹤不得覆蓋 RR、過熱、漲停不追等硬風控。
-14. v19.4 不擴大股票池。
-15. v19.4 不改 DB schema，除非 Tech 研究證明必要並由 Architect 另開任務。
+1. 總覽摘要新增 `🧭 今日結論`。
+2. 總覽摘要新增 `✅ 明日執行清單`。
+3. 總覽摘要新增 `未持倉漏斗`。
+4. 總覽摘要新增 `📎 詳情索引`。
+5. 明日執行清單最多顯示 5 項。
+6. 停損 / 減碼 / 停利 / 新倉風控必須排在執行清單前面。
+7. 未持倉只有高優先級追蹤標的進入執行清單。
+8. 弱勢淘汰預設只統計，不佔用主摘要。
+9. 持倉摘要不得只顯示 `續抱`，必須有處理狀態或下一步。
+10. 未持倉標題不得大量重複 `不買`，需顯示等待類型。
+11. 回測只能影響追蹤排序，不得直接產生 BUY。
+12. 總覽摘要仍最後送出，維持 v19.4.1 Telegram 順序。
+13. 持倉詳情與未持倉詳情仍保留，但低優先級標的可壓縮。
+14. 不改 DB schema。
+15. 不擴大股票池。
+16. 不直接放寬 RR / 過熱 / 加碼 / 停利 / 停損硬門檻。
 ```
-
-### PM 建議下一步
-
-- 先讓 Tech 做 v19.4 技術研究，確認現有資料是否足以支援：
-  - 當日隔日追蹤清單。
-  - 前一交易日追蹤回看。
-  - 新倉隔日狀態。
-  - 減碼後修復狀態。
-  - 回測排序權重。
-- 若 Tech 判斷不需 DB schema 變更，v19.4 可進入 TASK。
-- 若 Tech 判斷需要持久化追蹤狀態，Architect 應拆分成 v19.4 MVP 與後續版本。
 
 ## Tech Findings
 
-- Tech 結論：v19.4 可以先做「策略狀態層 + 隔日追蹤」的最小版本，不需要先放寬 RR / 過熱 / 加碼門檻，也不需要先改 DB schema。現有 `analysis` 結果欄位、`daily_signal_snapshot`、`daily_price`、`positions`、`position_events` 已足以支撐第一階段研究方向；真正風險在於狀態定義要保持為輔助語意，不能覆蓋硬風控。
+- Tech 結論：PM 提出的 v19.5「收盤決策壓縮與執行清單升級」具備高可行性，第一版可以主要落在 `core/generator.py` 的顯示 / 排序 / derived summary layer，不需要改 `services/analysis.py` 的交易 action，不需要改 DB schema，不需要改 replay/backfill。真正需要控管的是：壓縮後不能讓使用者漏看硬風控、不能把「追蹤 / 可準備」誤解成「可買」、不能讓弱勢淘汰資料從可追溯層消失。
 
-### 1. 現有資料結構支援度
+### 1. 現有實作支援度
 
-- 未持倉策略狀態層可由現有欄位推導：
-  - `decision / action / action_type`
-  - `decision_type`
-  - `trade_state`
-  - `heat_state`
-  - `structure_phase`
-  - `price_behavior`
-  - `market_grade`
-  - `volume_state`
-  - `volume_price_state`
-  - `rr`
-  - `breakout_distance`
-  - `entry_quality / confidence_score`
-- 目前 formatter 已有 `classify_watchlist_group()`，可作為 v19.4 的雛形；但 v19.4 不應只改 formatter，建議新增一個明確的 derived state，例如：
-  - `ENTRY_READY`
-  - `WAIT_PULLBACK`
-  - `WAIT_RR_REPAIR`
-  - `WAIT_VOLUME`
-  - `NEXT_DAY_CONFIRM`
-  - `WEAK_REJECT`
-- 這個 derived state 可以先在顯示 / condition layer 產生，不改 `services/analysis.py` 的買賣門檻；若後續要真正進策略權重，再移入 analysis 或 condition engine。
+- 目前 `core/generator.py` 已具備 v19.5 所需的大部分基礎 helper：
+  - `formatTelegramSummary()`：總覽摘要入口。
+  - `format_position_priority()`：持倉處理優先級。
+  - `format_next_day_tracking()` / `next_day_tracking_items()`：隔日追蹤清單。
+  - `format_pending_candidates_grouped()`：待確認候選。
+  - `classify_watchlist_group()` / `sort_watchlist_grouped()`：未持倉分組與排序。
+  - `formatTelegramPositionCard()` / `formatTelegramUnheldCard()`：詳情卡片。
+  - `compact_backtest_line()`：回測壓縮行。
+  - `split_message()` 與 v19.4.1 的多段推送順序：總覽摘要可保持最後送出。
+- 因此 v19.5 不需要從零重寫 Telegram reporter；建議新增少量 formatter helper，重組摘要內容：
+  - `format_today_conclusion()`
+  - `format_execution_checklist()`
+  - `format_unheld_funnel()`
+  - `format_detail_index()`
+  - `execution_item_from_holding()` / `execution_item_from_watch()`
 
-### 2. 隔日追蹤清單可行性
+### 2. 是否能只在顯示 / 排序層完成
 
-- 當日報文的「隔日追蹤」不需要新增 DB：
-  - 可直接從當天未持倉結果中挑選 `可準備 / 等回測 / 等RR修復 / 等量能 / 隔日確認`。
-  - 不進 `可買`，只作為隔日重點清單與排序。
-- 隔日報文要知道「昨天列入追蹤的標的」有兩種做法：
-  - 低侵入做法：從 `daily_signal_snapshot` 讀取前一個交易日的 12 檔 snapshot，再依相同 derived state 重新計算昨天的追蹤名單。
-  - 明確狀態做法：新增 tracking 表記錄昨日追蹤狀態，但 v19.4 第一階段不建議先改 schema。
-- 技術建議：
-  - v19.4 MVP 使用 `daily_signal_snapshot` + derived state 即可。
-  - 只有當 Owner 需要人工標記、跨多日追蹤、追蹤完成/失效狀態時，才考慮新增 DB table。
-
-### 3. 新倉隔日狀態可行性
-
-- 現有 `position_events` 已記錄：
-  - `event_date`
-  - `action_label`
-  - `shares_delta`
-  - `shares_before`
-  - `shares_after`
-  - `avg_price_before / avg_price_after`
-- 目前 Python 端只讀 `load_today_position_events()`，所以只能判斷「今日買 / 今日賣」。
-- v19.4 若要判斷「新倉隔日未修復」，需要新增一個 read-only loader，例如讀最近 2-5 個交易日的 `position_events`：
-  - 不需要改 schema。
-  - 不需要改 Edge Function 寫入格式。
-  - 需要補測試，避免沒有歷史事件時誤判。
-- 注意風險：
-  - 如果持倉是人工 `設定` 建立，而不是 `買入` 建立，系統只能知道設定日，不能精準知道真實建倉日。
-  - 因此「新倉隔日」應以事件資料可得時啟用，缺資料時回退到一般持倉狀態，不應硬判。
-
-### 4. 減碼後修復追蹤可行性
-
-- `position_events` 已能辨識減碼 / 賣出 / 停利 / 清倉事件，因為 Edge Function 會寫入 `action_label`、`shares_delta`、`event_type`。
-- v19.4 可在不改 DB 的情況下做：
-  - 今日減碼後：顯示 `減碼後觀察`。
-  - 隔日若重新站回突破區 / 盤面修復：回到 `底倉續抱` 或 `核心續抱`。
-  - 隔日未修復：降低優先級或進 `風控觀察`。
-- 技術上需要定義「修復」條件，但建議第一版只用現有欄位：
-  - `structure_phase`
-  - `price_behavior`
-  - `trend`
-  - `breakout_distance`
-  - `market_regime`
-  - `volume_state / volume_price_state`
-- 不建議第一版直接新增再次減碼策略，避免 v19.4 scope 膨脹。
-
-### 5. 核心倉風控升級可行性
-
-- `services/analysis.py` 已有高浮盈回落分支：
-  - `pnl >= 15`
-  - `heat_state in HOT / EXTREME` 或 `trade_state = EXTENDED`
-  - `price_behavior in VOLUME_DROP / LOW_VOLUME_PULLBACK / NORMAL`
-  - 跌破警戒價時輸出 `RISK_WATCH`，否則 `HOLD_CORE`
-- 這代表核心倉風控升級已有基礎，不需要重新發明。
-- v19.4 可做的是把 lifecycle 語意補完整：
-  - `核心續抱`
-  - `核心風控觀察`
-  - `停利後核心倉`
-  - `減碼後觀察`
-- 技術建議：
-  - 第一階段先建立「持倉生命週期顯示/derived state」。
-  - 第二階段再評估是否調整 analysis 的分支門檻。
-
-### 6. 回測判讀進排序 / 追蹤優先級可行性
-
-- 目前 `load_backtest_context()` 已查詢近 90 日 `daily_signal_snapshot` 與 `daily_price`，並計算：
-  - `sample`
-  - `win_rate`
-  - `avg_return`
-  - `verdict`
-  - `action`
-- v19.4 可把這些資料用於「追蹤優先級」：
-  - `參考度低`：只顯示，不加權。
-  - `參考度中`：可調整隔日追蹤排序。
-  - `參考度高`：可調整隔日追蹤排序與摘要順位。
-  - `相對偏弱`：降低追蹤優先級。
-  - `相對略優`：提高追蹤優先級，但不產生 BUY。
-- 技術上不建議讓回測直接改 `decision` 或覆蓋 RR / 過熱 / 停損：
-  - 可新增 `tracking_priority`。
+- 可以。PM 的必做項大多是「資訊重排與壓縮」，不要求改變策略結果：
+  - `🧭 今日結論` 可由現有 `market_summary`、market state、風險理由、持倉數、追蹤數推導。
+  - `✅ 明日執行清單` 可合併既有持倉優先級與隔日追蹤，最多取 3-5 項。
+  - `未持倉漏斗` 可由 `tomorrow_watch_state()` / `classify_watchlist_group()` 類型統計產生。
+  - `📎 詳情索引` 可由 holding / tracking / rejected counts 產生。
+- 建議 v19.5 明確保持以下不變：
+  - 不改 `decision`。
+  - 不改 `action`。
   - 不改 `is_tradeable`。
   - 不改 `is_best_candidate`。
-  - 不改 strongest candidate 的硬規則。
+  - 不改 RR / 過熱 / 漲停 / 停損 / 停利 / 加碼硬門檻。
+- 若只做第一版，應把 `可準備分數` 實作成 `display_priority` 或 `tracking_priority`，不得寫回 strategy result，也不得進 DB snapshot。
 
-### 7. 買入訊號稀少的技術處理建議
+### 3. 影響模組
 
-- 稀少買入不應先靠放寬門檻處理。
-- 目前未持倉已有 `可買 / 禁止追高 / 等待冷卻 / 可觀察但不可買 / 弱勢淘汰`，v19.4 可細分 `可觀察但不可買`：
-  - `等RR修復`
-  - `等量能`
-  - `隔日確認`
-  - `可準備`
-- 這可以改善 Owner 對「全部都是不買」的感受，同時維持策略安全性。
-- 實作上應產出明確欄位或 helper，不建議只在字串層拼文案，否則 QA 很難驗證。
+- 主要影響：
+  - `core/generator.py`
+    - 摘要 formatter。
+    - 執行清單排序。
+    - 未持倉漏斗統計。
+    - 詳情索引。
+    - 可能壓縮低優先級未持倉卡片的呈現方式。
+  - `tests/test_generator_report.py`
+    - 新增 / 更新 formatter snapshot-like assertions。
+    - 驗證摘要最後送出仍成立。
+    - 驗證硬 action 不被顯示層覆蓋。
+- 可能受影響但第一版不建議改：
+  - `services/analysis.py`：不改策略門檻。
+  - `services/daily_snapshot_store.py` / `services/signal_store.py`：不改寫入 payload。
+  - `services/position_store.py`：若只用當日 `position_events`，不需改；若要跨日事件狀態，才需要另開 read-only loader。
+  - `services/notifier.py`：v19.4.1 已處理 summary last + reply_markup last；v19.5 不應再改發送契約。
 
-### 8. 旺宏價格行右括號風險
+### 4. 建議技術落地方式
 
-- 目前 formatter 的 `price_change_line(price, change)` 固定輸出：
-  - `價格：{price}（{change}）`
-- v19.3.4 的預設持倉 / 未持倉卡片都使用同一個 `price_change_line()`。
-- `formatTelegramMessages()` 預設三段訊息目前不走 `split_message()`，只有完整詳情備份會 split。
-- 初步判斷：
-  - 單一價格行少右括號不太像 `price_change_line()` 本身漏括號。
-  - 更可能是 Owner 複製截斷、Telegram 顯示截圖截斷，或舊版報文殘留。
-- 仍建議先開一個 v19.3.5 顯示穩定性 QA 小項：
-  - 對預設三段 messages 驗證所有 `價格：` 行都符合 `價格：...（...%）`。
-  - 驗證預設每段訊息長度低於 Telegram 4096 字元，或讓預設三段也走 split guard。
-- 若 QA 證明預設訊息可能超過 Telegram 限制，應先修 v19.3.5，不要混入 v19.4 策略升級。
+- 不建議在 `formatTelegramSummary()` 裡直接堆大量字串判斷；應先建立一個摘要 view model：
+  - `build_report_decision_summary(results_map, market_summary, best, score)`
+  - 回傳：
+    - `today_conclusion`
+    - `execution_items`
+    - `unheld_funnel`
+    - `detail_index`
+    - `risk_reason`
+- `execution_items` 建議使用結構化資料，不要只用字串：
+  - `name`
+  - `kind`: `holding` / `watch`
+  - `state`: `STOP` / `REDUCE` / `TAKE_PROFIT` / `NEW_POSITION_RISK` / `CORE_RISK` / `WAIT_PULLBACK` / `WAIT_RR` / `WAIT_VOLUME` / `CONFIRM_NEXT_DAY`
+  - `priority`
+  - `trigger`
+  - `display_text`
+- 最後再由 formatter 轉成最多 5 行文字。這樣 QA 可以直接測排序與分類，不必靠全文比對。
 
-### 9. v19.4 技術拆分建議
+### 5. 持倉執行清單可行性
 
-- 建議拆成兩個任務，而不是一次大改：
-  - `v19.3.5`：顯示穩定性小修，只驗價格行括號與 Telegram message length / split guard。
-  - `v19.4.0`：策略狀態層與隔日追蹤 MVP。
-- v19.4.0 最小技術範圍：
-  - 新增 derived strategy state helper。
-  - 新增隔日追蹤清單 formatter。
-  - 從 `daily_signal_snapshot` 讀前一交易日追蹤狀態。
-  - 從 `position_events` 讀最近事件，支援新倉隔日 / 減碼後觀察。
-  - 讓 backtest context 只影響 tracking priority，不改 BUY / STOP / RR 硬規則。
-- 不建議第一版改動：
-  - RR 門檻。
-  - 過熱 / 漲停不追規則。
-  - 加碼 / 減碼 / 停利 / 停損策略門檻。
-  - DB schema。
-  - 股票池。
+- 可由現有持倉 helper 推導：
+  - `position_summary_action()`
+  - `position_priority_rank()`
+  - `holding_tomorrow_trigger()`
+  - `holding_next_step_line()`
+  - `ensure_holding_decision()`
+  - `stock_pnl()`
+- 風控 / 停利 / 減碼 / 停損應使用最高優先級，維持 PM 規則。
+- `續抱` 不應單獨出現在摘要；技術上可在 execution item 轉換時強制將其展開為：
+  - `洗盤續抱｜守警戒`
+  - `核心風控｜守警戒價`
+  - `新倉風控｜站回 / 守停損`
+  - `減碼後觀察｜修復才恢復優先級`
+- 這是顯示層語意展開，不改 `holding_decision.level`。
 
-### 10. 建議 QA 先設計的最小驗證矩陣
+### 6. 未持倉漏斗可行性
 
-- R3 強勢但過熱：
-  - 不進 `可買`。
-  - 進 `等待冷卻 / 等回測 / 隔日追蹤`。
-- RR 接近但不足：
-  - 不進 `可買`。
-  - 進 `等RR修復`。
-- 量能不足但非弱勢：
-  - 不進 `弱勢淘汰`。
-  - 進 `等量能`。
-- 今日新倉浮虧：
-  - 當日顯示 `新倉風控觀察 / 洗盤警戒`。
-  - 隔日未修復降級。
-- 減碼後：
-  - 當日顯示 `減碼後觀察`。
-  - 隔日修復 / 未修復分支可驗證。
-- 回測加權：
-  - 只能改追蹤排序。
-  - 不得產生 BUY。
-  - 不得改 strongest candidate 硬規則。
+- 可直接從現有未持倉狀態推導：
+  - `is_valid_entry()` -> `可買`
+  - `tomorrow_watch_state()` / `entry_blockers()` / `heat_state` / `trade_state` -> `可準備 / 等回測 / 等RR修復 / 等量能 / 隔日確認`
+  - `classify_watchlist_group()` 或弱勢條件 -> `淘汰`
+- 建議漏斗分類不要完全等同目前分組名稱，應建立 v19.5 專用 helper：
+  - `classify_unheld_funnel_state(name, data)`
+- 原因：
+  - 目前 `classify_watchlist_group()` 服務的是「未持倉摘要分組」。
+  - v19.5 漏斗服務的是「明日執行與閱讀優先級」。
+  - 兩者混用會讓未來 QA 很難判斷是產品分組變了，還是追蹤排序變了。
 
-### 11. Tech 結論
+### 7. 詳情保留與壓縮方式
 
-- v19.4 可以進入 PM 定義 TASK，但應限定為「狀態層 + 隔日追蹤」，不是放寬策略。
-- 現有資料結構足以支援 MVP；暫不需要 DB schema 變更。
-- 需要新增 read-only 歷史事件讀取與前一交易日 snapshot 讀取。
-- 回測可進 tracking priority，不應直接進交易 decision。
-- 旺宏右括號問題建議先由 QA 以 v19.3.5 顯示穩定性驗證處理；若測出預設訊息長度或 split 風險，再先修 v19.3.5。
+- PM 提到「低優先級未持倉詳情可壓縮」。技術上可行，但需明確產品邊界：
+  - 不得直接刪除標的。
+  - 不得讓弱勢淘汰完全不可追溯。
+  - 可把弱勢淘汰集中成統計行，並在同一段保留簡短列表，例如：`淘汰 4：旺宏、...｜主因：市場弱、遠離觸發`。
+- 如果 Owner 仍要求「所有標的完整卡片都在 Telegram 內」，則 v19.5 只能壓縮摘要，不能壓縮詳情。
+- 若允許詳情壓縮，建議第一版只壓縮「未持倉弱勢淘汰」卡片，不壓縮：
+  - 持倉。
+  - 可買。
+  - 可準備。
+  - 等回測 / 等RR / 等量能。
+  - 漲停 / 過熱高風險。
+
+### 8. 回測資料的使用邊界
+
+- 目前 `compact_backtest_line()` 已可顯示樣本、參考度、勝率、相對報酬與判讀。
+- v19.5 可讓回測參考度進 `display_priority`，但只限排序：
+  - `參考度低`：不提高優先級。
+  - `參考度中 / 高` 且相對略優：可在同類候選內排序提前。
+  - 相對偏弱：同類候選內排序降低。
+- 不得讓回測：
+  - 產生 BUY。
+  - 覆蓋 RR 不足。
+  - 覆蓋過熱 / 漲停不追。
+  - 覆蓋停損 / 減碼 / 停利。
+  - 改 strongest candidate。
+
+### 9. 技術風險
+
+- 語意壓縮風險：
+  - `今日結論` 太短可能讓使用者忽略持倉風控。
+  - 解法：執行清單中停損 / 減碼 / 新倉風控永遠排前面。
+- 分類誤導風險：
+  - `可準備` 容易被理解成可買。
+  - 解法：文案固定帶 `不可買 / 等觸發`，並在買點行維持 `不買`。
+- 資料缺失風險：
+  - 如果壓縮弱勢淘汰詳情，QA 需確認所有股票仍在摘要或詳情索引中可追溯。
+- Telegram 長度風險：
+  - 摘要最後送出後若變長，仍需確保 summary 不被 split 到難讀。
+  - 若 summary 有 split 風險，需讓 summary chunks 仍在最後且最後 chunk 保留核心結論，或限制執行清單最多 5 項。
+- 回歸風險：
+  - `formatTelegramMessages()` 訊息順序與 `reply_markup` 最後綁定不能回退。
+- 測試風險：
+  - 若只測全文片段，容易漏掉排序錯誤；建議新增 helper 層 unit tests。
+
+### 10. 建議 v19.5 任務切分
+
+- v19.5 可以作為 minor，但建議限定為「報文體驗與決策壓縮」，不要混入策略門檻。
+- MVP 範圍：
+  - 新增 `🧭 今日結論`。
+  - 新增 `✅ 明日執行清單`，最多 5 項。
+  - 新增 `未持倉漏斗`。
+  - 新增 `📎 詳情索引`。
+  - 保持總覽摘要最後送出。
+  - 保持 `reply_markup` 綁定最後摘要段。
+- 延後項：
+  - 跨日 tracking table。
+  - 跨日「昨日追蹤完成 / 失效」持久化。
+  - 策略門檻調整。
+  - DB schema 變更。
+  - 正式 backfill。
+
+### 11. 建議 QA 驗證方向
+
+- Formatter / summary：
+  - 摘要包含 `今日結論`、`明日執行清單`、`未持倉漏斗`、`詳情索引`。
+  - 摘要仍是 `messages[-1]`。
+  - `reply_markup` 仍附在最後一段摘要。
+- 執行清單排序：
+  - 停損 / 減碼 / 停利 / 新倉風控優先於一般追蹤。
+  - 最多 5 項。
+  - 合格 BUY 必須進前段，不被等待狀態覆蓋。
+- 未持倉漏斗：
+  - `可買`、`等回測`、`等RR修復`、`等量能`、`淘汰` 計數正確。
+  - 弱勢淘汰不佔用主執行清單。
+- 不變性：
+  - 不改 strategy action。
+  - 不改 DB payload。
+  - 不改 snapshot/replay/backfill。
+  - 回測只影響排序，不產生 BUY。
+
+### 12. Tech 結論
+
+- v19.5 可以進入 PM 正式 TASK，但應明確限制為「顯示 / 排序 / 摘要 view model」。
+- 第一版不需要改 `services/analysis.py`、DB schema、股票池、replay/backfill。
+- 技術上最重要的不是新增更多文案，而是建立結構化 summary view model，避免 formatter 字串堆疊失控。
+- 若 Owner 要把「可準備分數」真正納入交易決策，應另開 v19.6 或 v20 策略研究；v19.5 只做閱讀與執行體驗升級。
 
 ## QA Findings
 
-- QA 結論：v19.4 最小驗證應聚焦「策略狀態層 + 隔日追蹤 MVP」，不驗證放寬策略門檻，不要求 DB schema 變更，不跑全局測試。驗證目標是確認新狀態能提供更清楚的準備 / 等待 / 追蹤語意，同時不破壞現有硬風控。
+- QA 結論：v19.5 可以進入正式 PM `TASK.md`，但必須被定義為「顯示 / 排序 / 摘要 view model」版本，不能混入策略門檻、DB schema、replay/backfill 或跨日持久化。QA 對 PM / Tech 方向給 conditional approval：產品方向合理，技術落點可行，但摘要壓縮會引入新的閱讀風險與發送契約風險，必須在驗收標準中明確防回退。
 
-### v19.4 最小驗證矩陣
+### 關聯風險掃描
 
-| 編號 | 場景 | 最小輸入條件 | 預期輸出 | 必測重點 | 建議測試層級 |
-| --- | --- | --- | --- | --- | --- |
-| V19.4-QA-01 | R3 強勢但過熱 | `market=R3`、未持倉、結構強、`heat_state=HOT/EXTREME` 或漲停延伸 | 不進 `可買`；進 `等待冷卻 / 等回測 / 隔日追蹤` | 不追高原則維持；不可產生 BUY | formatter / derived state unit |
-| V19.4-QA-02 | RR 接近但不足 | 未持倉、結構強、非弱勢、`0 < rr < 1` 或接近門檻 | 不進 `可買`；顯示 `等RR修復`；可進隔日追蹤 | RR 硬門檻不放寬；語意從不買升級為可追蹤 | formatter / derived state unit |
-| V19.4-QA-03 | 量能不足但非弱勢 | 未持倉、結構可觀察、`volume_state=WEAK`、`market_grade != D` | 不進 `弱勢淘汰`；顯示 `等量能` | 量能不足與弱勢淘汰不可混淆 | formatter / derived state unit |
-| V19.4-QA-04 | 隔日確認 | 未持倉、`price_behavior=LIMIT_REBOUND/WEAK_REBOUND` 或訊號需隔日確認 | 不進 `可買`；顯示 `隔日確認`；進隔日追蹤 | 反彈 / 漲停反彈不直接買 | formatter / derived state unit |
-| V19.4-QA-05 | 弱勢淘汰 | 未持倉、`market_grade=D` 或結構弱、遠離觸發 | 顯示 `弱勢淘汰`；不進隔日追蹤優先清單 | 弱勢標的不佔用追蹤順位 | formatter / derived state unit |
-| V19.4-QA-06 | 合格 BUY 仍可買 | 未持倉、`decision=BUY`、`action>0`、`rr>=1`、非過熱、非弱勢、無 blocker | 顯示 `可買`；不進等待 / 追蹤分組 | 新狀態層不得壓掉真正買點 | formatter regression |
-| V19.4-QA-07 | 今日新倉浮虧 | 今日有買入事件、持倉、`pnl < 0` | 當日顯示 `新倉風控觀察 / 洗盤警戒` | 不回退普通續抱；不直接停損除非策略觸發 | formatter / position event unit |
-| V19.4-QA-08 | 新倉隔日未修復 | 前一交易日買入，隔日仍未修復或轉弱 | 顯示 `隔日未修復 / 風控觀察`；下一步提示降級 | 需依近 2-5 日 position events；缺事件時安全回退 | position event unit |
-| V19.4-QA-09 | 減碼後觀察 | 今日或前一日有減碼 / 賣出事件，仍有底倉 | 顯示 `減碼後觀察`；保留底倉語意 | 不把減碼後狀態誤判成新買點或普通續抱 | formatter / position event unit |
-| V19.4-QA-10 | 減碼後修復 | 減碼後隔日重新站回突破區或盤面修復 | 可回到 `底倉續抱 / 核心續抱` | 修復條件只影響顯示與追蹤，不自動加碼 | formatter / derived state unit |
-| V19.4-QA-11 | 減碼後未修復 | 減碼後隔日未站回、結構轉弱 | 顯示 `風控觀察 / 降低優先級` | 不直接新增賣出策略，除非 analysis 已輸出 | formatter / derived state unit |
-| V19.4-QA-12 | 核心倉高浮盈回落 | 持倉高浮盈、量縮或過熱後回落，未觸發停損 | 顯示 `核心風控觀察` 或 `核心續抱` 附下一步 | 不把核心倉普通化為續抱；不憑空停利 | formatter / holding lifecycle unit |
-| V19.4-QA-13 | 停利後核心倉 | 已有停利事件，仍保留持倉 | 顯示 `停利後核心倉` 或等效語意 | 不重複提示同日連續停利；保留核心倉語意 | formatter / position event unit |
-| V19.4-QA-14 | 回測參考度低 | `sample < 10`、相對略優 | 只顯示，不提高交易 decision；可低權重追蹤 | 參考度低不可推動 BUY | backtest context unit |
-| V19.4-QA-15 | 回測參考度中/高且略優 | `sample >= 10`、相對 `>= +1.0%` | 可提高追蹤排序 / priority | 不改 `is_tradeable`、不改 strongest hard rule | tracking priority unit |
-| V19.4-QA-16 | 回測偏弱 | 相對 `<= -0.5%` | 降低追蹤優先級 | 不覆蓋停損 / 風控；不把弱勢改可買 | tracking priority unit |
-| V19.4-QA-17 | 前一交易日追蹤名單 | 使用前一交易日 `daily_signal_snapshot` 推導追蹤清單 | 能產生昨日追蹤 / 今日修復對照 | 不新增 DB schema；缺 snapshot 時安全顯示無追蹤 | snapshot read unit |
-| V19.4-QA-18 | 缺 position events | 持倉存在，但沒有近 2-5 日事件 | 回退一般持倉狀態，不硬判新倉 / 減碼後 | 缺資料不可誤判 | position event unit |
+#### 直接消費者與資料流
 
-### 最小測試分層
+- `core/generator.py`
+  - `generate_report()` 回傳 `messages, execution_reply_markup(results_map)`。
+  - `formatTelegramMessages()` 目前回傳 list：持倉詳情、未持倉詳情、總覽摘要。
+  - `formatTelegramSummary()` 是 v19.5 壓縮摘要的主要入口。
+- `main.py`
+  - 直接消費 `generate_report()` 的 tuple，並呼叫 `send_many(messages, reply_markup=reply_markup)`。
+- `services/notifier.py`
+  - `send_many()` 對 list 訊息只把 `reply_markup` 附在最後一段。
+  - 單段 string 則直接附 `reply_markup`。
+- 測試契約
+  - `tests/test_generator_report.py` 已覆蓋 summary last、formatter 順序與部分策略顯示不變性。
+  - `tests/test_notifier.py` 已覆蓋 reply_markup 綁最後一段與單段字串原行為。
 
-- L1 formatter / derived state：
-  - 未持倉狀態層：`可買 / 可準備 / 等回測 / 等RR修復 / 等量能 / 隔日確認 / 弱勢淘汰`。
-  - 持倉 lifecycle：`新倉風控觀察 / 隔日未修復 / 減碼後觀察 / 核心風控觀察 / 停利後核心倉`。
-  - 只跑 `tests/test_generator_report.py` 或新增對應 formatter test file。
-- L2 局部 integration：
-  - 前一交易日 `daily_signal_snapshot` 讀取與 derived tracking list。
-  - 近 2-5 日 `position_events` read-only loader。
-  - 只跑新增的局部 store / loader tests，不跑 replay/backfill。
-- 禁止作為 v19.4 MVP 驗證項：
-  - full regression。
-  - formal backfill。
-  - live Telegram。
-  - live Supabase write。
-  - 全市場掃描。
+QA 判斷：v19.5 只要改摘要分段、summary split、messages list 順序或低優先級詳情壓縮，就會影響 `main.py -> send_many()` 這條直接發送契約。即使不改 `services/notifier.py`，QA 仍必須把 `messages[-1]` 是總覽摘要、且 `reply_markup` 附在最後摘要段列為必測。
 
-### 不變性檢查
+#### 可能漏掉的間接依賴
 
-v19.4 驗證必須額外確認以下不變性：
+- `generate()` 會把 `generate_report()[0]` 若為 list 就 join 成文字；v19.5 若改 messages 結構為 object / view model，不可破壞這個 fallback。
+- Telegram `send()` 會把單段超過 3500 字截斷；若 v19.5 摘要壓縮失敗導致 summary 過長，最重要的結論可能被截斷。
+- `split_message()` 目前只用於完整詳情備份；若 v19.5 讓摘要 split，需重新定義「最後一段摘要」與 `reply_markup` 應附在哪個 summary chunk。
+- `execution_reply_markup(results_map)` 仍依全結果產生按鈕；若低優先級標的詳情被壓縮，按鈕與可見標的的關係可能讓使用者困惑。
 
-- `BUY` 硬門檻不因 `可準備 / 隔日追蹤` 被放寬。
-- `is_tradeable` 不因回測略優或追蹤優先級提高而變成 true。
-- `is_best_candidate` 不因 tracking priority 而覆蓋原本硬規則。
-- 過熱、漲停鎖價、RR 不足仍不可被追蹤語意改成可買。
-- STOP / TAKE_PROFIT / REDUCE 既有 action 不被 lifecycle 顯示覆蓋。
-- 缺前日 snapshot 或缺 position events 時，必須安全回退，不得硬判追蹤或新倉狀態。
+### 質疑與反證
 
-### 建議最小測試命令
+#### 1. PM 是否漏需求
 
-若 v19.4 只改 formatter / derived state：
+PM 已定義 `今日結論`、`明日執行清單`、`未持倉漏斗`、`詳情索引`，但仍需要補三個硬性需求：
 
-```bash
-.venv/bin/python -m pytest tests/test_generator_report.py
-```
+- 風控不可被壓縮掉：停損、減碼、停利、新倉風控、核心風控必須在摘要可見；不能只存在詳情。
+- 低優先級可壓縮但不可消失：弱勢淘汰可統計化，但必須可追溯到股票名稱、主因與原始詳情位置。
+- 等待類型必須明確不是可買：`可準備`、`等回測`、`等RR修復`、`等量能` 必須固定帶 `不可買 / 等觸發 / 不追價` 之一，不能只用正向詞彙。
 
-若新增 read-only position event loader：
+QA 反證標準：若一份 v19.5 報文中使用者只看最後摘要，看不到任何風控標的、看不出等待標的不可買、或找不到淘汰標的名稱，則 PM 需求不完整。
 
-```bash
-.venv/bin/python -m pytest tests/test_position_store.py
-```
+#### 2. Tech 是否漏同步
 
-若新增前一交易日 snapshot tracking loader：
+Tech 正確指出 MVP 可主要落在 `core/generator.py`，但仍需同步三個契約：
 
-```bash
-.venv/bin/python -m pytest tests/test_daily_snapshot_store.py
-```
+- `formatTelegramMessages()` 的 list 順序不得回退，summary 必須仍是 `messages[-1]`。
+- `send_many()` 的 `reply_markup` last-message contract 必須新增 v19.5 integration test，不只保留 notifier unit test。
+- 如果建立 `build_report_decision_summary()` view model，必須有 helper-level tests 驗證排序與分類；不能只靠全文 `assertIn`。
 
-只有當 Tech 實際改到 strategy hard rules、snapshot persistence contract 或 replay/backfill scripts，才升級到相應局部策略 / snapshot / replay tests。v19.4 MVP 不應預設 full pytest。
+QA 反證標準：若 Tech 只改 `formatTelegramSummary()` 並讓現有片段測試通過，但沒有測 `generate_report() -> send_many()` 的末段摘要與按鈕契約，QA 應判定 conditional pass 或 blocked。
+
+#### 3. 測試是否能證明沒有破壞直接消費者
+
+不能只靠 formatter snapshot。v19.5 至少要證明：
+
+- `formatTelegramMessages()` 產出的最後一段是總覽摘要。
+- `generate_report()` 回傳的 messages list 保持可被 `send_many()` 消費。
+- `send_many(messages, reply_markup)` 仍將 inline keyboard 綁到最後摘要段。
+- 單段 string 行為沒有回退。
+- 摘要長度不會觸發 `send()` 3500 字截斷；或若摘要 split，仍有明確的最後 summary chunk 規則。
+
+### 指定風險檢查
+
+#### 摘要壓縮是否造成風控漏看
+
+高風險。PM 建議最多 3-5 項執行清單，若持倉風控超過 5 項，低順位風控可能被擠掉。
+
+QA 要求：
+- STOP / REDUCE / TAKE_PROFIT / 新倉風控 / 核心風控必須優先於所有未持倉追蹤。
+- 若風控項超過 5 項，摘要不得靜默截斷，必須顯示 `另有 N 檔風控見詳情` 或等效索引。
+- `今日結論` 不得只寫「不新增」，必須帶出是否有持倉風控。
+
+#### 等待標的是否被誤解為可買
+
+中高風險。`可準備` 是產品上有用的詞，但交易語意容易被使用者理解成可進場。
+
+QA 要求：
+- `可準備` 不得與 `可買` 同色 / 同語氣 / 同排序標籤。
+- 等待類標題必須包含 `等`、`不可買`、`不追價` 或具體觸發條件。
+- 買點行仍必須明確顯示 `不買`，除非 `is_valid_entry()` 成立。
+- 合格 BUY 必須覆蓋等待狀態；等待狀態不得覆蓋 BUY，也不得生成 `is_tradeable=True`。
+
+#### 低優先級標的是否不可追溯
+
+高風險。PM / Tech 都允許弱勢淘汰壓縮，但如果只剩統計數，Owner 後續無法檢查某檔股票為何被淘汰。
+
+QA 要求：
+- 弱勢淘汰可不展開完整卡片，但必須至少保留股票名稱清單與主因統計。
+- `詳情索引` 必須能回答：持倉幾檔、追蹤幾檔、淘汰幾檔、低優先級名稱在哪裡看。
+- 12 檔 watchlist 不得因壓縮而在報文中完全消失；若有任何標的不出現在摘要或詳情，QA 應判定 blocked。
+
+#### Telegram summary / reply_markup 契約是否回退
+
+高風險。v19.4.1 剛修正摘要最後送出與按鈕綁定，v19.5 正好會改 summary 結構，最容易回退。
+
+QA 要求：
+- 預設 messages 順序仍需保證最後一段是總覽摘要。
+- `include_detail=True` 時完整詳情 chunk 仍必須在摘要之前。
+- `reply_markup` 必須綁在最後摘要段，不可回到第一段詳情。
+- 若 summary split 成多段，必須定義 `reply_markup` 綁到最後 summary chunk，且最後 chunk 不得只是殘餘低價值文字。
+- 必須保留 `tests/test_notifier.py`，並新增 formatter-to-notifier contract smoke。
+
+### v19.5 QA 驗證矩陣建議
+
+| 編號 | 場景 | 風險 | 最小預期 | 建議測試 |
+| --- | --- | --- | --- | --- |
+| V19.5-QA-01 | 摘要最後送出 | Telegram 契約回退 | `messages[-1]` 包含 `v19.5`、`今日結論`、`明日執行清單` | formatter test |
+| V19.5-QA-02 | reply_markup 綁定 | 按鈕跑到詳情段 | `send_many()` 只對最後摘要段帶 markup | notifier + contract smoke |
+| V19.5-QA-03 | 多風控持倉 | 風控漏看 | STOP / REDUCE / TAKE_PROFIT / 新倉風控優先進執行清單；超量有索引 | summary view model unit |
+| V19.5-QA-04 | 風控超過 5 項 | 靜默截斷 | 顯示前 5 項且提示另有 N 項見詳情 | summary formatter test |
+| V19.5-QA-05 | 合格 BUY | 等待狀態覆蓋買點 | BUY 進執行清單前段；不顯示為等回測 / 可準備 | derived state unit |
+| V19.5-QA-06 | RR 不足但強勢 | 等待被誤解成可買 | 顯示 `等RR修復 / 不追價 / 買點：不買` | formatter test |
+| V19.5-QA-07 | 過熱強勢股 | 追高風險 | 顯示等冷卻 / 等回測，不進可買 | formatter test |
+| V19.5-QA-08 | 弱勢淘汰多檔 | 不可追溯 | 漏斗顯示淘汰數，詳情或統計行保留名稱與主因 | formatter test |
+| V19.5-QA-09 | 低優先級壓縮 | 12 檔消失 | 全部 watchlist 標的可在摘要 / 詳情 / 壓縮列表追溯 | snapshot-like test |
+| V19.5-QA-10 | 回測略優 | 回測產生 BUY | 只影響同類排序，不改 decision / is_tradeable / best candidate | strategy invariance test |
+| V19.5-QA-11 | 摘要長度 | Telegram 截斷 | summary 低於 3500 字，或有明確 split 規則 | length smoke |
+| V19.5-QA-12 | 無持倉 | 空狀態誤導 | 明日執行清單以候選為主，仍說明無持倉 | formatter test |
+| V19.5-QA-13 | 無追蹤候選 | 空狀態誤導 | 顯示僅處理持倉 / 無新追蹤 | formatter test |
+| V19.5-QA-14 | position_events 缺失 | 新倉 / 減碼誤判 | 安全回退，不硬判新倉或減碼後 | formatter fixture |
+| V19.5-QA-15 | generate fallback | 下游格式破壞 | `generate()` 仍可 join list，`generate_report()` tuple 不變 | contract test |
+
+### 最小測試分層建議
+
+- L1 必跑：
+  - `tests/test_generator_report.py`
+  - `tests/test_notifier.py`
+  - 新增 summary view model unit tests。
+  - formatter-to-notifier contract smoke。
+- L2 條件觸發：
+  - 若新增 read-only loader 或跨日追蹤讀取，跑對應 store / loader tests。
+  - 若調整 snapshot payload 或 signal fields，跑 snapshot / validator tests。
+- L3 條件觸發：
+  - 只有改到 `services/analysis.py`、DB payload、replay/backfill scripts、正式寫庫流程，才做 full pytest + replay/backfill dry-run。
+
+### QA 對 PM / Tech 結論的修正建議
+
+- PM 的 `明日執行清單最多 5 項` 需要補上「超過 5 項時如何追溯」。
+- PM 的 `弱勢淘汰預設只統計` 需要補上「名稱與主因不可消失」。
+- PM 的 `可準備分數` 應改名或加註為 `不可買的準備度`，避免被理解成買入建議。
+- Tech 的 view model 方向正確，但必須讓 QA 可直接測 `execution_items`、`unheld_funnel`、`detail_index`，不要只輸出字串。
+- Tech 不應在 v19.5 修改 `services/notifier.py`，除非 summary split 規則需要；若修改，必須升級契約驗證。
 
 ### QA 結論
 
-- v19.4 可以進入 PM 撰寫 `TASK.md`，但驗收矩陣必須鎖定「狀態層 + 隔日追蹤」。
-- QA 不建議第一版驗證策略門檻放寬；應先驗證新狀態不破壞硬風控。
-- v19.4 若要落地，Tech 應先補最小 fixture / snapshot tests，再實作 formatter / derived helper；QA 後續按上述矩陣做局部驗證。
+- v19.5 可進入正式 TASK，但 QA 建議標記為 minor + 預設 L3；若 Architect 明確限定不改策略 / DB / replay，可將實測收斂為「L2 顯示不變性 + contract」。
+- QA 不接受只做 formatter 片段測試。v19.5 的核心風險是摘要壓縮後的誤讀與 Telegram 發送契約回退，必須加入直接消費者 contract tests。
+- QA 對 PM / Tech 方向給 conditional approval：可以做，但 TASK 必須把風控不可漏看、等待不可誤解、低優先級可追溯、summary/reply_markup 不回退列為硬驗收。
 
 ## Architect Conclusion
 
-- PM 已完成 v19.4 顯著功能升級研究，並補出可直接放入 `TASK.md` 的產品文案、報文範例與驗收標準。Architect 判斷：研究階段已足夠，下一步直接產出正式 v19.4 `TASK.md`。
+- PM / Tech / QA 已完成 v19.5 報文與策略體驗強化研究。Architect 判斷：研究階段足夠，下一步可交 PM 正式改寫 `TASK.md`。
 
-### PM 研究結論摘要
+### Owner 補充約束
 
-- v19.4 不應第一階段直接放寬 RR、過熱或加碼門檻。
-- v19.4 應新增「策略狀態層」，補齊 `可準備 / 等回測 / 等RR修復 / 等量能 / 隔日確認`。
-- R3 市場不應等同全面禁止交易；應保留不追高原則，但增加「可準備 / 隔日追蹤」。
-- 持倉管理應補齊生命週期：
-  - 新倉浮虧隔日未修復降級。
-  - 減碼後觀察修復。
-  - 核心倉高浮盈回落進入核心風控觀察。
-- 回測可進入輔助權重，但不應覆蓋 RR / 過熱 / 風控等硬規則。
-- 旺宏價格行右括號疑慮不作為 v19.4 阻塞；目前視為非策略問題，不另開 v19.3.5。
+Owner 指出 v19.4.1 的短摘要 / 持倉處理區少了目前收益情況，導致無法一眼看到每檔持倉目前是賺是虧。這不是可壓縮資訊，v19.5 必須修正。
+
+硬性要求：
+
+- `✅ 明日執行清單` 中的所有持倉項必須保留目前收益百分比。
+- 收益顯示格式沿用既有摘要語意，例如：`英業達｜+20.04%｜核心風控｜守 59.0`。
+- 新倉風控、減碼後觀察、核心風控、洗盤續抱、續抱觀察都必須帶收益百分比。
+- 未持倉項不需要收益百分比，但必須保留等待 / 不買語意。
+- 壓縮摘要不得刪除持倉盈虧，因為盈虧是持倉處理優先級的重要判斷上下文。
 
 ### Architect 判斷
 
-- 直接進入 v19.4，不開 v19.3.5。
-- v19.4 定位為「交易閉環升級」，不是 formatter 小修。
-- v19.4 必須包含三個可感知主能力：
-  - `隔日追蹤`
-  - `持倉處理優先級`
-  - `明日觸發條件`
-- v19.4 應把「今天不能買」轉化為「明天怎麼看」。
-- `待確認候選`、回測追蹤排序、今日狀態到明日檢查閉環應納入驗收。
-- 現有資料結構足以支援 MVP；暫不改 DB schema。
-- 回測只進 tracking priority，不覆蓋 BUY / STOP / RR / 過熱硬規則。
-- 既有 QA 最小驗證矩陣可保留，後續 `TASK.md` 需引用不變性檢查。
+- v19.5 定位：`收盤決策壓縮與執行清單升級`。
+- v19.5 可進入正式 TASK，但必須限定為顯示 / 排序 / summary view model，不改策略 action。
+- 必做能力：
+  - `🧭 今日結論`
+  - `✅ 明日執行清單`
+  - `未持倉漏斗`
+  - `📎 詳情索引`
+  - 持倉執行清單保留目前收益百分比
+- 不可變更：
+  - 不改 `services/analysis.py` 的交易 action。
+  - 不改 RR / 過熱 / 漲停不追 / 加碼 / 停利 / 停損硬門檻。
+  - 不改 DB schema。
+  - 不擴大股票池。
+  - 不改 replay/backfill。
+- QA 要求需納入 TASK：
+  - 風控不可漏看。
+  - 等待標的不可被誤解為可買。
+  - 低優先級標的不可完全消失。
+  - summary 必須仍是 `messages[-1]`。
+  - `reply_markup` 必須仍綁在最後摘要段。
+  - 持倉執行清單必須保留收益百分比。
+- 測試等級：v19.5 是 minor，預設 L3；若 Owner 明確限定不改策略 / DB / replay，實測可收斂為 `L2 顯示不變性 + Telegram contract`，但不得低於 L2。
 
 ## Next Action
 
 - 轉 PM 正式改寫 `TASK.md`。
-- `TASK.md` 必須使用 PM Findings 內的「可直接放入 TASK.md 的產品文案」作為主體。
-- `TASK.md` 必須保留不可變更範圍：
-  - 不直接放寬 RR / 過熱 / 漲停不追。
-  - 不讓回測直接產生 BUY。
-  - 不改 DB schema。
-  - 不擴大股票池。
-  - 不做全 repo refactor。
+- `TASK.md` 必須使用 PM Findings 的產品方向，並合併 Tech / QA / Owner 補充約束。
+- `TASK.md` 必須明確寫入：
+  - 持倉執行清單保留收益百分比。
+  - 最多 5 項時，若風控超量需顯示另有 N 項見詳情。
+  - 弱勢淘汰可壓縮但名稱與主因不可消失。
+  - `可準備` / `等回測` / `等RR修復` 必須保持不可買語意。
+  - summary last 與 reply_markup last contract 不可回退。

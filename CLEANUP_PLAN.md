@@ -24,6 +24,9 @@
 - v19.4.1 Telegram 推送順序調整第一輪 L1 QA 已完成；Architect 收口發現 `reply_markup` 綁定位置風險後，Tech 已補修。本輪不再要求 QA 重跑，由 Architect 收口驗證後 push。
 - 已補充 QA 契約規則：改變 output / messages list / payload shape 時，L1 也必須測直接消費者。
 - 已補充 QA 強化規則：QA_REPORT 必須包含關聯風險掃描、質疑與反證，避免只按既有清單驗證。
+- v19.5 研究任務已完成 PM / Tech / QA Findings；PM 已改寫正式 `TASK.md`，Tech 已交付 `CHANGELOG.md`，QA 已交付 L2 通過報告。下一步 Architect 收口並 push。
+- 已補充文件寫入權限：研究任務 `RESEARCH.md` 為共享文件，各角色只寫自己的 Findings；開發任務回到 `TASK.md` / `CHANGELOG.md` / `QA_REPORT.md` 專屬交付。
+- 已補充 Tech 自檢 / QA 驗證邊界，避免 Tech 做完整 QA 或 QA 只重複 Tech 測試。
 - 已補充版本分級與 QA 分級規則；下一次啟動部門時只需讓該角色重新讀 `AGENTS.md` 與 `DISPATCH.md`，不需要立即逐窗通知。
 - 已補充 Architect 禁止直接實作新需求的硬規則，避免總控越權成為 Tech。
 - 若要處理策略門檻、live Telegram 或 full regression，需另開任務。
