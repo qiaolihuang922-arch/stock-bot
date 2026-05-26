@@ -4,7 +4,7 @@ import time
 from config import TOKEN, CHAT_ID
 
 # ================================
-# 🔥 notifier.py（v19.1.3｜Telegram 發送層）
+# 🔥 notifier.py（v19.4.1｜Telegram 發送層）
 # ================================
 
 def send(msg, reply_markup=None):
@@ -51,8 +51,9 @@ def send_many(messages, reply_markup=None):
     if not messages:
         return False
 
+    last_index = len(messages) - 1
     for index, message in enumerate(messages):
-        markup = reply_markup if index == 0 else None
+        markup = reply_markup if index == last_index else None
         if not send(message, reply_markup=markup):
             return False
         time.sleep(0.8)

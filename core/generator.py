@@ -42,7 +42,7 @@ from services.daily_snapshot_store import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v19.4"
+VERSION = "v19.4.1"
 
 EXECUTION_LEVELS = {
     "TAKE_PROFIT_50": "TP50",
@@ -3627,15 +3627,29 @@ def formatTelegramMessages(results_map, full_msg, best, score, market_summary, n
         ])
     ]
 
-    messages = [
-        formatTelegramSummary(results_map, best, score, market_summary, now, position_warning, daily_write_warning),
-        "【持倉標的】\n\n" + ("\n\n".join(position_cards) if position_cards else "無持倉"),
-        "【未持倉標的】\n\n" + ("\n\n".join(unheld_cards) if unheld_cards else "無"),
-    ]
+    summary_message = formatTelegramSummary(
+        results_map,
+        best,
+        score,
+        market_summary,
+        now,
+        position_warning,
+        daily_write_warning
+    )
+    position_message = "【持倉標的】\n\n" + ("\n\n".join(position_cards) if position_cards else "無持倉")
+    unheld_message = "【未持倉標的】\n\n" + ("\n\n".join(unheld_cards) if unheld_cards else "無")
+
+    messages = []
 
     if include_detail:
         for chunk in split_message("【完整詳情備份】\n" + full_msg):
             messages.append(chunk)
+
+    messages.extend([
+        position_message,
+        unheld_message,
+        summary_message,
+    ])
 
     return messages
 

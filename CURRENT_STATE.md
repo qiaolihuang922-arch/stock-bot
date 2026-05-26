@@ -5,8 +5,8 @@
 ## 專案狀態
 
 - 專案：台股策略報文機器人。
-- 目前穩定線：`v19.4` 交易閉環升級已通過全量 QA。
-- 最新推送：`463bc92 fix: improve report explainability` 已推送到 `origin/main`。
+- 目前穩定線：`v19.4.1` Telegram 推送順序與按鈕綁定修正進入 Architect 收口，待推送。
+- 最新推送：`7945384 feat: add v19.4 trading loop report` 已推送到 `origin/main`。
 - 最近已出現 `v19.3.1` formatter / daily write guard / Yahoo daily fallback 修正紀錄。
 - `v19.4` 已完成交易閉環升級；下一輪若要改策略門檻、跨日持久化追蹤或 live 寫庫，需另開任務。
 - 預設只處理 `core/watchlist.py` 的 12 檔股票。
@@ -42,6 +42,13 @@
   - 持倉生命週期新增新倉風控、減碼後觀察、核心風控等語意。
   - 回測參考度只影響追蹤排序，不產生 BUY，也不覆蓋硬性風控規則。
   - 已通過 full pytest、replay/backfill dry-run、入庫 payload、價格括號與 Telegram 長度 smoke check。
+- v19.4.1 Telegram 推送順序調整已完成 PM / Tech / QA 第一輪，並由 Tech 補修 Architect 收口發現的 `reply_markup` 風險：
+  - 預設訊息順序改為 `持倉詳情 -> 未持倉詳情 -> 總覽摘要`。
+  - `include_detail=True` 時，完整詳情 chunk 在摘要之前，總覽摘要仍最後送出。
+  - 無持倉 / 無未持倉情境仍保留空段，摘要最後。
+  - 已通過 `.venv/bin/python -m pytest tests/test_generator_report.py`，`32 passed`。
+  - `services/notifier.py` 多段訊息時改為將 `reply_markup` 綁在最後一段摘要；單段字串維持原行為。
+  - 新增 `tests/test_notifier.py` 覆蓋多段最後一段帶 markup 與單段字串行為。
 
 ## 現有模組
 
@@ -79,6 +86,7 @@
 - 部門交付文件 `TASK.md`、`CHANGELOG.md`、`QA_REPORT.md` 保留為工作流入口，不視為無用文件。
 - 固定 8 份 Markdown 工作流文件不得刪除，只允許更新內容。
 - Architect 狀態輸出固定為 `DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`AGENTS.md`、`CLEANUP_PLAN.md`。
+- 已新增版本分級與 QA 分級規則：patch / minor / major 對應 L1 / L2 / L3，minor 預設 L3，major 必須 Owner 明確批准。
 - PM 已提交 `TASK.md`：v19.3.3 formatter 一致性修正需求。
 - Tech 已提交 `CHANGELOG.md`：v19.3.3 formatter 映射修正與影響範圍。
 - QA 已提交 `QA_REPORT.md`：指定局部 formatter / snapshot / strategy-output-to-card 驗證通過，`27 passed`。
@@ -93,6 +101,11 @@
 - v19.4 任務狀態：PM / Tech / QA 已完成，Architect 已吸收 QA 結論。
 - v19.4 定位：交易閉環升級，主能力為隔日追蹤、持倉處理優先級、明日觸發條件。
 - v19.4 QA 結論：全量 QA 通過，包含 formatter、策略不變性、snapshot、replay/backfill dry-run、資料入庫 payload 路徑檢查與額外風險掃描。
+- 新任務已分派：`v19.4.1-telegram-order`，目標是調整 Telegram 多段推送順序，讓總覽摘要最後送出並顯示在最下面。
+- 流程修正：Architect 收到新功能 / 顯示 / bug 需求時預設只分派，不直接改代碼；除非 Owner 明確要求 Architect 直接實作。
+- v19.4.1 任務狀態：PM / Tech / QA 第一輪已完成；Architect 收口發現 `reply_markup` 綁定風險後，Tech 已補修；本輪不再要求 QA 重跑，由 Architect 收口驗證。
+- 流程修正：若任務改變函式回傳順序、messages list、payload shape 或外部呼叫契約，即使是 L1，QA 也必須檢查直接消費者。
+- 流程修正：QA 不只是驗證清單，必須主動質疑 PM / Tech 影響範圍，`QA_REPORT.md` 固定包含關聯風險掃描、質疑與反證、未測項目與明確結論。
 
 ## 影響模組判斷規則
 
@@ -105,11 +118,11 @@
 
 ## 當前交付檢查
 
-- `DISPATCH.md`：已更新為 v19.4 交易閉環升級，狀態為 QA accepted。
-- `TASK.md`：PM 已改寫為 v19.4 交易閉環升級需求。
-- `CHANGELOG.md`：Tech 已更新 v19.4 交易閉環升級摘要。
-- `QA_REPORT.md`：QA 已更新，v19.4 全量 QA 通過。
-- Architect 結論：本輪摘要鏈路已同步，可作為 v19.4 交易閉環升級驗收狀態。
+- `DISPATCH.md`：已更新為 `v19.4.1-telegram-order` patch 任務，狀態為 QA accepted。
+- `TASK.md`：PM 已改寫為 v19.4.1 Telegram 推送順序調整需求。
+- `CHANGELOG.md`：Tech 已改寫為 v19.4.1 Telegram 推送順序調整實作摘要。
+- `QA_REPORT.md`：QA 已改寫為 v19.4.1 第一輪 L1 驗證結論；`reply_markup` 補修由 Tech 摘要與 Architect 收口驗證承接。
+- Architect 結論：本輪可進入 diff 檢查、必要驗證、commit / push；QA 強化規則從下一次任務開始執行。
 
 ## 對話窗啟動規則
 
@@ -117,6 +130,7 @@
 - Owner 只需在對應對話窗發送 `DISPATCH.md` 內的固定啟動句。
 - 各角色自行讀 `DISPATCH.md` 判斷是否該工作。
 - 若狀態未輪到該角色，該角色只回報等待或阻塞，不做越權工作。
+- 流程規則更新後，不需要立刻通知所有部門；下一次啟動 PM / Tech / QA 時，讓該角色重新讀 `AGENTS.md` 與 `DISPATCH.md` 即可。
 
 ## 當前研究任務
 

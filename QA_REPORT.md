@@ -1,206 +1,148 @@
 # QA_REPORT.md
 
-本文件由 QA 維護，提交給 Architect。只記錄本輪 v19.4 QA 結果。
+本文件由 QA 維護，提交給 Architect。只記錄本輪 v19.4.1 QA 結果。
 
 ## 任務狀態
 
 - 狀態：QA 驗證完成
 - 對應 TASK / CHANGELOG：`TASK.md`、`CHANGELOG.md`
 - 提交日期：2026-05-26
-- 版本：v19.4
+- 任務：`v19.4.1-telegram-order`
+- 版本：v19.4.1
+- QA 等級：L1
 
 ## 測試範圍
 
-依 `DISPATCH.md`、`TASK.md`、`CHANGELOG.md`，本輪對 v19.4 交易閉環升級做全量 QA。
+依 `DISPATCH.md` 指定 `qa_level=L1`，本輪做局部 formatter / notifier contract / 指定回歸驗證。
 
 覆蓋範圍：
-- Formatter / snapshot / Telegram card。
-- 策略不變性。
-- Snapshot validator。
-- Replay dry-run。
-- Backfill dry-run。
-- 每日資料入庫 payload 路徑。
-- 額外風險：價格行右括號、Telegram 預設訊息長度、版本與新增摘要區塊。
+- `formatTelegramMessages()` 預設多段訊息順序。
+- `include_detail=True` 時完整詳情備份 chunk 與摘要順序。
+- 無持倉 / 無未持倉情境下摘要仍最後送出。
+- 總覽摘要內容仍包含版本、市場摘要、持倉處理優先級、隔日追蹤、待確認候選。
+- `send_many(messages, reply_markup=...)` 多段訊息時，`reply_markup` 綁定最後一段摘要。
+- `send_many("single message", reply_markup=...)` 單段字串保留原行為。
+- `main.py` 直接呼叫契約為 `generate_report() -> send_many(messages, reply_markup=reply_markup)`，本輪確認 notifier 層已按 messages list 最後一段附加按鈕。
+
+未執行全局測試、full pytest、replay/backfill dry-run、live Telegram、live Supabase write。
 
 ## 執行命令
 
 ```bash
-.venv/bin/python -m pytest
+.venv/bin/python -m pytest tests/test_notifier.py tests/test_generator_report.py
 ```
 
 ```bash
-.venv/bin/python scripts/dry_run_replay.py --dry-run --validate --source synthetic --version v19.4 --start-date 2026-05-18 --end-date 2026-05-22 > /tmp/v194_replay_synthetic.csv
-```
+.venv/bin/python - <<'PY'
+from datetime import datetime
+from unittest.mock import patch
+from core import generator
+from services import notifier
+from tests.test_generator_report import render_payload
 
-```bash
-.venv/bin/python scripts/backfill_signals.py --dry-run --source synthetic --version v19.4 --start-date 2026-05-18 --end-date 2026-05-22
-```
+base = [100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119]
+holding = render_payload(base, {"shares": 50, "avg_price": 118}, price=119, change=1.4)
+unheld = render_payload(base, None, price=119, change=1.4)
+unheld["stock_code"] = "2421"
+messages = generator.formatTelegramMessages(
+    {"智原": holding, "建準": unheld},
+    "FULL DETAIL",
+    None,
+    None,
+    "⏳ 觀望",
+    datetime(2026, 5, 25),
+)
+reply_markup = generator.execution_reply_markup({"智原": holding, "建準": unheld})
 
-```bash
-.venv/bin/python scripts/dry_run_replay.py --dry-run --validate --source twse --version v19.4 --start-date 2026-05-18 --end-date 2026-05-22 > /tmp/v194_replay_twse.csv
-```
+assert len(messages) == 3
+assert "【持倉標的】" in messages[0]
+assert "【未持倉標的】" in messages[1]
+assert "｜v19.4.1】" in messages[-1]
+assert "📊 市場：" in messages[-1]
 
-```bash
-.venv/bin/python scripts/backfill_signals.py --dry-run --source twse --version v19.4 --start-date 2026-05-18 --end-date 2026-05-22
-```
+with patch.object(notifier, "send", return_value=True) as mock_send, patch.object(notifier.time, "sleep"):
+    ok = notifier.send_many(messages, reply_markup=reply_markup)
 
-另執行本地 smoke checks：
-- 預設 Telegram 三段訊息長度。
-- 所有 `價格：` 行右括號格式。
-- v19.4 摘要區塊存在。
-- `build_daily_snapshot_payloads()` 完整 / 缺檔入庫 payload 行為。
+assert ok is True
+assert mock_send.call_args_list[0].kwargs["reply_markup"] is None
+assert mock_send.call_args_list[1].kwargs["reply_markup"] is None
+assert mock_send.call_args_list[-1].kwargs["reply_markup"] == reply_markup
+assert "📊 市場：" in mock_send.call_args_list[-1].args[0]
+print("CONTRACT OK", len(messages), mock_send.call_count)
+PY
+```
 
 ## 測試結果
 
-### Full pytest
+### Formatter / Notifier 指定回歸
 
 結果：通過。
 
 ```text
-89 passed, 21 warnings in 1.86s
+34 passed, 21 warnings in 1.66s
 ```
 
-警告皆來自既有第三方套件 / Python 版本 deprecation，未見 v19.4 測試失敗。
+警告來自既有第三方套件 / Python 版本 deprecation，未見 v19.4.1 測試失敗。
 
-### Replay / Backfill Dry-run
+### Formatter -> Notifier Contract Smoke
 
-Synthetic replay：
-
-```text
-VALIDATION OK
-60 snapshot rows
-```
-
-Synthetic backfill：
+結果：通過。
 
 ```text
-daily_price rows: 60
-daily_signal_snapshot rows: 60
-tradeable rows: 22
-best candidate rows: 3
-VALIDATION OK
-DRY RUN ONLY: no database writes
-```
-
-TWSE replay：
-
-```text
-VALIDATION OK
-60 snapshot rows
-```
-
-TWSE backfill：
-
-```text
-daily_price rows: 60
-daily_signal_snapshot rows: 60
-tradeable rows: 2
-best candidate rows: 2
-VALIDATION OK
-DRY RUN ONLY: no database writes
-```
-
-### 資料入庫路徑檢查
-
-本輪 diff 未修改：
-- `services/daily_snapshot_store.py`
-- `services/signal_store.py`
-- `core/signal_snapshot.py`
-- `core/signal_validator.py`
-- `scripts/dry_run_replay.py`
-- `scripts/backfill_signals.py`
-
-直接 payload check：
-
-```text
-complete_recorded True
-complete_signal_rows 12
-complete_price_rows 12
-partial_recorded False
-partial_reason incomplete_watchlist
-partial_missing ['2337']
-partial_signal_rows 0
-partial_price_rows 0
+CONTRACT OK 3 3
 ```
 
 結論：
-- 12 檔完整時會產生 12 筆 `daily_signal_snapshot` 與 12 筆 `daily_price` payload。
-- 缺 1 檔時不產生 signal / price rows。
-- v19.4 formatter 變更未破壞每日入庫完整性 guard。
-
-### 額外風險檢查
-
-預設 Telegram messages smoke check：
-
-```text
-message_count 3
-message_lengths [301, 983, 938]
-max_len 983
-price_lines 12
-bad_price_lines []
-has_v19_4 True
-has_priority True
-has_tracking True
-has_pending True
-```
-
-結論：
-- 預設三段訊息均低於 Telegram 4096 字元限制。
-- 12 條價格行均有完整全形右括號。
-- 摘要包含 `📌 持倉處理優先級`、`🕒 隔日追蹤`、`待確認候選`。
-- 版本顯示為 `v19.4`。
+- 真實 formatter 輸出 3 段訊息。
+- 第 1 段為 `【持倉標的】`。
+- 第 2 段為 `【未持倉標的】`。
+- 最後一段為 `v19.4.1` 總覽摘要，且包含 `📊 市場：`。
+- `send_many()` 對前兩段傳入 `reply_markup=None`。
+- `send_many()` 對最後一段總覽摘要傳入 `reply_markup`。
 
 ## 驗收項結果
 
-- 報文新增 `📌 持倉處理優先級`：通過。
-- 報文新增 `🕒 隔日追蹤`：通過。
-- 報文新增 `待確認候選`：通過。
-- 每個隔日追蹤標的有 `明日觸發`：通過。
-- R3 強勢但過熱不進 `可買`，進等待 / 追蹤語意：通過。
-- RR 不足但結構強不進 `可買`，進 `等RR修復`：通過。
-- 量能不足但非弱勢進 `等量能`：通過。
-- 弱勢 / 遠離觸發不進隔日追蹤優先清單：通過。
-- 合格 `BUY` 仍顯示 `可買`，未被待確認覆蓋：通過。
-- 今日新倉浮虧進 `新倉風控觀察 / 洗盤警戒`：通過。
-- 減碼後持倉進 `減碼後觀察`：通過。
-- 核心倉高浮盈回落顯示核心風控語意：通過。
-- 回測參考度只影響追蹤排序，不產生 BUY：通過。
-- `is_tradeable` / `is_best_candidate` 硬規則未被 tracking priority 覆蓋：通過。
-- STOP / TAKE_PROFIT / REDUCE action 未被 lifecycle 顯示覆蓋：通過。
-- 股票池未擴大：通過。
-- DB schema 未變更：通過。
+- `version_level` 為 patch，不引入新策略意圖：通過。
+- `qa_level` 為 L1，本輪只做 formatter / notifier contract / 指定回歸：通過。
+- 預設訊息列表中，總覽摘要為最後一段：通過。
+- 預設訊息列表順序為持倉詳情、未持倉詳情、總覽摘要：通過。
+- Telegram 最後送出的訊息包含版本標題與市場摘要：通過。
+- 總覽摘要仍包含市場狀態、今日重點、持倉處理優先級、隔日追蹤、待確認候選：通過。
+- 持倉詳情仍保留完整卡片：通過。
+- 未持倉詳情仍保留完整卡片：通過。
+- `include_detail=True` 時，完整詳情備份 chunk 在總覽摘要之前：通過。
+- `include_detail=True` 時，總覽摘要仍是最後送出的訊息：通過。
+- 無持倉或無未持倉時，總覽摘要仍最後送出：通過。
+- 多段訊息時，`reply_markup` 綁定最後一段總覽摘要：通過。
+- 單段字串訊息時，`reply_markup` 仍綁定該訊息：通過。
+- 不改每段內部排序：通過。
+- 不改策略輸出：未發現變更，且本輪未測策略 regression。
+- 不改 DB / replay / backfill：未發現變更，本輪未執行相關測試。
 
 ## 未測項目
 
 本輪未執行：
+- full pytest。
+- replay / backfill dry-run。
 - live Telegram delivery。
 - live Supabase write。
 - formal backfill write。
-- 真實交易日線上排程觸發。
 - Telegram 客戶端實機渲染截圖。
+- 真實 Telegram API 對多段訊息的實際到達順序。
 
 原因：
-- 本輪 QA 使用 dry-run / unit / regression 驗證，不做正式寫庫與真實外部推送。
-- `CHANGELOG.md` 明確本次未改 DB schema、DB 寫入邏輯、replay/backfill 正式寫入流程。
+- `DISPATCH.md` 指定 `qa_level=L1`。
+- `TASK.md` 與 `CHANGELOG.md` 明確本輪只改 Telegram messages list ordering 與 notifier `reply_markup` 附著位置。
+- `CHANGELOG.md` 明確未修改策略、DB、replay/backfill、股票池與 Supabase Edge Function。
 
 ## 殘留風險
 
-- 隔日追蹤目前是當日報文內的明日檢查清單，尚未新增跨日 tracking table；若 Owner 未來需要多日任務狀態，需另開 DB / persistence 任務。
-- 新倉 / 減碼後語意依賴 `position_events`；若事件缺失，會安全回退，但無法精準判定新倉或減碼後狀態。
-- 本輪 smoke check 驗證預設三段訊息長度與價格括號；真實 Telegram 客戶端仍可能受字體、複製、截圖或平台截斷影響。
-- 回測排序目前只調整追蹤順序；若未來要求回測進入 decision，需重新做策略層與 snapshot 不變性驗證。
-- v19.4 增加摘要內容後，目前 mock 訊息長度安全；但若未來持倉 / 未持倉卡片欄位再增加，應持續保留訊息長度 regression。
+- 本輪使用 mock 驗證 `send_many()` 參數綁定，未實際呼叫 Telegram API；若 Telegram 平台端發生送達順序延遲或 UI 特殊呈現，仍需 live Telegram 驗證。
+- 若其他外部流程繞過 `send_many()` 直接發送 messages list，本輪未覆蓋該路徑；目前本地直接呼叫方確認為 `main.py`。
+- 若未來摘要內容超長被 split，目前測試重點仍是完整詳情 split 與多段發送，摘要 split 的產品呈現需另開任務補測。
 
 ## QA 結論
 
 QA 結論：通過。
 
-v19.4 交易閉環升級已通過本輪全量 QA：
-- formatter 通過。
-- 策略不變性通過。
-- snapshot / validator 通過。
-- replay/backfill dry-run 通過。
-- 每日入庫 payload 路徑通過。
-- 價格行與 Telegram 預設訊息長度風險檢查通過。
-
-可交回 Architect 更新狀態。
+v19.4.1 Telegram 推送順序與按鈕綁定修正已通過 L1 驗證。可交回 Architect 更新狀態。

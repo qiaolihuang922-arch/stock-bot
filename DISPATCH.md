@@ -4,9 +4,11 @@
 
 ## Current Task
 
-- task_id: `v19.4-trading-loop`
-- task_name: `v19.4 交易閉環升級`
+- task_id: `v19.4.1-telegram-order`
+- task_name: `Telegram 推送順序調整`
 - task_type: `development`
+- version_level: `patch`
+- qa_level: `L1`
 - owner_status: `requested`
 - architect_status: `qa_accepted`
 - pm_status: `task_ready`
@@ -15,56 +17,36 @@
 
 ## Next Action
 
-- Architect: 已吸收 v19.4 `TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`，本輪全量 QA 通過。
-- PM: 已交付 v19.4 交易閉環升級 `TASK.md`。
-- Tech: 已交付 v19.4 交易閉環升級 `CHANGELOG.md`。
-- QA: 已完成 v19.4 全量 QA，包含 formatter、策略不變性、snapshot、replay/backfill dry-run、資料入庫路徑檢查與額外風險掃描。
-- Owner: 若確認交付，交由 Architect 檢查 diff、重跑必要驗證、commit 並 push。
+- Architect: 已確認 Tech 補修 `reply_markup` 綁定位置；本輪不再要求 QA 重跑，由 Architect 收口檢查後提交。
+- PM: 已交付 `TASK.md`，定義 Telegram 多段推送順序需求與驗收條件。
+- Tech: 已補修 Telegram `reply_markup` 綁定位置，並更新 `CHANGELOG.md`。
+- QA: 第一輪 L1 已通過；QA 強化規則從下一次任務開始執行。
+- Owner: 交由 Architect 檢查 diff、重跑必要驗證、commit 並 push。
 
 ## Task Brief
 
-v19.3.4 報文已接近穩定，v19.4 需要做出可感知的功能升級，不應只是 formatter 小修或少量文案調整。
+Owner 反馈：
 
-PM 需研究：
+- Telegram 報文是多段疊加推送。
+- 使用者打開 Telegram 時，最下面的新訊息最容易直接看到。
+- 目前最重要的摘要在第一段，會被後續詳情訊息往上推。
+- 需求：調整多段訊息送出順序，讓最重要的總覽摘要最後送出、顯示在最下面。
+- 版本由 Architect 判定，本輪定為 `v19.4.1` patch。
 
-- v19.4 要達到「顯著升級」的最小範圍，不能只改顯示文字。
-- v19.4 是否需要強化策略門檻，而不是只修 formatter。
-- 是否要改善買入訊號稀少問題：
-  - RR 門檻
-  - 過熱但可等待回測
-  - R3 市場下的可買 / 排隊 / 冷卻規則
-- 是否要改善持倉處理：
-  - 核心續抱
-  - 新倉風控
-  - 洗盤警戒
-  - 減碼 / 停利 / 停損升級規則
-- 是否要讓回測資訊進一步進入決策，而不是只顯示解釋：
-  - 樣本數可信度
-  - 3 日勝率
-  - 相對表現
-  - 是否可作為加權參考
-- 是否需要建立「隔日追蹤」或「待確認清單」：
-  - 今日不買但明天可重新評估
-  - 今日減碼後觀察是否修復
-  - 今日新倉浮虧隔日是否降級
-- 殘留顯示風險：
-  - Owner 最新貼文中旺宏價格行疑似少右括號：`價格：159.75（+4.75%`
-  - PM 需判斷這是複製截斷、Telegram split 問題，還是 v19.3.x 仍需補修。
+PM 需定義：
 
-- v19.4 報文應新增哪些使用者可見區塊與文案：
-  - `隔日追蹤`
-  - `持倉處理優先級`
-  - `待確認候選`
-  - `回測輔助排序`
-  - `明日觸發條件`
-- v19.4 是否要把「今天不能買」轉成「明天怎麼看」。
-- v19.4 應如何讓使用者感覺版本有明顯進步，而不是只多幾個 label。
+- 三段預設訊息的目標順序。
+- `include_detail=True` 時完整備份是否應排在摘要前，避免摘要被擋住。
+- 哪些內容屬於「最重要」並應位於最後一段。
+- 是否只改 Telegram 多段訊息排序，不改每段內部排序與策略文案。
+- 驗收條件：summary 必須是最後一段；持倉/未持倉詳情仍保留；版本顯示更新策略。
+- 收口補充：若 Telegram inline keyboard / reply_markup 存在，需確認它是否應綁定最後的總覽摘要，而不是第一段詳情。
 
 不可變更：
 
 - PM 不改代碼。
-- 本輪先不直接實作，但 PM 必須定義足夠明確的 v19.4 升級需求。
-- 本輪不要求 Tech 實作。
+- 本輪 Architect 不直接實作。
+- 不改策略層、不改買賣判斷、不改 DB、不改 replay/backfill。
 - 不做全 repo 分析。
 - 不跑全局測試。
 
@@ -83,6 +65,16 @@ PM 需研究：
 - `research_ready`: 該角色已提交研究摘要。
 - `research_accepted`: Architect 已吸收研究摘要並整理結論。
 
+## Version / QA Levels
+
+- version_level `patch`：bug / 文案 / 顯示一致性，不改策略意圖。
+- version_level `minor`：新增使用者可見能力或報文結構。
+- version_level `major`：改策略核心、DB schema、交易狀態機、正式寫庫或跨日持久化。
+- qa_level `L1`：局部 formatter / snapshot / 指定回歸。
+- qa_level `L2`：策略不變性 + formatter + snapshot + 相關模組測試。
+- qa_level `L3`：full pytest + replay/backfill dry-run + 入庫 payload 路徑 + 額外風險掃描。
+- minor 預設 L3；major 必須 L3 且需 Owner 明確批准。
+
 ## Fixed Startup Commands
 
 Owner 對 Architect：
@@ -94,19 +86,19 @@ Owner 對 Architect：
 Owner 對 PM：
 
 ```text
-讀取 AGENTS.md、DISPATCH.md、CURRENT_STATE.md、RESEARCH.md，按 PM 職責處理；根據 RESEARCH.md 的 Architect Conclusion 和 PM Findings，將 TASK.md 改寫為 v19.4 交易閉環升級需求。
+讀取 AGENTS.md、DISPATCH.md、CURRENT_STATE.md、RESEARCH.md，按 PM 職責處理；確認 version_level 與 qa_level，將 TASK.md 改寫為當前任務需求。
 ```
 
 Owner 對 Tech：
 
 ```text
-讀取 AGENTS.md、DISPATCH.md、CURRENT_STATE.md、TASK.md、RESEARCH.md，按 Tech 職責處理；如果 tech_status 是 todo 且 TASK.md 已 ready，就實作 v19.4 交易閉環升級，完成後改寫 CHANGELOG.md。
+讀取 AGENTS.md、DISPATCH.md、CURRENT_STATE.md、TASK.md、RESEARCH.md，按 Tech 職責處理；如果 tech_status 是 todo 且 TASK.md 已 ready，就實作當前任務，完成後改寫 CHANGELOG.md。
 ```
 
 Owner 對 QA：
 
 ```text
-讀取 AGENTS.md、DISPATCH.md、CURRENT_STATE.md、TASK.md、CHANGELOG.md、RESEARCH.md，按 QA 職責處理；如果 qa_status 是 todo 且 CHANGELOG.md 已 ready，就對 v19.4 交易閉環升級做全量 QA，包含 formatter、策略不變性、snapshot、replay/backfill dry-run、資料入庫路徑檢查，以及你認為 Owner 沒想到但可能出問題的地方。完成後更新 QA_REPORT.md。
+讀取 AGENTS.md、DISPATCH.md、CURRENT_STATE.md、TASK.md、CHANGELOG.md、RESEARCH.md，按 QA 職責處理；如果 qa_status 是 todo 且 CHANGELOG.md 已 ready，就依 DISPATCH.md 的 qa_level 驗證當前任務，並主動做關聯風險掃描、直接消費者檢查、質疑與反證；完成後更新 QA_REPORT.md。
 ```
 
 Owner 回到 Architect：
