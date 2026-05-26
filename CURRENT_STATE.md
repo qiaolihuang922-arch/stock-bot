@@ -86,6 +86,7 @@
 - Architect 只有在 Owner 明確說「你直接代 PM 寫 TASK」或「你直接實作 / 不走部門」時，才可越過對應角色。
 - 若 Architect 已越權改文件，必須先恢復越權改動，再更新流程規則。
 - Git 發布流程已補強：Owner 明確授權「對比後沒問題就直接 push / 自己 push / 對齊 git」時，Architect 在 final diff review、必要驗證與 commit 後，若沒有不明 diff 或阻塞，直接 push，不再二次詢問。
+- Version Contract Gate 已補強：Telegram / CLI / 使用者可見報文任務必須在 PM / Tech / QA 三件套中明確檢查版本字串與實際程式常量 / header 是否一致；不得只更新狀態文件版本。
 
 ## Telegram Unheld Funnel Count Bug 已完成本地修復
 

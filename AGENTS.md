@@ -125,6 +125,7 @@ Architect 每次準備採取動作前，必須先做以下自鎖檢查：
 - `非目標`：本輪明確不做什麼。
 - `影響模組`：直接模組與直接消費者。
 - `輸出契約`：被改輸出的欄位、順序、分組、payload 或 message list contract。
+- `版本契約`：若任務涉及 Telegram / CLI / 使用者可見報文，PM 必須明確寫出本輪應顯示的版本字串，或明確寫「本輪不升版，沿用目前 `VERSION`」。
 - `驗收條件`：可被 QA 驗證的條件，不能只寫「正常」「不壞」。
 - `範例或 fixture`：報文 / Telegram / payload 類任務必須給至少一段期望輸出形狀。
 - `禁止事項`：不得改策略、不得 live write、不得刪固定文件等本輪邊界。
@@ -139,6 +140,7 @@ PM 若沒有列出直接消費者與驗收條件，Tech 必須 blocked，不得�
 - `修改內容`：只描述本輪實際完成項。
 - `修改檔案`：逐一列出，不得用「相關文件」含糊帶過。
 - `契約影響`：函式回傳、message list、payload、報文排序、DB 寫入、CLI 輸出是否改變。
+- `版本同步`：若 `TASK.md` 有版本建議或版本契約，Tech 必須說明是否已同步使用者可見版本常量 / header / 測試期望；若不升版需說明原因。
 - `直接消費者同步`：哪些呼叫方或下游已同步；若無需同步需說明原因。
 - `未影響模組`：策略、DB、watchlist、Telegram live、replay/backfill 等是否未改。
 - `自檢命令`：實際跑過的最小命令與結果。
@@ -168,6 +170,7 @@ QA 若沒有主動質疑，或只驗欄位存在、不驗整體判斷風險，Ar
 - Tech 改了 `TASK.md` 未允許的範圍，或未列契約影響。
 - QA 只重跑 Tech 測試，沒有新增風險掃描或反證。
 - 報文任務沒有檢查手機閱讀路徑。
+- 報文 / CLI 任務的 `TASK.md`、`CHANGELOG.md`、`QA_REPORT.md` 沒有檢查使用者可見版本字串與實際程式常量 / header 是否一致。
 - 任一角色把「可能」「應該」「看起來」當結論，但沒有 evidence。
 - 任一角色遇到缺環境、缺資料、上游文件矛盾時仍宣告通過。
 
@@ -246,8 +249,11 @@ QA 套用規則：
 報文任務一律以 Owner 手機閱讀為第一視角，不以桌面長文可讀為準。
 
 - PM 必須先定義手機閱讀路徑與示例輸出，不得只列欄位需求。
+- PM 必須定義報文 header 版本契約：升版到哪個版本，或明確不升版；不得只在 `CURRENT_STATE.md` 寫版本而不要求 formatter 顯示同步。
 - Tech 必須用接近真實長報文的 fixture 檢查輸出，不得只讓單元欄位通過。
+- Tech 若修改 Telegram formatter、summary、header 或任何使用者可見報文，必須檢查 `core/generator.py` 的 `VERSION` 或等價版本常量是否符合 `TASK.md`，並同步測試。
 - QA 必須把輸出當成 Owner 手機上看到的 Telegram 連續訊息檢查；若「精確但難讀」或「數字可追溯但語意混桶」，必須 blocked 或 conditional pass。
+- QA 驗收報文時必須核對實際輸出 header 版本字串，不得只看 `TASK.md`、`CHANGELOG.md` 或 `CURRENT_STATE.md` 的版本文字。
 - Telegram summary 必須手機優先：短句、短行、少括號、少長名單。
 - 最後一段 summary 是 Owner 打開 Telegram 最先看到的決策區，必須直接回答：
   - 今天能不能買。

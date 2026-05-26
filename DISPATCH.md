@@ -36,10 +36,11 @@
 - 主 repo 驗證通過：`tests/test_generator_report.py tests/test_notifier.py`，`37 passed, 21 warnings`。
 - 已提交並推送：`3514f94 fix: clarify unheld funnel counts`。
 - 工作流程補強：Owner 若明確說「對比後沒問題就直接 push / 自己 push / 對齊 git」，Architect 完成 final diff review 與必要驗證後直接 commit / push，不再二次詢問；若發現不明 diff、QA 未通過或測試阻塞則不得 push。
+- 版本契約補強：後續 Telegram / CLI / 使用者可見報文任務，PM 必須定義版本字串是否升版，Tech 必須同步程式常量 / header / 測試，QA 必須核對實際輸出版本；狀態文件版本不得替代實際輸出版本。
 
 ## Next Action
 
-- 等待 Owner 下一個需求。
+- 等待 Owner 下一個需求。若要修正目前 `core/generator.py` 仍顯示 `v20.0.1` 的問題，需按新流程開版本同步 patch。
 
 ## Status Values
 
