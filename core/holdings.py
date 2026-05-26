@@ -1,7 +1,7 @@
 from core.watchlist import STOCKS
 
 
-# v19.3: live holdings are stored in Supabase positions.
+# Live holdings are stored in Supabase positions.
 # This file remains only for replay/backfill holding-code boundaries.
 HOLDINGS = {}
 

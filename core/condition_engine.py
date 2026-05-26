@@ -1,6 +1,4 @@
-# ================================
-# condition_engine.py（v19.1.3｜WATCH 條件映射層）
-# ================================
+# WATCH condition mapping layer.
 
 def condition_engine(result):
 
@@ -17,7 +15,7 @@ def condition_engine(result):
 
     decision = result.get("decision")
 
-    # 🔥 v19.1.3：只映射 analysis.py 的結果，不反推 decision
+    # Only maps analysis.py output; it does not infer decisions.
     market_grade = result.get("market_grade")
     structure = result.get("structure_state")
     trend = result.get("trend")
@@ -81,9 +79,6 @@ def condition_engine(result):
             "rr": True
         }
 
-    # ================================
-    # 🔥 NO_TRADE（對齊）
-    # ================================
     if decision == "NO_TRADE":
 
         if market_grade and market_grade != "D":
@@ -97,9 +92,6 @@ def condition_engine(result):
 
         return conditions
 
-    # ================================
-    # 🔥 基礎映射（v19.1.3）
-    # ================================
     if market_grade and market_grade in ["A+", "A", "B"]:
         conditions["market"] = True
 
@@ -112,9 +104,6 @@ def condition_engine(result):
     if volume and volume not in ["WEAK", "DISTRIBUTION"]:
         conditions["volume"] = True
 
-    # ================================
-    # 🔥 decision_type 對齊
-    # ================================
     if decision_type in [
         "breakout",
         "pre_breakout",
@@ -143,15 +132,9 @@ def condition_engine(result):
     if decision_type == "early":
         conditions["edge"] = True
 
-    # ================================
-    # 🔥 風控（保留）
-    # ================================
     if risk is not None and 0 < risk <= 0.08:
         conditions["risk"] = True
 
-    # ================================
-    # 🔥 RR（保留）
-    # ================================
     if rr is not None:
         if decision_type in [
             "breakout",
@@ -177,9 +160,6 @@ def condition_engine(result):
     return conditions
 
 
-# ================================
-# 🔥 summarize（不動）
-# ================================
 def summarize_conditions(c, decision):
 
     if decision == "BUY":

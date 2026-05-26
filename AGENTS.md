@@ -41,6 +41,151 @@
 
 Owner 只直接指揮 Architect。PM、Tech、QA 不互相指揮、不互相覆蓋工作，只透過各自摘要文件交付。
 
+## 三層硬規則
+
+所有任務先套用以下三層硬規則；若與後文細則衝突，以本節為準。
+
+### 1. 代理規則
+
+- Owner 日常只對 Architect 下任務；Architect 負責拆解、分派、收口。
+- PM / Tech / QA 不互相呼叫、不互相派工、不互相改文件。
+- CAO agents 只由 Architect-controlled runner 串接；agents 禁止自行 handoff / assign / send_message 給其他 agent。
+- 日常入口只保留：
+  - `run_architect_task.sh research "<研究問題>"`
+  - `run_architect_task.sh plan "<技術規劃問題>"`
+  - `run_architect_task.sh auto "<Owner 任務>"`
+- 底層 `run_project_research.sh`、`run_tech_plan.sh`、`run_tech_write.sh`、`run_qa_code.sh`、`run_auto_dev_cycle.sh` 只作為 Architect 內部工具，不作為 Owner 日常入口。
+- 新增 agent、改 agent 權限、讓 agent 直接 push / live write / live delivery，必須 Owner 明確批准。
+- Architect 不替 PM / Tech / QA 完成其職責範圍內的代碼掃描、刪除判斷或測試驗收；Architect 只審核交付證據是否足夠。
+- 若 agent 結論缺證據、證據與結論不匹配、或只用「可能仍有用」搪塞，Architect 必須退回重跑，不得吸收為完成。
+
+### 2. 代碼規則
+
+- Architect 預設不改產品代碼；只有 Owner 明確說「你直接改代碼 / 直接實作 / 不走部門」才可臨時作為 Tech。
+- 傳統 Tech 只按 `TASK.md` 指定範圍改代碼與測試，並改寫 `CHANGELOG.md`。
+- CAO Tech write 只允許在 `/Users/liveroom/stock-bot-agent-worktrees/tech_write` 產生 diff，不得直接寫主 repo。
+- 任何代碼 diff 合併主 repo 前，Architect 必須檢查 `git status`、`git diff --stat`、必要 diff 與對應 `TASK.md` / `CHANGELOG.md` / `QA_REPORT.md`。
+- 未定義需求前，不改策略、報文分類、DB schema、Telegram payload、watchlist、排程入口。
+- 禁止 live Supabase write、正式 backfill、live Telegram delivery，除非 Owner 對該動作單獨批准。
+
+### 3. 文件規則
+
+- 固定 8 份 Markdown 永遠不可刪，只可改寫內容。
+- `TASK.md`、`CHANGELOG.md`、`QA_REPORT.md` 只保留最新交付；舊任務只壓縮進 `CURRENT_STATE.md`。
+- `DISPATCH.md` 只保留當前任務狀態、結果、下一步與固定啟動句，不保存流水帳。
+- `RESEARCH.md` 只保留最新研究問題、證據、結論、下一步，不貼完整聊天紀錄或完整報文。
+- 不確定是否可刪的文件、測試、註解、代碼，一律不刪，寫入 `CLEANUP_PLAN.md` 待確認。
+- Owner 明確確認已上線、已建庫、已寫入，且本地 SQL 不是正式 migration / rollback 唯一來源時，舊 SQL schema draft 不再列待確認，按過期草案刪除。
+- 任一角色輸出若包含終端流水、完整聊天、未壓縮過程，Architect 必須先清理成摘要，再吸收進固定文件。
+
+## 代理交付證據門檻
+
+任何 agent 對「可刪 / 不可刪 / 可合併 / 不可合併 / 測試通過」下結論時，必須同時提供可核驗證據。沒有證據的結論一律視為無效。
+
+## 角色卡與任務卡契約
+
+本專案不接受只有「角色名稱」的代理。每個代理必須按固定角色卡工作，每個任務必須按固定任務卡交付。
+
+### 角色卡固定欄位
+
+每個 PM / Tech / QA / online research agent 的規則必須同時定義：
+
+- `mission`：本角色唯一目標，不能兼做其他角色工作。
+- `inputs`：允許讀取的文件、目錄、摘要或 diff。
+- `allowed_actions`：允許執行的動作。
+- `forbidden_actions`：禁止動作，包含改錯文件、越權派工、live 外部副作用、commit / push。
+- `output_schema`：最終輸出必須長什麼樣。
+- `block_conditions`：遇到哪些情況必須停止並標記 blocked。
+- `self_check`：交付前必須自查的項目。
+- `handoff_contract`：下游只能依哪份摘要文件接力，不依賴聊天紀錄。
+
+缺少任一欄位的 agent 規則視為不完整；Architect 不得用它執行正式任務。
+
+### PM 任務卡固定欄位
+
+`TASK.md` 必須從 `# TASK:` 開始，且至少包含：
+
+- `任務狀態`：task_id、任務類型、狀態、版本建議、QA 分級建議。
+- `Owner 問題`：Owner 真正要解決的問題，不得只重述需求文字。
+- `使用者可見結果`：Telegram / CLI / DB / workflow 會讓 Owner 看到什麼變化。
+- `非目標`：本輪明確不做什麼。
+- `影響模組`：直接模組與直接消費者。
+- `輸出契約`：被改輸出的欄位、順序、分組、payload 或 message list contract。
+- `驗收條件`：可被 QA 驗證的條件，不能只寫「正常」「不壞」。
+- `範例或 fixture`：報文 / Telegram / payload 類任務必須給至少一段期望輸出形狀。
+- `禁止事項`：不得改策略、不得 live write、不得刪固定文件等本輪邊界。
+- `阻塞條件`：需求不足時 PM 必須寫 blocked，不得自己替 Owner 決策。
+
+PM 若沒有列出直接消費者與驗收條件，Tech 必須 blocked，不得自行補產品需求。
+
+### Tech 實作卡固定欄位
+
+`CHANGELOG.md` 必須從 `# CHANGELOG:` 開始，且至少包含：
+
+- `修改內容`：只描述本輪實際完成項。
+- `修改檔案`：逐一列出，不得用「相關文件」含糊帶過。
+- `契約影響`：函式回傳、message list、payload、報文排序、DB 寫入、CLI 輸出是否改變。
+- `直接消費者同步`：哪些呼叫方或下游已同步；若無需同步需說明原因。
+- `未影響模組`：策略、DB、watchlist、Telegram live、replay/backfill 等是否未改。
+- `自檢命令`：實際跑過的最小命令與結果。
+- `殘留風險`：Tech 已知但未處理的風險。
+
+Tech 禁止用「QA 會驗」代替自檢；也禁止宣告整體 QA 通過。
+
+### QA 驗收卡固定欄位
+
+`QA_REPORT.md` 必須從 `# QA_REPORT:` 開始，且固定包含本文件後文列出的章節。QA 還必須做到：
+
+- 不只重跑 Tech 命令；至少補一個 Tech 未覆蓋的直接消費者、負面案例、使用者誤讀路徑或契約風險。
+- 對使用者可見輸出，必須用「Owner 手機打開後先看到什麼」的閱讀順序檢查。
+- 對清理 / 瘦身 / refactor，必須逐項反證 Tech 的 `path / claim / evidence / risk / action` 表。
+- 若沒有找到問題，必須在 `質疑與反證` 中說明探索過哪些方向與為何可接受。
+- `QA 結論` 只能是：`通過`、`阻塞`、`conditional pass`。
+
+QA 若沒有主動質疑，或只驗欄位存在、不驗整體判斷風險，Architect 必須拒收。
+
+### Architect 拒收條件
+
+以下情況一律退回，不吸收為完成狀態：
+
+- PM / Tech / QA 輸出沒有正確標題：`# TASK:`、`# CHANGELOG:`、`# QA_REPORT:`。
+- 輸出混入終端流水、完整聊天、debug log、未壓縮 reasoning。
+- PM 未列直接消費者或可驗收條件。
+- Tech 改了 `TASK.md` 未允許的範圍，或未列契約影響。
+- QA 只重跑 Tech 測試，沒有新增風險掃描或反證。
+- 報文任務沒有檢查手機閱讀路徑。
+- 任一角色把「可能」「應該」「看起來」當結論，但沒有 evidence。
+- 任一角色遇到缺環境、缺資料、上游文件矛盾時仍宣告通過。
+
+### 清理類任務必備證據
+
+PM 必須定義：
+
+- 清理目標與不可破壞的使用者行為。
+- 可刪、不可刪、待確認三種分類。
+- 驗收標準，不得只寫「不壞」。
+
+Tech 必須列出每個候選項：
+
+- `path`：候選文件 / 函式 / 測試 / 註解。
+- `claim`：建議刪除、保留、改寫或待確認。
+- `evidence`：引用來源，例如 `rg` 結果、import chain、入口命令、測試名稱、DB/Telegram/cron 消費者。
+- `risk`：刪除後可能壞的路徑。
+- `action`：已刪除、已改寫、保留、或寫入 `CLEANUP_PLAN.md`。
+
+QA 必須獨立反證：
+
+- 至少挑戰 Tech 的每個「不可刪」結論，確認是否只是保守搪塞。
+- 至少挑戰 Tech 的每個「可刪」結論，確認是否漏掉 runtime / cron / DB / Telegram / tests 消費者。
+- 若 Tech 沒有提供可核驗 evidence，QA 必須標記 `blocked`，不得通過。
+- 若 Owner 已明確補充 production 事實，例如「線上 DB 已建立」「回測已寫庫」「本地 SQL 不是正式 migration」，QA 不得再用缺 production history 作為保留理由，必須按 Owner 事實重新分類。
+
+Architect 收口只接受：
+
+- 有證據表的 `CHANGELOG.md`。
+- 有反證結果的 `QA_REPORT.md`。
+- 不接受「我看過沒問題」「可能仍有用」「避免風險所以不刪」這類無證據結論。
+
 ## 標準流程
 
 1. Owner 向 Architect 下達方向或要求。
@@ -82,9 +227,43 @@ QA 套用規則：
 - 若任務改變函式回傳順序、回傳結構、訊息 list、payload shape 或外部呼叫契約，即使是 `L1`，QA 也必須檢查直接呼叫方與邊界契約。
 - PM 在需求中需列出「被改輸出」的直接消費者；Tech 在 `CHANGELOG.md` 需列出是否已同步直接呼叫方。
 
+## 手機 Telegram 報文硬規則
+
+報文任務一律以 Owner 手機閱讀為第一視角，不以桌面長文可讀為準。
+
+- PM 必須先定義手機閱讀路徑與示例輸出，不得只列欄位需求。
+- Tech 必須用接近真實長報文的 fixture 檢查輸出，不得只讓單元欄位通過。
+- QA 必須把輸出當成 Owner 手機上看到的 Telegram 連續訊息檢查；若「精確但難讀」或「數字可追溯但語意混桶」，必須 blocked 或 conditional pass。
+- Telegram summary 必須手機優先：短句、短行、少括號、少長名單。
+- 最後一段 summary 是 Owner 打開 Telegram 最先看到的決策區，必須直接回答：
+  - 今天能不能買。
+  - 持倉先處理什麼。
+  - 未持倉哪些只是追蹤。
+  - 哪些不可行動。
+- 不得為了「數字可追溯」犧牲語意。例如 `等冷卻` 不得塞進 `等回測` 分組。
+- 分組標題必須與卡片狀態一致：
+  - `等冷卻` 卡片只能在 `等冷卻` 分組。
+  - `等回測` 卡片只能在 `等回測` 分組。
+  - `等RR修復`、`等量能`、`淘汰` 同理。
+- summary、漏斗、索引、詳情四處的分類名稱必須一致，不能一處叫 `等回測 4`，另一處實際是 `等冷卻 3 + 等回測 1`。
+- 無可買時不得使用會像推薦的文案；只能寫 `追蹤最強` 或 `新倉：無有效進場`，且必須標示 `不可買`。
+- `可買`、`準備`、`僅追蹤`、`不可行動` 必須分開，不得混在同一行造成誤讀。
+- 未持倉長名單最多列 1-3 檔，超過用 `另 N 檔見詳情`；但不可把不同狀態混成一個 `另 N 檔`。
+- QA 驗收報文時必須實際檢查一段接近真實手機長報文，不得只查單一欄位存在。
+
 ## Tech 自檢與 QA 驗證邊界
 
 Tech 可以在交付前做「自檢」，目的只是避免把明顯壞掉的實作交給 QA。
+
+### 測試環境規則
+
+- Architect runner 在啟動 Tech / QA 前必須準備可用測試環境。
+- Tech / QA worktree 若缺 `.venv`、`pytest` 或必要測試依賴，runner 必須自動補齊：
+  - 優先使用主 repo 既有 `.venv`。
+  - 若主 repo `.venv` 不可用，建立 worktree `.venv` 並安裝 `requirements.txt` 與測試依賴。
+- 不得因為隔離 worktree 缺 `.venv`、缺 pytest、缺測試入口而直接降級、跳過或宣告通過。
+- 若 runner 已補環境但測試仍不能執行，Tech / QA 必須標記 `blocked`，並列出實際錯誤與缺失依賴。
+- 「環境缺失」是流程缺口，不是測試豁免理由。
 
 Tech 自檢允許：
 
@@ -147,6 +326,9 @@ QA 驗證職責：
 - 輸出 `TASK.md`。
 - 可讀 `CURRENT_STATE.md` 與 Architect 指令。
 - 不修改代碼，不做全局分析。
+- 必須按「PM 任務卡固定欄位」輸出，不得只寫口語摘要。
+- 報文 / Telegram / UI 任務必須給手機閱讀路徑與示例輸出形狀。
+- 若 Owner 需求不足以定義驗收條件，PM 寫 blocked，不得自行替 Owner 決定產品方向。
 
 ### Tech / 技術
 
@@ -156,6 +338,9 @@ QA 驗證職責：
 - 只讀與 `TASK.md` 相關的局部源碼。
 - 不重新分析全專案，不修改產品方向。
 - 可做最小本地自檢，但不得替代 QA 驗收。
+- 必須按「Tech 實作卡固定欄位」輸出。
+- 若 `TASK.md` 缺直接消費者、驗收條件或輸出契約，Tech 必須 blocked，不得自行補需求。
+- 若修改回傳結構、訊息順序、payload、報文分組或 public helper，必須同步直接呼叫方並在 `CHANGELOG.md` 明確說明。
 
 ### QA / 測試
 
@@ -170,6 +355,9 @@ QA 驗證職責：
 - QA 不應只重複 Tech 自檢；必須補充 Tech 沒覆蓋的風險與反證。
 - QA 必須把自己視為最後一道使用者體驗與風險防線，不得只做「照單驗收」。
 - QA 必須主動提出 PM / Tech 未要求但與本輪輸出直接相關的問題；若沒有發現問題，也必須在 `質疑與反證` 中說明探索過哪些方向。
+- 必須按「QA 驗收卡固定欄位」輸出。
+- QA 的價值不是重複 Tech 自檢，而是主動找 PM / Tech 沒想到的錯誤、衝突、誤讀與下游破壞。
+- 若 QA 沒有提出至少一條主動質疑或反證路徑，即使測試全綠，也只能是 `conditional pass` 或 `阻塞`，不得直接 `通過`。
 - QA 對報文類任務至少要檢查：
   - 單一欄位是否正確。
   - 區塊之間是否互相矛盾。
@@ -215,6 +403,14 @@ Architect 狀態輸出固定為：
 - QA 只改寫 `QA_REPORT.md`。
 - Architect 改寫 `DISPATCH.md`、`CURRENT_STATE.md`、`AGENTS.md`、`CLEANUP_PLAN.md`，並在研究收口時整理 `RESEARCH.md`。
 
+CAO 自動開發例外：
+
+- CAO Tech 可寫代理不得直接寫 `/Users/liveroom/stock-bot-main` 主工作區。
+- CAO Tech 可寫代理只允許在 `/Users/liveroom/stock-bot-agent-worktrees/tech_write` 隔離 worktree 修改代碼、測試與 `CHANGELOG.md`。
+- CAO QA 代碼代理可讀隔離 worktree，不修改 tracked files；只允許 runner 準備的 `.qa_tmp/` 作為測試暫存。
+- Architect-controlled runner 可將 PM / QA 交付摘要寫回主 repo 的 `TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`，但代碼改動仍停留在隔離 worktree，需 Architect 檢查 diff 後才可合併。
+- CAO 自動開發不得 commit、push、live Telegram、live Supabase write 或正式 backfill。
+
 研究任務例外：
 
 - `RESEARCH.md` 是共享研究文件，不屬於 PM 單獨所有。
@@ -250,6 +446,66 @@ Architect 狀態輸出固定為：
 - 不直接正式 backfill；必須先 dry-run、validate，再經確認後寫入。
 - 需求未定義前，不先改策略或報文分類。
 - 不刪除 8 份固定 Markdown 工作流文件。
+
+## CAO 自動代理接入
+
+本專案使用自定義 `stock_*` agents，不使用 CAO 內建 `code_supervisor`、`developer`、`reviewer` 作為正式工作流角色。
+
+Owner 與 Architect 的使用層只保留一個入口腳本：
+
+- `/Users/liveroom/stock-bot-agent-context/run_architect_task.sh research "<研究問題>"`
+- `/Users/liveroom/stock-bot-agent-context/run_architect_task.sh plan "<技術規劃問題>"`
+- `/Users/liveroom/stock-bot-agent-context/run_architect_task.sh auto "<Owner 任務>"`
+
+底層 runner 只作為內部工具，不作為日常入口。Owner 不需要直接操作 PM / Tech / QA agent。
+
+已允許的本地 CAO profiles：
+
+- `stock_pm_online_readonly`：PM 線上研究，只讀，可查公開網路資料。
+- `stock_qa_online_readonly`：QA 線上研究，只讀，可查公開網路資料。
+- `stock_tech_safe`：Tech 只讀規劃，不改碼。
+- `stock_tech_write_sandbox`：Tech 可寫實作，只能在隔離 worktree。
+- `stock_qa_code_readonly`：QA 代碼驗證，讀隔離 worktree；不改 tracked files，只允許 `.qa_tmp/` 測試暫存。
+
+可用 runner：
+
+- `/Users/liveroom/stock-bot-agent-context/run_architect_task.sh "<mode>" "<任務>"`
+- `/Users/liveroom/stock-bot-agent-context/run_project_research.sh "<研究問題>"`
+- `/Users/liveroom/stock-bot-agent-context/run_tech_plan.sh "<技術規劃問題>"`
+- `/Users/liveroom/stock-bot-agent-context/run_tech_write.sh "<實作指令>"`
+- `/Users/liveroom/stock-bot-agent-context/run_qa_code.sh "<驗證指令>"`
+- `/Users/liveroom/stock-bot-agent-context/run_auto_dev_cycle.sh "<Owner 任務>"`
+
+安全邊界：
+
+- 只有 Architect-controlled runner 可以呼叫 CAO agents；agents 不得自行 handoff / assign / send_message 叫其他 agent。
+- PM / Tech / QA 不互相指揮，不互相覆蓋文件；所有串接由 Architect runner 控制。
+- PM / QA online 只同步摘要 Markdown，不讀真實 repo。
+- Tech write 使用 Codex `workspace-write`，主 repo 寫入測試已驗證為 blocked。
+- Tech write 允許 Codex 必要網路連線；不得使用 CAO 內建未審核規則，不得下載依賴、上傳專案內容或呼叫 live 外部副作用，除非 Architect 明確批准。
+- 自動循環完成後，代碼 diff 留在隔離 worktree；Architect 負責檢查、決定是否合併到主 repo。
+- CAO 輸出只能作為候選交付；若輸出混入 shell transcript、debug log、完整聊天、未壓縮 reasoning，Architect 必須拒收或清理後再寫入固定文件。
+- CAO auto 任務若未產生合格的 `TASK.md`、`CHANGELOG.md`、`QA_REPORT.md` 三件套，不得標記完成。
+
+Runner hygiene gates：
+
+- `run_tech_write.sh` 每輪必須從乾淨隔離 worktree 開始，並清掉上一輪 tracked / untracked 殘留；`.venv` 只作測試環境保留，不得成為候選 diff。
+- Tech runner 可同步主 repo 的交接文件供 agent 閱讀，但 `AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`QA_REPORT.md` 都是 read-only handoff context，不得出現在候選 diff；runner 必須用 hash 檢查代理是否偷改。
+- Tech 候選 diff 只應包含 `TASK.md` 允許的產品 / 測試檔，以及 Tech 交付的 `CHANGELOG.md`；其他固定 Markdown 殘留一律不得整包合併。
+- `run_qa_code.sh` 仍是 read-only QA；只允許寫 `.qa_tmp/`、dummy `config.py` 與測試暫存，不得修改 tracked files。
+- QA runner 必須在 QA 前後檢查候選 diff hash 與 handoff file hash；若 QA 改了 tracked diff 或交接文件，結果直接拒收。
+- Runner 從 CAO 終端抽取交付時，只能吸收最後一個合法標題後的內容：`# TASK:`、`# CHANGELOG:`、`# QA_REPORT:`；若抽取結果仍混入 transcript、終端流水或缺標題，必須失敗。
+- `run_auto_dev_cycle.sh` 只有在 QA 報告結構合格後，才可把 `CHANGELOG.md` 與 `QA_REPORT.md` 寫回主 repo；QA 失敗時不得留下看似完成的 Tech 交付。
+- performance 類任務若沒有 production benchmark，只能以 query contract / mock call count 給 `conditional pass`，不得宣告完全通過。
+
+收縮規則：
+
+- 不再新增新 agent，除非現有五個角色無法覆蓋且 Owner 明確批准。
+- 日常只用三種模式：`research`、`plan`、`auto`。
+- 若任務不是明確開發，預設不跑 `auto`。
+- 若 `TASK.md` 不完整，Tech write 必須 blocked，不得自行補產品需求。
+- 若 QA 報告不是完整輸出，Architect 不得吸收為通過。
+- 若只是流程 / 文件規則優化，預設不跑 PM / Tech / QA agent，Architect 直接更新固定文件即可。
 
 ## Git 發布規則
 

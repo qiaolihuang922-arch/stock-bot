@@ -4,56 +4,52 @@
 
 ## Latest Research
 
-- task_id: `v20-strategy-intelligence-architecture`
+- task_id: `agent-role-docs-external-review`
 - 日期：2026-05-26
-- 狀態：已完成，已進入並完成 `v20.0 Strategy Evidence Foundation`
-- 對應 commit：`2cc4e8a feat: add v20 strategy evidence foundation`
+- 狀態：已吸收為 Workflow Rules v3
+- 範圍：只研究 PM / Tech / QA 代理文檔與任務交付規則；不改產品代碼。
 
 ## Question
 
-Owner 質疑策略層過於簡單：旺宏 2337 從約 140 漲到約 160，但策略連續輸出淘汰。問題不是單一股票，而是整體策略缺少多日資料、外部事件、事後績效驗證與可反證資料層。
+Owner 認為目前代理雖然有分工，但實際交付仍容易變笨、含糊、照單驗收或越權。需要參考公開 GitHub / 多代理專案，強化本專案 PM / Tech / QA 代理文檔與拒收規則。
 
 ## Evidence
 
-- 旺宏案例顯示：不追高可能合理，但 `弱勢淘汰` 可能錯誤壓縮「強題材 + 高波動 + 注意股」。
-- 現有策略可產生報文，但缺少回答下列問題的資料：
-  - `淘汰` 後是否經常大漲。
-  - `等回測` 是否真的等到更好風報。
-  - `RR不足` 是否真的比追價安全。
-  - `可買` 是否比不可買追蹤組有更佳 MFE / MAE / 相對報酬。
+- `agentsmd/agents.md`：AGENTS.md 的核心價值是給 coding agents 一個可預期、專用的專案指令位置；範例包含 dev environment、testing instructions、PR instructions，強調具體命令與測試要求。
+- `FoundationAgents/MetaGPT`：用軟體公司模式把 Product Manager、Architect、Project Manager、Engineer 等角色拆開，並以 SOP 協作；重點不是角色名，而是角色輸出與流程標準化。
+- `OpenBMB/ChatDev`：多代理軟體開發流程明確分成 design / coding / testing / documenting 等階段，並支援使用者自定義 ChatChain、Phase、Role settings。
+- `CrewAI` docs：Agent 需要明確 role / goal / backstory；Task 需要 description、assigned agent、expected output。這點對應本專案的角色卡與任務卡。
+- `Microsoft AutoGen`：多代理框架重點是 agent orchestration 與 human-in-the-loop；對本專案的啟示是 agents 不能互相亂串，必須由 Architect runner 控制順序與停止條件。
 
-## PM Findings
+## Findings
 
-- v20 不應先調買賣門檻，而應先建立策略證據基礎。
-- Telegram 應新增簡短 `📊 策略證據` 摘要。
-- 外部新聞 / 題材可作研究資料，但不得直接產生 BUY。
-- 旺宏類應先進 classification audit，而不是直接改成可買。
-
-## Tech Findings
-
-- 可在現有流程內新增：
-  - `market_daily_bars`
-  - `strategy_feature_snapshots`
-  - `strategy_outcome_metrics`
-  - `strategy_classification_audit`
-  - `market_events` schema 草案
-- replay/backfill dry-run 可支援 evidence row 計算。
-- Telegram summary 可消費 evidence summary，不需要新平台。
-
-## QA Findings
-
-- Conditional approval：可進入 v20.0 `Strategy Evidence Foundation`。
-- 第一版不得修改 BUY / SELL / RR / heat / stop / take-profit / add 門檻。
-- 必須檢查 point-in-time、防未來資料洩漏、外部資料不接 BUY、evidence failure 不阻斷報文。
-- QA L3 必須包含 full pytest、replay/backfill dry-run、DB payload/schema、Telegram contract、策略不變性。
+- 目前本專案缺口不是「代理不夠多」，而是「代理交付模板不夠硬」。
+- 只寫 PM / Tech / QA 職責不足，還必須定義：
+  - 可讀 inputs。
+  - 可做 allowed_actions。
+  - 禁止 forbidden_actions。
+  - 必填 output_schema。
+  - 必須 blocked 的 block_conditions。
+  - 交付前 self_check。
+  - 下游 handoff_contract。
+- PM 的價值是把 Owner 需求變成可驗收任務，不是只改寫需求句子。
+- Tech 的價值是只在任務契約內實作，並說清契約影響與直接消費者同步。
+- QA 的價值是主動反證，而不是重跑 Tech 的測試。
+- Architect 的價值是拒收不合格交付，而不是替代理補完它們沒做的工作。
 
 ## Architect Conclusion
 
-v20 策略智能層應分階段：
+- 已在 `AGENTS.md` 新增「角色卡與任務卡契約」。
+- 已新增 PM / Tech / QA 固定交付欄位。
+- 已新增 Architect 拒收條件。
+- 已同步 CAO stock agent profiles 與 runner prompt，避免正式文檔和實際代理行為脫節。
+- 本輪不需要 PM / Tech / QA 接力，因為這是流程規則補強，屬 Architect 職責。
 
-1. v20.0：策略證據資料層與分類績效報告。
-2. v20.1+：production schema apply / retention / live write 流程。
-3. 後續：外部事件 ingestion、分類 taxonomy 重構。
-4. 最後：基於數據回測調整策略門檻。
+## Next Action
 
-v20.0 已完成並推送。下一步若 Owner 要啟用 production DB schema 或 live evidence write，需另開批准任務。
+- 下一次 `run_architect_task.sh auto` 實際任務要觀察：
+  - PM 是否輸出完整 `# TASK:`。
+  - Tech 是否輸出完整 `# CHANGELOG:`。
+  - QA 是否輸出完整 `# QA_REPORT:`。
+  - QA 是否真的主動反證，而不是只跑測試。
+- 若任一代理不合格，Architect 直接退回，不吸收、不合併、不標記完成。

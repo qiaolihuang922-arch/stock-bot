@@ -1,10 +1,4 @@
-# ================================
-# analysis.py（v19.1.3｜WATCH AND SHAKEOUT FIX）
-# ================================
-
-# ================================
-# 🔥 常數
-# ================================
+# Strategy constants and signal analysis.
 BREAKOUT_THRESHOLD = 0.005
 MIN_DATA_POINTS = 20
 
@@ -19,17 +13,11 @@ EXTENDED_LV2 = 1.15
 EXTENDED_LV3 = 1.22
 
 
-# ================================
-# 🔥 工具
-# ================================
 def avg(arr):
 
     return sum(arr) / len(arr) if arr else 0
 
 
-# ================================
-# 🔥 v19.1.3 資料保護 / 多週期工具
-# ================================
 def normalize_series(arr, n=MIN_DATA_POINTS):
 
     if not arr:
@@ -504,9 +492,6 @@ def quality_position(position, quality, profile):
     return 0
 
 
-# ================================
-# 🔥 倉位
-# ================================
 def base_position(
     market,
     trend,
@@ -546,9 +531,6 @@ def base_position(
     return round(min(pos, 0.6), 2)
 
 
-# ================================
-# 🔥 action mapper
-# ================================
 def action_mapper(decision, position):
 
     if decision == "BUY":
@@ -571,9 +553,6 @@ def action_mapper(decision, position):
     }
 
 
-# ================================
-# 🔥 dominant state
-# ================================
 def dominant_state(
     lifecycle,
     breakout_state,
@@ -602,9 +581,6 @@ def dominant_state(
     return "NORMAL"
 
 
-# ================================
-# 🔥 lifecycle strength ceiling
-# ================================
 def lifecycle_strength_ceiling(
     lifecycle
 ):
@@ -634,9 +610,6 @@ def lifecycle_strength_ceiling(
     )
 
 
-# ================================
-# 🔥 build result
-# ================================
 def build_result(**kwargs):
 
     decision = kwargs.get(
@@ -837,9 +810,6 @@ def build_result(**kwargs):
     return result
 
 
-# ================================
-# 🔥 strength score
-# ================================
 def strength_score(result):
 
     score = 0
@@ -922,9 +892,6 @@ def strength_score(result):
     return round(score, 2)
 
 
-# ================================
-# 🔥 market score
-# ================================
 def market_score(
     market,
     trend,
@@ -977,9 +944,6 @@ def market_score(
     return score
 
 
-# ================================
-# 🔥 market grade
-# ================================
 def market_grade(score):
 
     if score >= 11:
@@ -997,9 +961,6 @@ def market_grade(score):
     return "D"
 
 
-# ================================
-# 🔥 market signal
-# ================================
 def market_signal(
     closes,
     ma20,
@@ -2646,9 +2607,6 @@ def strategy(
         "confidence_score": confidence
     }
 
-    # ================================
-    # 🔥 weak market
-    # ================================
     if (
         market == "WEAK"
         or trend == "DOWN"
@@ -2709,9 +2667,6 @@ def strategy(
             **strategy_tags
         )
 
-    # ================================
-    # 🔥 breakout fail
-    # ================================
     if failed_breakout:
 
         return build_result(
@@ -2767,9 +2722,6 @@ def strategy(
             **strategy_tags
         )
 
-    # ================================
-    # 🔥 fake breakout
-    # ================================
     if fake_break:
 
         return build_result(
@@ -2828,9 +2780,6 @@ def strategy(
             **strategy_tags
         )
 
-    # ================================
-    # 🔥 extreme
-    # ================================
     if heat_state == "EXTREME":
 
         return build_result(
@@ -2918,9 +2867,6 @@ def strategy(
             strategy_tags
         )
 
-    # ================================
-    # 🔥 strong follow
-    # ================================
     if (
         strong_follow(
             closes,
@@ -3024,9 +2970,6 @@ def strategy(
         **strategy_tags
         )
 
-    # ================================
-    # 🔥 breakout
-    # ================================
     if (
         breakout_state == "BREAKOUT"
         and rr >= MIN_RR_BREAKOUT

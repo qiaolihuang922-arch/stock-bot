@@ -23,6 +23,12 @@ class FakeTable:
     def gte(self, *_args, **_kwargs):
         return self
 
+    def order(self, *_args, **_kwargs):
+        return self
+
+    def limit(self, *_args, **_kwargs):
+        return self
+
     def execute(self):
         return SimpleNamespace(data=self.rows)
 
@@ -526,16 +532,16 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("回測：", messages[1])
         self.assertIn("📊 市場：", messages[-1])
         self.assertIn("📌 持倉：智原", messages[-1])
-        self.assertIn("🧭 今日結論：", messages[-1])
+        self.assertIn("🧭 盤後結論：", messages[-1])
         self.assertIn("✅ 明日執行清單（持倉優先）", messages[-1])
         self.assertIn("1. 智原｜+0.85%｜加碼10｜加碼後守警戒價", messages[-1])
-        self.assertIn("未持倉 1 檔只等觸發，不列入明日執行", messages[-1])
+        self.assertIn("僅追蹤：RR 1，不列入明日執行", messages[-1])
         self.assertNotIn("建準｜等RR修復｜不追價，等RR達標", messages[-1])
         self.assertIn("未持倉漏斗（非執行）：", messages[-1])
-        self.assertIn("不可買追蹤 1", messages[-1])
-        self.assertIn("可準備 0（不可買）", messages[-1])
+        self.assertIn("僅追蹤 1", messages[-1])
+        self.assertIn("準備 0（不可買）", messages[-1])
         self.assertIn("等RR修復 1", messages[-1])
-        self.assertIn("📎 詳情索引：持倉 1｜執行 1｜未持倉追蹤 1｜淘汰 0", messages[-1])
+        self.assertIn("📎 詳情索引：持倉 1｜執行 1｜準備 0｜僅追蹤 1｜冷卻 0｜回測 0｜RR 1｜量能 0｜淘汰 0", messages[-1])
         self.assertNotIn("完整詳情備份", "\n".join(messages))
 
     def test_position_cards_follow_summary_order_and_decision_wording(self):
@@ -671,11 +677,11 @@ class GeneratorReportTest(unittest.TestCase):
             datetime(2026, 5, 26),
         )
 
-        self.assertIn("明日執行 2 項，持倉 1、可買 1；未持倉無追蹤", messages[-1])
+        self.assertIn("明日先看 2 項，持倉 1、可買 1；僅追蹤 0 檔", messages[-1])
         self.assertIn("1. 智原｜+0.85%｜加碼10｜加碼後守警戒價", messages[-1])
         self.assertIn("2. 建準｜可買｜分批，不追價", messages[-1])
-        self.assertIn("可買 1｜不可買追蹤 0", messages[-1])
-        self.assertIn("📎 詳情索引：持倉 1｜執行 2｜未持倉追蹤 0｜淘汰 0", messages[-1])
+        self.assertIn("可買 1｜準備 0（不可買）｜僅追蹤 0", messages[-1])
+        self.assertIn("📎 詳情索引：持倉 1｜執行 2｜準備 0｜僅追蹤 0｜冷卻 0｜回測 0｜RR 0｜量能 0｜淘汰 0", messages[-1])
         self.assertNotIn("未持倉 0 檔僅追蹤", messages[-1])
         self.assertNotIn("其餘 0 檔僅追蹤", messages[-1])
 
@@ -761,9 +767,10 @@ class GeneratorReportTest(unittest.TestCase):
         summary_msg = messages[-1]
         unheld_msg = messages[1]
         self.assertIn("未持倉漏斗（非執行）：", summary_msg)
-        self.assertIn("可買 0｜不可買追蹤 3｜可準備 0（不可買）｜等回測 2｜等RR修復 1｜等量能 0｜淘汰 1", summary_msg)
-        self.assertIn("未持倉 3 檔僅追蹤，等觸發，不列入明日執行", summary_msg)
-        self.assertIn("淘汰 1：旺宏", summary_msg)
+        self.assertIn("可買 0｜準備 0（不可買）｜僅追蹤 3｜冷卻 1｜回測 1｜等RR修復 1｜等量能 0｜淘汰 1", summary_msg)
+        self.assertIn("僅追蹤：冷卻 1／回測 1／RR 1，不列入明日執行", summary_msg)
+        self.assertIn("淘汰 1｜主因：", summary_msg)
+        self.assertNotIn("淘汰 1：旺宏", summary_msg)
         self.assertLess(unheld_msg.index("【聯電 2303】"), unheld_msg.index("【光寶科 2301】"))
         self.assertLess(unheld_msg.index("【光寶科 2301】"), unheld_msg.index("【建準 2421】"))
         self.assertLess(unheld_msg.index("【建準 2421】"), unheld_msg.index("【旺宏 2337】"))
@@ -871,18 +878,20 @@ class GeneratorReportTest(unittest.TestCase):
                 datetime(2026, 5, 26),
             )
 
-        self.assertIn("v20.0.1", messages[-1])
+        self.assertIn("v20.0.6", messages[-1])
         self.assertIn("📡 資料：即時價 realtime｜日線 yahoo", messages[-1])
-        self.assertIn("🧭 今日結論：R3 進攻偏熱；持倉優先處理；未持倉 6 檔僅追蹤，不新增", messages[-1])
+        self.assertIn("🧭 今日結論：R3 進攻偏熱；持倉 5 檔先檢視；新倉無有效進場；僅追蹤 6 檔", messages[-1])
         self.assertIn("🧭 原因：強勢股多過熱，RR不足，不追高", messages[-1])
         self.assertIn("✅ 明日執行清單（持倉優先）", messages[-1])
         self.assertIn("1. 英業達｜+19.37%｜核心風控觀察｜守警戒價", messages[-1])
         self.assertIn("2. 智原｜-0.59%｜洗盤警戒｜跌破警戒升級風控", messages[-1])
-        self.assertIn("未持倉 6 檔只等觸發，不列入明日執行", messages[-1])
+        self.assertIn("僅追蹤：冷卻 3／回測 1／RR 2，不列入明日執行", messages[-1])
         self.assertIn("未持倉漏斗（非執行）：", messages[-1])
-        self.assertIn("可買 0｜不可買追蹤 6｜可準備 0（不可買）｜等回測 4｜等RR修復 2｜等量能 0｜淘汰 1", messages[-1])
-        self.assertIn("📎 詳情索引：持倉 5｜執行 5｜未持倉追蹤 6｜淘汰 1", messages[-1])
-        self.assertIn("淘汰 1：旺宏", messages[-1])
+        self.assertIn("可買 0｜準備 0（不可買）｜僅追蹤 6", messages[-1])
+        self.assertIn("｜淘汰 1", messages[-1])
+        self.assertIn("📎 詳情索引：持倉 5｜執行 5｜準備 0｜僅追蹤 6", messages[-1])
+        self.assertIn("淘汰 1｜主因：", messages[-1])
+        self.assertNotIn("淘汰 1：旺宏", messages[-1])
         self.assertIn("【光寶科 2301】⏳ 等冷卻", messages[1])
         self.assertIn("【建準 2421】👀 等RR修復｜RR不足", messages[1])
         self.assertIn("【旺宏 2337】⛔ 淘汰｜弱反彈待確認", messages[1])
@@ -1054,7 +1063,7 @@ class GeneratorReportTest(unittest.TestCase):
         )
 
         self.assertIn("1. 建準｜可買｜分批，不追價", messages[-1])
-        self.assertIn("可買 1｜不可買追蹤 0｜可準備 0（不可買）｜等回測 0｜等RR修復 0｜等量能 0｜淘汰 0", messages[-1])
+        self.assertIn("可買 1｜準備 0（不可買）｜僅追蹤 0｜冷卻 0｜回測 0｜等RR修復 0｜等量能 0｜淘汰 0", messages[-1])
         self.assertNotIn("建準｜等", messages[-1])
         self.assertIn("【建準 2421】🟢 可買｜10%倉｜買點成立", messages[1])
         self.assertIn("買點：可買｜建議 10%倉｜現在可分批", messages[1])
@@ -1109,11 +1118,58 @@ class GeneratorReportTest(unittest.TestCase):
         )
 
         self.assertIn("1. 建準｜可買｜分批，不追價", messages[-1])
-        self.assertIn("可買 1｜不可買追蹤 0｜可準備 0（不可買）｜等回測 0｜等RR修復 0｜等量能 0｜淘汰 1", messages[-1])
-        self.assertIn("淘汰 1：旺宏", messages[-1])
+        self.assertIn("可買 1｜準備 0（不可買）｜僅追蹤 0｜冷卻 0｜回測 0｜等RR修復 0｜等量能 0｜淘汰 1", messages[-1])
+        self.assertIn("淘汰 1｜主因：", messages[-1])
+        self.assertNotIn("淘汰 1：旺宏", messages[-1])
         self.assertNotIn("建準｜等", messages[-1])
         self.assertNotIn("旺宏｜等", messages[-1])
         self.assertIn("【建準 2421】🟢 可買｜10%倉｜買點成立", messages[1])
+
+    def test_rejected_best_stock_does_not_reappear_as_top_recommendation(self):
+        weak_payload = {
+            "stock_code": "2337",
+            "price": 159.25,
+            "change": 4.43,
+            "price_source": "realtime",
+            "daily_source": "yahoo",
+            "result": {
+                "decision": "WAIT",
+                "action": 0,
+                "rr": 2.44,
+                "heat_state": "NORMAL",
+                "trade_state": "WAIT",
+                "structure_phase": "WEAK_REBOUND",
+                "price_behavior": "WEAK_REBOUND",
+                "market_grade": "D",
+                "volume_state": "WEAK",
+                "volume_price_state": "NORMAL",
+                "structure_state": "WEAK",
+                "entry_quality": "D",
+                "confidence_score": 42,
+                "breakout_distance": 8.55,
+            },
+            "holding": None,
+            "structure_score": 1,
+            "volume_ratio": 0.8,
+        }
+
+        messages = generator.formatTelegramMessages(
+            {"旺宏": weak_payload},
+            "FULL DETAIL",
+            "旺宏",
+            8.8,
+            "⏳ 觀望",
+            datetime(2026, 5, 26),
+        )
+
+        summary_msg = messages[-1]
+        self.assertIn("🔥 最強：無有效進場標的", summary_msg)
+        self.assertNotIn("🔥 最強：旺宏", summary_msg)
+        self.assertNotIn("追蹤最強：旺宏", summary_msg)
+        self.assertNotIn("旺宏｜排序", summary_msg)
+        self.assertIn("不可行動：淘汰 1，見詳情", summary_msg)
+        self.assertIn("淘汰 1｜主因：", summary_msg)
+        self.assertIn("【旺宏 2337】⛔ 淘汰", messages[1])
 
     def test_v19_4_volume_blocked_non_weak_stock_enters_wait_volume(self):
         payload = {
@@ -1152,8 +1208,8 @@ class GeneratorReportTest(unittest.TestCase):
             datetime(2026, 5, 26),
         )
 
-        self.assertIn("可買 0｜不可買追蹤 1｜可準備 0（不可買）｜等回測 0｜等RR修復 0｜等量能 1｜淘汰 0", messages[-1])
-        self.assertIn("未持倉 1 檔僅追蹤，等觸發，不列入明日執行", messages[-1])
+        self.assertIn("可買 0｜準備 0（不可買）｜僅追蹤 1｜冷卻 0｜回測 0｜等RR修復 0｜等量能 1｜淘汰 0", messages[-1])
+        self.assertIn("僅追蹤：量能 1，不列入明日執行", messages[-1])
         self.assertNotIn("1. 技嘉｜等量能｜不買，等量能回升", messages[-1])
         self.assertIn("【技嘉 2376】👀 等量能｜量能不足", messages[1])
 
@@ -1210,8 +1266,8 @@ class GeneratorReportTest(unittest.TestCase):
             datetime(2026, 5, 26),
         )
 
-        self.assertIn("未持倉 2 檔僅追蹤，等觸發，不列入明日執行", messages[-1])
-        self.assertIn("可買 0｜不可買追蹤 2｜可準備 0（不可買）｜等回測 0｜等RR修復 2｜等量能 0｜淘汰 0", messages[-1])
+        self.assertIn("僅追蹤：RR 2，不列入明日執行", messages[-1])
+        self.assertIn("可買 0｜準備 0（不可買）｜僅追蹤 2｜冷卻 0｜回測 0｜等RR修復 2｜等量能 0｜淘汰 0", messages[-1])
         self.assertNotIn("【可買", messages[-1])
         self.assertIn("【仁寶 2324】👀 等RR修復｜RR不足", messages[1])
         self.assertIn("【建準 2421】👀 等RR修復｜RR不足", messages[1])
@@ -1317,7 +1373,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("FULL DETAIL", messages[0])
         self.assertIn("【持倉標的】", messages[1])
         self.assertIn("【未持倉標的】", messages[2])
-        self.assertIn("｜v20.0.1】", messages[-1])
+        self.assertIn("｜v20.0.6】", messages[-1])
 
 
 if __name__ == "__main__":

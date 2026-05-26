@@ -1,5 +1,7 @@
 import unittest
 from datetime import datetime
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from services import strategy_evidence
 
@@ -144,6 +146,158 @@ class StrategyEvidenceTest(unittest.TestCase):
         self.assertIn("證據層暫時略過：資料更新失敗，主報文不受影響", text)
         self.assertNotIn("timeout while connecting", text)
         self.assertNotIn("db.example", text)
+
+    def test_load_summary_limits_ordered_queries(self):
+        class Query:
+            def __init__(self, name, calls):
+                self.name = name
+                self.calls = calls
+
+            def select(self, *_args, **_kwargs):
+                return self
+
+            def eq(self, *_args, **_kwargs):
+                return self
+
+            def order(self, field, **kwargs):
+                self.calls.append((self.name, "order", field, kwargs))
+                return self
+
+            def limit(self, value):
+                self.calls.append((self.name, "limit", value))
+                return self
+
+            def execute(self):
+                return SimpleNamespace(data=[])
+
+        class Client:
+            def __init__(self):
+                self.calls = []
+
+            def table(self, name):
+                return Query(name, self.calls)
+
+        client = Client()
+
+        strategy_evidence.load_strategy_evidence_summary(client, "v20.0.6", limit=25)
+
+        self.assertIn(("strategy_feature_snapshots", "order", "trade_date", {"desc": True}), client.calls)
+        self.assertIn(("strategy_feature_snapshots", "limit", 25), client.calls)
+        self.assertIn(("strategy_outcome_metrics", "limit", 25 * len(strategy_evidence.OUTCOME_HORIZONS)), client.calls)
+        self.assertIn(("strategy_classification_audit", "limit", 1), client.calls)
+
+    def test_load_summary_uses_desc_limit_before_downstream_summary(self):
+        class Query:
+            def __init__(self, name, calls, rows):
+                self.name = name
+                self.calls = calls
+                self.rows = rows
+
+            def select(self, *_args, **_kwargs):
+                self.calls.append((self.name, "select"))
+                return self
+
+            def eq(self, *_args, **_kwargs):
+                self.calls.append((self.name, "eq"))
+                return self
+
+            def order(self, field, **kwargs):
+                self.calls.append((self.name, "order", field, kwargs))
+                return self
+
+            def limit(self, value):
+                self.calls.append((self.name, "limit", value))
+                return self
+
+            def execute(self):
+                self.calls.append((self.name, "execute"))
+                return SimpleNamespace(data=self.rows)
+
+        class Client:
+            def __init__(self):
+                self.calls = []
+                self.rows = {
+                    "strategy_feature_snapshots": [],
+                    "strategy_outcome_metrics": [],
+                    "strategy_classification_audit": [{
+                        "stock_id": "2337",
+                        "stock_name": "旺宏",
+                        "trade_date": "2026-05-26",
+                        "strategy_version": "v20.0.6",
+                        "suggested_audit_category": "弱反彈語意需複核",
+                        "severity": "medium",
+                        "review_status": "open",
+                    }],
+                }
+
+            def table(self, name):
+                return Query(name, self.calls, self.rows.get(name, []))
+
+        client = Client()
+
+        text = strategy_evidence.load_strategy_evidence_summary(client, "v20.0.6", limit=25)
+        audit_calls = [
+            call
+            for call in client.calls
+            if call[0] == "strategy_classification_audit"
+        ]
+
+        self.assertLess(
+            audit_calls.index(("strategy_classification_audit", "order", "trade_date", {"desc": True})),
+            audit_calls.index(("strategy_classification_audit", "limit", 1)),
+        )
+        self.assertLess(
+            audit_calls.index(("strategy_classification_audit", "limit", 1)),
+            audit_calls.index(("strategy_classification_audit", "execute")),
+        )
+        self.assertIn("⚠ 分類警示：弱反彈語意需複核 1 筆（旺宏）", text)
+
+    def test_record_strategy_evidence_reuses_injected_client(self):
+        payload = {
+            "recorded": True,
+            "market_rows": [],
+            "feature_rows": [{
+                "stock_id": "2421",
+                "trade_date": "2026-05-26",
+                "strategy_version": "v20.0.6",
+            }],
+            "audit_rows": [],
+        }
+
+        class Query:
+            def __init__(self):
+                self.upserted = []
+
+            def upsert(self, rows, **kwargs):
+                self.upserted.append((rows, kwargs))
+                return self
+
+            def execute(self):
+                return SimpleNamespace(data=[])
+
+        class Client:
+            def __init__(self):
+                self.tables = {}
+
+            def table(self, name):
+                self.tables.setdefault(name, Query())
+                return self.tables[name]
+
+        client = Client()
+
+        with patch.object(strategy_evidence, "build_strategy_evidence_payloads", return_value=payload), \
+             patch.object(strategy_evidence, "get_supabase_client", side_effect=AssertionError("unexpected new client")):
+            result = strategy_evidence.record_strategy_evidence(
+                "v20.0.6",
+                "盤後",
+                {},
+                datetime(2026, 5, 26, 13, 30),
+                client=client,
+            )
+
+        self.assertTrue(result["recorded"])
+        self.assertEqual(result["feature_rows"], 1)
+        self.assertIn("strategy_feature_snapshots", client.tables)
 
     def test_classification_report_separates_3d_win_rate_and_5d_mfe(self):
         feature_rows = [

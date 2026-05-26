@@ -47,7 +47,7 @@ from services.strategy_evidence import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.0.1"
+VERSION = "v20.0.6"
 
 EXECUTION_LEVELS = {
     "TAKE_PROFIT_50": "TP50",
@@ -2399,7 +2399,13 @@ def best_stock_text(results_map, best, score=None):
     if not best:
         return "無有效進場標的"
 
+    if best not in results_map:
+        return "無有效進場標的"
+
     result = results_map[best]["result"]
+    if not is_valid_entry(result):
+        return "無有效進場標的"
+
     return (
         f"{best}"
         f"｜排序★{safe_round(score)}"
@@ -3310,7 +3316,10 @@ def unheld_funnel_state(name, data):
     if state == "弱勢淘汰":
         return "淘汰"
 
-    if state in ["等回測", "等冷卻"]:
+    if state == "等冷卻":
+        return "等冷卻"
+
+    if state == "等回測":
         return "等回測"
 
     if state == "等RR修復":
@@ -3359,7 +3368,8 @@ def unheld_execution_priority(index, name, data):
     rank = {
         "可買": 0,
         "可準備": 3,
-        "等回測": 4,
+        "等冷卻": 4,
+        "等回測": 5,
         "等RR修復": 5,
         "等量能": 6,
         "淘汰": 9,
@@ -3398,6 +3408,7 @@ def build_unheld_funnel(watch_items):
     groups = {
         "可買": [],
         "可準備": [],
+        "等冷卻": [],
         "等回測": [],
         "等RR修復": [],
         "等量能": [],
@@ -3435,7 +3446,7 @@ def unheld_tracking_count(funnel):
 
     return sum(
         len(funnel[label])
-        for label in ["可準備", "等回測", "等RR修復", "等量能"]
+        for label in ["等冷卻", "等回測", "等RR修復", "等量能"]
     )
 
 
@@ -3443,32 +3454,41 @@ def today_conclusion_text(holding_items, watch_items, market_mode, risk_level):
 
     funnel = build_unheld_funnel(watch_items)
     buy_count = len(funnel["可買"])
+    prepare_count = len(funnel["可準備"])
     tracking_count = unheld_tracking_count(funnel)
     holding_count = len(holding_items)
 
     if holding_count and buy_count:
         base = (
-            f"{risk_level} {market_mode}；明日執行 {holding_count + buy_count} 項，"
+            f"{risk_level} {market_mode}；明日先看 {holding_count + buy_count} 項，"
             f"持倉 {holding_count}、可買 {buy_count}"
         )
+        if prepare_count:
+            return f"{base}；準備 {prepare_count} 檔；僅追蹤 {tracking_count} 檔"
         if tracking_count:
-            return f"{base}；未持倉 {tracking_count} 檔僅追蹤"
-        return f"{base}；未持倉無追蹤"
+            return f"{base}；僅追蹤 {tracking_count} 檔"
+        return f"{base}；僅追蹤 0 檔"
 
     if holding_count:
+        if prepare_count:
+            return f"{risk_level} {market_mode}；持倉 {holding_count} 檔先檢視；新倉準備 {prepare_count} 檔；僅追蹤 {tracking_count} 檔"
         if tracking_count:
-            return f"{risk_level} {market_mode}；持倉優先處理；未持倉 {tracking_count} 檔僅追蹤，不新增"
-        return f"{risk_level} {market_mode}；持倉優先處理；未持倉無追蹤，不新增"
+            return f"{risk_level} {market_mode}；持倉 {holding_count} 檔先檢視；新倉無有效進場；僅追蹤 {tracking_count} 檔"
+        return f"{risk_level} {market_mode}；持倉 {holding_count} 檔先檢視；新倉無有效進場"
 
     if buy_count:
+        if prepare_count:
+            return f"{risk_level} {market_mode}；無持倉，可買 {buy_count} 檔；準備 {prepare_count} 檔；僅追蹤 {tracking_count} 檔"
         if tracking_count:
-            return f"{risk_level} {market_mode}；無持倉，可買 {buy_count} 檔；其餘 {tracking_count} 檔僅追蹤"
-        return f"{risk_level} {market_mode}；無持倉，可買 {buy_count} 檔；未持倉無追蹤"
+            return f"{risk_level} {market_mode}；無持倉，可買 {buy_count} 檔；僅追蹤 {tracking_count} 檔"
+        return f"{risk_level} {market_mode}；無持倉，可買 {buy_count} 檔；僅追蹤 0 檔"
 
+    if prepare_count:
+        return f"{risk_level} {market_mode}；無持倉，新倉無有效進場；準備 {prepare_count} 檔；僅追蹤 {tracking_count} 檔"
     if tracking_count:
-        return f"{risk_level} {market_mode}；無持倉，未持倉 {tracking_count} 檔僅追蹤，不新增"
+        return f"{risk_level} {market_mode}；無持倉，新倉無有效進場；僅追蹤 {tracking_count} 檔"
 
-    return f"{risk_level} {market_mode}；無持倉，未持倉無追蹤，不新增"
+    return f"{risk_level} {market_mode}；無持倉，新倉無有效進場"
 
 
 def today_reason_text(watch_items, market_mode):
@@ -3481,19 +3501,19 @@ def today_reason_text(watch_items, market_mode):
     if market_mode == "進攻偏熱":
         if funnel["等RR修復"]:
             return "強勢股多過熱，RR不足，不追高"
-        return "強勢股多過熱，新倉等回測與降溫"
+        return "強勢股多過熱，新倉等回測或降溫"
 
     if market_mode == "轉弱":
         return "弱勢淘汰偏多，先控新倉"
 
-    if funnel["等RR修復"] and funnel["等回測"]:
+    if funnel["等RR修復"] and (funnel["等回測"] or funnel["等冷卻"]):
         return "RR與追價風險仍在，等觸發再評估"
 
     if funnel["等RR修復"]:
         return "RR不足，不追價"
 
-    if funnel["等回測"]:
-        return "追價風險仍在，等回測確認"
+    if funnel["等回測"] or funnel["等冷卻"]:
+        return "追價風險仍在，等冷卻或回測確認"
 
     return "依今日條件排序，未觸發不新增"
 
@@ -3523,18 +3543,36 @@ def format_execution_checklist(holding_items, watch_items, limit=5):
 
     items = build_execution_items(holding_items, watch_items)
     funnel = build_unheld_funnel(watch_items)
+    holding_count = len(holding_items)
+    buy_count = len(funnel["可買"])
+    prepare_count = len(funnel["可準備"])
     tracking_count = unheld_tracking_count(funnel)
 
     if not items:
+        lines = []
+        if holding_count:
+            lines.append(f"盤後持倉檢視：{holding_count} 檔")
+        if prepare_count:
+            lines.append(f"明日盤前準備：{prepare_count} 檔（不可買）")
         if tracking_count:
-            return [f"未持倉 {tracking_count} 檔僅追蹤，等觸發，不列入明日執行"]
-        return ["無持倉，無明日執行"]
+            lines.append(tracking_summary_line(funnel))
+        if funnel["淘汰"]:
+            lines.append(f"不可行動：淘汰 {len(funnel['淘汰'])}，見詳情")
+        return lines or ["無持倉，無明日執行"]
 
     displayed = items[:limit]
-    lines = [
+    lines = []
+    if holding_count:
+        lines.append(f"盤後持倉檢視：{holding_count} 檔")
+    if buy_count:
+        lines.append(f"新倉可買：{buy_count} 檔")
+    if prepare_count:
+        lines.append(f"明日盤前準備：{prepare_count} 檔（不可買）")
+
+    lines.extend([
         f"{index}. {item['line']}"
         for index, item in enumerate(displayed, start=1)
-    ]
+    ])
 
     hidden_control_count = sum(
         1
@@ -3548,9 +3586,26 @@ def format_execution_checklist(holding_items, watch_items, limit=5):
         lines.append(f"另有 {len(items) - limit} 項執行見詳情")
 
     if tracking_count:
-        lines.append(f"未持倉 {tracking_count} 檔只等觸發，不列入明日執行")
+        lines.append(tracking_summary_line(funnel))
+
+    if funnel["淘汰"]:
+        lines.append(f"不可行動：淘汰 {len(funnel['淘汰'])}，見詳情")
 
     return lines
+
+
+def tracking_summary_line(funnel):
+
+    parts = []
+    if funnel["等冷卻"]:
+        parts.append(f"冷卻 {len(funnel['等冷卻'])}")
+    if funnel["等回測"]:
+        parts.append(f"回測 {len(funnel['等回測'])}")
+    if funnel["等RR修復"]:
+        parts.append(f"RR {len(funnel['等RR修復'])}")
+    if funnel["等量能"]:
+        parts.append(f"量能 {len(funnel['等量能'])}")
+    return f"僅追蹤：{'／'.join(parts)}，不列入明日執行"
 
 
 def format_unheld_funnel(watch_items):
@@ -3560,9 +3615,10 @@ def format_unheld_funnel(watch_items):
 
     return (
         f"可買 {len(funnel['可買'])}"
-        f"｜不可買追蹤 {tracking_count}"
-        f"｜可準備 {len(funnel['可準備'])}（不可買）"
-        f"｜等回測 {len(funnel['等回測'])}"
+        f"｜準備 {len(funnel['可準備'])}（不可買）"
+        f"｜僅追蹤 {tracking_count}"
+        f"｜冷卻 {len(funnel['等冷卻'])}"
+        f"｜回測 {len(funnel['等回測'])}"
         f"｜等RR修復 {len(funnel['等RR修復'])}"
         f"｜等量能 {len(funnel['等量能'])}"
         f"｜淘汰 {len(funnel['淘汰'])}"
@@ -3579,7 +3635,12 @@ def detail_index_text(holding_items, watch_items):
     return (
         f"📎 詳情索引：持倉 {len(holding_items)}"
         f"｜執行 {execution_count}"
-        f"｜未持倉追蹤 {tracking_count}"
+        f"｜準備 {len(funnel['可準備'])}"
+        f"｜僅追蹤 {tracking_count}"
+        f"｜冷卻 {len(funnel['等冷卻'])}"
+        f"｜回測 {len(funnel['等回測'])}"
+        f"｜RR {len(funnel['等RR修復'])}"
+        f"｜量能 {len(funnel['等量能'])}"
         f"｜淘汰 {len(rejected)}"
     )
 
@@ -3592,8 +3653,7 @@ def rejected_trace_line(watch_items):
     if not rejected:
         return None
 
-    names = "、".join(rejected)
-    return f"淘汰 {len(rejected)}：{names}｜主因：{dominant_reject_reasons(watch_items)}"
+    return f"淘汰 {len(rejected)}｜主因：{dominant_reject_reasons(watch_items)}｜詳情見淘汰分組"
 
 
 def formatTelegramSummary(results_map, best, score, market_summary, now, position_warning=None, daily_write_warning=None, strategy_evidence_summary=None):
@@ -3610,9 +3670,11 @@ def formatTelegramSummary(results_map, best, score, market_summary, now, positio
         if not data.get("holding")
     ]
     market_mode, risk_level = derive_market_state(watch_items)
+    phase = get_market_phase()
+    conclusion_label = "今日結論" if phase == "盤中" else "盤後結論"
 
     lines = [
-        f"【{now.strftime('%m/%d')} {get_market_phase()}｜{VERSION}】",
+        f"【{now.strftime('%m/%d')} {phase}｜{VERSION}】",
     ]
 
     if position_warning:
@@ -3626,11 +3688,11 @@ def formatTelegramSummary(results_map, best, score, market_summary, now, positio
         f"📊 市場：{market_mode}｜{risk_level}",
     ])
 
-    if get_market_phase() == "盤中":
+    if phase == "盤中":
         lines.append(source_summary_text(results_map))
 
     lines.extend([
-        f"🧭 今日結論：{today_conclusion_text(holding_items, watch_items, market_mode, risk_level)}",
+        f"🧭 {conclusion_label}：{today_conclusion_text(holding_items, watch_items, market_mode, risk_level)}",
         f"🧭 原因：{today_reason_text(watch_items, market_mode)}",
         f"🔥 最強：{best_stock_text(results_map, best, score)}",
         f"🚨 風險：{compact_risk_text(results_map)}",
@@ -4412,16 +4474,18 @@ def generate_report():
         msg += f"\n⚠ DB記錄失敗：{str(e)}"
 
     try:
+        evidence_client = get_supabase_client()
         # 中文註釋：v20.0 策略證據層只寫入研究資料與分類證據，不回寫或放寬任何交易決策。
         evidence_result = record_strategy_evidence(
             VERSION,
             get_market_phase(),
             results_map,
-            now
+            now,
+            client=evidence_client
         )
         try:
             strategy_evidence_summary = load_strategy_evidence_summary(
-                get_supabase_client(),
+                evidence_client,
                 VERSION
             )
         except Exception as summary_error:

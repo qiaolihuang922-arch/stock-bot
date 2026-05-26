@@ -1,8 +1,6 @@
 import os
 
-# ================================
-# 🔥 utils.py（v19.1.3｜執行防重複工具）
-# ================================
+# Runtime duplicate-send guard.
 
 def already_sent(tag):
     path = f"/tmp/{tag}"

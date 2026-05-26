@@ -593,6 +593,8 @@ def load_strategy_evidence_summary(client, version, limit=240):
         client.table("strategy_feature_snapshots")
         .select("stock_id,trade_date,strategy_version,watch_category,reject_family")
         .eq("strategy_version", version)
+        .order("trade_date", desc=True)
+        .limit(limit)
         .execute()
         .data
         or []
@@ -601,6 +603,8 @@ def load_strategy_evidence_summary(client, version, limit=240):
         client.table("strategy_outcome_metrics")
         .select("stock_id,trade_date,strategy_version,watch_category,reject_family,horizon_days,close_return_pct,relative_return_pct,max_favorable_excursion_pct,max_adverse_excursion_pct,outcome_label")
         .eq("strategy_version", version)
+        .order("trade_date", desc=True)
+        .limit(limit * len(OUTCOME_HORIZONS))
         .execute()
         .data
         or []
@@ -609,11 +613,13 @@ def load_strategy_evidence_summary(client, version, limit=240):
         client.table("strategy_classification_audit")
         .select("stock_id,trade_date,strategy_version,suggested_audit_category,severity,review_status")
         .eq("strategy_version", version)
+        .order("trade_date", desc=True)
+        .limit(1)
         .execute()
         .data
         or []
     )
-    return report_from_rows(feature_rows[-limit:], outcome_rows[-limit * len(OUTCOME_HORIZONS):], audit_rows[:1])
+    return report_from_rows(feature_rows, outcome_rows, audit_rows)
 
 
 def get_supabase_client():
@@ -622,12 +628,12 @@ def get_supabase_client():
     return create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
-def record_strategy_evidence(version, phase, results_map, now=None):
+def record_strategy_evidence(version, phase, results_map, now=None, client=None):
     payloads = build_strategy_evidence_payloads(version, phase, results_map, now)
     if not payloads.get("recorded"):
         return payloads
 
-    client = get_supabase_client()
+    client = client or get_supabase_client()
     market_rows = payloads["market_rows"]
     feature_rows = payloads["feature_rows"]
     audit_rows = payloads["audit_rows"]

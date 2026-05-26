@@ -3,9 +3,7 @@ import requests
 import time
 from config import TOKEN, CHAT_ID
 
-# ================================
-# 🔥 notifier.py（v19.4.1｜Telegram 發送層）
-# ================================
+# Telegram delivery layer.
 
 def send(msg, reply_markup=None):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"

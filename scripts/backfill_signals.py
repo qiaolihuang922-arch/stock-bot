@@ -85,7 +85,7 @@ def build_rows(stock_ids, start_date, end_date, version, source):
             if cutoff < 20:
                 continue
 
-            # 中文註釋：v19.1.3 backfill 每日只使用該日以前含當日資料，嚴禁未來資料污染。
+            # Pass only data available up to the backfill date to avoid lookahead bias.
             snapshot = analyze_ohlcv_snapshot(
                 stock_id,
                 trade_date.isoformat(),

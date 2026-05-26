@@ -11,9 +11,7 @@ try:
 except ImportError:
     pytz = None
 
-# ================================
-# 🔥 stock_api.py（v19.1.3｜行情資料層）
-# ================================
+# Market data access layer.
 
 tz = pytz.timezone("Asia/Taipei") if pytz else None
 HEADERS = {"User-Agent": "Mozilla/5.0"}
