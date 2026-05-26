@@ -123,6 +123,28 @@ class StrategyEvidenceTest(unittest.TestCase):
 
         self.assertIn("RR不足｜樣本 3｜樣本不足，不判讀", text)
 
+    def test_schema_missing_error_uses_readiness_message(self):
+        error = {
+            "message": "Could not find the table 'public.market_daily_bars' in the schema cache",
+            "code": "PGRST205",
+        }
+
+        text = strategy_evidence.format_strategy_evidence_summary(error=error)
+
+        self.assertIn("策略證據尚未啟用：資料表未建立，主報文不受影響", text)
+        self.assertNotIn("Could not find the table", text)
+        self.assertNotIn("schema cache", text)
+        self.assertNotIn("{'message'", text)
+
+    def test_generic_db_error_is_sanitized(self):
+        text = strategy_evidence.format_strategy_evidence_summary(
+            error=RuntimeError("timeout while connecting to db.example.internal")
+        )
+
+        self.assertIn("證據層暫時略過：資料更新失敗，主報文不受影響", text)
+        self.assertNotIn("timeout while connecting", text)
+        self.assertNotIn("db.example", text)
+
     def test_classification_report_separates_3d_win_rate_and_5d_mfe(self):
         feature_rows = [
             {

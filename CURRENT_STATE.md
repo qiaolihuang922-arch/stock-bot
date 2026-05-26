@@ -50,6 +50,17 @@
 
 以上都需 Owner 另開明確批准流程。
 
+## 目前進行中
+
+- 新任務：`v20.0.1-evidence-readiness-message`。
+- 來源：v20.0 盤後報文中 `📊 策略證據 v20.0` 顯示 Supabase 原始錯誤：production table `public.market_daily_bars` 尚未建立。
+- 判斷：主報文未阻斷，證據層降級有效；但不應在 Telegram 顯示原始 Supabase dict/error。
+- 目標：改成友善可讀提示，例如「策略證據尚未啟用：資料表未建立，主報文不受影響」。
+- 邊界：不 apply production schema、不正式寫庫、不改策略、不改 BUY / SELL / `is_tradeable` / `action`。
+- PM 已交付 `TASK.md`；下一步交 Tech 實作 friendly fallback / readiness message 與必要測試。
+- Tech 已交付 `CHANGELOG.md`，修改 `core/generator.py`、`services/strategy_evidence.py` 與 tests；下一步由 QA 做 L2 驗證。
+- QA 已交付 `QA_REPORT.md`，L2 結論通過；下一步 Architect 收口提交並推送。
+
 ## 現有模組
 
 - `main.py`：主要執行入口。

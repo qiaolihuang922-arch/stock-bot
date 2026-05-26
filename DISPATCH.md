@@ -4,32 +4,35 @@
 
 ## Current Task
 
-- task_id: `v20.0-strategy-evidence-foundation`
-- task_name: `v20.0 Strategy Evidence Foundation`
+- task_id: `v20.0.1-evidence-readiness-message`
+- task_name: `v20.0.1 Evidence Readiness Message`
 - task_type: `development`
-- version_level: `major`
-- qa_level: `L3`
+- version_level: `patch`
+- qa_level: `L2`
 - owner_status: `requested`
-- architect_status: `pushed`
+- architect_status: `dispatched`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
 - qa_status: `qa_passed`
-- commit: `2cc4e8a feat: add v20 strategy evidence foundation`
+- commit: `pending`
 
 ## Current Result
 
-- v20.0 已完成 PM / Tech / QA 接力並推送到 `origin/main`。
-- 本輪新增策略證據資料層、分類績效摘要、Telegram `📊 策略證據 v20.0`、replay/backfill dry-run evidence path 與 schema 草案。
-- QA L3 通過：full pytest、synthetic replay/backfill dry-run、DB payload/schema、Telegram contract、策略不變性、未來資料洩漏、證據層失敗降級與外部資料不接 BUY 路徑。
-- 本輪未做 production schema apply、live Supabase write、live Telegram delivery、正式 backfill write；這些需 Owner 另開明確批准流程。
+- Owner 貼出 v20.0 盤後報文，策略證據區顯示：
+  - `證據層略過：更新失敗 {'message': "Could not find the table 'public.market_daily_bars' in the schema cache", ...}`
+- 判斷：
+  - evidence layer 降級有效，主報文未被阻斷。
+  - production schema 尚未 apply，故 Supabase 找不到 `market_daily_bars` 是符合已知未完成項。
+  - 但 Telegram 直接露出 Supabase 原始錯誤，不符合使用者可讀性，需 patch。
+- 本輪只處理「未啟用 evidence schema 時的友善提示 / readiness message」，不直接 apply production schema、不正式寫庫。
 
 ## Next Action
 
-- Architect: push 後已壓縮工作流文件；等待 Owner 下一個需求。
-- PM: 等待下一輪任務；不得自行改 `TASK.md`。
-- Tech: 等待下一輪任務；不得自行改代碼或 `CHANGELOG.md`。
-- QA: 等待下一輪任務；不得自行重跑或改 `QA_REPORT.md`。
-- Owner: 若要啟用 v20 production schema / live write / live Telegram，需明確下達新任務。
+- Architect: 已吸收 QA `QA_REPORT.md`；本輪 v20.0.1 patch 已通過 L2，下一步做提交前 diff 檢查與必要驗證後提交推送。
+- PM: 已完成 `TASK.md`，定義 schema 未啟用、DB 查詢失敗、樣本不足三種 Telegram 文案與驗收條件。
+- Tech: 已交付 `CHANGELOG.md`；只改 friendly fallback / readiness message 與必要 tests，未 apply schema、未正式寫庫。
+- QA: 已完成 L2 驗證並提交 `QA_REPORT.md`；Telegram 不再露出原始 Supabase dict/error，主報文不阻斷，策略不變。
+- Owner: 若要真正啟用 evidence DB，需另開 production schema apply / live write 任務。
 
 ## Status Values
 

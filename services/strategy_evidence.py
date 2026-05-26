@@ -523,7 +523,7 @@ def build_audit_rows(feature_rows):
 def format_strategy_evidence_summary(report=None, audits=None, error=None):
     lines = ["📊 策略證據 v20.0"]
     if error:
-        lines.append(f"證據層略過：{error}")
+        lines.append(format_strategy_evidence_error(error))
         return "\n".join(lines)
 
     report = report or {}
@@ -562,6 +562,30 @@ def report_from_rows(feature_rows, outcome_rows, audit_rows=None):
         build_classification_report(feature_rows, outcome_rows),
         audit_rows or build_audit_rows(feature_rows)
     )
+
+
+def strategy_evidence_error_kind(error):
+    text = str(error or "").lower()
+    schema_markers = [
+        "could not find the table",
+        "schema cache",
+        "market_daily_bars",
+        "strategy_feature_snapshots",
+        "strategy_outcome_metrics",
+        "strategy_classification_audit",
+        "relation",
+        "does not exist",
+        "pgrst205",
+    ]
+    if any(marker in text for marker in schema_markers):
+        return "schema_missing"
+    return "db_failure"
+
+
+def format_strategy_evidence_error(error):
+    if strategy_evidence_error_kind(error) == "schema_missing":
+        return "策略證據尚未啟用：資料表未建立，主報文不受影響"
+    return "證據層暫時略過：資料更新失敗，主報文不受影響"
 
 
 def load_strategy_evidence_summary(client, version, limit=240):

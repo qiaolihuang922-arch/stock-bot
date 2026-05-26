@@ -28,6 +28,7 @@
 
 ## 待處理項目
 
+- v20.0.1 patch：修正 evidence schema 未啟用時 Telegram 露出原始 Supabase 錯誤的顯示問題。
 - 若 Owner 要正式啟用 v20 evidence DB：
   - 另開 production schema apply 任務。
   - 檢查 Supabase RLS / 權限 / index / rollback。

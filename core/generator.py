@@ -47,7 +47,7 @@ from services.strategy_evidence import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.0"
+VERSION = "v20.0.1"
 
 EXECUTION_LEVELS = {
     "TAKE_PROFIT_50": "TP50",
@@ -4424,16 +4424,13 @@ def generate_report():
                 get_supabase_client(),
                 VERSION
             )
-        except Exception:
-            if evidence_result.get("recorded"):
-                strategy_evidence_summary = format_strategy_evidence_summary()
-            else:
-                strategy_evidence_summary = format_strategy_evidence_summary(
-                    error=evidence_result.get("reason", "skip")
-                )
+        except Exception as summary_error:
+            strategy_evidence_summary = format_strategy_evidence_summary(
+                error=summary_error
+            )
     except Exception as e:
         strategy_evidence_summary = format_strategy_evidence_summary(
-            error=f"更新失敗 {str(e)}"
+            error=e
         )
 
     messages = formatTelegramMessages(
