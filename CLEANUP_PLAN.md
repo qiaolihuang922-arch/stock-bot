@@ -21,6 +21,7 @@
 - QA 可寫暫存只限 `.qa_tmp/`；任何 tracked diff 或 handoff hash 變動都視為 QA 越權。
 - Architect 不得因產品 bug 很小就跳過 PM；小 bug 只代表 QA 分級可低，不代表可越權寫 `TASK.md` 或改代碼。
 - Architect 若在對話中發現自己開始定位產品代碼、寫 `TASK.md`、寫 `CHANGELOG.md` 或寫 `QA_REPORT.md`，必須停止並回到分派流程。
+- Owner 明確授權「對比後沒問題就直接 push / 自己 push / 對齊 git」時，Architect 完成 final diff review 與必要驗證後可直接 commit / push，不再二次詢問；有不明 diff、QA 未通過或測試阻塞時不得 push。
 
 ## 最新收斂
 
@@ -64,6 +65,7 @@
   - PM / Tech / QA 已按流程接力。
   - QA 第一輪 conditional pass 發現 `可準備 > 0` 邊界，已回派 Tech 補修。
   - QA 第二輪通過，主 repo 局部驗證 `37 passed, 21 warnings`。
+- Auto push after final review 已寫入流程：Owner 授權後，Architect 對比確認無問題即可直接推送。
 - push 後仍需壓縮：
   - `DISPATCH.md`
   - `TASK.md`

@@ -14,7 +14,7 @@
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
 - qa_status: `qa_passed`
-- commit: `pending_owner_request`
+- commit: `pushed`
 
 ## Current Result
 
@@ -34,10 +34,12 @@
   - `CHANGELOG.md`
   - `QA_REPORT.md`
 - 主 repo 驗證通過：`tests/test_generator_report.py tests/test_notifier.py`，`37 passed, 21 warnings`。
+- 已提交並推送：`3514f94 fix: clarify unheld funnel counts`。
+- 工作流程補強：Owner 若明確說「對比後沒問題就直接 push / 自己 push / 對齊 git」，Architect 完成 final diff review 與必要驗證後直接 commit / push，不再二次詢問；若發現不明 diff、QA 未通過或測試阻塞則不得 push。
 
 ## Next Action
 
-- 若 Owner 要發布，Architect 需做 final diff review 後 commit / push。
+- 等待 Owner 下一個需求。
 
 ## Status Values
 

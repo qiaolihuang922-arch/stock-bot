@@ -5,9 +5,9 @@
 ## 專案狀態
 
 - 專案：台股策略報文機器人。
-- 目前穩定線：`v20.0.6 Telegram Report Clarity And Query Performance` 已完成本地合併、QA L2 conditional pass；尚未 commit / push。
-- 最新流程線：`CAO Runner Process Hardening` 已完成本地修復；本輪只改 runner gate 與流程規則，不改產品代碼。
-- 最新已推送 commit：`a34df7a docs: compress workflow state after v20.0.1`
+- 目前穩定線：`Telegram Unheld Funnel Count Bug` 已完成、QA L1 通過並推送。
+- 最新流程線：`Architect Role Self Lock` 與 `Auto Push After Final Review` 已寫入工作流程。
+- 最新已推送 commit：`3514f94 fix: clarify unheld funnel counts`
 - 交付形態維持不變：定時 GitHub Actions / 腳本 -> 產生 Telegram 報文 -> 發送給 Owner。
 - 預設只處理 `core/watchlist.py` 的 12 檔股票。
 
@@ -85,6 +85,7 @@
   - QA 按 `TASK.md` / `CHANGELOG.md` 驗證並產出 `QA_REPORT.md`。
 - Architect 只有在 Owner 明確說「你直接代 PM 寫 TASK」或「你直接實作 / 不走部門」時，才可越過對應角色。
 - 若 Architect 已越權改文件，必須先恢復越權改動，再更新流程規則。
+- Git 發布流程已補強：Owner 明確授權「對比後沒問題就直接 push / 自己 push / 對齊 git」時，Architect 在 final diff review、必要驗證與 commit 後，若沒有不明 diff 或阻塞，直接 push，不再二次詢問。
 
 ## Telegram Unheld Funnel Count Bug 已完成本地修復
 
@@ -104,6 +105,7 @@
   - `DISPATCH.md`
 - 未改策略 decision、DB payload、watchlist、live Telegram、live Supabase、replay/backfill write path。
 - 驗證：`tests/test_generator_report.py tests/test_notifier.py`，`37 passed, 21 warnings`。
+- 已提交並推送：`3514f94 fix: clarify unheld funnel counts`。
 
 ## v20.0.3 瘦身審計進度
 

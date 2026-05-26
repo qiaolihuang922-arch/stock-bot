@@ -533,6 +533,8 @@ Runner hygiene gates：
 - Architect 只提交本輪 `TASK.md`、`CHANGELOG.md`、`QA_REPORT.md` 對應範圍內的文件，以及 Architect 狀態文件。
 - 若工作區有不明來源改動，Architect 必須排除或請 Owner 確認，不可無差別提交。
 - Owner 明確要求「把本地最新修改推送」時，Architect 仍需先檢查 diff，再將確認屬於本輪工作流與代碼變更的文件提交推送。
+- Owner 明確說「對比後沒問題就直接 push / 自己 push / 對齊 git」時，這視為本輪發布授權；Architect 完成 final diff review、必要驗證與 commit 後，若沒有不明 diff 或測試阻塞，必須直接 push，不再二次詢問。
+- 若 final diff review 發現不明來源改動、交付文件矛盾、QA 未通過、測試阻塞或 live 副作用風險，Architect 不得 push，必須標記 blocked 或回報 Owner。
 
 ## Push 後壓縮規則
 
