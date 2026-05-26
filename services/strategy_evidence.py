@@ -1,0 +1,634 @@
+from datetime import datetime
+
+try:
+    import pytz
+except ImportError:
+    pytz = None
+
+from core.watchlist import WATCHLIST_CODES, missing_watchlist_codes
+
+
+tz = pytz.timezone("Asia/Taipei") if pytz else None
+OUTCOME_HORIZONS = [1, 3, 5, 10]
+REPORT_CATEGORIES = ["淘汰", "等回測", "RR不足"]
+MIN_REPORT_SAMPLE = 10
+
+
+def _num(value):
+    try:
+        if value in [None, "-"]:
+            return None
+        return float(value)
+    except:
+        return None
+
+
+def _safe_round(value, digits=4):
+    value = _num(value)
+    if value is None:
+        return None
+    return round(value, digits)
+
+
+def _avg(values):
+    values = [item for item in values if item is not None]
+    return sum(values) / len(values) if values else None
+
+
+def _median(values):
+    values = sorted(item for item in values if item is not None)
+    if not values:
+        return None
+    mid = len(values) // 2
+    if len(values) % 2:
+        return values[mid]
+    return (values[mid - 1] + values[mid]) / 2
+
+
+def _pct(current, base):
+    current = _num(current)
+    base = _num(base)
+    if current is None or not base:
+        return None
+    return (current - base) / base * 100
+
+
+def _pct_change(values, days):
+    if not values or len(values) <= days:
+        return None
+    return _pct(values[-1], values[-1 - days])
+
+
+def _vol_ratio(values, days):
+    if not values or len(values) < days:
+        return None
+    base = _avg([_num(item) for item in values[-days:]])
+    latest = _num(values[-1])
+    if latest is None or not base:
+        return None
+    return latest / base
+
+
+def should_record_strategy_evidence(phase, now=None):
+    now = now or (datetime.now(tz) if tz else datetime.now())
+    if now.weekday() >= 5:
+        return False
+    after_close = now.hour > 13 or (now.hour == 13 and now.minute >= 20)
+    return after_close and phase in ["收盤", "盤後"]
+
+
+def stable_watch_category(result, holding=False):
+    if holding:
+        return "持倉"
+
+    decision = result.get("decision")
+    action = _num(result.get("action")) or 0
+    rr = _num(result.get("rr"))
+    phase = result.get("structure_phase")
+    behavior = result.get("price_behavior")
+    heat = result.get("heat_state")
+    trade_state = result.get("trade_state")
+    market = result.get("market_grade")
+    dist = _num(result.get("breakout_distance"))
+    volume_state = result.get("volume_state")
+
+    if decision == "BUY" and action > 0:
+        return "可買"
+
+    if heat in ["HOT", "EXTREME"] or trade_state in ["AVOID", "EXTENDED"] or behavior in ["LIMIT_LOCK", "LIMIT_REBOUND"]:
+        return "追價風險"
+
+    if trade_state == "LATE_ENTRY" or (rr is not None and rr < 1):
+        return "RR不足"
+
+    if trade_state == "NO_VOLUME" or volume_state == "WEAK":
+        return "等量能"
+
+    if phase in ["WEAK_REBOUND", "WEAK"] or market == "D":
+        return "弱勢淘汰"
+
+    if dist is not None and dist > 4:
+        return "等回測"
+
+    return "等回測"
+
+
+def reject_family(result, category=None):
+    category = category or stable_watch_category(result)
+    rr = _num(result.get("rr"))
+    heat = result.get("heat_state")
+    trade_state = result.get("trade_state")
+    behavior = result.get("price_behavior")
+    phase = result.get("structure_phase")
+    market = result.get("market_grade")
+    volume_state = result.get("volume_state")
+
+    if category == "可買":
+        return "可買"
+    if category == "持倉":
+        return "持倉"
+    if heat in ["HOT", "EXTREME"] or trade_state in ["AVOID", "EXTENDED"] or behavior in ["LIMIT_LOCK", "LIMIT_REBOUND"]:
+        return "追價風險"
+    if trade_state == "LATE_ENTRY" or (rr is not None and rr < 1):
+        return "RR不足"
+    if trade_state == "NO_VOLUME" or volume_state == "WEAK":
+        return "量能不足"
+    if phase in ["WEAK_REBOUND", "WEAK"] or market == "D":
+        return "弱勢"
+    return "條件未齊"
+
+
+def feature_from_result(stock_id, trade_date, version, data):
+    result = data.get("result") or {}
+    closes = data.get("closes") or []
+    volumes = data.get("volumes") or []
+    holding = bool(data.get("holding"))
+    category = stable_watch_category(result, holding=holding)
+    family = reject_family(result, category)
+    blockers = result.get("reasons") or result.get("blockers") or []
+    if not blockers:
+        blockers = [family] if family not in ["可買", "持倉"] else []
+
+    return {
+        "stock_id": stock_id,
+        "trade_date": trade_date,
+        "strategy_version": version,
+        "price": _safe_round(data.get("price"), 4),
+        "change_pct": _safe_round(data.get("change"), 4),
+        "chg_1d": _safe_round(_pct_change(closes, 1), 4),
+        "chg_3d": _safe_round(_pct_change(closes, 3), 4),
+        "chg_5d": _safe_round(_pct_change(closes, 5), 4),
+        "chg_10d": _safe_round(_pct_change(closes, 10), 4),
+        "vol_ratio_5": _safe_round(_vol_ratio(volumes, 5), 4),
+        "vol_ratio_10": _safe_round(_vol_ratio(volumes, 10), 4),
+        "breakout_distance": _safe_round(result.get("breakout_distance"), 4),
+        "rr": _safe_round(result.get("rr"), 4),
+        "score": _safe_round(result.get("strength"), 4),
+        "confidence": _safe_round(result.get("confidence_score"), 4),
+        "market_state": result.get("market_grade"),
+        "trend": result.get("trend"),
+        "structure_state": result.get("structure_state"),
+        "structure_phase": result.get("structure_phase"),
+        "volume_state": result.get("volume_state"),
+        "heat_state": result.get("heat_state"),
+        "trade_state": result.get("trade_state"),
+        "decision": result.get("decision"),
+        "action": _safe_round(result.get("action"), 4),
+        "is_tradeable": bool(result.get("is_tradeable", False)),
+        "is_best_candidate": bool(result.get("is_best_candidate", False)),
+        "watch_category": category,
+        "reject_family": family,
+        "blockers": blockers,
+        "raw_reason_summary": "、".join(str(item) for item in blockers[:5]),
+        "audit_category": audit_category_for_feature(category, family, result, data)
+    }
+
+
+def market_bar_from_data(stock_id, trade_date, data):
+    ohlcv = data.get("ohlcv") or {}
+    required = ["open", "high", "low", "close", "volume"]
+    if not all(_num(ohlcv.get(field)) is not None for field in required):
+        return None
+    return {
+        "stock_id": stock_id,
+        "trade_date": trade_date,
+        "open": _safe_round(ohlcv.get("open"), 4),
+        "high": _safe_round(ohlcv.get("high"), 4),
+        "low": _safe_round(ohlcv.get("low"), 4),
+        "close": _safe_round(ohlcv.get("close"), 4),
+        "volume": _safe_round(ohlcv.get("volume"), 4),
+        "turnover": _safe_round(ohlcv.get("turnover"), 4),
+        "source": ohlcv.get("source", "daily_close")
+    }
+
+
+def build_strategy_evidence_payloads(version, phase, results_map, now=None, expected_stock_ids=None):
+    now = now or (datetime.now(tz) if tz else datetime.now())
+    if not should_record_strategy_evidence(phase, now):
+        return {
+            "recorded": False,
+            "reason": "skip_phase",
+            "market_rows": [],
+            "feature_rows": [],
+            "audit_rows": []
+        }
+
+    expected_stock_ids = expected_stock_ids or WATCHLIST_CODES
+    missing = missing_watchlist_codes(results_map, expected_stock_ids)
+    if missing:
+        return {
+            "recorded": False,
+            "reason": "incomplete_watchlist",
+            "missing_stock_ids": missing,
+            "market_rows": [],
+            "feature_rows": [],
+            "audit_rows": []
+        }
+
+    trade_date = now.strftime("%Y-%m-%d")
+    market_rows = []
+    feature_rows = []
+
+    for _name, data in results_map.items():
+        stock_id = data.get("stock_code")
+        if not stock_id:
+            continue
+        bar = market_bar_from_data(stock_id, trade_date, data)
+        if bar:
+            market_rows.append(bar)
+        feature_rows.append(feature_from_result(stock_id, trade_date, version, data))
+
+    return {
+        "recorded": True,
+        "reason": "ready",
+        "market_rows": market_rows,
+        "feature_rows": feature_rows,
+        "audit_rows": build_audit_rows(feature_rows)
+    }
+
+
+def feature_from_signal_row(row):
+    result = {
+        "decision": row.get("action"),
+        "rr": row.get("rr"),
+        "market_grade": row.get("market_state"),
+        "structure_state": row.get("structure_state"),
+        "structure_phase": row.get("pattern"),
+        "volume_state": None,
+        "heat_state": "EXTREME" if (row.get("heat_level") or 0) >= 3 else ("HOT" if (row.get("heat_level") or 0) >= 2 else "NORMAL"),
+        "trade_state": "LATE_ENTRY" if "RR不足" in (row.get("reasons") or []) else "WAIT",
+        "breakout_distance": None,
+        "strength": row.get("score"),
+        "action": 0
+    }
+    category = stable_watch_category(result)
+    if row.get("is_tradeable"):
+        category = "可買"
+    family = reject_family(result, category)
+    return {
+        "stock_id": row.get("stock_id"),
+        "trade_date": row.get("trade_date"),
+        "strategy_version": row.get("version"),
+        "price": _safe_round(row.get("close"), 4),
+        "change_pct": None,
+        "chg_1d": None,
+        "chg_3d": None,
+        "chg_5d": None,
+        "chg_10d": None,
+        "vol_ratio_5": None,
+        "vol_ratio_10": _safe_round(row.get("volume_ratio"), 4),
+        "breakout_distance": None,
+        "rr": _safe_round(row.get("rr"), 4),
+        "score": _safe_round(row.get("score"), 4),
+        "confidence": None,
+        "market_state": row.get("market_state"),
+        "trend": None,
+        "structure_state": row.get("structure_state"),
+        "structure_phase": row.get("pattern"),
+        "volume_state": None,
+        "heat_state": result.get("heat_state"),
+        "trade_state": result.get("trade_state"),
+        "decision": row.get("action"),
+        "action": 0,
+        "is_tradeable": bool(row.get("is_tradeable")),
+        "is_best_candidate": bool(row.get("is_best_candidate")),
+        "watch_category": category,
+        "reject_family": family,
+        "blockers": row.get("reasons") or [],
+        "raw_reason_summary": "、".join(str(item) for item in (row.get("reasons") or [])[:5]),
+        "audit_category": None
+    }
+
+
+def market_rows_from_price_rows(price_rows, source="backfill"):
+    rows = []
+    for row in price_rows:
+        close = _num(row.get("close"))
+        volume = _num(row.get("volume"))
+        if close is None or volume is None:
+            continue
+        open_price = _num(row.get("open"))
+        high = _num(row.get("high"))
+        low = _num(row.get("low"))
+        rows.append({
+            "stock_id": row.get("stock_id"),
+            "trade_date": row.get("trade_date"),
+            "open": _safe_round(open_price if open_price is not None else close, 4),
+            "high": _safe_round(high if high is not None else close, 4),
+            "low": _safe_round(low if low is not None else close, 4),
+            "close": _safe_round(close, 4),
+            "volume": _safe_round(volume, 4),
+            "turnover": _safe_round(row.get("turnover"), 4),
+            "source": row.get("source") or source
+        })
+    return rows
+
+
+def feature_rows_from_signal_rows(signal_rows):
+    return [feature_from_signal_row(row) for row in signal_rows]
+
+
+def price_lookup(price_rows):
+    lookup = {}
+    for row in price_rows:
+        stock_id = row.get("stock_id")
+        trade_date = str(row.get("trade_date"))
+        if not stock_id or not trade_date:
+            continue
+        lookup.setdefault(stock_id, {})[trade_date] = row
+    return lookup
+
+
+def sorted_dates(rows):
+    return sorted({str(row.get("trade_date")) for row in rows if row.get("trade_date")})
+
+
+def _future_window(lookup, stock_id, trade_date, horizon_days):
+    dates = sorted(lookup.get(stock_id, {}))
+    if trade_date not in dates:
+        return None
+    start = dates.index(trade_date)
+    end = start + horizon_days
+    if end >= len(dates):
+        return None
+    return [lookup[stock_id][date] for date in dates[start + 1:end + 1]]
+
+
+def _market_return(price_rows, trade_date, horizon_days):
+    lookup = price_lookup(price_rows)
+    returns = []
+    for stock_id, rows in lookup.items():
+        start = rows.get(trade_date)
+        window = _future_window(lookup, stock_id, trade_date, horizon_days)
+        if not start or not window:
+            continue
+        returns.append(_pct(window[-1].get("close"), start.get("close")))
+    return _avg(returns)
+
+
+def outcome_label(close_return, mfe, mae):
+    if close_return is None:
+        return "pending"
+    if close_return >= 3:
+        return "win"
+    if close_return <= -3:
+        return "loss"
+    if mfe is not None and mfe >= 5 and close_return < 1:
+        return "whipsaw"
+    if mfe is not None and mfe >= 3:
+        return "late_win"
+    if mae is not None and mae <= -5:
+        return "risk"
+    return "flat"
+
+
+def calculate_outcome_metrics(feature_rows, price_rows, horizons=None):
+    horizons = horizons or OUTCOME_HORIZONS
+    lookup = price_lookup(price_rows)
+    rows = []
+
+    for feature in feature_rows:
+        stock_id = feature.get("stock_id")
+        trade_date = str(feature.get("trade_date"))
+        start = lookup.get(stock_id, {}).get(trade_date)
+        if not start:
+            continue
+        start_close = _num(start.get("close") or feature.get("price"))
+        if not start_close:
+            continue
+
+        for horizon in horizons:
+            window = _future_window(lookup, stock_id, trade_date, horizon)
+            if not window:
+                continue
+            horizon_close = _num(window[-1].get("close"))
+            highs = [_num(row.get("high") or row.get("close")) for row in window]
+            lows = [_num(row.get("low") or row.get("close")) for row in window]
+            close_return = _pct(horizon_close, start_close)
+            mfe = _pct(max(item for item in highs if item is not None), start_close) if any(item is not None for item in highs) else None
+            mae = _pct(min(item for item in lows if item is not None), start_close) if any(item is not None for item in lows) else None
+            market_return = _market_return(price_rows, trade_date, horizon)
+
+            rows.append({
+                "stock_id": stock_id,
+                "trade_date": trade_date,
+                "strategy_version": feature.get("strategy_version"),
+                "watch_category": feature.get("watch_category"),
+                "reject_family": feature.get("reject_family"),
+                "horizon_days": horizon,
+                "close_return_pct": _safe_round(close_return, 4),
+                "relative_return_pct": _safe_round(close_return - market_return, 4) if market_return is not None and close_return is not None else None,
+                "max_favorable_excursion_pct": _safe_round(mfe, 4),
+                "max_adverse_excursion_pct": _safe_round(mae, 4),
+                "hit_breakout_after_signal": bool(mfe is not None and mfe >= 3),
+                "hit_stop_like_drawdown": bool(mae is not None and mae <= -5),
+                "best_entry_gap_pct": _safe_round(mae, 4),
+                "outcome_label": outcome_label(close_return, mfe, mae)
+            })
+
+    return rows
+
+
+def build_classification_report(feature_rows, outcome_rows, min_sample=MIN_REPORT_SAMPLE, horizon_days=3):
+    by_key = {}
+    feature_lookup = {
+        (row.get("stock_id"), str(row.get("trade_date")), row.get("strategy_version")): row
+        for row in feature_rows
+    }
+
+    for outcome in outcome_rows:
+        horizon = int(outcome.get("horizon_days") or 0)
+        if horizon not in OUTCOME_HORIZONS:
+            continue
+        key = (
+            outcome.get("stock_id"),
+            str(outcome.get("trade_date")),
+            outcome.get("strategy_version")
+        )
+        feature = feature_lookup.get(key, {})
+        category = feature.get("watch_category") or outcome.get("watch_category")
+        if category not in REPORT_CATEGORIES:
+            if category == "弱勢淘汰":
+                category = "淘汰"
+            elif feature.get("reject_family") == "RR不足":
+                category = "RR不足"
+            else:
+                continue
+        by_key.setdefault(category, {}).setdefault(horizon, []).append(outcome)
+
+    report = {}
+    for category in REPORT_CATEGORIES:
+        rows_by_horizon = by_key.get(category, {})
+        primary_rows = rows_by_horizon.get(horizon_days, [])
+        mfe_horizon = 5 if rows_by_horizon.get(5) else horizon_days
+        mfe_rows = rows_by_horizon.get(mfe_horizon, primary_rows)
+        sample = len(primary_rows)
+        win_count = sum(1 for row in primary_rows if (_num(row.get("close_return_pct")) or 0) > 0)
+        leak_count = sum(1 for row in mfe_rows if (_num(row.get("max_favorable_excursion_pct")) or 0) >= 5)
+        report[category] = {
+            "sample": sample,
+            "sample_ready": sample >= min_sample,
+            "win_rate": round(win_count / sample * 100) if sample else None,
+            "median_return": _safe_round(_median([_num(row.get("close_return_pct")) for row in primary_rows]), 2),
+            "median_mfe": _safe_round(_median([_num(row.get("max_favorable_excursion_pct")) for row in mfe_rows]), 2),
+            "median_mae": _safe_round(_median([_num(row.get("max_adverse_excursion_pct")) for row in mfe_rows]), 2),
+            "return_horizon": horizon_days,
+            "mfe_horizon": mfe_horizon,
+            "missed_rally_count": leak_count
+        }
+
+    return report
+
+
+def audit_category_for_feature(category, family, result, data):
+    chg5 = _pct_change(data.get("closes") or [], 5)
+    chg10 = _pct_change(data.get("closes") or [], 10)
+    heat = result.get("heat_state")
+    behavior = result.get("price_behavior")
+    phase = result.get("structure_phase")
+
+    if category in ["淘汰", "弱勢淘汰"] and (chg5 is not None and chg5 >= 8 or chg10 is not None and chg10 >= 15):
+        return "高波動強勢，非弱勢淘汰"
+    if family == "追價風險" and (heat in ["HOT", "EXTREME"] or behavior in ["LIMIT_LOCK", "LIMIT_REBOUND"]):
+        return "不追價合理，但需高波動觀察"
+    if phase == "WEAK_REBOUND" and (chg5 is not None and chg5 >= 5):
+        return "弱反彈語意需複核"
+    return None
+
+
+def build_audit_rows(feature_rows):
+    rows = []
+    for feature in feature_rows:
+        audit = feature.get("audit_category")
+        if not audit:
+            continue
+        rows.append({
+            "stock_id": feature.get("stock_id"),
+            "trade_date": feature.get("trade_date"),
+            "strategy_version": feature.get("strategy_version"),
+            "original_category": feature.get("watch_category"),
+            "suggested_audit_category": audit,
+            "distortion_type": "classification_semantics",
+            "evidence_summary": (
+                f"分類={feature.get('watch_category')}｜"
+                f"5日={feature.get('chg_5d')}｜10日={feature.get('chg_10d')}｜"
+                f"family={feature.get('reject_family')}"
+            ),
+            "severity": "medium",
+            "review_status": "open"
+        })
+    return rows
+
+
+def format_strategy_evidence_summary(report=None, audits=None, error=None):
+    lines = ["📊 策略證據 v20.0"]
+    if error:
+        lines.append(f"證據層略過：{error}")
+        return "\n".join(lines)
+
+    report = report or {}
+    audits = audits or []
+
+    if not report:
+        lines.append("樣本不足：需累積策略證據後啟用分類績效判讀")
+    else:
+        for category in REPORT_CATEGORIES:
+            item = report.get(category) or {"sample": 0, "sample_ready": False}
+            sample = item.get("sample") or 0
+            if not item.get("sample_ready"):
+                lines.append(f"{category}｜樣本 {sample}｜樣本不足，不判讀")
+                continue
+            win_rate = item.get("win_rate")
+            mfe = item.get("median_mfe")
+            mfe_text = "-" if mfe is None else f"{mfe:+.1f}%"
+            return_horizon = item.get("return_horizon") or 3
+            mfe_horizon = item.get("mfe_horizon") or 5
+            missed = item.get("missed_rally_count")
+            lines.append(
+                f"{category}｜樣本 {sample}｜{return_horizon}日勝率 {win_rate}%｜"
+                f"{mfe_horizon}日MFE中位 {mfe_text}｜漏失 {missed}"
+            )
+
+    if audits:
+        first = audits[0]
+        name = first.get("stock_name") or first.get("stock_id")
+        lines.append(f"⚠ 分類警示：{first.get('suggested_audit_category')} 1 筆（{name}）")
+
+    return "\n".join(lines)
+
+
+def report_from_rows(feature_rows, outcome_rows, audit_rows=None):
+    return format_strategy_evidence_summary(
+        build_classification_report(feature_rows, outcome_rows),
+        audit_rows or build_audit_rows(feature_rows)
+    )
+
+
+def load_strategy_evidence_summary(client, version, limit=240):
+    feature_rows = (
+        client.table("strategy_feature_snapshots")
+        .select("stock_id,trade_date,strategy_version,watch_category,reject_family")
+        .eq("strategy_version", version)
+        .execute()
+        .data
+        or []
+    )
+    outcome_rows = (
+        client.table("strategy_outcome_metrics")
+        .select("stock_id,trade_date,strategy_version,watch_category,reject_family,horizon_days,close_return_pct,relative_return_pct,max_favorable_excursion_pct,max_adverse_excursion_pct,outcome_label")
+        .eq("strategy_version", version)
+        .execute()
+        .data
+        or []
+    )
+    audit_rows = (
+        client.table("strategy_classification_audit")
+        .select("stock_id,trade_date,strategy_version,suggested_audit_category,severity,review_status")
+        .eq("strategy_version", version)
+        .execute()
+        .data
+        or []
+    )
+    return report_from_rows(feature_rows[-limit:], outcome_rows[-limit * len(OUTCOME_HORIZONS):], audit_rows[:1])
+
+
+def get_supabase_client():
+    from supabase import create_client
+    from config import SUPABASE_KEY, SUPABASE_URL
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
+
+
+def record_strategy_evidence(version, phase, results_map, now=None):
+    payloads = build_strategy_evidence_payloads(version, phase, results_map, now)
+    if not payloads.get("recorded"):
+        return payloads
+
+    client = get_supabase_client()
+    market_rows = payloads["market_rows"]
+    feature_rows = payloads["feature_rows"]
+    audit_rows = payloads["audit_rows"]
+
+    if market_rows:
+        client.table("market_daily_bars").upsert(
+            market_rows,
+            on_conflict="stock_id,trade_date,source"
+        ).execute()
+
+    if feature_rows:
+        client.table("strategy_feature_snapshots").upsert(
+            feature_rows,
+            on_conflict="stock_id,trade_date,strategy_version"
+        ).execute()
+
+    if audit_rows:
+        client.table("strategy_classification_audit").upsert(
+            audit_rows,
+            on_conflict="stock_id,trade_date,strategy_version,distortion_type"
+        ).execute()
+
+    return {
+        "recorded": True,
+        "market_rows": len(market_rows),
+        "feature_rows": len(feature_rows),
+        "audit_rows": len(audit_rows)
+    }

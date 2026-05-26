@@ -18,6 +18,12 @@ from scripts.dry_run_replay import (
     trading_days
 )
 from services.stock_api import get_twse_ohlcv_history
+from services.strategy_evidence import (
+    build_audit_rows,
+    calculate_outcome_metrics,
+    feature_rows_from_signal_rows,
+    market_rows_from_price_rows
+)
 
 
 def resolve_stock_ids(args):
@@ -204,7 +210,15 @@ def get_supabase_client():
     return create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
-def upsert_rows(price_rows, signal_rows):
+def build_evidence_rows(price_rows, signal_rows):
+    market_rows = market_rows_from_price_rows(price_rows)
+    feature_rows = feature_rows_from_signal_rows(signal_rows)
+    outcome_rows = calculate_outcome_metrics(feature_rows, price_rows)
+    audit_rows = build_audit_rows(feature_rows)
+    return market_rows, feature_rows, outcome_rows, audit_rows
+
+
+def upsert_rows(price_rows, signal_rows, evidence_rows=None):
     client = get_supabase_client()
 
     if price_rows:
@@ -219,14 +233,47 @@ def upsert_rows(price_rows, signal_rows):
             on_conflict="stock_id,trade_date,version"
         ).execute()
 
+    if evidence_rows:
+        market_rows, feature_rows, outcome_rows, audit_rows = evidence_rows
 
-def print_summary(price_rows, signal_rows, validation_errors):
+        if market_rows:
+            client.table("market_daily_bars").upsert(
+                market_rows,
+                on_conflict="stock_id,trade_date,source"
+            ).execute()
+
+        if feature_rows:
+            client.table("strategy_feature_snapshots").upsert(
+                feature_rows,
+                on_conflict="stock_id,trade_date,strategy_version"
+            ).execute()
+
+        if outcome_rows:
+            client.table("strategy_outcome_metrics").upsert(
+                outcome_rows,
+                on_conflict="stock_id,trade_date,strategy_version,horizon_days"
+            ).execute()
+
+        if audit_rows:
+            client.table("strategy_classification_audit").upsert(
+                audit_rows,
+                on_conflict="stock_id,trade_date,strategy_version,distortion_type"
+            ).execute()
+
+
+def print_summary(price_rows, signal_rows, validation_errors, evidence_rows=None):
     tradeable = sum(1 for row in signal_rows if row.get("is_tradeable"))
     best = sum(1 for row in signal_rows if row.get("is_best_candidate"))
+    evidence_rows = evidence_rows or ([], [], [], [])
+    market_rows, feature_rows, outcome_rows, audit_rows = evidence_rows
 
     print("BACKFILL PLAN")
     print(f"daily_price rows: {len(price_rows)}")
     print(f"daily_signal_snapshot rows: {len(signal_rows)}")
+    print(f"market_daily_bars rows: {len(market_rows)}")
+    print(f"strategy_feature_snapshots rows: {len(feature_rows)}")
+    print(f"strategy_outcome_metrics rows: {len(outcome_rows)}")
+    print(f"strategy_classification_audit rows: {len(audit_rows)}")
     print(f"tradeable rows: {tradeable}")
     print(f"best candidate rows: {best}")
 
@@ -272,14 +319,15 @@ def main():
         stock_ids,
         [day.isoformat() for day in trading_days(start_date, end_date)]
     )
-    print_summary(price_rows, signal_rows, validation_errors)
+    evidence_rows = build_evidence_rows(price_rows, signal_rows)
+    print_summary(price_rows, signal_rows, validation_errors, evidence_rows)
 
     if validation_errors:
         raise SystemExit(1)
 
     if args.write:
         # 中文註釋：v19.1.3 正式寫入必須通過 validation 且同時帶 --write --confirm-write。
-        upsert_rows(price_rows, signal_rows)
+        upsert_rows(price_rows, signal_rows, evidence_rows)
         print("WRITE OK")
     else:
         print("DRY RUN ONLY: no database writes")

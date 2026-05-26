@@ -679,6 +679,32 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("未持倉 0 檔僅追蹤", messages[-1])
         self.assertNotIn("其餘 0 檔僅追蹤", messages[-1])
 
+    def test_summary_includes_strategy_evidence_without_changing_actions(self):
+        payload = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119],
+            None,
+            price=119,
+            change=1.4,
+        )
+        payload["stock_code"] = "2421"
+        payload["result"]["decision"] = "BUY"
+        payload["result"]["action"] = 0.1
+
+        messages = generator.formatTelegramMessages(
+            {"建準": payload},
+            "FULL DETAIL",
+            "建準",
+            9.2,
+            "🟢 市場偏強",
+            datetime(2026, 5, 26),
+            strategy_evidence_summary="📊 策略證據 v20.0\nRR不足｜樣本 3｜樣本不足，不判讀",
+        )
+
+        self.assertIn("📊 策略證據 v20.0", messages[-1])
+        self.assertIn("RR不足｜樣本 3｜樣本不足，不判讀", messages[-1])
+        self.assertEqual(payload["result"]["decision"], "BUY")
+        self.assertEqual(payload["result"]["action"], 0.1)
+
     def test_unheld_cards_follow_summary_group_order(self):
         limit_payload = render_payload(
             [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 125],
@@ -845,7 +871,7 @@ class GeneratorReportTest(unittest.TestCase):
                 datetime(2026, 5, 26),
             )
 
-        self.assertIn("v19.5.1", messages[-1])
+        self.assertIn("v20.0", messages[-1])
         self.assertIn("📡 資料：即時價 realtime｜日線 yahoo", messages[-1])
         self.assertIn("🧭 今日結論：R3 進攻偏熱；持倉優先處理；未持倉 6 檔僅追蹤，不新增", messages[-1])
         self.assertIn("🧭 原因：強勢股多過熱，RR不足，不追高", messages[-1])
@@ -1291,7 +1317,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("FULL DETAIL", messages[0])
         self.assertIn("【持倉標的】", messages[1])
         self.assertIn("【未持倉標的】", messages[2])
-        self.assertIn("｜v19.5.1】", messages[-1])
+        self.assertIn("｜v20.0】", messages[-1])
 
 
 if __name__ == "__main__":

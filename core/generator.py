@@ -39,10 +39,15 @@ from services.daily_snapshot_store import (
     get_supabase_client,
     record_daily_snapshots
 )
+from services.strategy_evidence import (
+    format_strategy_evidence_summary,
+    load_strategy_evidence_summary,
+    record_strategy_evidence
+)
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v19.5.1"
+VERSION = "v20.0"
 
 EXECUTION_LEVELS = {
     "TAKE_PROFIT_50": "TP50",
@@ -3591,7 +3596,7 @@ def rejected_trace_line(watch_items):
     return f"淘汰 {len(rejected)}：{names}｜主因：{dominant_reject_reasons(watch_items)}"
 
 
-def formatTelegramSummary(results_map, best, score, market_summary, now, position_warning=None, daily_write_warning=None):
+def formatTelegramSummary(results_map, best, score, market_summary, now, position_warning=None, daily_write_warning=None, strategy_evidence_summary=None):
 
     holding_items = [
         (name, data)
@@ -3644,6 +3649,9 @@ def formatTelegramSummary(results_map, best, score, market_summary, now, positio
     rejected_line = rejected_trace_line(watch_items)
     if rejected_line:
         lines.append(rejected_line)
+
+    if strategy_evidence_summary:
+        lines.extend(["", strategy_evidence_summary])
 
     return "\n".join(lines)
 
@@ -3969,7 +3977,7 @@ def split_message(text, limit=3400):
     return chunks
 
 
-def formatTelegramMessages(results_map, full_msg, best, score, market_summary, now, position_warning=None, include_detail=False, daily_write_warning=None):
+def formatTelegramMessages(results_map, full_msg, best, score, market_summary, now, position_warning=None, include_detail=False, daily_write_warning=None, strategy_evidence_summary=None):
 
     ordered_items = ordered_result_items(results_map)
     holding_items = sort_position_summary([
@@ -3997,7 +4005,8 @@ def formatTelegramMessages(results_map, full_msg, best, score, market_summary, n
         market_summary,
         now,
         position_warning,
-        daily_write_warning
+        daily_write_warning,
+        strategy_evidence_summary
     )
     position_message = "【持倉標的】\n\n" + ("\n\n".join(position_cards) if position_cards else "無持倉")
     unheld_message = "【未持倉標的】\n\n" + ("\n\n".join(unheld_cards) if unheld_cards else "無")
@@ -4375,6 +4384,8 @@ def generate_report():
 
     msg += market_summary
 
+    strategy_evidence_summary = None
+
     try:
         # 中文註釋：v19.1.3 只在收盤/盤後把每日穩定訊號寫入 Supabase，盤中不入庫。
         signal_result = record_daily_signals(
@@ -4400,6 +4411,31 @@ def generate_report():
         daily_write_warning = None
         msg += f"\n⚠ DB記錄失敗：{str(e)}"
 
+    try:
+        # 中文註釋：v20.0 策略證據層只寫入研究資料與分類證據，不回寫或放寬任何交易決策。
+        evidence_result = record_strategy_evidence(
+            VERSION,
+            get_market_phase(),
+            results_map,
+            now
+        )
+        try:
+            strategy_evidence_summary = load_strategy_evidence_summary(
+                get_supabase_client(),
+                VERSION
+            )
+        except Exception:
+            if evidence_result.get("recorded"):
+                strategy_evidence_summary = format_strategy_evidence_summary()
+            else:
+                strategy_evidence_summary = format_strategy_evidence_summary(
+                    error=evidence_result.get("reason", "skip")
+                )
+    except Exception as e:
+        strategy_evidence_summary = format_strategy_evidence_summary(
+            error=f"更新失敗 {str(e)}"
+        )
+
     messages = formatTelegramMessages(
         results_map,
         msg,
@@ -4408,7 +4444,8 @@ def generate_report():
         market_summary,
         now,
         position_warning,
-        daily_write_warning=daily_write_warning
+        daily_write_warning=daily_write_warning,
+        strategy_evidence_summary=strategy_evidence_summary
     )
 
     return messages, execution_reply_markup(results_map)

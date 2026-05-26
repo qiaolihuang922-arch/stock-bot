@@ -5,7 +5,7 @@
 ## 專案狀態
 
 - 專案：台股策略報文機器人。
-- 目前穩定線：`v19.5.1` 摘要語意一致性修復已通過 QA，等待本輪提交推送。
+- 目前穩定線：`v19.5.1` 摘要語意一致性修復已推送；本輪主線為 `v20.0 Strategy Evidence Foundation`，已通過 QA L3，等待 Architect 提交推送。
 - 最新功能推送：`4ecc0e0 feat: add v19.5 decision summary` 已推送到 `origin/main`。
 - 最新狀態文件推送：`72d3e81 docs: update current state after v19.5` 已推送到 `origin/main`。
 - 最近已出現 `v19.3.1` formatter / daily write guard / Yahoo daily fallback 修正紀錄。
@@ -68,6 +68,8 @@
 - `core/holdings.py`：舊 replay/backfill 邊界兼容，不是線上持倉來源。
 - `scripts/dry_run_replay.py`：dry-run replay。
 - `scripts/backfill_signals.py`：受保護 backfill，預設不寫庫。
+- `services/strategy_evidence.py`：v20.0 策略證據資料層、分類績效摘要、outcome metrics 與 classification audit。
+- `docs/v20_strategy_evidence_schema.sql`：v20.0 策略證據資料層 schema 草案。
 - `supabase/functions/telegram-execution/index.ts`：Telegram 持倉文字命令處理。
 - `tests/`：目前以策略、formatter、snapshot、backfill/replay、行情來源等局部測試為主。
 
@@ -124,6 +126,18 @@
 - v19.5.1 定位：patch，只修 summary 文案與跨區塊語意一致性；不改策略、不改買賣判斷、不改 DB、不改 Telegram summary-last contract。
 - v19.5.1 當前狀態：PM 已改寫 `TASK.md`；QA 第一輪阻塞後，Tech 已補修 `未持倉 0 檔僅追蹤` 文案分支並補 formatter unit test；QA 重測通過。
 - v19.5.1 驗證：`.venv/bin/python -m pytest tests/test_generator_report.py tests/test_notifier.py`，`35 passed, 21 warnings`。
+- 新研究任務已升級：`v20-strategy-intelligence-architecture`，從旺宏 2337 單點外部驗證擴大為 v20 策略智能層研究。
+- PM 已完成旺宏外部資料研究：旺宏不一定應直接買，但 `淘汰｜弱反彈待確認` 可能低估其「強題材 + 高波動 + 注意股」狀態。
+- Tech 已完成 v20 策略資料與驗證框架研究：建議先建策略證據資料層、outcome path metrics、strategy feature snapshots、外部事件資料與分類績效報告，不直接修改 BUY / SELL 門檻。
+- Architect 初步收口：v20 第一個開發任務應是 `Strategy Evidence Foundation`，先讓策略分類能被 1/3/5/10 日事後結果反證，再調整 taxonomy 或策略門檻。
+- v20 硬邊界：最終仍服務現有定時 GitHub Actions / 腳本執行流程，產生報文並發送到 Owner Telegram；不得設計成脫離 TG 報文的新平台或需要 Owner 改工作流的重型系統。
+- QA 已完成 v20 架構反證，結論為 conditional approval：可進入 v20.0 `Strategy Evidence Foundation` TASK，但第一版只能做策略證據資料層與分類績效報告，不得直接改 BUY / SELL 門檻或把外部新聞直接接入買點。
+- v20.0 正式 `TASK.md` 已完成，任務為 `Strategy Evidence Foundation`：建立策略證據資料層、分類績效報告與 Telegram 策略證據摘要；`version_level=major`，`qa_level=L3`。
+- v20.0 已完成 PM / Tech / QA 接力並通過 L3：
+  - Tech 新增 `services/strategy_evidence.py`、`docs/v20_strategy_evidence_schema.sql`、replay/backfill dry-run evidence path、Telegram `📊 策略證據 v20.0` 摘要與相關測試。
+  - QA 驗證：full pytest `99 passed, 21 warnings`；synthetic replay dry-run `STRATEGY EVIDENCE FEATURE ROWS: 60`；synthetic backfill dry-run `VALIDATION OK` 且 no database writes。
+  - QA 覆蓋 DB payload/schema、Telegram summary-last / reply_markup-last、策略不變性、未來資料洩漏、證據層失敗降級、外部資料不接 BUY / `is_tradeable` / `action`。
+  - 未做 live Telegram、live Supabase write、production schema apply、TWSE live replay/backfill；這些需另開批准流程。
 
 ## 影響模組判斷規則
 
@@ -136,13 +150,16 @@
 
 ## 當前交付檢查
 
-- `DISPATCH.md`：已更新為 `v19.5.1-summary-semantic-consistency` 修復任務，QA accepted。
+- `DISPATCH.md`：已更新為 `v20.0-strategy-evidence-foundation` 開發任務，QA 已通過，等待 Architect 提交推送。
+- `TASK.md`：PM 已改寫為 v20.0 `Strategy Evidence Foundation` 正式需求。
+- `CHANGELOG.md`：Tech 已改寫為 v20.0 實作摘要；Architect 初步檢查未見 `services/analysis.py` 或 BUY / SELL 門檻修改。
+- `RESEARCH.md`：v20 策略智能層研究已完成 PM / Tech / QA / Architect 收口，conditional approval。
 - `RESEARCH.md`：PM 已寫入 v19.5 報文與策略體驗強化研究。
 - `RESEARCH.md`：Tech 已寫入 v19.5 實作可行性研究；QA 已寫入 v19.5 風險掃描；Architect 已寫入結論與 Owner 補充。
 - `TASK.md`：PM 已正式改寫為 v19.5 收盤決策壓縮與執行清單升級需求。
 - `CHANGELOG.md`：Tech 已改寫為 v19.5 實作摘要。
-- `QA_REPORT.md`：QA 已改寫為 v19.5 L2 驗證摘要，結論通過。
-- Architect 結論：v19.5 摘要鏈路已完成並已推送；QA 流程已補強且本輪生效。`v19.5.1` 已修復摘要語意一致性與 `0 檔僅追蹤` 噪音，QA 重測通過，可提交推送。
+- `QA_REPORT.md`：QA 已改寫為 v20.0 L3 驗證摘要，結論通過。
+- Architect 結論：v20.0 Strategy Evidence Foundation 已可收口提交；production schema apply、live Supabase write、live Telegram delivery、正式 backfill write 不是本輪完成項，需 Owner 另行批准。
 
 ## 對話窗啟動規則
 

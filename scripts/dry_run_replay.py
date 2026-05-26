@@ -13,6 +13,7 @@ from core.signal_snapshot import analyze_ohlcv_snapshot, apply_snapshot_boundari
 from core.signal_validator import validate_snapshots
 from core.watchlist import WATCHLIST_CODES
 from services.stock_api import get_twse_ohlcv_history
+from services.strategy_evidence import feature_rows_from_signal_rows
 
 
 DEFAULT_WATCHLIST = WATCHLIST_CODES
@@ -193,9 +194,30 @@ def emit_csv(rows):
 
 def emit_validation(rows, expected_stock_ids=None, expected_trade_dates=None):
     errors = validate_snapshots(rows, expected_stock_ids, expected_trade_dates)
+    feature_rows = feature_rows_from_signal_rows([
+        {
+            "stock_id": row.get("stock_id"),
+            "trade_date": row.get("trade_date"),
+            "version": row.get("version"),
+            "close": row.get("close"),
+            "volume_ratio": row.get("volume_ratio"),
+            "pattern": row.get("pattern"),
+            "market_state": row.get("market_state"),
+            "structure_state": row.get("structure_state"),
+            "rr": row.get("rr"),
+            "score": row.get("score"),
+            "heat_level": row.get("heat_level"),
+            "action": row.get("action"),
+            "reasons": row.get("reasons"),
+            "is_tradeable": row.get("is_tradeable"),
+            "is_best_candidate": row.get("is_best_candidate")
+        }
+        for row in rows
+    ])
 
     if not errors:
         print("VALIDATION OK", file=sys.stderr)
+        print(f"STRATEGY EVIDENCE FEATURE ROWS: {len(feature_rows)}", file=sys.stderr)
         return
 
     print("VALIDATION FAILED", file=sys.stderr)

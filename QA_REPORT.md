@@ -1,189 +1,280 @@
 # QA_REPORT.md
 
-本文件由 QA 維護，提交給 Architect。只記錄本輪 v19.5.1 QA 重測結果。
+本文件由 QA 維護，提交給 Architect。只記錄本輪 v20.0 L3 驗證結果。
 
 ## 任務狀態
 
 - 狀態：QA 驗證完成
-- 對應 TASK / CHANGELOG：`TASK.md`、`CHANGELOG.md`
+- 對應任務：`v20.0-strategy-evidence-foundation`
+- 版本：`v20.0`
+- QA 等級：`L3`
 - 提交日期：2026-05-26
-- 任務：`v19.5.1-summary-semantic-consistency`
-- 版本：v19.5.1
-- QA 等級：L1
+- 依據文件：`AGENTS.md`、`DISPATCH.md`、`CURRENT_STATE.md`、`TASK.md`、`CHANGELOG.md`、`RESEARCH.md`
 
 ## 測試範圍
 
-本輪是針對 QA blocker 的重測。依 `DISPATCH.md` 與 `CHANGELOG.md`，重點驗證：
+本輪依 `qa_level=L3` 驗證 v20.0 Strategy Evidence Foundation：
 
-- `未持倉 0 檔僅追蹤` 是否已從今日結論消失。
-- `其餘 0 檔僅追蹤` 是否不再出現。
-- `未持倉無追蹤` 是否與漏斗 `不可買追蹤 0`、詳情索引 `未持倉追蹤 0` 語意一致。
-- 明日執行清單仍保留持倉盈虧百分比與合格可買項。
-- 不可買等待標的仍不進明日執行清單。
-- Summary-last / reply_markup-last contract 是否未回退。
+- full pytest。
+- replay / backfill dry-run。
+- DB payload / schema 草案。
+- Telegram summary-last / reply_markup-last contract。
+- 策略不變性：不得改 BUY / SELL、`is_tradeable`、`action`、RR / 過熱 / 停損 / 停利 / 加碼硬門檻。
+- 未來資料洩漏：feature snapshot 不得含 future outcome，外部事件需 point-in-time 欄位。
+- 證據層失敗不得阻斷既有 Telegram 報文。
+- 外部資料不得直接影響 BUY / `is_tradeable` / `action`。
 
-未執行 full pytest、replay/backfill、live Telegram、live Supabase。
+未執行 live Supabase write、live Telegram delivery、TWSE live replay/backfill。
 
 ## 執行命令
 
 ```bash
-.venv/bin/python -m pytest tests/test_generator_report.py tests/test_notifier.py
+.venv/bin/python -m pytest
 ```
 
 結果：
 
 ```text
-35 passed, 21 warnings in 2.24s
+99 passed, 21 warnings in 0.56s
 ```
 
-另執行 QA 補充重測 smoke：
-- 有持倉 + 合格 BUY + 0 個不可買追蹤候選。
-- 無持倉 + 合格 BUY + 0 個不可買追蹤候選。
-- 持倉占滿執行清單 + 多個不可買追蹤候選。
-- formatter-to-notifier `reply_markup` 契約。
+```bash
+.venv/bin/python scripts/dry_run_replay.py --dry-run --validate --source synthetic --version v20.0 --start-date 2026-05-18 --end-date 2026-05-22
+```
 
 結果：
 
 ```text
-QA_RETEST_OK 289 242 456
+VALIDATION OK
+STRATEGY EVIDENCE FEATURE ROWS: 60
+```
+
+```bash
+.venv/bin/python scripts/backfill_signals.py --dry-run --source synthetic --version v20.0 --start-date 2026-05-18 --end-date 2026-05-22
+```
+
+結果：
+
+```text
+BACKFILL PLAN
+daily_price rows: 60
+daily_signal_snapshot rows: 60
+market_daily_bars rows: 60
+strategy_feature_snapshots rows: 60
+strategy_outcome_metrics rows: 72
+strategy_classification_audit rows: 0
+VALIDATION OK
+DRY RUN ONLY: no database writes
+```
+
+QA 補充 smoke：
+
+```text
+QA_SMOKE_OK 3 318 可買 可買
+QA_DB_PAYLOAD_OK 12 12 0 36
 ```
 
 ## 測試結果
 
-### Blocker 回歸
+### Full Pytest
 
 結果：通過。
 
-上一輪阻塞場景：
-- 有 1 檔持倉。
-- 有 1 檔合格 `BUY`。
-- 沒有不可買等待 / 追蹤候選。
+- 共 99 項測試通過。
+- 覆蓋既有 strategy、formatter、notifier、snapshot、validator、stock history、watchlist alignment 與新增 strategy evidence tests。
+- 21 個 warnings 來自既有第三方套件 / Python 版本 deprecation，未指向本輪功能失敗。
 
-重測確認：
-- 今日結論不再出現 `未持倉 0 檔僅追蹤`。
-- 今日結論不再出現 `其餘 0 檔僅追蹤`。
-- 今日結論改為包含 `未持倉無追蹤`。
-- 漏斗仍保留 `可買 1｜不可買追蹤 0`，方便對帳。
-- 詳情索引仍保留 `持倉 1｜執行 2｜未持倉追蹤 0｜淘汰 0`。
-- 明日執行清單同時列出持倉與可買項。
-- 持倉執行項仍有 `+/-xx.xx%` 盈虧百分比。
+### Replay / Backfill Dry-run
 
-### 額外分支
+結果：通過。
 
-無持倉 + 合格 BUY + 0 個不可買追蹤候選：
-- 不再出現 `其餘 0 檔僅追蹤`。
-- 顯示 `無持倉，可買 1 檔；未持倉無追蹤`。
-- 漏斗 / 詳情索引數字一致。
+- replay synthetic validate 通過。
+- replay 產生 `STRATEGY EVIDENCE FEATURE ROWS: 60`。
+- backfill dry-run 顯示新舊資料路徑 row count：
+  - `daily_price rows: 60`
+  - `daily_signal_snapshot rows: 60`
+  - `market_daily_bars rows: 60`
+  - `strategy_feature_snapshots rows: 60`
+  - `strategy_outcome_metrics rows: 72`
+  - `strategy_classification_audit rows: 0`
+- backfill 明確輸出 `DRY RUN ONLY: no database writes`。
 
-持倉占滿 5 項 + 多個不可買追蹤候選：
-- 明日執行清單維持 5 項。
-- 不可買追蹤候選不進 numbered 執行項。
-- 顯示 `未持倉 4 檔只等觸發，不列入明日執行`。
-- 漏斗顯示 `不可買追蹤 4`。
-- 詳情索引顯示 `持倉 5｜執行 5｜未持倉追蹤 4`。
+### DB Payload / Schema
 
-Telegram contract：
-- 前兩段詳情不帶 `reply_markup`。
-- 最後 summary 段帶 `reply_markup`。
-- 最後 summary 段仍包含 `🧭 今日結論`。
+結果：通過，schema 為草案可進 Architect 收口，但 production 套用前仍需 DBA / RLS / 權限確認。
+
+已檢查：
+
+- `docs/v20_strategy_evidence_schema.sql` 包含：
+  - `market_daily_bars`
+  - `strategy_feature_snapshots`
+  - `strategy_outcome_metrics`
+  - `strategy_classification_audit`
+  - `market_events`
+- 各主資料表有 primary key / unique key 以支援重跑冪等：
+  - `market_daily_bars`: `(stock_id, trade_date, source)`
+  - `strategy_feature_snapshots`: `(stock_id, trade_date, strategy_version)`
+  - `strategy_outcome_metrics`: `(stock_id, trade_date, strategy_version, horizon_days)`
+  - `strategy_classification_audit`: `(stock_id, trade_date, strategy_version, distortion_type)`
+  - `market_events`: `dedupe_key unique`
+- `market_events` 具備 point-in-time 欄位：`source_url`、`published_at`、`market_effective_at`、`ingested_at`。
+- QA payload smoke 驗證收盤 12 檔可產生 12 筆 market rows、12 筆 feature rows；feature snapshot 不含 future outcome 欄位，outcome metrics 另行補算。
+
+### Telegram Contract
+
+結果：通過。
+
+- `formatTelegramMessages()` 仍回傳多段 messages。
+- `messages[-1]` 仍是總覽 summary。
+- `📊 策略證據 v20.0` 併入最後 summary 段。
+- `services.notifier.send_many()` mock 驗證 `reply_markup` 只綁最後 summary 段，前面詳情段不帶 `reply_markup`。
+- 證據層錯誤摘要 `證據層略過：更新失敗 simulated` 出現在最後 summary 段，且既有 `🧭 今日結論`、`✅ 明日執行清單` 仍存在。
+
+### 策略不變性
+
+結果：通過。
+
+- `git diff` 未顯示 `services/analysis.py`、`core/signal_snapshot.py`、`core/signal_validator.py`、`services/daily_snapshot_store.py`、`services/signal_store.py`、`services/notifier.py`、`services/stock_api.py`、`core/watchlist.py` 有本輪修改。
+- 新增 evidence layer 只讀取 / 快照 `decision`、`action`、`is_tradeable`，沒有回寫策略結果。
+- QA smoke 驗證原始 payload 的 `decision=BUY`、`action=0.1`、`is_tradeable=True` 在加入 evidence summary 後不變。
+- `strategy_classification_audit` 只產生 audit row，不改 BUY / SELL / WAIT。
+
+### 未來資料洩漏
+
+結果：通過本輪可驗範圍。
+
+- `strategy_feature_snapshots` payload 不含 `horizon_days`、`close_return_pct`、MFE、MAE、`outcome_label` 等 future outcome 欄位。
+- `strategy_outcome_metrics` 與 feature snapshot 分表。
+- outcome metrics 由 `calculate_outcome_metrics()` 另行使用未來 price rows 補算，不回填 feature generation。
+- `market_events` schema 有 `published_at`、`market_effective_at`、`ingested_at`，但本輪僅為 schema 草案，未接入策略或績效計算。
+
+### 外部資料不得直接影響 BUY / is_tradeable / action
+
+結果：通過。
+
+- 本輪沒有新聞 / 題材 / 法人 / 注意股 ingestion code。
+- `market_events` 只存在於 schema 草案，未被 `services/strategy_evidence.py`、`core/generator.py`、`scripts/backfill_signals.py`、`scripts/dry_run_replay.py` 引用。
+- 外部事件無路徑可直接改 `decision=BUY`、`is_tradeable=True` 或 `action`。
 
 ## 關聯風險掃描
 
-### 直接呼叫方
+直接呼叫方：
 
-- `core/generator.formatTelegramMessages()`：仍回傳 list，summary 在 `messages[-1]`。
-- `core/generator.generate_report()`：仍回傳 `(messages, reply_markup)`。
-- `main.py -> send_many()`：契約未改。
-- `services/notifier.send_many()`：未修改，仍將 `reply_markup` 綁到最後一段。
+- `core/generator.generate_report()`：新增 evidence record / load，但包在 try/except；失敗時產生略過文字，不阻斷 messages。
+- `core/generator.formatTelegramMessages()`：新增 `strategy_evidence_summary` 參數，預設 `None`，既有呼叫可相容。
+- `services.notifier.send_many()`：未修改，contract smoke 通過。
+- `scripts.dry_run_replay.py`：validate 時額外輸出 evidence feature rows，不改 validation 規則。
+- `scripts.backfill_signals.py`：dry-run 顯示 evidence rows；正式寫庫仍需 `--write --confirm-write`。
 
-直接消費者契約未見回退。
+下游與副作用：
 
-### 下游與副作用
-
-- 本輪 diff 未修改 `services/analysis.py`、DB、replay/backfill、notifier、watchlist。
-- 本輪只修 summary 結論文案分支。
-- 漏斗與詳情索引保留 0 數字是合理的對帳資訊；主結論使用 `未持倉無追蹤` 做降噪，語意不衝突。
+- 正式 Supabase write 未執行。
+- schema 尚未 production 套用，RLS / 權限 / index 實際效果未驗。
+- 研究資料層沒有阻斷 Telegram path，但 production DB latency 尚未測。
+- backfill evidence rows 會增加資料量，需 Architect 後續確認 retention / archive 策略。
 
 ## 跨區塊語意一致性
 
-已檢查：
-- `今日結論`
-- `明日執行清單`
-- `未持倉漏斗（非執行）`
-- `詳情索引`
-- `reply_markup` 最後摘要段契約
+已檢查 Telegram summary 與 evidence summary 的語意：
 
-結論：
-- `今日結論` 用 `未持倉無追蹤` 表達沒有等待候選。
-- `未持倉漏斗` 用 `不可買追蹤 0` 保留數字對帳。
-- `詳情索引` 用 `未持倉追蹤 0` 保留數字對帳。
-- 三者語意一致：主結論降噪，漏斗 / 索引保留統計。
-- 明日執行清單的 numbered items 與 `執行 N` 可對上。
+- `📊 策略證據 v20.0` 是證據摘要，不覆蓋 `🧭 今日結論`。
+- 樣本不足時顯示 `樣本不足，不判讀`，不產生買賣建議。
+- evidence audit 用 `分類警示`，不是 `可買` 或 `必買`。
+- 主交易區塊仍由既有策略決策控制；證據區塊只是事後績效 / audit 輔助。
+
+結論：本輪未發現跨區塊語意把 evidence 誤包裝成交易指令。
 
 ## 使用者誤讀風險
 
-已解除上一輪主要誤讀風險：
-- 不再讓使用者看到不存在的 `0 檔僅追蹤`。
-- `未持倉無追蹤` 可清楚表達沒有等待候選。
-- `可買 1` 與 `不可買追蹤 0` 分離，使用者不會把 0 追蹤誤解成行動項。
-- 不可買等待候選仍標示為只等觸發、不列入明日執行。
+已降低：
+
+- 證據摘要標題為 `策略證據`，不是 `買點` 或 `推薦`。
+- 低樣本顯示 `樣本不足，不判讀`。
+- evidence failure 顯示 `證據層略過`，不會讓使用者誤以為策略失效。
 
 殘留風險：
-- 真實 Telegram UI 未測，但本輪本地 formatter 與 notifier contract 已通過。
+
+- `漏失` 一詞可能被解讀為策略錯誤而非事後統計；目前可接受，但 v20.1 若進一步面向使用者，可考慮改成 `大漲漏失統計` 或補充 `僅供檢討`。
+- 第一版只看 12 檔 watchlist，分類績效樣本可能偏小；報文已用 `樣本不足，不判讀` 緩解。
 
 ## 質疑與反證
 
 ### PM 是否漏需求
 
-PM 沒漏；`TASK.md` 已明確要求避免 `追 0 檔` 噪音。本輪 Tech 已補齊該分支。
+未見關鍵漏需求。`TASK.md` 已包含 point-in-time、樣本不足、證據層失敗不阻斷報文、外部資料不得接 BUY 等硬邊界。
 
 ### Tech 是否漏同步
 
-未見漏同步。`CHANGELOG.md` 明確說明修復 `holding_count and buy_count and tracking_count == 0`，並同步處理 `無持倉 + 可買 + tracking_count == 0`。
+未見阻塞級漏同步。`CHANGELOG.md` 列出的新增檔案與實際 diff 一致；未影響模組中列出的策略核心與 notifier 未見 diff。
+
+需 Architect 注意：`docs/v20_strategy_evidence_schema.sql` 是 schema 草案，尚不能視為 production DB 已完成。
 
 ### 測試是否能證明沒有破壞直接消費者
 
-可以。QA 已用 formatter 產生 messages，餵入 `send_many()` mock，確認 `reply_markup` 仍綁最後 summary 段。
+可以覆蓋本輪主要直接消費者：
+
+- full pytest 通過。
+- formatter-to-notifier smoke 通過。
+- replay/backfill dry-run 通過。
+- DB payload smoke 通過。
+
+未覆蓋 live Telegram / live Supabase，因此 live delivery 與 production RLS 權限仍是殘留風險，不是本輪阻塞。
 
 ### QA 是否主動找到指定清單之外的風險
 
-有。除上一輪 blocker 精確回歸外，本輪也補測了無持倉 + 可買 + 0 追蹤，以及持倉占滿清單 + 不可買追蹤候選，未發現新阻塞。
+有。除指定清單外，QA 額外檢查：
+
+- evidence failure summary 是否仍保留 `今日結論` 與 `明日執行清單`。
+- feature snapshot 是否混入 future outcome 欄位。
+- `market_events` 是否真的沒有被程式碼消費進 BUY 路徑。
+- schema 草案是否有 point-in-time 與 idempotency key。
+- `漏失` 文案可能帶來誤讀，但目前不構成 blocker。
 
 ## 驗收項結果
 
-- `version_level=patch`：通過。
-- `qa_level=L1`：通過。
-- 今日結論不再輸出 `未持倉 0 檔僅追蹤`：通過。
-- 今日結論不再輸出 `其餘 0 檔僅追蹤`：通過。
-- `未持倉無追蹤` 與漏斗 / 詳情索引一致：通過。
-- 明日執行清單全是持倉時顯示持倉優先：通過既有測試。
-- 不可買等待標的不列入明日執行：通過。
-- 漏斗標明非執行 / 不可買追蹤：通過。
-- 詳情索引區分執行 / 未持倉追蹤 / 淘汰：通過。
-- 持倉執行清單保留盈虧百分比：通過。
-- Summary-last / reply_markup-last contract：通過。
-- 不改 strategy / DB / replay / backfill：未見 diff。
+- `version_level=major`：通過。
+- `qa_level=L3`：通過。
+- full pytest：通過。
+- replay dry-run：通過。
+- backfill dry-run：通過。
+- DB payload / schema 草案：通過，production 套用需另行核准。
+- Telegram `messages[-1]` summary-last：通過。
+- `reply_markup` last summary：通過。
+- 策略不變性：通過。
+- 未來資料洩漏防線：通過本輪可驗範圍。
+- 證據層失敗不阻斷報文：通過。
+- 外部資料不得直接影響 BUY / `is_tradeable` / `action`：通過。
 
 ## 未測項目
 
-本輪未執行：
-- full pytest。
-- replay / backfill dry-run。
+本輪未測：
+
 - live Telegram delivery。
 - live Supabase write。
-- Telegram 客戶端實機截圖。
+- production schema apply / migration。
+- Supabase RLS / 權限 / index performance。
+- TWSE live replay / live backfill。
+- 正式 backfill 寫庫。
+- 真實外部新聞 / 題材 ingestion。
 
 原因：
-- `DISPATCH.md` 指定 `qa_level=L1`。
-- `TASK.md` / `CHANGELOG.md` 限定本輪只改 formatter / summary view model。
+
+- `DISPATCH.md` / `TASK.md` 要求 L3 dry-run，不要求 live write。
+- 正式 Supabase write、live Telegram delivery、production migration 依 `AGENTS.md` 需另行明確批准。
+- `market_events` 本輪只交付 schema 草案，未交付 ingestion。
 
 ## 殘留風險
 
-- 真實 Telegram 到達順序與 UI 呈現未測。
-- 若未來產品要求完全不顯示任何 0 統計，需另開 PM 任務；本輪保留漏斗 / 索引中的 0 是為了數字可追溯。
+- Production DB schema 尚未套用，RLS / 權限 / index / migration rollback 未驗。
+- Evidence summary 依賴 DB 查詢；本地已驗證失敗降級，但 production latency 未測。
+- `load_strategy_evidence_summary()` 查詢未顯式排序，若 Supabase 回傳順序不穩，分類報告樣本窗口可能不完全可預期；目前不阻塞，但建議後續加 `.order("trade_date")`。
+- backfill 正式寫庫會增加資料量；需 Architect 後續確認 retention / archive。
+- 12 檔 watchlist 樣本偏小，策略證據第一版應維持 `樣本不足，不判讀` 防過度解讀。
 
 ## QA 結論
 
 QA 結論：通過。
 
-v19.5.1 QA blocker 已解除。`未持倉 0 檔僅追蹤` 已消失，`未持倉無追蹤` 與漏斗 / 詳情索引一致，summary-last / reply_markup-last contract 未回退。可交回 Architect 更新狀態。
+v20.0 Strategy Evidence Foundation 已通過 L3 驗證。full pytest、replay/backfill dry-run、DB payload/schema、Telegram contract、策略不變性、未來資料洩漏防線、證據層失敗降級與外部資料不接 BUY 路徑均未發現阻塞問題。
+
+可交回 Architect 更新狀態；production schema apply、live Supabase write、live Telegram delivery 需另開明確批准流程。

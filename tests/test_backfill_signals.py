@@ -2,6 +2,7 @@ import unittest
 from datetime import date, timedelta
 
 from scripts.backfill_signals import (
+    build_evidence_rows,
     build_rows_from_ohlcv,
     validate_signal_payloads
 )
@@ -53,6 +54,12 @@ class BackfillSignalsTest(unittest.TestCase):
         self.assertEqual(price_rows[0]["low"], rows[25]["low"])
         self.assertEqual(price_rows[0]["source"], "twse")
         self.assertEqual(validate_signal_payloads(signal_rows), [])
+        market_rows, feature_rows, outcome_rows, audit_rows = build_evidence_rows(price_rows, signal_rows)
+        self.assertEqual(len(market_rows), 5)
+        self.assertEqual(len(feature_rows), 5)
+        self.assertTrue(outcome_rows)
+        self.assertEqual(feature_rows[0]["strategy_version"], "v19.1.3")
+        self.assertIn("watch_category", feature_rows[0])
 
     def test_validate_payload_blocks_bad_best_candidate(self):
         errors = validate_signal_payloads([

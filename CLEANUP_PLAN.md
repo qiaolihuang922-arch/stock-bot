@@ -58,6 +58,17 @@
 
 - 先完成本輪流程文件補強，不修代碼。
 - `v19.5.1` 已分派；PM 已改寫 `TASK.md`，QA 第一輪阻塞後 Tech 已補修 `未持倉 0 檔僅追蹤` 語意噪音並改寫 `CHANGELOG.md`，QA 重測通過。下一步 Architect 提交並推送。
+- 新研究任務已升級為 `v20-strategy-intelligence-architecture`；旺宏只是案例，真正問題是整個策略層是否有足夠多日資料、DB、外部事件與事後績效驗證。
+- 策略質疑不能只用內部測試通過回覆；若價格/新聞/題材與策略輸出明顯矛盾，需進入全策略層研究與反證流程。
+- Tech 已完成資料層與驗證框架研究。下一步由 QA 反證，之後才可由 PM 開 v20.0 `Strategy Evidence Foundation` 開發任務。
+- v20 起手式不得直接調參或直接改買入門檻；先建立策略證據資料層、outcome path metrics、classification report。
+- v20 不做脫離現有工作流的新平台；所有資料層與驗證層最終必須支撐定時任務產出 Telegram 報文。
+- QA 已完成 v20 架構反證，conditional approval。下一步由 PM 撰寫 v20.0 `Strategy Evidence Foundation` 正式 TASK。
+- PM 已完成 v20.0 `Strategy Evidence Foundation` 正式 TASK。下一步由 Tech 實作，QA 後續按 L3 驗證。
+- v20.0 初版已完成 PM / Tech / QA 接力，QA L3 通過。下一步由 Architect 做提交前 diff 檢查、必要驗證、commit / push。
+- v20.0 本輪不包含 production schema apply、live Supabase write、live Telegram delivery、正式 backfill write；若要啟用，需另開批准任務。
+- v20.0 push 後需壓縮 `DISPATCH.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`、`RESEARCH.md`、`CURRENT_STATE.md`，避免研究與交付文件繼續膨脹。
+- 收到 `RESEARCH.md` Tech Findings 後，Architect 只讀研究摘要與必要局部上下文，不掃全 repo。
 - 收到 `TASK.md`、`CHANGELOG.md`、`QA_REPORT.md` 任一文件後，Architect 只讀該摘要與必要局部上下文。
 - 根據摘要更新 `CURRENT_STATE.md`。
 - 若發現重複、過期或互相衝突的工作，再更新本文件並交由對應會話處理。
