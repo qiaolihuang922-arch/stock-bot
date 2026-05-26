@@ -9,32 +9,38 @@
 - 不刪除固定 8 份 Markdown 工作流文件。
 - 不刪除測試或核心文件，除非有明確任務與影響判斷。
 - 清理工作必須先有摘要、範圍與驗證方式。
+- Architect 不直接修功能代碼；Owner 提出新功能 / 顯示 / bug / 策略需求時，先更新 `DISPATCH.md` 分派。
+- QA 不是照單驗收角色；必須主動找問題、跨區塊語意一致性、使用者誤讀風險。
 - 每次 Architect 完成 commit / push 後，必須壓縮工作流 Markdown，只保留最新任務與高信號摘要。
-- 新任務先判斷版本分級與 QA 分級，避免每輪都重新討論測試範圍。
-- Architect 不直接修功能代碼；若 Owner 提出新功能 / 顯示 / bug 需求，先更新 `DISPATCH.md` 分派。
-- QA 不是照單驗收角色；流程文件必須保留 QA 主動找問題、跨區塊語意一致性、使用者誤讀風險檢查規則。
 
-## 待整理項目
+## 最新收斂
 
-- v19.3.3 formatter 一致性修正已完成指定 QA，Architect 已更新狀態。
-- v19.3.4 報文解釋力修正已完成指定 QA，Architect 已更新狀態。
-- 最近一次 push 已完成；下一步應壓縮 `TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`、`RESEARCH.md`、`CURRENT_STATE.md`，避免文件累積過長。
+- v20.0 Strategy Evidence Foundation 已完成並推送。
+- push 後已壓縮：
+  - `DISPATCH.md`
+  - `TASK.md`
+  - `CHANGELOG.md`
+  - `QA_REPORT.md`
+  - `RESEARCH.md`
+  - `CURRENT_STATE.md`
+  - `CLEANUP_PLAN.md`
 - 本輪不清理核心代碼。
-- v19.4 交易閉環升級已完成全量 QA，包含 formatter、策略不變性、snapshot、replay/backfill dry-run、資料入庫 payload 路徑檢查與額外風險掃描。
-- 下一步若 Owner 確認交付，由 Architect 檢查 diff、重跑必要驗證、commit 並 push。
-- v19.4.1 Telegram 推送順序調整第一輪 L1 QA 已完成；Architect 收口發現 `reply_markup` 綁定位置風險後，Tech 已補修。本輪不再要求 QA 重跑，由 Architect 收口驗證後 push。
-- 已補充 QA 契約規則：改變 output / messages list / payload shape 時，L1 也必須測直接消費者。
-- 已補充 QA 強化規則：QA_REPORT 必須包含關聯風險掃描、質疑與反證，避免只按既有清單驗證。
-- v19.5 研究任務已完成 PM / Tech / QA Findings；PM 已改寫正式 `TASK.md`，Tech 已交付 `CHANGELOG.md`，QA 已交付 L2 通過報告。下一步 Architect 收口並 push。
-- 已補充文件寫入權限：研究任務 `RESEARCH.md` 為共享文件，各角色只寫自己的 Findings；開發任務回到 `TASK.md` / `CHANGELOG.md` / `QA_REPORT.md` 專屬交付。
-- 已補充 Tech 自檢 / QA 驗證邊界，避免 Tech 做完整 QA 或 QA 只重複 Tech 測試。
-- 已補充版本分級與 QA 分級規則；下一次啟動部門時只需讓該角色重新讀 `AGENTS.md` 與 `DISPATCH.md`，不需要立即逐窗通知。
-- 已補充 Architect 禁止直接實作新需求的硬規則，避免總控越權成為 Tech。
-- v19.5 報文暴露流程缺口：欄位與 contract 測試通過，但 `今日結論`、`明日執行清單`、`漏斗` 之間可產生語意衝突。已將 QA 規則升級為必須主動檢查跨區塊語意一致性與使用者誤讀風險。
-- 已開 `v19.5.1-summary-semantic-consistency`，應先由 PM 定義「執行項 vs 僅追蹤候選」文案規則，再由 Tech 修 formatter / summary view model，QA 必須針對真實報文做語意一致性反證。
-- 若要處理策略門檻、live Telegram 或 full regression，需另開任務。
-- 部門交付文件 `TASK.md`、`CHANGELOG.md`、`QA_REPORT.md` 是工作流入口，必須保留；任務結束後只清空或改寫內容，不刪文件。
-- 工作區若出現未提交核心檔案修改，Architect 不處理；需由 Tech 或 Owner 確認來源。
+
+## 待處理項目
+
+- 若 Owner 要正式啟用 v20 evidence DB：
+  - 另開 production schema apply 任務。
+  - 檢查 Supabase RLS / 權限 / index / rollback。
+  - 決定 retention / archive 策略。
+- 若 Owner 要 live evidence write：
+  - 先做 staging 或 dry-run 對照。
+  - 再批准 live Supabase write。
+- 若 Owner 要 live Telegram delivery 驗證：
+  - 另開明確任務，不混入一般 QA。
+- 後續可改善：
+  - `load_strategy_evidence_summary()` 增加顯式排序。
+  - `漏失` 文案改為更低誤讀版本。
+  - 擴充真實外部事件 ingestion，但不得直接接 BUY。
 
 ## 固定保留清單
 
@@ -56,19 +62,5 @@
 
 ## 下一步
 
-- 先完成本輪流程文件補強，不修代碼。
-- `v19.5.1` 已分派；PM 已改寫 `TASK.md`，QA 第一輪阻塞後 Tech 已補修 `未持倉 0 檔僅追蹤` 語意噪音並改寫 `CHANGELOG.md`，QA 重測通過。下一步 Architect 提交並推送。
-- 新研究任務已升級為 `v20-strategy-intelligence-architecture`；旺宏只是案例，真正問題是整個策略層是否有足夠多日資料、DB、外部事件與事後績效驗證。
-- 策略質疑不能只用內部測試通過回覆；若價格/新聞/題材與策略輸出明顯矛盾，需進入全策略層研究與反證流程。
-- Tech 已完成資料層與驗證框架研究。下一步由 QA 反證，之後才可由 PM 開 v20.0 `Strategy Evidence Foundation` 開發任務。
-- v20 起手式不得直接調參或直接改買入門檻；先建立策略證據資料層、outcome path metrics、classification report。
-- v20 不做脫離現有工作流的新平台；所有資料層與驗證層最終必須支撐定時任務產出 Telegram 報文。
-- QA 已完成 v20 架構反證，conditional approval。下一步由 PM 撰寫 v20.0 `Strategy Evidence Foundation` 正式 TASK。
-- PM 已完成 v20.0 `Strategy Evidence Foundation` 正式 TASK。下一步由 Tech 實作，QA 後續按 L3 驗證。
-- v20.0 初版已完成 PM / Tech / QA 接力，QA L3 通過。下一步由 Architect 做提交前 diff 檢查、必要驗證、commit / push。
-- v20.0 本輪不包含 production schema apply、live Supabase write、live Telegram delivery、正式 backfill write；若要啟用，需另開批准任務。
-- v20.0 push 後需壓縮 `DISPATCH.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`、`RESEARCH.md`、`CURRENT_STATE.md`，避免研究與交付文件繼續膨脹。
-- 收到 `RESEARCH.md` Tech Findings 後，Architect 只讀研究摘要與必要局部上下文，不掃全 repo。
-- 收到 `TASK.md`、`CHANGELOG.md`、`QA_REPORT.md` 任一文件後，Architect 只讀該摘要與必要局部上下文。
-- 根據摘要更新 `CURRENT_STATE.md`。
-- 若發現重複、過期或互相衝突的工作，再更新本文件並交由對應會話處理。
+- 等待 Owner 下一個需求。
+- 若下一步是 v20 production 啟用，不得直接寫庫；必須先分派 PM 定義 rollout / rollback / 驗收條件。
