@@ -85,6 +85,14 @@ def parse_twse_number(value):
         return None
 
 
+def parse_yahoo_timestamp(value):
+    try:
+        timezone = tz or datetime.now().astimezone().tzinfo
+        return datetime.fromtimestamp(int(value), timezone).date()
+    except:
+        return None
+
+
 def parse_quote_level(raw):
     if not raw:
         return None
@@ -178,6 +186,101 @@ def get_yahoo(code):
         return d["regularMarketPrice"], d["regularMarketChangePercent"]
     except:
         return None
+
+
+def get_yahoo_history(code, months=4, min_rows=45):
+    if requests is None:
+        record_error(code, "yahoo_daily", "requests unavailable")
+        return None
+
+    last_error = None
+
+    for suffix in ["TW", "TWO"]:
+        try:
+            symbol = f"{code}.{suffix}"
+            url = (
+                f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+                f"?range={max(1, months)}mo&interval=1d"
+            )
+            payload = requests.get(url, headers=HEADERS, timeout=10).json()
+            result = (payload.get("chart") or {}).get("result") or []
+
+            if not result:
+                error = (payload.get("chart") or {}).get("error")
+                last_error = error or f"{symbol}: no result"
+                continue
+
+            item = result[0]
+            timestamps = item.get("timestamp") or []
+            quote = ((item.get("indicators") or {}).get("quote") or [{}])[0]
+            opens = quote.get("open") or []
+            highs = quote.get("high") or []
+            lows = quote.get("low") or []
+            closes_raw = quote.get("close") or []
+            volumes_raw = quote.get("volume") or []
+
+            rows = []
+
+            for index, timestamp in enumerate(timestamps):
+                try:
+                    close = closes_raw[index]
+                    volume = volumes_raw[index]
+
+                    if close is None or volume is None:
+                        continue
+
+                    trade_date = parse_yahoo_timestamp(timestamp)
+                    if not trade_date:
+                        continue
+
+                    open_price = opens[index] if index < len(opens) else None
+                    high = highs[index] if index < len(highs) else None
+                    low = lows[index] if index < len(lows) else None
+
+                    rows.append((trade_date, float(close), float(volume)))
+
+                    if all(value is not None for value in [open_price, high, low]):
+                        cached = LAST_OHLCV.get(str(code)) or {}
+                        cached_date = cached.get("trade_date")
+                        if cached_date and trade_date <= cached_date:
+                            continue
+                        LAST_OHLCV[str(code)] = {
+                            "stock_id": str(code),
+                            "trade_date": trade_date,
+                            "open": float(open_price),
+                            "high": float(high),
+                            "low": float(low),
+                            "close": float(close),
+                            "volume": float(volume),
+                            "source": "yahoo"
+                        }
+                except Exception as exc:
+                    last_error = f"parse: {exc}"
+                    continue
+
+            rows.sort(key=lambda item: item[0])
+
+            if len(rows) < min_rows:
+                last_error = f"{symbol}: insufficient rows={len(rows)}"
+                continue
+
+            closes = [item[1] for item in rows]
+            volumes = [item[2] for item in rows]
+            price = closes[-1]
+            prev = closes[-2]
+            change = (price - prev) / prev * 100
+            ma5 = sum(closes[-5:]) / 5 if len(closes) >= 5 else price
+            ma20 = sum(closes[-20:]) / 20 if len(closes) >= 20 else price
+
+            clear_error(code)
+            return price, change, ma5, ma20, closes, volumes
+
+        except Exception as exc:
+            last_error = f"{type(exc).__name__}: {exc}"
+            continue
+
+    record_error(code, "yahoo_daily", last_error or "empty data")
+    return None
 
 
 def get_twse(code, months=2, retries=1, min_rows=45, max_months=4):

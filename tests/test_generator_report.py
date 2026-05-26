@@ -134,11 +134,44 @@ class GeneratorReportTest(unittest.TestCase):
     def test_generate_reports_data_source_errors_when_all_quotes_fail(self):
         with patch.object(generator, "stocks", {"測試": "1234"}), \
              patch.object(generator, "get_twse", return_value=None), \
+             patch.object(generator, "get_yahoo_history", return_value=None), \
              patch.object(generator, "get_last_error", return_value="twse: DNS failed"):
             report = generator.generate()
 
         self.assertIn("⚠ 無有效數據：行情來源未返回可用日線", report)
         self.assertIn("測試(1234) twse: DNS failed", report)
+
+    def test_load_stock_signal_uses_yahoo_daily_fallback_when_twse_fails(self):
+        closes = [
+            100, 101, 102, 103, 104,
+            105, 106, 107, 108, 109,
+            110, 111, 112, 113, 114,
+            115, 116, 117, 118, 119
+        ]
+        volumes = VOL_ATTACK
+        daily = (
+            119,
+            1.4,
+            sum(closes[-5:]) / 5,
+            sum(closes[-20:]) / 20,
+            closes,
+            volumes
+        )
+
+        with patch.object(generator, "get_twse", return_value=None), \
+             patch.object(generator, "get_yahoo_history", return_value=daily), \
+             patch.object(generator, "get_last_error", return_value="twse: timeout"), \
+             patch.object(generator, "get_realtime_price", return_value=None), \
+             patch.object(generator, "get_yahoo", return_value=None), \
+             patch.object(generator, "get_last_ohlcv", return_value={"source": "yahoo"}):
+            name, data, decision, error = generator.load_stock_signal("測試", "1234")
+
+        self.assertEqual(name, "測試")
+        self.assertIsNone(error)
+        self.assertIsNotNone(data)
+        self.assertEqual(data["daily_source"], "yahoo")
+        self.assertEqual(data["price_source"], "yahoo")
+        self.assertIsNotNone(decision)
 
     def test_hidden_rr_is_not_listed_as_advantage(self):
         result = {

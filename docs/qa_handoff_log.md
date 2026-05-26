@@ -126,3 +126,32 @@ This file is append-only. Each development change should add a new entry so QA c
   - Confirm default three-message Telegram output includes `每日快照未寫入` in the first summary message when `missing_stock_ids` is returned.
   - Confirm the warning is not hidden in detail-only content.
   - Confirm standard holding/unheld detail messages remain unchanged.
+
+## 2026-05-26 - batch-004
+
+### Change 1
+- Summary: Added Yahoo daily K-line fallback for online report generation when TWSE daily K-line requests time out or return no usable daily rows. The existing Yahoo/realtime fallback only covered live price; this change lets strategy generation continue only when fallback daily closes/volumes are available.
+- Files changed:
+  - `services/stock_api.py`
+  - `core/generator.py`
+  - `tests/test_generator_report.py`
+  - `tests/test_stock_api_history.py`
+  - `docs/qa_handoff_log.md`
+- Test level: L1
+- Scope: data source / formatter error path / Telegram
+- Minimal validation run:
+  - `.venv/bin/python -m pytest tests/test_generator_report.py tests/test_stock_api_history.py`
+- Skipped tests:
+  - Full regression test suite
+  - Live Telegram delivery
+  - Live Supabase write verification
+  - Live TWSE/Yahoo network smoke test
+  - Replay/backfill dry-run
+- Reason for skipping: Targeted data-source fallback fix with mocked local tests; live provider behavior should be verified by QA in networked regression.
+- External services touched: none
+- DB/schema/write risk: no
+- QA focus:
+  - Simulate TWSE timeout and confirm Yahoo daily fallback produces usable closes/volumes.
+  - Confirm report only shows `無有效數據` when both TWSE daily and Yahoo daily fallback fail.
+  - Confirm daily snapshot DB guard still blocks writes if fallback does not cover all 12 stocks.
+  - Confirm fallback OHLCV and price source are marked `yahoo` when used.

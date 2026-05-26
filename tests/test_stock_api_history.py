@@ -7,6 +7,7 @@ from services.stock_api import (
     compact_error,
     get_last_error,
     get_twse,
+    get_yahoo_history,
     parse_twse_date,
     parse_twse_number,
     record_error
@@ -82,6 +83,49 @@ class StockApiHistoryTest(unittest.TestCase):
 
         self.assertIsNotNone(result)
         self.assertEqual(len(calls), 3)
+
+    def test_get_yahoo_history_returns_daily_kline_fallback(self):
+        class FakeResponse:
+            def json(self):
+                timestamps = [
+                    1770000000 + day * 86400
+                    for day in range(50)
+                ]
+                closes = [
+                    100 + day
+                    for day in range(50)
+                ]
+                return {
+                    "chart": {
+                        "result": [
+                            {
+                                "timestamp": timestamps,
+                                "indicators": {
+                                    "quote": [
+                                        {
+                                            "open": closes,
+                                            "high": [item + 1 for item in closes],
+                                            "low": [item - 1 for item in closes],
+                                            "close": closes,
+                                            "volume": [1000] * 50
+                                        }
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                }
+
+        with patch("services.stock_api.requests.get", return_value=FakeResponse()):
+            result = get_yahoo_history("3231", months=4, min_rows=45)
+
+        self.assertIsNotNone(result)
+        price, change, ma5, ma20, closes, volumes = result
+        self.assertEqual(price, 149)
+        self.assertGreater(change, 0)
+        self.assertEqual(len(closes), 50)
+        self.assertEqual(len(volumes), 50)
+        self.assertEqual(ma5, sum(closes[-5:]) / 5)
 
 
 if __name__ == "__main__":

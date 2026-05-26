@@ -8,6 +8,7 @@ import pytz
 
 from services.stock_api import (
     get_twse,
+    get_yahoo_history,
     get_yahoo,
     get_realtime_price,
     get_last_error,
@@ -2917,9 +2918,16 @@ def load_stock_signal(name, code):
 
     try:
         twse = get_twse(code)
+        daily_source = "twse"
 
         if not twse:
-            return name, None, None, f"{name}({code}) {get_last_error(code) or 'twse: no data'}"
+            twse_error = get_last_error(code) or "twse: no data"
+            twse = get_yahoo_history(code)
+            daily_source = "yahoo"
+
+            if not twse:
+                fallback_error = get_last_error(code) or "yahoo_daily: no data"
+                return name, None, None, f"{name}({code}) {twse_error}；fallback {fallback_error}"
 
         (
             t_price,
@@ -2942,8 +2950,11 @@ def load_stock_signal(name, code):
             )
         )
 
+        if price_source == "twse" and daily_source != "twse":
+            price_source = daily_source
+
         if not closes or not volumes:
-            return name, None, None, f"{name}({code}) twse: empty kline"
+            return name, None, None, f"{name}({code}) {daily_source}: empty kline"
 
         result = strategy(
             price,
@@ -2969,6 +2980,7 @@ def load_stock_signal(name, code):
             "price": price,
             "change": change,
             "price_source": price_source,
+            "daily_source": daily_source,
             "stock_code": code,
 
             "ma5": ma5,
