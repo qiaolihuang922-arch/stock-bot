@@ -16,6 +16,7 @@
 ## 最新收斂
 
 - v20.0 Strategy Evidence Foundation 已完成並推送。
+- v20.0.1 Evidence Readiness Message 已完成並推送。
 - push 後已壓縮：
   - `DISPATCH.md`
   - `TASK.md`
@@ -28,7 +29,7 @@
 
 ## 待處理項目
 
-- v20.0.1 patch：修正 evidence schema 未啟用時 Telegram 露出原始 Supabase 錯誤的顯示問題。
+- v20.0.1 patch 已完成並推送；工作流文件已壓縮。
 - 若 Owner 要正式啟用 v20 evidence DB：
   - 另開 production schema apply 任務。
   - 檢查 Supabase RLS / 權限 / index / rollback。

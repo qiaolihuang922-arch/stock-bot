@@ -10,28 +10,27 @@
 - version_level: `patch`
 - qa_level: `L2`
 - owner_status: `requested`
-- architect_status: `dispatched`
+- architect_status: `pushed`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
 - qa_status: `qa_passed`
-- commit: `pending`
+- commit: `2728a9e fix: hide raw strategy evidence errors`
 
 ## Current Result
 
-- Owner 貼出 v20.0 盤後報文，策略證據區顯示：
-  - `證據層略過：更新失敗 {'message': "Could not find the table 'public.market_daily_bars' in the schema cache", ...}`
-- 判斷：
-  - evidence layer 降級有效，主報文未被阻斷。
-  - production schema 尚未 apply，故 Supabase 找不到 `market_daily_bars` 是符合已知未完成項。
-  - 但 Telegram 直接露出 Supabase 原始錯誤，不符合使用者可讀性，需 patch。
-- 本輪只處理「未啟用 evidence schema 時的友善提示 / readiness message」，不直接 apply production schema、不正式寫庫。
+- v20.0.1 已完成 PM / Tech / QA 接力並推送到 `origin/main`。
+- 修正 evidence schema 未啟用時 Telegram 露出 Supabase raw error 的問題。
+- schema missing 顯示：`策略證據尚未啟用：資料表未建立，主報文不受影響`。
+- generic DB failure 顯示：`證據層暫時略過：資料更新失敗，主報文不受影響`。
+- 樣本不足仍顯示樣本不足，不被誤判為更新失敗。
+- 本輪未 apply production schema、未正式寫庫、未改策略。
 
 ## Next Action
 
-- Architect: 已吸收 QA `QA_REPORT.md`；本輪 v20.0.1 patch 已通過 L2，下一步做提交前 diff 檢查與必要驗證後提交推送。
-- PM: 已完成 `TASK.md`，定義 schema 未啟用、DB 查詢失敗、樣本不足三種 Telegram 文案與驗收條件。
-- Tech: 已交付 `CHANGELOG.md`；只改 friendly fallback / readiness message 與必要 tests，未 apply schema、未正式寫庫。
-- QA: 已完成 L2 驗證並提交 `QA_REPORT.md`；Telegram 不再露出原始 Supabase dict/error，主報文不阻斷，策略不變。
+- Architect: push 後已壓縮工作流文件；等待 Owner 下一個需求。
+- PM: 等待下一輪任務。
+- Tech: 等待下一輪任務。
+- QA: 等待下一輪任務。
 - Owner: 若要真正啟用 evidence DB，需另開 production schema apply / live write 任務。
 
 ## Status Values

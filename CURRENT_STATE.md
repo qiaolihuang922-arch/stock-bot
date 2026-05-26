@@ -5,38 +5,28 @@
 ## 專案狀態
 
 - 專案：台股策略報文機器人。
-- 目前穩定線：`v20.0 Strategy Evidence Foundation` 已完成、QA L3 通過並推送。
-- 最新 commit：`2cc4e8a feat: add v20 strategy evidence foundation`
+- 目前穩定線：`v20.0.1 Evidence Readiness Message` 已完成、QA L2 通過並推送。
+- 最新 commit：`2728a9e fix: hide raw strategy evidence errors`
 - 交付形態維持不變：定時 GitHub Actions / 腳本 -> 產生 Telegram 報文 -> 發送給 Owner。
 - 預設只處理 `core/watchlist.py` 的 12 檔股票。
 
 ## v20.0 已完成
 
-- 新增 `services/strategy_evidence.py`：
-  - market daily bars。
-  - strategy feature snapshots。
-  - outcome metrics。
-  - classification audit。
-  - classification report / Telegram evidence summary。
+- 新增 `services/strategy_evidence.py`：market bars、feature snapshots、outcome metrics、classification audit、classification report / Telegram evidence summary。
 - 新增 `docs/v20_strategy_evidence_schema.sql` 作為 production schema 草案。
-- `core/generator.py` 版本升至 `v20.0`，Telegram summary 新增 `📊 策略證據 v20.0`。
-- `scripts/dry_run_replay.py` 新增 evidence feature rows 輸出。
-- `scripts/backfill_signals.py` 新增 evidence row planning / optional upsert path；正式寫庫仍需 `--write --confirm-write`。
-- 新增 / 更新測試覆蓋 evidence layer、Telegram summary、backfill evidence rows。
+- `core/generator.py` 新增 `📊 策略證據 v20.0`。
+- `scripts/dry_run_replay.py` 與 `scripts/backfill_signals.py` 接入 evidence dry-run path。
+- QA L3 通過：full pytest `99 passed, 21 warnings`，synthetic replay/backfill dry-run 通過且不寫庫。
 
-## v20.0 驗證
+## v20.0.1 已完成
 
-- QA L3 結論：通過。
-- `.venv/bin/python -m pytest`：`99 passed, 21 warnings`。
-- synthetic replay dry-run：`VALIDATION OK`，`STRATEGY EVIDENCE FEATURE ROWS: 60`。
-- synthetic backfill dry-run：`VALIDATION OK`，`DRY RUN ONLY: no database writes`。
-- QA 已覆蓋：
-  - DB payload/schema 草案。
-  - Telegram summary-last / reply_markup-last。
-  - 策略不變性。
-  - 未來資料洩漏防線。
-  - evidence failure 不阻斷報文。
-  - external events 不接 BUY / `is_tradeable` / `action`。
+- 修正 evidence schema 未啟用時 Telegram 露出 Supabase raw error 的問題。
+- schema missing 顯示：`策略證據尚未啟用：資料表未建立，主報文不受影響`。
+- generic DB failure 顯示：`證據層暫時略過：資料更新失敗，主報文不受影響`。
+- 樣本不足仍顯示樣本不足，不被誤判為更新失敗。
+- 主報文版本升至 `v20.0.1`，策略證據區塊名稱仍為 `📊 策略證據 v20.0`。
+- QA L2 通過：formatter / evidence fallback、notifier contract、策略不變性。
+- 未 apply production schema、未正式寫庫、未改策略。
 
 ## 明確未完成
 
@@ -52,14 +42,7 @@
 
 ## 目前進行中
 
-- 新任務：`v20.0.1-evidence-readiness-message`。
-- 來源：v20.0 盤後報文中 `📊 策略證據 v20.0` 顯示 Supabase 原始錯誤：production table `public.market_daily_bars` 尚未建立。
-- 判斷：主報文未阻斷，證據層降級有效；但不應在 Telegram 顯示原始 Supabase dict/error。
-- 目標：改成友善可讀提示，例如「策略證據尚未啟用：資料表未建立，主報文不受影響」。
-- 邊界：不 apply production schema、不正式寫庫、不改策略、不改 BUY / SELL / `is_tradeable` / `action`。
-- PM 已交付 `TASK.md`；下一步交 Tech 實作 friendly fallback / readiness message 與必要測試。
-- Tech 已交付 `CHANGELOG.md`，修改 `core/generator.py`、`services/strategy_evidence.py` 與 tests；下一步由 QA 做 L2 驗證。
-- QA 已交付 `QA_REPORT.md`，L2 結論通過；下一步 Architect 收口提交並推送。
+- 無進行中任務；等待 Owner 下一個需求。
 
 ## 現有模組
 
@@ -75,7 +58,7 @@
 - `core/signal_snapshot.py`：snapshot 組裝。
 - `core/signal_validator.py`：snapshot 邏輯驗證。
 - `services/position_store.py`：Supabase `positions` 持倉讀取。
-- `services/strategy_evidence.py`：v20.0 策略證據資料層。
+- `services/strategy_evidence.py`：v20.0 策略證據資料層與 v20.0.1 error fallback。
 - `scripts/dry_run_replay.py`：dry-run replay。
 - `scripts/backfill_signals.py`：受保護 backfill，預設不寫庫。
 - `docs/v20_strategy_evidence_schema.sql`：v20.0 schema 草案。
@@ -85,6 +68,7 @@
 ## 已知風險
 
 - `docs/v20_strategy_evidence_schema.sql` 尚未 production 套用。
+- Production evidence schema 尚未 apply 前，Telegram 會顯示「策略證據尚未啟用」，這是預期狀態。
 - Evidence summary 依賴 DB 查詢；本地已驗證失敗降級，但 production latency 未測。
 - `load_strategy_evidence_summary()` 查詢未顯式排序，後續可加 `.order("trade_date")`。
 - backfill 正式寫庫會增加資料量，需 retention / archive 策略。
@@ -93,15 +77,7 @@
 
 ## 流程狀態
 
-- 固定 8 份 Markdown 工作流文件不得刪除，只允許更新內容：
-  - `AGENTS.md`
-  - `DISPATCH.md`
-  - `RESEARCH.md`
-  - `CURRENT_STATE.md`
-  - `CLEANUP_PLAN.md`
-  - `TASK.md`
-  - `CHANGELOG.md`
-  - `QA_REPORT.md`
+- 固定 8 份 Markdown 工作流文件不得刪除，只允許更新內容。
 - Architect 收到新功能 / 顯示 / bug / 策略需求時，預設只分派，不直接改代碼。
 - Tech 自檢不等於 QA；QA 必須補直接消費者、跨區塊語意、使用者誤讀、負面案例與反證。
 - production schema apply、live Supabase write、live Telegram delivery、正式 backfill write 都不是預設 QA L3，必須 Owner 明確批准。
