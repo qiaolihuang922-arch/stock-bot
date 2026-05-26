@@ -42,7 +42,7 @@ from services.daily_snapshot_store import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v19.3.4"
+VERSION = "v19.4"
 
 EXECUTION_LEVELS = {
     "TAKE_PROFIT_50": "TP50",
@@ -2582,6 +2582,177 @@ def classify_watchlist_group(name, data):
     return "可觀察但不可買"
 
 
+def tomorrow_watch_state(name, data):
+
+    result = data["result"]
+    blockers = entry_blockers(result)
+
+    if is_valid_entry(result):
+        return "可買"
+
+    label = blockers[0] if blockers else final_label(result)
+    behavior = result.get("price_behavior")
+    heat = result.get("heat_state")
+    trade = result.get("trade_state")
+    phase = result.get("structure_phase")
+    market_grade = result.get("market_grade")
+
+    if (
+        label in ["市場弱", "弱勢", "弱反彈待確認", "遠離觸發"]
+        or market_grade == "D"
+        or phase in ["WEAK", "WEAK_REBOUND"]
+    ):
+        return "弱勢淘汰"
+
+    if behavior in ["LIMIT_LOCK", "LIMIT_REBOUND"] or label in ["漲停不追", "漲停反彈待確認"]:
+        return "等回測" if behavior == "LIMIT_LOCK" or label == "漲停不追" else "隔日確認"
+
+    if heat in ["HOT", "EXTREME"] or trade in ["EXTENDED", "AVOID"] or label == "過熱觀察":
+        return "等冷卻"
+
+    if label == "RR不足" or trade == "LATE_ENTRY" or "RR不足" in blockers:
+        return "等RR修復"
+
+    if "量能不足" in blockers and market_grade != "D":
+        return "等量能"
+
+    return "隔日確認"
+
+
+def tomorrow_trigger_text(state, data):
+
+    result = data.get("result") or {}
+
+    if state == "可買":
+        return "依買點分批，不追高"
+
+    if state == "等冷卻":
+        return "過熱降溫且回測不破"
+
+    if state == "等回測":
+        return "回測不破且非漲停追價"
+
+    if state == "等RR修復":
+        return "RR修復至達標，不追高"
+
+    if state == "等量能":
+        return "量能回升且非追高"
+
+    if state == "隔日確認":
+        return "站回突破區且量能不失控"
+
+    if state == "弱勢淘汰":
+        return "重新轉強前不列優先"
+
+    if result.get("breakout_distance") is not None:
+        return "重新接近買點再評估"
+
+    return None
+
+
+def backtest_tracking_adjustment(context):
+
+    if not context or isinstance(context, str):
+        return 0
+
+    sample = context.get("sample")
+    avg_return = context.get("avg_return")
+
+    if sample is None or sample < 10 or avg_return is None:
+        return 0
+
+    if avg_return >= 1.0:
+        return -1 if sample >= 30 else -0.5
+
+    if avg_return <= -0.5:
+        return 1 if sample >= 30 else 0.5
+
+    return 0
+
+
+def tracking_sort_key(index, name, data):
+
+    state = tomorrow_watch_state(name, data)
+    state_rank = {
+        "可買": 0,
+        "等冷卻": 1,
+        "等回測": 2,
+        "等RR修復": 3,
+        "等量能": 4,
+        "隔日確認": 5,
+        "弱勢淘汰": 9,
+    }
+    pnl_rank = 0
+    result = data.get("result") or {}
+
+    if result.get("market_grade") in ["A+", "A"]:
+        pnl_rank -= 0.25
+
+    return (
+        state_rank.get(state, 8) + backtest_tracking_adjustment(data.get("backtest_context")) + pnl_rank,
+        list(STOCKS).index(name) if name in STOCKS else index,
+    )
+
+
+def next_day_tracking_items(watch_items, limit=5):
+
+    candidates = []
+
+    for index, (name, data) in enumerate(watch_items):
+        state = tomorrow_watch_state(name, data)
+        trigger = tomorrow_trigger_text(state, data)
+
+        if state in ["可買", "弱勢淘汰"] or not trigger:
+            continue
+
+        candidates.append((index, name, data, state, trigger))
+
+    candidates.sort(key=lambda item: tracking_sort_key(item[0], item[1], item[2]))
+    return candidates[:limit]
+
+
+def format_next_day_tracking(watch_items):
+
+    items = next_day_tracking_items(watch_items)
+
+    if not items:
+        return ["無"]
+
+    lines = []
+    for idx, (_index, name, data, state, trigger) in enumerate(items, start=1):
+        lines.append(f"{idx}. {name}｜{state}｜明日觸發：{trigger}")
+
+    return lines
+
+
+def format_pending_candidates_grouped(watch_items):
+
+    groups = {
+        "可買": [],
+        "等冷卻": [],
+        "等回測": [],
+        "等RR修復": [],
+        "等量能": [],
+        "隔日確認": [],
+        "弱勢淘汰": [],
+    }
+
+    for index, (name, data) in enumerate(watch_items):
+        state = tomorrow_watch_state(name, data)
+        groups.setdefault(state, []).append((index, name, data))
+
+    lines = []
+    for label in ["可買", "等冷卻", "等回測", "等RR修復", "等量能", "隔日確認", "弱勢淘汰"]:
+        values = sorted(
+            groups.get(label, []),
+            key=lambda item: tracking_sort_key(item[0], item[1], item[2])
+        )
+        if values:
+            lines.append(f"【{label} {len(values)}】{'、'.join(name for _index, name, _data in values)}")
+
+    return lines or ["無"]
+
+
 def format_watchlist_summary_grouped(watchlist):
 
     groups = {
@@ -2722,11 +2893,19 @@ def position_summary_action(name, data):
     if level == "RISK_WATCH":
         return "風控觀察"
 
+    if is_reduce_after_observation(data):
+        return "減碼後觀察"
+
+    if is_core_risk_watch_display(data):
+        return "核心風控觀察"
+
     if "核心" in action or level == "HOLD_CORE":
+        if (data.get("holding") or {}).get("realized_profit_taken_ratio", 0) > 0:
+            return "停利後核心倉"
         return "核心續抱"
 
     if "賣" in today_text:
-        return "底倉續抱"
+        return "減碼後觀察"
 
     if level == "SHAKEOUT_WARN":
         return "洗盤警戒"
@@ -2744,6 +2923,38 @@ def position_summary_action(name, data):
         return "續抱觀察"
 
     return "續抱"
+
+
+def is_reduce_after_observation(data):
+
+    events = data.get("position_events") or {}
+    decision = ensure_holding_decision("", data)
+    level = decision.get("level") if decision else ""
+
+    return (
+        data.get("holding")
+        and events.get("sold_shares", 0) > 0
+        and level not in ["STOP_100", "REDUCE_25", "REDUCE_50", "TAKE_PROFIT_25", "TAKE_PROFIT_50"]
+    )
+
+
+def is_core_risk_watch_display(data):
+
+    decision = ensure_holding_decision("", data)
+    result = data.get("result") or {}
+    level = decision.get("level") if decision else ""
+
+    return (
+        data.get("holding")
+        and level == "HOLD_CORE"
+        and stock_pnl(data) >= 8
+        and (
+            result.get("heat_state") in ["HOT", "EXTREME"]
+            or result.get("trade_state") == "EXTENDED"
+            or result.get("extended_level", 0) >= 2
+        )
+        and result.get("price_behavior") in ["VOLUME_DROP", "LOW_VOLUME_PULLBACK", "NORMAL", "LIMIT_LOCK", None]
+    )
 
 
 def is_new_position_loss(data):
@@ -2799,6 +3010,15 @@ def position_summary_note(name, data):
 
     if action == "核心續抱":
         return decision.get("note") or "高浮盈回落，暫不加碼"
+
+    if action == "核心風控觀察":
+        return "守警戒價，觀察是否轉弱"
+
+    if action == "停利後核心倉":
+        return "保留核心倉，等待冷卻"
+
+    if action == "減碼後觀察":
+        return "觀察是否重新站回突破區"
 
     if action == "洗盤續抱":
         return "縮量回測，未見出貨"
@@ -2918,6 +3138,92 @@ def source_summary_text(results_map):
     return f"📡 資料：即時價 {price_source}｜日線 {daily_source}"
 
 
+def holding_tomorrow_trigger(name, data):
+
+    decision = ensure_holding_decision(name, data)
+    action = position_summary_action(name, data)
+    level = decision.get("level") if decision else ""
+
+    if level == "STOP_100":
+        return "清出後等重新買點"
+
+    if level in ["REDUCE_25", "REDUCE_50"]:
+        return "無法重新站回突破區，繼續降低優先級"
+
+    if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]:
+        return "保留核心倉，等待冷卻後再評估"
+
+    if action == "新倉風控觀察":
+        return "明日未修復降級"
+
+    if action == "洗盤警戒":
+        return "跌破警戒升級風控"
+
+    if action == "核心風控觀察":
+        return "守警戒價"
+
+    if action == "減碼後觀察":
+        return "修復才恢復優先級"
+
+    if action == "停利後核心倉":
+        return "等待冷卻後再評估"
+
+    if action == "洗盤續抱":
+        return "跌破警戒升級風控"
+
+    if action == "核心續抱":
+        return "守警戒價，觀察是否轉弱"
+
+    if action == "續抱觀察":
+        return "無法接近買點則降級"
+
+    return "暫不加碼"
+
+
+def position_priority_rank(name, data):
+
+    action = position_summary_action(name, data)
+    level = (ensure_holding_decision(name, data) or {}).get("level", "")
+    rank = {
+        "停損": 0,
+        "減碼": 1,
+        "停利": 1,
+        "新倉風控觀察": 2,
+        "風控觀察": 3,
+        "核心風控觀察": 3,
+        "減碼後觀察": 4,
+        "洗盤警戒": 5,
+        "洗盤續抱": 6,
+        "停利後核心倉": 7,
+        "核心續抱": 7,
+        "續抱觀察": 8,
+        "續抱": 9,
+    }
+
+    if level in ["STOP_100"]:
+        return (0, stock_pnl(data))
+
+    return (rank.get(action, 9), stock_pnl(data))
+
+
+def format_position_priority(holding_items):
+
+    if not holding_items:
+        return ["無持倉"]
+
+    ordered = sorted(holding_items, key=lambda item: position_priority_rank(item[0], item[1]))
+    lines = []
+
+    for index, (name, data) in enumerate(ordered, start=1):
+        lines.append(
+            f"{index}. {name}"
+            f"｜{position_summary_action(name, data)}"
+            f"｜{holding_tomorrow_trigger(name, data)}"
+        )
+
+    return lines
+
+
 def formatTelegramSummary(results_map, best, score, market_summary, now, position_warning=None, daily_write_warning=None):
 
     holding_items = [
@@ -2967,19 +3273,14 @@ def formatTelegramSummary(results_map, best, score, market_summary, now, positio
     if no_new_reason:
         lines.append(f"🧭 原因：{no_new_reason}")
 
-    lines.extend([
-        "",
-        "持倉摘要："
-    ])
+    lines.extend(["", "📌 持倉處理優先級"])
+    lines.extend(format_position_priority(holding_items))
 
-    if holding_items:
-        for index, (name, data) in enumerate(holding_items, start=1):
-            lines.append(holding_summary_line(index, name, data))
-    else:
-        lines.append("無")
+    lines.extend(["", "🕒 隔日追蹤"])
+    lines.extend(format_next_day_tracking(watch_items))
 
-    lines.extend(["", "未持倉標的："])
-    lines.extend(format_watchlist_summary_grouped(watch_items))
+    lines.extend(["", "待確認候選："])
+    lines.extend(format_pending_candidates_grouped(watch_items))
 
     return "\n".join(lines)
 
@@ -3060,6 +3361,9 @@ def holding_next_step_line(name, data):
     if action == "洗盤警戒":
         return "守警戒價，跌破警戒升級風控"
 
+    if action == "減碼後觀察":
+        return "修復才恢復優先級，未修復續降級"
+
     if action == "洗盤續抱":
         return "守警戒價，等量價修復"
 
@@ -3068,6 +3372,12 @@ def holding_next_step_line(name, data):
 
     if action == "風控觀察":
         return "跌破警戒升級風控"
+
+    if action == "核心風控觀察":
+        return "守警戒價，跌破警戒升級風控"
+
+    if action == "停利後核心倉":
+        return "保留核心倉，等待冷卻後再評估"
 
     if action == "核心續抱":
         return "保留核心倉，觀察是否轉弱"
@@ -3118,6 +3428,15 @@ def holding_detail_decision_lines(name, data):
 
     if summary_action == "風控觀察":
         return "風控觀察，暫不加碼", "跌破警戒價優先風控"
+
+    if summary_action == "核心風控觀察":
+        return "核心風控觀察，暫不加碼", "守警戒價，跌破警戒升級風控"
+
+    if summary_action == "減碼後觀察":
+        return "減碼後觀察，暫不加碼", "修復才恢復優先級，未修復續降級"
+
+    if summary_action == "停利後核心倉":
+        return "停利後核心倉，暫不加碼", "等待冷卻後再評估"
 
     if summary_action == "底倉續抱":
         return "保留底倉，暫不加碼", "觀察減碼後是否轉弱，跌破警戒價優先風控"
@@ -3202,18 +3521,18 @@ def formatTelegramUnheldCard(name, data):
     blockers = entry_blockers(result)
     valid_entry = is_valid_entry(result)
     title_label = "買點成立" if valid_entry else (blockers[0] if blockers else final_label(result))
-    group = classify_watchlist_group(name, data)
+    state = tomorrow_watch_state(name, data)
 
     if valid_entry:
         title_icon = "🟢"
         title_action = f"可買｜{entry_size_text(result)}"
-    elif group == "等待冷卻":
+    elif state in ["等冷卻", "等回測"]:
         title_icon = "⏳"
-        title_action = "等待冷卻"
-    elif group == "可觀察但不可買":
+        title_action = state
+    elif state in ["等RR修復", "等量能", "隔日確認"]:
         title_icon = "👀"
-        title_action = "觀察"
-    elif group == "弱勢淘汰":
+        title_action = state
+    elif state == "弱勢淘汰":
         title_icon = "⛔"
         title_action = "淘汰"
     else:
@@ -3227,11 +3546,13 @@ def formatTelegramUnheldCard(name, data):
         if valid_entry
         else f"買點：不買｜{risk_label}｜{entry_wait_text(result)}｜{entry_conclusion(result)}"
     )
+    tomorrow_line = f"明日觸發：{tomorrow_trigger_text(state, data)}"
 
     return "\n".join([
         f"【{stock_title(name, data)}】{title_icon} {title_action}｜{title_label}",
         f"盤面：{plain_label(compact_market_line(result, dist))}",
         buy_line,
+        tomorrow_line,
         f"數據：RR {rr_text}｜S {data.get('structure_score', '-')}/5｜V {data.get('volume_ratio', '-')}x",
         compact_backtest_line(data.get("backtest_context")),
         price_change_line(data.get("price"), data.get("change")),

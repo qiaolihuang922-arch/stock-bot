@@ -1,93 +1,206 @@
 # QA_REPORT.md
 
-本文件由 QA 維護，提交給 Architect。只做差異測試、snapshot test、formatter test，不全 repo 掃描，不 refactor。本文件不得刪除，任務更新時只改寫內容。
+本文件由 QA 維護，提交給 Architect。只記錄本輪 v19.4 QA 結果。
 
 ## 任務狀態
 
 - 狀態：QA 驗證完成
 - 對應 TASK / CHANGELOG：`TASK.md`、`CHANGELOG.md`
 - 提交日期：2026-05-26
-- 版本：v19.3.4
+- 版本：v19.4
 
 ## 測試範圍
 
-依最新 `TASK.md` 與 `CHANGELOG.md`，本次只驗證 v19.3.4 報文解釋力修正。
+依 `DISPATCH.md`、`TASK.md`、`CHANGELOG.md`，本輪對 v19.4 交易閉環升級做全量 QA。
 
-驗證重點：
-- 報文版本顯示為 `v19.3.4`。
-- 回測行顯示樣本數、參考度、3 日勝率、相對報酬、判讀結果。
-- R3 且不新增時，摘要顯示 `🧭 原因`。
-- 今日新倉浮虧顯示 `新倉風控觀察` 或 `洗盤警戒`，不回退普通 `續抱觀察`。
-- 持倉詳情卡片包含 `下一步：...`。
-- 停利 / 減碼 / 停損詳情包含 `原因` 與 `下一步`。
-- 停利 / 減碼 / 停損不改變原本交易 action。
-- 價格行右括號仍完整。
-- 報文大版型維持 v19.3.x 形式。
-
-測試類型：
-- 局部 formatter test。
-- Snapshot / card rendering test。
-- 報文解釋力文案 regression。
-
-未執行全局測試、全 repo 掃描、refactor。
+覆蓋範圍：
+- Formatter / snapshot / Telegram card。
+- 策略不變性。
+- Snapshot validator。
+- Replay dry-run。
+- Backfill dry-run。
+- 每日資料入庫 payload 路徑。
+- 額外風險：價格行右括號、Telegram 預設訊息長度、版本與新增摘要區塊。
 
 ## 執行命令
 
 ```bash
-.venv/bin/python -m pytest tests/test_generator_report.py
+.venv/bin/python -m pytest
 ```
 
+```bash
+.venv/bin/python scripts/dry_run_replay.py --dry-run --validate --source synthetic --version v19.4 --start-date 2026-05-18 --end-date 2026-05-22 > /tmp/v194_replay_synthetic.csv
+```
+
+```bash
+.venv/bin/python scripts/backfill_signals.py --dry-run --source synthetic --version v19.4 --start-date 2026-05-18 --end-date 2026-05-22
+```
+
+```bash
+.venv/bin/python scripts/dry_run_replay.py --dry-run --validate --source twse --version v19.4 --start-date 2026-05-18 --end-date 2026-05-22 > /tmp/v194_replay_twse.csv
+```
+
+```bash
+.venv/bin/python scripts/backfill_signals.py --dry-run --source twse --version v19.4 --start-date 2026-05-18 --end-date 2026-05-22
+```
+
+另執行本地 smoke checks：
+- 預設 Telegram 三段訊息長度。
+- 所有 `價格：` 行右括號格式。
+- v19.4 摘要區塊存在。
+- `build_daily_snapshot_payloads()` 完整 / 缺檔入庫 payload 行為。
+
 ## 測試結果
+
+### Full pytest
 
 結果：通過。
 
 ```text
-29 passed, 21 warnings in 1.61s
+89 passed, 21 warnings in 1.86s
 ```
 
-驗收項結果：
-- v19.3.4 版本顯示：通過。
-- 回測參考度與判讀結果：通過。
-- R3 不新增原因行 `🧭 原因`：通過。
-- 今日新倉浮虧風控語氣：通過。
-- 持倉詳情 `下一步`：通過。
-- 停利 / 減碼 / 停損詳情 `原因` 與 `下一步`：通過。
-- 交易 action 未被 formatter 改寫：通過。
-- 價格行右括號完整：通過。
-- 大版型未回退：通過。
+警告皆來自既有第三方套件 / Python 版本 deprecation，未見 v19.4 測試失敗。
 
-警告說明：
-- 21 個 warnings 來自既有第三方套件 / Python 版本 deprecation。
-- 未見本次 v19.3.4 formatter / snapshot 驗證失敗。
+### Replay / Backfill Dry-run
+
+Synthetic replay：
+
+```text
+VALIDATION OK
+60 snapshot rows
+```
+
+Synthetic backfill：
+
+```text
+daily_price rows: 60
+daily_signal_snapshot rows: 60
+tradeable rows: 22
+best candidate rows: 3
+VALIDATION OK
+DRY RUN ONLY: no database writes
+```
+
+TWSE replay：
+
+```text
+VALIDATION OK
+60 snapshot rows
+```
+
+TWSE backfill：
+
+```text
+daily_price rows: 60
+daily_signal_snapshot rows: 60
+tradeable rows: 2
+best candidate rows: 2
+VALIDATION OK
+DRY RUN ONLY: no database writes
+```
+
+### 資料入庫路徑檢查
+
+本輪 diff 未修改：
+- `services/daily_snapshot_store.py`
+- `services/signal_store.py`
+- `core/signal_snapshot.py`
+- `core/signal_validator.py`
+- `scripts/dry_run_replay.py`
+- `scripts/backfill_signals.py`
+
+直接 payload check：
+
+```text
+complete_recorded True
+complete_signal_rows 12
+complete_price_rows 12
+partial_recorded False
+partial_reason incomplete_watchlist
+partial_missing ['2337']
+partial_signal_rows 0
+partial_price_rows 0
+```
+
+結論：
+- 12 檔完整時會產生 12 筆 `daily_signal_snapshot` 與 12 筆 `daily_price` payload。
+- 缺 1 檔時不產生 signal / price rows。
+- v19.4 formatter 變更未破壞每日入庫完整性 guard。
+
+### 額外風險檢查
+
+預設 Telegram messages smoke check：
+
+```text
+message_count 3
+message_lengths [301, 983, 938]
+max_len 983
+price_lines 12
+bad_price_lines []
+has_v19_4 True
+has_priority True
+has_tracking True
+has_pending True
+```
+
+結論：
+- 預設三段訊息均低於 Telegram 4096 字元限制。
+- 12 條價格行均有完整全形右括號。
+- 摘要包含 `📌 持倉處理優先級`、`🕒 隔日追蹤`、`待確認候選`。
+- 版本顯示為 `v19.4`。
+
+## 驗收項結果
+
+- 報文新增 `📌 持倉處理優先級`：通過。
+- 報文新增 `🕒 隔日追蹤`：通過。
+- 報文新增 `待確認候選`：通過。
+- 每個隔日追蹤標的有 `明日觸發`：通過。
+- R3 強勢但過熱不進 `可買`，進等待 / 追蹤語意：通過。
+- RR 不足但結構強不進 `可買`，進 `等RR修復`：通過。
+- 量能不足但非弱勢進 `等量能`：通過。
+- 弱勢 / 遠離觸發不進隔日追蹤優先清單：通過。
+- 合格 `BUY` 仍顯示 `可買`，未被待確認覆蓋：通過。
+- 今日新倉浮虧進 `新倉風控觀察 / 洗盤警戒`：通過。
+- 減碼後持倉進 `減碼後觀察`：通過。
+- 核心倉高浮盈回落顯示核心風控語意：通過。
+- 回測參考度只影響追蹤排序，不產生 BUY：通過。
+- `is_tradeable` / `is_best_candidate` 硬規則未被 tracking priority 覆蓋：通過。
+- STOP / TAKE_PROFIT / REDUCE action 未被 lifecycle 顯示覆蓋：通過。
+- 股票池未擴大：通過。
+- DB schema 未變更：通過。
 
 ## 未測項目
 
-依 QA 職責與 `CHANGELOG.md` 範圍未執行：
-- full pytest。
-- 全 repo 掃描。
-- replay / backfill。
-- historical simulation。
+本輪未執行：
 - live Telegram delivery。
-- live Supabase read/write。
-- TWSE / Yahoo live data fetch。
-- DB schema / persistence regression。
-- `services/analysis.py` 策略門檻 regression。
-- RR / 過熱 / 加碼 / 減碼 / 停利 / 停損策略判斷條件調整測試。
-- v19.4 策略方向測試。
+- live Supabase write。
+- formal backfill write。
+- 真實交易日線上排程觸發。
+- Telegram 客戶端實機渲染截圖。
+
+原因：
+- 本輪 QA 使用 dry-run / unit / regression 驗證，不做正式寫庫與真實外部推送。
+- `CHANGELOG.md` 明確本次未改 DB schema、DB 寫入邏輯、replay/backfill 正式寫入流程。
 
 ## 殘留風險
 
-- 本次驗證只覆蓋 `TASK.md` / `CHANGELOG.md` 指定的報文解釋力與 formatter 修正，未覆蓋非本任務改動。
-- 本次未執行 live Telegram delivery；真實 Telegram 客戶端渲染仍需 Architect 決定是否另行手動驗收。
-- 本次未驗證 replay / backfill / DB，因任務明確不涉及 DB schema、daily snapshot、正式寫入或回測流程。
-- 新倉浮虧判定依賴 `position_events.bought_shares`；若今日交易事件未入庫，報文無法判定今日新倉。
-- R3 `🧭 原因` 是 formatter 摘要解釋，不是新的策略阻斷條件。
-- 回測 `參考度 / 略優 / 偏弱` 只解讀既有 backtest context，不代表新增回測資料或策略分數。
+- 隔日追蹤目前是當日報文內的明日檢查清單，尚未新增跨日 tracking table；若 Owner 未來需要多日任務狀態，需另開 DB / persistence 任務。
+- 新倉 / 減碼後語意依賴 `position_events`；若事件缺失，會安全回退，但無法精準判定新倉或減碼後狀態。
+- 本輪 smoke check 驗證預設三段訊息長度與價格括號；真實 Telegram 客戶端仍可能受字體、複製、截圖或平台截斷影響。
+- 回測排序目前只調整追蹤順序；若未來要求回測進入 decision，需重新做策略層與 snapshot 不變性驗證。
+- v19.4 增加摘要內容後，目前 mock 訊息長度安全；但若未來持倉 / 未持倉卡片欄位再增加，應持續保留訊息長度 regression。
 
 ## QA 結論
 
-可交回 Architect 更新狀態。
+QA 結論：通過。
 
-QA 判定：
-- v19.3.4 報文解釋力修正的局部 formatter / snapshot 驗證已通過。
-- 本輪可作為 v19.3.4 顯示層解釋力修正驗收依據。
+v19.4 交易閉環升級已通過本輪全量 QA：
+- formatter 通過。
+- 策略不變性通過。
+- snapshot / validator 通過。
+- replay/backfill dry-run 通過。
+- 每日入庫 payload 路徑通過。
+- 價格行與 Telegram 預設訊息長度風險檢查通過。
+
+可交回 Architect 更新狀態。

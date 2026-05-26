@@ -5,9 +5,10 @@
 ## 專案狀態
 
 - 專案：台股策略報文機器人。
-- 目前穩定線：`v19.3.4` 報文解釋力修正已通過指定 QA。
+- 目前穩定線：`v19.4` 交易閉環升級已通過全量 QA。
+- 最新推送：`463bc92 fix: improve report explainability` 已推送到 `origin/main`。
 - 最近已出現 `v19.3.1` formatter / daily write guard / Yahoo daily fallback 修正紀錄。
-- `v19.4` 曾有策略診斷方向，屬待 PM 確認的下一階段，不代表已實作。
+- `v19.4` 已完成交易閉環升級；下一輪若要改策略門檻、跨日持久化追蹤或 live 寫庫，需另開任務。
 - 預設只處理 `core/watchlist.py` 的 12 檔股票。
 
 ## 已完成功能
@@ -35,6 +36,12 @@
   - 今日新倉浮虧顯示 `新倉風控觀察` 或 `洗盤警戒`，不回退普通 `續抱觀察`。
   - 持倉詳情卡片包含 `下一步`。
   - 停利 / 減碼 / 停損詳情包含 `原因` 與 `下一步`，且不改變交易 action。
+- v19.4 交易閉環升級已通過全量 QA：
+  - 摘要新增 `📌 持倉處理優先級`、`🕒 隔日追蹤`、`待確認候選`。
+  - 隔日追蹤標的包含 `明日觸發`，把「今天不能買」轉成「明天怎麼看」。
+  - 持倉生命週期新增新倉風控、減碼後觀察、核心風控等語意。
+  - 回測參考度只影響追蹤排序，不產生 BUY，也不覆蓋硬性風控規則。
+  - 已通過 full pytest、replay/backfill dry-run、入庫 payload、價格括號與 Telegram 長度 smoke check。
 
 ## 現有模組
 
@@ -58,12 +65,12 @@
 
 ## 已知問題與風險
 
-- `v19.4` 診斷指出未持倉股票的 `不買` 顯示過度壓縮，容易讓報文感覺過度保守。
-- `shakeout_protected` 持倉保護條件偏寬，可能讓弱勢且離觸發遠的持倉仍顯示為 `洗盤觀察`。
-- 高獲利、HOT/EXTENDED、量縮回落的持倉尚未有更清楚的 `核心續抱` 或 `風控觀察` 分支。
+- 隔日追蹤目前是報文內的明日檢查清單，尚未新增跨日 tracking table。
+- 新倉 / 減碼後語意依賴 `position_events`；若事件缺失會安全回退，但無法精準判定新倉或減碼後狀態。
 - intraday 報文可能混用 realtime price/change 與 Yahoo daily K-line 結構/量能，來源拆分需要更清楚顯示。
 - RR 隱藏規則可解釋，但使用者視角可能覺得不一致。
 - 正式 backfill 尚未完成；目前僅可依規定先 dry-run 與 validate。
+- live Telegram delivery、live Supabase write、formal backfill write 未在 v19.4 QA 中執行。
 
 ## 目前進行中項目
 
@@ -81,6 +88,11 @@
 - v19.3.4 報文解釋力修正已完成指定 QA。
 - v19.3.4 驗證：`.venv/bin/python -m pytest tests/test_generator_report.py`，`29 passed`。
 - v19.3.4 未覆蓋：full pytest、live Telegram、DB、replay/backfill、策略門檻 regression。
+- 新研究任務已分派：`v19.4 強化方向產品研究`。
+- v19.4 研究目標：策略門檻、買入訊號稀少、持倉升降級、回測是否納入決策、隔日追蹤。
+- v19.4 任務狀態：PM / Tech / QA 已完成，Architect 已吸收 QA 結論。
+- v19.4 定位：交易閉環升級，主能力為隔日追蹤、持倉處理優先級、明日觸發條件。
+- v19.4 QA 結論：全量 QA 通過，包含 formatter、策略不變性、snapshot、replay/backfill dry-run、資料入庫 payload 路徑檢查與額外風險掃描。
 
 ## 影響模組判斷規則
 
@@ -93,11 +105,11 @@
 
 ## 當前交付檢查
 
-- `DISPATCH.md`：已更新為 v19.3.4 報文解釋力修正。
-- `TASK.md`：PM 已改寫為 v19.3.4 報文解釋力修正需求。
-- `CHANGELOG.md`：Tech 已更新 v19.3.4 報文解釋力修正摘要。
-- `QA_REPORT.md`：QA 已更新，指定測試通過。
-- Architect 結論：本輪摘要鏈路已同步，可作為 v19.3.4 報文解釋力修正驗收狀態。
+- `DISPATCH.md`：已更新為 v19.4 交易閉環升級，狀態為 QA accepted。
+- `TASK.md`：PM 已改寫為 v19.4 交易閉環升級需求。
+- `CHANGELOG.md`：Tech 已更新 v19.4 交易閉環升級摘要。
+- `QA_REPORT.md`：QA 已更新，v19.4 全量 QA 通過。
+- Architect 結論：本輪摘要鏈路已同步，可作為 v19.4 交易閉環升級驗收狀態。
 
 ## 對話窗啟動規則
 

@@ -153,3 +153,16 @@ Architect 狀態輸出固定為：
 - Architect 只提交本輪 `TASK.md`、`CHANGELOG.md`、`QA_REPORT.md` 對應範圍內的文件，以及 Architect 狀態文件。
 - 若工作區有不明來源改動，Architect 必須排除或請 Owner 確認，不可無差別提交。
 - Owner 明確要求「把本地最新修改推送」時，Architect 仍需先檢查 diff，再將確認屬於本輪工作流與代碼變更的文件提交推送。
+
+## Push 後壓縮規則
+
+每次 Architect 完成 commit / push 後，下一步必須做上下文壓縮，避免 Markdown 文件變成新的長聊天紀錄。
+
+- `DISPATCH.md`：只保留當前任務狀態與固定啟動句，不保留歷史任務過程。
+- `TASK.md`：只保留最新任務；舊任務只保留 3-5 行摘要到 `CURRENT_STATE.md`。
+- `CHANGELOG.md`：只保留最新任務；舊實作只保留 3-5 行摘要到 `CURRENT_STATE.md`。
+- `QA_REPORT.md`：只保留最新任務；舊測試只保留命令、結果、未測範圍摘要到 `CURRENT_STATE.md`。
+- `RESEARCH.md`：只保留最新研究問題、結論、下一步；刪除長過程與完整報文。
+- `CURRENT_STATE.md`：每個版本只保留高信號摘要，不貼完整報文、不貼完整 diff。
+- `CLEANUP_PLAN.md`：只保留待處理項與清理規則，不保留已完成流水帳。
+- 壓縮不得刪除固定 8 份 Markdown 文件，只能改寫內容。
