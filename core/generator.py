@@ -42,7 +42,7 @@ from services.daily_snapshot_store import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v19.3.3"
+VERSION = "v19.3.4"
 
 EXECUTION_LEVELS = {
     "TAKE_PROFIT_50": "TP50",
@@ -2452,6 +2452,40 @@ def focus_text(results_map, market_summary):
     return "暫不新增，等訊號確認"
 
 
+def r3_no_new_reason(watch_items):
+
+    if any(is_valid_entry(data.get("result") or {}) for _name, data in watch_items):
+        return None
+
+    groups = {
+        "禁止追高": 0,
+        "等待冷卻": 0,
+        "可觀察但不可買": 0,
+        "弱勢淘汰": 0,
+    }
+    rr_count = 0
+
+    for name, data in watch_items:
+        group = classify_watchlist_group(name, data)
+        groups[group] = groups.get(group, 0) + 1
+        if "RR不足" in entry_blockers(data.get("result") or {}):
+            rr_count += 1
+
+    if groups.get("禁止追高", 0) and groups.get("等待冷卻", 0) and rr_count:
+        return "強勢股多已過熱，RR不足，禁止追高"
+
+    if groups.get("禁止追高", 0) + groups.get("等待冷卻", 0) >= max(2, len(watch_items) // 2):
+        return "漲停/過熱偏多，新倉只等冷卻"
+
+    if rr_count >= max(2, len(watch_items) // 2):
+        return "RR不足偏多，強勢股不追價"
+
+    if groups.get("弱勢淘汰", 0) >= max(2, len(watch_items) // 2):
+        return "弱勢淘汰偏多，暫不擴倉"
+
+    return "強勢股多已過熱，RR不足，禁止追高"
+
+
 def holding_summary_line(index, name, data):
 
     decision = ensure_holding_decision(name, data)
@@ -2680,6 +2714,11 @@ def position_summary_action(name, data):
     if level == "ADD_10":
         return "加碼10"
 
+    if is_new_position_loss(data):
+        if is_holding_shakeout_warning_display(data):
+            return "洗盤警戒"
+        return "新倉風控觀察"
+
     if level == "RISK_WATCH":
         return "風控觀察"
 
@@ -2705,6 +2744,16 @@ def position_summary_action(name, data):
         return "續抱觀察"
 
     return "續抱"
+
+
+def is_new_position_loss(data):
+
+    events = data.get("position_events") or {}
+    return (
+        data.get("holding")
+        and events.get("bought_shares", 0) > 0
+        and stock_pnl(data) < 0
+    )
 
 
 def is_holding_shakeout_warning_display(data):
@@ -2755,10 +2804,15 @@ def position_summary_note(name, data):
         return "縮量回測，未見出貨"
 
     if action == "洗盤警戒":
+        if is_new_position_loss(data):
+            return "新倉小虧，守風控"
         return "小虧，暫不加碼"
 
     if action == "風控觀察":
         return decision.get("note") or "跌破警戒價優先風控"
+
+    if action == "新倉風控觀察":
+        return "今日新倉小虧，暫不加碼"
 
     if action == "續抱觀察":
         return decision.get("note") or "轉弱觀察，不加碼"
@@ -2878,6 +2932,12 @@ def formatTelegramSummary(results_map, best, score, market_summary, now, positio
         if not data.get("holding")
     ]
     market_mode, risk_level = derive_market_state(watch_items)
+    focus = focus_text(results_map, market_summary)
+    no_new_reason = (
+        r3_no_new_reason(watch_items)
+        if risk_level == "R3" and "暫不新增" in focus
+        else None
+    )
 
     lines = [
         f"【{now.strftime('%m/%d')} {get_market_phase()}｜{VERSION}】",
@@ -2901,7 +2961,13 @@ def formatTelegramSummary(results_map, best, score, market_summary, now, positio
         f"📌 持倉：{holding_names}",
         f"🔥 最強：{best_stock_text(results_map, best, score)}",
         f"🚨 風險：{compact_risk_text(results_map)}",
-        f"🎯 今日重點：{focus_text(results_map, market_summary)}",
+        f"🎯 今日重點：{focus}",
+    ])
+
+    if no_new_reason:
+        lines.append(f"🧭 原因：{no_new_reason}")
+
+    lines.extend([
         "",
         "持倉摘要："
     ])
@@ -2926,6 +2992,8 @@ def formatTelegramPositionCard(name, data):
     today_text = event_summary_text(data.get("position_events") or {}) or "無"
     dist = data.get("breakout_distance", result.get("breakout_distance"))
     decision_line, condition_line = holding_detail_decision_lines(name, data)
+    reason_line = holding_reason_line(name, data)
+    next_step = holding_next_step_line(name, data)
     rr_text = (
         "-（持倉不看新倉RR）"
         if decision and not decision.get("allow_add")
@@ -2939,12 +3007,72 @@ def formatTelegramPositionCard(name, data):
         f"盤面：{plain_label(compact_market_line(result, dist))}",
         f"決策：{decision_line}",
         f"條件：{condition_line}",
+        f"下一步：{next_step}",
         f"數據：RR {rr_text}｜S {data.get('structure_score', '-')}/5｜V {data.get('volume_ratio', '-')}x",
         compact_backtest_line(data.get("backtest_context")),
         price_change_line(data.get("price"), data.get("change")),
     ]
 
+    if reason_line:
+        lines.insert(6, f"原因：{reason_line}")
+
     return "\n".join(lines)
+
+
+def holding_reason_line(name, data):
+
+    decision = ensure_holding_decision(name, data)
+    level = decision.get("level") if decision else ""
+
+    if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]:
+        return "高浮盈且過熱延伸，先保留獲利"
+
+    if level in ["REDUCE_25", "REDUCE_50"]:
+        return "突破失敗或結構轉弱，先降低風險"
+
+    if level == "STOP_100":
+        return "跌破停損線，避免虧損擴大"
+
+    return None
+
+
+def holding_next_step_line(name, data):
+
+    decision = ensure_holding_decision(name, data)
+    action = position_summary_action(name, data)
+    level = decision.get("level") if decision else ""
+
+    if level == "STOP_100":
+        return "清出後不急回補，等重新出現買點"
+
+    if level in ["REDUCE_25", "REDUCE_50"]:
+        return "若無法重新站回突破區，繼續降低優先級"
+
+    if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]:
+        return "保留核心倉，等待冷卻後再評估"
+
+    if level in ["ADD_10", "ADD_20", "ADD_30"]:
+        return "加碼後守警戒價，量價未延續則停止加碼"
+
+    if action == "新倉風控觀察":
+        return "隔日未修復，降低優先級"
+
+    if action == "洗盤警戒":
+        return "守警戒價，跌破警戒升級風控"
+
+    if action == "洗盤續抱":
+        return "守警戒價，等量價修復"
+
+    if action == "續抱觀察":
+        return "隔日未修復，降低優先級"
+
+    if action == "風控觀察":
+        return "跌破警戒升級風控"
+
+    if action == "核心續抱":
+        return "保留核心倉，觀察是否轉弱"
+
+    return "暫不加碼"
 
 
 def holding_detail_decision_lines(name, data):
@@ -2974,6 +3102,9 @@ def holding_detail_decision_lines(name, data):
     if level == "STOP_100":
         return f"{action_text}，{note or '硬停損觸發'}", "停損優先，避免虧損擴大"
 
+    if summary_action == "新倉風控觀察":
+        return "新倉風控觀察，暫不加碼", "守警戒價，跌破停損或轉弱優先風控"
+
     if summary_action == "核心續抱":
         return "核心續抱，暫不加碼", "跌破警戒價優先風控，等待冷卻"
 
@@ -2981,6 +3112,8 @@ def holding_detail_decision_lines(name, data):
         return "洗盤續抱，暫不加碼", "跌破警戒價優先風控"
 
     if summary_action == "洗盤警戒":
+        if is_new_position_loss(data):
+            return "洗盤警戒，暫不加碼", "守警戒價，跌破停損或轉弱優先風控"
         return "洗盤警戒，暫不加碼", "若跌破停損或轉弱，優先風控"
 
     if summary_action == "風控觀察":
@@ -3031,11 +3164,34 @@ def compact_backtest_line(context):
 
     avg_return = context.get("avg_return")
     relative = f"{avg_return:+.1f}%" if avg_return is not None else "-"
+    sample = context.get("sample")
+    win_rate = context.get("win_rate")
+
+    if sample is None:
+        return "回測：-"
+
+    if sample < 10:
+        confidence = "參考度低"
+    elif sample < 30:
+        confidence = "參考度中"
+    else:
+        confidence = "參考度高"
+
+    if avg_return is None:
+        verdict = "判讀不足"
+    elif avg_return >= 1.0:
+        verdict = "略優"
+    elif avg_return > -0.5:
+        verdict = "無明顯優勢"
+    else:
+        verdict = "偏弱"
 
     return (
-        f"回測：樣本{context.get('sample')}"
-        f"｜3日勝率{context.get('win_rate')}%"
+        f"回測：樣本{sample}"
+        f"｜{confidence}"
+        f"｜3日勝率{win_rate}%"
         f"｜相對{relative}"
+        f"｜{verdict}"
     )
 
 

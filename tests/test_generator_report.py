@@ -779,8 +779,9 @@ class GeneratorReportTest(unittest.TestCase):
                 datetime(2026, 5, 26),
             )
 
-        self.assertIn("v19.3.3", messages[0])
+        self.assertIn("v19.3.4", messages[0])
         self.assertIn("📡 資料：即時價 realtime｜日線 yahoo", messages[0])
+        self.assertIn("🧭 原因：強勢股多已過熱，RR不足，禁止追高", messages[0])
         self.assertIn("1. 英業達｜+19.37%｜核心續抱｜高浮盈回落，暫不加碼", messages[0])
         self.assertIn("2. 緯創｜+7.27%｜洗盤續抱｜縮量回測，未見出貨", messages[0])
         self.assertIn("3. 南亞科｜+3.61%｜續抱觀察｜轉弱觀察，不加碼", messages[0])
@@ -796,6 +797,76 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("RR -（持倉不看新倉RR）", messages[1])
         self.assertIn("RR -（過熱）", messages[2])
         self.assertIn("RR -（弱勢）", messages[2])
+
+    def test_v19_3_4_backtest_line_explains_confidence_and_verdict(self):
+        self.assertEqual(
+            generator.compact_backtest_line({
+                "sample": 35,
+                "win_rate": 46,
+                "avg_return": -0.6,
+            }),
+            "回測：樣本35｜參考度高｜3日勝率46%｜相對-0.6%｜偏弱",
+        )
+        self.assertEqual(
+            generator.compact_backtest_line({
+                "sample": 8,
+                "win_rate": 50,
+                "avg_return": 0.3,
+            }),
+            "回測：樣本8｜參考度低｜3日勝率50%｜相對+0.3%｜無明顯優勢",
+        )
+        self.assertEqual(
+            generator.compact_backtest_line({
+                "sample": 15,
+                "win_rate": 60,
+                "avg_return": 1.8,
+            }),
+            "回測：樣本15｜參考度中｜3日勝率60%｜相對+1.8%｜略優",
+        )
+        self.assertEqual(generator.compact_backtest_line(None), "回測：-")
+
+    def test_v19_3_4_new_position_loss_displays_risk_watch_and_next_step(self):
+        payload = {
+            "stock_code": "2376",
+            "price": 99,
+            "change": -1.0,
+            "price_source": "realtime",
+            "daily_source": "yahoo",
+            "result": {
+                "decision": "WAIT",
+                "action": 0,
+                "rr": 1.2,
+                "heat_state": "NORMAL",
+                "trade_state": "WAIT",
+                "structure_phase": "BASE",
+                "price_behavior": "NORMAL",
+                "market_grade": "B",
+                "volume_state": "NORMAL",
+                "volume_price_state": "NORMAL",
+                "structure_state": "NORMAL",
+                "entry_quality": "D",
+                "confidence_score": 49,
+                "breakout_distance": 0,
+            },
+            "holding": {"shares": 30, "avg_price": 100},
+            "holding_decision": {
+                "action": "續抱",
+                "level": "HOLD_WATCH",
+                "note": "不加碼",
+                "warning_price": 95,
+                "hard_stop_price": 90,
+            },
+            "position_events": {"event_count": 1, "bought_shares": 30},
+            "structure_score": 3,
+            "volume_ratio": 1.0,
+        }
+
+        card = generator.formatTelegramPositionCard("技嘉", payload)
+
+        self.assertIn("【技嘉 2376】📌 新倉風控觀察｜-1.00%", card)
+        self.assertIn("決策：新倉風控觀察，暫不加碼", card)
+        self.assertIn("條件：守警戒價，跌破停損或轉弱優先風控", card)
+        self.assertIn("下一步：隔日未修復，降低優先級", card)
 
     def test_light_loss_shakeout_holding_displays_warning_even_when_decision_is_watch(self):
         payload = {
@@ -939,6 +1010,8 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【智原 3035】📌 停損", stop_card)
         self.assertIn("決策：停損 100%，硬停損觸發", stop_card)
         self.assertIn("條件：停損優先，避免虧損擴大", stop_card)
+        self.assertIn("原因：跌破停損線，避免虧損擴大", stop_card)
+        self.assertIn("下一步：清出後不急回補，等重新出現買點", stop_card)
 
         reduce_payload = dict(base)
         reduce_payload["holding_decision"] = {
@@ -952,6 +1025,8 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【智原 3035】📌 減碼", reduce_card)
         self.assertIn("決策：減碼 25%，降低風險", reduce_card)
         self.assertIn("條件：結構轉弱或突破失敗，先降風險", reduce_card)
+        self.assertIn("原因：突破失敗或結構轉弱，先降低風險", reduce_card)
+        self.assertIn("下一步：若無法重新站回突破區，繼續降低優先級", reduce_card)
 
         profit_payload = dict(base)
         profit_payload["price"] = 140
@@ -967,6 +1042,8 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【智原 3035】📌 停利", profit_card)
         self.assertIn("決策：停利 25%，鎖定部分獲利", profit_card)
         self.assertIn("條件：高浮盈或過熱延伸，保留核心倉", profit_card)
+        self.assertIn("原因：高浮盈且過熱延伸，先保留獲利", profit_card)
+        self.assertIn("下一步：保留核心倉，等待冷卻後再評估", profit_card)
 
     def test_telegram_messages_can_include_detail_when_requested(self):
         payload = render_payload(

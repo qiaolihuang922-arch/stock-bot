@@ -5,7 +5,7 @@
 ## 專案狀態
 
 - 專案：台股策略報文機器人。
-- 目前穩定線：`v19.3.3` formatter 一致性修正已通過指定 QA。
+- 目前穩定線：`v19.3.4` 報文解釋力修正已通過指定 QA。
 - 最近已出現 `v19.3.1` formatter / daily write guard / Yahoo daily fallback 修正紀錄。
 - `v19.4` 曾有策略診斷方向，屬待 PM 確認的下一階段，不代表已實作。
 - 預設只處理 `core/watchlist.py` 的 12 檔股票。
@@ -29,6 +29,12 @@
   - `TAKE_PROFIT_*` 顯示停利，`REDUCE_*` 顯示減碼，`STOP_100` 顯示停損且不壓成減碼。
   - 停利 / 減碼 / 停損詳情決策行直接呈現策略 action。
   - 阻擋原因在摘要 / 詳情保持一致。
+- v19.3.4 報文解釋力修正已通過指定 QA：
+  - 回測行顯示樣本數、參考度、3 日勝率、相對報酬、判讀結果。
+  - R3 且不新增時，摘要顯示 `🧭 原因`。
+  - 今日新倉浮虧顯示 `新倉風控觀察` 或 `洗盤警戒`，不回退普通 `續抱觀察`。
+  - 持倉詳情卡片包含 `下一步`。
+  - 停利 / 減碼 / 停損詳情包含 `原因` 與 `下一步`，且不改變交易 action。
 
 ## 現有模組
 
@@ -72,6 +78,9 @@
 - 本輪 v19.3.3 可視為指定顯示層一致性驗收通過；未覆蓋 full pytest、live Telegram、DB、replay/backfill。
 - 研究任務已完成：策略層與顯示層一致性、買入 / 賣出 / 加碼提示缺失原因已整理到 `RESEARCH.md`。
 - Architect 結論：`v19.3.3 formatter 一致性修正` 已完成指定驗收；後續若要處理策略門檻、live Telegram 或 full regression，需另開任務。
+- v19.3.4 報文解釋力修正已完成指定 QA。
+- v19.3.4 驗證：`.venv/bin/python -m pytest tests/test_generator_report.py`，`29 passed`。
+- v19.3.4 未覆蓋：full pytest、live Telegram、DB、replay/backfill、策略門檻 regression。
 
 ## 影響模組判斷規則
 
@@ -84,10 +93,11 @@
 
 ## 當前交付檢查
 
-- `TASK.md`：已有 PM 需求，目標為 v19.3.3 formatter 一致性修正。
-- `CHANGELOG.md`：已更新，對應 v19.3.3 formatter 一致性修正。
-- `QA_REPORT.md`：已更新，指定測試通過。
-- Architect 結論：本輪摘要鏈路已同步，可作為 v19.3.3 formatter 一致性修正驗收狀態。
+- `DISPATCH.md`：已更新為 v19.3.4 報文解釋力修正。
+- `TASK.md`：PM 已改寫為 v19.3.4 報文解釋力修正需求。
+- `CHANGELOG.md`：Tech 已更新 v19.3.4 報文解釋力修正摘要。
+- `QA_REPORT.md`：QA 已更新，指定測試通過。
+- Architect 結論：本輪摘要鏈路已同步，可作為 v19.3.4 報文解釋力修正驗收狀態。
 
 ## 對話窗啟動規則
 

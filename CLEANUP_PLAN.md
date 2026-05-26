@@ -12,11 +12,10 @@
 
 ## 待整理項目
 
-- PM 已提交 v19.3.3 `TASK.md`，本輪不整理 v19.4。
-- Tech 已根據最新 `TASK.md` 改寫 `CHANGELOG.md`。
-- QA 已根據最新 `TASK.md` / `CHANGELOG.md` 改寫 `QA_REPORT.md`。
-- 本輪 v19.3.3 formatter 一致性修正已完成指定 QA，Architect 已更新狀態。
-- 本輪不清理核心代碼；若要處理策略門檻、live Telegram 或 full regression，需另開任務。
+- v19.3.3 formatter 一致性修正已完成指定 QA，Architect 已更新狀態。
+- v19.3.4 報文解釋力修正已完成指定 QA，Architect 已更新狀態。
+- 本輪不清理核心代碼；若要推送，需由 Architect 先檢查 diff 與局部測試結果。
+- 若要處理策略門檻、live Telegram 或 full regression，需另開任務。
 - 部門交付文件 `TASK.md`、`CHANGELOG.md`、`QA_REPORT.md` 是工作流入口，必須保留；任務結束後只清空或改寫內容，不刪文件。
 - 工作區若出現未提交核心檔案修改，Architect 不處理；需由 Tech 或 Owner 確認來源。
 

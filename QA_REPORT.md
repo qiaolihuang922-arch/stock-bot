@@ -7,28 +7,27 @@
 - 狀態：QA 驗證完成
 - 對應 TASK / CHANGELOG：`TASK.md`、`CHANGELOG.md`
 - 提交日期：2026-05-26
-- 版本：v19.3.3
+- 版本：v19.3.4
 
 ## 測試範圍
 
-依最新 `TASK.md` 與 `CHANGELOG.md`，本次只驗證 v19.3.3 formatter 一致性修正。
+依最新 `TASK.md` 與 `CHANGELOG.md`，本次只驗證 v19.3.4 報文解釋力修正。
 
 驗證重點：
-- 合格未持倉 `BUY` 在摘要顯示 `【可買 N】...`，不可進入 `可觀察但不可買`。
-- 合格未持倉 `BUY` 詳情顯示 `🟢 可買｜買點成立`，買點行顯示建議倉位與 `現在可分批`。
-- `ADD_10 / ADD_20 / ADD_30` 在持倉摘要、詳情標題、決策行顯示加碼語意。
-- `TAKE_PROFIT_*` 顯示停利，不被壓成續抱。
-- `REDUCE_*` 顯示減碼，不被壓成續抱。
-- `STOP_100` 顯示停損，不可只顯示減碼。
-- 停利 / 減碼 / 停損詳情決策行直接呈現策略 action。
-- `RR不足 / 過熱觀察 / 市場弱 / 量能不足 / 遠離觸發` 的摘要、標題、買點行主因一致。
-- 報文大版型維持 v19.3.2 形式。
-- 不修改策略門檻。
+- 報文版本顯示為 `v19.3.4`。
+- 回測行顯示樣本數、參考度、3 日勝率、相對報酬、判讀結果。
+- R3 且不新增時，摘要顯示 `🧭 原因`。
+- 今日新倉浮虧顯示 `新倉風控觀察` 或 `洗盤警戒`，不回退普通 `續抱觀察`。
+- 持倉詳情卡片包含 `下一步：...`。
+- 停利 / 減碼 / 停損詳情包含 `原因` 與 `下一步`。
+- 停利 / 減碼 / 停損不改變原本交易 action。
+- 價格行右括號仍完整。
+- 報文大版型維持 v19.3.x 形式。
 
 測試類型：
 - 局部 formatter test。
 - Snapshot / card rendering test。
-- Strategy-output-to-card 一致性 test。
+- 報文解釋力文案 regression。
 
 未執行全局測試、全 repo 掃描、refactor。
 
@@ -43,27 +42,27 @@
 結果：通過。
 
 ```text
-27 passed, 21 warnings in 1.72s
+29 passed, 21 warnings in 1.61s
 ```
 
 驗收項結果：
-- 合格未持倉 `BUY` 摘要 `【可買 N】...`：通過。
-- 合格未持倉 `BUY` 未進入 `可觀察但不可買`：通過。
-- 合格未持倉 `BUY` 詳情 `🟢 可買｜買點成立`：通過。
-- `ADD_10 / ADD_20 / ADD_30` 加碼語意：通過。
-- `TAKE_PROFIT_*` 停利語意：通過。
-- `REDUCE_*` 減碼語意：通過。
-- `STOP_100` 停損語意，不壓成減碼：通過。
-- 停利 / 減碼 / 停損詳情決策行直接呈現策略 action：通過。
-- 阻擋原因摘要 / 詳情一致性：通過。
+- v19.3.4 版本顯示：通過。
+- 回測參考度與判讀結果：通過。
+- R3 不新增原因行 `🧭 原因`：通過。
+- 今日新倉浮虧風控語氣：通過。
+- 持倉詳情 `下一步`：通過。
+- 停利 / 減碼 / 停損詳情 `原因` 與 `下一步`：通過。
+- 交易 action 未被 formatter 改寫：通過。
+- 價格行右括號完整：通過。
+- 大版型未回退：通過。
 
 警告說明：
 - 21 個 warnings 來自既有第三方套件 / Python 版本 deprecation。
-- 未見本次 v19.3.3 formatter / snapshot 驗證失敗。
+- 未見本次 v19.3.4 formatter / snapshot 驗證失敗。
 
 ## 未測項目
 
-依 QA 指令與 `CHANGELOG.md` 範圍未執行：
+依 QA 職責與 `CHANGELOG.md` 範圍未執行：
 - full pytest。
 - 全 repo 掃描。
 - replay / backfill。
@@ -78,16 +77,17 @@
 
 ## 殘留風險
 
-- 本次驗證只覆蓋 `TASK.md` / `CHANGELOG.md` 指定的 formatter 一致性修正，未覆蓋非本任務改動。
+- 本次驗證只覆蓋 `TASK.md` / `CHANGELOG.md` 指定的報文解釋力與 formatter 修正，未覆蓋非本任務改動。
 - 本次未執行 live Telegram delivery；真實 Telegram 客戶端渲染仍需 Architect 決定是否另行手動驗收。
 - 本次未驗證 replay / backfill / DB，因任務明確不涉及 DB schema、daily snapshot、正式寫入或回測流程。
-- Formatter 現已能正確呈現策略已有 action，但不代表策略會更頻繁產生 `BUY / ADD / STOP / TAKE_PROFIT / REDUCE` 訊號。
-- 若後續策略層新增 action level 或改變 blocker 命名，仍需同步補 formatter snapshot cases。
+- 新倉浮虧判定依賴 `position_events.bought_shares`；若今日交易事件未入庫，報文無法判定今日新倉。
+- R3 `🧭 原因` 是 formatter 摘要解釋，不是新的策略阻斷條件。
+- 回測 `參考度 / 略優 / 偏弱` 只解讀既有 backtest context，不代表新增回測資料或策略分數。
 
 ## QA 結論
 
 可交回 Architect 更新狀態。
 
 QA 判定：
-- v19.3.3 formatter 一致性修正的局部 formatter / snapshot / strategy-output-to-card 驗證已通過。
-- 本輪可作為 v19.3.3 顯示層一致性修正驗收依據。
+- v19.3.4 報文解釋力修正的局部 formatter / snapshot 驗證已通過。
+- 本輪可作為 v19.3.4 顯示層解釋力修正驗收依據。
