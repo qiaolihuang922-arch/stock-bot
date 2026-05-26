@@ -233,3 +233,30 @@ This file is append-only. Each development change should add a new entry so QA c
   - Confirm TWSE fallback is limited to `months=1`, `max_months=2`, `min_rows=20`.
   - Confirm realtime price source remains `realtime` and no extra Yahoo quote request is made when realtime succeeds.
   - Confirm replay/backfill behavior remains unchanged.
+
+### Change 5
+- Summary: Final v19.3.2 small fix: classify light-loss shakeout holdings as `洗盤警戒` when price action or structure shows shakeout with weak/coiling volume, and show non-hidden near-zero RR as `0.00（不足）`.
+- Files changed:
+  - `core/generator.py`
+  - `services/analysis.py`
+  - `tests/test_analysis_engine.py`
+  - `tests/test_generator_report.py`
+  - `docs/qa_handoff_log.md`
+- Test level: L1
+- Scope: formatter / Telegram / holding / RR
+- Minimal validation run:
+  - `.venv/bin/python -m pytest tests/test_analysis_engine.py tests/test_generator_report.py`
+- Skipped tests:
+  - Full regression test suite
+  - Replay/backfill dry-run
+  - Live Telegram delivery
+  - Live Supabase read/write verification
+  - TWSE/Yahoo network smoke test
+- Reason for skipping: Final scoped v19.3.2 display/holding-label fix; no Telegram layout, DB schema, stock pool, write path, or backfill path changed.
+- External services touched: none
+- DB/schema/write risk: no
+- QA focus:
+  - Confirm 智原-style light-loss SHAKEOUT + weak/coiling volume displays `洗盤警戒｜小虧，暫不加碼`.
+  - Confirm holding detail title and decision lines show `洗盤警戒`, `決策：洗盤警戒，暫不加碼`, and `條件：若跌破停損或轉弱，優先風控`.
+  - Confirm RR raw value that rounds to zero displays `RR 0.00（不足）` when RR is not hidden.
+  - Confirm no Telegram layout or v19.4 version change was introduced.

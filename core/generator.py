@@ -1126,6 +1126,14 @@ def rr_display_text(result, holding=False):
     if should_hide_rr(result):
         return f"-（{hidden_rr_reason(result, holding)}）"
 
+    try:
+        rr = float(result.get("rr"))
+    except:
+        return safe_round(result.get("rr"))
+
+    if round(rr, 2) == 0:
+        return "0.00（不足）"
+
     return safe_round(result.get("rr"))
 
 
@@ -2664,6 +2672,9 @@ def position_summary_action(name, data):
     if level == "SHAKEOUT_WARN":
         return "洗盤警戒"
 
+    if is_holding_shakeout_warning_display(data):
+        return "洗盤警戒"
+
     if level == "SHAKEOUT":
         return "洗盤續抱"
 
@@ -2674,6 +2685,24 @@ def position_summary_action(name, data):
         return "續抱觀察"
 
     return "續抱"
+
+
+def is_holding_shakeout_warning_display(data):
+
+    result = data.get("result") or {}
+
+    return (
+        data.get("holding")
+        and stock_pnl(data) < 0
+        and (
+            result.get("price_behavior") == "LOW_VOLUME_PULLBACK"
+            or result.get("structure_phase") == "SHAKEOUT"
+        )
+        and (
+            result.get("volume_state") == "WEAK"
+            or result.get("volume_price_state") == "COILING"
+        )
+    )
 
 
 def position_summary_note(name, data):

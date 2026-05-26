@@ -110,6 +110,31 @@ class AnalysisEngineTest(unittest.TestCase):
         self.assertEqual(signal["action"], "洗盤警戒")
         self.assertFalse(item["is_tradeable"])
 
+    def test_holding_light_loss_shakeout_phase_becomes_warning(self):
+        result = {
+            "decision": "WAIT",
+            "structure_phase": "SHAKEOUT",
+            "price_behavior": "NORMAL",
+            "market_regime": "NEUTRAL",
+            "multi_day_bias": "SHAKEOUT",
+            "heat_state": "NORMAL",
+            "trade_state": "WAIT",
+            "extended_level": 1,
+            "trend": "SIDE",
+            "volume_state": "WEAK",
+            "volume_price_state": "COILING",
+            "rr": 1.2,
+            "breakout_distance": 0,
+            "entry_quality": "D",
+            "confidence_score": 49,
+        }
+
+        signal = holding_signal(result, 209.75, 211.5, "realtime", -0.8)
+
+        self.assertEqual(signal["level"], "SHAKEOUT_WARN")
+        self.assertEqual(signal["action"], "洗盤警戒")
+        self.assertIn("小虧", signal["reason"])
+
     def test_holding_weak_far_pullback_is_not_shakeout_protected(self):
         result = {
             "decision": "WAIT",

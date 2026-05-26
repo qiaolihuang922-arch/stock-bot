@@ -1877,8 +1877,14 @@ def holding_signal(
     )
     light_loss_weak_pullback = (
         pnl < 0
-        and volume == "WEAK"
-        and behavior == "LOW_VOLUME_PULLBACK"
+        and (
+            behavior == "LOW_VOLUME_PULLBACK"
+            or phase == "SHAKEOUT"
+        )
+        and (
+            volume == "WEAK"
+            or vp == "COILING"
+        )
     )
 
     shakeout_protected = (

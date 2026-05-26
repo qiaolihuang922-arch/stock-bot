@@ -791,6 +791,61 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("RR -（過熱）", messages[2])
         self.assertIn("RR -（弱勢）", messages[2])
 
+    def test_light_loss_shakeout_holding_displays_warning_even_when_decision_is_watch(self):
+        payload = {
+            "stock_code": "3035",
+            "price": 209.75,
+            "change": -0.8,
+            "price_source": "realtime",
+            "daily_source": "yahoo",
+            "result": {
+                "decision": "WAIT",
+                "action": 0,
+                "rr": 1.2,
+                "heat_state": "NORMAL",
+                "trade_state": "WAIT",
+                "structure_phase": "SHAKEOUT",
+                "price_behavior": "NORMAL",
+                "market_grade": "B",
+                "volume_state": "WEAK",
+                "volume_price_state": "COILING",
+                "structure_state": "NORMAL",
+                "entry_quality": "D",
+                "confidence_score": 49,
+                "breakout_distance": 0,
+            },
+            "holding": {"shares": 40, "avg_price": 211.5},
+            "holding_decision": {
+                "action": "續抱",
+                "level": "HOLD_WATCH",
+                "note": "不加碼",
+                "warning_price": 200.92,
+                "hard_stop_price": 194.58,
+            },
+            "structure_score": 3,
+            "volume_ratio": 0.7,
+        }
+
+        card = generator.formatTelegramPositionCard("智原", payload)
+
+        self.assertIn("【智原 3035】📌 洗盤警戒｜-0.83%", card)
+        self.assertIn("決策：洗盤警戒，暫不加碼", card)
+        self.assertIn("條件：若跌破停損或轉弱，優先風控", card)
+
+    def test_rr_zero_display_marks_insufficient_when_not_hidden(self):
+        self.assertEqual(
+            generator.rr_display_text({
+                "rr": 0,
+                "heat_state": "NORMAL",
+                "trade_state": "WAIT",
+                "market_grade": "B",
+                "structure_phase": "BASE",
+                "volume_state": "NORMAL",
+                "breakout_distance": 0,
+            }),
+            "0.00（不足）"
+        )
+
     def test_telegram_messages_can_include_detail_when_requested(self):
         payload = render_payload(
             [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119],
