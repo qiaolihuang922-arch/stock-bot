@@ -5,8 +5,9 @@
 ## 專案狀態
 
 - 專案：台股策略報文機器人。
-- 目前穩定線：`v19.5` 收盤決策壓縮與執行清單升級已推送。
-- 最新推送：`4ecc0e0 feat: add v19.5 decision summary` 已推送到 `origin/main`。
+- 目前穩定線：`v19.5.1` 摘要語意一致性修復已通過 QA，等待本輪提交推送。
+- 最新功能推送：`4ecc0e0 feat: add v19.5 decision summary` 已推送到 `origin/main`。
+- 最新狀態文件推送：`72d3e81 docs: update current state after v19.5` 已推送到 `origin/main`。
 - 最近已出現 `v19.3.1` formatter / daily write guard / Yahoo daily fallback 修正紀錄。
 - `v19.4` 已完成交易閉環升級；下一輪若要改策略門檻、跨日持久化追蹤或 live 寫庫，需另開任務。
 - 預設只處理 `core/watchlist.py` 的 12 檔股票。
@@ -72,6 +73,8 @@
 
 ## 已知問題與風險
 
+- v19.5 實際報文暴露流程缺口：`今日結論`、`明日執行清單`、`未持倉漏斗`、`詳情索引` 各自欄位存在，但跨區塊語意可互相衝突。例如今日結論寫 `明日只追 6 檔`，而明日執行清單 5 項全是持倉，容易混淆「執行項」與「僅追蹤候選」。
+- QA 不能只驗證指定欄位與測試命令通過；報文類任務必須主動檢查使用者誤讀、跨區塊矛盾、壓縮失真、數量與明細不一致。
 - 隔日追蹤目前是報文內的明日檢查清單，尚未新增跨日 tracking table。
 - 新倉 / 減碼後語意依賴 `position_events`；若事件缺失會安全回退，但無法精準判定新倉或減碼後狀態。
 - intraday 報文可能混用 realtime price/change 與 Yahoo daily K-line 結構/量能，來源拆分需要更清楚顯示。
@@ -114,6 +117,13 @@
 - v19.5 正式 `TASK.md` 已完成，Tech 已交付 `CHANGELOG.md`，QA 已交付 L2 驗證通過報告。
 - 流程修正：`RESEARCH.md` 是研究任務共享文件，PM / Tech / QA 可各自寫入自己的 Findings；進入開發後才回到 `TASK.md` / `CHANGELOG.md` / `QA_REPORT.md` 專屬交付。
 - 流程修正：Tech 自檢只負責最小本地驗證，不做 QA 完整驗收；QA 必須在 Tech 自檢之外補關聯風險、負面案例與契約反證。
+- 流程修正：QA 必須主動找 Owner / Architect / PM 未明確列出的風險；若只照指定清單驗收，視為 QA 不完整。
+- 流程修正：報文、summary、Telegram 文字、dashboard 類任務必須做跨區塊語意一致性檢查，確認標題、今日結論、執行清單、漏斗、索引、詳情中的數字、狀態、排序與可買/不可買語意一致。
+- 流程修正：`QA_REPORT.md` 新增固定章節 `跨區塊語意一致性` 與 `使用者誤讀風險`；QA 若發現明顯輸出誤導，即使測試通過也不得直接給通過。
+- 新任務已分派：`v19.5.1-summary-semantic-consistency`。
+- v19.5.1 定位：patch，只修 summary 文案與跨區塊語意一致性；不改策略、不改買賣判斷、不改 DB、不改 Telegram summary-last contract。
+- v19.5.1 當前狀態：PM 已改寫 `TASK.md`；QA 第一輪阻塞後，Tech 已補修 `未持倉 0 檔僅追蹤` 文案分支並補 formatter unit test；QA 重測通過。
+- v19.5.1 驗證：`.venv/bin/python -m pytest tests/test_generator_report.py tests/test_notifier.py`，`35 passed, 21 warnings`。
 
 ## 影響模組判斷規則
 
@@ -126,13 +136,13 @@
 
 ## 當前交付檢查
 
-- `DISPATCH.md`：已更新為 `v19.5-report-summary-execution` 開發任務，狀態為 QA accepted。
+- `DISPATCH.md`：已更新為 `v19.5.1-summary-semantic-consistency` 修復任務，QA accepted。
 - `RESEARCH.md`：PM 已寫入 v19.5 報文與策略體驗強化研究。
 - `RESEARCH.md`：Tech 已寫入 v19.5 實作可行性研究；QA 已寫入 v19.5 風險掃描；Architect 已寫入結論與 Owner 補充。
 - `TASK.md`：PM 已正式改寫為 v19.5 收盤決策壓縮與執行清單升級需求。
 - `CHANGELOG.md`：Tech 已改寫為 v19.5 實作摘要。
 - `QA_REPORT.md`：QA 已改寫為 v19.5 L2 驗證摘要，結論通過。
-- Architect 結論：v19.5 摘要鏈路已完成；可進入 diff 檢查、必要驗證、commit / push。
+- Architect 結論：v19.5 摘要鏈路已完成並已推送；QA 流程已補強且本輪生效。`v19.5.1` 已修復摘要語意一致性與 `0 檔僅追蹤` 噪音，QA 重測通過，可提交推送。
 
 ## 對話窗啟動規則
 

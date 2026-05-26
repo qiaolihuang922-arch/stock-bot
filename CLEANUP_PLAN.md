@@ -12,6 +12,7 @@
 - 每次 Architect 完成 commit / push 後，必須壓縮工作流 Markdown，只保留最新任務與高信號摘要。
 - 新任務先判斷版本分級與 QA 分級，避免每輪都重新討論測試範圍。
 - Architect 不直接修功能代碼；若 Owner 提出新功能 / 顯示 / bug 需求，先更新 `DISPATCH.md` 分派。
+- QA 不是照單驗收角色；流程文件必須保留 QA 主動找問題、跨區塊語意一致性、使用者誤讀風險檢查規則。
 
 ## 待整理項目
 
@@ -29,6 +30,8 @@
 - 已補充 Tech 自檢 / QA 驗證邊界，避免 Tech 做完整 QA 或 QA 只重複 Tech 測試。
 - 已補充版本分級與 QA 分級規則；下一次啟動部門時只需讓該角色重新讀 `AGENTS.md` 與 `DISPATCH.md`，不需要立即逐窗通知。
 - 已補充 Architect 禁止直接實作新需求的硬規則，避免總控越權成為 Tech。
+- v19.5 報文暴露流程缺口：欄位與 contract 測試通過，但 `今日結論`、`明日執行清單`、`漏斗` 之間可產生語意衝突。已將 QA 規則升級為必須主動檢查跨區塊語意一致性與使用者誤讀風險。
+- 已開 `v19.5.1-summary-semantic-consistency`，應先由 PM 定義「執行項 vs 僅追蹤候選」文案規則，再由 Tech 修 formatter / summary view model，QA 必須針對真實報文做語意一致性反證。
 - 若要處理策略門檻、live Telegram 或 full regression，需另開任務。
 - 部門交付文件 `TASK.md`、`CHANGELOG.md`、`QA_REPORT.md` 是工作流入口，必須保留；任務結束後只清空或改寫內容，不刪文件。
 - 工作區若出現未提交核心檔案修改，Architect 不處理；需由 Tech 或 Owner 確認來源。
@@ -53,6 +56,8 @@
 
 ## 下一步
 
+- 先完成本輪流程文件補強，不修代碼。
+- `v19.5.1` 已分派；PM 已改寫 `TASK.md`，QA 第一輪阻塞後 Tech 已補修 `未持倉 0 檔僅追蹤` 語意噪音並改寫 `CHANGELOG.md`，QA 重測通過。下一步 Architect 提交並推送。
 - 收到 `TASK.md`、`CHANGELOG.md`、`QA_REPORT.md` 任一文件後，Architect 只讀該摘要與必要局部上下文。
 - 根據摘要更新 `CURRENT_STATE.md`。
 - 若發現重複、過期或互相衝突的工作，再更新本文件並交由對應會話處理。
