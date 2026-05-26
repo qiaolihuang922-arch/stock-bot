@@ -155,3 +155,25 @@ This file is append-only. Each development change should add a new entry so QA c
   - Confirm report only shows `無有效數據` when both TWSE daily and Yahoo daily fallback fail.
   - Confirm daily snapshot DB guard still blocks writes if fallback does not cover all 12 stocks.
   - Confirm fallback OHLCV and price source are marked `yahoo` when used.
+
+### Change 2
+- Summary: Added product-facing v19.4 strategy diagnosis document for 2026-05-26 intraday data-source, unheld blocker, and holding-state review.
+- Files changed:
+  - `docs/v19_4_strategy_diagnosis_2026-05-26.md`
+  - `docs/qa_handoff_log.md`
+- Test level: L0
+- Scope: docs / strategy diagnosis
+- Minimal validation run:
+  - Manual document creation check.
+- Skipped tests:
+  - Unit tests
+  - Full regression test suite
+  - Live Telegram delivery
+  - Live Supabase write verification
+  - TWSE/Yahoo network smoke test
+- Reason for skipping: Documentation-only output from diagnostic analysis; no code path changed.
+- External services touched: none
+- DB/schema/write risk: no
+- QA focus:
+  - Confirm the diagnosis document is present and readable.
+  - Confirm no implementation change is implied by this documentation-only commit.
