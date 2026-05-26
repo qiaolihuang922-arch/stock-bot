@@ -5,8 +5,8 @@
 ## 專案狀態
 
 - 專案：台股策略報文機器人。
-- 目前穩定線：`v19.4.1` Telegram 推送順序與按鈕綁定修正已推送。
-- 最新推送：`127441e fix: send telegram summary last` 已推送到 `origin/main`。
+- 目前穩定線：`v19.5` 收盤決策壓縮與執行清單升級已推送。
+- 最新推送：`4ecc0e0 feat: add v19.5 decision summary` 已推送到 `origin/main`。
 - 最近已出現 `v19.3.1` formatter / daily write guard / Yahoo daily fallback 修正紀錄。
 - `v19.4` 已完成交易閉環升級；下一輪若要改策略門檻、跨日持久化追蹤或 live 寫庫，需另開任務。
 - 預設只處理 `core/watchlist.py` 的 12 檔股票。
