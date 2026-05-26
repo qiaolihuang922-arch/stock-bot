@@ -455,11 +455,12 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("📊 市場：", messages[0])
         self.assertIn("📌 持倉：智原", messages[0])
         self.assertIn("未持倉標的：", messages[0])
-        self.assertIn("【等待冷卻 1】建準", messages[0])
+        self.assertIn("【可觀察但不可買 1】建準", messages[0])
         self.assertIn("【持倉標的】", messages[1])
         self.assertIn("倉位：50股", messages[1])
         self.assertIn("【未持倉標的】", messages[2])
-        self.assertIn("買點：不買｜追價風險", messages[2])
+        self.assertIn("【建準 2421】👀 觀察｜RR不足", messages[2])
+        self.assertIn("買點：不買｜RR不足", messages[2])
         self.assertIn("回測：", messages[2])
         self.assertNotIn("完整詳情備份", "\n".join(messages))
 
@@ -507,6 +508,13 @@ class GeneratorReportTest(unittest.TestCase):
         )
         weak_payload["stock_code"] = "2408"
         weak_payload["result"]["market_grade"] = "D"
+        weak_payload["holding_decision"] = {
+            "action": "續抱觀察",
+            "level": "HOLD_WATCH",
+            "note": "轉弱觀察，不加碼",
+            "warning_price": 283.1,
+            "hard_stop_price": 274.16,
+        }
 
         messages = generator.formatTelegramMessages(
             {
@@ -529,12 +537,12 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【英業達 2356】📌 核心續抱", position_msg)
         self.assertIn("【緯創 3231】📌 底倉續抱", position_msg)
         self.assertIn("【南亞科 2408】📌 續抱觀察", position_msg)
-        self.assertIn("決策：保留核心倉，暫不加碼", position_msg)
+        self.assertIn("決策：核心續抱，暫不加碼", position_msg)
         self.assertIn("決策：保留底倉，暫不加碼", position_msg)
         self.assertIn("條件：觀察減碼後是否轉弱，跌破警戒價優先風控", position_msg)
         self.assertIn("決策：續抱，暫不加碼", position_msg)
         self.assertIn("條件：浮盈不足，等量價確認後再評估加碼", position_msg)
-        self.assertIn("決策：弱勢續抱，暫不加碼", position_msg)
+        self.assertIn("決策：續抱觀察，暫不加碼", position_msg)
 
     def test_unheld_cards_follow_summary_group_order(self):
         limit_payload = render_payload(
@@ -555,6 +563,17 @@ class GeneratorReportTest(unittest.TestCase):
         wait_payload["stock_code"] = "2421"
         wait_payload["result"]["rr"] = 0.5
 
+        hot_payload = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 123],
+            None,
+            price=123,
+            change=4.2,
+        )
+        hot_payload["stock_code"] = "2301"
+        hot_payload["result"]["heat_state"] = "HOT"
+        hot_payload["result"]["trade_state"] = "EXTENDED"
+        hot_payload["result"]["rr"] = 0.78
+
         weak_payload = render_payload(
             [100, 99, 98, 97, 96, 95, 94, 93, 92, 91, 90, 89, 88, 87, 86, 85, 84, 83, 82, 81],
             None,
@@ -568,6 +587,7 @@ class GeneratorReportTest(unittest.TestCase):
             {
                 "旺宏": weak_payload,
                 "建準": wait_payload,
+                "光寶科": hot_payload,
                 "聯電": limit_payload,
             },
             "FULL DETAIL",
@@ -579,10 +599,15 @@ class GeneratorReportTest(unittest.TestCase):
 
         summary_msg = messages[0]
         unheld_msg = messages[2]
-        self.assertLess(summary_msg.index("【禁止追高 1】聯電"), summary_msg.index("【等待冷卻 1】建準"))
-        self.assertLess(summary_msg.index("【等待冷卻 1】建準"), summary_msg.index("【弱勢/未觸發 1】旺宏"))
-        self.assertLess(unheld_msg.index("【聯電 2303】"), unheld_msg.index("【建準 2421】"))
+        self.assertLess(summary_msg.index("【禁止追高 1】聯電"), summary_msg.index("【等待冷卻 1】光寶科"))
+        self.assertLess(summary_msg.index("【等待冷卻 1】光寶科"), summary_msg.index("【可觀察但不可買 1】建準"))
+        self.assertLess(summary_msg.index("【可觀察但不可買 1】建準"), summary_msg.index("【弱勢淘汰 1】旺宏"))
+        self.assertLess(unheld_msg.index("【聯電 2303】"), unheld_msg.index("【光寶科 2301】"))
+        self.assertLess(unheld_msg.index("【光寶科 2301】"), unheld_msg.index("【建準 2421】"))
         self.assertLess(unheld_msg.index("【建準 2421】"), unheld_msg.index("【旺宏 2337】"))
+        self.assertIn("【光寶科 2301】⏳ 等待冷卻", unheld_msg)
+        self.assertIn("【建準 2421】👀 觀察", unheld_msg)
+        self.assertIn("【旺宏 2337】⛔ 淘汰", unheld_msg)
 
     def test_unheld_price_line_keeps_closing_parenthesis(self):
         payload = render_payload(
@@ -626,6 +651,80 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("缺少 3035, 2421", messages[0])
         self.assertNotIn("每日快照未寫入", messages[1])
         self.assertNotIn("每日快照未寫入", messages[2])
+
+    def test_v19_3_2_intraday_summary_classifies_0526_cases(self):
+        def payload(code, price, change, result, holding=None, decision=None):
+            return {
+                "stock_code": code,
+                "price": price,
+                "change": change,
+                "price_source": "realtime",
+                "daily_source": "yahoo",
+                "result": {
+                    "decision": "WAIT",
+                    "action": 0,
+                    "rr": 0,
+                    "heat_state": "NORMAL",
+                    "trade_state": "WAIT",
+                    "structure_phase": "BASE",
+                    "price_behavior": "NORMAL",
+                    "market_grade": "B",
+                    "volume_state": "NORMAL",
+                    "volume_price_state": "NORMAL",
+                    "structure_state": "NORMAL",
+                    "entry_quality": "D",
+                    "confidence_score": 49,
+                    "breakout_distance": 0,
+                    **result,
+                },
+                "holding": holding,
+                "holding_decision": decision,
+                "structure_score": 3,
+                "volume_ratio": 1,
+            }
+
+        results = {
+            "英業達": payload("2356", 62.25, -4.82, {"heat_state": "HOT", "trade_state": "EXTENDED"}, {"shares": 550, "avg_price": 52.15}, {"action": "核心續抱", "level": "HOLD_CORE", "note": "高浮盈回落，暫不加碼", "warning_price": 59.14, "hard_stop_price": 54.76}),
+            "緯創": payload("3231", 146.75, -1.51, {"structure_phase": "SHAKEOUT", "volume_state": "WEAK"}, {"shares": 200, "avg_price": 136.8}, {"action": "洗盤續抱", "level": "SHAKEOUT", "note": "縮量回測，未見出貨", "warning_price": 139.41, "hard_stop_price": 125.86}),
+            "南亞科": payload("2408", 308.75, 4.31, {"structure_phase": "WEAK", "volume_state": "WEAK", "breakout_distance": 11}, {"shares": 30, "avg_price": 298}, {"action": "續抱觀察", "level": "HOLD_WATCH", "note": "轉弱觀察，不加碼", "warning_price": 293.31, "hard_stop_price": 274.16}),
+            "技嘉": payload("2376", 336.25, -0.07, {"structure_phase": "SHAKEOUT", "volume_state": "WEAK"}, {"shares": 30, "avg_price": 334.5}, {"action": "洗盤續抱", "level": "SHAKEOUT", "note": "縮量回測，未見出貨", "warning_price": 317.77, "hard_stop_price": 307.74}),
+            "智原": payload("3035", 210.25, -3.78, {"structure_phase": "SHAKEOUT", "volume_state": "WEAK"}, {"shares": 40, "avg_price": 211.5}, {"action": "洗盤警戒", "level": "SHAKEOUT_WARN", "note": "小虧，暫不加碼", "warning_price": 200.92, "hard_stop_price": 194.58}),
+            "華邦電": payload("2344", 141, 9.73, {"price_behavior": "LIMIT_LOCK", "structure_phase": "LOCK_LIMIT", "heat_state": "EXTREME", "trade_state": "AVOID", "rr": 0.23}),
+            "聯電": payload("2303", 130.75, 4.6, {"heat_state": "EXTREME", "trade_state": "AVOID", "rr": 0}),
+            "群創": payload("3481", 46.225, -5.86, {"heat_state": "EXTREME", "trade_state": "AVOID", "rr": 0}),
+            "光寶科": payload("2301", 237.25, 4.29, {"heat_state": "HOT", "trade_state": "EXTENDED", "rr": 0.78}),
+            "建準": payload("2421", 163.25, 0.46, {"trade_state": "LATE_ENTRY", "rr": 0.12, "volume_state": "WEAK", "market_grade": "A"}),
+            "仁寶": payload("2324", 33.325, -3.82, {"trade_state": "LATE_ENTRY", "rr": 0.26, "market_grade": "A"}),
+            "旺宏": payload("2337", 159.25, 4.43, {"structure_phase": "WEAK_REBOUND", "price_behavior": "WEAK_REBOUND", "market_grade": "D", "volume_state": "WEAK", "rr": 2.44, "breakout_distance": 8.55}),
+        }
+
+        with patch.object(generator, "get_market_phase", return_value="盤中"):
+            messages = generator.formatTelegramMessages(
+                results,
+                "FULL DETAIL",
+                None,
+                None,
+                "🚨 過熱控倉，先處理持倉",
+                datetime(2026, 5, 26),
+            )
+
+        self.assertIn("v19.3.2", messages[0])
+        self.assertIn("📡 資料：即時價 realtime｜日線 yahoo", messages[0])
+        self.assertIn("1. 英業達｜+19.37%｜核心續抱｜高浮盈回落，暫不加碼", messages[0])
+        self.assertIn("2. 緯創｜+7.27%｜洗盤續抱｜縮量回測，未見出貨", messages[0])
+        self.assertIn("3. 南亞科｜+3.61%｜續抱觀察｜轉弱觀察，不加碼", messages[0])
+        self.assertIn("4. 技嘉｜+0.52%｜洗盤續抱｜縮量回測，未見出貨", messages[0])
+        self.assertIn("5. 智原｜-0.59%｜洗盤警戒｜小虧，暫不加碼", messages[0])
+        self.assertIn("【禁止追高 3】華邦電、聯電、群創", messages[0])
+        self.assertIn("【等待冷卻 1】光寶科", messages[0])
+        self.assertIn("【可觀察但不可買 2】建準、仁寶", messages[0])
+        self.assertIn("【弱勢淘汰 1】旺宏", messages[0])
+        self.assertIn("【光寶科 2301】⏳ 等待冷卻", messages[2])
+        self.assertIn("【建準 2421】👀 觀察｜RR不足", messages[2])
+        self.assertIn("【旺宏 2337】⛔ 淘汰｜弱反彈待確認", messages[2])
+        self.assertIn("RR -（持倉不看新倉RR）", messages[1])
+        self.assertIn("RR -（過熱）", messages[2])
+        self.assertIn("RR -（弱勢）", messages[2])
 
     def test_telegram_messages_can_include_detail_when_requested(self):
         payload = render_payload(

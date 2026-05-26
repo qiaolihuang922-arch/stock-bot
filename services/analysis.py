@@ -1844,6 +1844,7 @@ def holding_signal(
     bias = result.get("multi_day_bias")
     decision = result.get("decision")
     heat = result.get("heat_state")
+    trade = result.get("trade_state")
     extended = result.get("extended_level", 0)
     trend = result.get("trend")
     volume = result.get("volume_state")
@@ -1869,6 +1870,17 @@ def holding_signal(
         )
     )
 
+    weak_far_from_trigger = (
+        phase == "WEAK"
+        and dist is not None
+        and dist > 4
+    )
+    light_loss_weak_pullback = (
+        pnl < 0
+        and volume == "WEAK"
+        and behavior == "LOW_VOLUME_PULLBACK"
+    )
+
     shakeout_protected = (
         phase in ["SHAKEOUT", "HEALTHY_PULLBACK"]
         or (
@@ -1885,7 +1897,7 @@ def holding_signal(
             and bias != "DOWN_CONFIRM"
             and pnl > -5
         )
-    )
+    ) and not weak_far_from_trigger
 
     if pnl >= 15:
         hard_stop_price = max(
@@ -2138,9 +2150,60 @@ def holding_signal(
             2
         )
 
+    if (
+        pnl >= 15
+        and (
+            heat in ["HOT", "EXTREME"]
+            or trade == "EXTENDED"
+        )
+        and behavior in ["VOLUME_DROP", "LOW_VOLUME_PULLBACK", "NORMAL"]
+    ):
+        if price <= warning_price:
+            return payload(
+                "風控觀察",
+                0,
+                "高浮盈回落，跌破警戒價",
+                "RISK_WATCH",
+                "RISK_WATCH",
+                False,
+                4
+            )
+
+        return payload(
+            "核心續抱",
+            0,
+            "高浮盈回落，暫不加碼",
+            "HOLD_CORE",
+            "CORE_HOLD",
+            False,
+            3
+        )
+
+    if weak_far_from_trigger and pnl >= 0:
+        return payload(
+            "續抱觀察",
+            0,
+            "轉弱觀察，不加碼",
+            "HOLD_WATCH",
+            "WATCH",
+            False,
+            3
+        )
+
+    if light_loss_weak_pullback:
+        return payload(
+            "洗盤警戒",
+            0,
+            "小虧，暫不加碼",
+            "SHAKEOUT_WARN",
+            "SHAKEOUT_WARN",
+            False,
+            3
+        )
+
     if shakeout_protected and pnl > -5:
         return payload(
-            "洗盤觀察",
+            "洗盤續抱",
             0,
             "縮量回測，未見出貨",
             "SHAKEOUT",

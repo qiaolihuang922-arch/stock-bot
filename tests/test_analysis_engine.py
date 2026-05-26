@@ -106,9 +106,58 @@ class AnalysisEngineTest(unittest.TestCase):
     def test_holding_shakeout_observation(self):
         item = snap("shakeout", [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 116], VOL_LOW)
         signal = holding_signal(item["raw_result"], 116, 117, "realtime", -1.0)
-        self.assertEqual(signal["level"], "SHAKEOUT")
-        self.assertEqual(signal["action"], "洗盤觀察")
+        self.assertEqual(signal["level"], "SHAKEOUT_WARN")
+        self.assertEqual(signal["action"], "洗盤警戒")
         self.assertFalse(item["is_tradeable"])
+
+    def test_holding_weak_far_pullback_is_not_shakeout_protected(self):
+        result = {
+            "decision": "WAIT",
+            "structure_phase": "WEAK",
+            "price_behavior": "NORMAL",
+            "market_regime": "RISK_ON",
+            "multi_day_bias": "UP",
+            "heat_state": "NORMAL",
+            "trade_state": "NO_VOLUME",
+            "extended_level": 1,
+            "trend": "UP",
+            "volume_state": "WEAK",
+            "volume_price_state": "COILING",
+            "rr": 4.5,
+            "breakout_distance": 11,
+            "entry_quality": "D",
+            "confidence_score": 39,
+        }
+
+        signal = holding_signal(result, 308.75, 298, "realtime", 4.3)
+
+        self.assertEqual(signal["level"], "HOLD_WATCH")
+        self.assertEqual(signal["action"], "續抱觀察")
+
+    def test_high_profit_hot_pullback_becomes_core_hold(self):
+        result = {
+            "decision": "WAIT",
+            "structure_phase": "BREAKOUT_CONFIRM",
+            "price_behavior": "VOLUME_DROP",
+            "market_regime": "RISK_ON",
+            "multi_day_bias": "UP",
+            "heat_state": "HOT",
+            "trade_state": "EXTENDED",
+            "extended_level": 2,
+            "trend": "UP",
+            "volume_state": "STRONG",
+            "volume_price_state": "NORMAL",
+            "rr": 0,
+            "breakout_distance": -12,
+            "entry_quality": "D",
+            "confidence_score": 49,
+        }
+
+        signal = holding_signal(result, 62.25, 52.15, "realtime", -4.8)
+
+        self.assertEqual(signal["level"], "HOLD_CORE")
+        self.assertEqual(signal["action"], "核心續抱")
+        self.assertIn("高浮盈回落", signal["reason"])
 
     def test_holding_take_profit_25(self):
         item = snap("limit_hold", [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 130], VOL_ATTACK)

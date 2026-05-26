@@ -177,3 +177,32 @@ This file is append-only. Each development change should add a new entry so QA c
 - QA focus:
   - Confirm the diagnosis document is present and readable.
   - Confirm no implementation change is implied by this documentation-only commit.
+
+### Change 3
+- Summary: Implemented v19.3.2 corrective patch for 2026-05-26 intraday report: added top-level data-source transparency, RR hidden-reason text, four-way unheld grouping, differentiated holding labels, and narrow holding-signal branch fixes for high-profit pullback, weak/far holdings, and light-loss weak pullback.
+- Files changed:
+  - `core/generator.py`
+  - `services/analysis.py`
+  - `tests/test_analysis_engine.py`
+  - `tests/test_generator_report.py`
+  - `docs/qa_handoff_log.md`
+- Test level: L2
+- Scope: formatter / Telegram / strategy / holding / RR
+- Minimal validation run:
+  - `.venv/bin/python -m pytest tests/test_analysis_engine.py tests/test_generator_report.py`
+- Skipped tests:
+  - Full regression test suite
+  - Replay/backfill dry-run
+  - Live Telegram delivery
+  - Live Supabase read/write verification
+  - Live TWSE/Yahoo network smoke test
+- Reason for skipping: v19.3.2 intentionally scoped to Telegram display semantics and limited holding-signal branches; no DB schema, write path, backfill path, or provider request logic changed. Full regression and live services remain QA batch responsibilities.
+- External services touched: none
+- DB/schema/write risk: no
+- QA focus:
+  - Confirm Telegram version shows `v19.3.2`, not `v19.4`.
+  - Confirm intraday summary displays `資料：即時價 realtime｜日線 yahoo` or `mixed` when sources differ.
+  - Confirm hidden RR displays contextual text such as `持倉不看新倉RR`, `過熱`, `弱勢`, `量能不足`, or `遠離觸發`.
+  - Confirm unheld stocks split into `禁止追高`, `等待冷卻`, `可觀察但不可買`, and `弱勢淘汰`, with non-buy headings no longer all shown as `⛔ 不買`.
+  - Confirm holding summary/detail labels differentiate `核心續抱`, `洗盤續抱`, `洗盤警戒`, `續抱觀察`, and `風控觀察`.
+  - Confirm no DB schema or daily write/backfill behavior changed.
