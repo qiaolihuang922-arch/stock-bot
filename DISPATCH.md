@@ -4,40 +4,40 @@
 
 ## Current Task
 
-- task_id: `cao-runner-process-hardening`
-- task_name: `CAO Runner Process Hardening`
-- task_type: `workflow_runner_patch`
-- version_level: `none`
-- qa_level: `process`
+- task_id: `telegram-unheld-funnel-count-bug`
+- task_name: `Telegram Unheld Funnel Count Bug`
+- task_type: `formatter_bugfix`
+- version_level: `patch`
+- qa_level: `L1`
 - owner_status: `requested`
-- architect_status: `completed_local`
-- pm_status: `not_required`
-- tech_status: `not_required`
-- qa_status: `not_required`
+- architect_status: `qa_accepted`
+- pm_status: `task_ready`
+- tech_status: `changelog_ready`
+- qa_status: `qa_passed`
 - commit: `pending_owner_request`
 
 ## Current Result
 
-- 本輪是 Architect 流程 / runner 修復，不改產品策略、報文、DB、watchlist、live Telegram 或 live Supabase。
-- 已針對上一輪暴露的 5 個問題補 runner gate：
-  - 自動鏈不能因 Tech 自檢通過就放行；QA 缺完整測試環境時必須 blocked。
-  - QA runner 維持 read-only，但允許 `.qa_tmp/`、dummy `config.py` 與測試暫存，並用 diff hash / handoff hash 防止 QA 修改候選 diff。
-  - Tech / QA 交付抽取改為只吸收最後一個合法 `# CHANGELOG:` / `# QA_REPORT:`，避免 transcript 混入正式文件。
-  - Tech worktree 的上下文 Markdown 改為 read-only handoff context，不再作為整包可合併 diff；候選 diff 只看產品 / 測試 / `CHANGELOG.md`。
-  - auto cycle 改為 QA 報告結構合格後，才把 `CHANGELOG.md` / `QA_REPORT.md` 寫回主 repo。
-- `AGENTS.md` 已新增 Runner hygiene gates，將上述行為固定為後續規則。
-- v20.0.6 產品 patch 仍維持：已本地合併、QA L2 `conditional pass`、尚未 commit / push；未做 production 秒數 benchmark。
-- Architect final review 驗證已通過：
-  - full pytest：`105 passed, 21 warnings`
-  - replay synthetic dry-run validate：`VALIDATION OK`
-  - backfill synthetic dry-run：`VALIDATION OK`、`DRY RUN ONLY: no database writes`
-  - runner shell syntax：`bash -n` 通過
+- Owner 指出短報文 `未持倉漏斗（非執行）` 的顯示會造成數量誤讀：
+  - 例：已持倉 5 檔，未持倉實際 7 檔。
+  - 現有短報文類似 `可買 0｜準備 0｜僅追蹤 6｜冷卻 3｜回測 1｜等RR修復 2｜等量能 0｜淘汰 1`。
+  - `僅追蹤 6` 已包含冷卻 / 回測 / RR / 量能，後面又列子分類，手機閱讀上容易被誤加成超過 watchlist 12 檔。
+- 本輪只修短報文漏斗顯示契約，不改策略 decision、未持倉分類、DB payload、watchlist、live Telegram 或 live Supabase。
+- Architect 已按角色自鎖規則分派 PM；不得直接寫 `TASK.md` 或搜尋 / 修改產品代碼。
+- PM 已交付 `TASK.md`。
+- Tech 第一輪已在隔離 worktree 產生候選 diff，QA 結論為 `conditional pass`。
+- QA 主動發現邊界風險：當 `可準備 > 0` 時，短報文的 `非執行追蹤 N` 與 `其中` 拆分母集合不一致，仍可能造成手機數量誤讀。
+- Tech 第二輪已補修該邊界，QA 第二輪結論：`通過`。
+- 已吸收白名單候選 diff：
+  - `core/generator.py`
+  - `tests/test_generator_report.py`
+  - `CHANGELOG.md`
+  - `QA_REPORT.md`
+- 主 repo 驗證通過：`tests/test_generator_report.py tests/test_notifier.py`，`37 passed, 21 warnings`。
 
 ## Next Action
 
-- 若 Owner 要發布到遠端，Architect 需先確認本地 commit，再另行 push。
-- 下一次 `run_architect_task.sh auto` 實際任務要觀察新 gate 是否阻止：測試環境缺口、transcript 污染、handoff 文件殘留、QA 偷改 tracked files。
-- 若仍覺得 v20.0.6 查詢慢，另開 performance measurement 任務量測 production 真實秒數。
+- 若 Owner 要發布，Architect 需做 final diff review 後 commit / push。
 
 ## Status Values
 
@@ -76,7 +76,7 @@
 Owner 對 Architect：
 
 ```text
-按 AGENTS.md 和 DISPATCH.md 處理這個需求，分派並更新狀態文件。
+你是 Architect / 總控，不是 PM、Tech、QA。先讀 AGENTS.md 和 DISPATCH.md；若是產品 bug / 顯示 bug / feature request，只能先更新 DISPATCH.md 分派 PM，不得直接寫 TASK.md、不得搜尋或修改產品代碼，除非 Owner 明確說你直接代該角色。
 ```
 
 Architect 可用 CAO online research：

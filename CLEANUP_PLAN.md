@@ -19,6 +19,8 @@
 - PM / Tech / QA 代理必須按角色卡與任務卡輸出；缺輸出契約、缺直接消費者、缺主動反證的交付一律退回。
 - CAO runner 的 handoff 文件不是候選 diff；若固定 Markdown 因上下文同步出現在 worktree diff，Architect 不得整包合併。
 - QA 可寫暫存只限 `.qa_tmp/`；任何 tracked diff 或 handoff hash 變動都視為 QA 越權。
+- Architect 不得因產品 bug 很小就跳過 PM；小 bug 只代表 QA 分級可低，不代表可越權寫 `TASK.md` 或改代碼。
+- Architect 若在對話中發現自己開始定位產品代碼、寫 `TASK.md`、寫 `CHANGELOG.md` 或寫 `QA_REPORT.md`，必須停止並回到分派流程。
 
 ## 最新收斂
 
@@ -53,6 +55,15 @@
   - QA runner 加上 handoff hash gate，避免 QA 偷改交接文件。
   - Tech / QA 交付抽取只吸收最後合法標題後內容，降低 transcript 污染。
   - auto cycle 延後寫回 `CHANGELOG.md` / `QA_REPORT.md`，避免 QA 失敗時主 repo 留下假完成交付。
+- Architect role self-lock 已完成：
+  - 新對話先確認總控身份。
+  - 產品 bug 先分派 PM，不直接寫 `TASK.md`。
+  - 未經 Owner 明確授權，不代 Tech / QA 實作或驗收。
+  - 越權改動需先恢復，再更新流程規則。
+- Telegram unheld funnel count bug 已完成本地修復：
+  - PM / Tech / QA 已按流程接力。
+  - QA 第一輪 conditional pass 發現 `可準備 > 0` 邊界，已回派 Tech 補修。
+  - QA 第二輪通過，主 repo 局部驗證 `37 passed, 21 warnings`。
 - push 後仍需壓縮：
   - `DISPATCH.md`
   - `TASK.md`

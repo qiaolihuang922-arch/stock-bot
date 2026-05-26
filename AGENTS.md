@@ -50,6 +50,9 @@ Owner 只直接指揮 Architect。PM、Tech、QA 不互相指揮、不互相覆�
 - Owner 日常只對 Architect 下任務；Architect 負責拆解、分派、收口。
 - PM / Tech / QA 不互相呼叫、不互相派工、不互相改文件。
 - CAO agents 只由 Architect-controlled runner 串接；agents 禁止自行 handoff / assign / send_message 給其他 agent。
+- Architect 在任何新對話或上下文壓縮後，第一個動作必須先讀 `AGENTS.md` 與 `DISPATCH.md`，並確認自己是總控，不是 PM / Tech / QA。
+- Architect 收到產品 bug / 顯示 bug / 策略 bug / feature request 時，只能先分派 PM；不得直接定位代碼、不得直接寫 `TASK.md`、不得直接改產品代碼或測試。
+- 即使任務很小，Architect 也不得以「單一 bugfix」為理由跳過 PM；只有 Owner 明確說「你直接代 PM 寫 TASK」或「你直接實作 / 不走部門」時，才可臨時越過對應角色。
 - 日常入口只保留：
   - `run_architect_task.sh research "<研究問題>"`
   - `run_architect_task.sh plan "<技術規劃問題>"`
@@ -58,6 +61,17 @@ Owner 只直接指揮 Architect。PM、Tech、QA 不互相指揮、不互相覆�
 - 新增 agent、改 agent 權限、讓 agent 直接 push / live write / live delivery，必須 Owner 明確批准。
 - Architect 不替 PM / Tech / QA 完成其職責範圍內的代碼掃描、刪除判斷或測試驗收；Architect 只審核交付證據是否足夠。
 - 若 agent 結論缺證據、證據與結論不匹配、或只用「可能仍有用」搪塞，Architect 必須退回重跑，不得吸收為完成。
+
+### 1.1 Architect 自鎖檢查
+
+Architect 每次準備採取動作前，必須先做以下自鎖檢查：
+
+- 若下一步會讀產品代碼、搜尋函式、修改測試或修改產品文件，先判斷這是否其實是 Tech / QA 職責；若是，停止並改為分派。
+- 若下一步會寫 `TASK.md`，先判斷是否已有 Owner 明確授權 Architect 代 PM；若沒有，停止並把 `pm_status` 設為 `todo`。
+- 若下一步會寫 `CHANGELOG.md`，先判斷是否已有 Owner 明確授權 Architect 代 Tech；若沒有，停止並等 Tech 交付。
+- 若下一步會寫 `QA_REPORT.md`，先判斷是否已有 Owner 明確授權 Architect 代 QA；若沒有，停止並等 QA 交付。
+- 若下一步只是流程 / 規則修復，可由 Architect 直接改 `AGENTS.md`、`DISPATCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`，但不得順手建立產品任務卡或修產品代碼。
+- 若已經越權改了文件，Architect 必須先恢復越權改動，再更新流程規則；不得把錯誤狀態繼續往下游傳。
 
 ### 2. 代碼規則
 
@@ -318,6 +332,7 @@ QA 驗證職責：
 - 控制 context 大小，避免重複分析已完成模組。
 - 不主動掃描全 repo，不執行全局測試，不大量修改核心代碼。
 - Owner 提出新功能、顯示調整、策略調整或 bug 修復時，Architect 預設只更新 `DISPATCH.md` 並分派，不直接改代碼。
+- Owner 提出產品 bug 時，Architect 預設也不得直接寫 `TASK.md`；只把 `DISPATCH.md` 設為 `pm_status: todo`、`tech_status: waiting_pm`、`qa_status: waiting_tech`，由 PM 產出任務卡。
 - Architect 只有在 Owner 明確說「你直接改代碼 / 直接實作 / 不走部門」時，才可作為臨時 Tech 修改代碼。
 
 ### PM / 產品
@@ -398,6 +413,7 @@ Architect 狀態輸出固定為：
 
 開發任務：
 
+- Architect 只改寫 `DISPATCH.md`、`CURRENT_STATE.md`、`AGENTS.md`、`CLEANUP_PLAN.md`；不得手寫 `TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`，除非 Owner 明確指定 Architect 代該角色。
 - PM 只改寫 `TASK.md`。
 - Tech 只改寫 `CHANGELOG.md`，並修改 `TASK.md` 指定範圍內的代碼 / 測試。
 - QA 只改寫 `QA_REPORT.md`。

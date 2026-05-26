@@ -74,6 +74,37 @@
   - runner shell syntax：`bash -n` 通過
 - 未執行新的 CAO auto 任務；下一次實際 auto 任務需觀察 gate 是否如預期阻止殘留與污染。
 
+## Architect Role Self Lock 已完成
+
+- 修復總控越權風險：Architect 不得因為 bug 小就直接定位產品代碼、寫 `TASK.md`、改產品代碼或測試。
+- 新對話 / 上下文壓縮後，Architect 第一個動作必須確認自己是總控，不是 PM / Tech / QA。
+- 產品 bug / 顯示 bug / feature request 的預設流程：
+  - Architect 只更新 `DISPATCH.md` 分派，設 `pm_status: todo`、`tech_status: waiting_pm`、`qa_status: waiting_tech`。
+  - PM 產出 `TASK.md`。
+  - Tech 按 `TASK.md` 實作並產出 `CHANGELOG.md`。
+  - QA 按 `TASK.md` / `CHANGELOG.md` 驗證並產出 `QA_REPORT.md`。
+- Architect 只有在 Owner 明確說「你直接代 PM 寫 TASK」或「你直接實作 / 不走部門」時，才可越過對應角色。
+- 若 Architect 已越權改文件，必須先恢復越權改動，再更新流程規則。
+
+## Telegram Unheld Funnel Count Bug 已完成本地修復
+
+- 修正短報文 `未持倉漏斗（非執行）` 數量誤讀：
+  - 先顯示 `未持倉總數 N 檔`。
+  - 再顯示同層母集合：可買 / 可準備 / 僅追蹤 / 淘汰。
+  - 再用 `其中僅追蹤 N 檔拆分` 顯示等冷卻 / 等回測 / 等RR修復 / 等量能。
+  - 另用 `非執行追蹤合計` 明確表示可準備 + 僅追蹤。
+- QA 第一輪發現 `可準備 > 0` 時母集合不一致，已回派 Tech 第二輪補修。
+- QA 第二輪結論：`通過`。
+- 修改檔案：
+  - `core/generator.py`
+  - `tests/test_generator_report.py`
+  - `TASK.md`
+  - `CHANGELOG.md`
+  - `QA_REPORT.md`
+  - `DISPATCH.md`
+- 未改策略 decision、DB payload、watchlist、live Telegram、live Supabase、replay/backfill write path。
+- 驗證：`tests/test_generator_report.py tests/test_notifier.py`，`37 passed, 21 warnings`。
+
 ## v20.0.3 瘦身審計進度
 
 - 已用 CAO agents 跑真正瘦身審計。
