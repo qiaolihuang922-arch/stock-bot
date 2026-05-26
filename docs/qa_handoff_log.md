@@ -206,3 +206,30 @@ This file is append-only. Each development change should add a new entry so QA c
   - Confirm unheld stocks split into `禁止追高`, `等待冷卻`, `可觀察但不可買`, and `弱勢淘汰`, with non-buy headings no longer all shown as `⛔ 不買`.
   - Confirm holding summary/detail labels differentiate `核心續抱`, `洗盤續抱`, `洗盤警戒`, `續抱觀察`, and `風控觀察`.
   - Confirm no DB schema or daily write/backfill behavior changed.
+
+### Change 4
+- Summary: Optimized online daily report data requests so intraday/daily Telegram generation only requests the minimum 20 daily rows required by strategy, avoids the previous 4-month TWSE monthly scan, and skips Yahoo quote lookup when realtime price is already usable.
+- Files changed:
+  - `core/generator.py`
+  - `tests/test_generator_report.py`
+  - `docs/qa_handoff_log.md`
+- Test level: L1
+- Scope: data source / Telegram / performance
+- Minimal validation run:
+  - `.venv/bin/python -m pytest tests/test_generator_report.py tests/test_stock_api_history.py`
+  - Local timing probe: 12-stock quote scan dropped from about 55s to about 2.1s in the current environment.
+- Skipped tests:
+  - Full regression test suite
+  - Replay/backfill dry-run
+  - Live Telegram delivery
+  - Live Supabase write verification
+  - Formal TWSE/Yahoo provider regression
+- Reason for skipping: Targeted online report request optimization; replay/backfill historical fetch paths and DB write logic were not changed. Live provider variability should be confirmed by QA/network smoke.
+- External services touched: Yahoo / TWSE during local timing probe
+- DB/schema/write risk: no
+- QA focus:
+  - Confirm online report still covers all 12 stocks.
+  - Confirm each stock uses `months=1`, `min_rows=20` Yahoo daily when sufficient.
+  - Confirm TWSE fallback is limited to `months=1`, `max_months=2`, `min_rows=20`.
+  - Confirm realtime price source remains `realtime` and no extra Yahoo quote request is made when realtime succeeds.
+  - Confirm replay/backfill behavior remains unchanged.

@@ -19,7 +19,8 @@ from services.analysis import (
     strategy,
     pick_best_stock,
     BREAKOUT_THRESHOLD,
-    holding_signal as strategy_holding_signal
+    holding_signal as strategy_holding_signal,
+    MIN_DATA_POINTS
 )
 
 from core.condition_engine import (
@@ -3080,20 +3081,55 @@ def formatTelegramMessages(results_map, full_msg, best, score, market_summary, n
     return messages
 
 
+REPORT_DAILY_MIN_ROWS = MIN_DATA_POINTS
+
+
+def load_report_daily_kline(code):
+
+    # 中文註釋：線上報文只需要 MA20 / 10日量 / 20日支撐壓力，不走 replay/backfill 的長歷史抓取口徑。
+    yahoo = get_yahoo_history(
+        code,
+        months=1,
+        min_rows=REPORT_DAILY_MIN_ROWS
+    )
+
+    if yahoo:
+        return yahoo, "yahoo", None
+
+    yahoo_error = get_last_error(code) or "yahoo_daily: no data"
+
+    twse = get_twse(
+        code,
+        months=1,
+        min_rows=REPORT_DAILY_MIN_ROWS,
+        max_months=2
+    )
+
+    if twse:
+        return twse, "twse", None
+
+    twse_error = get_last_error(code) or "twse: no data"
+
+    yahoo_retry = get_yahoo_history(
+        code,
+        months=2,
+        min_rows=REPORT_DAILY_MIN_ROWS
+    )
+
+    if yahoo_retry:
+        return yahoo_retry, "yahoo", None
+
+    retry_error = get_last_error(code) or "yahoo_daily: no data"
+    return None, None, f"{yahoo_error}；fallback {twse_error}；retry {retry_error}"
+
+
 def load_stock_signal(name, code):
 
     try:
-        twse = get_twse(code)
-        daily_source = "twse"
+        daily, daily_source, daily_error = load_report_daily_kline(code)
 
-        if not twse:
-            twse_error = get_last_error(code) or "twse: no data"
-            twse = get_yahoo_history(code)
-            daily_source = "yahoo"
-
-            if not twse:
-                fallback_error = get_last_error(code) or "yahoo_daily: no data"
-                return name, None, None, f"{name}({code}) {twse_error}；fallback {fallback_error}"
+        if not daily:
+            return name, None, None, f"{name}({code}) {daily_error}"
 
         (
             t_price,
@@ -3102,10 +3138,10 @@ def load_stock_signal(name, code):
             ma20,
             closes,
             volumes
-        ) = twse
+        ) = daily
 
         realtime = get_realtime_price(code)
-        yahoo = get_yahoo(code)
+        yahoo = None if realtime else get_yahoo(code)
 
         price, change, price_source = (
             get_live_price_data(

@@ -173,6 +173,71 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertEqual(data["price_source"], "yahoo")
         self.assertIsNotNone(decision)
 
+    def test_load_stock_signal_uses_minimal_yahoo_daily_without_twse_when_sufficient(self):
+        closes = [
+            100, 101, 102, 103, 104,
+            105, 106, 107, 108, 109,
+            110, 111, 112, 113, 114,
+            115, 116, 117, 118, 119
+        ]
+        daily = (
+            119,
+            1.4,
+            sum(closes[-5:]) / 5,
+            sum(closes[-20:]) / 20,
+            closes,
+            VOL_ATTACK
+        )
+
+        with patch.object(generator, "get_yahoo_history", return_value=daily) as yahoo_history, \
+             patch.object(generator, "get_twse") as twse, \
+             patch.object(generator, "get_realtime_price", return_value=(120, 1.7)), \
+             patch.object(generator, "get_yahoo") as yahoo_quote, \
+             patch.object(generator, "get_last_ohlcv", return_value={"source": "yahoo"}):
+            name, data, decision, error = generator.load_stock_signal("測試", "1234")
+
+        self.assertEqual(name, "測試")
+        self.assertIsNone(error)
+        self.assertIsNotNone(data)
+        self.assertEqual(data["daily_source"], "yahoo")
+        self.assertEqual(data["price_source"], "realtime")
+        self.assertIsNotNone(decision)
+        yahoo_history.assert_called_once_with("1234", months=1, min_rows=generator.REPORT_DAILY_MIN_ROWS)
+        twse.assert_not_called()
+        yahoo_quote.assert_not_called()
+
+    def test_load_report_daily_kline_falls_back_to_limited_twse_window(self):
+        closes = [
+            100, 101, 102, 103, 104,
+            105, 106, 107, 108, 109,
+            110, 111, 112, 113, 114,
+            115, 116, 117, 118, 119
+        ]
+        daily = (
+            119,
+            1.4,
+            sum(closes[-5:]) / 5,
+            sum(closes[-20:]) / 20,
+            closes,
+            VOL_ATTACK
+        )
+
+        with patch.object(generator, "get_yahoo_history", return_value=None) as yahoo_history, \
+             patch.object(generator, "get_twse", return_value=daily) as twse, \
+             patch.object(generator, "get_last_error", return_value="yahoo_daily: timeout"):
+            result, source, error = generator.load_report_daily_kline("1234")
+
+        self.assertEqual(result, daily)
+        self.assertEqual(source, "twse")
+        self.assertIsNone(error)
+        yahoo_history.assert_called_once_with("1234", months=1, min_rows=generator.REPORT_DAILY_MIN_ROWS)
+        twse.assert_called_once_with(
+            "1234",
+            months=1,
+            min_rows=generator.REPORT_DAILY_MIN_ROWS,
+            max_months=2
+        )
+
     def test_hidden_rr_is_not_listed_as_advantage(self):
         result = {
             "decision": "NO_TRADE",
