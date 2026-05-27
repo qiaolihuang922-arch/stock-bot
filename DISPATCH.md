@@ -4,43 +4,34 @@
 
 ## Current Task
 
-- task_id: `telegram-unheld-funnel-count-bug`
-- task_name: `Telegram Unheld Funnel Count Bug`
-- task_type: `formatter_bugfix`
-- version_level: `patch`
-- qa_level: `L1`
+- task_id: `workflow-scope-action-noise-gates`
+- task_name: `Workflow Scope, Holding Action, and Noise Gates`
+- task_type: `workflow_rules`
+- version_level: `none`
+- qa_level: `process`
 - owner_status: `requested`
-- architect_status: `qa_accepted`
-- pm_status: `task_ready`
-- tech_status: `changelog_ready`
-- qa_status: `qa_passed`
+- architect_status: `completed`
+- pm_status: `not_required`
+- tech_status: `not_required`
+- qa_status: `not_required`
 - commit: `pushed`
 
 ## Current Result
 
-- Owner 指出短報文 `未持倉漏斗（非執行）` 的顯示會造成數量誤讀：
-  - 例：已持倉 5 檔，未持倉實際 7 檔。
-  - 現有短報文類似 `可買 0｜準備 0｜僅追蹤 6｜冷卻 3｜回測 1｜等RR修復 2｜等量能 0｜淘汰 1`。
-  - `僅追蹤 6` 已包含冷卻 / 回測 / RR / 量能，後面又列子分類，手機閱讀上容易被誤加成超過 watchlist 12 檔。
-- 本輪只修短報文漏斗顯示契約，不改策略 decision、未持倉分類、DB payload、watchlist、live Telegram 或 live Supabase。
-- Architect 已按角色自鎖規則分派 PM；不得直接寫 `TASK.md` 或搜尋 / 修改產品代碼。
-- PM 已交付 `TASK.md`。
-- Tech 第一輪已在隔離 worktree 產生候選 diff，QA 結論為 `conditional pass`。
-- QA 主動發現邊界風險：當 `可準備 > 0` 時，短報文的 `非執行追蹤 N` 與 `其中` 拆分母集合不一致，仍可能造成手機數量誤讀。
-- Tech 第二輪已補修該邊界，QA 第二輪結論：`通過`。
-- 已吸收白名單候選 diff：
-  - `core/generator.py`
-  - `tests/test_generator_report.py`
-  - `CHANGELOG.md`
-  - `QA_REPORT.md`
-- 主 repo 驗證通過：`tests/test_generator_report.py tests/test_notifier.py`，`37 passed, 21 warnings`。
-- 已提交並推送：`3514f94 fix: clarify unheld funnel counts`。
-- 工作流程補強：Owner 若明確說「對比後沒問題就直接 push / 自己 push / 對齊 git」，Architect 完成 final diff review 與必要驗證後直接 commit / push，不再二次詢問；若發現不明 diff、QA 未通過或測試阻塞則不得 push。
-- 版本契約補強：後續 Telegram / CLI / 使用者可見報文任務，PM 必須定義版本字串是否升版，Tech 必須同步程式常量 / header / 測試，QA 必須核對實際輸出版本；狀態文件版本不得替代實際輸出版本。
+- Owner 指出三個流程失誤：
+  - 小 bug 被處理成大任務，跑了過多驗證與無關流程。
+  - 持倉建議可能上一秒加碼、下一秒減碼，甚至剛買後又叫賣。
+  - 報文重複噪音仍多，決策被長文稀釋。
+- 本輪是流程 / 規則修復，由 Architect 直接更新固定文件，不跑 PM / Tech / QA，不改產品代碼。
+- 已在 `AGENTS.md` 補入：
+  - 任務尺寸與驗證預算：`tiny_patch / normal_patch / risk_patch`，要求明確停止條件，避免小 bug 無限擴張。
+  - 持倉行動一致性硬規則：同一標的同一報文只能有一個主行動；今日買入後不得再像加碼；剛買後轉弱必須明確風控觸發。
+  - 報文噪音預算：summary / 索引 / 詳情分工，限制不可買與淘汰標的高層重複點名，QA 必須檢查重複噪音。
 
 ## Next Action
 
-- 等待 Owner 下一個需求。若要修正目前 `core/generator.py` 仍顯示 `v20.0.1` 的問題，需按新流程開版本同步 patch。
+- 等待 Owner 下一個需求。
+- 後續若要修「持倉加減碼反轉」或「報文噪音」的產品行為，必須按新規則先由 PM 定義持倉行動優先級、噪音預算與驗收 fixture。
 
 ## Status Values
 

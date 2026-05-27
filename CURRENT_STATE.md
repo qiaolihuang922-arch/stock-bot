@@ -12,6 +12,14 @@
 - 預設只處理 `core/watchlist.py` 的 12 檔股票。
 - CAO 中文前端固定為 `http://127.0.0.1:5173/`，目錄 `/Users/liveroom/.local/share/cao-web-zh/web`；Architect 只要分配 / 啟動 CAO agents，就必須把此前端地址回覆給 Owner。
 
+## Workflow Scope / Action / Noise Gates 已完成
+
+- 修復流程層三個缺口：
+  - 小 bug 不得無限擴張：新增 `tiny_patch / normal_patch / risk_patch` 與驗證預算，要求每次升級 QA 範圍都寫明具體風險與停止條件。
+  - 持倉行動不得前後打架：同一標的同一報文只能有一個主行動；`今日 買` 後預設只做新倉風控觀察，不再顯示像加碼；若轉弱要賣 / 減碼必須明確觸發條件。
+  - 報文重複噪音納入驗收：summary 只放決策，索引放數量，詳情放追溯；不可買 / 淘汰標的不得在高層反覆點名。
+- 本輪只改流程文件，不改產品代碼、不改策略、不改 Telegram formatter。
+
 ## v20.0 已完成
 
 - 新增 `services/strategy_evidence.py`：market bars、feature snapshots、outcome metrics、classification audit、classification report / Telegram evidence summary。
