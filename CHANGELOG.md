@@ -2,61 +2,66 @@
 
 ## 修改內容
 
-- 將 Telegram formatter 的使用者可見版本常量從 `v20.0.1` 同步為 `v20.0.9`。
-- 將 Telegram header 相關 formatter 測試期望從 `v20.0.1` 同步為 `v20.0.9`。
-- 以 formatter 直接輸出核對 header 第一行包含 `v20.0.9`，且不包含 `v20.0.1`。
+- 修復持倉策略在今日已減碼後仍重複輸出同級減碼的問題。
+- `services.analysis.holding_signal()` 新增今日交易事件判斷：
+  - 優先使用 `sell_pct` / `today_sold_ratio`。
+  - 其次使用 `shares_before` / `before_shares` / `shares_before_trade` / `holding_shares_before` / `previous_shares` 換算。
+  - 若缺交易前股數，使用 `current_shares + sold_shares` 估算交易前總股數。
+- 今日已賣比例接近原建議同級減碼時，原 `REDUCE_25` / `REDUCE_50` 轉為 `POST_REDUCE_WATCH` / `減碼後觀察`。
+- 今日已賣但新訊號升級為更高級減碼時，保留增量減碼；`STOP_100` 硬停損仍不被今日已賣事件遮蔽。
+- 今日已買入且未跌破警戒 / 停損時，一般 reduce 訊號轉為 `NEW_POSITION_RISK_WATCH` / `新倉風控觀察`，保留硬風控覆蓋。
+- Telegram formatter 同步策略層唯一主行動，讓 summary、持倉卡、明日清單、詳情一致。
 
 ## 修改檔案
 
+- `services/analysis.py`
 - `core/generator.py`
+- `tests/test_analysis_engine.py`
 - `tests/test_generator_report.py`
 - `CHANGELOG.md`
 
 ## 契約影響
 
-- 使用者可見 Telegram 報文 header 版本字串改為 `v20.0.9`。
-- `core/generator.py` 的 `VERSION` 常量已同步為 `v20.0.9`，`formatTelegramSummary()` header 會使用同一個常量輸出。
-- 未改 Telegram message list 數量、順序、payload shape、函式回傳型態、分組名稱、summary 規則、持倉 / 未持倉分類或 DB 寫入契約。
+- `services.analysis.holding_signal()` 新增 optional 參數：`position_events=None`、`current_shares=None`。既有呼叫方不傳入時維持原行為。
+- `core.generator.holding_status()` 新增 optional 參數：`position_events=None`，並把持倉股數作為 `current_shares` 傳給策略層。
+- 持倉策略 decision 可能新增兩個 level：
+  - `POST_REDUCE_WATCH`：今日已減碼比例已接近原建議，主行動改為減碼後觀察。
+  - `NEW_POSITION_RISK_WATCH`：今日剛買入且未達硬風控覆蓋，主行動改為新倉風控觀察。
+- 未改 Telegram message list 數量、payload shape、DB schema、未持倉分組或 watchlist。
+- 使用者可見 Telegram header 保持 `v20.0.9`，不做本輪升版，避免回退前一輪版本同步。
 
 ## 版本同步
 
-- `TASK.md` 版本契約要求使用者可見 Telegram header 顯示 `v20.0.9`。
-- 已同步 `core/generator.py` 的 `VERSION` 常量為 `v20.0.9`。
-- 已同步 `tests/test_generator_report.py` 中 header 版本字串期望為 `v20.0.9`。
+- Owner 本輪重點是策略衝突修復；本次移植保留目前 `core/generator.py` 的 `VERSION = "v20.0.9"`。
+- `tests/test_generator_report.py` 既有 header 版本期望仍為 `v20.0.9`。
 
 ## 直接消費者同步
 
-- `formatTelegramSummary()` 直接消費 `VERSION` 常量，header 輸出已同步。
-- `formatTelegramMessages()` 直接消費 `formatTelegramSummary()` 產生 summary message，message list 外層契約未改。
-- `tests/test_generator_report.py` 已同步兩個使用者可見 header 版本期望：
-  - 一般 summary message header。
-  - `include_detail=True` 時最後 summary message header。
-- Owner 手機 Telegram 閱讀者會在報文第一屏 header 看到 `v20.0.9`。
+- `core/generator.py` 的 `holding_status()` 已同步呼叫 `holding_signal()` 新參數，並由以下直接呼叫方傳入 `position_events`：
+  - `render_stock()`
+  - `ensure_holding_decision()`
+  - `generate_report()` 持倉 summary 組裝路徑
+- `formatTelegramPositionCard()` 透過 `ensure_holding_decision()` 可取得事件感知後的 `POST_REDUCE_WATCH`。
+- `position_summary_action()`、`position_summary_note()`、`holding_tomorrow_trigger()`、`holding_reason_line()`、`holding_next_step_line()`、`holding_detail_decision_lines()` 已同步新主行動。
+- `tests/test_notifier.py` 已重跑，確認 message list 直接消費者未破壞。
 
 ## 未影響模組
 
-- `services/analysis.py` 策略判斷未改。
-- `core/condition_engine.py` 條件映射未改。
-- `services/stock_api.py` 行情來源未改。
-- `services/signal_store.py`、`services/daily_snapshot_store.py`、`services/position_store.py` DB / snapshot / 持倉讀寫未改。
-- `core/signal_snapshot.py`、`core/signal_validator.py` snapshot 組裝與驗證未改。
-- `core/watchlist.py` 股票清單未改。
-- replay / backfill scripts 未改、未執行。
-- Telegram live delivery 未執行。
-- Supabase live write 未執行。
+- 未改 DB schema / migrations。
+- 未改 `core/watchlist.py`。
+- 未改未持倉漏斗、淘汰股分類、watchlist 或行情來源。
+- 未改 `services/signal_store.py`、`services/daily_snapshot_store.py`、`services/position_store.py` schema 或正式寫入邏輯。
+- 未執行 live Telegram delivery。
+- 未執行 live Supabase write。
+- 未執行正式 replay / backfill 寫入。
 
 ## 已跑自檢命令
 
-- `rg -n "v20\\.0\\.1|v20\\.0\\.9" -g '!CHANGELOG.md' -g '!TASK.md' -g '!DISPATCH.md' -g '!CURRENT_STATE.md' -g '!AGENTS.md' -g '!QA_REPORT.md'`
-  - 結果：程式與測試只剩 `core/generator.py`、`tests/test_generator_report.py` 使用 `v20.0.9`；另有 `CLEANUP_PLAN.md` 歷史狀態文字含 `v20.0.1`，非 Telegram header 程式常量或測試期望，本輪未改固定總控文件。
-- `arch -arm64 .venv/bin/python -c 'import sys, types, pytest; m=types.ModuleType("config"); m.SUPABASE_URL="https://example.supabase.co"; m.SUPABASE_KEY="dummy-key"; m.SUPABASE_SERVICE_ROLE_KEY="dummy-key"; m.TOKEN="dummy-token"; m.CHAT_ID="dummy-chat"; sys.modules["config"]=m; raise SystemExit(pytest.main(["tests/test_generator_report.py", "-q"]))'`
-  - 結果：`34 passed, 21 warnings`
-- `arch -arm64 .venv/bin/python - <<'PY' ...`
-  - 核對 formatter output header 第一行：`【05/27 盤後｜v20.0.9】`
-  - 結果：`contains_v20_0_9=True`、`contains_v20_0_1=False`
+- `arch -arm64 .venv/bin/python -c 'import sys, types, pytest; m=types.ModuleType("config"); m.SUPABASE_URL="https://example.supabase.co"; m.SUPABASE_KEY="dummy-key"; m.SUPABASE_SERVICE_ROLE_KEY="dummy-key"; m.TOKEN="dummy-token"; m.CHAT_ID="dummy-chat"; sys.modules["config"]=m; raise SystemExit(pytest.main(["tests/test_analysis_engine.py", "tests/test_generator_report.py", "tests/test_notifier.py", "-q"]))'`
+  - 結果：`69 passed, 21 warnings`
 
 ## 殘留風險
 
-- 本輪只做 Tech 最小自檢，未宣告 QA 通過。
-- 未執行 full pytest、replay/backfill、live Telegram delivery 或 live Supabase write；依 `TASK.md` 與 Tech 邊界未執行。
-- `CLEANUP_PLAN.md` 仍有一筆歷史狀態文字提到 `v20.0.1 Evidence Readiness Message`；它不是本輪使用者可見 Telegram header 版本來源或測試期望，且 Tech 本輪不改 Architect 總控文件。
+- 本輪未執行 full pytest、replay/backfill、live Telegram delivery 或 live Supabase write；依 `TASK.md` 與禁止事項未執行。
+- 若 `position_events` 同時缺 `sell_pct`、`sold_shares` 與可估算股數，策略無法推導今日已賣比例，會保留原始風控建議。
+- 增量減碼目前以目標比例減去已賣比例估算增量比例；QA 仍需用接近 Owner 長報文情境檢查 summary、持倉卡、明日清單與詳情不互相衝突。

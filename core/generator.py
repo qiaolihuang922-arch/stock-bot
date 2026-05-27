@@ -1281,7 +1281,8 @@ def holding_status(
     change=None,
     realized_profit_taken_ratio=0,
     realized_profit_taken_date=None,
-    signal_date=None
+    signal_date=None,
+    position_events=None
 ):
 
     signal = strategy_holding_signal(
@@ -1292,7 +1293,9 @@ def holding_status(
         change,
         realized_profit_taken_ratio,
         realized_profit_taken_date,
-        signal_date
+        signal_date,
+        position_events,
+        shares
     )
 
     ratio = signal.get("ratio", 0)
@@ -2062,7 +2065,8 @@ def render_stock(
             change,
             holding.get("realized_profit_taken_ratio", 0),
             holding.get("realized_profit_taken_date"),
-            datetime.now(tz).date().isoformat()
+            datetime.now(tz).date().isoformat(),
+            today_events
         )
 
         result["_holding_decision"] = holding_decision
@@ -2387,7 +2391,8 @@ def ensure_holding_decision(name, data, signal_date=None):
         data.get("change"),
         holding.get("realized_profit_taken_ratio", 0),
         holding.get("realized_profit_taken_date"),
-        signal_date or datetime.now(tz).date().isoformat()
+        signal_date or datetime.now(tz).date().isoformat(),
+        data.get("position_events") or {}
     )
 
     data["holding_decision"] = decision
@@ -2877,11 +2882,23 @@ def position_summary_action(name, data):
     if level == "STOP_100":
         return "停損"
 
+    if str(action).startswith("硬風控"):
+        return "硬風控減碼"
+
+    if str(action).startswith("增量"):
+        return "增量減碼"
+
     if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]:
         return "停利"
 
     if level in ["REDUCE_25", "REDUCE_50"]:
         return "減碼"
+
+    if level == "POST_REDUCE_WATCH":
+        return "減碼後觀察"
+
+    if level == "NEW_POSITION_RISK_WATCH":
+        return "新倉風控觀察"
 
     if is_today_buy_holding(data):
         return "新倉風控觀察"
@@ -2914,7 +2931,7 @@ def position_summary_action(name, data):
             return "停利後核心倉"
         return "核心續抱"
 
-    if "賣" in today_text:
+    if "賣" in today_text and not str(action).startswith("硬風控"):
         return "減碼後觀察"
 
     if level == "SHAKEOUT_WARN":
@@ -3014,10 +3031,10 @@ def position_summary_note(name, data):
     today_text = event_summary_text(data.get("position_events") or {})
     note = decision.get("note") if decision else ""
 
-    if "賣" in today_text:
-        return "已減碼，觀察是否轉弱"
-
     action = position_summary_action(name, data)
+
+    if "賣" in today_text and action == "減碼後觀察":
+        return note or "已減碼，觀察是否轉弱"
 
     if action in ["加碼10", "加碼20", "加碼30"]:
         return f"{decision.get('action')}，{decision.get('note') or '條件成立'}"
@@ -3031,6 +3048,12 @@ def position_summary_note(name, data):
     if action == "減碼":
         return f"{decision.get('action')}，降低風險"
 
+    if action == "硬風控減碼":
+        return f"{decision.get('action')}，{note or '今日事件後仍需降低風險'}"
+
+    if action == "增量減碼":
+        return f"{decision.get('action')}，{note or '補足增量風控'}"
+
     if action == "核心續抱":
         return decision.get("note") or "高浮盈回落，暫不加碼"
 
@@ -3041,7 +3064,7 @@ def position_summary_note(name, data):
         return "保留核心倉，等待冷卻"
 
     if action == "減碼後觀察":
-        return "觀察是否重新站回突破區"
+        return note or "觀察是否重新站回突破區"
 
     if action == "洗盤續抱":
         return "縮量回測，未見出貨"
@@ -3055,7 +3078,7 @@ def position_summary_note(name, data):
         return decision.get("note") or "跌破警戒價優先風控"
 
     if action == "新倉風控觀察":
-        return "今日新倉小虧，暫不加碼"
+        return note or "今日剛買入，先看是否守住警戒"
 
     if action == "續抱觀察":
         return decision.get("note") or "轉弱觀察，不加碼"
@@ -3173,6 +3196,12 @@ def holding_tomorrow_trigger(name, data):
     if level in ["REDUCE_25", "REDUCE_50"]:
         return "無法重新站回突破區，繼續降低優先級"
 
+    if level == "POST_REDUCE_WATCH":
+        return "修復才恢復優先級"
+
+    if level == "NEW_POSITION_RISK_WATCH":
+        return "明日未修復降級"
+
     if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]:
         return "保留核心倉，等待冷卻後再評估"
 
@@ -3212,6 +3241,8 @@ def position_priority_rank(name, data):
     level = (ensure_holding_decision(name, data) or {}).get("level", "")
     rank = {
         "停損": 0,
+        "硬風控減碼": 1,
+        "增量減碼": 1,
         "減碼": 1,
         "停利": 1,
         "新倉風控觀察": 2,
@@ -3266,6 +3297,8 @@ def holding_execution_priority(name, data):
     level = (ensure_holding_decision(name, data) or {}).get("level", "")
     rank = {
         "停損": 0,
+        "硬風控減碼": 1,
+        "增量減碼": 1,
         "減碼": 1,
         "停利": 2,
         "新倉風控觀察": 3,
@@ -3300,6 +3333,8 @@ def holding_execution_item(name, data):
         "priority": holding_execution_priority(name, data),
         "is_control": label in [
             "停損",
+            "硬風控減碼",
+            "增量減碼",
             "減碼",
             "停利",
             "新倉風控觀察",
@@ -3737,10 +3772,17 @@ def holding_reason_line(name, data):
         return "高浮盈且過熱延伸，先保留獲利"
 
     if level in ["REDUCE_25", "REDUCE_50"]:
+        if str(decision.get("action", "")).startswith("硬風控"):
+            return decision.get("note") or "硬風控覆蓋，今日事件後仍需降風險"
+        if str(decision.get("action", "")).startswith("增量"):
+            return decision.get("note") or "補足今日未完成的風控差額"
         return "突破失敗或結構轉弱，先降低風險"
 
     if level == "STOP_100":
         return "跌破停損線，避免虧損擴大"
+
+    if level in ["POST_REDUCE_WATCH", "NEW_POSITION_RISK_WATCH"]:
+        return decision.get("note")
 
     return None
 
@@ -3756,6 +3798,12 @@ def holding_next_step_line(name, data):
 
     if level in ["REDUCE_25", "REDUCE_50"]:
         return "若無法重新站回突破區，繼續降低優先級"
+
+    if level == "POST_REDUCE_WATCH":
+        return "修復才恢復優先級，未修復續降級"
+
+    if level == "NEW_POSITION_RISK_WATCH":
+        return "隔日未修復，降低優先級"
 
     if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]:
         return "保留核心倉，等待冷卻後再評估"
@@ -3818,10 +3866,20 @@ def holding_detail_decision_lines(name, data):
         return f"{action_text}，鎖定部分獲利", "高浮盈或過熱延伸，保留核心倉"
 
     if level in ["REDUCE_25", "REDUCE_50"]:
+        if str(action_text).startswith("硬風控"):
+            return f"{action_text}，{note or '今日事件後仍需降低風險'}", "硬風控覆蓋，高於今日交易事件"
+        if str(action_text).startswith("增量"):
+            return f"{action_text}，{note or '補足增量風控'}", "今日已減碼不足，新訊號要求補足風控"
         return f"{action_text}，降低風險", "結構轉弱或突破失敗，先降風險"
 
     if level == "STOP_100":
         return f"{action_text}，{note or '硬停損觸發'}", "停損優先，避免虧損擴大"
+
+    if level == "POST_REDUCE_WATCH":
+        return "減碼後觀察，暫不加碼", note or "今日已減碼接近原建議，等待新訊號"
+
+    if level == "NEW_POSITION_RISK_WATCH":
+        return "新倉風控觀察，暫不加碼", note or "今日剛買入，先觀察是否守住警戒 / 停損"
 
     if summary_action == "核心續抱":
         return "核心續抱，暫不加碼", "跌破警戒價優先風控，等待冷卻"
@@ -4334,7 +4392,8 @@ def generate_report():
             data.get("change"),
             data["holding"].get("realized_profit_taken_ratio", 0),
             data["holding"].get("realized_profit_taken_date"),
-            now.date().isoformat()
+            now.date().isoformat(),
+            data.get("position_events") or {}
         )
 
         if h_decision["level"] in [

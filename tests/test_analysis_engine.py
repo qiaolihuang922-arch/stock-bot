@@ -233,6 +233,101 @@ class AnalysisEngineTest(unittest.TestCase):
         self.assertEqual(signal["action"], "續抱核心倉")
         self.assertIn("同日不連續賣", signal["reason"])
 
+    def test_post_reduce_watch_uses_sold_shares_when_sell_pct_missing(self):
+        result = {
+            "structure_phase": "DISTRIBUTION",
+            "price_behavior": "DISTRIBUTION_SPIKE",
+            "market_regime": "RISK_ON",
+            "multi_day_bias": "MIXED",
+            "decision": "WAIT",
+            "heat_state": "NORMAL",
+            "trade_state": "WAIT",
+            "extended_level": 0,
+            "trend": "UP",
+            "volume_state": "STRONG",
+            "volume_price_state": "DISTRIBUTION",
+            "rr": 1.2,
+            "breakout_distance": 0,
+            "entry_quality": "B",
+            "confidence_score": 70,
+        }
+
+        signal = holding_signal(
+            result,
+            105,
+            100,
+            "realtime",
+            -1.0,
+            position_events={"sold_shares": 40},
+            current_shares=110
+        )
+
+        self.assertEqual(signal["level"], "POST_REDUCE_WATCH")
+        self.assertEqual(signal["action"], "減碼後觀察")
+        self.assertEqual(signal["ratio"], 0)
+        self.assertIn("今日已減碼約27%", signal["reason"])
+        self.assertIn("原建議25%", signal["reason"])
+
+        signal_with_larger_current_holding = holding_signal(
+            result,
+            105,
+            100,
+            "realtime",
+            -1.0,
+            position_events={"sold_shares": 40},
+            current_shares=150
+        )
+
+        self.assertEqual(signal_with_larger_current_holding["level"], "POST_REDUCE_WATCH")
+        self.assertIn("今日已減碼約21%", signal_with_larger_current_holding["reason"])
+
+    def test_post_reduce_allows_incremental_reduce_and_stop(self):
+        result = {
+            "structure_phase": "DISTRIBUTION",
+            "price_behavior": "DISTRIBUTION_SPIKE",
+            "market_regime": "RISK_ON",
+            "multi_day_bias": "MIXED",
+            "decision": "WAIT",
+            "heat_state": "NORMAL",
+            "trade_state": "WAIT",
+            "extended_level": 0,
+            "trend": "UP",
+            "volume_state": "STRONG",
+            "volume_price_state": "DISTRIBUTION",
+            "rr": 1.2,
+            "breakout_distance": 0,
+            "entry_quality": "B",
+            "confidence_score": 70,
+        }
+
+        reduce_signal = holding_signal(
+            result,
+            99,
+            100,
+            "realtime",
+            -2.0,
+            position_events={"sold_shares": 40},
+            current_shares=110
+        )
+
+        self.assertEqual(reduce_signal["level"], "REDUCE_50")
+        self.assertGreater(reduce_signal["ratio"], 0)
+        self.assertLess(reduce_signal["ratio"], 0.5)
+        self.assertIn("風控升級", reduce_signal["reason"])
+
+        stop_signal = holding_signal(
+            result,
+            90,
+            100,
+            "realtime",
+            -5.0,
+            position_events={"sold_shares": 40},
+            current_shares=110
+        )
+
+        self.assertEqual(stop_signal["level"], "STOP_100")
+        self.assertEqual(stop_signal["ratio"], 1)
+
     def test_profit_taken_does_not_lock_after_heat_cools(self):
         item = snap("cooled_profit_taken", [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 114], VOL_ATTACK)
         signal = holding_signal(

@@ -1782,7 +1782,9 @@ def holding_signal(
     change=None,
     realized_profit_taken_ratio=0,
     realized_profit_taken_date=None,
-    signal_date=None
+    signal_date=None,
+    position_events=None,
+    current_shares=None
 ):
 
     pnl = (
@@ -1820,6 +1822,47 @@ def holding_signal(
         and signal_date is not None
         and str(realized_profit_taken_date) == str(signal_date)
     )
+    position_events = position_events or {}
+
+    def numeric_event_value(*keys):
+        for key in keys:
+            try:
+                value = position_events.get(key)
+                if value is not None:
+                    return float(value)
+            except (TypeError, ValueError):
+                pass
+        return 0
+
+    def today_sold_ratio():
+        sold_shares = numeric_event_value("sold_shares", "today_sold_qty")
+        if sold_shares <= 0:
+            return 0
+
+        explicit_pct = numeric_event_value("sell_pct", "today_sold_ratio")
+        if explicit_pct > 0:
+            return explicit_pct
+
+        before_shares = numeric_event_value(
+            "shares_before",
+            "before_shares",
+            "shares_before_trade",
+            "holding_shares_before",
+            "previous_shares"
+        )
+        if before_shares <= 0:
+            try:
+                before_shares = float(current_shares or 0) + sold_shares
+            except (TypeError, ValueError):
+                before_shares = 0
+
+        if before_shares <= 0:
+            return 0
+
+        return sold_shares / before_shares * 100
+
+    def today_bought_shares():
+        return numeric_event_value("bought_shares", "today_bought_qty")
 
     structure_broken = (
         phase in ["FAILED_BREAKOUT", "DISTRIBUTION"]
@@ -1951,7 +1994,7 @@ def holding_signal(
             else:
                 add_status = "BLOCK"
 
-        return {
+        data = {
             "action": action,
             "ratio": ratio,
             "reason": reason,
@@ -1964,6 +2007,68 @@ def holding_signal(
             "warning_price": warning_price,
             "hard_stop_price": hard_stop_price
         }
+
+        if level not in ["REDUCE_25", "REDUCE_50"]:
+            return data
+
+        if today_bought_shares() > 0:
+            if price <= warning_price:
+                trigger = "跌破停損" if price <= hard_stop_price else "跌破警戒"
+                data.update({
+                    "action": f"硬風控減碼 {int(ratio * 100)}%",
+                    "reason": f"今日新倉{trigger}，先降低風險",
+                    "add_status": "FORBID",
+                    "allow_add": False,
+                })
+                return data
+
+            data.update({
+                "action": "新倉風控觀察",
+                "ratio": 0,
+                "reason": f"今日剛買入{int(today_bought_shares())}股，原始減碼訊號未達硬風控覆蓋條件",
+                "level": "NEW_POSITION_RISK_WATCH",
+                "phase": "NEW_POSITION_RISK_WATCH",
+                "risk_level": min(risk_level, 3),
+                "add_status": "FORBID",
+                "allow_add": False,
+                "add_blockers": ["今日剛買入", "未觸發硬風控"],
+            })
+            return data
+
+        sold_ratio = today_sold_ratio()
+        recommended_pct = ratio * 100
+        if sold_ratio <= 0:
+            return data
+
+        completed_same_level = (
+            abs(sold_ratio - recommended_pct) <= 5
+            or sold_ratio >= recommended_pct * 0.8
+        )
+        if completed_same_level:
+            data.update({
+                "action": "減碼後觀察",
+                "ratio": 0,
+                "reason": f"今日已減碼約{round(sold_ratio)}%，接近原建議{round(recommended_pct)}%，等待新訊號",
+                "level": "POST_REDUCE_WATCH",
+                "phase": "POST_REDUCE_WATCH",
+                "risk_level": min(risk_level, 3),
+                "add_status": "FORBID",
+                "allow_add": False,
+                "add_blockers": ["今日已減碼", "等待新訊號"],
+            })
+            return data
+
+        if ratio > 0 and sold_ratio < recommended_pct:
+            incremental_ratio = max(ratio - sold_ratio / 100, 0)
+            data.update({
+                "action": f"增量減碼 {round(incremental_ratio * 100)}%",
+                "ratio": incremental_ratio,
+                "reason": f"風控升級，今日已減碼約{round(sold_ratio)}%，仍需補足至{round(recommended_pct)}%",
+                "add_status": "FORBID",
+                "allow_add": False,
+            })
+
+        return data
 
     if (
         price <= hard_stop_price

@@ -20,6 +20,26 @@
 - QA 結論：`通過`；已驗證 formatter summary header 為 `【05/27 盤後｜v20.0.9】`，且 `core/`、`tests/` 中不再殘留 `v20.0.1` 作為使用者可見 header 版本來源或測試期望。
 - 驗證：`tests/test_generator_report.py tests/test_notifier.py`，`39 passed, 21 warnings`。
 
+## Post Trade Reduce Cooldown Strategy Fix 已完成本地修復
+
+- 修復 Owner 指出的持倉策略衝突：
+  - 今日已減碼且比例接近原建議同級減碼時，主行動轉為 `減碼後觀察`，不再重複叫同級減碼。
+  - 若缺 `sell_pct`，策略會用 `sold_shares / (current_shares + sold_shares)` 估算今日已賣比例。
+  - 今日已賣後若風控升級到更高級減碼或 `STOP_100`，仍允許增量風控 / 停損，不做硬鎖。
+  - 今日買入後的一般 reduce 訊號轉為 `新倉風控觀察`；買入後硬停損仍保留 `STOP_100`。
+- 保留 `v20.0.9`，本輪不升版；未回退 action-noise、淘汰去點名、未持倉漏斗母集合契約。
+- 修改檔案：
+  - `services/analysis.py`
+  - `core/generator.py`
+  - `tests/test_analysis_engine.py`
+  - `tests/test_generator_report.py`
+  - `TASK.md`
+  - `CHANGELOG.md`
+  - `QA_REPORT.md`
+  - `DISPATCH.md`
+- 未改 DB schema、watchlist、live Telegram、live Supabase、replay/backfill write path。
+- QA 結論：`通過`；驗證 `69 passed, 21 warnings`。
+
 ## Workflow Scope / Action / Noise Gates 已完成
 
 - 修復流程層三個缺口：

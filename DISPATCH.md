@@ -4,9 +4,9 @@
 
 ## Current Task
 
-- task_id: `telegram-version-20-0-9-sync`
-- task_name: `Telegram Version String Sync to v20.0.9`
-- task_type: `telegram_version_display_bugfix`
+- task_id: `post-trade-reduce-cooldown-strategy-fix`
+- task_name: `Post Trade Reduce Cooldown Strategy Fix`
+- task_type: `holding_strategy_event_aware_bugfix`
 - version_level: `patch`
 - qa_level: `L2`
 - owner_status: `requested`
@@ -18,18 +18,27 @@
 
 ## Current Result
 
-- Owner 指出 Telegram 報文仍顯示 `v20.0.1`，要求版本號能正常同步，並統一修改到 `v20.0.9`，不要漏掉。
-- Architect 已按自鎖規則分派 PM；本輪只允許處理使用者可見版本字串同步，不改策略、不改報文分類、不改 DB / Telegram payload。
-- PM 必須定義版本契約：Telegram header、程式版本常量、formatter 測試期望、狀態文件記錄都要一致為 `v20.0.9`。
-- Tech 只能修改版本常量、測試期望與必要交付文件；不得趁機改持倉行動、漏斗、策略證據、watchlist 或資料來源。
-- QA 必須實際驗證 formatter 輸出 header 包含 `v20.0.9`，並掃描不應殘留 `v20.0.1` 的使用者可見版本期望。
+- Owner 指出最新報文有策略衝突：
+  - `緯創` 已依報文賣過約 25%，新報文仍再次給同級 `減碼`，造成重複減碼建議。
+  - `智原` 今日買入後又被報文列為 `減碼 50%`，與新倉行為衝突；若確實需要風控，必須是 event-aware 的風控升級，不是硬性鎖死或無條件再賣。
+- 本輪要修的是策略 / 持倉狀態機的「已執行交易事件」判斷，不是單純 formatter 文案，也不是硬鎖死不准賣。
+- PM 必須先定義 post-trade cooldown / event-aware reduce 契約：
+  - 今日已賣且比例接近建議減碼比例時，後續主行動應降為 `減碼後觀察` 或等價觀察狀態。
+  - 只有跌破停損、跌破警戒、結構進一步惡化、或新觸發更高級別風控時，才允許同日 / 次報文再次減碼。
+  - 今日買入與減碼衝突時，要定義新倉風控、停損 / 減碼硬優先、以及何時可覆蓋新倉觀察。
+- Tech 不得用硬性「今天賣過就永不賣」處理；必須保留更高級風控可覆蓋的條件。
+- QA 必須用 Owner 這段報文建 fixture，檢查不再重複同級減碼，也不遮蔽真正停損 / 更高級風控。
 - CAO 前端：`http://127.0.0.1:5173/`
-- PM 已交付 `TASK.md`。
-- Tech 已交付版本同步候選 diff。
-- QA 報告結論：`通過`；已驗證 formatter summary header 為 `【05/27 盤後｜v20.0.9】`，且程式 / 測試使用者可見 header 期望不殘留 `v20.0.1`。
-- 已吸收白名單候選 diff：
+- PM 已交付 `TASK.md`，版本契約修正為本輪不升版、沿用 `v20.0.9`。
+- Tech 候選已由 Architect 移植到最新 main，避免舊 worktree 回退 `v20.0.9`、action-noise、未持倉漏斗與淘汰去點名契約。
+- QA 結論：`通過`；驗證 `sold_shares` only 可轉 `減碼後觀察`，`REDUCE_50` / `STOP_100` 不被硬鎖，今日買入一般 reduce 轉 `新倉風控觀察`，買入後硬停損仍保留。
+- 驗證命令：`tests/test_analysis_engine.py tests/test_generator_report.py tests/test_notifier.py -q`，結果 `69 passed, 21 warnings`。
+- 已吸收白名單 diff：
+  - `services/analysis.py`
   - `core/generator.py`
+  - `tests/test_analysis_engine.py`
   - `tests/test_generator_report.py`
+  - `TASK.md`
   - `CHANGELOG.md`
   - `QA_REPORT.md`
 

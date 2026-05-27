@@ -1366,6 +1366,46 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("仁寶", summary_msg)
         self.assertNotIn("淘汰 4：旺宏、群創、南亞科、仁寶", summary_msg)
 
+    def test_post_reduce_watch_card_uses_sold_shares_fallback_without_sell_pct(self):
+        payload = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119],
+            {"shares": 110, "avg_price": 100},
+            price=105,
+            change=-1.0,
+        )
+        payload["stock_code"] = "3231"
+        payload["result"].update({
+            "structure_phase": "DISTRIBUTION",
+            "price_behavior": "DISTRIBUTION_SPIKE",
+            "volume_price_state": "DISTRIBUTION",
+            "trend": "UP",
+            "volume_state": "STRONG",
+            "multi_day_bias": "MIXED",
+            "decision": "WAIT",
+        })
+        payload["position_events"] = {"event_count": 1, "sold_shares": 40}
+
+        card = generator.formatTelegramPositionCard("緯創", payload)
+        decision = payload["holding_decision"]
+        messages = generator.formatTelegramMessages(
+            {"緯創": payload},
+            "FULL DETAIL",
+            None,
+            None,
+            "⏳ 觀望",
+            datetime(2026, 5, 27),
+        )
+
+        self.assertEqual(decision["level"], "POST_REDUCE_WATCH")
+        self.assertIn("【緯創 3231】📌 減碼後觀察", card)
+        self.assertIn("今日 賣 40股", card)
+        self.assertIn("決策：減碼後觀察，暫不加碼", card)
+        self.assertIn("今日已減碼約27%", decision["note"])
+        self.assertIn("1. 緯創｜+5.00%｜減碼後觀察｜修復才恢復優先級", messages[-1])
+        self.assertNotIn("📌 減碼｜", card)
+        self.assertNotIn("決策：減碼 25%", card)
+        self.assertNotIn("緯創｜+5.00%｜減碼｜", messages[-1])
+
     def test_v19_3_3_profit_reduce_stop_detail_lines_are_direct_actions(self):
         base = render_payload(
             [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119],
