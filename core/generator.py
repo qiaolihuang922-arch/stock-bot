@@ -2846,20 +2846,22 @@ def position_summary_rank(name, data):
         bucket = 0
     elif level in ["REDUCE_50", "REDUCE_25", "TAKE_PROFIT_50", "TAKE_PROFIT_25"]:
         bucket = 1
-    elif level in ["ADD_30", "ADD_20", "ADD_10"]:
+    elif is_today_buy_holding(data):
         bucket = 2
-    elif "核心" in action or level == "HOLD_CORE":
+    elif level in ["ADD_30", "ADD_20", "ADD_10"]:
         bucket = 3
-    elif "賣" in today_text:
+    elif "核心" in action or level == "HOLD_CORE":
         bucket = 4
+    elif "賣" in today_text:
+        bucket = 5
     elif level in ["SHAKEOUT", "HOLD_WATCH", "SHAKEOUT_WARN", "RISK_WATCH"]:
-        bucket = 5
-    elif "買" in today_text and pnl >= 0:
-        bucket = 5
-    elif pnl < 0 or data["result"].get("market_grade") == "D":
-        bucket = 7
-    else:
         bucket = 6
+    elif "買" in today_text and pnl >= 0:
+        bucket = 6
+    elif pnl < 0 or data["result"].get("market_grade") == "D":
+        bucket = 8
+    else:
+        bucket = 7
 
     return (bucket, -pnl)
 
@@ -2880,6 +2882,9 @@ def position_summary_action(name, data):
 
     if level in ["REDUCE_25", "REDUCE_50"]:
         return "減碼"
+
+    if is_today_buy_holding(data):
+        return "新倉風控觀察"
 
     if level == "ADD_30":
         return "加碼30"
@@ -2928,6 +2933,19 @@ def position_summary_action(name, data):
         return "續抱觀察"
 
     return "續抱"
+
+
+def is_today_buy_holding(data):
+
+    if not data.get("holding"):
+        return False
+
+    events = data.get("position_events") or {}
+    if events.get("bought_shares", 0) > 0:
+        return True
+
+    today_action = str(data.get("today_action") or "").upper()
+    return today_action in ["BUY", "買", "買入", "今日買入"]
 
 
 def is_reduce_after_observation(data):
@@ -3158,11 +3176,11 @@ def holding_tomorrow_trigger(name, data):
     if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]:
         return "保留核心倉，等待冷卻後再評估"
 
-    if level in ["ADD_10", "ADD_20", "ADD_30"]:
-        return "加碼後守警戒價，量價未延續則停止加碼"
-
     if action == "新倉風控觀察":
         return "明日未修復降級"
+
+    if level in ["ADD_10", "ADD_20", "ADD_30"]:
+        return "加碼後守警戒價，量價未延續則停止加碼"
 
     if action == "洗盤警戒":
         return "跌破警戒升級風控"
@@ -3344,11 +3362,11 @@ def unheld_execution_trigger(funnel_state, data):
     if funnel_state == "可準備":
         return f"不可買，{trigger or '等條件確認'}"
 
-    if funnel_state == "等回測":
-        return "不追價，回測不破且降溫再評估"
-
     if funnel_state == "等冷卻":
         return "不追價，等冷卻降溫"
+
+    if funnel_state == "等回測":
+        return "不追價，回測不破且降溫再評估"
 
     if funnel_state == "等RR修復":
         return "不追價，等RR達標"
@@ -3564,7 +3582,6 @@ def format_execution_checklist(holding_items, watch_items, limit=5):
 def format_unheld_funnel(watch_items):
 
     funnel = build_unheld_funnel(watch_items)
-    unheld_total = sum(len(items) for items in funnel.values())
     tracking_count = unheld_tracking_count(funnel)
     tracking_only_count = sum(
         len(funnel[label])
@@ -3572,7 +3589,7 @@ def format_unheld_funnel(watch_items):
     )
 
     return "\n".join([
-        f"未持倉總數 {unheld_total} 檔",
+        f"未持倉總數 {sum(len(items) for items in funnel.values())} 檔",
         (
             f"可買 {len(funnel['可買'])}"
             f"｜可準備 {len(funnel['可準備'])}（不可買）"
@@ -3613,8 +3630,7 @@ def rejected_trace_line(watch_items):
     if not rejected:
         return None
 
-    names = "、".join(rejected)
-    return f"淘汰 {len(rejected)}：{names}｜主因：{dominant_reject_reasons(watch_items)}"
+    return f"淘汰 {len(rejected)} 檔｜主因：{dominant_reject_reasons(watch_items)}｜詳情見未持倉卡"
 
 
 def formatTelegramSummary(results_map, best, score, market_summary, now, position_warning=None, daily_write_warning=None, strategy_evidence_summary=None):
@@ -3744,11 +3760,11 @@ def holding_next_step_line(name, data):
     if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]:
         return "保留核心倉，等待冷卻後再評估"
 
-    if level in ["ADD_10", "ADD_20", "ADD_30"]:
-        return "加碼後守警戒價，量價未延續則停止加碼"
-
     if action == "新倉風控觀察":
         return "隔日未修復，降低優先級"
+
+    if level in ["ADD_10", "ADD_20", "ADD_30"]:
+        return "加碼後守警戒價，量價未延續則停止加碼"
 
     if action == "洗盤警戒":
         return "守警戒價，跌破警戒升級風控"
@@ -3786,6 +3802,9 @@ def holding_detail_decision_lines(name, data):
     action_text = decision.get("action") if decision else ""
     note = decision.get("note") if decision else ""
 
+    if summary_action == "新倉風控觀察":
+        return "新倉風控觀察，暫不加碼", "守警戒價，跌破停損或轉弱優先風控"
+
     if level == "ADD_30":
         return f"{action_text}，{note or '強勢突破確認'}", "RR足夠，品質達標"
 
@@ -3803,9 +3822,6 @@ def holding_detail_decision_lines(name, data):
 
     if level == "STOP_100":
         return f"{action_text}，{note or '硬停損觸發'}", "停損優先，避免虧損擴大"
-
-    if summary_action == "新倉風控觀察":
-        return "新倉風控觀察，暫不加碼", "守警戒價，跌破停損或轉弱優先風控"
 
     if summary_action == "核心續抱":
         return "核心續抱，暫不加碼", "跌破警戒價優先風控，等待冷卻"

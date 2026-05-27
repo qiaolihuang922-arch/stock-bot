@@ -7,7 +7,7 @@
 - 專案：台股策略報文機器人。
 - 目前穩定線：`Telegram Unheld Funnel Count Bug` 已完成、QA L1 通過並推送。
 - 最新流程線：`Architect Role Self Lock` 與 `Auto Push After Final Review` 已寫入工作流程。
-- 最新已推送 commit：`3514f94 fix: clarify unheld funnel counts`
+- 最新已推送 commit：本次 `fix: align telegram actions and noise` 提交；以 `git log -1` 為準。
 - 交付形態維持不變：定時 GitHub Actions / 腳本 -> 產生 Telegram 報文 -> 發送給 Owner。
 - 預設只處理 `core/watchlist.py` 的 12 檔股票。
 - CAO 中文前端固定為 `http://127.0.0.1:5173/`，目錄 `/Users/liveroom/.local/share/cao-web-zh/web`；Architect 只要分配 / 啟動 CAO agents，就必須把此前端地址回覆給 Owner。
@@ -19,6 +19,24 @@
   - 持倉行動不得前後打架：同一標的同一報文只能有一個主行動；`今日 買` 後預設只做新倉風控觀察，不再顯示像加碼；若轉弱要賣 / 減碼必須明確觸發條件。
   - 報文重複噪音納入驗收：summary 只放決策，索引放數量，詳情放追溯；不可買 / 淘汰標的不得在高層反覆點名。
 - 本輪只改流程文件，不改產品代碼、不改策略、不改 Telegram formatter。
+
+## Telegram Holding Action / Noise Fix 已完成本地修復
+
+- 修復 Owner 指出的三類產品問題：
+  - 今日買入持倉即使原始 decision 是加碼，也先顯示 `新倉風控觀察`，不再在 summary / 持倉卡 / 明日清單輸出加碼語意。
+  - 高分但風控優先的持倉改為 `不加碼，先風控`，避免被重新包裝成可買或可加碼。
+  - Summary 新增手機優先決策行，未持倉 `準備 / 僅追蹤 / 淘汰` 分工更清楚；淘汰股高層只顯示數量與主因，不重複點名完整名單。
+  - 保留上一輪已推送的未持倉漏斗契約：`未持倉總數`、母集合、`僅追蹤` 拆分與 `非執行追蹤合計`，避免短報文再次出現總數誤讀。
+- 修改檔案：
+  - `core/generator.py`
+  - `tests/test_generator_report.py`
+  - `TASK.md`
+  - `CHANGELOG.md`
+  - `QA_REPORT.md`
+  - `DISPATCH.md`
+- 未改策略 decision 來源、DB payload、watchlist、live Telegram、live Supabase、replay/backfill。
+- Final QA 結論：`通過`；首輪 QA 因引用舊漏斗任務被 Architect 拒收並重跑，final review 又攔下一次漏斗契約回歸並修回。
+- 驗證：`tests/test_generator_report.py tests/test_notifier.py`，`39 passed, 21 warnings`。
 
 ## v20.0 已完成
 

@@ -4,34 +4,41 @@
 
 ## Current Task
 
-- task_id: `workflow-scope-action-noise-gates`
-- task_name: `Workflow Scope, Holding Action, and Noise Gates`
-- task_type: `workflow_rules`
-- version_level: `none`
-- qa_level: `process`
+- task_id: `telegram-action-noise-consistency-fix`
+- task_name: `Telegram Holding Action and Noise Consistency Fix`
+- task_type: `formatter_strategy_ux_bugfix`
+- version_level: `patch`
+- qa_level: `L2`
 - owner_status: `requested`
-- architect_status: `completed`
-- pm_status: `not_required`
-- tech_status: `not_required`
-- qa_status: `not_required`
+- architect_status: `pushed`
+- pm_status: `task_ready`
+- tech_status: `changelog_ready`
+- qa_status: `qa_passed`
 - commit: `pushed`
 
 ## Current Result
 
-- Owner 指出三個流程失誤：
-  - 小 bug 被處理成大任務，跑了過多驗證與無關流程。
-  - 持倉建議可能上一秒加碼、下一秒減碼，甚至剛買後又叫賣。
-  - 報文重複噪音仍多，決策被長文稀釋。
-- 本輪是流程 / 規則修復，由 Architect 直接更新固定文件，不跑 PM / Tech / QA，不改產品代碼。
-- 已在 `AGENTS.md` 補入：
-  - 任務尺寸與驗證預算：`tiny_patch / normal_patch / risk_patch`，要求明確停止條件，避免小 bug 無限擴張。
-  - 持倉行動一致性硬規則：同一標的同一報文只能有一個主行動；今日買入後不得再像加碼；剛買後轉弱必須明確風控觸發。
-  - 報文噪音預算：summary / 索引 / 詳情分工，限制不可買與淘汰標的高層重複點名，QA 必須檢查重複噪音。
+- Owner 要求實際修復三類產品問題，不只是改規則：
+  - 小 bug 修復流程膨脹，後續產品修復需按 `tiny_patch / normal_patch / risk_patch` 控制驗證範圍。
+  - 持倉報文可能出現上一段加碼、下一段減碼，甚至剛買後又叫賣的互斥行動。
+  - Telegram 報文仍有重複噪音，決策、索引、詳情之間反覆點名或重複長句。
+- Architect 已按自鎖規則分派 PM；不得直接寫 `TASK.md` 或直接搜尋 / 修改產品代碼。
+- 本輪目標是產品行為修復：PM 必須先定義持倉主行動優先級、噪音預算、手機閱讀 fixture 與驗收條件；Tech 再按 `TASK.md` 實作；QA 必須補剛買後轉弱、高分但風控優先、不可買 / 淘汰高層重複曝光案例。
+- CAO 前端：`http://127.0.0.1:5173/`
+- PM 已交付 `TASK.md`。
+- Tech 已在隔離 worktree 產生候選 diff，並交付 `CHANGELOG.md`。
+- 首輪 QA 報告錯誤引用舊漏斗任務，Architect 拒收並重跑 QA。
+- Final QA 結論：`通過`。
+- 已吸收白名單候選 diff：
+  - `core/generator.py`
+  - `tests/test_generator_report.py`
+  - `CHANGELOG.md`
+  - `QA_REPORT.md`
+- Final review 曾拒收一次候選：Tech 回退了上一輪 `未持倉總數 / 母集合 / 僅追蹤拆分 / 非執行追蹤合計` 漏斗契約；已修回並由 QA 明確驗證不得恢復一行 `不可買追蹤`。
 
 ## Next Action
 
-- 等待 Owner 下一個需求。
-- 後續若要修「持倉加減碼反轉」或「報文噪音」的產品行為，必須按新規則先由 PM 定義持倉行動優先級、噪音預算與驗收 fixture。
+- 本輪已完成，等待 Owner 下一個任務。
 
 ## Status Values
 
