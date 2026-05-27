@@ -896,7 +896,7 @@ class GeneratorReportTest(unittest.TestCase):
                 datetime(2026, 5, 26),
             )
 
-        self.assertIn("v20.0.1", messages[-1])
+        self.assertIn("v20.0.9", messages[-1])
         self.assertIn("📡 資料：即時價 realtime｜日線 yahoo", messages[-1])
         self.assertIn("🧭 今日結論：R3 進攻偏熱；持倉優先處理；未持倉 6 檔僅追蹤，不新增", messages[-1])
         self.assertIn("🧭 原因：強勢股多過熱，RR不足，不追高", messages[-1])
@@ -1444,7 +1444,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("FULL DETAIL", messages[0])
         self.assertIn("【持倉標的】", messages[1])
         self.assertIn("【未持倉標的】", messages[2])
-        self.assertIn("｜v20.0.1】", messages[-1])
+        self.assertIn("｜v20.0.9】", messages[-1])
 
 
 if __name__ == "__main__":

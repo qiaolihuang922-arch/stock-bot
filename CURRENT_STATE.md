@@ -7,10 +7,18 @@
 - 專案：台股策略報文機器人。
 - 目前穩定線：`Telegram Unheld Funnel Count Bug` 已完成、QA L1 通過並推送。
 - 最新流程線：`Architect Role Self Lock` 與 `Auto Push After Final Review` 已寫入工作流程。
-- 最新已推送 commit：本次 `fix: align telegram actions and noise` 提交；以 `git log -1` 為準。
+- 最新已推送 commit：本次 `fix: sync telegram version to v20.0.9` 提交；以 `git log -1` 為準。
 - 交付形態維持不變：定時 GitHub Actions / 腳本 -> 產生 Telegram 報文 -> 發送給 Owner。
 - 預設只處理 `core/watchlist.py` 的 12 檔股票。
 - CAO 中文前端固定為 `http://127.0.0.1:5173/`，目錄 `/Users/liveroom/.local/share/cao-web-zh/web`；Architect 只要分配 / 啟動 CAO agents，就必須把此前端地址回覆給 Owner。
+
+## Telegram Version v20.0.9 已完成本地修復
+
+- 將 Telegram formatter 使用者可見 header 版本常量同步為 `v20.0.9`。
+- 同步 formatter 測試中的 header 版本期望為 `v20.0.9`。
+- 未改策略 decision、持倉 / 未持倉分類、message list 順序、DB payload、watchlist、live Telegram、live Supabase、replay/backfill。
+- QA 結論：`通過`；已驗證 formatter summary header 為 `【05/27 盤後｜v20.0.9】`，且 `core/`、`tests/` 中不再殘留 `v20.0.1` 作為使用者可見 header 版本來源或測試期望。
+- 驗證：`tests/test_generator_report.py tests/test_notifier.py`，`39 passed, 21 warnings`。
 
 ## Workflow Scope / Action / Noise Gates 已完成
 

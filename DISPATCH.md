@@ -4,9 +4,9 @@
 
 ## Current Task
 
-- task_id: `telegram-action-noise-consistency-fix`
-- task_name: `Telegram Holding Action and Noise Consistency Fix`
-- task_type: `formatter_strategy_ux_bugfix`
+- task_id: `telegram-version-20-0-9-sync`
+- task_name: `Telegram Version String Sync to v20.0.9`
+- task_type: `telegram_version_display_bugfix`
 - version_level: `patch`
 - qa_level: `L2`
 - owner_status: `requested`
@@ -18,23 +18,20 @@
 
 ## Current Result
 
-- Owner 要求實際修復三類產品問題，不只是改規則：
-  - 小 bug 修復流程膨脹，後續產品修復需按 `tiny_patch / normal_patch / risk_patch` 控制驗證範圍。
-  - 持倉報文可能出現上一段加碼、下一段減碼，甚至剛買後又叫賣的互斥行動。
-  - Telegram 報文仍有重複噪音，決策、索引、詳情之間反覆點名或重複長句。
-- Architect 已按自鎖規則分派 PM；不得直接寫 `TASK.md` 或直接搜尋 / 修改產品代碼。
-- 本輪目標是產品行為修復：PM 必須先定義持倉主行動優先級、噪音預算、手機閱讀 fixture 與驗收條件；Tech 再按 `TASK.md` 實作；QA 必須補剛買後轉弱、高分但風控優先、不可買 / 淘汰高層重複曝光案例。
+- Owner 指出 Telegram 報文仍顯示 `v20.0.1`，要求版本號能正常同步，並統一修改到 `v20.0.9`，不要漏掉。
+- Architect 已按自鎖規則分派 PM；本輪只允許處理使用者可見版本字串同步，不改策略、不改報文分類、不改 DB / Telegram payload。
+- PM 必須定義版本契約：Telegram header、程式版本常量、formatter 測試期望、狀態文件記錄都要一致為 `v20.0.9`。
+- Tech 只能修改版本常量、測試期望與必要交付文件；不得趁機改持倉行動、漏斗、策略證據、watchlist 或資料來源。
+- QA 必須實際驗證 formatter 輸出 header 包含 `v20.0.9`，並掃描不應殘留 `v20.0.1` 的使用者可見版本期望。
 - CAO 前端：`http://127.0.0.1:5173/`
 - PM 已交付 `TASK.md`。
-- Tech 已在隔離 worktree 產生候選 diff，並交付 `CHANGELOG.md`。
-- 首輪 QA 報告錯誤引用舊漏斗任務，Architect 拒收並重跑 QA。
-- Final QA 結論：`通過`。
+- Tech 已交付版本同步候選 diff。
+- QA 報告結論：`通過`；已驗證 formatter summary header 為 `【05/27 盤後｜v20.0.9】`，且程式 / 測試使用者可見 header 期望不殘留 `v20.0.1`。
 - 已吸收白名單候選 diff：
   - `core/generator.py`
   - `tests/test_generator_report.py`
   - `CHANGELOG.md`
   - `QA_REPORT.md`
-- Final review 曾拒收一次候選：Tech 回退了上一輪 `未持倉總數 / 母集合 / 僅追蹤拆分 / 非執行追蹤合計` 漏斗契約；已修回並由 QA 明確驗證不得恢復一行 `不可買追蹤`。
 
 ## Next Action
 

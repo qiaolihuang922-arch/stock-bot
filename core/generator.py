@@ -47,7 +47,7 @@ from services.strategy_evidence import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.0.1"
+VERSION = "v20.0.9"
 
 EXECUTION_LEVELS = {
     "TAKE_PROFIT_50": "TP50",
