@@ -498,6 +498,16 @@ Owner 與 Architect 的使用層只保留一個入口腳本：
 - `/Users/liveroom/stock-bot-agent-context/run_qa_code.sh "<驗證指令>"`
 - `/Users/liveroom/stock-bot-agent-context/run_auto_dev_cycle.sh "<Owner 任務>"`
 
+CAO 前端 UI 固定入口：
+
+- API server：`http://127.0.0.1:9889/`
+- 前端 UI：`http://127.0.0.1:5173/`
+- 中文化前端固定目錄：`/Users/liveroom/.local/share/cao-web-zh/web`
+- 啟動前端命令：`cd /Users/liveroom/.local/share/cao-web-zh/web && npm run dev -- --host 127.0.0.1 --port 5173`
+- 啟動 API 命令：`/Users/liveroom/.local/bin/cao-server --host 127.0.0.1 --port 9889`
+- Architect 只要分配 / 啟動 / 使用 CAO agents，就必須在回覆 Owner 時提供前端 UI 地址 `http://127.0.0.1:5173/`，方便 Owner 直接查看代理狀態。
+- 不得再用 `/tmp` 內重新 clone 的 upstream 英文前端作為日常 UI；若固定中文化目錄缺失，必須先重建中文化 UI 並更新本節。
+
 安全邊界：
 
 - 只有 Architect-controlled runner 可以呼叫 CAO agents；agents 不得自行 handoff / assign / send_message 叫其他 agent。

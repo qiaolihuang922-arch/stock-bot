@@ -10,6 +10,7 @@
 - 最新已推送 commit：`3514f94 fix: clarify unheld funnel counts`
 - 交付形態維持不變：定時 GitHub Actions / 腳本 -> 產生 Telegram 報文 -> 發送給 Owner。
 - 預設只處理 `core/watchlist.py` 的 12 檔股票。
+- CAO 中文前端固定為 `http://127.0.0.1:5173/`，目錄 `/Users/liveroom/.local/share/cao-web-zh/web`；Architect 只要分配 / 啟動 CAO agents，就必須把此前端地址回覆給 Owner。
 
 ## v20.0 已完成
 
