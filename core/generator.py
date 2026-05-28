@@ -47,7 +47,7 @@ from services.strategy_evidence import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.0.9"
+VERSION = "v20.0.10"
 
 EXECUTION_LEVELS = {
     "TAKE_PROFIT_50": "TP50",
@@ -3127,6 +3127,18 @@ def entry_size_text(result):
     return "觀察"
 
 
+def unheld_entry_size_detail_text(result):
+    action = result.get("action", 0)
+
+    try:
+        if float(action) >= 0.6:
+            return "首筆最多 30%，總上限 60%"
+    except (TypeError, ValueError):
+        pass
+
+    return entry_size_text(result)
+
+
 def entry_wait_text(result):
 
     blockers = entry_blockers(result)
@@ -3359,9 +3371,33 @@ def holding_execution_item(name, data):
 
     label = holding_execution_label(name, data)
     trigger = holding_tomorrow_trigger(name, data)
+    events = data.get("position_events") or {}
+    decision = ensure_holding_decision(name, data) or {}
 
     if label == "續抱觀察" and trigger == "暫不加碼":
         trigger = "暫不加碼，守警戒"
+
+    if (
+        events.get("sold_shares", 0) > 0
+        and decision.get("level") == "POST_PROFIT_WATCH"
+    ):
+        sell_pct = events.get("sell_pct") or round(
+            (data.get("holding") or {}).get("realized_profit_taken_ratio", 0) * 100
+        )
+        executed_text = f"今日已停利 {sell_pct}%" if sell_pct else "今日已停利"
+        return {
+            "name": name,
+            "kind": "holding",
+            "state": "已執行",
+            "priority": holding_execution_priority(name, data),
+            "is_control": True,
+            "line": (
+                f"{name}"
+                f"｜已執行"
+                f"｜{executed_text}"
+                f"｜停利後觀察"
+            ),
+        }
 
     return {
         "name": name,
@@ -3428,8 +3464,18 @@ def unheld_execution_trigger(funnel_state, data):
 
     watch_state = tomorrow_watch_state("", data)
     trigger = tomorrow_trigger_text(watch_state, data)
+    result = data.get("result") or {}
+    action = result.get("action", 0)
 
     if funnel_state == "可買":
+        try:
+            size_pct = round(float(action) * 100)
+        except (TypeError, ValueError):
+            size_pct = 0
+
+        if size_pct >= 60:
+            return "首筆最多 30%，總上限 60%｜分批，不追價"
+
         return "分批，不追價"
 
     if funnel_state == "可準備":
@@ -3570,7 +3616,7 @@ def today_conclusion_text(holding_items, watch_items, market_mode, risk_level):
 
     if holding_count and buy_count:
         base = (
-            f"{risk_level} {market_mode}；明日執行 {holding_count + buy_count} 項，"
+            f"{risk_level} {market_mode}；今日盤中執行 {holding_count + buy_count} 項，"
             f"持倉 {holding_count}、可買 {buy_count}"
         )
         if tracking_count:
@@ -3649,28 +3695,53 @@ def format_execution_checklist(holding_items, watch_items, limit=5):
 
     if not items:
         if tracking_count:
-            return [f"未持倉 {tracking_count} 檔僅追蹤，等觸發，不列入明日執行"]
-        return ["無持倉，無明日執行"]
+            return [f"未持倉 {tracking_count} 檔僅追蹤，等觸發，不列入今日盤中執行"]
+        return ["無持倉，無今日盤中執行"]
 
-    displayed = items[:limit]
+    actionable_states = {
+        "可買",
+        "停損",
+        "硬風控減碼",
+        "增量減碼",
+        "減碼",
+        "停利",
+        "已執行",
+        "加碼10",
+        "加碼20",
+        "加碼30",
+    }
+    actionable_items = [
+        item for item in items
+        if item.get("state") in actionable_states
+    ]
+    passive_items = [
+        item for item in items
+        if item.get("state") not in actionable_states
+    ]
+    displayed = actionable_items + passive_items[:max(limit - len(actionable_items), 0)]
     lines = [
         f"{index}. {item['line']}"
         for index, item in enumerate(displayed, start=1)
     ]
 
+    displayed_ids = {id(item) for item in displayed}
+    hidden_items = [
+        item for item in items
+        if id(item) not in displayed_ids
+    ]
     hidden_control_count = sum(
         1
-        for item in items[limit:]
+        for item in hidden_items
         if item.get("is_control")
     )
 
     if hidden_control_count:
         lines.append(f"另有 {hidden_control_count} 項風控見詳情")
-    elif len(items) > limit:
-        lines.append(f"另有 {len(items) - limit} 項執行見詳情")
+    elif hidden_items:
+        lines.append(f"另有 {len(hidden_items)} 項觀察見詳情")
 
     if tracking_count:
-        lines.append(f"未持倉 {tracking_count} 檔只等觸發，不列入明日執行")
+        lines.append(f"未持倉 {tracking_count} 檔只等觸發，不列入今日盤中執行")
 
     return lines
 
@@ -3770,7 +3841,7 @@ def formatTelegramSummary(results_map, best, score, market_summary, now, positio
         f"📌 持倉：{holding_names}",
     ])
 
-    execution_title = "✅ 明日執行清單（持倉優先）" if holding_items else "✅ 明日執行清單（無持倉）"
+    execution_title = "✅ 今日盤中執行清單（持倉優先）" if holding_items else "✅ 今日盤中執行清單（無持倉）"
     lines.extend(["", execution_title])
     lines.extend(format_execution_checklist(holding_items, watch_items))
 
@@ -4053,7 +4124,7 @@ def compact_backtest_line(context):
     )
 
 
-def formatTelegramUnheldCard(name, data):
+def formatTelegramUnheldCard(name, data, report_phase=None):
 
     result = data["result"]
     dist = data.get("breakout_distance", result.get("breakout_distance"))
@@ -4067,7 +4138,7 @@ def formatTelegramUnheldCard(name, data):
 
     if valid_entry:
         title_icon = "🟢"
-        title_action = f"可買｜{entry_size_text(result)}"
+        title_action = f"可買｜{unheld_entry_size_detail_text(result)}"
     elif state in ["等冷卻", "等回測"]:
         title_icon = "⏳"
         title_action = state
@@ -4084,12 +4155,16 @@ def formatTelegramUnheldCard(name, data):
     rr_text = rr_display_text(result, holding=False)
     risk_label = unheld_buy_risk_label(result, title_label)
     wait_text = unheld_entry_wait_text(result, state, funnel_state)
-    buy_line = (
-        f"買點：可買｜建議 {entry_size_text(result)}｜{wait_text}"
-        if valid_entry
-        else f"買點：不買｜{risk_label}｜{wait_text}｜{entry_conclusion(result)}"
-    )
-    tomorrow_line = f"明日觸發：{tomorrow_trigger_text(state, data)}"
+    detail_size_text = unheld_entry_size_detail_text(result)
+    raw_size_text = entry_size_text(result)
+    if valid_entry and detail_size_text != raw_size_text:
+        buy_line = f"買點：可買｜{detail_size_text}｜分批，不追價"
+    elif valid_entry:
+        buy_line = f"買點：可買｜建議 {raw_size_text}｜{wait_text}"
+    else:
+        buy_line = f"買點：不買｜{risk_label}｜{wait_text}｜{entry_conclusion(result)}"
+    trigger_label = "盤中觸發" if report_phase == "盤中" else "明日觸發"
+    tomorrow_line = f"{trigger_label}：{tomorrow_trigger_text(state, data)}"
 
     return "\n".join([
         f"【{stock_title(name, data)}】{title_icon} {title_action}｜{title_label}",
@@ -4152,6 +4227,7 @@ def split_message(text, limit=3400):
 def formatTelegramMessages(results_map, full_msg, best, score, market_summary, now, position_warning=None, include_detail=False, daily_write_warning=None, strategy_evidence_summary=None):
 
     ordered_items = ordered_result_items(results_map)
+    report_phase = get_market_phase()
     holding_items = sort_position_summary([
         (name, data)
         for name, data in ordered_items
@@ -4162,7 +4238,7 @@ def formatTelegramMessages(results_map, full_msg, best, score, market_summary, n
         for name, data in holding_items
     ]
     unheld_cards = [
-        formatTelegramUnheldCard(name, data)
+        formatTelegramUnheldCard(name, data, report_phase=report_phase)
         for _index, (name, data) in sort_watchlist_grouped([
             (name, data)
             for name, data in ordered_items

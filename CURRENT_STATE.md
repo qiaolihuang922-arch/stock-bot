@@ -7,7 +7,7 @@
 - 專案：台股策略報文機器人。
 - 目前穩定線：`Telegram Unheld Funnel Count Bug` 已完成、QA L1 通過並推送。
 - 最新流程線：`Architect Role Self Lock` 與 `Auto Push After Final Review` 已寫入工作流程。
-- 最新已推送 commit：本次 `chore: clean agent worktrees after delivery` 提交；以 `git log -1` 為準。
+- 最新已推送 commit：本次 `fix: clarify intraday execution report` 提交；以 `git log -1` 為準。
 - 交付形態維持不變：定時 GitHub Actions / 腳本 -> 產生 Telegram 報文 -> 發送給 Owner。
 - 預設只處理 `core/watchlist.py` 的 12 檔股票。
 - CAO 中文前端固定為 `http://127.0.0.1:5173/`，目錄 `/Users/liveroom/.local/share/cao-web-zh/web`；Architect 只要分配 / 啟動 CAO agents，或準備回覆此前端地址，就必須先確認 `9889` API 與 `5173` 前端已啟動；若未啟動，先執行 `/Users/liveroom/stock-bot-agent-context/ensure_cao_services.sh`，再把前端地址回覆給 Owner。
@@ -31,6 +31,26 @@
 - 未改策略 decision、持倉 / 未持倉分類、message list 順序、DB payload、watchlist、live Telegram、live Supabase、replay/backfill。
 - QA 結論：`通過`；已驗證 formatter summary header 為 `【05/27 盤後｜v20.0.9】`，且 `core/`、`tests/` 中不再殘留 `v20.0.1` 作為使用者可見 header 版本來源或測試期望。
 - 驗證：`tests/test_generator_report.py tests/test_notifier.py`，`39 passed, 21 warnings`。
+
+## Intraday Report Strategy and Version Review 已完成本地修復
+
+- 修復 Owner 針對 `05/28 盤中` 報文指出的問題：
+  - 版本由 `v20.0.9` 升為 `v20.0.10`，修正「不能回退」被誤解成「不能升版」的流程問題。
+  - 盤中報文 summary / 執行清單改為 `今日盤中執行`，不再混用 `明日執行清單`。
+  - 今日已停利的英業達在執行清單顯示 `已執行｜今日已停利 25%｜停利後觀察`，避免被讀成再次待執行停利。
+  - 光寶科 `action >= 60%` 時，summary 與未持倉詳情卡都顯示 `首筆最多 30%，總上限 60%｜分批，不追價`，不再出現 `可買｜60%倉` / `建議 60%倉` 這類一次買滿語意。
+  - 可交易項優先保留在手機第一屏執行清單，`另 N 項見詳情` 只用於觀察項。
+  - 旺宏上漲但淘汰時保留 `弱反彈待確認` / 結構未修復語意。
+- 修改檔案：
+  - `core/generator.py`
+  - `tests/test_generator_report.py`
+  - `TASK.md`
+  - `CHANGELOG.md`
+  - `QA_REPORT.md`
+  - `DISPATCH.md`
+  - `AGENTS.md`
+- QA 首輪阻塞光寶科詳情卡仍顯示 60% 倉；retry 後 QA 結論：`通過`。
+- 驗證：`tests/test_generator_report.py tests/test_notifier.py`，`44 passed, 21 warnings`。
 
 ## Post Trade Reduce Cooldown Strategy Fix 已完成本地修復
 

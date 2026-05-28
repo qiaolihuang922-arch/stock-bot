@@ -228,6 +228,10 @@ Architect 收口只接受：
 - minor 必須先由 PM 明確定義使用者可見變化與驗收條件。
 - major 必須先走研究任務，Owner 明確確認後才可進入開發。
 - 若一個任務同時符合多個級別，以最高級別處理。
+- `不得回退版本` 只代表版本下限，不代表本輪禁止升版；PM / Tech / QA 不得把 Owner 的「不要回退」解讀成「沿用舊版本」。
+- 任何使用者可見 Telegram / CLI / UI 報文變更，只要改到策略 decision、持倉主行動、未持倉分類、summary、漏斗、執行清單、formatter header 或 message list contract，預設至少升 patch 版；若 PM 判定不升版，必須在 `TASK.md` 寫明理由與 Owner 可見風險。
+- Tech 若看到 `TASK.md` 版本契約仍沿用舊版，但本輪實際改了使用者可見行為，必須 blocked 要求 PM 修正版本契約，不得自行默默沿用。
+- QA 驗收時必須核對「本輪變更等級」與「實際 header 版本」是否匹配；若使用者可見行為變更但版本未升且無明確理由，QA 必須 blocked 或 conditional pass。
 
 ## 任務尺寸與驗證預算
 
