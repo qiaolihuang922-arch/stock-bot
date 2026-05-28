@@ -7,7 +7,7 @@
 - 專案：台股策略報文機器人。
 - 目前穩定線：`Telegram Unheld Funnel Count Bug` 已完成、QA L1 通過並推送。
 - 最新流程線：`Architect Role Self Lock` 與 `Auto Push After Final Review` 已寫入工作流程。
-- 最新已推送 commit：本次 `fix: clarify intraday execution report` 提交；以 `git log -1` 為準。
+- 最新已推送 commit：本次 `fix: refine intraday follow-up report` 提交；以 `git log -1` 為準。
 - 交付形態維持不變：定時 GitHub Actions / 腳本 -> 產生 Telegram 報文 -> 發送給 Owner。
 - 預設只處理 `core/watchlist.py` 的 12 檔股票。
 - CAO 中文前端固定為 `http://127.0.0.1:5173/`，目錄 `/Users/liveroom/.local/share/cao-web-zh/web`；Architect 只要分配 / 啟動 CAO agents，或準備回覆此前端地址，就必須先確認 `9889` API 與 `5173` 前端已啟動；若未啟動，先執行 `/Users/liveroom/stock-bot-agent-context/ensure_cao_services.sh`，再把前端地址回覆給 Owner。
@@ -51,6 +51,25 @@
   - `AGENTS.md`
 - QA 首輪阻塞光寶科詳情卡仍顯示 60% 倉；retry 後 QA 結論：`通過`。
 - 驗證：`tests/test_generator_report.py tests/test_notifier.py`，`44 passed, 21 warnings`。
+
+## Intraday v20.0.11 Follow-up Report Fix 已完成本地修復
+
+- 修復 Owner 針對 `05/28 盤中｜v20.0.10` 後續報文指出的問題：
+  - 盤中 summary 改為區分 `今日盤中交易執行`、`已執行（不重複下單）`、`持倉風控檢查`、`隔日計畫`，不再把觀察 / 續抱 / 減碼後觀察包成今日下單。
+  - 版本升為 `v20.0.11`。
+  - 英業達今日已減碼後在 summary 顯示已執行且不重複下單，持倉風控只保留短句 `剩餘部位觀察｜不加碼`。
+  - 盤中 summary 與持倉 detail card 不再輸出 `明日未修復 / 隔日未修復` 舊語意，改為盤中觀察與條件式隔日計畫。
+  - 群創 / 光寶科淘汰主因統一為 `突破失敗`，補充 `追價風險 / 過熱 / RR不可用` 不覆蓋主因；光寶科從可買轉淘汰時會顯示可買條件已失效。
+  - 未持倉漏斗母集合與拆分數量維持不回歸。
+- 修改檔案：
+  - `core/generator.py`
+  - `tests/test_generator_report.py`
+  - `TASK.md`
+  - `CHANGELOG.md`
+  - `QA_REPORT.md`
+  - `DISPATCH.md`
+- QA 前兩輪 conditional pass 被 Architect 退回；第三輪 QA 結論：`通過`。
+- 驗證：`tests/test_generator_report.py tests/test_notifier.py`，`46 passed, 21 warnings`。
 
 ## Post Trade Reduce Cooldown Strategy Fix 已完成本地修復
 

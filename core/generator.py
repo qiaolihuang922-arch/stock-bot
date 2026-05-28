@@ -47,7 +47,7 @@ from services.strategy_evidence import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.0.10"
+VERSION = "v20.0.11"
 
 EXECUTION_LEVELS = {
     "TAKE_PROFIT_50": "TP50",
@@ -3384,7 +3384,7 @@ def holding_execution_item(name, data):
         sell_pct = events.get("sell_pct") or round(
             (data.get("holding") or {}).get("realized_profit_taken_ratio", 0) * 100
         )
-        executed_text = f"今日已停利 {sell_pct}%" if sell_pct else "今日已停利"
+        executed_text = f"今日已減碼 {sell_pct}%" if sell_pct else "今日已減碼"
         return {
             "name": name,
             "kind": "holding",
@@ -3395,7 +3395,8 @@ def holding_execution_item(name, data):
                 f"{name}"
                 f"｜已執行"
                 f"｜{executed_text}"
-                f"｜停利後觀察"
+                f"｜不再重複減碼"
+                f"｜剩餘部位觀察"
             ),
         }
 
@@ -3589,6 +3590,9 @@ def rejected_primary_reason(result):
     if result.get("market_grade") == "D" or "市場弱" in blockers:
         return "市場弱"
 
+    if "RR不足" in blockers:
+        return "RR不可用"
+
     if phase in ["WEAK", "DISTRIBUTION"]:
         return "結構弱"
 
@@ -3610,33 +3614,33 @@ def unheld_tracking_count(funnel):
 def today_conclusion_text(holding_items, watch_items, market_mode, risk_level):
 
     funnel = build_unheld_funnel(watch_items)
-    buy_count = len(funnel["可買"])
+    pending_count = len(pending_trade_items(holding_items, watch_items))
+    executed_count = len(executed_trade_items(holding_items, watch_items))
     tracking_count = unheld_tracking_count(funnel)
     holding_count = len(holding_items)
 
-    if holding_count and buy_count:
-        base = (
-            f"{risk_level} {market_mode}；今日盤中執行 {holding_count + buy_count} 項，"
-            f"持倉 {holding_count}、可買 {buy_count}"
-        )
+    if pending_count:
+        base = f"{risk_level} {market_mode}；交易執行 {pending_count} 項"
+        if holding_count:
+            base += f"；持倉風控檢查 {holding_count} 檔"
+        if executed_count:
+            base += f"；已執行 {executed_count} 項不重複"
         if tracking_count:
             return f"{base}；未持倉 {tracking_count} 檔僅追蹤"
         return f"{base}；未持倉無追蹤"
 
     if holding_count:
+        base = f"{risk_level} {market_mode}；交易執行：無新增下單；持倉風控檢查 {holding_count} 檔"
+        if executed_count:
+            base += f"；已執行 {executed_count} 項不重複"
         if tracking_count:
-            return f"{risk_level} {market_mode}；持倉優先處理；未持倉 {tracking_count} 檔僅追蹤，不新增"
-        return f"{risk_level} {market_mode}；持倉優先處理；未持倉無追蹤，不新增"
-
-    if buy_count:
-        if tracking_count:
-            return f"{risk_level} {market_mode}；無持倉，可買 {buy_count} 檔；其餘 {tracking_count} 檔僅追蹤"
-        return f"{risk_level} {market_mode}；無持倉，可買 {buy_count} 檔；未持倉無追蹤"
+            return f"{base}；未持倉 {tracking_count} 檔僅追蹤"
+        return f"{base}；未持倉無追蹤"
 
     if tracking_count:
-        return f"{risk_level} {market_mode}；無持倉，未持倉 {tracking_count} 檔僅追蹤，不新增"
+        return f"{risk_level} {market_mode}；交易執行：無新增下單；未持倉 {tracking_count} 檔僅追蹤"
 
-    return f"{risk_level} {market_mode}；無持倉，未持倉無追蹤，不新增"
+    return f"{risk_level} {market_mode}；交易執行：無新增下單；未持倉無追蹤"
 
 
 def today_reason_text(watch_items, market_mode):
@@ -3687,61 +3691,143 @@ def build_execution_items(holding_items, watch_items):
     return items
 
 
-def format_execution_checklist(holding_items, watch_items, limit=5):
+def pending_trade_items(holding_items, watch_items):
 
-    items = build_execution_items(holding_items, watch_items)
-    funnel = build_unheld_funnel(watch_items)
-    tracking_count = unheld_tracking_count(funnel)
-
-    if not items:
-        if tracking_count:
-            return [f"未持倉 {tracking_count} 檔僅追蹤，等觸發，不列入今日盤中執行"]
-        return ["無持倉，無今日盤中執行"]
-
-    actionable_states = {
+    pending_states = {
         "可買",
         "停損",
         "硬風控減碼",
         "增量減碼",
         "減碼",
         "停利",
-        "已執行",
         "加碼10",
         "加碼20",
         "加碼30",
     }
-    actionable_items = [
-        item for item in items
-        if item.get("state") in actionable_states
+    return [
+        item for item in build_execution_items(holding_items, watch_items)
+        if item.get("state") in pending_states
     ]
-    passive_items = [
-        item for item in items
-        if item.get("state") not in actionable_states
+
+
+def executed_trade_items(holding_items, watch_items):
+
+    return [
+        item for item in build_execution_items(holding_items, watch_items)
+        if item.get("state") == "已執行"
     ]
-    displayed = actionable_items + passive_items[:max(limit - len(actionable_items), 0)]
+
+
+def holding_control_items(holding_items):
+
+    return [
+        holding_execution_item(name, data)
+        for name, data in sorted(holding_items, key=lambda item: holding_execution_priority(item[0], item[1]))
+    ]
+
+
+def format_execution_checklist(holding_items, watch_items, limit=5):
+
+    items = pending_trade_items(holding_items, watch_items)
+    funnel = build_unheld_funnel(watch_items)
+    tracking_count = unheld_tracking_count(funnel)
+
+    if not items:
+        lines = ["無新增下單"]
+        if tracking_count:
+            lines.append(f"未持倉 {tracking_count} 檔僅追蹤，等觸發，不列入今日盤中交易執行")
+        return lines
+
+    displayed = items[:limit]
     lines = [
         f"{index}. {item['line']}"
         for index, item in enumerate(displayed, start=1)
     ]
 
-    displayed_ids = {id(item) for item in displayed}
-    hidden_items = [
-        item for item in items
-        if id(item) not in displayed_ids
-    ]
-    hidden_control_count = sum(
-        1
-        for item in hidden_items
-        if item.get("is_control")
-    )
-
-    if hidden_control_count:
-        lines.append(f"另有 {hidden_control_count} 項風控見詳情")
-    elif hidden_items:
-        lines.append(f"另有 {len(hidden_items)} 項觀察見詳情")
+    if len(items) > len(displayed):
+        lines.append(f"另有 {len(items) - len(displayed)} 項交易執行見詳情")
 
     if tracking_count:
-        lines.append(f"未持倉 {tracking_count} 檔只等觸發，不列入今日盤中執行")
+        lines.append(f"未持倉 {tracking_count} 檔只等觸發，不列入今日盤中交易執行")
+
+    return lines
+
+
+def format_executed_checklist(holding_items, watch_items, limit=3):
+
+    items = executed_trade_items(holding_items, watch_items)
+
+    if not items:
+        return []
+
+    lines = [
+        f"{index}. {item['line']}"
+        for index, item in enumerate(items[:limit], start=1)
+    ]
+
+    if len(items) > limit:
+        lines.append(f"另有 {len(items) - limit} 項已執行見詳情")
+
+    return lines
+
+
+def intraday_holding_control_line(item, report_phase):
+
+    line = item["line"]
+
+    if report_phase != "盤中":
+        return line
+
+    if item.get("state") == "已執行":
+        return f"{item['name']}｜剩餘部位觀察｜不加碼"
+
+    if "明日未修復" in line or "隔日未修復" in line:
+        parts = line.split("｜")
+        if len(parts) >= 4:
+            return "｜".join(parts[:3] + ["盤中觀察修復狀況"])
+
+    return line
+
+
+def format_holding_control_checklist(holding_items, limit=5, report_phase=None):
+
+    items = holding_control_items(holding_items)
+
+    if not items:
+        return ["無持倉"]
+
+    lines = [
+        f"{index}. {intraday_holding_control_line(item, report_phase)}"
+        for index, item in enumerate(items[:limit], start=1)
+    ]
+
+    if len(items) > limit:
+        lines.append(f"另有 {len(items) - limit} 項持倉風控見詳情")
+
+    return lines
+
+
+def format_next_day_plan(holding_items, limit=5):
+
+    candidates = []
+
+    for name, data in holding_items:
+        trigger = holding_tomorrow_trigger(name, data)
+        if "未修復" not in trigger:
+            continue
+        candidates.append((position_priority_rank(name, data), name))
+
+    if not candidates:
+        return []
+
+    candidates.sort()
+    lines = [
+        f"- 若收盤仍未修復：{name}列入隔日降級檢查"
+        for _rank, name in candidates[:limit]
+    ]
+
+    if len(candidates) > limit:
+        lines.append(f"- 另有 {len(candidates) - limit} 檔未修復項目見詳情")
 
     return lines
 
@@ -3777,13 +3863,13 @@ def format_unheld_funnel(watch_items):
 def detail_index_text(holding_items, watch_items):
 
     funnel = build_unheld_funnel(watch_items)
-    execution_count = len(build_execution_items(holding_items, watch_items))
+    execution_count = len(pending_trade_items(holding_items, watch_items))
     tracking_count = unheld_tracking_count(funnel)
     rejected = funnel["淘汰"]
 
     return (
         f"📎 詳情索引：持倉 {len(holding_items)}"
-        f"｜執行 {execution_count}"
+        f"｜交易執行 {execution_count}"
         f"｜未持倉追蹤 {tracking_count}"
         f"｜淘汰 {len(rejected)}"
     )
@@ -3841,9 +3927,21 @@ def formatTelegramSummary(results_map, best, score, market_summary, now, positio
         f"📌 持倉：{holding_names}",
     ])
 
-    execution_title = "✅ 今日盤中執行清單（持倉優先）" if holding_items else "✅ 今日盤中執行清單（無持倉）"
-    lines.extend(["", execution_title])
+    lines.extend(["", "✅ 今日盤中交易執行"])
     lines.extend(format_execution_checklist(holding_items, watch_items))
+
+    executed_lines = format_executed_checklist(holding_items, watch_items)
+    if executed_lines:
+        lines.extend(["", "已執行（不重複下單）"])
+        lines.extend(executed_lines)
+
+    lines.extend(["", "持倉風控檢查"])
+    lines.extend(format_holding_control_checklist(holding_items, report_phase=get_market_phase()))
+
+    next_day_plan = format_next_day_plan(holding_items)
+    if next_day_plan:
+        lines.extend(["", "隔日計畫"])
+        lines.extend(next_day_plan)
 
     lines.extend(["", "未持倉漏斗（非執行）："])
     lines.append(format_unheld_funnel(watch_items))
@@ -3935,7 +4033,7 @@ def holding_next_step_line(name, data):
         return "修復才恢復優先級，未修復續降級"
 
     if level == "NEW_POSITION_RISK_WATCH":
-        return "隔日未修復，降低優先級"
+        return "盤中先觀察，未修復再降級"
 
     if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]:
         return "保留核心倉，等待冷卻後再評估"
@@ -3944,7 +4042,7 @@ def holding_next_step_line(name, data):
         return "等待新高、過熱升級或風控訊號"
 
     if action == "新倉風控觀察":
-        return "隔日未修復，降低優先級"
+        return "盤中先觀察，未修復再降級"
 
     if level in ["ADD_10", "ADD_20", "ADD_30"]:
         return "加碼後守警戒價，量價未延續則停止加碼"
@@ -3959,7 +4057,7 @@ def holding_next_step_line(name, data):
         return "守警戒價，等量價修復"
 
     if action == "續抱觀察":
-        return "隔日未修復，降低優先級"
+        return "盤中先觀察，未修復再降級"
 
     if action == "風控觀察":
         return "跌破警戒升級風控"
@@ -4165,16 +4263,63 @@ def formatTelegramUnheldCard(name, data, report_phase=None):
         buy_line = f"買點：不買｜{risk_label}｜{wait_text}｜{entry_conclusion(result)}"
     trigger_label = "盤中觸發" if report_phase == "盤中" else "明日觸發"
     tomorrow_line = f"{trigger_label}：{tomorrow_trigger_text(state, data)}"
-
-    return "\n".join([
+    reason_line = rejected_transition_reason_line(result) if funnel_state == "淘汰" else None
+    lines = [
         f"【{stock_title(name, data)}】{title_icon} {title_action}｜{title_label}",
         f"盤面：{plain_label(compact_market_line(result, dist))}",
         buy_line,
+    ]
+
+    if reason_line:
+        lines.append(reason_line)
+
+    lines.extend([
         tomorrow_line,
         f"數據：RR {rr_text}｜S {data.get('structure_score', '-')}/5｜V {data.get('volume_ratio', '-')}x",
         compact_backtest_line(data.get("backtest_context")),
         price_change_line(data.get("price"), data.get("change")),
     ])
+
+    return "\n".join(lines)
+
+
+def rejected_transition_reason_line(result):
+
+    primary = rejected_primary_reason(result)
+    blockers = entry_blockers(result)
+    supplements = []
+
+    if any(item.startswith("過熱") for item in blockers) or result.get("heat_state") in ["HOT", "EXTREME"]:
+        supplements.append("追價風險 / 過熱")
+
+    try:
+        rr_unusable = result.get("rr") is not None and float(result.get("rr")) < 1
+    except (TypeError, ValueError):
+        rr_unusable = False
+
+    if ("RR不足" in blockers or rr_unusable) and primary != "RR不可用":
+        supplements.append("RR不可用")
+
+    if "量能不足" in blockers and primary != "量能不足":
+        supplements.append("量能不足")
+
+    if "遠離觸發" in blockers and primary != "遠離觸發":
+        supplements.append("遠離觸發")
+
+    cause = "前次可買條件已失效"
+    if primary == "突破失敗":
+        cause += "：突破失敗或跌破進場條件"
+    elif primary == "RR不可用":
+        cause += "：RR不可用"
+    elif primary == "弱反彈待確認":
+        cause += "：結構未修復"
+    elif primary:
+        cause += f"：{primary}"
+
+    if supplements:
+        return f"原因：{cause}｜補充：{'、'.join(supplements[:2])}，不作主因"
+
+    return f"原因：{cause}"
 
 
 def unheld_buy_risk_label(result, title_label):
