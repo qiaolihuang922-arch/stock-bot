@@ -2,46 +2,49 @@
 
 ## 修改內容
 
-- Telegram formatter 可見版本由 `v20.1.0` 升至 `v20.1.1`。
-- 收斂盤後明日計畫語意：持倉加碼項目改為 `待觸發加碼10/20/30`，不再把加碼歸為風控短句。
-- 收斂持倉風控區：加碼持倉只保留 `風控：守警戒線，不追價`，避免與明日計畫重複完整加碼下一步。
-- 收斂未持倉長卡買點句：等回測、等 RR、淘汰等不可買情境改為短句，先呈現 `不買 / 不可買 / 等條件`。
-- 盤中隔日計畫不再使用未收盤假設語意；盤後路徑使用已知收盤語意 `收盤未修復，列入明日降級檢查`。
-- 淘汰卡移除舊式產業 guard，改為單次短句 `產業：未判斷產業多空`。
+- Telegram formatter 可見版本由 `v20.1.1` 升至 `v20.1.2`。
+- `formatTelegramSummary()` 的 market theme evidence 行改到今日結論、主線/執行、新倉語意之後，避免手機第一屏先看到題材偏多。
+- 新增 `build_market_theme_evidence_provider()` 作為 production formatter provider / adapter；existing `market_theme_evidence` dict 會重新拆回 source family 後由 `build_market_theme_evidence()` 驗證，不再直接信任 `confirmed` 欄位。
+- `ai_supply_chain_mainline_supported()` 改走 normalized evidence，避免 malformed report-derived only dict 讓主線句輸出 `AI / 電子供應鏈仍偏多`。
+- market theme evidence object 補上 `level`、`as_of`、`source_family_details`、`supports_claims`，保留既有 `theme_status` / `confirmed` / `source_families` 欄位供現有測試與 formatter 消費。
+- 保留 v20.1.1 手機降噪契約：短買點句、`待觸發加碼10`、移除 `若收盤`、移除 `不代表看空產業`、禁止 `明日風控｜加碼10`。
 
 ## 修改檔案
 
+- `core/market_theme_evidence.py`
 - `core/generator.py`
-- `tests/test_generator_report.py`
 - `tests/test_market_theme_evidence.py`
+- `tests/test_generator_report.py`
 - `tests/test_notifier.py`
 - `CHANGELOG.md`
 
 ## 契約影響
 
-- Telegram header / formatter 可見版本改為 `v20.1.1`。
-- Telegram message list 仍維持原本結構：詳情訊息在前、summary 為最後一則，notifier `send_many()` 可照舊消費。
-- 使用者可見文字有變更：summary / 明日計畫 / 持倉風控 / 未持倉卡 / 淘汰卡的文案更短，並移除本輪禁止語意。
-- 未改 formatter 回傳型別、Telegram payload shape、DB payload、DB schema、策略 decision、watchlist 或 live delivery 行為。
+- Telegram header / formatter 可見版本改為 `v20.1.2`。
+- Telegram summary 文字順序有變更：market theme evidence 行仍在 summary，但位於今日結論、主線/執行、新倉之後。
+- `build_market_theme_evidence_provider()` 新增 public helper；輸出仍是 structured evidence object，且 malformed existing dict 只能被重新驗證為 weak / absent / stale，不可只靠既有 `confirmed: true` 成為 confirmed。
+- `format_market_theme_summary_lines()` 使用手機短句：confirmed 顯示 `市場題材：...證據偏多，但買點仍看個股條件`；weak 顯示 `市場題材：來源不足，僅追蹤`。
+- 未改 Telegram message list 型別、notifier payload shape、DB payload、策略 decision、watchlist 或交易建議邏輯。
 
 ## 版本同步
 
-- `core/generator.py` 已同步 `VERSION = "v20.1.1"`。
-- `tests/test_generator_report.py`、`tests/test_market_theme_evidence.py`、`tests/test_notifier.py` 已同步 header 期望為 `v20.1.1`。
+- `core/generator.py` 已同步 `VERSION = "v20.1.2"`。
+- `tests/test_generator_report.py`、`tests/test_market_theme_evidence.py`、`tests/test_notifier.py` 已同步 header 期望為 `v20.1.2`。
 
 ## 直接消費者同步
 
-- Telegram notifier / message sender：`tests/test_notifier.py` 已確認最後一則 summary 仍可由 `send_many()` 發送，且 header 為 `v20.1.1`。
-- Owner 手機 Telegram 閱讀路徑：`tests/test_generator_report.py` 新增盤後加碼計畫 fixture，檢查 `待觸發加碼10`、持倉風控短句，以及禁止把加碼歸為風控與重複完整加碼下一步。
-- Formatter message list / snapshot：既有 formatter tests 已同步不可買短句、淘汰產業 guard、盤中隔日計畫語意與版本字串。
-- QA 使用的長報文形狀 fixture：`tests/test_generator_report.py` 中 v20 長報文情境已更新為短買點句與 `產業：未判斷產業多空`。
+- Owner 手機 Telegram summary：`tests/test_market_theme_evidence.py` 與 `tests/test_generator_report.py` 已檢查 evidence 行出現在 `🧭 新倉：無有效進場。` 之後。
+- Formatter message list：`formatTelegramSummary()` / `formatTelegramMessages()` 維持 summary 為最後一則，僅調整 summary 內 market theme evidence 位置與文案。
+- Telegram notifier / sender：`tests/test_notifier.py` 已同步最後 summary header 為 `v20.1.2`，`send_many()` 消費方式不變。
+- Market theme direct consumer：`ai_supply_chain_mainline_supported()` 已同步改走 `market_theme_summary_evidence()` normalizer，避免主線句繞過 provider。
+- QA fixture / snapshot：新增 malformed existing evidence dict 測試，確認 report-derived only malformed dict 不會 confirmed。
 
 ## 未影響模組
 
 - 未改 `services/analysis.py` 策略 decision。
 - 未改 `core/condition_engine.py` 條件映射。
 - 未改行情來源、watchlist、scheduler / cron。
-- 未新增 DB table / migration。
+- 未新增 DB table / migration / cache。
 - 未改 DB write path / payload schema。
 - 未改 replay/backfill。
 - 未執行 live Telegram delivery。
@@ -51,12 +54,12 @@
 ## 已跑自檢命令
 
 - `arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py`
-  - 結果：`60 passed, 21 warnings`。
-- `rg -n "v20\\.1\\.0|若收盤|不代表看空產業|明日風控｜加碼|買點：不買｜題材仍可追蹤|買點：不買｜.*技術觸發失效" core tests`
-  - 結果：產品碼無命中；測試中僅保留 `assertNotIn` 禁止字串檢查。
+  - 結果：`62 passed, 21 warnings`。
+- `rg -n "v20\\.1\\.1|若收盤|不代表看空產業|明日風控｜加碼|今日可追主線買進|AI / 電子供應鏈 confirmed 偏多|市場偏多，所以放寬買點|題材偏多，所以 RR" core tests`
+  - 結果：產品碼與測試未殘留 `v20.1.1` 或禁止輸出語意；測試中只保留 `assertNotIn` 類禁止語意檢查。
 
 ## 殘留風險
 
-- 本輪只收斂 Telegram formatter 呈現，不處理更上游的策略分類、持倉決策或證據鏈 provider。
-- Summary 仍保留既有漏斗、索引、資料來源與部分舊版回歸區塊；本輪未做更大幅度的 message list 重排或刪段。
+- 本輪只修 QA 指出的 summary 順序與 provider normalizer，不新增 DB schema、cache、外部 provider 或 production history。
+- Structured source family 的新鮮度仍以現有 runtime 傳入欄位判斷；缺欄位或 malformed source 會降級，但不主動補外部資料。
 - 測試警告來自既有相依套件與 Python 版本 deprecation，非本輪新增失敗。

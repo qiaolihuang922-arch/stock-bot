@@ -89,9 +89,10 @@
   - QA 結論為 `通過`；`tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py` 為 `60 passed, 21 warnings`。
 - v20.1.2 Market Theme Evidence Structured Provider 已分派但未吸收：
   - PM 任務卡已建立。
-  - Tech runner 在隔離 worktree 失敗，沒有合法 `CHANGELOG.md`，QA 未跑。
-  - 不吸收部分候選 diff；清理 worktree 回主 repo `HEAD`。
-  - 後續需重跑 Tech / QA，若需要建表或 cache 先通知 Owner。
+  - Tech retry 已交付合法 `CHANGELOG.md`，QA retry 通過。
+  - 本輪只吸收 6 個限定檔案，不整包合併 worktree。
+  - 未新增 DB/schema/cache/external provider/live write/backfill。
+  - 後續若需要 production confirmed 的第二類 runtime source，且涉及建表或 cache，先通知 Owner。
 - push 後仍需壓縮：
   - `DISPATCH.md`
   - `TASK.md`

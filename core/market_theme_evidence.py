@@ -46,6 +46,30 @@ def _normalize_source(source, fallback_family=None):
     return normalized
 
 
+def _sources_from_existing_evidence(evidence):
+    if not isinstance(evidence, dict):
+        return []
+
+    families = evidence.get("source_family_details") or evidence.get("source_families") or []
+    if isinstance(families, dict):
+        families = [families]
+    if isinstance(families, str):
+        families = [families]
+
+    sources = []
+    for family in families:
+        if isinstance(family, dict):
+            sources.append(family)
+            continue
+        if family:
+            sources.append({"source_family": family})
+
+    if not sources and evidence.get("source_family"):
+        sources.append({"source_family": evidence.get("source_family")})
+
+    return sources
+
+
 def _missing_structured_fields(source):
     return sorted(
         field for field in REQUIRED_STRUCTURED_FIELDS
@@ -78,7 +102,14 @@ def _source_limitation_text(source, missing):
         return "來源不足，僅來自報文衍生資料"
     if missing:
         return f"{family} 缺 {'、'.join(missing)}，不可計入 confirmed"
+    if not _source_is_fresh(source):
+        return f"{family} freshness={source.get('freshness')}，不可計入 confirmed"
     return None
+
+
+def _source_is_fresh(source):
+    freshness = str(source.get("freshness") or "").lower()
+    return freshness in {"fresh", "same_day", "current"}
 
 
 def build_market_theme_evidence(
@@ -157,6 +188,7 @@ def build_market_theme_evidence(
             family != REPORT_DERIVED_FAMILY
             and family in STRUCTURED_CONFIRMED_FAMILIES
             and not missing
+            and _source_is_fresh(source)
             and family not in valid_structured_by_family
         ):
             valid_structured_by_family[family] = source
@@ -176,16 +208,62 @@ def build_market_theme_evidence(
     actionability = "theme_confirmed" if confirmed else ("track_only" if theme_status == "weak" else "absent")
 
     return {
+        "level": theme_status,
+        "as_of": next(
+            (
+                source.get("as_of")
+                for source in raw_sources
+                if isinstance(source, dict) and source.get("as_of")
+            ),
+            None,
+        ),
         "theme_status": theme_status,
         "theme_direction": theme_direction,
         "theme_label": theme_label,
         "actionability": actionability,
         "source_families": source_families,
+        "source_family_details": raw_sources,
         "confirmed_source_families": valid_families,
         "source_family_count_for_confirmed": len(valid_families),
+        "supports_claims": [
+            claim
+            for source in raw_sources
+            if isinstance(source, dict)
+            for claim in (
+                source.get("supports_claims")
+                if isinstance(source.get("supports_claims"), list)
+                else ([source.get("supports_claims")] if source.get("supports_claims") else [])
+            )
+        ],
         "limitations": limitations,
         "confirmed": confirmed,
     }
+
+
+def build_market_theme_evidence_provider(
+    results_map=None,
+    watchlist_groups=None,
+    formatter_report_input=None,
+    market_theme_evidence=None,
+    **structured_sources,
+):
+    existing_sources = _sources_from_existing_evidence(market_theme_evidence)
+    theme = None
+    if isinstance(market_theme_evidence, dict):
+        theme = (
+            market_theme_evidence.get("theme_label")
+            or market_theme_evidence.get("theme")
+            or market_theme_evidence.get("topic")
+        )
+
+    return build_market_theme_evidence(
+        results_map=results_map,
+        watchlist_groups=watchlist_groups,
+        formatter_report_input=formatter_report_input,
+        sources=existing_sources,
+        theme=theme,
+        **structured_sources,
+    )
 
 
 def format_market_theme_summary_lines(evidence):
@@ -194,15 +272,10 @@ def format_market_theme_summary_lines(evidence):
 
     theme_label = evidence.get("theme_label") or "未命名主題"
     if evidence.get("confirmed"):
-        family_count = evidence.get("source_family_count_for_confirmed") or 0
-        direction = "偏多" if evidence.get("theme_direction") == "bullish" else ""
         return [
-            f"市場主題：{theme_label}{direction}",
-            f"狀態：confirmed｜{family_count} 類 structured sources",
+            f"市場題材：{theme_label}證據偏多，但買點仍看個股條件",
         ]
 
     return [
-        f"市場主題：{theme_label}",
-        "狀態：weak｜來源不足｜只追蹤",
-        "行動：不可買，等 structured evidence 補強",
+        "市場題材：來源不足，僅追蹤",
     ]

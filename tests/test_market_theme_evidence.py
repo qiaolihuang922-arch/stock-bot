@@ -2,7 +2,10 @@ import unittest
 from datetime import datetime
 
 from core import generator
-from core.market_theme_evidence import build_market_theme_evidence
+from core.market_theme_evidence import (
+    build_market_theme_evidence,
+    build_market_theme_evidence_provider,
+)
 from tests.test_generator_report import render_payload
 
 
@@ -114,6 +117,33 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             evidence["confirmed_source_families"],
             ["market_state", "structured_strategy_evidence"],
         )
+        self.assertEqual(evidence["level"], "confirmed")
+        self.assertIn("supports_claims", evidence)
+
+    def test_provider_normalizes_existing_malformed_confirmed_dict(self):
+        evidence = build_market_theme_evidence_provider(
+            formatter_report_input={
+                "market_theme_evidence": {
+                    "confirmed": True,
+                    "theme_status": "confirmed",
+                    "theme_label": "AI/電子供應鏈",
+                    "theme_direction": "bullish",
+                    "source_families": ["report_derived"],
+                }
+            },
+            market_theme_evidence={
+                "confirmed": True,
+                "theme_status": "confirmed",
+                "theme_label": "AI/電子供應鏈",
+                "theme_direction": "bullish",
+                "source_families": ["report_derived"],
+            },
+        )
+
+        self.assertFalse(evidence["confirmed"])
+        self.assertEqual(evidence["level"], "weak")
+        self.assertEqual(evidence["theme_label"], "AI/電子供應鏈")
+        self.assertEqual(evidence["source_families"], ["report_derived"])
 
     def test_formatter_report_derived_only_shows_weak_track_only(self):
         payload = render_payload(
@@ -145,14 +175,13 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         )
 
         summary = messages[-1]
-        self.assertIn("【05/28 盤中｜v20.1.1】", summary)
-        self.assertIn("市場主題：AI/電子供應鏈", summary)
-        self.assertIn("狀態：weak｜來源不足｜只追蹤", summary)
-        self.assertIn("行動：不可買，等 structured evidence 補強", summary)
+        self.assertIn("【05/28 盤中｜v20.1.2】", summary)
+        self.assertIn("市場題材：來源不足，僅追蹤", summary)
         self.assertIn("🧭 主線：市場偏多但買點未成立。", summary)
         self.assertNotIn("confirmed", summary)
         self.assertNotIn("AI/電子供應鏈偏多", summary)
         self.assertNotIn("今日可買：台積電", summary)
+        self.assertLess(summary.index("🧭 新倉：無有效進場。"), summary.index("市場題材：來源不足，僅追蹤"))
 
     def test_confirmed_theme_without_stock_entry_stays_track_only(self):
         payload = render_payload(
@@ -202,12 +231,55 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         )
 
         summary = messages[-1]
-        self.assertIn("市場主題：AI/電子供應鏈偏多", summary)
-        self.assertIn("狀態：confirmed｜2 類 structured sources", summary)
+        self.assertIn("市場題材：AI/電子供應鏈證據偏多，但買點仍看個股條件", summary)
         self.assertIn("🧭 新倉：無有效進場。", summary)
         self.assertIn("未持倉 1 檔僅追蹤", summary)
+        self.assertLess(
+            summary.index("🧭 新倉：無有效進場。"),
+            summary.index("市場題材：AI/電子供應鏈證據偏多，但買點仍看個股條件"),
+        )
         self.assertNotIn("今日可買：台積電", summary)
         self.assertNotIn("台積電｜可買", summary)
+
+    def test_formatter_does_not_trust_existing_malformed_evidence_dict(self):
+        payload = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 126],
+            None,
+            price=126,
+            change=3.1,
+        )
+        payload["result"].update({
+            "decision": "WAIT",
+            "action": 0,
+            "breakout_distance": 7.5,
+            "rr": 1.8,
+            "market_grade": "A",
+            "heat_state": "NORMAL",
+            "trade_state": "WAIT",
+        })
+
+        messages = generator.formatTelegramMessages(
+            {"台積電": payload},
+            "FULL DETAIL",
+            None,
+            None,
+            {
+                "market_theme_evidence": {
+                    "confirmed": True,
+                    "theme_status": "confirmed",
+                    "theme_label": "AI/電子供應鏈",
+                    "theme_direction": "bullish",
+                    "source_families": ["report_derived"],
+                }
+            },
+            datetime(2026, 5, 28),
+            report_phase="盤中",
+        )
+
+        summary = messages[-1]
+        self.assertIn("市場題材：來源不足，僅追蹤", summary)
+        self.assertNotIn("市場題材：AI/電子供應鏈證據偏多", summary)
+        self.assertNotIn("🧭 主線：AI / 電子供應鏈仍偏多。", summary)
 
 
 if __name__ == "__main__":

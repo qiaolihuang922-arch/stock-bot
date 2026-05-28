@@ -161,10 +161,19 @@
   - 若需要 DB table / schema / cache、正式 Supabase write、live Telegram、backfill 或外部 provider，必須先通知 Owner。
   - report-derived only 仍只能 weak / track only。
   - confirmed 仍需兩類完整 structured source family，且不放寬個股買點。
-- Tech runner 本輪失敗：
-  - 隔離 worktree 曾產生部分候選 diff，並跑到局部 `61 passed, 21 warnings`。
-  - 但 Tech 未完成合法 `CHANGELOG.md`，QA 未執行。
-  - Architect 未吸收產品代碼，需清理 worktree 後另行重跑。
+- Tech retry 已完成，QA retry 結論 `通過`。
+- 已完成變更：
+  - Telegram header / formatter `VERSION` 升為 `v20.1.2`。
+  - `build_market_theme_evidence_provider()` 接到 production formatter path。
+  - existing `market_theme_evidence` dict 會重新驗證 source families / required fields / freshness，不直接信任 `confirmed: true`。
+  - summary 內 market theme evidence 行位於今日結論 / 主線執行 / 新倉之後，避免手機先看到題材偏多。
+  - malformed / report-derived only / stale case 不得 confirmed；confirmed 仍不放寬個股買點。
+  - v20.1.1 手機降噪契約未回退。
+- 未做：
+  - 未新增 DB schema / table / cache。
+  - 未接外部 provider。
+  - 未 live Telegram / Supabase write，未 backfill。
+- QA 驗證：`tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py` 為 `62 passed, 21 warnings`，並補 summary line order、malformed dict、stale source、notifier consumer 反證。
 
 ## Post Trade Reduce Cooldown Strategy Fix 已完成本地修復
 

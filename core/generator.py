@@ -35,6 +35,7 @@ from services.position_store import (
 from core.watchlist import STOCKS
 from core.market_theme_evidence import (
     build_market_theme_evidence,
+    build_market_theme_evidence_provider,
     format_market_theme_summary_lines
 )
 
@@ -51,7 +52,7 @@ from services.strategy_evidence import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.1.1"
+VERSION = "v20.1.2"
 
 EXECUTION_LEVELS = {
     "TAKE_PROFIT_50": "TP50",
@@ -3926,7 +3927,7 @@ def rejected_trace_line(watch_items):
 def ai_supply_chain_mainline_supported(market_summary):
 
     if isinstance(market_summary, dict):
-        evidence = market_summary.get("market_theme_evidence") or market_summary
+        evidence = market_theme_summary_evidence({}, market_summary)
         return bool(
             evidence.get("confirmed")
             and evidence.get("theme_direction") == "bullish"
@@ -3939,9 +3940,11 @@ def market_theme_summary_evidence(results_map, market_summary):
 
     if isinstance(market_summary, dict):
         evidence = market_summary.get("market_theme_evidence")
-        if isinstance(evidence, dict):
-            return evidence
-        return build_market_theme_evidence(formatter_report_input=market_summary)
+        return build_market_theme_evidence_provider(
+            results_map=results_map,
+            formatter_report_input=market_summary,
+            market_theme_evidence=evidence,
+        )
 
     return build_market_theme_evidence(
         results_map=results_map,
@@ -4014,9 +4017,6 @@ def formatTelegramSummary(results_map, best, score, market_summary, now, positio
     lines.extend([
         f"📊 市場：{market_mode}｜{risk_level}",
     ])
-    lines.extend(format_market_theme_summary_lines(
-        market_theme_summary_evidence(results_map, market_summary)
-    ))
 
     if report_phase == "盤中":
         lines.append(source_summary_text(results_map))
@@ -4025,6 +4025,9 @@ def formatTelegramSummary(results_map, best, score, market_summary, now, positio
         f"🧭 今日結論：{today_conclusion_text(holding_items, watch_items, market_mode, risk_level, report_phase=report_phase)}",
         f"🧭 原因：{today_reason_text(watch_items, market_mode, report_phase=report_phase)}",
         *market_execution_bridge_lines(holding_items, watch_items, market_mode, market_summary),
+        *format_market_theme_summary_lines(
+            market_theme_summary_evidence(results_map, market_summary)
+        ),
         f"🔥 最強：{best_stock_text(results_map, best, score)}",
         f"🚨 風險：{compact_risk_text(results_map)}",
         f"📌 持倉：{holding_names}",

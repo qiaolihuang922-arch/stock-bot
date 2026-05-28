@@ -10,11 +10,11 @@
 - version_level: `patch`
 - qa_level: `L2`
 - owner_status: `requested`
-- architect_status: `blocked`
+- architect_status: `completed`
 - pm_status: `task_ready`
-- tech_status: `blocked`
-- qa_status: `waiting_tech`
-- commit: `not_applicable`
+- tech_status: `changelog_ready`
+- qa_status: `qa_passed`
+- commit: `pushed`
 
 ## Current Result
 
@@ -26,17 +26,24 @@
   - 僅允許使用現有 runtime 可取得的結構化輸入。
   - 若需要 DB table / schema / cache、正式 Supabase write、live Telegram、backfill 或外部 provider，必須 blocked 並通知 Owner。
   - report-derived only 仍只能 weak / track only；confirmed 仍需兩類完整 structured source family 且不放寬個股買點。
-- Tech runner 本輪失敗：
-  - 隔離 worktree 產生了部分候選 diff，並曾跑到 `61 passed, 21 warnings`。
-  - 但 Tech 未完成合法 `CHANGELOG.md` 交付，QA 未執行；Architect 不吸收、不合併產品代碼。
-  - 隔離 worktree 將清理回主 repo `HEAD`。
-- 本輪沒有建表、沒有寫庫、沒有 live delivery，也沒有把未 QA 的證據鏈代碼合入主 repo。
+- Tech retry 已交付合法 `CHANGELOG.md`，QA retry 結論 `通過`。
+- 本輪實作為 `v20.1.2` Market Theme Evidence Structured Provider：
+  - Telegram header / formatter `VERSION` 升為 `v20.1.2`。
+  - `build_market_theme_evidence_provider()` 接到 production formatter path，輸出 structured evidence object。
+  - report-derived only / malformed existing dict 會重新驗證並降級，不得偽造 confirmed。
+  - 市場題材 evidence 行移到今日結論 / 主線執行 / 新倉之後，避免手機先看到題材偏多。
+  - confirmed 只作市場題材背景，仍顯示買點看個股條件，不放寬個股買點。
+  - v20.1.1 手機降噪契約未回退：短買點句、`待觸發加碼10`、無 `若收盤`、無 `不代表看空產業`、無 `明日風控｜加碼10`。
+  - 未新增 DB schema / table / cache，未接外部 provider，未 live Telegram / Supabase write，未 backfill。
+- QA 驗證：
+  - `tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py`：`62 passed, 21 warnings`。
+  - 補測 summary line order、malformed existing dict、stale source、notifier consumer。
 
 ## Next Action
 
-- 先清理失敗的 Tech worktree，保留 `TASK.md` 作為下一輪接力入口。
-- 後續重跑 Tech / QA 前，需提醒 Tech 必須先交付合法 `CHANGELOG.md`；未完成 QA 前不得吸收產品代碼。
-- 若下一輪確認需要建表 / schema / cache，先通知 Owner。
+- Architect final review 已在主 repo 跑同組驗證，通過後提交並推送。
+- 推送後清理 CAO worktree，並確認 CAO API / 前端服務可用。
+- 下一步若要 production confirmed 需要新增第二類 production runtime source；若涉及建表 / schema / cache，先通知 Owner。
 
 ## Status Values
 
