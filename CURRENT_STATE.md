@@ -175,6 +175,19 @@
   - 未 live Telegram / Supabase write，未 backfill。
 - QA 驗證：`tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py` 為 `62 passed, 21 warnings`，並補 summary line order、malformed dict、stale source、notifier consumer 反證。
 
+## Post-cycle Review Gate 已補入流程
+
+- Owner 要求每輪流程跑完後，Architect 必須自動總結問題並補 agent / runner / 流程規則，避免同類問題反覆發生。
+- 已更新 `AGENTS.md`：
+  - 新增 `Post-cycle Review Gate`。
+  - 每輪完成、阻塞、QA conditional / blocked、Tech runner 失敗、auto parser 失敗、commit / push 後都必須觸發。
+  - Architect 必須檢查根因、QA 是否攔住風險、Tech 是否回退既有契約、是否需要補 agent prompt / runner / 固定文件。
+  - 需要補規則時，Architect 直接更新固定流程文件；不得只說「下次注意」。
+- 已同步 `DISPATCH.md` 與 `CLEANUP_PLAN.md`：
+  - 下輪任務收口前必須先執行 post-cycle review。
+  - QA 擋下的問題必須變成 reusable guard。
+  - 已修手機報文契約、版本契約、證據鏈 contract、CAO 前端啟動等問題不得靠記憶維持，必須落文件或落 runner 待補項。
+
 ## Post Trade Reduce Cooldown Strategy Fix 已完成本地修復
 
 - 修復 Owner 指出的持倉策略衝突：

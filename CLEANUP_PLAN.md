@@ -23,6 +23,7 @@
 - Architect 若在對話中發現自己開始定位產品代碼、寫 `TASK.md`、寫 `CHANGELOG.md` 或寫 `QA_REPORT.md`，必須停止並回到分派流程。
 - Owner 明確授權「對比後沒問題就直接 push / 自己 push / 對齊 git」時，Architect 完成 final diff review 與必要驗證後可直接 commit / push，不再二次詢問；有不明 diff、QA 未通過或測試阻塞時不得 push。
 - 報文 / CLI 任務必須檢查使用者可見版本字串與程式常量 / header；狀態文件版本與實際輸出版本不一致時，不得收口。
+- 每輪 PM -> Tech -> QA -> Architect 收口後，必須執行 Post-cycle Review Gate：總結本輪根因、QA 攔截、是否回退既有契約、是否需要補 agent / runner / 流程規則；需要補時直接更新固定文件，不得只口頭說下次注意。
 
 ## 最新收斂
 
@@ -93,6 +94,11 @@
   - 本輪只吸收 6 個限定檔案，不整包合併 worktree。
   - 未新增 DB/schema/cache/external provider/live write/backfill。
   - 後續若需要 production confirmed 的第二類 runtime source，且涉及建表或 cache，先通知 Owner。
+- Post-cycle Review Gate 已補入固定流程：
+  - 每輪完成 / 阻塞 / QA conditional / runner 失敗 / commit push 後，Architect 必須復盤並補規則。
+  - QA 擋下的問題必須沉澱成 reusable guard。
+  - 已修契約不得在下一輪悄悄回退；若任務容易碰到既有契約，Architect 必須在分派指令中寫明不得回退。
+  - runner / worktree / CAO 前端服務問題若重複發生，必須記入本文件或另開流程補丁。
 - push 後仍需壓縮：
   - `DISPATCH.md`
   - `TASK.md`

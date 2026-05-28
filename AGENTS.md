@@ -74,6 +74,40 @@ Architect 每次準備採取動作前，必須先做以下自鎖檢查：
 - 若下一步只是流程 / 規則修復，可由 Architect 直接改 `AGENTS.md`、`DISPATCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`，但不得順手建立產品任務卡或修產品代碼。
 - 若已經越權改了文件，Architect 必須先恢復越權改動，再更新流程規則；不得把錯誤狀態繼續往下游傳。
 
+### 1.2 Post-cycle Review Gate
+
+每次完整流程結束後，Architect 必須做一次收口復盤，不得等 Owner 再次指出同一類問題。
+
+觸發時機：
+
+- PM / Tech / QA 任務完成並被 Architect 吸收後。
+- QA 阻塞、conditional pass、Tech runner 失敗、auto cycle parser 失敗後。
+- commit / push 完成後。
+- Owner 指出「又犯同樣問題」「反覆改回去」「流程沒補上」時。
+
+Architect 必須檢查並記錄：
+
+- 本輪問題根因：需求不清、PM 漏契約、Tech 漏同步、QA 漏反證、runner / worktree 問題、版本契約、手機閱讀、證據鏈、或流程文件不足。
+- QA 是否真的攔住風險；若 QA 沒攔住，需補 QA 規則。
+- Tech 是否把既有已修契約改回去；若有，需補禁止回退 guard。
+- 是否有可抽象成通用規則的失誤；若有，直接更新 `AGENTS.md`、`DISPATCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`。
+- 是否需要補 runner / agent prompt；若需要，記入 `CLEANUP_PLAN.md`，需要改腳本時另開流程任務。
+- 是否需要新任務；若是產品 / 策略 / 顯示 / feature，仍需先分派 PM，不得用復盤名義直接改產品代碼。
+
+收口輸出要求：
+
+- `DISPATCH.md` 的 `Current Result` 必須包含本輪「流程教訓 / 已補規則 / 待補流程」摘要。
+- `CURRENT_STATE.md` 必須保留高信號流程狀態，不貼長過程。
+- `CLEANUP_PLAN.md` 必須新增或更新待補項，已完成的補丁只保留短摘要。
+- 若本輪無需補規則，Architect 也必須在 final response 說明「已做 post-cycle review，未發現需新增規則」。
+
+拒收條件：
+
+- 只說「下次注意」但沒有檢查是否要補文件。
+- QA 曾阻塞但 Architect 沒把阻塞原因轉成可重用 guard。
+- runner / worktree / 前端服務問題重複發生但沒有寫入流程待補。
+- 已修契約被新任務回退，卻沒有把「不得回退既有契約」寫進下一輪任務指令或流程文件。
+
 ### 2. 代碼規則
 
 - Architect 預設不改產品代碼；只有 Owner 明確說「你直接改代碼 / 直接實作 / 不走部門」才可臨時作為 Tech。
@@ -215,6 +249,7 @@ Architect 收口只接受：
 7. Tech 只根據 `TASK.md` 實作，完成後輸出 `CHANGELOG.md`。
 8. QA 只根據 `TASK.md` 與 `CHANGELOG.md` 驗證，完成後輸出 `QA_REPORT.md`。
 9. Architect 只讀 `DISPATCH.md`、三份交付摘要或 `RESEARCH.md`，以及必要局部上下文，更新總控文件。
+10. Architect 執行 Post-cycle Review Gate：總結本輪根因、QA 攔截、是否回退既有契約、是否需要補 agent / runner / 流程規則；需要補則直接更新固定流程文件。
 
 ## 版本分級
 
@@ -381,6 +416,7 @@ QA 驗證職責：
 - Owner 提出新功能、顯示調整、策略調整或 bug 修復時，Architect 預設只更新 `DISPATCH.md` 並分派，不直接改代碼。
 - Owner 提出產品 bug 時，Architect 預設也不得直接寫 `TASK.md`；只把 `DISPATCH.md` 設為 `pm_status: todo`、`tech_status: waiting_pm`、`qa_status: waiting_tech`，由 PM 產出任務卡。
 - Architect 只有在 Owner 明確說「你直接改代碼 / 直接實作 / 不走部門」時，才可作為臨時 Tech 修改代碼。
+- 每輪流程完成或阻塞後，Architect 必須做 Post-cycle Review Gate，把可重複失誤轉成固定規則或待補流程；不得只口頭提醒「下次注意」。
 
 ### PM / 產品
 
@@ -600,6 +636,8 @@ Runner hygiene gates：
 ## Push 後壓縮規則
 
 每次 Architect 完成 commit / push 後，下一步必須做上下文壓縮，避免 Markdown 文件變成新的長聊天紀錄。
+
+壓縮前必須先完成 Post-cycle Review Gate；若發現需要補 agent / runner / 流程規則，先更新固定文件，再壓縮與收口。
 
 - `DISPATCH.md`：只保留當前任務狀態與固定啟動句，不保留歷史任務過程。
 - `TASK.md`：只保留最新任務；舊任務只保留 3-5 行摘要到 `CURRENT_STATE.md`。

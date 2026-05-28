@@ -5,45 +5,40 @@
 ## Current Task
 
 - task_id: `market-theme-evidence-structured-provider-v20-1-2`
-- task_name: `Market Theme Evidence Structured Provider v20.1.2`
+- task_name: `Post-cycle Review Gate After v20.1.2`
 - task_type: `development`
-- version_level: `patch`
-- qa_level: `L2`
+- version_level: `none`
+- qa_level: `process`
 - owner_status: `requested`
 - architect_status: `completed`
-- pm_status: `task_ready`
-- tech_status: `changelog_ready`
-- qa_status: `qa_passed`
+- pm_status: `not_required`
+- tech_status: `not_required`
+- qa_status: `not_required`
 - commit: `pushed`
 
 ## Current Result
 
 - CAO 前端：`http://127.0.0.1:5173/`
-- `v20.1.1` Telegram 手機閱讀降噪已於 commit `3f15ee5` 推送。
-- Owner 要求繼續證據鏈下一步；Architect 已分派 PM 定義 `v20.1.2` structured provider 接線任務。
-- PM 已交付 `TASK.md`：
-  - 目標是把 dry-run `market_theme_evidence` 往 production formatter 可用 structured provider / adapter 推進。
-  - 僅允許使用現有 runtime 可取得的結構化輸入。
-  - 若需要 DB table / schema / cache、正式 Supabase write、live Telegram、backfill 或外部 provider，必須 blocked 並通知 Owner。
-  - report-derived only 仍只能 weak / track only；confirmed 仍需兩類完整 structured source family 且不放寬個股買點。
-- Tech retry 已交付合法 `CHANGELOG.md`，QA retry 結論 `通過`。
-- 本輪實作為 `v20.1.2` Market Theme Evidence Structured Provider：
-  - Telegram header / formatter `VERSION` 升為 `v20.1.2`。
-  - `build_market_theme_evidence_provider()` 接到 production formatter path，輸出 structured evidence object。
-  - report-derived only / malformed existing dict 會重新驗證並降級，不得偽造 confirmed。
-  - 市場題材 evidence 行移到今日結論 / 主線執行 / 新倉之後，避免手機先看到題材偏多。
-  - confirmed 只作市場題材背景，仍顯示買點看個股條件，不放寬個股買點。
-  - v20.1.1 手機降噪契約未回退：短買點句、`待觸發加碼10`、無 `若收盤`、無 `不代表看空產業`、無 `明日風控｜加碼10`。
-  - 未新增 DB schema / table / cache，未接外部 provider，未 live Telegram / Supabase write，未 backfill。
-- QA 驗證：
-  - `tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py`：`62 passed, 21 warnings`。
-  - 補測 summary line order、malformed existing dict、stale source、notifier consumer。
+- `v20.1.2` Market Theme Evidence Structured Provider 已於 commit `4e02637` 推送。
+- Owner 要求：每次流程跑完後，Architect 必須自動總結問題、補 agent 規則、補流程漏洞，避免同類問題重複發生。
+- 本輪為純流程補丁，不改產品代碼、不改策略、不改 DB、不跑 QA。
+- 已補 `AGENTS.md`：
+  - 新增 `Post-cycle Review Gate`。
+  - 每輪完成、阻塞、QA conditional / blocked、Tech runner 失敗、auto parser 失敗、commit / push 後，Architect 必須復盤。
+  - 復盤必須檢查根因、QA 是否攔住、Tech 是否回退既有契約、是否需要補 agent / runner / 流程規則。
+  - 若需要補規則，Architect 直接更新固定流程文件；不得只說「下次注意」。
+  - `DISPATCH.md` / `CURRENT_STATE.md` / `CLEANUP_PLAN.md` 必須記錄流程教訓與待補項。
+- 這條 gate 會用來防止：
+  - 手機報文同類誤讀反覆出現。
+  - 已修契約在下一輪被改回去。
+  - QA 阻塞原因沒有沉澱成 reusable guard。
+  - runner / worktree / 前端服務問題只靠口頭記憶。
 
 ## Next Action
 
-- Architect final review 已在主 repo 跑同組驗證，通過後提交並推送。
+- 流程補丁已提交並推送。
 - 推送後清理 CAO worktree，並確認 CAO API / 前端服務可用。
-- 下一步若要 production confirmed 需要新增第二類 production runtime source；若涉及建表 / schema / cache，先通知 Owner。
+- 下一輪產品 / 策略 / 證據鏈任務完成後，必須先跑 Post-cycle Review Gate 再 final response。
 
 ## Status Values
 
