@@ -30,10 +30,13 @@
   - 本輪 diff 只包含 `AGENTS.md`、`DISPATCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`RESEARCH.md`。
   - 未修改產品代碼、測試、策略、DB 或 runner。
 - 已提交並推送：`fa0174a chore: compress workflow docs`。
+- 已補狀態提交並推送：`43193f6 chore: mark workflow cleanup pushed`。
+- 已執行 CAO worktree cleanup，`tech_write` 對齊 `43193f6`。
+- 已確認 CAO API / UI 可用：`http://127.0.0.1:9889/`、`http://127.0.0.1:5173/`。
 
 ## Next Action
 
-- 執行 CAO worktree cleanup 與服務確認。
+- 等待 Owner 下一個需求。
 
 ## Status Values
 
