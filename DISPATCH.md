@@ -14,7 +14,7 @@
 - pm_status: `not_required`
 - tech_status: `not_required`
 - qa_status: `not_required`
-- commit: `pending`
+- commit: `pushed`
 
 ## Current Result
 
@@ -29,11 +29,11 @@
   - 文件層驗證 `git diff --check` 通過。
   - 本輪 diff 只包含 `AGENTS.md`、`DISPATCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`RESEARCH.md`。
   - 未修改產品代碼、測試、策略、DB 或 runner。
+- 已提交並推送：`fa0174a chore: compress workflow docs`。
 
 ## Next Action
 
-- commit / push。
-- 推送後執行 CAO worktree cleanup 與服務確認。
+- 執行 CAO worktree cleanup 與服務確認。
 
 ## Status Values
 
