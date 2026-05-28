@@ -39,6 +39,7 @@
   - 待確認項。
 - `RESEARCH.md` 保留市場 / 題材證據鏈研究結論，刪除終端過程與長表格流水。
 - `DISPATCH.md` 切換為本輪流程審計與壓縮任務，不再保存上一輪產品任務完整過程。
+- CAO runner prompt 已補任務尺寸 / 最小改動 / 風險預算 / 停止條件，避免 PM、Tech、QA 把小任務擴成大任務。
 
 ## Pending / Watchlist
 
@@ -48,6 +49,9 @@
   - 是否避免把 one-off 事故塞進 `AGENTS.md`。
   - 是否壓縮 `DISPATCH.md` / `CURRENT_STATE.md` / `CLEANUP_PLAN.md`。
 - 下一次 CAO auto 任務後，確認：
+  - PM 是否真的先判斷任務尺寸，且 tiny patch 沒膨脹。
+  - Tech 是否真的維持最小 diff，且未過擬合測試或回退既有契約。
+  - QA 是否真的使用風險預算與停止條件，且未無理由擴大驗證。
   - Tech worktree 是否乾淨起跑。
   - QA `.qa_tmp/` 是否足夠且未改 tracked files。
   - handoff hash gate 是否有效。

@@ -4,8 +4,8 @@
 
 ## Current Task
 
-- task_id: `workflow-full-audit-and-compression-20260528`
-- task_name: `Workflow Full Audit and Compression`
+- task_id: `cao-agent-prompt-efficiency-20260528`
+- task_name: `CAO Agent Prompt Efficiency and Closeable Handoff`
 - task_type: `process`
 - version_level: `none`
 - qa_level: `process`
@@ -18,21 +18,21 @@
 
 ## Current Result
 
-- 本輪只做流程治理與固定 Markdown 壓縮，不改產品代碼、不改策略、不改測試。
-- Owner 指出：不能每次把單點問題硬塞進 `AGENTS.md`，應該抽象成 agent / 流程方向，並清除冗餘內容。
-- Architect 已確認身份為總控；本輪允許直接改 `AGENTS.md`、`DISPATCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`RESEARCH.md`，不得手寫 `TASK.md` / `CHANGELOG.md` / `QA_REPORT.md`，也不得碰產品代碼。
-- 本輪目標：
-  - 壓縮 `CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`RESEARCH.md`，移除舊版本流水與終端過程。
-  - 補強 `AGENTS.md` 的規則治理：先分類根因，再決定是否升級為硬規則；一次性事故不得直接塞進硬規則。
-  - 保留固定 8 份 Markdown，不刪除。
-- 已完成初步檢查：
-  - 文件層驗證 `git diff --check` 通過。
-  - 本輪 diff 只包含 `AGENTS.md`、`DISPATCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`RESEARCH.md`。
-  - 未修改產品代碼、測試、策略、DB 或 runner。
-- 已提交並推送：`fa0174a chore: compress workflow docs`。
-- 已補狀態提交並推送：`43193f6 chore: mark workflow cleanup pushed`。
-- 已執行 CAO worktree cleanup，`tech_write` 對齊 `43193f6`。
-- 已確認 CAO API / UI 可用：`http://127.0.0.1:9889/`、`http://127.0.0.1:5173/`。
+- 本輪只做 CAO runner prompt 與流程文件補強，不改產品代碼、不改策略、不改測試。
+- Owner 擔心：agent 不夠聰明、效率低，且關掉對話後狀態會錯亂。
+- 已完成本機 runner prompt 補丁：
+  - `/Users/liveroom/stock-bot-agent-context/run_auto_dev_cycle.sh`：PM 必須先判斷任務尺寸，tiny patch 只允許單一主 bug、單一輸出契約、1-2 個驗收案例，並寫停止條件。
+  - `/Users/liveroom/stock-bot-agent-context/run_tech_write.sh`：Tech 必須先寫任務尺寸、最小改動策略、旁支待辦；禁止順手重構、測試過擬合、回退既有契約。
+  - `/Users/liveroom/stock-bot-agent-context/run_qa_code.sh`：QA 必須先寫風險預算與停止條件；驗證範圍需匹配任務尺寸，tiny patch 不得無理由擴成全量矩陣。
+  - `/Users/liveroom/stock-bot-agent-context/run_tech_plan.sh`：規劃代理必須輸出任務尺寸、最小影響面與不應觸碰模組。
+  - `/Users/liveroom/stock-bot-agent-context/README.md`：更新 Tech write / QA runner 已啟用狀態，移除舊「Tech 自動寫碼尚未啟用」誤導。
+- 關閉對話後的接力方式：
+  - 新對話先讀 `AGENTS.md`、`DISPATCH.md`、`CURRENT_STATE.md`。
+  - 本輪 runner 腳本不在 git repo 內，但已在本機實際路徑改好；本文件與 `CURRENT_STATE.md` 記錄改動位置。
+  - 若要重新核對 runner，直接讀上述 5 個本機檔案。
+- 已驗證：
+  - Runner shell syntax：`bash -n run_auto_dev_cycle.sh run_tech_write.sh run_qa_code.sh run_tech_plan.sh run_online_agent.sh` 通過。
+  - Repo 文件 diff：`git diff --check` 通過。
 
 ## Next Action
 
