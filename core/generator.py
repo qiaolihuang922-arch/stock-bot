@@ -52,7 +52,7 @@ from services.strategy_evidence import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.2.0"
+VERSION = "v20.2.1"
 
 EXECUTION_LEVELS = {
     "TAKE_PROFIT_50": "TP50",
@@ -628,6 +628,19 @@ def compact_market_line(result, dist):
         parts.append(pos)
 
     return "｜".join(parts)
+
+
+def card_breakout_distance(data):
+    result = data.get("result") or {}
+    dist = data.get("breakout_distance")
+
+    if dist is None or dist == "":
+        dist = result.get("breakout_distance")
+
+    if dist == "":
+        return None
+
+    return dist
 
 
 def compact_entry_judgement(result):
@@ -4053,7 +4066,7 @@ def formatTelegramPositionCard(name, data):
     decision = ensure_holding_decision(name, data)
     result = data["result"]
     today_text = event_summary_text(data.get("position_events") or {}) or "無"
-    dist = data.get("breakout_distance", result.get("breakout_distance"))
+    dist = card_breakout_distance(data)
     decision_line, condition_line = holding_detail_decision_lines(name, data)
     reason_line = holding_reason_line(name, data)
     next_step = holding_next_step_line(name, data)
@@ -4314,7 +4327,7 @@ def compact_backtest_line(context):
 def formatTelegramUnheldCard(name, data, report_phase=None):
 
     result = data["result"]
-    dist = data.get("breakout_distance", result.get("breakout_distance"))
+    dist = card_breakout_distance(data)
     blockers = entry_blockers(result)
     valid_entry = is_valid_entry(result)
     title_label = "買點成立" if valid_entry else (blockers[0] if blockers else final_label(result))

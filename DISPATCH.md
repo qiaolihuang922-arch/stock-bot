@@ -4,13 +4,13 @@
 
 ## Current Task
 
-- task_id: `market-theme-evidence-production-pm-20260528`
-- task_name: `Market Theme Evidence Production PM Definition`
-- task_type: `feature`
-- version_level: `minor`
-- qa_level: `L3`
+- task_id: `telegram-breakout-distance-always-visible-v20.2.1`
+- task_name: `Telegram Breakout Distance Always Visible`
+- task_type: `display_bugfix`
+- version_level: `patch`
+- qa_level: `L1`
 - owner_status: `requested`
-- architect_status: `qa_passed_absorbed`
+- architect_status: `pushed`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
 - qa_status: `qa_passed`
@@ -18,52 +18,39 @@
 
 ## Current Result
 
-- Owner 要求開始證據鏈下一步。
-- 當前只進入 PM 定義階段，不直接改產品代碼、不建表、不做 live Supabase write、不做正式 backfill、不做 live Telegram。
-- PM 必須定義：
-  - production confirmed 需要哪些 runtime sources。
-  - source freshness、cache / schema 邊界、payload contract。
-  - 什麼情況需要先通知 Owner 才能建表 / cache / external provider。
-  - evidence 如何進 Telegram 報文，但不得改策略 decision 或放寬買點。
-  - 驗收條件與 QA L3 範圍。
+- Owner 要求小改動：不管距離突破點多少，只要有距離資料，Telegram / 報文卡片都要顯示突破距離。
+- 本輪範圍限定為 tiny_patch / L1：
+  - 只改持倉與未持倉卡片的盤面行顯示。
+  - 不改策略 decision、突破門檻、買賣 / 加減碼、DB、watchlist、live Telegram、replay/backfill。
+  - 使用者可見版本升為 `v20.2.1`。
 - CAO 服務已確認：
   - API: `http://127.0.0.1:9889/`
   - UI: `http://127.0.0.1:5173/`
 - PM 已交付 `TASK.md`，Architect 已檢查：
   - `# TASK:` 標題存在。
-  - 已列直接消費者、輸出契約、版本契約、approval gates、阻塞條件。
-  - 明確禁止本輪建表、live write、正式 backfill、live Telegram。
-- Tech runner 狀態：
-  - 第一輪 Tech 在隔離 worktree 產生候選 diff，局部測試一度通過，但在重寫 `CHANGELOG.md` 時超時退出。
-  - 第二輪收口仍未產生有效輸出，`CHANGELOG.md` 仍是舊任務內容。
-  - Architect 拒收本輪 Tech 交付：不進 QA、不合併產品 diff、不推送產品變更。
-  - 主 repo 只保留 PM 任務卡與阻塞紀錄；隔離 worktree 已清理。
-- Owner 確認這是正常流程保護後，Architect 重新分派 Tech 從乾淨 worktree 實作。
-- Tech 重跑已交付合格 `CHANGELOG.md` 與候選 diff；runner 已修正為由 Tech final answer 生成 `CHANGELOG.md`，避免再次卡在檔案編輯收口。
-- QA 已阻塞候選 diff：
-  - 一般五類 fixture 與 notifier / strategy invariance 測試通過。
-  - QA 自訂反證發現：若 required source 同時有 `freshness=stale/unavailable` 與 `freshness_reason=same_trade_date`，候選仍可能輸出 `confirmed`。
-  - 這違反 TASK「任一 required source stale / unavailable 時，不得輸出 confirmed」。
-- Tech 已完成 QA block 修正：
-  - `freshness=stale/unavailable/missing` 現在優先於 allowed `freshness_reason`。
-  - 已補負面測試並重新跑相關 evidence / formatter / notifier / strategy invariance 測試。
-- QA 重新驗證結果：
-  - freshness precedence 阻塞點已解除。
-  - 相關測試與 Telegram direct-consumer smoke 通過。
-  - 但 `CHANGELOG.md` 只描述最後的 freshness fix，未覆蓋整個 worktree 的 v20.2.0 feature diff，因此不能整包吸收。
-- Tech 已補完整 `CHANGELOG.md`，覆蓋 `core/market_theme_evidence.py`、`core/generator.py`、formatter/notifier tests、版本同步與 no-live-write 邊界。
-- QA 最終一致性複核通過：
-  - `CHANGELOG.md` 與 worktree diff 一致。
-  - freshness precedence、v20.2.0 header、no DB/schema/cache/live/backfill、message list/notifier payload shape 均通過。
-  - Architect 已只吸收 QA 明確列出的 6 個檔案，不整包合併 worktree。
+  - 已列手機閱讀路徑、直接消費者、輸出契約、版本契約與禁止事項。
+- Tech 已交付 `CHANGELOG.md` 與候選 diff：
+  - `core/generator.py` VERSION 升為 `v20.2.1`。
+  - 卡片距離讀取支援 `data.breakout_distance` 缺失時 fallback 到 `result.breakout_distance`。
+  - 持倉與未持倉卡片共用同一距離顯示規則。
+  - 測試同步 formatter、notifier direct consumer、market evidence header。
+- QA 最終驗證通過：
+  - 有距離資料時，`已突破 / 臨界突破 / 接近突破 / 遠離突破` 都保留括號距離。
+  - 缺資料時不輸出 `0%`、`None%`、空括號或假距離。
+  - message list / notifier payload shape 未破壞。
+  - 無策略、DB、watchlist、live Telegram、replay/backfill diff。
 - 主 repo 驗證：
-  - `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_generator_report.py tests/test_notifier.py tests/test_analysis_engine.py tests/test_strategy_evidence.py`
-  - 結果：`113 passed, 21 warnings`
+  - `arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py tests/test_notifier.py tests/test_market_theme_evidence.py`
+  - 結果：`72 passed, 21 warnings`
   - `git diff --check` 通過。
+- Post-cycle review：
+  - 根因分類：正常 tiny_patch，外加一次 runner / worktree 交付摘要不一致被 QA 攔下。
+  - QA 有效攔截：版本 / CHANGELOG 與實際 diff 不一致時 blocked，修正後通過。
+  - 不新增硬規則；此屬 runner handoff 風險，已按既有 Post-cycle Review Gate 記錄到 `CLEANUP_PLAN.md`。
 
 ## Next Action
 
-- commit / push 後清理 tech worktree。
+- 等待 Owner 下一個需求；若是產品 / 顯示 / 策略 bug，仍先分派 PM。
 
 ## Status Values
 

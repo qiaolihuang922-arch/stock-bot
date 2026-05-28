@@ -7,7 +7,7 @@
 - 專案：台股策略報文機器人。
 - 交付形態：排程 / 腳本產生 Telegram 報文並發送給 Owner。
 - 股票清單唯一來源：`core/watchlist.py`，預設 12 檔。
-- 最新使用者可見 Telegram 版本：`v20.1.3`。
+- 最新使用者可見 Telegram 版本：`v20.2.1`。
 - 最新 pushed commit 以 `git log -1` 為準。
 - 固定 8 份 Markdown 不刪除，只改寫內容：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 
@@ -33,6 +33,16 @@
 
 ## Recent High-Signal Milestones
 
+- `v20.2.1` Telegram Breakout Distance Always Visible 已通過 QA：
+  - 持倉與未持倉卡片只要有突破距離資料，`已突破 / 臨界突破 / 接近突破 / 遠離突破` 都顯示括號距離。
+  - `data.breakout_distance` 缺失時 fallback 到 `result.breakout_distance`。
+  - 缺距離資料時不輸出 `0%`、`None%`、空括號或假距離。
+  - QA 驗證：`tests/test_generator_report.py tests/test_notifier.py tests/test_market_theme_evidence.py`，`72 passed, 21 warnings`。
+- `v20.2.0` Market Theme Evidence Production Contract 已推送：
+  - confirmed 必須同時有 fresh supportive `watchlist_breadth` 與 `market_index` / `sector_index`。
+  - `stale` / `unavailable` / `missing` freshness 優先於 allowed `freshness_reason`，不得 confirmed。
+  - Telegram evidence 區塊顯示 confirmed / weak / mixed / stale / absent 與限制句。
+  - 未新增 DB schema / cache / external provider / live write / backfill / live Telegram。
 - `v20.1.3` Telegram Holding Risk Tomorrow Plan Dedupe 已推送：
   - 移除重複 `隔日計畫`。
   - 持倉未修復 / 降級檢查只留在 `持倉風控檢查`。
@@ -51,16 +61,11 @@
   - 建立 `market_theme_evidence` dry-run helper 與測試。
   - report-derived only 只能 weak / track only，不可 confirmed。
 - 早期 v20.0.x 舊細節已壓縮：完整流水不再保留在本文件，必要時查 git history。
-- `v20.2.0` Market Theme Evidence Production Contract 已通過 QA 並推送：
-  - confirmed 必須同時有 fresh supportive `watchlist_breadth` 與 `market_index` / `sector_index`。
-  - `stale` / `unavailable` / `missing` freshness 優先於 allowed `freshness_reason`，不得 confirmed。
-  - Telegram evidence 區塊顯示 confirmed / weak / mixed / stale / absent 與限制句。
-  - 未新增 DB schema / cache / external provider / live write / backfill / live Telegram。
-
 ## Stable Product Contracts
 
 - Telegram 報文以手機閱讀為第一視角。
 - 使用者可見報文變更需同步 `core/generator.py` 的 `VERSION` 或等價 header 常量，除非 PM 明確定義不升版理由。
+- 持倉與未持倉卡片只要有突破距離資料，盤面行必須顯示括號距離；缺資料不得輸出假距離。
 - 未持倉漏斗母集合固定為：`可買 / 可準備 / 僅追蹤 / 淘汰`；`僅追蹤` 再拆 `等冷卻 / 等回測 / 等RR修復 / 等量能`。
 - 同一檔持倉同一份報文只能有一個主行動；持倉風控優先於高分、最強、待觸發加碼。
 - 今日買入後預設是 `新倉風控觀察`；若要賣 / 減碼 / 停損，必須說明明確觸發條件。

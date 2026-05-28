@@ -23,7 +23,7 @@ class NotifierSendManyTest(unittest.TestCase):
         )
 
     def test_send_many_preserves_formatter_version_header_on_last_message(self):
-        summary = "【05/28 盤中｜v20.2.0】\n今日新倉：無有效進場"
+        summary = "【05/28 盤中｜v20.2.1】\n今日新倉：無有效進場"
 
         with patch.object(notifier, "send", return_value=True) as mock_send, \
              patch.object(notifier.time, "sleep"):
@@ -31,7 +31,7 @@ class NotifierSendManyTest(unittest.TestCase):
 
         self.assertTrue(ok)
         self.assertEqual(mock_send.call_args_list[-1], call(summary, reply_markup=None))
-        self.assertIn("【05/28 盤中｜v20.2.0】", mock_send.call_args_list[-1].args[0])
+        self.assertIn("【05/28 盤中｜v20.2.1】", mock_send.call_args_list[-1].args[0])
 
     def test_reply_markup_stays_on_single_string_message(self):
         reply_markup = {"inline_keyboard": [[{"text": "設定", "callback_data": "noop"}]]}

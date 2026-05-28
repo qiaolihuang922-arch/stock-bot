@@ -47,6 +47,10 @@
 ## Pending / Watchlist
 
 - Tech runner gap 已補：`run_tech_write.sh` 改為讓 Tech 在 final answer 輸出 `# CHANGELOG:`，由 runner 寫入 worktree `CHANGELOG.md`，避免 agent 卡在直接編輯交付文件。
+- 本輪 `v20.2.1` tiny patch 中，QA 曾攔下 `CHANGELOG.md` / tracked diff / VERSION 不一致：
+  - 根因分類：`runner_gap` / handoff drift，不是產品規則缺失。
+  - 已用 QA 重跑與主 repo 驗證收口。
+  - 後續觀察：Tech 修交付摘要時不得讓 worktree 產品 diff 被重置；若再發生，應補 runner guard，而不是新增硬規則。
 - 下一次產品任務完成後，確認 Post-cycle Review Gate 是否有做到：
   - 根因分類。
   - QA 攔截是否沉澱成 guard。

@@ -58,6 +58,125 @@ def render_payload(closes, holding=None, price=None, change=0):
 
 
 class GeneratorReportTest(unittest.TestCase):
+    def breakout_distance_payload(
+        self,
+        distance,
+        *,
+        holding=False,
+        include_result_distance=True,
+        data_distance="missing",
+    ):
+        result = {
+            "decision": "WAIT",
+            "action": 0,
+            "rr": 1.2,
+            "heat_state": "NORMAL",
+            "trade_state": "WAIT",
+            "structure_phase": "BREAKOUT_CONFIRM",
+            "price_behavior": "NORMAL",
+            "market_grade": "B",
+            "volume_state": "NORMAL",
+            "volume_price_state": "NORMAL",
+            "structure_state": "NORMAL",
+            "entry_quality": "B",
+            "confidence_score": 70,
+        }
+        if include_result_distance:
+            result["breakout_distance"] = distance
+
+        payload = {
+            "stock_code": "0000",
+            "price": 100,
+            "change": 0,
+            "price_source": "realtime",
+            "daily_source": "yahoo",
+            "result": result,
+            "holding": {"shares": 10, "avg_price": 100} if holding else None,
+            "structure_score": 4,
+            "volume_ratio": 1.0,
+        }
+        if holding:
+            payload["holding_decision"] = {
+                "action": "續抱",
+                "level": "HOLD_WATCH",
+                "note": "觀察",
+                "warning_price": 95,
+                "hard_stop_price": 90,
+            }
+        if data_distance != "missing":
+            payload["breakout_distance"] = data_distance
+        return payload
+
+    def test_v20_2_1_holding_card_always_shows_breakout_distance_when_available(self):
+        cases = [
+            (-1, "已突破（-1%）"),
+            (0, "臨界突破（0%）"),
+            (2, "接近突破（2%）"),
+            (7, "遠離突破（7%）"),
+        ]
+
+        for distance, expected in cases:
+            with self.subTest(distance=distance):
+                card = generator.formatTelegramPositionCard(
+                    "範例股",
+                    self.breakout_distance_payload(distance, holding=True),
+                )
+
+                self.assertIn(f"盤面：突破確認｜偏強｜普通｜{expected}", card)
+
+    def test_v20_2_1_unheld_card_always_shows_breakout_distance_when_available(self):
+        cases = [
+            (-1, "已突破（-1%）"),
+            (0, "臨界突破（0%）"),
+            (2, "接近突破（2%）"),
+            (7, "遠離突破（7%）"),
+        ]
+
+        for distance, expected in cases:
+            with self.subTest(distance=distance):
+                card = generator.formatTelegramUnheldCard(
+                    "範例股",
+                    self.breakout_distance_payload(distance),
+                    report_phase="盤中",
+                )
+
+                self.assertIn(f"盤面：突破確認｜偏強｜普通｜{expected}", card)
+
+    def test_v20_2_1_card_breakout_distance_falls_back_to_result_and_omits_missing(self):
+        holding_card = generator.formatTelegramPositionCard(
+            "範例股",
+            self.breakout_distance_payload(2, holding=True, data_distance=None),
+        )
+        unheld_card = generator.formatTelegramUnheldCard(
+            "範例股",
+            self.breakout_distance_payload(7, data_distance=None),
+            report_phase="盤中",
+        )
+
+        self.assertIn("盤面：突破確認｜偏強｜普通｜接近突破（2%）", holding_card)
+        self.assertIn("盤面：突破確認｜偏強｜普通｜遠離突破（7%）", unheld_card)
+
+        for holding in [True, False]:
+            with self.subTest(holding=holding):
+                payload = self.breakout_distance_payload(
+                    None,
+                    holding=holding,
+                    include_result_distance=False,
+                )
+                if holding:
+                    card = generator.formatTelegramPositionCard("範例股", payload)
+                else:
+                    card = generator.formatTelegramUnheldCard(
+                        "範例股",
+                        payload,
+                        report_phase="盤中",
+                    )
+
+                self.assertIn("盤面：突破確認｜偏強｜普通", card)
+                self.assertNotIn("（0%）", card)
+                self.assertNotIn("None%", card)
+                self.assertNotIn("（）", card)
+
     def test_limit_lock_conclusion_is_not_overridden_by_rr(self):
         result = {
             "decision": "BUY",
@@ -970,7 +1089,7 @@ class GeneratorReportTest(unittest.TestCase):
                 datetime(2026, 5, 26),
             )
 
-        self.assertIn("v20.2.0", messages[-1])
+        self.assertIn("v20.2.1", messages[-1])
         self.assertIn("📡 資料：即時價 realtime｜日線 yahoo", messages[-1])
         self.assertIn("🧭 今日結論：R3 進攻偏熱；交易執行：無新增下單；持倉風控檢查 5 檔；未持倉 6 檔僅追蹤", messages[-1])
         self.assertIn("🧭 原因：強勢股多過熱，RR不足，不追高", messages[-1])
@@ -1426,7 +1545,7 @@ class GeneratorReportTest(unittest.TestCase):
         )
 
         summary = messages[-1]
-        self.assertIn("【05/28 盤後｜v20.2.0】", summary)
+        self.assertIn("【05/28 盤後｜v20.2.1】", summary)
         self.assertIn("明日計畫 1\n1. 技嘉｜待觸發加碼10", summary)
         self.assertIn("持倉風控檢查\n1. 技嘉｜風控：守警戒線，不追價", summary)
         self.assertLess(summary.index("持倉風控檢查"), summary.index("明日計畫 1"))
@@ -1470,7 +1589,7 @@ class GeneratorReportTest(unittest.TestCase):
         )
 
         summary = messages[-1]
-        self.assertIn("【05/28 盤後｜v20.2.0】", summary)
+        self.assertIn("【05/28 盤後｜v20.2.1】", summary)
         self.assertLess(summary.index("持倉風控檢查"), summary.index("明日計畫 1"))
         self.assertIn("智原｜", summary)
         self.assertIn("緯創｜", summary)
@@ -1690,7 +1809,7 @@ class GeneratorReportTest(unittest.TestCase):
             datetime(2026, 5, 27),
         )
 
-        self.assertIn("v20.2.0", messages[-1])
+        self.assertIn("v20.2.1", messages[-1])
         self.assertEqual(payload["holding_decision"]["level"], "POST_PROFIT_WATCH")
         self.assertIn("【智原 3035】📌 停利後觀察", card)
         self.assertIn("決策：停利後觀察，暫不加碼", card)
@@ -1761,7 +1880,7 @@ class GeneratorReportTest(unittest.TestCase):
         position = messages[0]
         unheld = messages[1]
 
-        self.assertIn("【05/28 盤中｜v20.2.0】", summary)
+        self.assertIn("【05/28 盤中｜v20.2.1】", summary)
         self.assertIn("✅ 今日盤中交易執行", summary)
         self.assertNotIn("明日執行", summary)
         self.assertIn("交易執行 1 項；持倉風控檢查 1 檔；已執行 1 項不重複", summary)
@@ -1857,7 +1976,7 @@ class GeneratorReportTest(unittest.TestCase):
         position = messages[0]
         unheld = messages[1]
 
-        self.assertIn("【05/28 盤中｜v20.2.0】", summary)
+        self.assertIn("【05/28 盤中｜v20.2.1】", summary)
         self.assertIn("🧭 今日結論：", summary)
         self.assertIn("交易執行：無新增下單", summary)
         self.assertIn("✅ 今日盤中交易執行\n無新增下單", summary)
@@ -1972,7 +2091,7 @@ class GeneratorReportTest(unittest.TestCase):
         position = messages[0]
         unheld = messages[1]
 
-        self.assertIn("【05/28 盤中｜v20.2.0】", summary)
+        self.assertIn("【05/28 盤中｜v20.2.1】", summary)
         self.assertIn("市場 / 題材證據：weak", summary)
         self.assertIn("限制：市場證據不足，僅依策略分類追蹤", summary)
         self.assertIn("🧭 主線：市場偏多但買點未成立。", summary)
@@ -2093,7 +2212,7 @@ class GeneratorReportTest(unittest.TestCase):
 
         summary = messages[-1]
 
-        self.assertIn("【05/28 盤中｜v20.2.0】", summary)
+        self.assertIn("【05/28 盤中｜v20.2.1】", summary)
         self.assertIn("🧭 主線：市場偏多但買點未成立。", summary)
         self.assertIn("🧭 新倉：無有效進場。", summary)
         self.assertIn("買點未成立", summary)
@@ -2170,7 +2289,7 @@ class GeneratorReportTest(unittest.TestCase):
         unheld = messages[1]
 
         self.assertEqual(phase_mock.call_count, 1)
-        self.assertIn("【05/28 盤中｜v20.2.0】", summary)
+        self.assertIn("【05/28 盤中｜v20.2.1】", summary)
         self.assertIn("✅ 今日盤中交易執行", summary)
         self.assertIn("光寶科｜可買｜分批，不追價", summary)
         self.assertIn("【光寶科 2301】🟢 可買｜10%倉｜買點成立", unheld)
@@ -2209,7 +2328,7 @@ class GeneratorReportTest(unittest.TestCase):
         summary = messages[-1]
         unheld = messages[1]
 
-        self.assertIn("【05/28 盤後｜v20.2.0】", summary)
+        self.assertIn("【05/28 盤後｜v20.2.1】", summary)
         self.assertIn("今日交易紀錄\n無新增", summary)
         self.assertIn("明日計畫 1", summary)
         self.assertIn("光寶科｜明日追蹤｜開盤後確認，不追價", summary)
@@ -2245,7 +2364,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("FULL DETAIL", messages[0])
         self.assertIn("【持倉標的】", messages[1])
         self.assertIn("【未持倉標的】", messages[2])
-        self.assertIn("｜v20.2.0】", messages[-1])
+        self.assertIn("｜v20.2.1】", messages[-1])
 
 
 if __name__ == "__main__":
