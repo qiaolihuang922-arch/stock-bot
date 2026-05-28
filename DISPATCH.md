@@ -14,7 +14,7 @@
 - pm_status: `not_required`
 - tech_status: `not_required`
 - qa_status: `not_required`
-- commit: `pending`
+- commit: `pushed`
 
 ## Current Result
 
@@ -29,7 +29,7 @@
   - `tools/cao_agent/setup_agent_worktree.sh`：新電腦初始化隔離 worktree。
   - `tools/cao_agent/README.md`：部署、環境變數、日常入口與安全邊界。
   - `tools/cao_agent/bin/codex` 與 `sandbox/codex_no_network.sb`：可遷移 sandbox wrapper，不再寫死 `/Users/liveroom`。
-- 本輪新增 / 待提交：
+- 本輪新增並已推送：
   - `tools/cao_agent/profiles/stock_*.md.template`：PM / Tech / QA / online research 等 stock agent profile 模板，避免新機器缺角色卡。
   - `tools/cao_agent/install_agent_profiles.sh`：把 profile 模板按本機路徑渲染到 CAO profile 目錄。
   - `tools/cao_agent/bootstrap_local.sh`：檢查可下載依賴、安裝 profiles、建立 tech worktree。
@@ -51,8 +51,8 @@
 
 ## Next Action
 
-- 完成 shell syntax、profile render、bootstrap smoke、git diff check 後 commit / push。
-- push 後執行 `tools/cao_agent/cleanup_agent_worktrees.sh`。
+- 等待 Owner 下一個需求。
+- 若下次需要本機重部署，先讀 `tools/cao_agent/DEPLOYMENT.md`，再跑 `tools/cao_agent/bootstrap_local.sh`。
 
 ## Status Values
 
