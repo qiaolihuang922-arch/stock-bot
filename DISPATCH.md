@@ -4,40 +4,40 @@
 
 ## Current Task
 
-- task_id: `market-theme-evidence-v20-1-0-dry-run`
-- task_name: `Market Theme Evidence Dry-run v20.1.0`
+- task_id: `telegram-mobile-noise-reduction-v20-1-1`
+- task_name: `Telegram Mobile Noise Reduction v20.1.1`
 - task_type: `development`
-- version_level: `minor`
+- version_level: `patch`
 - qa_level: `L2`
 - owner_status: `requested`
-- architect_status: `conditional_acceptance`
+- architect_status: `completed`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
-- qa_status: `conditional_pass`
+- qa_status: `qa_passed`
 - commit: `pushed`
 
 ## Current Result
 
 - CAO 前端：`http://127.0.0.1:5173/`
-- Owner 確認 v20.0.14 報文可接受，要求繼續證據鏈下一步。
-- 本輪實作為 `v20.1.0` dry-run market theme evidence contract：
-  - 新增 `core/market_theme_evidence.py`，提供 `build_market_theme_evidence()` 與 `format_market_theme_summary_lines()`。
-  - `results_map`、`watchlist_groups`、formatter report input 統一視為 `report_derived` source family，不能互相湊成 confirmed。
-  - confirmed 只計入完整 structured source，需至少兩個不同 source family 且具備 `as_of/freshness/confidence/supports_claims/limitations`。
-  - report-derived only 在 Telegram 顯示 `weak｜來源不足｜只追蹤`，不得輸出 confirmed 或 AI/電子供應鏈偏多。
-  - confirmed market theme 只影響市場主題顯示，不放寬個股買點；買點未成立仍是不可買 / 無有效進場。
-  - 使用者可見 header / formatter `VERSION` 升為 `v20.1.0`。
-  - 未新增 DB table / migration / cache，未改 DB write path、watchlist、strategy decision、scheduler、live Telegram、Supabase write。
-- QA 結論：`conditional pass`。
-  - 驗證 `tests/test_market_theme_evidence.py tests/test_generator_report.py tests/test_notifier.py`：`59 passed, 21 warnings`。
-  - 條件：吸收時必須納入新檔 `core/market_theme_evidence.py` 與 `tests/test_market_theme_evidence.py`；Architect 已納入。
-  - production `generate_report()` 尚未接 structured provider，預設最多 weak/absent；若要 production confirmed 或歷史追溯，需後續 provider / schema 任務。
-- 需要建表 / schema / cache 的真正持久化 evidence provider 尚未開始；進入該階段前必須再通知 Owner。
+- Owner 檢查 `v20.1.0` 盤後報文後，指出手機排版仍偏重，要求先修報文閱讀，再繼續證據鏈下一步。
+- 本輪實作為 `v20.1.1` Telegram 手機閱讀降噪：
+  - 使用者可見 header / formatter `VERSION` 升為 `v20.1.1`。
+  - 盤後明日計畫中，持倉加碼項目改為 `待觸發加碼10/20/30`，不再輸出 `明日風控｜加碼10`。
+  - 持倉風控區收斂為 `風控：守警戒線，不追價`，避免重複完整加碼下一步。
+  - 盤後輸出移除 `若收盤` 等未收盤語意。
+  - 淘汰卡移除 `不代表看空產業`，改成單次短句 `產業：未判斷產業多空`。
+  - 未持倉長卡買點句改短，先呈現 `不買 / 不可買 / 等條件`。
+  - 未改策略 decision、DB schema / payload、watchlist、證據鏈 provider、live Telegram、Supabase write、replay/backfill。
+- QA 結論：`通過`。
+  - 驗證 `tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py`：`60 passed, 21 warnings`。
+  - QA 補盤後持倉加碼 + 未持倉追蹤 fixture，確認 summary 最後、header `v20.1.1`、無 `v20.1.0`、無 `若收盤`、無 `不代表看空產業`、無 `技嘉｜明日風控｜加碼10`。
+- 證據鏈 production structured provider / evidence cache / DB schema 尚未開始；進入建表或正式寫庫前必須先通知 Owner。
 
 ## Next Action
 
-- 本輪限定 diff 已通過 Architect final review，提交並推送。
-- 後續如要接 production structured provider / evidence cache / DB schema，另開任務；若需要建表，先通知 Owner。
+- 本輪限定 diff 已通過 Architect final review、驗證、提交並推送。
+- 推送後清理 CAO worktree，並確認 CAO API / 前端服務可用。
+- 下一步才繼續 production structured provider / evidence cache / DB schema 規劃；若需要建表，先通知 Owner。
 
 ## Status Values
 

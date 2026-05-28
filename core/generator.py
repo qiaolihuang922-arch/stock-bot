@@ -51,7 +51,7 @@ from services.strategy_evidence import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.1.0"
+VERSION = "v20.1.1"
 
 EXECUTION_LEVELS = {
     "TAKE_PROFIT_50": "TP50",
@@ -3738,6 +3738,9 @@ def post_market_plan_line(item):
     if item.get("kind") == "watch":
         return f"{item['name']}｜明日追蹤｜開盤後確認，不追價"
 
+    if item.get("state") in ["加碼10", "加碼20", "加碼30"]:
+        return f"{item['name']}｜待觸發{item.get('state')}"
+
     return f"{item['name']}｜明日風控｜{item.get('state') or '待確認'}"
 
 
@@ -3799,6 +3802,9 @@ def intraday_holding_control_line(item, report_phase):
 
     line = item["line"]
 
+    if item.get("state") in ["加碼10", "加碼20", "加碼30"]:
+        return f"{item['name']}｜風控：守警戒線，不追價"
+
     if report_phase != "盤中":
         return line
 
@@ -3831,7 +3837,7 @@ def format_holding_control_checklist(holding_items, limit=5, report_phase=None):
     return lines
 
 
-def format_next_day_plan(holding_items, limit=5):
+def format_next_day_plan(holding_items, limit=5, report_phase=None):
 
     candidates = []
 
@@ -3845,10 +3851,16 @@ def format_next_day_plan(holding_items, limit=5):
         return []
 
     candidates.sort()
-    lines = [
-        f"- 若收盤仍未修復：{name}列入隔日降級檢查"
-        for _rank, name in candidates[:limit]
-    ]
+    if report_phase in (None, "盤中"):
+        lines = [
+            f"- 盤中觀察修復：{name}收盤未修復則列入隔日降級檢查"
+            for _rank, name in candidates[:limit]
+        ]
+    else:
+        lines = [
+            f"- 收盤未修復，列入明日降級檢查：{name}"
+            for _rank, name in candidates[:limit]
+        ]
 
     if len(candidates) > limit:
         lines.append(f"- 另有 {len(candidates) - limit} 檔未修復項目見詳情")
@@ -4036,7 +4048,7 @@ def formatTelegramSummary(results_map, best, score, market_summary, now, positio
     lines.extend(["", "持倉風控檢查"])
     lines.extend(format_holding_control_checklist(holding_items, report_phase=report_phase))
 
-    next_day_plan = format_next_day_plan(holding_items)
+    next_day_plan = format_next_day_plan(holding_items, report_phase=report_phase)
     if next_day_plan:
         lines.extend(["", "隔日計畫"])
         lines.extend(next_day_plan)
@@ -4363,11 +4375,11 @@ def formatTelegramUnheldCard(name, data, report_phase=None):
     elif valid_entry:
         buy_line = f"買點：可買｜建議 {raw_size_text}｜{wait_text}"
     elif funnel_state == "等回測":
-        buy_line = "買點：不買｜題材仍可追蹤｜買點未成立，等回測確認｜不可立即買入"
+        buy_line = "買點：不買，等回測"
     elif funnel_state == "淘汰":
-        buy_line = f"買點：不買｜{risk_label}｜{wait_text}｜技術觸發失效，暫不行動｜不代表看空產業"
+        buy_line = f"買點：不可買，{wait_text}"
     else:
-        buy_line = f"買點：不買｜{risk_label}｜{wait_text}｜{entry_conclusion(result)}"
+        buy_line = f"買點：不買，{wait_text}"
     trigger_label = "盤中觸發" if report_phase == "盤中" else "明日觸發"
     tomorrow_line = f"{trigger_label}：{tomorrow_trigger_text(state, data)}"
     reason_line = rejected_transition_reason_line(result) if funnel_state == "淘汰" else None
@@ -4423,10 +4435,12 @@ def rejected_transition_reason_line(result):
     elif primary:
         cause += f"：{primary}"
 
-    if supplements:
-        return f"原因：{cause}｜補充：{'、'.join(supplements[:2])}，不作主因｜不代表看空產業"
+    industry_guard = "產業：未判斷產業多空"
 
-    return f"原因：{cause}｜不代表看空產業"
+    if supplements:
+        return f"原因：{cause}｜補充：{'、'.join(supplements[:2])}，不作主因｜{industry_guard}"
+
+    return f"原因：{cause}｜{industry_guard}"
 
 
 def unheld_buy_risk_label(result, title_label):

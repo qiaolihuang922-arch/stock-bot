@@ -145,7 +145,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         )
 
         summary = messages[-1]
-        self.assertIn("【05/28 盤中｜v20.1.0】", summary)
+        self.assertIn("【05/28 盤中｜v20.1.1】", summary)
         self.assertIn("市場主題：AI/電子供應鏈", summary)
         self.assertIn("狀態：weak｜來源不足｜只追蹤", summary)
         self.assertIn("行動：不可買，等 structured evidence 補強", summary)

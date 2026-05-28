@@ -138,6 +138,21 @@
   - 未改策略 decision、watchlist、DB write path、live Telegram、Supabase write、scheduler。
 - QA 結論：`conditional pass`；驗證 `tests/test_market_theme_evidence.py tests/test_generator_report.py tests/test_notifier.py` 為 `59 passed, 21 warnings`。條件是吸收時必須納入新檔 `core/market_theme_evidence.py` 與 `tests/test_market_theme_evidence.py`，本地候選已納入。
 
+## Telegram Mobile Noise Reduction v20.1.1 已完成本地修復
+
+- Owner 檢查 `v20.1.0` 盤後報文後，指出手機排版仍偏重；本輪先收斂 Telegram 閱讀，再繼續證據鏈下一步。
+- 已完成變更：
+  - Telegram header / formatter `VERSION` 升為 `v20.1.1`。
+  - 盤後明日計畫的持倉加碼項目改為 `待觸發加碼10/20/30`，不再把加碼寫成 `明日風控｜加碼10`。
+  - 持倉風控區只保留 `風控：守警戒線，不追價`，避免重複完整加碼下一步。
+  - 盤後輸出移除 `若收盤` 等未收盤語意。
+  - 淘汰卡移除 `不代表看空產業`，改為單次短句 `產業：未判斷產業多空`。
+  - 未持倉買點句改短，先呈現 `不買 / 不可買 / 等條件`。
+- 未做：
+  - 未改策略 decision。
+  - 未改 DB schema / payload、watchlist、證據鏈 provider、live Telegram、Supabase write、replay/backfill。
+- QA 結論：`通過`；驗證 `tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py` 為 `60 passed, 21 warnings`，並補盤後手機閱讀 fixture。
+
 ## Post Trade Reduce Cooldown Strategy Fix 已完成本地修復
 
 - 修復 Owner 指出的持倉策略衝突：

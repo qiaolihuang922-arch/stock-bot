@@ -82,6 +82,11 @@
   - report-derived only 降級為 weak，不可 confirmed。
   - structured confirmed 需兩類完整 source families。
   - QA 結論為 `conditional pass`；吸收條件是納入新檔 `core/market_theme_evidence.py` 與 `tests/test_market_theme_evidence.py`。
+- v20.1.1 Telegram Mobile Noise Reduction 已形成限定可吸收候選：
+  - 只收斂 Telegram formatter 手機閱讀、盤後語意與版本字串。
+  - 移除 `若收盤`、`不代表看空產業`、`明日風控｜加碼10` 等誤讀文案。
+  - 未改策略 decision、DB、watchlist、證據鏈 provider 或 live delivery。
+  - QA 結論為 `通過`；`tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py` 為 `60 passed, 21 warnings`。
 - push 後仍需壓縮：
   - `DISPATCH.md`
   - `TASK.md`

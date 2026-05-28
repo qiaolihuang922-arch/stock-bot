@@ -1,332 +1,254 @@
-# TASK: market_theme_evidence v20.1.0 confirmed 判斷收斂與 Telegram 弱證據呈現修復
+# TASK: v20.1.1 Telegram 手機閱讀降噪與盤後語意收斂
 
 ## 任務狀態
 
-- task_id: market_theme_evidence_v20_1_0_confirmed_source_family_fix
-- 任務類型: risk_patch
+- task_id: telegram_mobile_noise_reduction_v20_1_1
+- 任務類型: normal_patch
 - 狀態: ready_for_tech
-- 版本契約: 保持 v20.1.0，不得升版、不得回退。
+- 版本建議: patch，由 v20.1.0 升至 v20.1.1
+- 版本契約: Telegram 報文 header / formatter 可見版本必須顯示 v20.1.1
 - QA 分級建議: L2
-- QA 升級原因: 本輪改到 Telegram formatter 可見語意、helper payload contract、notifier 直接消費路徑，且 QA 已以負面案例阻塞 confirmed 判斷過寬問題。
 
 ## Owner 問題
 
-上一輪 market_theme_evidence v20.1.0 dry-run provider / payload contract 被 QA 阻塞：build_market_theme_evidence() 把 results_map + watchlist_groups 這類同屬報文衍生來源族群的資料湊成 confirmed｜AI/電子供應鏈偏多。
+Owner 檢查 v20.1.0 Telegram 長報文後，判斷手機閱讀負擔過高，且盤後語意與部分行動文案會造成誤讀。需先修正報文排版、重複資訊與盤後用語，再繼續證據鏈下一步。
 
-這違反既有 TASK 核心要求：confirmed 必須由至少兩類獨立、非循環、結構化內部來源支持。缺少 market_state、price_volume、structured_strategy_evidence 等 structured source 時，不得把 theme 字串或 report-derived 輸入包裝成
-confirmed bullish market theme。
+核心問題不是策略判斷錯，而是同一標的與同一行動在 summary、明日計畫、持倉風控、詳情卡重複長句，手機上難以快速判斷「今天做什麼、明天看什麼、哪些只是追蹤、哪些不可行動」。
 
 ## 使用者可見結果
 
-Owner 在手機 Telegram 打開報文時，若系統只拿到 results_map、watchlist_groups、formatter report input 這類報文衍生資料，應看到：
+Owner 在手機 Telegram 打開報文後應先看到：
 
-- 市場主題狀態為 weak、來源不足 或 只追蹤。
-- 不得看到 confirmed。
-- 不得看到 AI/電子供應鏈偏多 這種像已確認偏多的結論。
-- 若買點未成立，即使主題 confirmed，也必須仍顯示不可買或只追蹤，不得變成買入建議。
+1. 第一屏 summary 變短，只回答今日結論與明日最重要行動，不重複完整條件句。
+2. 持倉、未持倉、淘汰詳情卡仍可追溯，但不再把同一標的完整行動句跨區塊重複三次。
+3. 盤後報文不再出現 若收盤仍未修復 這類未收盤語意。
+4. 淘汰詳情卡不再反覆輸出 不代表看空產業。
+5. 技嘉｜明日風控｜加碼10 這種語意衝突文案改為觀察或待觸發語意。
+6. 未持倉長卡的買點句縮短，手機上可先看懂不可買 / 可追蹤 / 待條件，不被長句淹沒。
 
 ## 非目標
 
-- 不重開 market_theme_evidence v20.1.0 需求範圍。
-- 不新增資料表。
 - 不改策略 decision。
-- 不改 DB payload schema 或正式寫庫流程。
-- 不改 watchlist 來源、scheduler、live Telegram delivery、live Supabase write。
-- 不把既有 strategy_evidence_summary 字串宣稱為已自動接入 structured confirmed。
+- 不改買賣、加減碼、停損、停利判斷邏輯。
+- 不改 DB schema / migration。
+- 不改 watchlist。
+- 不新增證據鏈 provider。
+- 不做 live Telegram delivery。
+- 不做 live Supabase write。
 - 不做正式 backfill。
-- 不調整股票買賣策略、停損停利、持倉狀態機。
+- 不清理無關程式碼或測試。
+- 不改變股票分類結果，只改報文呈現、語意收斂與版本字串。
 
 ## 影響模組
 
-- core/market_theme_evidence.py
-- 本輪候選 diff 必須納入。
-- 收斂 confirmed 判斷、source family 去重、structured source contract 驗證。
-- core/generator.py
-- formatTelegramSummary 或等價 Telegram summary formatter 必須正確呈現 weak / 來源不足 / 只追蹤。
-- 必須核對 VERSION 或等價 header 版本仍為 v20.1.0。
-- notifier 相關 Telegram 直接消費路徑
-- 驗證 formatter 輸出進入 Telegram message list 後不誤導。
-- tests/test_market_theme_evidence.py
-- 本輪候選 diff 必須納入。
-- 補齊 QA 指出的負面與正面 contract tests。
-- 既有 formatter / notifier 測試
-- 依本 TASK 直接範圍補測，不做 full repo 擴張。
+- Telegram formatter / 報文組裝: core/generator.py 或等價 formatter 模組。
+- Telegram message list contract: 產生 Telegram 連續訊息的區塊順序、header、summary、明日計畫、持倉風控、未持倉卡、淘汰卡。
+- 相關 formatter tests / snapshot tests。
+- 若現有版本常量在 core/generator.py，需同步 VERSION = "v20.1.1" 或等價常量。
 
 ## 直接消費者
 
-- Telegram summary formatter / formatTelegramSummary
-- Telegram message list / notifier dry-run output
-- generate_report production 預設路徑
-- QA helper tests / formatter tests / notifier smoke tests
-- Owner 手機上的 Telegram 報文閱讀路徑
+- Telegram notifier / message sender。
+- Owner 手機 Telegram 閱讀路徑。
+- 任何依賴 formatter message list 的測試或 snapshot。
+- Architect 後續驗收候選 diff 與重跑驗證時讀取的報文輸出。
+- QA 使用的 v20.1.0 長報文形狀 fixture。
 
 ## 輸出契約
 
-### source family contract
+### 手機閱讀路徑
 
-results_map、watchlist_groups、formatter report input 彼此視為同一個 report-derived 來源族群：
+報文資訊分工必須收斂為：
 
-- source_family: report_derived
-- 不得互相湊成 confirmed
-- 僅可支撐 weak 或 trackable
-- 不得補出 theme_direction: bullish
+- 第一屏 summary:
+- 只放今日是否可買、持倉先處理什麼、未持倉哪些只是追蹤、哪些不可行動。
+- 不放完整條件鏈。
+- 不重複詳情卡中的下一步長句。
+- 未持倉長名單最多列 1-3 檔；超過用分類數量與 另 N 檔見詳情，但不得混合不同狀態。
+- 明日計畫 / 執行清單:
+- 只列明日要檢查或等待觸發的短行動。
+- 不重複 summary 完整句。
+- 不把加碼寫成風控。
+- 技嘉 類待加碼情境應使用 明日觀察加碼條件 或 待觸發加碼10 類語意。
+- 持倉風控:
+- 只列風控檢查、停損警戒、降級檢查。
+- 不重複完整加碼下一步。
+- 若同一標的在明日計畫已有加碼觀察，持倉風控只保留必要風控短句，不再複製同一句。
+- 詳情卡:
+- 保留必要追溯欄位與條件原因。
+- 不重複 summary 結論。
+- 同一標的完整行動句不得在 summary、明日計畫、詳情卡三處重複出現。
+- 索引 / 漏斗:
+- 只承擔數量、分類、可追溯入口。
+- 不承擔完整行動建議。
+- 分類名稱需與詳情卡一致。
 
-可支撐 confirmed 的 structured source family 包含但不限於：
+### 盤後語意
 
-- market_state
-- price_volume
-- structured_strategy_evidence
-- watchlist_theme_breadth
+盤後報文禁止出現：
 
-### structured source 必備欄位
+- 若收盤仍未修復
+- 其他等價的「收盤尚未發生」語意
 
-每個用來支撐 confirmed 的 structured source 必須具備：
+盤後應改為已知收盤語意，例如：
 
-- as_of
-- freshness
-- confidence
-- supports_claims
-- limitations
+- 收盤未修復，列入明日降級檢查
+- 明日仍未修復再降級
+- 收盤已確認未修復，明日檢查是否降級
 
-缺任一欄位，不得計入 confirmed 的 structured source count。
+### 淘汰卡 evidence guard 語意
 
-### confirmed 判斷契約
+淘汰詳情卡禁止反覆輸出：
 
-confirmed 必須同時符合：
+- 不代表看空產業
 
-- 至少兩個不同 source_family
-- 每個 source 都是 structured source
-- 每個 source 都具備必備欄位
-- 來源不可循環、不可同族重複湊數
-- 至少一個 source family 不是 report_derived
-- 若沒有 market_state 或 structured_strategy_evidence，不得補 theme_direction: bullish
-- 僅有 theme 字串時，只能輸出 theme_trackable 或 weak
+無 structured 產業證據時，統一使用短句：
 
-### Telegram summary contract
+- 僅策略條件未通過，未判斷產業多空
 
-若 formatter 只得到 results_map / watchlist_groups / formatter report input：
+或更短等價句：
 
-- 顯示 weak
-- 顯示 來源不足
-- 顯示 只追蹤 或等價不可行動語意
-- 不得顯示 confirmed
-- 不得顯示 AI/電子供應鏈偏多
-- 不得把未成立買點包裝成可買
+- 未判斷產業多空
 
-若 market theme 已 confirmed，但個股買點未成立：
+同一張淘汰卡最多出現一次該類提醒。
 
-- market theme 可顯示 confirmed
-- 個股交易行動仍必須是不可買 / 等待 / 只追蹤
-- summary 不得把 confirmed 主題誤導成今日可買
+### 技嘉明日計畫語意
 
-### CHANGELOG 契約
+禁止輸出：
 
-Tech 必須在 CHANGELOG.md 如實說明：
+- 技嘉｜明日風控｜加碼10
+- 其他把 加碼 歸類成 風控 的等價短句
 
-- core/market_theme_evidence.py 是否新增或修改。
-- tests/test_market_theme_evidence.py 是否新增或修改。
-- production generate_report 預設路徑目前是否只會產生 weak / absent。
-- 不得宣稱既有 strategy_evidence_summary 字串已自動接入 structured confirmed，除非本輪真的有 structured source contract 接線且有測試證明。
-- 版本仍為 v20.1.0，並說明 formatter header / 常量是否已核對。
+可接受形狀：
+
+- 技嘉｜明日觀察加碼條件
+- 技嘉｜待觸發加碼10
+- 技嘉｜加碼條件未觸發，明日觀察
+
+持倉風控區不得再重複完整加碼下一步；若需要保留風控，只能寫短句，例如：
+
+- 技嘉｜風控：守警戒線
+- 技嘉｜風控：不追價，等觸發
+
+### 未持倉長卡買點短句
+
+禁止長句形狀：
+
+- 買點：不買｜題材仍可追蹤｜買點未成立...
+
+可接受手機短句形狀：
+
+- 買點：不買，僅追蹤
+- 買點未成立，等回測
+- 不可買，題材追蹤
+
+詳情可保留必要追溯，但不得在同一卡內重複不可買結論與長理由。
 
 ## 驗收條件
 
-1. results_map + watchlist_groups only 不得輸出 confirmed。
-2. results_map + watchlist_groups only 不得輸出 theme_direction: bullish。
-3. 只有 theme 字串時，只能輸出 theme_trackable 或 weak，不得輸出 AI/電子供應鏈偏多。
-4. 缺少 as_of、freshness、confidence、supports_claims、limitations 任一欄位的 source 不得計入 confirmed。
-5. 同一個 source_family 兩筆 structured source 不得湊成 confirmed。
-6. structured market_state + structured_strategy_evidence 且欄位完整時，才可輸出 confirmed。
-7. confirmed market theme 但個股買點未成立時，Telegram summary 仍必須顯示不可買 / 等待 / 只追蹤，不得輸出買入建議。
-8. formatTelegramSummary 若只得到 report-derived inputs，手機閱讀第一屏必須看到 weak / 來源不足 / 只追蹤，不得看到 confirmed。
-9. generate_report production 預設路徑若尚未接 structured source，Tech 必須在 CHANGELOG 說明目前只能產生 weak / absent。
-10. header / version 常量仍為 v20.1.0，不得回退。
-11. 不得改 DB、watchlist、scheduler、live delivery、策略 decision。
-12. QA 必須重跑 helper / formatter / notifier 相關驗證，並補手機閱讀反證。
+1. Telegram header / formatter 可見版本為 v20.1.1，不得仍顯示 v20.1.0。
+2. 使用 Owner 指出的 v20.1.0 長報文形狀建立或更新手機閱讀 fixture，輸出第一屏 summary 明顯縮短，且不重複完整行動句。
+3. 盤後 fixture 輸出中不得包含 若收盤、若收盤仍未修復 或等價未收盤語意。
+4. 淘汰詳情卡不得包含 不代表看空產業。
+5. 淘汰詳情卡若無 structured 產業證據，只能短句表示 未判斷產業多空，且同一張卡最多一次。
+6. 技嘉 明日計畫不得出現 明日風控｜加碼10，加碼條件必須歸類為觀察或待觸發。
+7. 持倉風控區不得重複 技嘉 完整加碼下一步。
+8. 未持倉長卡買點句必須縮短，手機可先讀出 不買 / 僅追蹤 / 待條件，詳情不得重複結論長句。
+9. 同一標的完整行動句不得在 summary、明日計畫、持倉風控、詳情卡中重複三次。
+10. message list contract 不得破壞：notifier 仍能消費 formatter 輸出的 message list。
+11. 不得改變策略分類、decision、DB payload、watchlist 或 live delivery 行為。
+12. 相關 formatter / snapshot / direct consumer smoke 測試通過。
 
 ## 範例或 fixture
 
-### Fixture A: report-derived only，不得 confirmed
+### 手機第一屏期望形狀
 
-Input shape:
+Stock Bot v20.1.1 盤後摘要
 
-{
-"results_map": {
-"2330": {"theme": "AI/電子供應鏈", "score": 82}
-},
-"watchlist_groups": {
-"AI/電子供應鏈": ["2330", "2382"]
-},
-"market_state": None,
-"price_volume": None,
-"structured_strategy_evidence": None
-}
+今日新倉：無有效進場。
+持倉：先守風控，明日只觀察觸發條件。
+未持倉：追蹤最強 2 檔；不可買 5 檔見詳情。
+淘汰：僅策略條件未通過，未判斷產業多空。
 
-Expected evidence shape:
+### 明日計畫期望形狀
 
-{
-"theme_status": "weak",
-"theme_direction": None,
-"theme_label": "AI/電子供應鏈",
-"actionability": "track_only",
-"source_families": ["report_derived"],
-"limitations": ["來源不足，僅來自報文衍生資料"],
-"confirmed": False
-}
+明日計畫
+- 技嘉｜明日觀察加碼條件
+- AAPL｜收盤未修復，列入明日降級檢查
+- TSLA｜不可買，僅追蹤
 
-手機 Telegram 示例輸出形狀:
+### 持倉風控期望形狀
 
-市場主題：AI/電子供應鏈
-狀態：weak｜來源不足｜只追蹤
-行動：不可買，等 structured evidence 補強
+持倉風控
+- 技嘉｜風控：守警戒線，不追價
+- AAPL｜明日檢查是否降級
 
-不得出現:
+不得出現：
 
-confirmed｜AI/電子供應鏈偏多
+技嘉｜明日風控｜加碼10
+若收盤仍未修復
 
-### Fixture B: 缺 structured 欄位，不得 confirmed
+### 淘汰卡期望形狀
 
-Input shape:
+淘汰｜XXXX
+狀態：不可行動
+原因：策略條件未通過
+產業：未判斷產業多空
 
-{
-"market_state": {
-"source_family": "market_state",
-"as_of": "2026-05-28",
-"confidence": 0.8,
-"supports_claims": ["risk_on"]
-},
-"structured_strategy_evidence": {
-"source_family": "structured_strategy_evidence",
-"as_of": "2026-05-28",
-"freshness": "same_day",
-"confidence": 0.7,
-"supports_claims": ["AI breadth improving"],
-"limitations": ["sample limited"]
-}
-}
+不得出現：
 
-Expected:
+不代表看空產業
+不代表看空產業
 
-{
-"confirmed": False,
-"theme_status": "weak",
-"limitations": ["market_state 缺 freshness 或 limitations，不可計入 confirmed"]
-}
+### 未持倉卡期望形狀
 
-### Fixture C: 同 family 兩筆，不得 confirmed
+未持倉｜YYYY
+狀態：僅追蹤
+買點：不買，等回測
+追溯：量能不足；風險報酬未達標
 
-Input shape:
+不得出現：
 
-{
-"sources": [
-{
-"source_family": "market_state",
-"as_of": "2026-05-28",
-"freshness": "same_day",
-"confidence": 0.8,
-"supports_claims": ["risk_on"],
-"limitations": ["index only"]
-},
-{
-"source_family": "market_state",
-"as_of": "2026-05-28",
-"freshness": "same_day",
-"confidence": 0.7,
-"supports_claims": ["sector strength"],
-"limitations": ["same family"]
-}
-]
-}
-
-Expected:
-
-{
-"confirmed": False,
-"theme_status": "weak",
-"source_family_count_for_confirmed": 1
-}
-
-### Fixture D: structured market_state + structured_strategy_evidence，可 confirmed
-
-Input shape:
-
-{
-"market_state": {
-"source_family": "market_state",
-"as_of": "2026-05-28",
-"freshness": "same_day",
-"confidence": 0.82,
-"supports_claims": ["risk_on", "electronics sector breadth"],
-"limitations": ["intraday may change"]
-},
-"structured_strategy_evidence": {
-"source_family": "structured_strategy_evidence",
-"as_of": "2026-05-28",
-"freshness": "same_day",
-"confidence": 0.76,
-"supports_claims": ["AI supply chain setup count rising"],
-"limitations": ["buy point still requires individual trigger"]
-}
-}
-
-Expected:
-
-{
-"confirmed": True,
-"theme_status": "confirmed",
-"theme_direction": "bullish",
-"source_families": ["market_state", "structured_strategy_evidence"]
-}
-
-### Fixture E: confirmed 但買點未成立，仍不可買
-
-手機 Telegram 示例輸出形狀:
-
-市場主題：AI/電子供應鏈偏多
-狀態：confirmed｜2 類 structured sources
-
-新倉：無有效進場
-追蹤最強：2330、2382
-行動：不可買，等個股買點成立
-
-不得出現:
-
-今日可買：2330
-
-除非個股買點 contract 另有證據成立。
+買點：不買｜題材仍可追蹤｜買點未成立｜...
 
 ## 明確禁止事項
 
-- 禁止用 results_map、watchlist_groups、formatter report input 互相湊成 confirmed。
-- 禁止把 report-derived family 當成多個獨立來源。
-- 禁止缺 structured 欄位仍 confirmed。
-- 禁止同 family 多筆湊 confirmed。
-- 禁止沒有 market_state 或 structured_strategy_evidence 時補 theme_direction: bullish。
-- 禁止只因 theme 字串存在就輸出 AI/電子供應鏈偏多。
-- 禁止改策略 decision。
-- 禁止新增 DB table / migration。
-- 禁止改 DB write path、watchlist、scheduler、live Telegram、live Supabase。
+- 禁止修改策略 decision。
+- 禁止修改 DB schema、migration、Supabase write path。
+- 禁止修改 watchlist。
+- 禁止新增證據鏈 provider。
+- 禁止 live Telegram delivery。
+- 禁止 live Supabase write。
 - 禁止正式 backfill。
-- 禁止把 strategy_evidence_summary 字串宣稱成 structured confirmed。
-- 禁止刪除固定 8 份 Markdown。
-- 禁止擴大為 full product refactor。
+- 禁止將淘汰股包裝成產業多空判斷。
+- 禁止把不可買、僅追蹤、可買、待觸發混在同一行造成誤讀。
+- 禁止為了壓縮文字而移除必要風控語意。
+- 禁止同一標的跨多區塊重複完整行動句。
+- 禁止版本 header 仍停留在 v20.1.0。
 
 ## 阻塞條件
 
-Tech 必須 blocked，若發現：
+Tech 必須 blocked，若遇到以下任一情況：
 
-- 既有 TASK.md / CHANGELOG.md 與本 TASK 的 confirmed contract 矛盾且無法局部修正。
-- 無法定位 build_market_theme_evidence() 或等價 helper。
-- 無法確認 formatTelegramSummary 或 Telegram summary 直接消費路徑。
-- 無法核對 VERSION / formatter header 是否為 v20.1.0。
-- 測試環境缺 pytest 或必要依賴，runner 補環境後仍無法執行。
-- 需要新增 DB schema、改策略 decision、改 live delivery 才能完成本 TASK。
-- production generate_report 預設路徑是否只產生 weak / absent 無法判定。
+- 無法定位 Telegram formatter 或版本常量。
+- 現有 fixture 不足以重現 Owner 指出的 v20.1.0 長報文形狀，且無法建立替代 fixture。
+- 盤後 / 盤中狀態在資料模型中不可區分，導致無法可靠移除 若收盤 語意。
+- 技嘉｜明日風控｜加碼10 的來源不是 formatter 文案，而是上游策略 action contract，且修改會改變策略語意。
+- message list / notifier contract 未明確，無法保證不破壞直接消費者。
+- 任一需求需要改策略、DB、watchlist、live delivery 或證據鏈 provider 才能完成。
 
-QA 必須 blocked 或 conditional pass，若發現：
+## QA 分級建議
 
-- helper 測試通過但 Telegram 手機閱讀仍可能把 weak 誤讀成 confirmed。
-- confirmed 主題被誤導成個股可買。
-- CHANGELOG.md 宣稱 structured confirmed 已接線，但測試或程式證據不足。
-- header 版本不是 v20.1.0。
-- 新檔 core/market_theme_evidence.py 或 tests/test_market_theme_evidence.py 未被納入候選 diff 說明。
+QA 分級: L2
+
+QA 至少需驗證：
+
+- 使用接近 Owner v20.1.0 長報文形狀的手機閱讀 fixture。
+- summary 第一屏更短，且決策、追蹤、不可行動分清楚。
+- 盤後輸出無 若收盤。
+- 淘汰卡無 不代表看空產業。
+- 技嘉明日計畫語意不衝突。
+- 同一標的不在多區塊重複完整行動句。
+- message list / notifier direct consumer smoke 不破壞。
+- formatter header / VERSION 實際輸出為 v20.1.1。
+- 策略 decision、DB、watchlist、live Telegram/Supabase 未被修改。
