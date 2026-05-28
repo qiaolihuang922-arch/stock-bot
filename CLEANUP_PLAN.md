@@ -69,6 +69,10 @@
   - QA 第二輪通過，主 repo 局部驗證 `37 passed, 21 warnings`。
 - Auto push after final review 已寫入流程：Owner 授權後，Architect 對比確認無問題即可直接推送。
 - Version contract gate 已寫入流程：PM 定義版本契約、Tech 同步 `VERSION` / header / 測試、QA 以實際輸出核對版本。
+- v20.0.13 Market Theme Evidence Guard 已形成限定可吸收候選：
+  - 不建表、不新增 evidence provider，只防止舊 `market_summary` 自我證明 AI / 電子供應鏈 confirmed bullish。
+  - QA 結論為 `conditional pass`；指定 formatter / notifier 驗證通過。
+  - broader formatter smoke 仍有 3 個 phase-sensitive failures，需另開任務處理，不得宣告整體 formatter suite 全綠。
 - push 後仍需壓縮：
   - `DISPATCH.md`
   - `TASK.md`
@@ -91,6 +95,7 @@
 - 下一次 auto 開發需觀察 Tech / QA 是否使用 worktree `.venv` 正常跑必要測試；不得再因缺環境跳過驗證。
 - 後續所有報文任務需按 `AGENTS.md` 的手機 Telegram 報文硬規則驗收，不得只證明數字可追溯。
 - 若 Owner 仍覺得查詢慢，下一步應開 performance measurement 任務，量測 production 實際秒數，不再只看 query contract。
+- 另開 `formatter-phase-sensitive-tests` 任務：固定或重設 `get_market_phase()` 相關測試期望，處理 `tests/test_generator_report.py tests/test_notifier.py` broader smoke 中 3 個盤中 / 明日文案相位敏感失敗。
 - 需要重跑一次真正的清理審計：
   - `core/holdings.py`
   - `docs/v19_*`：已刪除本地 SQL 草案。

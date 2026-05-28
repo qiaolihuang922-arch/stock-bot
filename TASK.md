@@ -1,207 +1,167 @@
-# TASK: v20.0.12 市場方向與執行態度語意拆分
+# TASK: market_theme_evidence_dry_run_contract_v20_1_0 版本契約 QA blocker patch
 
 ## 任務狀態
 
-- task_id: telegram_semantics_market_direction_vs_execution_v20_0_12
-- 任務類型: normal_patch
+- task_id: market_theme_evidence_dry_run_contract_v20_1_0_version_contract_patch
+- 任務類型: tiny_patch
 - 狀態: ready_for_tech
 - 版本建議: patch
-- 版本契約: 本輪修改使用者可見 Telegram 報文，必須升版到 v20.0.12，並同步 formatter header / VERSION / 相關測試期望。
-- QA 分級建議: L1+
-- 以 Telegram formatter / snapshot / 直接消費者 smoke 為主。
-- 因涉及 summary、持倉語意、未持倉分類語意，QA 必須補手機閱讀順序與跨區塊語意一致性檢查。
-- 不需要 full pytest、replay、正式 backfill、live delivery。
+- 版本契約: 將使用者可見 Telegram header / VERSION / 相關測試期望 / CHANGELOG.md 版本同步由 v20.0.12 升到 v20.0.13
+- QA 分級建議: L1
+- QA 停止條件: 只驗版本字串同步、相關 formatter tests、notifier 直接消費者、以及 evidence blocker 修復未回退；不得擴大到 v20.1.0 新能力驗收
 
 ## Owner 問題
 
-05/28 盤中 v20.0.11 報文在市場 / AI 主線偏多、但策略尚未給出新增買點時，容易讓 Owner 把兩件事混在一起：
+上一輪 market_theme_evidence_dry_run_contract_v20_1_0_qa_blocker 的 evidence blocker 修復已獲 QA conditional pass，只剩版本契約衝突：使用者可見版本仍卡在 v20.0.12，但 Owner 要求修 bug 後應正常進 patch。
 
-- 「市場方向 / 產業題材仍偏多」。
-- 「當前交易執行上不能追高，新增倉位要等回測或觸發」。
-
-本輪要優化 Telegram 報文語意，讓 Owner 手機打開後能立刻理解：主線仍在，不代表現在可買；等回測 / 淘汰是技術觸發狀態，不是看空 AI 或電子供應鏈產業。
+本輪只修正版本契約，明確標示這是 QA blocker patch 修復，不是 v20.1.0 新能力發布。
 
 ## 使用者可見結果
 
-Owner 在 Telegram 報文中會看到更清楚的短句：
+Owner 在 Telegram 手機報文第一眼 header 應看到版本升為 v20.0.13。
 
-- Summary 明確拆開「主線偏多」與「執行等待」。
-- 持倉 AI / 電子供應鏈標的表達為「主線持倉保留 / 先按風控續抱」，不暗示可加碼。
-- 未持倉等回測 / 淘汰標的表達為「產業方向不等於當前可買」，原因是技術觸發未成立、已失效或不符合策略門檻。
-- Header / 版本字串顯示 v20.0.12。
+手機閱讀路徑：
+
+1. Owner 打開 Telegram。
+2. 第一行 header 看到類似 【05/28 盤中｜v20.0.13】 或 【05/28 盤後｜v20.0.13】。
+3. Summary 仍保留已通過的 evidence blocker 語意：缺 explicit source 時，不得把 AI / 電子供應鏈寫成 confirmed bullish。
+4. Owner 不應看到任何 v20.1.0 新能力發布語意。
 
 ## 非目標
 
-- 不改交易決策。
-- 不改策略核心、分數、門檻、排序、買賣條件。
-- 不改 DB schema、DB write payload、Telegram payload shape。
+- 不重開 PM 需求範圍。
+- 不改 evidence 判斷邏輯。
+- 不改策略 decision。
+- 不改 DB schema / DB payload。
 - 不改 watchlist。
-- 不新增外部即時新聞依賴。
-- 不新增 market regime 判斷資料源。
 - 不做 live Telegram delivery。
 - 不做 live Supabase write。
-- 不做正式 backfill。
-- 不重構 formatter 架構。
-- 不把「AI 主線偏多」轉成任何自動買入或加碼訊號。
+- 不改 scheduler / cron。
+- 不新增 v20.1.0 能力。
+- 不新增外部資料來源。
+- 不修改 market theme confirmed / weak / absent contract，除非是防止本輪版本同步造成回退的測試期望更新。
 
 ## 影響模組
 
 - 直接模組:
-- core/generator.py 或等價 Telegram 報文 formatter。
-- formatter 相關 snapshot / unit tests。
-- 可能同步檢查:
-- 產生 Telegram message list 的直接入口。
-- 報文 header 版本常量，例如 VERSION。
-- 不應影響:
-- services/analysis.py 策略判斷。
-- core/condition_engine.py 條件映射。
-- services/stock_api.py 行情來源。
-- DB 寫入流程。
-- watchlist。
-- replay / backfill 寫庫流程。
+- Telegram formatter header 版本常量所在模組。
+- VERSION 或等價使用者可見版本常量。
+- formatter 版本 header 測試。
+- notifier 直接消費者測試。
+- CHANGELOG.md 版本描述。
+- 不應影響模組:
+- market theme evidence 判斷邏輯。
+- strategy decision core。
+- DB write path。
+- watchlist generation。
+- live Telegram sender 的實際發送行為。
+- Supabase write path。
+- scheduler / cron entrypoint。
 
 ## 直接消費者
 
-- Owner 手機上的 Telegram 盤中報文。
-- Telegram message list 產生器的直接呼叫方。
-- formatter snapshot / regression tests。
-- 任何依賴 formatter header 版本字串的測試或驗收腳本。
+Tech 必須確認並同步以下直接消費者：
+
+- Telegram 報文 header formatter。
+- notifier 組裝 / 傳送前讀取 formatter output 的直接路徑。
+- 相關 formatter tests 中的 header 版本期望。
+- 相關 notifier tests 中的版本字串期望。
+- CHANGELOG.md 中本輪版本說明。
 
 ## 輸出契約
 
-### Header / 版本
+### Version Contract
 
-- Telegram 報文 header 必須顯示 v20.0.12。
-- 不得只更新文件版本而漏改實際 formatter 輸出版本。
+- 使用者可見 Telegram header 必須顯示 v20.0.13。
+- 程式版本常量 VERSION 或等價來源必須為 v20.0.13。
+- formatter tests / notifier tests 不得仍期待 v20.0.12。
+- CHANGELOG.md 必須說明：
+- 本輪是 v20.0.13 QA blocker patch 修復。
+- 本輪不是 v20.1.0 新能力發布。
+- 保留已通過的 evidence blocker 修復。
 
-### Summary 語意
+### Evidence Regression Contract
 
-Summary 必須在 Owner 手機閱讀最前段，用短句拆清楚：
+必須保留上一輪已通過修復：
 
-- 市場 / AI 主線仍偏多或題材仍在。
-- 新增買點未成立。
-- 執行態度是等回測 / 等觸發 / 不追高。
-- 不得把「主線偏多」寫成「今日可買」。
-- 不得把「無新增下單」寫成「看空產業」。
-
-### 持倉語意
-
-對 AI / 電子供應鏈相關持倉：
-
-- 可表達「主線持倉保留」「既有倉位按風控續抱」。
-- 新增倉位必須表達為「等觸發」或「等回測」。
-- 不得出現「可加碼」「追主線」「補倉」等會讓 Owner 誤讀為加碼的暗示，除非既有策略已明確產生加碼決策。
-- 同一檔持倉在 summary、持倉卡、執行清單、詳情中的主行動必須一致。
-
-### 未持倉等回測 / 淘汰語意
-
-對未持倉標的：
-
-- 等回測 應表達為：題材或方向仍可追蹤，但策略買點尚未成立。
-- 淘汰 應表達為：本輪技術觸發失效、條件未達或風險報酬不合格，不代表看空產業。
-- 不得把淘汰股描述成產業基本面看空。
-- 不得讓等回測或淘汰標的在 summary 中像推薦買入。
-
-### 分組與 payload
-
-- 不改 message list contract。
-- 不改 Telegram payload shape。
-- 不改股票分類結果，只改使用者可見文案。
-- 分組標題與卡片狀態必須一致：
-- 等回測 卡片仍在 等回測 分組。
-- 淘汰 卡片仍在 淘汰 分組。
-- 不得為了文案優化改動分類歸屬。
-
-## 手機閱讀路徑
-
-QA 必須按 Owner 手機打開 Telegram 後的閱讀順序檢查：
-
-1. 先看 header，確認版本為 v20.0.12。
-2. 先讀 summary 最後決策區，確認第一眼能看懂：
-- 主線仍偏多。
-- 但新增買點未成立。
-- 今日不追高 / 先等回測。
-3. 再看持倉區，確認 AI / 電子供應鏈持倉是「保留 / 續抱 / 風控」，不是加碼暗示。
-4. 再看未持倉區，確認等回測 / 淘汰只是技術狀態，不是產業看空。
-5. 最後看詳情，確認 summary、索引、卡片、詳情的分類名稱與行動語意一致。
+- 舊 market_summary 不能自我證明。
+- 缺 explicit source 不得 confirmed。
+- market_summary='AI / 電子供應鏈仍偏多' 加 market_mode='進攻偏熱' 不得湊成 confirmed。
+- 缺 source 時 summary 不得輸出 AI / 電子供應鏈 confirmed bullish 語意。
 
 ## 驗收條件
 
-- Header 實際輸出包含 v20.0.12。
-- Summary 有短句明確拆分「主線偏多」與「買點未成立 / 不追高 / 等回測」。
-- 無新增下單時，summary 不得出現像推薦買入的文案。
-- AI / 電子供應鏈持倉不出現未經策略決策支持的加碼暗示。
-- 未持倉 等回測 標的不被描述成可立即買入。
-- 未持倉 淘汰 標的不被描述成產業看空，只能是本輪策略 / 技術條件未通過。
-- 不改任何策略 decision、分類結果、DB payload、Telegram payload shape。
-- formatter 直接測試或 snapshot 必須覆蓋：
-- 市場 / AI 主線偏多但無新增買點。
-- 既有 AI / 電子供應鏈持倉保留但不加碼。
-- 未持倉等回測。
-- 未持倉淘汰。
-- QA 必須補一個 Tech 未覆蓋的手機誤讀檢查：確認 Owner 不會把「主線偏多」誤讀成「今天可買」，也不會把「淘汰」誤讀成「看空產業」。
+1. Telegram header 實際輸出版本為 v20.0.13。
+2. VERSION 或等價版本常量為 v20.0.13。
+3. 相關 formatter tests 的版本期望已同步為 v20.0.13。
+4. 相關 notifier tests 的版本期望已同步為 v20.0.13。
+5. CHANGELOG.md 明確寫本輪是 v20.0.13 QA blocker patch，不是 v20.1.0 新能力發布。
+6. 負面 evidence fixture 仍通過：舊 market_summary + market_mode='進攻偏熱' + 無 explicit source 時不得 confirmed。
+7. 同一負面 fixture 的 Telegram summary 不得出現 AI 題材偏多、電子供應鏈偏多或等價 confirmed bullish 文案。
+8. 不得改策略、DB、watchlist、live delivery、scheduler。
+9. QA 只復驗版本字串、相關 formatter tests、notifier 直接消費者，以及 evidence 邏輯未回退。
+10. QA 結論只能是 通過 或 conditional pass，且 QA_REPORT.md 格式必須符合 runner。
 
 ## 範例或 fixture
 
-### 範例輸出形狀
+### Telegram header 期望形狀
 
-[盤中掃描 v20.0.12]
+【05/28 盤中｜v20.0.13】
 
-今日結論
-主線：AI / 電子供應鏈仍偏多。
-執行：新增買點未成立，先等回測，不追高。
-新倉：無有效進場。
+或：
 
-持倉
-- 2330 台積電：主線持倉保留，按既有風控續抱；新增倉位等觸發。
-- 2308 台達電：電子供應鏈仍在主線內，先持有觀察；不追價加碼。
+【05/28 盤後｜v20.0.13】
 
-未持倉追蹤
-等回測
-- 3661 世芯-KY：題材仍可追蹤，但買點未成立；等回測確認。
+### Evidence 負面 fixture
 
-淘汰
-- 0000 範例股：本輪技術觸發失效，暫不行動；不代表看空產業。
+input_fixture = {
+"market_mode": "進攻偏熱",
+"market_summary": "AI / 電子供應鏈仍偏多",
+"internal_report_input": {
+"summary": "AI / 電子供應鏈仍偏多",
+},
+"market_theme_evidence_sources": [],
+}
 
-### 負面示例，不可出現
+### 負面 fixture 期望 summary 形狀
 
-AI 主線偏多，今天可進場追。
+今日新倉：無有效進場
+AI 題材：可追蹤，證據不足
+電子供應鏈：可追蹤，證據不足
+買點未成立，不可買
 
-2330 主線強，可加碼。
+### 禁止輸出形狀
 
-淘汰：AI 產業轉空。
+【05/28 盤中｜v20.0.12】
+AI 題材偏多
+電子供應鏈偏多
 
-等回測：最強候選，立即關注買入。
+【05/28 盤中｜v20.1.0】
 
 ## 明確禁止事項
 
-- 禁止修改策略核心、交易門檻、分數、排序、決策邏輯。
-- 禁止修改 DB schema、DB write payload、Telegram payload shape。
-- 禁止修改 watchlist。
-- 禁止新增外部即時新聞依賴。
-- 禁止 live Telegram delivery。
+- 禁止重開 PM 需求範圍。
+- 禁止改 evidence 判斷邏輯，除非 Tech 發現版本同步造成測試回退且必須阻塞說明。
+- 禁止改策略 decision。
+- 禁止改 DB schema / DB payload。
 - 禁止 live Supabase write。
-- 禁止正式 backfill。
-- 禁止把市場方向偏多轉成買入、加碼或補倉訊號。
-- 禁止把淘汰 / 等回測文案寫成產業基本面看空。
+- 禁止 live Telegram delivery。
+- 禁止改 watchlist。
+- 禁止改 scheduler / cron。
+- 禁止新增 v20.1.0 新能力。
+- 禁止把本輪描述成 v20.1.0 發布。
+- 禁止讓舊 market_summary 字串支撐 confirmed。
+- 禁止讓缺 explicit source 的 AI / 電子供應鏈寫成 bullish confirmed 語意。
 - 禁止刪除固定 8 份 Markdown。
-- 禁止順手重構無關 formatter 或策略模組。
+- 禁止 Tech 修改 TASK.md。
+- 禁止 QA 擴大為 full pytest、replay、backfill 或 live path 驗證，除非發現版本同步直接破壞契約。
 
 ## 阻塞條件
 
-Tech 必須 blocked 的情況：
+若出現以下任一情況，Tech 必須標記 blocked：
 
-- 無法定位實際 Telegram formatter header 版本常量。
-- 現有 formatter 無法只改文案而不碰策略 decision。
-- 需要改 message list contract 或 payload shape 才能完成文案。
-- TASK.md 範圍外需要新增市場資料源或即時新聞依賴。
-- 測試環境無法執行最小 formatter / snapshot 測試，且 runner 無法補齊依賴。
-
-QA 必須 blocked 或 conditional pass 的情況：
-
-- 實際 Telegram 輸出版本不是 v20.0.12。
-- Summary 仍可能讓 Owner 把主線偏多誤讀成今日可買。
-- 持倉區仍出現無策略支持的加碼暗示。
-- 淘汰 / 等回測仍可能被誤讀成產業看空。
-- Tech 改動超出文案 / formatter 範圍，碰到策略、DB、watchlist 或 payload shape。
-- QA 未能取得接近真實長報文 fixture 進行手機閱讀順序檢查。
+- 無法定位使用者可見 Telegram header 的唯一版本來源。
+- 程式中存在多個互相衝突的使用者可見版本來源，且無法在 tiny patch 範圍內安全同步。
+- 版本同步會迫使改動 evidence 邏輯、策略、DB、watchlist、live delivery 或 scheduler。
+- formatter / notifier 測試無法在 runner 準備的環境中執行。
+- 上游文件同時要求 v20.0.13 與 v20.1.0 作為同一 Telegram header 版本。

@@ -47,7 +47,7 @@ from services.strategy_evidence import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.0.12"
+VERSION = "v20.0.13"
 
 EXECUTION_LEVELS = {
     "TAKE_PROFIT_50": "TP50",
@@ -3889,10 +3889,15 @@ def rejected_trace_line(watch_items):
 def ai_supply_chain_mainline_supported(market_summary):
 
     summary_text = str(market_summary or "")
-    return any(
+    has_theme_keyword = any(
         keyword in summary_text
         for keyword in ["AI", "人工智慧", "電子供應鏈"]
     )
+    has_explicit_evidence = any(
+        token in summary_text
+        for token in ["market_theme_evidence", "source:", "來源:", "confirmed", "證據確認"]
+    )
+    return has_theme_keyword and has_explicit_evidence
 
 
 def market_execution_bridge_lines(holding_items, watch_items, market_mode, market_summary=None):

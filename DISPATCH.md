@@ -4,38 +4,38 @@
 
 ## Current Task
 
-- task_id: `market-theme-evidence-chain-research`
-- task_name: `Market Theme Evidence Chain Research`
-- task_type: `research`
-- version_level: `major`
-- qa_level: `research`
+- task_id: `market-theme-evidence-v20-0-13-guard`
+- task_name: `Market Theme Evidence Guard v20.0.13`
+- task_type: `development`
+- version_level: `patch`
+- qa_level: `L1`
 - owner_status: `requested`
-- architect_status: `research_accepted`
-- pm_status: `research_ready`
-- tech_status: `not_required`
-- qa_status: `research_ready`
+- architect_status: `qa_accepted`
+- pm_status: `task_ready`
+- tech_status: `changelog_ready`
+- qa_status: `conditional_pass`
 - commit: `pushed`
 
 ## Current Result
 
-- Owner 指出：目前完成的是「保護邏輯 / 文案橋接」，真正的市場 / 題材證據鏈尚未建立。
-- Architect 判斷本輪不可直接進入開發，需先做研究與產品契約：
-  - 定義「市場主線 / 題材偏多」的證據來源：價格 / 量能 / watchlist 結構、類股 / 指數 / 新聞或外部資料是否納入。
-  - 定義證據等級：confirmed / weak / absent / stale；沒有證據時報文如何降級。
-  - 定義報文如何引用證據：不能只寫 `AI 主線偏多`，必須能追溯到來源、時間、樣本與限制。
-  - 定義是否需要資料表、快取、來源更新頻率、失敗 fallback、production benchmark 與 QA 驗收。
-  - 禁止未研究先改 DB schema、策略決策、live write、正式 backfill 或 live Telegram。
 - CAO 前端：`http://127.0.0.1:5173/`
-- PM / QA research 已寫入 `RESEARCH.md`。
-- Architect 結論：
-  - `v20.0.12` 只是保護邏輯，不是真正證據鏈。
-  - 下一步應先做 `market_theme_evidence` dry-run / payload contract，不改策略 decision、不 live write。
-  - 證據鏈需支援 `confirmed / weak / absent / stale`，每句市場 / 題材文案都要能追溯 `source_type / source_name / as_of / level / limitations`。
-  - 無證據或過期時必須降級；非 AI 場景不得硬寫 AI；產業背景強不得推導成可買。
+- Owner 確認：先做能做的市場 / 題材證據保護；需要建表時再通知。
+- 本輪實作為 `v20.0.13` patch guard，不是完整 `v20.1.0` evidence chain：
+  - Telegram header / formatter `VERSION` 升為 `v20.0.13`。
+  - 舊 `market_summary="AI / 電子供應鏈仍偏多"` 不得自我證明為 confirmed bullish。
+  - 缺 explicit evidence token 時，summary 降級為 `市場偏多但買點未成立` / `新倉：無有效進場`，不輸出 AI / 電子供應鏈 confirmed bullish。
+  - 新增 notifier 直接消費者測試，確認 summary 仍是最後一則並保留 `v20.0.13` header。
+  - 未改策略 decision、DB schema、watchlist、Supabase write、live Telegram、scheduler。
+- QA 結論：`conditional pass`。
+  - 指定 formatter / notifier 驗證通過：`6 passed, 13 warnings`。
+  - broader related smoke 仍有 3 個既有 / 殘留 phase-sensitive failures，與本輪版本 / evidence guard 不同軸，不宣告整體 formatter suite 全綠。
+  - Architect 有條件吸收限定 diff；phase-sensitive failures 需另開任務處理。
+- 需要建表 / schema / cache 的真正 evidence provider 尚未開始；進入該階段前必須再通知 Owner。
 
 ## Next Action
 
-- 等 Owner 確認是否進入 PM 任務卡：`market_theme_evidence` dry-run / payload contract。
+- 本輪限定 diff 已通過 Architect final review，提交並推送。
+- 後續另開任務處理 broader formatter phase-sensitive failures，並規劃真正 `market_theme_evidence` provider / payload / schema；若需要建表，先通知 Owner。
 
 ## Status Values
 

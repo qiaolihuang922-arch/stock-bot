@@ -7,7 +7,7 @@
 - 專案：台股策略報文機器人。
 - 目前穩定線：`Telegram Unheld Funnel Count Bug` 已完成、QA L1 通過並推送。
 - 最新流程線：`Architect Role Self Lock` 與 `Auto Push After Final Review` 已寫入工作流程。
-- 最新已推送 commit：本次 `fix: add market execution bridge` 提交；以 `git log -1` 為準。
+- 最新已推送 commit：以 `git log -1` 為準。
 - 交付形態維持不變：定時 GitHub Actions / 腳本 -> 產生 Telegram 報文 -> 發送給 Owner。
 - 預設只處理 `core/watchlist.py` 的 12 檔股票。
 - CAO 中文前端固定為 `http://127.0.0.1:5173/`，目錄 `/Users/liveroom/.local/share/cao-web-zh/web`；Architect 只要分配 / 啟動 CAO agents，或準備回覆此前端地址，就必須先確認 `9889` API 與 `5173` 前端已啟動；若未啟動，先執行 `/Users/liveroom/stock-bot-agent-context/ensure_cao_services.sh`，再把前端地址回覆給 Owner。
@@ -90,6 +90,21 @@
   - `DISPATCH.md`
 - QA 首輪阻塞硬寫 AI 主線；retry 後 QA 結論：`通過`。
 - 驗證：`tests/test_generator_report.py tests/test_notifier.py`，`48 passed, 21 warnings`。
+
+## Market Theme Evidence Guard v20.0.13 已完成
+
+- Owner 指出：真正市場 / 題材證據鏈尚未完成；本輪先做不用建表的防誤讀 guard，需要建表時再通知 Owner。
+- 本輪是 `v20.0.13` patch，不是完整 `v20.1.0` evidence provider / schema / cache。
+- 已完成變更：
+  - Telegram header / formatter `VERSION` 升為 `v20.0.13`。
+  - 舊 `market_summary="AI / 電子供應鏈仍偏多"` 不再能自我證明為 AI / 電子供應鏈 confirmed bullish。
+  - 缺 explicit evidence token 時，summary 降級為 `市場偏多但買點未成立`，並保留 `新倉：無有效進場` / 不追高語意。
+  - 新增 formatter 負面 fixture 與 notifier last-message 直接消費者測試。
+- 未做：
+  - 未新增 DB schema / table / cache。
+  - 未新增正式 evidence provider。
+  - 未改策略 decision、watchlist、Supabase write、live Telegram、scheduler。
+- QA 結論：`conditional pass`；限定 diff 可吸收，但 `tests/test_generator_report.py tests/test_notifier.py` broader smoke 仍有 3 個既有 phase-sensitive failures，需另開任務固定 `get_market_phase()` 或調整期望。
 
 ## Post Trade Reduce Cooldown Strategy Fix 已完成本地修復
 

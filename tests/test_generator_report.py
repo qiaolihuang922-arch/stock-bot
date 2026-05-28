@@ -966,7 +966,7 @@ class GeneratorReportTest(unittest.TestCase):
                 datetime(2026, 5, 26),
             )
 
-        self.assertIn("v20.0.12", messages[-1])
+        self.assertIn("v20.0.13", messages[-1])
         self.assertIn("📡 資料：即時價 realtime｜日線 yahoo", messages[-1])
         self.assertIn("🧭 今日結論：R3 進攻偏熱；交易執行：無新增下單；持倉風控檢查 5 檔；未持倉 6 檔僅追蹤", messages[-1])
         self.assertIn("🧭 原因：強勢股多過熱，RR不足，不追高", messages[-1])
@@ -1556,7 +1556,7 @@ class GeneratorReportTest(unittest.TestCase):
             datetime(2026, 5, 27),
         )
 
-        self.assertIn("v20.0.12", messages[-1])
+        self.assertIn("v20.0.13", messages[-1])
         self.assertEqual(payload["holding_decision"]["level"], "POST_PROFIT_WATCH")
         self.assertIn("【智原 3035】📌 停利後觀察", card)
         self.assertIn("決策：停利後觀察，暫不加碼", card)
@@ -1627,7 +1627,7 @@ class GeneratorReportTest(unittest.TestCase):
         position = messages[0]
         unheld = messages[1]
 
-        self.assertIn("【05/28 盤中｜v20.0.12】", summary)
+        self.assertIn("【05/28 盤中｜v20.0.13】", summary)
         self.assertIn("✅ 今日盤中交易執行", summary)
         self.assertNotIn("明日執行", summary)
         self.assertIn("交易執行 1 項；持倉風控檢查 1 檔；已執行 1 項不重複", summary)
@@ -1723,7 +1723,7 @@ class GeneratorReportTest(unittest.TestCase):
         position = messages[0]
         unheld = messages[1]
 
-        self.assertIn("【05/28 盤中｜v20.0.12】", summary)
+        self.assertIn("【05/28 盤中｜v20.0.13】", summary)
         self.assertIn("🧭 今日結論：", summary)
         self.assertIn("交易執行：無新增下單", summary)
         self.assertIn("✅ 今日盤中交易執行\n無新增下單", summary)
@@ -1830,7 +1830,7 @@ class GeneratorReportTest(unittest.TestCase):
                 "FULL DETAIL",
                 None,
                 None,
-                "🟢 AI 主線偏多",
+                "market_theme_evidence:confirmed｜AI 主線偏多",
                 datetime(2026, 5, 28),
             )
 
@@ -1838,7 +1838,7 @@ class GeneratorReportTest(unittest.TestCase):
         position = messages[0]
         unheld = messages[1]
 
-        self.assertIn("【05/28 盤中｜v20.0.12】", summary)
+        self.assertIn("【05/28 盤中｜v20.0.13】", summary)
         self.assertIn("🧭 主線：AI / 電子供應鏈仍偏多。", summary)
         self.assertIn("🧭 執行：新增買點未成立，先等回測，不追高。", summary)
         self.assertIn("🧭 新倉：無有效進場。", summary)
@@ -1920,6 +1920,45 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("AI 主線", summary)
         self.assertNotIn("電子供應鏈", summary)
 
+    def test_intraday_v20_0_13_legacy_market_summary_cannot_confirm_theme(self):
+        hot_payload = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 132],
+            None,
+            price=132,
+            change=6.4,
+        )
+        hot_payload["stock_code"] = "1216"
+        hot_payload["result"].update({
+            "decision": "WAIT",
+            "action": 0,
+            "breakout_distance": 1,
+            "price_behavior": "NORMAL",
+            "heat_state": "HOT",
+            "trade_state": "EXTENDED",
+            "rr": 1.4,
+            "market_grade": "A",
+        })
+
+        with patch.object(generator, "get_market_phase", return_value="盤中"):
+            messages = generator.formatTelegramMessages(
+                {"食品甲": hot_payload},
+                "FULL DETAIL",
+                None,
+                None,
+                "AI / 電子供應鏈仍偏多",
+                datetime(2026, 5, 28),
+            )
+
+        summary = messages[-1]
+
+        self.assertIn("【05/28 盤中｜v20.0.13】", summary)
+        self.assertIn("🧭 主線：市場偏多但買點未成立。", summary)
+        self.assertIn("🧭 新倉：無有效進場。", summary)
+        self.assertIn("買點未成立", summary)
+        self.assertNotIn("AI / 電子供應鏈仍偏多", summary)
+        self.assertNotIn("AI 題材偏多", summary)
+        self.assertNotIn("電子供應鏈偏多", summary)
+
     def test_intraday_holding_control_keeps_next_day_text_in_next_day_plan(self):
         payload = render_payload(
             [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 122],
@@ -1978,7 +2017,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("FULL DETAIL", messages[0])
         self.assertIn("【持倉標的】", messages[1])
         self.assertIn("【未持倉標的】", messages[2])
-        self.assertIn("｜v20.0.12】", messages[-1])
+        self.assertIn("｜v20.0.13】", messages[-1])
 
 
 if __name__ == "__main__":
