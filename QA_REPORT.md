@@ -2,105 +2,57 @@
 
   ## 測試範圍
 
-  依據：TASK.md、CHANGELOG.md、git diff、core/generator.py、services/analysis.py、tests/test_analysis_engine.py、tests/test_generator_report.py、tests/test_notifier.py。
+  - 依據：TASK.md、CHANGELOG.md、git diff、core/generator.py、services/analysis.py、相關測試 diff。
+  - 候選 diff 範圍：core/generator.py、services/analysis.py、tests/test_analysis_engine.py、tests/test_generator_report.py、CHANGELOG.md。
+  - 可吸收 diff：上述 5 個檔案與本輪任務一致，可作為候選審核範圍。
+  - worktree 殘留：git status --short 只顯示上述 5 個 tracked modified；QA 未修改 tracked file。.qa_tmp/ 僅作測試暫存，不應作為合併內容。
 
-  版本契約核對通過：
+  實測命令：
 
-  - TASK.md：本輪不升版，沿用 v20.0.9。
-  - CHANGELOG.md：保留 core/generator.py 的 VERSION = "v20.0.9"。
-  - core/generator.py：VERSION = "v20.0.9"。
-  - 測試期望：tests/test_generator_report.py 仍檢查 v20.0.9。
-  - 未找到 v20.0.10 殘留於上述契約檔案。
+  TMPDIR=$PWD/.qa_tmp PYTHONPATH=$PWD/.qa_tmp:$PWD arch -arm64 .venv/bin/python -m pytest tests/test_analysis_engine.py tests/test_generator_report.py tests/test_notifier.py -q
 
-  執行測試：
+  結果：76 passed, 21 warnings
 
-  - tests/test_analysis_engine.py tests/test_generator_report.py tests/test_notifier.py -q
-  - 結果：69 passed, 21 warnings
-  - warnings 為既有套件 deprecation / Python 3.9 警告，非本輪失敗。
-
-  額外 QA 反證：
-
-  - 直接呼叫 holding_signal() 驗證今日買入一般 reduce 轉 NEW_POSITION_RISK_WATCH。
-  - 直接呼叫 holding_signal() 驗證今日買入後硬停損仍為 STOP_100。
+  QA 追加負面/對照案例：用 inline Python fixture 驗證 市場弱+RR不足、結構弱+RR不足、突破失敗+RR不足、弱反彈+RR不足 四類真正淘汰，以及非淘汰 RR不足 對照。結果通過。
 
   ## 關聯風險掃描
 
-  可吸收 diff：
-
-  - TASK.md
-  - CHANGELOG.md
-  - core/generator.py
-  - services/analysis.py
-  - tests/test_analysis_engine.py
-  - tests/test_generator_report.py
-
-  worktree 殘留 / 不建議整包合併：
-
-  - DISPATCH.md 仍有未提交 diff，但不在 CHANGELOG.md 修改檔案清單內，屬 Architect-controlled 狀態文件；本 QA 不把它視為 Tech 可吸收 code diff，需 Architect 另行決定是否保留。
-
-  直接消費者核對：
-
-  - core.generator.holding_status() 已把 position_events 與持倉股數傳入策略層。
-  - render_stock()、ensure_holding_decision()、generate_report() 路徑有同步事件感知決策。
-  - formatTelegramPositionCard()、summary action/note、明日清單、詳情 decision lines 已支援 POST_REDUCE_WATCH / NEW_POSITION_RISK_WATCH。
-  - tests/test_notifier.py 通過，message list 發送端消費路徑未破壞。
-
-  清理 / 瘦身 / refactor 證據表：
-
-  - 本輪不是清理 / 瘦身 / refactor 任務，不適用 path / claim / evidence / risk / action 表。
+  - TASK.md / CHANGELOG.md / diff 一致：本輪確實修改策略狀態、觀察天數傳遞、未持倉分類與 Telegram 顯示文案，未見任務外 DB schema、watchlist、live send、正式 backfill 改動。
+  - 直接消費者已檢查：formatTelegramMessages()、formatTelegramUnheldCard()、summary 漏斗、unheld_funnel_state()、tomorrow_watch_state()、holding_status() 呼叫鏈。
+  - VERSION = "v20.0.9" 仍存在於 core/generator.py，測試也回歸 header 未回退。
+  - 清理/瘦身/refactor 證據表要求不適用：本輪不是清理任務。
 
   ## 跨區塊語意一致性
 
-  Owner 手機閱讀順序核對：
+  按 Owner 手機閱讀順序檢查：
 
-  - Header 版本為 v20.0.9。
-  - 緯創 sold_shares only fixture：策略層輸出 POST_REDUCE_WATCH，formatter 卡片顯示「減碼後觀察」，summary 明日清單顯示「緯創｜+5.00%｜減碼後觀察｜修復才恢復優先級」。
-  - 同一 fixture 未出現「📌 減碼｜」「決策：減碼 25%」「緯創｜+5.00%｜減碼｜」。
-  - 今日買入一般 reduce：QA 反證輸出 NEW_POSITION_RISK_WATCH 新倉風控觀察 0。
-  - 今日買入硬停損：QA 反證輸出 STOP_100 停損 100% 1。
-  - 今日已賣後風控升級：測試覆蓋 REDUCE_50 增量減碼與 STOP_100 不被硬鎖。
-
-  未回退項目：
-
-  - action-noise：test_summary_with_holding_and_buy_has_no_zero_tracking_noise 仍通過。
-  - 淘汰去點名：test_rejected_summary_shows_count_not_full_four_stock_names 仍通過。
-  - 未持倉漏斗母集合：test_unheld_funnel_prepare_count_has_separate_tracking_parent 仍通過。
+  - Header：仍為 v20.0.9。
+  - Summary 主因：真正淘汰且 RR不足時，主因顯示 市場弱 / 結構弱 / 突破失敗 / 弱反彈待確認，未顯示 RR不足。
+  - 未持倉卡主標：真正淘汰顯示 ⛔ 淘汰｜<淘汰主因>，未被 RR不足搶主標。
+  - 買點行：真正淘汰顯示 等市場轉強、等結構修復、等重新轉強 或 重新轉強前不列優先，未出現 等RR達標。
+  - 明日觸發：真正淘汰顯示 重新轉強前不列優先，未出現 RR修復至達標。
+  - 非淘汰 RR不足 對照：仍顯示 等RR修復、等RR達標、RR修復至達標，不追高，符合任務要求。
+  - 漏斗與降噪：局部回歸測試覆蓋未持倉母集合、僅追蹤拆分、淘汰主因不反覆點名；未見回退。
 
   ## 使用者誤讀風險
 
-  未發現會讓 Owner 把「已減碼後觀察」誤讀成「明日再減碼同級」的輸出；卡片、summary、詳情都避開同級 減碼 25% 主行動。
+  本輪關鍵誤讀路徑已被修正：真正淘汰標的不再因 RR不足被手機第一屏或卡片讀成「只要 RR 修復就可買」。非淘汰 RR不足 仍維持等RR修復，因此不會把可追蹤標的誤降為淘汰。
 
-  未發現今日買入一般弱化被誤讀成「剛買就減碼 50%」；一般 reduce 被降為「新倉風控觀察」，硬停損仍明確顯示停損。
-
-  剩餘需注意：DISPATCH.md 是 worktree 殘留，不應和本輪 code diff 整包合併，否則 Architect 狀態可能被非本輪 QA 吸收。
+  仍需注意：若 production position events 缺少可估算今日買賣比例的欄位，已減碼/已買入狀態仍可能無法被策略推導；這是 CHANGELOG.md 已揭露的資料完整性殘留，不是本輪 diff 可完全消除的 formatter 問題。
 
   ## 質疑與反證
 
-  PM 是否漏需求：
-
-  - 未發現。TASK.md 已列版本契約、直接消費者、event-aware reduce、硬風控覆蓋與手機閱讀路徑。
-
-  Tech 是否漏同步：
-
-  - 未發現直接消費者漏同步。策略函式新增 optional 參數，既有呼叫方不傳仍維持原行為；formatter 關鍵路徑已傳入事件資料。
-
-  測試是否能證明沒有破壞直接消費者：
-
-  - 指定三組測試通過，並涵蓋 strategy、formatter 長報文、notifier message list。
-  - QA 額外用不落檔直接呼叫反證今日買入一般 reduce 與硬停損分支。
-
-  QA 主動找到指定清單之外的風險：
-
-  - 找到 DISPATCH.md worktree 殘留；已標記不可作為 Tech code diff 一起吸收。
+  - 質疑 Tech 是否只修單一 市場弱+RR不足：QA 追加覆蓋 結構弱、突破失敗、弱反彈，均未露出 RR 修復語意。
+  - 質疑是否只修買點行、漏掉明日觸發：QA 檢查 明日觸發，真正淘汰均為 重新轉強前不列優先。
+  - 質疑是否破壞非淘汰 RR不足：QA 對照 fixture 確認仍進 等RR修復。
+  - 質疑是否回退既有直接消費者：重跑 tests/test_notifier.py 與 formatter/analysis 測試，message list 消費者未破壞。
+  - 質疑是否整包合併風險：目前 tracked diff 僅任務相關 5 檔；仍建議 Architect 合併時只吸收候選 diff，不把 .qa_tmp/ 或任何工作暫存納入。
 
   ## 未測項目
 
-  未跑 full pytest、replay/backfill dry-run、live Telegram、live Supabase write；依本輪 L2 範圍與禁止事項可接受。
-
-  未驗證正式資料庫今日交易事件來源，只驗證 position_events 進入策略與 formatter 後的契約；本輪未改 DB schema / position_store schema。
+  - 未執行 full pytest、replay/backfill dry-run、live Telegram delivery、live Supabase write；依 TASK.md 非目標與禁止事項可接受。
+  - 未連 production position events 實資料驗證；本輪以策略/formatter fixture 與 message contract 驗證為主。
 
   ## QA 結論
 
   通過
-
-  限制：僅通過可吸收 diff；不得建議整包合併目前 worktree，DISPATCH.md 殘留需 Architect 另行處理。

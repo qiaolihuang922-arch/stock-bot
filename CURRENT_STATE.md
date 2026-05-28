@@ -7,7 +7,7 @@
 - 專案：台股策略報文機器人。
 - 目前穩定線：`Telegram Unheld Funnel Count Bug` 已完成、QA L1 通過並推送。
 - 最新流程線：`Architect Role Self Lock` 與 `Auto Push After Final Review` 已寫入工作流程。
-- 最新已推送 commit：本次 `fix: sync telegram version to v20.0.9` 提交；以 `git log -1` 為準。
+- 最新已推送 commit：本次 `fix: repair strategy state transitions` 提交；以 `git log -1` 為準。
 - 交付形態維持不變：定時 GitHub Actions / 腳本 -> 產生 Telegram 報文 -> 發送給 Owner。
 - 預設只處理 `core/watchlist.py` 的 12 檔股票。
 - CAO 中文前端固定為 `http://127.0.0.1:5173/`，目錄 `/Users/liveroom/.local/share/cao-web-zh/web`；Architect 只要分配 / 啟動 CAO agents，就必須把此前端地址回覆給 Owner。
@@ -39,6 +39,25 @@
   - `DISPATCH.md`
 - 未改 DB schema、watchlist、live Telegram、live Supabase、replay/backfill write path。
 - QA 結論：`通過`；驗證 `69 passed, 21 warnings`。
+
+## Strategy State Transition and Rising Stock Classification Fix 已完成本地修復
+
+- 修復 Owner 指出的三個策略狀態問題：
+  - 已完成同級停利後，不再重複輸出同級 `停利 25% / 50%`，改為 `停利後觀察`；更高級停利與硬風控仍可覆蓋。
+  - 多日觀察會依 `observation_days / watch_days` 與盤面條件分流；未修復且遠離觸發降為 `風控觀察`，修復後可回到續抱。
+  - 上漲但不可買不再直接淘汰；`遠離觸發` 進 `等回測`，過熱/延伸仍可進 `等冷卻`，非淘汰 RR 不足維持 `等RR修復`。
+- 修復 QA 擋下的手機誤讀：真正淘汰且同時 RR 不足時，summary 主因、未持倉卡主標、買點等待與明日觸發不再顯示 RR 修復語意，改為市場 / 結構 / 重新轉強優先。
+- 保留 `v20.0.9`，本輪不升版；未改 DB schema、watchlist、live Telegram、live Supabase、正式 replay/backfill。
+- 修改檔案：
+  - `services/analysis.py`
+  - `core/generator.py`
+  - `tests/test_analysis_engine.py`
+  - `tests/test_generator_report.py`
+  - `TASK.md`
+  - `CHANGELOG.md`
+  - `QA_REPORT.md`
+  - `DISPATCH.md`
+- QA 結論：`通過`；驗證 `76 passed, 21 warnings`，並補市場弱 / 結構弱 / 突破失敗 / 弱反彈同時 RR 不足的反證。
 
 ## Workflow Scope / Action / Noise Gates 已完成
 

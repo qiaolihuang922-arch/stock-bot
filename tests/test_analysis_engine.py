@@ -204,6 +204,21 @@ class AnalysisEngineTest(unittest.TestCase):
         self.assertEqual(signal["action"], "停利 25%")
         self.assertIn("續鎖一段利潤", signal["reason"])
 
+    def test_holding_after_same_level_profit_taken_observes(self):
+        item = snap("same_level_profit_taken", [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 130], VOL_ATTACK)
+        signal = holding_signal(
+            item["raw_result"],
+            130,
+            100,
+            "realtime",
+            9.9,
+            realized_profit_taken_ratio=0.25
+        )
+        self.assertEqual(signal["level"], "POST_PROFIT_WATCH")
+        self.assertEqual(signal["action"], "停利後觀察")
+        self.assertEqual(signal["ratio"], 0)
+        self.assertIn("同級停利已完成", "、".join(signal["add_blockers"]))
+
     def test_holding_after_second_profit_taken_does_not_repeat_take_profit(self):
         item = snap("profit_taken_again", [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 130], VOL_ATTACK)
         signal = holding_signal(
@@ -327,6 +342,88 @@ class AnalysisEngineTest(unittest.TestCase):
 
         self.assertEqual(stop_signal["level"], "STOP_100")
         self.assertEqual(stop_signal["ratio"], 1)
+
+    def test_profit_taken_same_level_does_not_block_hard_stop(self):
+        result = {
+            "structure_phase": "WEAK",
+            "price_behavior": "NORMAL",
+            "market_regime": "RISK_OFF",
+            "multi_day_bias": "DOWN_CONFIRM",
+            "decision": "WAIT",
+            "heat_state": "NORMAL",
+            "trade_state": "WAIT",
+            "extended_level": 0,
+            "trend": "DOWN",
+            "volume_state": "STRONG",
+            "volume_price_state": "NORMAL",
+            "rr": 0.8,
+            "breakout_distance": 8,
+            "entry_quality": "D",
+            "confidence_score": 20,
+        }
+
+        signal = holding_signal(
+            result,
+            90,
+            100,
+            "realtime",
+            -5.0,
+            realized_profit_taken_ratio=0.25
+        )
+
+        self.assertEqual(signal["level"], "STOP_100")
+        self.assertEqual(signal["ratio"], 1)
+
+    def test_multi_day_observation_repair_upgrades_to_hold(self):
+        result = {
+            "structure_phase": "BREAKOUT_CONFIRM",
+            "price_behavior": "NORMAL",
+            "market_regime": "RISK_ON",
+            "multi_day_bias": "UP_CONFIRM",
+            "decision": "WAIT",
+            "heat_state": "NORMAL",
+            "trade_state": "WAIT",
+            "extended_level": 0,
+            "trend": "UP",
+            "volume_state": "STRONG",
+            "volume_price_state": "EXPANSION",
+            "rr": 1.6,
+            "breakout_distance": 1,
+            "entry_quality": "B",
+            "confidence_score": 70,
+            "observation_days": 4,
+        }
+
+        signal = holding_signal(result, 104, 100, "realtime", 1.0)
+
+        self.assertEqual(signal["level"], "HOLD")
+        self.assertEqual(signal["action"], "續抱")
+
+    def test_multi_day_observation_unrepaired_degrades_to_risk_watch(self):
+        result = {
+            "structure_phase": "WEAK",
+            "price_behavior": "NORMAL",
+            "market_regime": "RISK_ON",
+            "multi_day_bias": "MIXED",
+            "decision": "WAIT",
+            "heat_state": "NORMAL",
+            "trade_state": "WAIT",
+            "extended_level": 0,
+            "trend": "UP",
+            "volume_state": "WEAK",
+            "volume_price_state": "COILING",
+            "rr": 3.0,
+            "breakout_distance": 9,
+            "entry_quality": "D",
+            "confidence_score": 35,
+            "observation_days": 4,
+        }
+
+        signal = holding_signal(result, 105, 100, "realtime", 0.5)
+
+        self.assertEqual(signal["level"], "RISK_WATCH")
+        self.assertEqual(signal["action"], "風控觀察")
+        self.assertIn("觀察4日未修復", signal["reason"])
 
     def test_profit_taken_does_not_lock_after_heat_cools(self):
         item = snap("cooled_profit_taken", [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 114], VOL_ATTACK)

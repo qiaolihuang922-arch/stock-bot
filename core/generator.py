@@ -1282,7 +1282,8 @@ def holding_status(
     realized_profit_taken_ratio=0,
     realized_profit_taken_date=None,
     signal_date=None,
-    position_events=None
+    position_events=None,
+    observation_days=0
 ):
 
     signal = strategy_holding_signal(
@@ -1295,7 +1296,8 @@ def holding_status(
         realized_profit_taken_date,
         signal_date,
         position_events,
-        shares
+        shares,
+        observation_days
     )
 
     ratio = signal.get("ratio", 0)
@@ -2066,7 +2068,8 @@ def render_stock(
             holding.get("realized_profit_taken_ratio", 0),
             holding.get("realized_profit_taken_date"),
             datetime.now(tz).date().isoformat(),
-            today_events
+            today_events,
+            holding.get("observation_days", data.get("observation_days", 0))
         )
 
         result["_holding_decision"] = holding_decision
@@ -2392,7 +2395,8 @@ def ensure_holding_decision(name, data, signal_date=None):
         holding.get("realized_profit_taken_ratio", 0),
         holding.get("realized_profit_taken_date"),
         signal_date or datetime.now(tz).date().isoformat(),
-        data.get("position_events") or {}
+        data.get("position_events") or {},
+        holding.get("observation_days", data.get("observation_days", 0))
     )
 
     data["holding_decision"] = decision
@@ -2556,7 +2560,7 @@ def classify_watchlist_group(name, data):
     market_grade = result.get("market_grade")
 
     if (
-        label in ["市場弱", "弱勢", "弱反彈待確認", "遠離觸發"]
+        label in ["市場弱", "弱勢", "弱反彈待確認", "突破失敗"]
         or market_grade == "D"
         or phase in ["WEAK", "WEAK_REBOUND"]
     ):
@@ -2608,11 +2612,14 @@ def tomorrow_watch_state(name, data):
     market_grade = result.get("market_grade")
 
     if (
-        label in ["市場弱", "弱勢", "弱反彈待確認", "遠離觸發"]
+        label in ["市場弱", "弱勢", "弱反彈待確認", "突破失敗"]
         or market_grade == "D"
         or phase in ["WEAK", "WEAK_REBOUND"]
     ):
         return "弱勢淘汰"
+
+    if label == "遠離觸發":
+        return "等回測"
 
     if behavior in ["LIMIT_LOCK", "LIMIT_REBOUND"] or label in ["漲停不追", "漲停反彈待確認"]:
         return "等回測" if behavior == "LIMIT_LOCK" or label == "漲停不追" else "隔日確認"
@@ -2891,6 +2898,9 @@ def position_summary_action(name, data):
     if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]:
         return "停利"
 
+    if level == "POST_PROFIT_WATCH":
+        return "停利後觀察"
+
     if level in ["REDUCE_25", "REDUCE_50"]:
         return "減碼"
 
@@ -3045,6 +3055,9 @@ def position_summary_note(name, data):
     if action == "停利":
         return f"{decision.get('action')}，鎖定部分獲利"
 
+    if action == "停利後觀察":
+        return decision.get("note") or "同級停利已完成，等待新條件"
+
     if action == "減碼":
         return f"{decision.get('action')}，降低風險"
 
@@ -3149,6 +3162,25 @@ def entry_wait_text(result):
     return f"等{first}解除"
 
 
+def unheld_entry_wait_text(result, state, funnel_state):
+
+    if state == "弱勢淘汰" or funnel_state == "淘汰":
+        reason = rejected_primary_reason(result)
+
+        if reason == "市場弱":
+            return "等市場轉強"
+
+        if reason in ["結構弱", "弱反彈待確認"]:
+            return "等結構修復"
+
+        if reason == "突破失敗":
+            return "等重新轉強"
+
+        return "重新轉強前不列優先"
+
+    return entry_wait_text(result)
+
+
 def daily_write_warning_text(signal_result=None, snapshot_result=None):
 
     missing = []
@@ -3205,6 +3237,9 @@ def holding_tomorrow_trigger(name, data):
     if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]:
         return "保留核心倉，等待冷卻後再評估"
 
+    if level == "POST_PROFIT_WATCH":
+        return "等待新高、過熱升級或風控訊號"
+
     if action == "新倉風控觀察":
         return "明日未修復降級"
 
@@ -3249,6 +3284,7 @@ def position_priority_rank(name, data):
         "風控觀察": 3,
         "核心風控觀察": 3,
         "減碼後觀察": 4,
+        "停利後觀察": 4,
         "洗盤警戒": 5,
         "洗盤續抱": 6,
         "停利後核心倉": 7,
@@ -3306,6 +3342,7 @@ def holding_execution_priority(name, data):
         "核心風控觀察": 4,
         "洗盤警戒": 5,
         "減碼後觀察": 6,
+        "停利後觀察": 6,
         "洗盤續抱": 7,
         "停利後核心倉": 8,
         "核心續抱": 8,
@@ -3341,6 +3378,7 @@ def holding_execution_item(name, data):
             "風控觀察",
             "核心風控觀察",
             "洗盤警戒",
+            "停利後觀察",
         ],
         "line": (
             f"{name}"
@@ -3479,8 +3517,7 @@ def dominant_reject_reasons(watch_items):
         if unheld_funnel_state(name, data) != "淘汰":
             continue
 
-        blockers = entry_blockers(data.get("result") or {})
-        reason = blockers[0] if blockers else final_label(data.get("result") or {})
+        reason = rejected_primary_reason(data.get("result") or {})
         if not reason:
             reason = "條件不足"
         reason_counts[reason] = reason_counts.get(reason, 0) + 1
@@ -3490,6 +3527,30 @@ def dominant_reject_reasons(watch_items):
 
     ordered = sorted(reason_counts.items(), key=lambda item: (-item[1], item[0]))
     return "、".join(reason for reason, _count in ordered[:2])
+
+
+def rejected_primary_reason(result):
+
+    blockers = entry_blockers(result)
+    phase = result.get("structure_phase")
+
+    if result.get("decision") == "FAIL" or phase == "FAILED_BREAKOUT" or "突破失敗" in blockers:
+        return "突破失敗"
+
+    if phase == "WEAK_REBOUND" or result.get("price_behavior") == "WEAK_REBOUND" or "弱反彈待確認" in blockers:
+        return "弱反彈待確認"
+
+    if result.get("market_grade") == "D" or "市場弱" in blockers:
+        return "市場弱"
+
+    if phase in ["WEAK", "DISTRIBUTION"]:
+        return "結構弱"
+
+    for reason in blockers:
+        if reason not in ["RR不足", "量能不足", "遠離觸發", "過熱觀察"] and not reason.startswith("過熱"):
+            return reason
+
+    return final_label(result)
 
 
 def unheld_tracking_count(funnel):
@@ -3781,7 +3842,7 @@ def holding_reason_line(name, data):
     if level == "STOP_100":
         return "跌破停損線，避免虧損擴大"
 
-    if level in ["POST_REDUCE_WATCH", "NEW_POSITION_RISK_WATCH"]:
+    if level in ["POST_REDUCE_WATCH", "NEW_POSITION_RISK_WATCH", "POST_PROFIT_WATCH"]:
         return decision.get("note")
 
     return None
@@ -3807,6 +3868,9 @@ def holding_next_step_line(name, data):
 
     if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]:
         return "保留核心倉，等待冷卻後再評估"
+
+    if level == "POST_PROFIT_WATCH":
+        return "等待新高、過熱升級或風控訊號"
 
     if action == "新倉風控觀察":
         return "隔日未修復，降低優先級"
@@ -3834,6 +3898,9 @@ def holding_next_step_line(name, data):
 
     if action == "停利後核心倉":
         return "保留核心倉，等待冷卻後再評估"
+
+    if action == "停利後觀察":
+        return "等待新高、過熱升級或風控訊號"
 
     if action == "核心續抱":
         return "保留核心倉，觀察是否轉弱"
@@ -3881,6 +3948,9 @@ def holding_detail_decision_lines(name, data):
     if level == "NEW_POSITION_RISK_WATCH":
         return "新倉風控觀察，暫不加碼", note or "今日剛買入，先觀察是否守住警戒 / 停損"
 
+    if level == "POST_PROFIT_WATCH":
+        return "停利後觀察，暫不加碼", note or "同級停利已完成，等待新條件"
+
     if summary_action == "核心續抱":
         return "核心續抱，暫不加碼", "跌破警戒價優先風控，等待冷卻"
 
@@ -3903,6 +3973,9 @@ def holding_detail_decision_lines(name, data):
 
     if summary_action == "停利後核心倉":
         return "停利後核心倉，暫不加碼", "等待冷卻後再評估"
+
+    if summary_action == "停利後觀察":
+        return "停利後觀察，暫不加碼", "等待新高、過熱升級或風控訊號"
 
     if summary_action == "底倉續抱":
         return "保留底倉，暫不加碼", "觀察減碼後是否轉弱，跌破警戒價優先風控"
@@ -3988,6 +4061,9 @@ def formatTelegramUnheldCard(name, data):
     valid_entry = is_valid_entry(result)
     title_label = "買點成立" if valid_entry else (blockers[0] if blockers else final_label(result))
     state = tomorrow_watch_state(name, data)
+    funnel_state = unheld_funnel_state(name, data)
+    if state == "弱勢淘汰":
+        title_label = rejected_primary_reason(result)
 
     if valid_entry:
         title_icon = "🟢"
@@ -4007,10 +4083,11 @@ def formatTelegramUnheldCard(name, data):
 
     rr_text = rr_display_text(result, holding=False)
     risk_label = unheld_buy_risk_label(result, title_label)
+    wait_text = unheld_entry_wait_text(result, state, funnel_state)
     buy_line = (
-        f"買點：可買｜建議 {entry_size_text(result)}｜{entry_wait_text(result)}"
+        f"買點：可買｜建議 {entry_size_text(result)}｜{wait_text}"
         if valid_entry
-        else f"買點：不買｜{risk_label}｜{entry_wait_text(result)}｜{entry_conclusion(result)}"
+        else f"買點：不買｜{risk_label}｜{wait_text}｜{entry_conclusion(result)}"
     )
     tomorrow_line = f"明日觸發：{tomorrow_trigger_text(state, data)}"
 
@@ -4393,7 +4470,8 @@ def generate_report():
             data["holding"].get("realized_profit_taken_ratio", 0),
             data["holding"].get("realized_profit_taken_date"),
             now.date().isoformat(),
-            data.get("position_events") or {}
+            data.get("position_events") or {},
+            data["holding"].get("observation_days", data.get("observation_days", 0))
         )
 
         if h_decision["level"] in [

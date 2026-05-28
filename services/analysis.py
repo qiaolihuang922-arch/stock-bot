@@ -1784,7 +1784,8 @@ def holding_signal(
     realized_profit_taken_date=None,
     signal_date=None,
     position_events=None,
-    current_shares=None
+    current_shares=None,
+    observation_days=0
 ):
 
     pnl = (
@@ -1823,6 +1824,17 @@ def holding_signal(
         and str(realized_profit_taken_date) == str(signal_date)
     )
     position_events = position_events or {}
+
+    try:
+        observation_days = int(
+            observation_days
+            or result.get("observation_days")
+            or position_events.get("observation_days")
+            or position_events.get("watch_days")
+            or 0
+        )
+    except (TypeError, ValueError):
+        observation_days = 0
 
     def numeric_event_value(*keys):
         for key in keys:
@@ -1863,6 +1875,33 @@ def holding_signal(
 
     def today_bought_shares():
         return numeric_event_value("bought_shares", "today_bought_qty")
+
+    def completed_profit_ratio(recommended_ratio):
+        if realized_profit_taken_ratio >= 0.75:
+            return False
+
+        recommended_pct = recommended_ratio * 100
+        realized_pct = realized_profit_taken_ratio * 100
+        return (
+            realized_pct > 0
+            and (
+                abs(realized_pct - recommended_pct) <= 5
+                or realized_pct >= recommended_pct * 0.8
+            )
+        )
+
+    def post_profit_watch(recommended_ratio):
+        return payload(
+            "停利後觀察",
+            0,
+            f"同級停利已完成約{round(realized_profit_taken_ratio * 100)}%，本輪未觸發更高級停利或硬風控",
+            "POST_PROFIT_WATCH",
+            "POST_PROFIT_WATCH",
+            False,
+            2,
+            add_status="FORBID",
+            add_blockers_value=["同級停利已完成", "等待新條件"]
+        )
 
     structure_broken = (
         phase in ["FAILED_BREAKOUT", "DISTRIBUTION"]
@@ -2135,6 +2174,9 @@ def holding_signal(
                 4
             )
 
+        if completed_profit_ratio(0.25):
+            return post_profit_watch(0.25)
+
         if realized_profit_taken_ratio >= 0.25:
             return payload(
                 "續抱核心倉",
@@ -2179,6 +2221,9 @@ def holding_signal(
                 4
             )
 
+        if completed_profit_ratio(0.5):
+            return post_profit_watch(0.5)
+
         if realized_profit_taken_ratio >= 0.5:
             return payload(
                 "續抱核心倉",
@@ -2194,7 +2239,7 @@ def holding_signal(
             return payload(
                 "停利 25%",
                 0.25,
-                "已停利部分，極熱再降風險",
+                "停利級距升級，極熱再降風險",
                 "TAKE_PROFIT_25",
                 "LOCK_PROFIT",
                 False,
@@ -2252,10 +2297,21 @@ def holding_signal(
         )
 
     if weak_far_from_trigger and pnl >= 0:
+        if observation_days >= 3:
+            return payload(
+                "風控觀察",
+                0,
+                f"觀察{observation_days}日未修復且遠離觸發，降低優先級",
+                "RISK_WATCH",
+                "RISK_WATCH",
+                False,
+                4
+            )
+
         return payload(
             "續抱觀察",
             0,
-            "轉弱觀察，不加碼",
+            "轉弱觀察，不加碼" if observation_days <= 0 else f"觀察{observation_days}日內，等待重新接近買點",
             "HOLD_WATCH",
             "WATCH",
             False,

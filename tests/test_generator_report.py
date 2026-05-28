@@ -522,6 +522,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【未持倉標的】", messages[1])
         self.assertIn("【建準 2421】👀 等RR修復｜RR不足", messages[1])
         self.assertIn("買點：不買｜RR不足", messages[1])
+        self.assertIn("買點：不買｜RR不足｜等RR達標", messages[1])
         self.assertIn("明日觸發：RR修復至達標，不追高", messages[1])
         self.assertIn("回測：", messages[1])
         self.assertIn("📊 市場：", messages[-1])
@@ -796,6 +797,75 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【光寶科 2301】⏳ 等冷卻", unheld_msg)
         self.assertIn("【建準 2421】👀 等RR修復", unheld_msg)
         self.assertIn("【旺宏 2337】⛔ 淘汰", unheld_msg)
+
+    def test_unheld_far_from_trigger_tracks_retest_instead_of_rejecting(self):
+        payload = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 126],
+            None,
+            price=126,
+            change=2.0,
+        )
+        payload["stock_code"] = "2303"
+        payload["result"].update({
+            "decision": "WAIT",
+            "price_behavior": "NORMAL",
+            "heat_state": "NORMAL",
+            "trade_state": "WAIT",
+            "structure_phase": "BREAKOUT",
+            "market_grade": "A",
+            "entry_quality": "B",
+            "rr": 1.4,
+            "breakout_distance": 7,
+        })
+
+        messages = generator.formatTelegramMessages(
+            {"聯電": payload},
+            "FULL DETAIL",
+            None,
+            None,
+            "⏳ 觀望",
+            datetime(2026, 5, 27),
+        )
+
+        self.assertEqual(generator.unheld_funnel_state("聯電", payload), "等回測")
+        self.assertIn("可買 0｜可準備 0（不可買）｜僅追蹤 1｜淘汰 0", messages[-1])
+        self.assertIn("其中僅追蹤 1 檔拆分：等冷卻 0、等回測 1、等RR修復 0、等量能 0", messages[-1])
+        self.assertIn("【聯電 2303】⏳ 等回測｜遠離觸發", messages[1])
+
+    def test_rejected_weak_rr_uses_true_reject_reason_not_rr(self):
+        payload = render_payload(
+            [120, 118, 116, 114, 112, 110, 108, 106, 104, 102, 100, 98, 96, 94, 92, 90, 88, 86, 84, 85],
+            None,
+            price=85,
+            change=1.2,
+        )
+        payload["stock_code"] = "2337"
+        payload["result"].update({
+            "decision": "WAIT",
+            "price_behavior": "NORMAL",
+            "structure_phase": "WEAK",
+            "market_grade": "D",
+            "rr": 0.4,
+            "breakout_distance": 9,
+        })
+
+        messages = generator.formatTelegramMessages(
+            {"旺宏": payload},
+            "FULL DETAIL",
+            None,
+            None,
+            "⏳ 觀望",
+            datetime(2026, 5, 27),
+        )
+
+        self.assertEqual(generator.unheld_funnel_state("旺宏", payload), "淘汰")
+        self.assertIn("淘汰 1 檔｜主因：市場弱｜詳情見未持倉卡", messages[-1])
+        self.assertIn("【旺宏 2337】⛔ 淘汰｜市場弱", messages[1])
+        self.assertIn("買點：不買｜市場弱｜等市場轉強", messages[1])
+        self.assertIn("明日觸發：重新轉強前不列優先", messages[1])
+        self.assertNotIn("淘汰 1 檔｜主因：RR不足", messages[-1])
+        self.assertNotIn("【旺宏 2337】⛔ 淘汰｜RR不足", messages[1])
+        self.assertNotIn("等RR達標", messages[1])
 
     def test_unheld_price_line_keeps_closing_parenthesis(self):
         payload = render_payload(
@@ -1461,6 +1531,33 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("條件：高浮盈或過熱延伸，保留核心倉", profit_card)
         self.assertIn("原因：高浮盈且過熱延伸，先保留獲利", profit_card)
         self.assertIn("下一步：保留核心倉，等待冷卻後再評估", profit_card)
+
+    def test_post_profit_watch_card_does_not_repeat_same_level_take_profit(self):
+        payload = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 130],
+            {"shares": 100, "avg_price": 100, "realized_profit_taken_ratio": 0.25},
+            price=130,
+            change=9.9,
+        )
+        payload["stock_code"] = "3035"
+
+        card = generator.formatTelegramPositionCard("智原", payload)
+        messages = generator.formatTelegramMessages(
+            {"智原": payload},
+            "FULL DETAIL",
+            None,
+            None,
+            "⏳ 觀望",
+            datetime(2026, 5, 27),
+        )
+
+        self.assertIn("v20.0.9", messages[-1])
+        self.assertEqual(payload["holding_decision"]["level"], "POST_PROFIT_WATCH")
+        self.assertIn("【智原 3035】📌 停利後觀察", card)
+        self.assertIn("決策：停利後觀察，暫不加碼", card)
+        self.assertIn("同級停利已完成", card)
+        self.assertIn("1. 智原｜+30.00%｜停利後觀察｜等待新高、過熱升級或風控訊號", messages[-1])
+        self.assertNotIn("決策：停利 25%", card)
 
     def test_telegram_messages_can_include_detail_when_requested(self):
         payload = render_payload(

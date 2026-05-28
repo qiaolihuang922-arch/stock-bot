@@ -4,9 +4,9 @@
 
 ## Current Task
 
-- task_id: `post-trade-reduce-cooldown-strategy-fix`
-- task_name: `Post Trade Reduce Cooldown Strategy Fix`
-- task_type: `holding_strategy_event_aware_bugfix`
+- task_id: `strategy-state-transition-classification-fix`
+- task_name: `Strategy State Transition and Rising Stock Classification Fix`
+- task_type: `strategy_state_machine_bugfix`
 - version_level: `patch`
 - qa_level: `L2`
 - owner_status: `requested`
@@ -18,21 +18,27 @@
 
 ## Current Result
 
-- Owner 指出最新報文有策略衝突：
-  - `緯創` 已依報文賣過約 25%，新報文仍再次給同級 `減碼`，造成重複減碼建議。
-  - `智原` 今日買入後又被報文列為 `減碼 50%`，與新倉行為衝突；若確實需要風控，必須是 event-aware 的風控升級，不是硬性鎖死或無條件再賣。
-- 本輪要修的是策略 / 持倉狀態機的「已執行交易事件」判斷，不是單純 formatter 文案，也不是硬鎖死不准賣。
-- PM 必須先定義 post-trade cooldown / event-aware reduce 契約：
-  - 今日已賣且比例接近建議減碼比例時，後續主行動應降為 `減碼後觀察` 或等價觀察狀態。
-  - 只有跌破停損、跌破警戒、結構進一步惡化、或新觸發更高級別風控時，才允許同日 / 次報文再次減碼。
-  - 今日買入與減碼衝突時，要定義新倉風控、停損 / 減碼硬優先、以及何時可覆蓋新倉觀察。
-- Tech 不得用硬性「今天賣過就永不賣」處理；必須保留更高級風控可覆蓋的條件。
-- QA 必須用 Owner 這段報文建 fixture，檢查不再重複同級減碼，也不遮蔽真正停損 / 更高級風控。
+- Owner 指出三個策略狀態問題：
+  - 持倉已停利後，下一次決策仍反覆給同級 `停利`，造成重複賣出訊號。
+  - 多日下來標的一直停在 `觀察`，缺少觀察狀態的到期、升級或降級規則。
+  - 一直上漲的股票仍反覆被列入 `淘汰`，把「不可追高 / 等冷卻 / 等回測」誤判成永久不可行動。
+- 本輪要修的是策略狀態機與報文分類契約，不是單純 formatter 文案，也不是硬性鎖死交易。
+- PM 必須先定義：
+  - `停利後` 狀態：已執行同級停利後，主行動應轉為 `停利後觀察` / `核心續抱` / 等待新條件；只有獲利階段、過熱級別或風控風險升級時，才允許新增停利。
+  - `觀察` 狀態老化：觀察不能無限期存在；必須定義修復升級、未修復降級、失效淘汰或維持觀察的停止條件。
+  - `上漲但不可買` 分類：強勢上漲但位置過遠、過熱、漲停或 RR 不足時，應歸為 `等冷卻` / `等回測` / `等RR修復` / `追蹤強勢不可買`，不得直接混入 `淘汰`；`淘汰` 僅保留給結構弱、趨勢失效、明確市場弱或觸發失效。
+- Tech 不得用「賣過就永不停利」「觀察 N 天一律淘汰」「上漲一律追蹤」這種硬鎖；必須保留升級條件與風控優先。
+- QA 必須用 Owner 這三類情境建 fixture，並額外反證：
+  - 已停利同級訊號不重複，但更高級停利 / 停損仍可覆蓋。
+  - 多日觀察會按條件升級、降級或失效，不會永久卡住。
+  - 上漲過熱股不被淘汰，弱勢反彈或市場弱仍可淘汰。
+  - 不回退上一輪 `v20.0.9`、post-reduce cooldown、未持倉漏斗與報文降噪契約。
 - CAO 前端：`http://127.0.0.1:5173/`
-- PM 已交付 `TASK.md`，版本契約修正為本輪不升版、沿用 `v20.0.9`。
-- Tech 候選已由 Architect 移植到最新 main，避免舊 worktree 回退 `v20.0.9`、action-noise、未持倉漏斗與淘汰去點名契約。
-- QA 結論：`通過`；驗證 `sold_shares` only 可轉 `減碼後觀察`，`REDUCE_50` / `STOP_100` 不被硬鎖，今日買入一般 reduce 轉 `新倉風控觀察`，買入後硬停損仍保留。
-- 驗證命令：`tests/test_analysis_engine.py tests/test_generator_report.py tests/test_notifier.py -q`，結果 `69 passed, 21 warnings`。
+- PM / Tech / QA 必須在最新 main 上工作；若隔離 worktree 基線過舊，Architect 不得整包吸收，只能白名單移植必要 diff 後重跑 QA。
+- PM 已交付 `TASK.md`，版本契約為本輪不升版、沿用 `v20.0.9`。
+- Tech 已在對齊最新 `origin/main` 的隔離 worktree 完成候選 diff；首輪舊基線 diff 因無法套用被拒收並重跑。
+- QA 首輪 `conditional pass` 擋下弱勢淘汰卡片仍出現 `等RR達標` 的誤讀文案；Tech 已補修，真正淘汰卡片改為 `等市場轉強` / `等結構修復` / `等重新轉強`，非淘汰 RR 不足仍保留 `等RR修復`。
+- QA 最終結論：`通過`；驗證 `76 passed, 21 warnings`，並補四類真正淘汰 + RR 不足反證，以及非淘汰 RR 不足對照。
 - 已吸收白名單 diff：
   - `services/analysis.py`
   - `core/generator.py`
