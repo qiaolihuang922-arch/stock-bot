@@ -148,6 +148,18 @@
   - runner shell syntax：`bash -n` 通過
 - 未執行新的 CAO auto 任務；下一次實際 auto 任務需觀察 gate 是否如預期阻止殘留與污染。
 
+## CAO Worktree Post-Push Cleanup 已完成
+
+- 修復隔離 worktree 開發後殘留舊 diff / 舊基線的流程缺口。
+- 新增 `/Users/liveroom/stock-bot-agent-context/cleanup_agent_worktrees.sh`：
+  - 只在主 repo clean 時執行。
+  - 解除 handoff Markdown 的 skip-worktree 標記。
+  - 將 `/Users/liveroom/stock-bot-agent-worktrees/tech_write` reset 到主 repo 當前 `HEAD`。
+  - 清除 tracked / untracked 殘留與 `.qa_tmp/`，只保留 `.venv`。
+- 修正 `/Users/liveroom/stock-bot-agent-context/run_tech_write.sh`：每輪開頭清理時對齊主 repo 當前 `HEAD`，不再只 reset 到隔離 worktree 自己的舊 `HEAD`。
+- 本輪已實際清理 `tech_write`，目前對齊最新 `8f0e38f`，status clean。
+- `AGENTS.md` 已新增規則：Architect 每次吸收候選 diff 並完成 commit / push 後，必須執行 cleanup 腳本，避免下一輪代理踩到舊版本。
+
 ## Architect Role Self Lock 已完成
 
 - 修復總控越權風險：Architect 不得因為 bug 小就直接定位產品代碼、寫 `TASK.md`、改產品代碼或測試。

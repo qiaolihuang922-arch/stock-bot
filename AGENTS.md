@@ -559,6 +559,9 @@ CAO 前端 UI 固定入口：
 Runner hygiene gates：
 
 - `run_tech_write.sh` 每輪必須從乾淨隔離 worktree 開始，並清掉上一輪 tracked / untracked 殘留；`.venv` 只作測試環境保留，不得成為候選 diff。
+- `run_tech_write.sh` 清理起點必須對齊主 repo 當前 `HEAD`，不得只 reset 到隔離 worktree 自己的舊 `HEAD`；避免舊版本基線反覆污染新任務。
+- Architect 每次已吸收候選 diff 並完成 commit / push 後，必須執行 `/Users/liveroom/stock-bot-agent-context/cleanup_agent_worktrees.sh`，把隔離 worktree reset 到主 repo 當前 `HEAD` 並移除 tracked / untracked / `.qa_tmp` 殘留；只保留 `.venv`。
+- `cleanup_agent_worktrees.sh` 只能在主 repo clean 時執行；若主 repo 仍有未提交 diff，必須先完成 commit / push 或明確放棄本輪修改，不得清理隔離 worktree 造成候選 diff 遺失。
 - Tech runner 可同步主 repo 的交接文件供 agent 閱讀，但 `AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`QA_REPORT.md` 都是 read-only handoff context，不得出現在候選 diff；runner 必須用 hash 檢查代理是否偷改。
 - Tech 候選 diff 只應包含 `TASK.md` 允許的產品 / 測試檔，以及 Tech 交付的 `CHANGELOG.md`；其他固定 Markdown 殘留一律不得整包合併。
 - `run_qa_code.sh` 仍是 read-only QA；只允許寫 `.qa_tmp/`、dummy `config.py` 與測試暫存，不得修改 tracked files。

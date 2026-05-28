@@ -41,6 +41,7 @@
 - SQL 草案已由 Owner 決策刪除：線上 DB 已建立、回測已寫入 DB，本地 `docs/v*_schema.sql` 不再保留。
 - Code/comment slimming 已完成：吸收 9 個 Python 檔案註解-only diff，L3 驗證通過。
 - CAO runner 已修復：PM 輸出清洗、Tech worktree 每輪清理、QA 強制證據表與殘留區分。
+- CAO worktree post-push 清理已補強：每次 commit / push 後由 Architect 執行 `/Users/liveroom/stock-bot-agent-context/cleanup_agent_worktrees.sh`，將 `tech_write` 對齊主 repo 當前 `HEAD`，移除 tracked / untracked / `.qa_tmp` 殘留，只保留 `.venv`。
 - v20.0.4 Telegram 顯示一致性已完成：summary、未持倉分組、詳情索引與最後行動清單已補顆粒度。
 - CAO auto cycle 環境缺口已修復：Tech / QA worktree 啟動前會自動確保 `.venv` 與 pytest 可用。
 - v20.0.5 已修正手機 Telegram 報文閱讀問題：未持倉分組拆成冷卻 / 回測 / RR / 量能 / 淘汰，summary 改短。
