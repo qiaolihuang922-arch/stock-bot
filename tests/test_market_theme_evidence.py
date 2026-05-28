@@ -9,6 +9,21 @@ from core.market_theme_evidence import (
 from tests.test_generator_report import render_payload
 
 
+def source(source_type, level="supportive", freshness="fresh", freshness_reason="same_trade_date", **overrides):
+    return {
+        "source_type": source_type,
+        "source_name": overrides.pop("source_name", source_type),
+        "as_of": overrides.pop("as_of", "2026-05-28"),
+        "freshness": freshness,
+        "freshness_reason": freshness_reason,
+        "level": level,
+        "supports_claims": overrides.pop("supports_claims", [f"{source_type} supportive"]),
+        "limitations": overrides.pop("limitations", ["只佐證題材背景，不改變個股買點"]),
+        "source_family": overrides.pop("source_family", source_type),
+        **overrides,
+    }
+
+
 class MarketThemeEvidenceTest(unittest.TestCase):
     def test_report_derived_results_and_watchlist_cannot_confirm_theme(self):
         evidence = build_market_theme_evidence(
@@ -58,27 +73,19 @@ class MarketThemeEvidenceTest(unittest.TestCase):
 
         self.assertFalse(evidence["confirmed"])
         self.assertEqual(evidence["theme_status"], "weak")
-        self.assertEqual(evidence["source_family_count_for_confirmed"], 1)
+        self.assertEqual(evidence["source_family_count_for_confirmed"], 0)
         self.assertIn(
-            "market_state 缺 freshness、limitations，不可計入 confirmed",
+            "market_index 缺 freshness、freshness_reason、level、limitations，不可計入 confirmed",
             evidence["limitations"],
         )
 
-    def test_same_source_family_does_not_confirm(self):
-        source = {
-            "source_family": "market_state",
-            "as_of": "2026-05-28",
-            "freshness": "same_day",
-            "confidence": 0.8,
-            "supports_claims": ["risk_on"],
-            "limitations": ["index only"],
-        }
+    def test_same_source_type_does_not_confirm(self):
+        market_source = source("market_index", source_family="market_state")
         evidence = build_market_theme_evidence(
             sources=[
-                source,
+                market_source,
                 {
-                    **source,
-                    "confidence": 0.7,
+                    **market_source,
                     "supports_claims": ["sector strength"],
                     "limitations": ["same family"],
                 },
@@ -90,13 +97,30 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         self.assertEqual(evidence["source_family_count_for_confirmed"], 1)
         self.assertEqual(evidence["source_families"], ["market_state"])
 
-    def test_market_state_and_strategy_evidence_can_confirm(self):
+    def test_watchlist_breadth_and_market_index_can_confirm(self):
+        evidence = build_market_theme_evidence(
+            sources=[
+                source("watchlist_breadth", source_family="watchlist_theme_breadth"),
+                source("market_index", source_family="market_state"),
+            ],
+        )
+
+        self.assertTrue(evidence["confirmed"])
+        self.assertEqual(evidence["theme_status"], "confirmed")
+        self.assertEqual(evidence["theme_direction"], "supportive")
+        self.assertEqual(
+            evidence["confirmed_source_types"],
+            ["watchlist_breadth", "market_index"],
+        )
+        self.assertEqual(evidence["level"], "confirmed")
+        self.assertIn("supports_claims", evidence)
+
+    def test_market_state_and_strategy_evidence_legacy_pair_no_longer_confirms_without_contract_fields(self):
         evidence = build_market_theme_evidence(
             market_state={
                 "source_family": "market_state",
                 "as_of": "2026-05-28",
                 "freshness": "same_day",
-                "confidence": 0.82,
                 "supports_claims": ["risk_on", "electronics sector breadth"],
                 "limitations": ["intraday may change"],
             },
@@ -104,21 +128,62 @@ class MarketThemeEvidenceTest(unittest.TestCase):
                 "source_family": "structured_strategy_evidence",
                 "as_of": "2026-05-28",
                 "freshness": "same_day",
-                "confidence": 0.76,
                 "supports_claims": ["AI supply chain setup count rising"],
                 "limitations": ["buy point still requires individual trigger"],
             },
         )
 
-        self.assertTrue(evidence["confirmed"])
-        self.assertEqual(evidence["theme_status"], "confirmed")
-        self.assertEqual(evidence["theme_direction"], "bullish")
-        self.assertEqual(
-            evidence["confirmed_source_families"],
-            ["market_state", "structured_strategy_evidence"],
+        self.assertFalse(evidence["confirmed"])
+        self.assertEqual(evidence["level"], "weak")
+
+    def test_stale_required_source_downgrades(self):
+        evidence = build_market_theme_evidence(
+            sources=[
+                source("watchlist_breadth"),
+                source(
+                    "sector_index",
+                    freshness="stale",
+                    freshness_reason="older_than_threshold",
+                ),
+            ],
         )
-        self.assertEqual(evidence["level"], "confirmed")
-        self.assertIn("supports_claims", evidence)
+
+        self.assertFalse(evidence["confirmed"])
+        self.assertEqual(evidence["level"], "stale")
+
+    def test_required_source_freshness_overrides_allowed_reason(self):
+        for freshness in ["stale", "unavailable", "missing"]:
+            with self.subTest(freshness=freshness):
+                evidence = build_market_theme_evidence(
+                    sources=[
+                        source("watchlist_breadth"),
+                        source(
+                            "sector_index",
+                            freshness=freshness,
+                            freshness_reason="same_trade_date",
+                        ),
+                    ],
+                )
+
+                self.assertFalse(evidence["confirmed"])
+                self.assertEqual(evidence["level"], "stale")
+
+    def test_mixed_when_background_strong_but_watchlist_weak(self):
+        evidence = build_market_theme_evidence(
+            sources=[
+                source("watchlist_breadth", level="weak"),
+                source("official", level="supportive"),
+            ],
+        )
+
+        self.assertFalse(evidence["confirmed"])
+        self.assertEqual(evidence["level"], "mixed")
+
+    def test_absent_when_no_runtime_or_report_source(self):
+        evidence = build_market_theme_evidence()
+
+        self.assertFalse(evidence["confirmed"])
+        self.assertEqual(evidence["level"], "absent")
 
     def test_provider_normalizes_existing_malformed_confirmed_dict(self):
         evidence = build_market_theme_evidence_provider(
@@ -175,13 +240,14 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         )
 
         summary = messages[-1]
-        self.assertIn("【05/28 盤中｜v20.1.3】", summary)
-        self.assertIn("市場題材：來源不足，僅追蹤", summary)
+        self.assertIn("【05/28 盤中｜v20.2.0】", summary)
+        self.assertIn("市場 / 題材證據：weak", summary)
+        self.assertIn("限制：市場證據不足，僅依策略分類追蹤", summary)
         self.assertIn("🧭 主線：市場偏多但買點未成立。", summary)
         self.assertNotIn("confirmed", summary)
         self.assertNotIn("AI/電子供應鏈偏多", summary)
         self.assertNotIn("今日可買：台積電", summary)
-        self.assertLess(summary.index("🧭 新倉：無有效進場。"), summary.index("市場題材：來源不足，僅追蹤"))
+        self.assertLess(summary.index("🧭 新倉：無有效進場。"), summary.index("市場 / 題材證據：weak"))
 
     def test_confirmed_theme_without_stock_entry_stays_track_only(self):
         payload = render_payload(
@@ -202,22 +268,10 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         })
         evidence = build_market_theme_evidence(
             theme="AI/電子供應鏈",
-            market_state={
-                "source_family": "market_state",
-                "as_of": "2026-05-28",
-                "freshness": "same_day",
-                "confidence": 0.82,
-                "supports_claims": ["risk_on", "electronics sector breadth"],
-                "limitations": ["intraday may change"],
-            },
-            structured_strategy_evidence={
-                "source_family": "structured_strategy_evidence",
-                "as_of": "2026-05-28",
-                "freshness": "same_day",
-                "confidence": 0.76,
-                "supports_claims": ["AI supply chain setup count rising"],
-                "limitations": ["buy point still requires individual trigger"],
-            },
+            sources=[
+                source("watchlist_breadth", source_family="watchlist_theme_breadth"),
+                source("sector_index", source_family="market_state"),
+            ],
         )
 
         messages = generator.formatTelegramMessages(
@@ -231,12 +285,14 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         )
 
         summary = messages[-1]
-        self.assertIn("市場題材：AI/電子供應鏈證據偏多，但買點仍看個股條件", summary)
+        self.assertIn("市場 / 題材證據：confirmed", summary)
+        self.assertIn("限制：題材可追蹤，不代表可買", summary)
+        self.assertIn("來源：watchlist_breadth same_trade_date; sector_index same_trade_date", summary)
         self.assertIn("🧭 新倉：無有效進場。", summary)
         self.assertIn("未持倉 1 檔僅追蹤", summary)
         self.assertLess(
             summary.index("🧭 新倉：無有效進場。"),
-            summary.index("市場題材：AI/電子供應鏈證據偏多，但買點仍看個股條件"),
+            summary.index("市場 / 題材證據：confirmed"),
         )
         self.assertNotIn("今日可買：台積電", summary)
         self.assertNotIn("台積電｜可買", summary)
@@ -277,8 +333,9 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         )
 
         summary = messages[-1]
-        self.assertIn("市場題材：來源不足，僅追蹤", summary)
-        self.assertNotIn("市場題材：AI/電子供應鏈證據偏多", summary)
+        self.assertIn("市場 / 題材證據：weak", summary)
+        self.assertIn("限制：市場證據不足，僅依策略分類追蹤", summary)
+        self.assertNotIn("市場 / 題材證據：confirmed", summary)
         self.assertNotIn("🧭 主線：AI / 電子供應鏈仍偏多。", summary)
 
 

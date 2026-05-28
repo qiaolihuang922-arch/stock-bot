@@ -148,10 +148,10 @@ FULL_PROMPT="你是 Tech 可寫隔離代理。你只能在目前 worktree 實作
 $PROMPT
 
 要求：
-1. 先判斷本輪任務尺寸與風險，寫進 CHANGELOG.md：tiny_patch / normal_patch / risk_patch / research / process。
+1. 先判斷本輪任務尺寸與風險，寫進最終 CHANGELOG 內容：tiny_patch / normal_patch / risk_patch / research / process。
 2. 先找最小影響面：只修改 TASK.md 指定的必要代碼與必要測試；不得順手重構、清理旁支、改策略方向或擴大輸出契約。
-3. 更新 CHANGELOG.md，且第一行必須是 # CHANGELOG:。
-4. CHANGELOG.md 必須包含：修改內容、修改檔案、最小改動策略、契約影響、直接消費者同步、未影響模組、已跑自檢命令、殘留風險、旁支待辦。
+3. 不要直接編輯 CHANGELOG.md；請在最終回答中輸出完整 CHANGELOG，且第一行必須是 # CHANGELOG:。runner 會把最終回答寫入 CHANGELOG.md。
+4. 最終回答的 CHANGELOG 必須包含：修改內容、修改檔案、最小改動策略、契約影響、直接消費者同步、未影響模組、已跑自檢命令、殘留風險、旁支待辦。
 5. 若任務改變回傳結構、訊息順序、payload、報文分組或 public helper，必須同步直接呼叫方並在 CHANGELOG.md 說明。
 6. 若任務是清理 / 瘦身 / refactor，CHANGELOG.md 必須包含 path / claim / evidence / risk / action 證據表。
 7. 不得為了通過測試寫死 fixture、壓掉真實邊界、或回退既有已修契約；如果 TASK.md 與既有契約衝突，停止並回報 blocked。
@@ -206,6 +206,8 @@ if ! head -n 1 "$ANSWER_FILE" | rg -q '^# CHANGELOG:'; then
   echo "Tech answer did not start with required '# CHANGELOG:' heading: $ANSWER_FILE" >&2
   exit 1
 fi
+
+cp "$ANSWER_FILE" "$WORKTREE/CHANGELOG.md"
 
 READONLY_AFTER="$(readonly_hashes)"
 if [[ "$READONLY_AFTER" != "$READONLY_BEFORE" ]]; then

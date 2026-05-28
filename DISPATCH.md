@@ -10,11 +10,11 @@
 - version_level: `minor`
 - qa_level: `L3`
 - owner_status: `requested`
-- architect_status: `blocked_reviewed`
+- architect_status: `qa_passed_absorbed`
 - pm_status: `task_ready`
-- tech_status: `blocked`
-- qa_status: `waiting_tech`
-- commit: `pending`
+- tech_status: `changelog_ready`
+- qa_status: `qa_passed`
+- commit: `pushed`
 
 ## Current Result
 
@@ -37,12 +37,33 @@
   - 第一輪 Tech 在隔離 worktree 產生候選 diff，局部測試一度通過，但在重寫 `CHANGELOG.md` 時超時退出。
   - 第二輪收口仍未產生有效輸出，`CHANGELOG.md` 仍是舊任務內容。
   - Architect 拒收本輪 Tech 交付：不進 QA、不合併產品 diff、不推送產品變更。
-  - 主 repo 只保留 PM 任務卡與本阻塞狀態；隔離 worktree 候選 diff 待清理或重跑。
+  - 主 repo 只保留 PM 任務卡與阻塞紀錄；隔離 worktree 已清理。
+- Owner 確認這是正常流程保護後，Architect 重新分派 Tech 從乾淨 worktree 實作。
+- Tech 重跑已交付合格 `CHANGELOG.md` 與候選 diff；runner 已修正為由 Tech final answer 生成 `CHANGELOG.md`，避免再次卡在檔案編輯收口。
+- QA 已阻塞候選 diff：
+  - 一般五類 fixture 與 notifier / strategy invariance 測試通過。
+  - QA 自訂反證發現：若 required source 同時有 `freshness=stale/unavailable` 與 `freshness_reason=same_trade_date`，候選仍可能輸出 `confirmed`。
+  - 這違反 TASK「任一 required source stale / unavailable 時，不得輸出 confirmed」。
+- Tech 已完成 QA block 修正：
+  - `freshness=stale/unavailable/missing` 現在優先於 allowed `freshness_reason`。
+  - 已補負面測試並重新跑相關 evidence / formatter / notifier / strategy invariance 測試。
+- QA 重新驗證結果：
+  - freshness precedence 阻塞點已解除。
+  - 相關測試與 Telegram direct-consumer smoke 通過。
+  - 但 `CHANGELOG.md` 只描述最後的 freshness fix，未覆蓋整個 worktree 的 v20.2.0 feature diff，因此不能整包吸收。
+- Tech 已補完整 `CHANGELOG.md`，覆蓋 `core/market_theme_evidence.py`、`core/generator.py`、formatter/notifier tests、版本同步與 no-live-write 邊界。
+- QA 最終一致性複核通過：
+  - `CHANGELOG.md` 與 worktree diff 一致。
+  - freshness precedence、v20.2.0 header、no DB/schema/cache/live/backfill、message list/notifier payload shape 均通過。
+  - Architect 已只吸收 QA 明確列出的 6 個檔案，不整包合併 worktree。
+- 主 repo 驗證：
+  - `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_generator_report.py tests/test_notifier.py tests/test_analysis_engine.py tests/test_strategy_evidence.py`
+  - 結果：`113 passed, 21 warnings`
+  - `git diff --check` 通過。
 
 ## Next Action
 
-- 先修 Tech runner / agent 收口問題，或重跑 Tech 但必須取得正確 `# CHANGELOG:`。
-- 在 Tech 交付合格前，不進 QA、不合併候選 diff。
+- commit / push 後清理 tech worktree。
 
 ## Status Values
 

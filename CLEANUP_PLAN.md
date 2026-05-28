@@ -46,7 +46,7 @@
 
 ## Pending / Watchlist
 
-- Tech runner gap: `market-theme-evidence-production-pm-20260528` 第一輪 Tech 已產生候選 diff，但 runner 在 `CHANGELOG.md` 收口時超時；第二輪收口仍無有效輸出。下次重跑前需確認 CAO sentinel / final-answer 捕捉與 `CHANGELOG.md` 寫入流程，避免半成品 diff 留在隔離 worktree。
+- Tech runner gap 已補：`run_tech_write.sh` 改為讓 Tech 在 final answer 輸出 `# CHANGELOG:`，由 runner 寫入 worktree `CHANGELOG.md`，避免 agent 卡在直接編輯交付文件。
 - 下一次產品任務完成後，確認 Post-cycle Review Gate 是否有做到：
   - 根因分類。
   - QA 攔截是否沉澱成 guard。

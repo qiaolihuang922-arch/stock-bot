@@ -51,6 +51,11 @@
   - 建立 `market_theme_evidence` dry-run helper 與測試。
   - report-derived only 只能 weak / track only，不可 confirmed。
 - 早期 v20.0.x 舊細節已壓縮：完整流水不再保留在本文件，必要時查 git history。
+- `v20.2.0` Market Theme Evidence Production Contract 已通過 QA 並推送：
+  - confirmed 必須同時有 fresh supportive `watchlist_breadth` 與 `market_index` / `sector_index`。
+  - `stale` / `unavailable` / `missing` freshness 優先於 allowed `freshness_reason`，不得 confirmed。
+  - Telegram evidence 區塊顯示 confirmed / weak / mixed / stale / absent 與限制句。
+  - 未新增 DB schema / cache / external provider / live write / backfill / live Telegram。
 
 ## Stable Product Contracts
 
@@ -113,6 +118,6 @@
 
 ## Open Follow-Ups
 
-- 證據鏈下一階段若要 production confirmed，需要新增第二類 runtime source；若涉及 DB table / cache / external provider，先通知 Owner。
+- 證據鏈 v20.2.0 只建立 production contract 與 runtime source gate；若要自動取得 market_index / sector_index、建表、cache、external provider 或持久化 evidence，先通知 Owner。
 - 若 Owner 仍覺得查詢慢，另開 performance measurement 任務，量測 production 實際秒數。
 - 後續可改善 `load_strategy_evidence_summary()` 顯式排序與 `漏失` 文案，但需另開任務。

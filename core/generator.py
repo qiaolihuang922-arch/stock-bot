@@ -52,7 +52,7 @@ from services.strategy_evidence import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.1.3"
+VERSION = "v20.2.0"
 
 EXECUTION_LEVELS = {
     "TAKE_PROFIT_50": "TP50",
@@ -3919,10 +3919,12 @@ def market_theme_summary_evidence(results_map, market_summary):
 
     if isinstance(market_summary, dict):
         evidence = market_summary.get("market_theme_evidence")
+        report_date = market_summary.get("as_of")
         return build_market_theme_evidence_provider(
             results_map=results_map,
             formatter_report_input=market_summary,
             market_theme_evidence=evidence,
+            as_of=report_date,
         )
 
     return build_market_theme_evidence(
@@ -3943,10 +3945,7 @@ def market_execution_bridge_lines(holding_items, watch_items, market_mode, marke
     if market_mode == "轉弱":
         mainline = "主線：盤勢轉弱，題材先降速觀察。"
     elif market_mode == "進攻偏熱":
-        if ai_supply_chain_mainline_supported(market_summary):
-            mainline = "主線：AI / 電子供應鏈仍偏多。"
-        else:
-            mainline = "主線：市場偏多但買點未成立。"
+        mainline = "主線：市場偏多但買點未成立。"
     else:
         mainline = "主線：題材仍可追蹤，不等於今日可買。"
 
