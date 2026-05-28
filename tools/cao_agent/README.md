@@ -6,9 +6,12 @@
 
 - CAO CLI: `$HOME/.local/bin/cao`
 - CAO server: `$HOME/.local/bin/cao-server`
+- CAO MCP server: `$HOME/.local/bin/cao-mcp-server`
 - Codex app: `/Applications/Codex.app/Contents/Resources/codex`
 - CAO 中文前端預設目錄：`$HOME/.local/share/cao-web-zh/web`
 - Python / pytest 依賴：優先使用 repo `.venv`，否則 runner 會為隔離 worktree 建立 `.venv`。
+
+下載與重建流程見 `tools/cao_agent/DEPLOYMENT.md`。
 
 可用環境變數覆蓋預設路徑：
 
@@ -18,8 +21,12 @@
 - `STOCK_BOT_AGENT_WORKTREE`
 - `CAO_BIN`
 - `CAO_SERVER_BIN`
+- `CAO_MCP_SERVER_BIN`
 - `CAO_WEB_DIR`
+- `CAO_WEB_REPO_DIR`
 - `CAO_LOG_DIR`
+- `CAO_AGENT_PROFILE_DIR`
+- `CODEX_APP_BIN`
 
 ## Local Runtime Paths
 
@@ -35,6 +42,13 @@
 ## Setup
 
 ```bash
+tools/cao_agent/bootstrap_local.sh
+```
+
+或手動分步：
+
+```bash
+tools/cao_agent/install_agent_profiles.sh
 tools/cao_agent/setup_agent_worktree.sh
 tools/cao_agent/ensure_cao_services.sh
 ```
@@ -65,6 +79,7 @@ tools/cao_agent/cleanup_agent_worktrees.sh
 - Tech 先定義最小改動策略，避免順手重構、測試過擬合或回退既有契約。
 - QA 先定義 1-3 個風險預算與停止條件，避免 tiny patch 被驗成大任務。
 - Tech plan 先輸出任務尺寸、最小影響面與不應觸碰模組。
+- `profiles/stock_*.md.template` 保存本專案手寫 agent role cards；新機器用 `install_agent_profiles.sh` 渲染到 CAO profile 目錄。
 
 ## Safety
 

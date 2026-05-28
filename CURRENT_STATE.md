@@ -26,6 +26,9 @@
 - CAO 中文前端：`http://127.0.0.1:5173/`
 - 中文前端預設目錄：`$HOME/.local/share/cao-web-zh/web`，可用 `CAO_WEB_DIR` 覆蓋。
 - 服務確認 / 啟動腳本：`tools/cao_agent/ensure_cao_services.sh`
+- 本機部署文件：`tools/cao_agent/DEPLOYMENT.md`
+- 本機 bootstrap：`tools/cao_agent/bootstrap_local.sh`
+- CAO stock agent profile 模板：`tools/cao_agent/profiles/stock_*.md.template`
 - Architect 只要分配、啟動或回覆 CAO 前端地址，必須先確認 `9889` API 與 `5173` 前端正在 listen；未啟動則先跑服務確認腳本。
 
 ## Recent High-Signal Milestones
@@ -101,6 +104,10 @@
   - QA 先定義 1-3 個風險預算與停止條件，避免 tiny patch 被驗成大任務。
   - Tech plan 先輸出任務尺寸、最小影響面與不應觸碰模組。
   - 實際腳本已納入 repo：`tools/cao_agent/run_auto_dev_cycle.sh`、`run_tech_write.sh`、`run_qa_code.sh`、`run_tech_plan.sh`。
+- CAO 本機可重建資產已納入 repo：
+  - runner 腳本、sandbox wrapper、profile 模板、profile 安裝腳本、bootstrap 腳本與部署文件。
+  - 可下載依賴記錄在 `tools/cao_agent/DEPLOYMENT.md`；手寫 agent role cards 以模板保存在 `tools/cao_agent/profiles/`。
+  - 中文 CAO UI 目前仍是外部 checkout，不直接放入主 repo；若要長期固定中文化，需另開任務抽 patch 或 fork。
 - commit / push 後需執行 `tools/cao_agent/cleanup_agent_worktrees.sh`，讓隔離 worktree 對齊主 repo。
 - 清理任務若涉及產品代碼、測試或 runtime 文件，必須有 PM 任務、Tech 證據表與 QA 反證；流程文件壓縮可由 Architect 直接處理。
 

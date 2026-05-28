@@ -10,8 +10,11 @@ REPO_PARENT="$(cd "$REPO_ROOT/.." && pwd)"
 
 CAO_BIN="${CAO_BIN:-$HOME/.local/bin/cao}"
 CAO_SERVER_BIN="${CAO_SERVER_BIN:-$HOME/.local/bin/cao-server}"
+CAO_MCP_SERVER_BIN="${CAO_MCP_SERVER_BIN:-$HOME/.local/bin/cao-mcp-server}"
 CAO_LOG_DIR="${CAO_LOG_DIR:-$HOME/.aws/cli-agent-orchestrator/logs}"
 CAO_WEB_DIR="${CAO_WEB_DIR:-$HOME/.local/share/cao-web-zh/web}"
+CAO_WEB_REPO_DIR="${CAO_WEB_REPO_DIR:-$(cd "$(dirname "$CAO_WEB_DIR")" 2>/dev/null && pwd || dirname "$CAO_WEB_DIR")}"
+CAO_AGENT_PROFILE_DIR="${CAO_AGENT_PROFILE_DIR:-$HOME/.aws/cli-agent-orchestrator/agent-context}"
 
 CAO_AGENT_CONTEXT="${STOCK_BOT_AGENT_CONTEXT:-$REPO_ROOT/.cao_agent_context}"
 CAO_AGENT_OUTPUTS="${STOCK_BOT_AGENT_OUTPUTS:-$CAO_AGENT_CONTEXT/outputs}"

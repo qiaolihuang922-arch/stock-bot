@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REAL_CODEX="/Applications/Codex.app/Contents/Resources/codex"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AGENT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$AGENT_DIR/env.sh"
+REAL_CODEX="${CODEX_APP_BIN:-/Applications/Codex.app/Contents/Resources/codex}"
 
 SANDBOX_TEMPLATE="$AGENT_DIR/sandbox/codex_no_network.sb"
 SANDBOX_PROFILE="$(mktemp "${TMPDIR:-/tmp}/stock-bot-codex-sandbox.XXXXXX.sb")"

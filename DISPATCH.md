@@ -4,8 +4,8 @@
 
 ## Current Task
 
-- task_id: `cao-agent-runners-in-repo-20260528`
-- task_name: `CAO Agent Runners In Repo`
+- task_id: `cao-local-deployment-assets-20260528`
+- task_name: `CAO Local Deployment Assets`
 - task_type: `process`
 - version_level: `none`
 - qa_level: `process`
@@ -14,13 +14,13 @@
 - pm_status: `not_required`
 - tech_status: `not_required`
 - qa_status: `not_required`
-- commit: `pushed`
+- commit: `pending`
 
 ## Current Result
 
-- 本輪只做 CAO runner 遷移與流程文件補強，不改產品代碼、不改策略、不改測試。
-- Owner 指出：CAO runner 也應合併到 `stock-bot-main`，否則重新部署到別的電腦抓不到這些文件。
-- 已完成 repo 內可遷移 runner：
+- 本輪只做 CAO 本機部署資產整理，不改產品代碼、不改策略、不改測試。
+- Owner 指出：環境可下載的只需記錄來源與重部署流程；不可下載且屬於手寫代碼 / 規則的內容要放入 repo。
+- 已在 repo 內保存可遷移 runner：
   - `tools/cao_agent/run_auto_dev_cycle.sh`：PM 必須先判斷任務尺寸，tiny patch 只允許單一主 bug、單一輸出契約、1-2 個驗收案例，並寫停止條件。
   - `tools/cao_agent/run_tech_write.sh`：Tech 必須先寫任務尺寸、最小改動策略、旁支待辦；禁止順手重構、測試過擬合、回退既有契約。
   - `tools/cao_agent/run_qa_code.sh`：QA 必須先寫風險預算與停止條件；驗證範圍需匹配任務尺寸，tiny patch 不得無理由擴成全量矩陣。
@@ -29,19 +29,30 @@
   - `tools/cao_agent/setup_agent_worktree.sh`：新電腦初始化隔離 worktree。
   - `tools/cao_agent/README.md`：部署、環境變數、日常入口與安全邊界。
   - `tools/cao_agent/bin/codex` 與 `sandbox/codex_no_network.sb`：可遷移 sandbox wrapper，不再寫死 `/Users/liveroom`。
+- 本輪新增 / 待提交：
+  - `tools/cao_agent/profiles/stock_*.md.template`：PM / Tech / QA / online research 等 stock agent profile 模板，避免新機器缺角色卡。
+  - `tools/cao_agent/install_agent_profiles.sh`：把 profile 模板按本機路徑渲染到 CAO profile 目錄。
+  - `tools/cao_agent/bootstrap_local.sh`：檢查可下載依賴、安裝 profiles、建立 tech worktree。
+  - `tools/cao_agent/DEPLOYMENT.md`：記錄 CAO / uv / tmux / Node / Codex app / CAO web UI 來源與重部署步驟。
+- 大型外部資產處理：
+  - 本機中文 CAO UI 位於 `$HOME/.local/share/cao-web-zh`，是 `awslabs/cli-agent-orchestrator` checkout 上的本地修改，約 186MB。
+  - 不直接整包塞入 `stock-bot-main`；已在部署文件記錄來源與 `CAO_WEB_DIR` 覆蓋方式。若中文化需長期固定，另開任務抽最小中文 patch 或維護獨立 fork。
 - 關閉對話後的接力方式：
   - 新對話先讀 `AGENTS.md`、`DISPATCH.md`、`CURRENT_STATE.md`。
   - 本輪 runner 腳本已納入 repo 的 `tools/cao_agent/`，重新部署到其他電腦時會隨 repo 一起取得。
   - 若要重新核對 runner，直接讀 `tools/cao_agent/README.md` 與相關腳本。
 - 已驗證：
   - Runner shell syntax：`bash -n tools/cao_agent/*.sh tools/cao_agent/bin/codex` 通過。
+  - 本機 bootstrap：`tools/cao_agent/bootstrap_local.sh` 通過，已確認 git / tmux / npm / uv / Codex app / CAO CLI / CAO server / CAO MCP server / CAO web UI。
+  - Profile render：`tools/cao_agent/install_agent_profiles.sh` 通過，已渲染到本機 CAO profile 目錄。
   - Repo 內 `tools/cao_agent/setup_agent_worktree.sh` 可執行並能定位 repo、context、worktree。
   - Repo 內 `tools/cao_agent/ensure_cao_services.sh` 可確認 CAO API / UI。
   - Repo 文件 diff：`git diff --check` 通過。
 
 ## Next Action
 
-- 等待 Owner 下一個需求。
+- 完成 shell syntax、profile render、bootstrap smoke、git diff check 後 commit / push。
+- push 後執行 `tools/cao_agent/cleanup_agent_worktrees.sh`。
 
 ## Status Values
 

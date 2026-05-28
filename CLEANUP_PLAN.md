@@ -40,6 +40,9 @@
 - `RESEARCH.md` 保留市場 / 題材證據鏈研究結論，刪除終端過程與長表格流水。
 - `DISPATCH.md` 切換為本輪流程審計與壓縮任務，不再保存上一輪產品任務完整過程。
 - CAO runner prompt 已補任務尺寸 / 最小改動 / 風險預算 / 停止條件，避免 PM、Tech、QA 把小任務擴成大任務。
+- CAO 本機部署資產已收斂到 repo：
+  - runner 腳本、profile 模板、profile 安裝、bootstrap、部署說明都在 `tools/cao_agent/`。
+  - 可下載依賴只記錄來源與安裝指令，不把外部 runtime 塞進 repo。
 
 ## Pending / Watchlist
 
@@ -58,6 +61,7 @@
   - `CHANGELOG.md` / `QA_REPORT.md` 是否無 transcript 污染。
 - 證據鏈 production 化若需要 DB table / cache / external provider，先通知 Owner，再進 PM 任務，不在本文件直接決策。
 - 若要做真正 code cleanup，需另開清理任務並要求 Tech 提供 `path / claim / evidence / risk / action` 表，QA 逐項反證。
+- 中文 CAO UI 是大型外部 checkout；若 Owner 要求重部署時完全保留中文化，需要另開任務抽最小中文 patch 或建立獨立 fork，不直接整包塞進主 repo。
 
 ## Fixed Keep List
 
