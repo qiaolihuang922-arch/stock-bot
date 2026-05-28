@@ -99,6 +99,11 @@
   - QA 擋下的問題必須沉澱成 reusable guard。
   - 已修契約不得在下一輪悄悄回退；若任務容易碰到既有契約，Architect 必須在分派指令中寫明不得回退。
   - runner / worktree / CAO 前端服務問題若重複發生，必須記入本文件或另開流程補丁。
+- v20.1.3 Telegram Holding Risk Tomorrow Plan Dedupe 已形成限定可吸收候選：
+  - 刪除重複 `隔日計畫`，持倉未修復降級只留在 `持倉風控檢查`。
+  - 無非重複明日事項時，不顯示 `明日計畫 0` / `明日計畫：無新增下單`。
+  - 有真正 pending item 時，例如 `技嘉｜待觸發加碼10`，仍保留 `明日計畫 N`，且排在持倉風控之後。
+  - QA 兩輪 conditional pass 已沉澱成 guard：空區塊與 0 計數也算手機噪音；手機閱讀順序必須持倉風控優先。
 - push 後仍需壓縮：
   - `DISPATCH.md`
   - `TASK.md`

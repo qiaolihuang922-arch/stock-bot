@@ -188,6 +188,23 @@
   - QA 擋下的問題必須變成 reusable guard。
   - 已修手機報文契約、版本契約、證據鏈 contract、CAO 前端啟動等問題不得靠記憶維持，必須落文件或落 runner 待補項。
 
+## Telegram Holding Risk Tomorrow Plan Dedupe v20.1.3 已完成本地修復
+
+- Owner 指出 `v20.1.2` 盤後報文中 `隔日計畫` 與 `持倉風控檢查` 重複：智原 / 緯創同一個明日未修復降級行動被兩個區塊重講。
+- 已完成變更：
+  - Telegram header / formatter `VERSION` 升為 `v20.1.3`。
+  - 移除獨立 `隔日計畫` 與舊 `format_next_day_plan()` helper。
+  - 持倉未修復 / 降級檢查只保留在 `持倉風控檢查`。
+  - `明日計畫` 只保留真正非重複 pending items，例如 `技嘉｜待觸發加碼10`。
+  - 沒有非重複明日事項時，不輸出 `明日計畫 0`、`明日計畫：無新增下單` 或空明日計畫區塊。
+  - Summary 手機閱讀順序改為先持倉風控，再明日計畫。
+- 未做：
+  - 未改策略 decision、持倉 action 來源、DB、watchlist、market theme evidence provider、live Telegram / Supabase、replay/backfill。
+- QA 結論：`通過`；驗證 `tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py` 為 `64 passed, 21 warnings`。
+- Post-cycle review：
+  - QA 兩次 conditional pass 有效攔截殘留：空明日計畫 / 0 計數，以及明日計畫排序早於持倉風控。
+  - 本輪已用測試 guard 固定「空區塊也算手機噪音」與「持倉風控優先於明日計畫」。
+
 ## Post Trade Reduce Cooldown Strategy Fix 已完成本地修復
 
 - 修復 Owner 指出的持倉策略衝突：

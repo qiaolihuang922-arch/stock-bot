@@ -4,41 +4,44 @@
 
 ## Current Task
 
-- task_id: `market-theme-evidence-structured-provider-v20-1-2`
-- task_name: `Post-cycle Review Gate After v20.1.2`
+- task_id: `telegram-holding-risk-tomorrow-plan-dedupe-v20-1-3`
+- task_name: `Telegram Holding Risk Tomorrow Plan Dedupe v20.1.3`
 - task_type: `development`
-- version_level: `none`
-- qa_level: `process`
+- version_level: `patch`
+- qa_level: `L1`
 - owner_status: `requested`
 - architect_status: `completed`
-- pm_status: `not_required`
-- tech_status: `not_required`
-- qa_status: `not_required`
+- pm_status: `task_ready`
+- tech_status: `changelog_ready`
+- qa_status: `qa_passed`
 - commit: `pushed`
 
 ## Current Result
 
 - CAO 前端：`http://127.0.0.1:5173/`
-- `v20.1.2` Market Theme Evidence Structured Provider 已於 commit `4e02637` 推送。
-- Owner 要求：每次流程跑完後，Architect 必須自動總結問題、補 agent 規則、補流程漏洞，避免同類問題重複發生。
-- 本輪為純流程補丁，不改產品代碼、不改策略、不改 DB、不跑 QA。
-- 已補 `AGENTS.md`：
-  - 新增 `Post-cycle Review Gate`。
-  - 每輪完成、阻塞、QA conditional / blocked、Tech runner 失敗、auto parser 失敗、commit / push 後，Architect 必須復盤。
-  - 復盤必須檢查根因、QA 是否攔住、Tech 是否回退既有契約、是否需要補 agent / runner / 流程規則。
-  - 若需要補規則，Architect 直接更新固定流程文件；不得只說「下次注意」。
-  - `DISPATCH.md` / `CURRENT_STATE.md` / `CLEANUP_PLAN.md` 必須記錄流程教訓與待補項。
-- 這條 gate 會用來防止：
-  - 手機報文同類誤讀反覆出現。
-  - 已修契約在下一輪被改回去。
-  - QA 阻塞原因沒有沉澱成 reusable guard。
-  - runner / worktree / 前端服務問題只靠口頭記憶。
+- Owner 指出 `v20.1.2` 報文中 `隔日計畫` 與 `持倉風控檢查` 重複：智原 / 緯創同一個明日未修復降級行動被兩個區塊重複描述。
+- PM 定義 `v20.1.3` tiny patch：同一檔同一風控 / 降級行動只能出現一次；`明日計畫` 只承載真正非重複待觸發事項。
+- Tech 已交付 `CHANGELOG.md`，QA 結論 `通過`。
+- 本輪實作：
+  - Telegram header / formatter `VERSION` 升為 `v20.1.3`。
+  - 移除獨立 `隔日計畫` 與舊 `format_next_day_plan()` helper。
+  - 持倉未修復 / 降級檢查只保留在 `持倉風控檢查`。
+  - `明日計畫` 只顯示非重複 pending items，例如 `技嘉｜待觸發加碼10`。
+  - 沒有非重複明日事項時，不輸出 `明日計畫 0`、`明日計畫：無新增下單` 或空明日計畫區塊。
+  - Summary 手機閱讀順序改為先持倉風控，再明日計畫。
+  - 未改策略 decision、持倉 action 判斷來源、DB、watchlist、market theme evidence provider、live Telegram / Supabase、replay/backfill。
+- QA 驗證：
+  - `tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py`：`64 passed, 21 warnings`。
+  - 補手機閱讀 fixture：risk_only 無明日計畫噪音；risk_plus_add 中持倉風控早於明日計畫 1，技嘉待觸發加碼保留。
+- Post-cycle review：
+  - QA 兩次 conditional pass 有效攔住殘留噪音：先攔下 `明日計畫 0 / 無新增下單`，再攔下 `明日計畫` 排在持倉風控之前。
+  - 本輪已把「空計畫 / 0 計數 / 同義區塊」納入測試 guard；暫不需新增 `AGENTS.md` 大規則，但後續報文任務需把空區塊也視為手機噪音。
 
 ## Next Action
 
-- 流程補丁已提交並推送。
+- Architect final review 已在主 repo 跑同組驗證，通過後提交並推送。
 - 推送後清理 CAO worktree，並確認 CAO API / 前端服務可用。
-- 下一輪產品 / 策略 / 證據鏈任務完成後，必須先跑 Post-cycle Review Gate 再 final response。
+- 後續報文任務如新增區塊，PM 必須定義空區塊 / 0 計數是否顯示；QA 必須檢查手機閱讀順序。
 
 ## Status Values
 

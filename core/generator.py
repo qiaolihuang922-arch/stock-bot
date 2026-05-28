@@ -52,7 +52,7 @@ from services.strategy_evidence import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.1.2"
+VERSION = "v20.1.3"
 
 EXECUTION_LEVELS = {
     "TAKE_PROFIT_50": "TP50",
@@ -3623,11 +3623,17 @@ def today_conclusion_text(holding_items, watch_items, market_mode, risk_level, r
     executed_count = len(executed_trade_items(holding_items, watch_items))
     tracking_count = unheld_tracking_count(funnel)
     holding_count = len(holding_items)
-    execution_label = "明日計畫" if report_phase not in (None, "盤中") else "交易執行"
+    intraday = report_phase in (None, "盤中")
+    execution_label = "交易執行" if intraday else "明日計畫"
+    no_new_entry_text = "交易執行：無新增下單" if intraday else "新倉：無有效進場"
 
     if pending_count:
-        base = f"{risk_level} {market_mode}；{execution_label} {pending_count} 項"
-        if holding_count:
+        base = f"{risk_level} {market_mode}"
+        if holding_count and not intraday:
+            base += f"；持倉風控檢查 {holding_count} 檔；{execution_label} {pending_count} 項"
+        else:
+            base += f"；{execution_label} {pending_count} 項"
+        if holding_count and intraday:
             base += f"；持倉風控檢查 {holding_count} 檔"
         if executed_count:
             base += f"；已執行 {executed_count} 項不重複"
@@ -3636,7 +3642,7 @@ def today_conclusion_text(holding_items, watch_items, market_mode, risk_level, r
         return f"{base}；未持倉無追蹤"
 
     if holding_count:
-        base = f"{risk_level} {market_mode}；{execution_label}：無新增下單；持倉風控檢查 {holding_count} 檔"
+        base = f"{risk_level} {market_mode}；{no_new_entry_text}；持倉風控檢查 {holding_count} 檔"
         if executed_count:
             base += f"；已執行 {executed_count} 項不重複"
         if tracking_count:
@@ -3644,9 +3650,9 @@ def today_conclusion_text(holding_items, watch_items, market_mode, risk_level, r
         return f"{base}；未持倉無追蹤"
 
     if tracking_count:
-        return f"{risk_level} {market_mode}；{execution_label}：無新增下單；未持倉 {tracking_count} 檔僅追蹤"
+        return f"{risk_level} {market_mode}；{no_new_entry_text}；未持倉 {tracking_count} 檔僅追蹤"
 
-    return f"{risk_level} {market_mode}；{execution_label}：無新增下單；未持倉無追蹤"
+    return f"{risk_level} {market_mode}；{no_new_entry_text}；未持倉無追蹤"
 
 
 def today_reason_text(watch_items, market_mode, report_phase=None):
@@ -3838,37 +3844,6 @@ def format_holding_control_checklist(holding_items, limit=5, report_phase=None):
     return lines
 
 
-def format_next_day_plan(holding_items, limit=5, report_phase=None):
-
-    candidates = []
-
-    for name, data in holding_items:
-        trigger = holding_tomorrow_trigger(name, data)
-        if "未修復" not in trigger:
-            continue
-        candidates.append((position_priority_rank(name, data), name))
-
-    if not candidates:
-        return []
-
-    candidates.sort()
-    if report_phase in (None, "盤中"):
-        lines = [
-            f"- 盤中觀察修復：{name}收盤未修復則列入隔日降級檢查"
-            for _rank, name in candidates[:limit]
-        ]
-    else:
-        lines = [
-            f"- 收盤未修復，列入明日降級檢查：{name}"
-            for _rank, name in candidates[:limit]
-        ]
-
-    if len(candidates) > limit:
-        lines.append(f"- 另有 {len(candidates) - limit} 檔未修復項目見詳情")
-
-    return lines
-
-
 def format_unheld_funnel(watch_items):
 
     funnel = build_unheld_funnel(watch_items)
@@ -3904,13 +3879,17 @@ def detail_index_text(holding_items, watch_items, report_phase=None):
     tracking_count = unheld_tracking_count(funnel)
     rejected = funnel["淘汰"]
     execution_label = "明日計畫" if report_phase not in (None, "盤中") else "交易執行"
+    parts = [f"📎 詳情索引：持倉 {len(holding_items)}"]
 
-    return (
-        f"📎 詳情索引：持倉 {len(holding_items)}"
-        f"｜{execution_label} {execution_count}"
-        f"｜未持倉追蹤 {tracking_count}"
-        f"｜淘汰 {len(rejected)}"
-    )
+    if report_phase in (None, "盤中") or execution_count:
+        parts.append(f"{execution_label} {execution_count}")
+
+    parts.extend([
+        f"未持倉追蹤 {tracking_count}",
+        f"淘汰 {len(rejected)}",
+    ])
+
+    return "｜".join(parts)
 
 
 def rejected_trace_line(watch_items):
@@ -4039,9 +4018,6 @@ def formatTelegramSummary(results_map, best, score, market_summary, now, positio
     else:
         lines.extend(["", "今日交易紀錄"])
         lines.append("無新增")
-        plan_count = len(pending_trade_items(holding_items, watch_items))
-        lines.extend(["", f"明日計畫 {plan_count}"])
-        lines.extend(format_execution_checklist(holding_items, watch_items, report_phase=report_phase))
 
     executed_lines = format_executed_checklist(holding_items, watch_items)
     if executed_lines:
@@ -4051,10 +4027,11 @@ def formatTelegramSummary(results_map, best, score, market_summary, now, positio
     lines.extend(["", "持倉風控檢查"])
     lines.extend(format_holding_control_checklist(holding_items, report_phase=report_phase))
 
-    next_day_plan = format_next_day_plan(holding_items, report_phase=report_phase)
-    if next_day_plan:
-        lines.extend(["", "隔日計畫"])
-        lines.extend(next_day_plan)
+    if report_phase != "盤中":
+        plan_count = len(pending_trade_items(holding_items, watch_items))
+        if plan_count:
+            lines.extend(["", f"明日計畫 {plan_count}"])
+            lines.extend(format_execution_checklist(holding_items, watch_items, report_phase=report_phase))
 
     lines.extend(["", "未持倉漏斗（非執行）："])
     lines.append(format_unheld_funnel(watch_items))
