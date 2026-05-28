@@ -4,40 +4,40 @@
 
 ## Current Task
 
-- task_id: `post-market-phase-message-consistency-v20-0-14`
-- task_name: `Post-market Phase Message Consistency v20.0.14`
+- task_id: `market-theme-evidence-v20-1-0-dry-run`
+- task_name: `Market Theme Evidence Dry-run v20.1.0`
 - task_type: `development`
-- version_level: `patch`
-- qa_level: `L1`
+- version_level: `minor`
+- qa_level: `L2`
 - owner_status: `requested`
-- architect_status: `qa_accepted`
+- architect_status: `conditional_acceptance`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
-- qa_status: `qa_passed`
+- qa_status: `conditional_pass`
 - commit: `pushed`
 
 ## Current Result
 
 - CAO 前端：`http://127.0.0.1:5173/`
-- Owner 要求修復最新 `v20.0.13` 報文檢查出的盤後 phase / 行動一致性問題。
-- 本輪實作為 `v20.0.14` patch：
-  - 盤後 summary 不再輸出 `今日盤中交易執行` / `不列入今日盤中交易執行`。
-  - 盤後改用 `今日交易紀錄`、`明日計畫`、`持倉風控檢查`。
-  - 持倉卡 `今日 無` 的待加碼不再被列為今日已執行，改列明日待觸發。
-  - 盤後不再輸出 `若收盤仍未修復`，改為收盤已知或明日檢查語意。
-  - 淘汰卡無產業證據時不再寫 `不代表看空產業`，改為中性 `未判斷產業多空`。
-  - `formatTelegramMessages()` 同一輪只決定一次 `report_phase`，並傳入 summary、卡片、index、reason 等 phase-sensitive helper，避免卡片盤中、summary 盤後的混合語意。
-  - 未改策略 decision、DB schema、watchlist、Supabase write、live Telegram、scheduler。
-- QA 結論：`通過`。
-  - formatter / notifier 驗證：`52 passed, 21 warnings`。
-  - QA 補反向 phase drift smoke，確認同一輪 messages 不會重讀不同 phase。
-  - 殘留風險：`price_label_for_source()` 仍屬行情 / 詳情標籤層即時 phase helper，非本輪 message list contract。
-- 需要建表 / schema / cache 的真正 evidence provider 尚未開始；進入該階段前必須再通知 Owner。
+- Owner 確認 v20.0.14 報文可接受，要求繼續證據鏈下一步。
+- 本輪實作為 `v20.1.0` dry-run market theme evidence contract：
+  - 新增 `core/market_theme_evidence.py`，提供 `build_market_theme_evidence()` 與 `format_market_theme_summary_lines()`。
+  - `results_map`、`watchlist_groups`、formatter report input 統一視為 `report_derived` source family，不能互相湊成 confirmed。
+  - confirmed 只計入完整 structured source，需至少兩個不同 source family 且具備 `as_of/freshness/confidence/supports_claims/limitations`。
+  - report-derived only 在 Telegram 顯示 `weak｜來源不足｜只追蹤`，不得輸出 confirmed 或 AI/電子供應鏈偏多。
+  - confirmed market theme 只影響市場主題顯示，不放寬個股買點；買點未成立仍是不可買 / 無有效進場。
+  - 使用者可見 header / formatter `VERSION` 升為 `v20.1.0`。
+  - 未新增 DB table / migration / cache，未改 DB write path、watchlist、strategy decision、scheduler、live Telegram、Supabase write。
+- QA 結論：`conditional pass`。
+  - 驗證 `tests/test_market_theme_evidence.py tests/test_generator_report.py tests/test_notifier.py`：`59 passed, 21 warnings`。
+  - 條件：吸收時必須納入新檔 `core/market_theme_evidence.py` 與 `tests/test_market_theme_evidence.py`；Architect 已納入。
+  - production `generate_report()` 尚未接 structured provider，預設最多 weak/absent；若要 production confirmed 或歷史追溯，需後續 provider / schema 任務。
+- 需要建表 / schema / cache 的真正持久化 evidence provider 尚未開始；進入該階段前必須再通知 Owner。
 
 ## Next Action
 
 - 本輪限定 diff 已通過 Architect final review，提交並推送。
-- 後續如要處理行情 / 詳情標籤層 phase drift 或真正 `market_theme_evidence` provider / payload / schema，另開任務；若需要建表，先通知 Owner。
+- 後續如要接 production structured provider / evidence cache / DB schema，另開任務；若需要建表，先通知 Owner。
 
 ## Status Values
 

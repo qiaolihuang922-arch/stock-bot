@@ -77,6 +77,11 @@
   - 修復盤後 summary / index / reason / unheld card 的 phase 語意一致性。
   - `formatTelegramMessages()` 同輪固定一次 `report_phase`，避免卡片盤中、summary 盤後。
   - QA 結論為 `通過`；`tests/test_generator_report.py tests/test_notifier.py` 為 `52 passed, 21 warnings`。
+- v20.1.0 Market Theme Evidence Dry-run 已形成限定可吸收候選：
+  - 新增 dry-run helper 與 tests，不建表、不寫庫。
+  - report-derived only 降級為 weak，不可 confirmed。
+  - structured confirmed 需兩類完整 source families。
+  - QA 結論為 `conditional pass`；吸收條件是納入新檔 `core/market_theme_evidence.py` 與 `tests/test_market_theme_evidence.py`。
 - push 後仍需壓縮：
   - `DISPATCH.md`
   - `TASK.md`
@@ -100,6 +105,7 @@
 - 後續所有報文任務需按 `AGENTS.md` 的手機 Telegram 報文硬規則驗收，不得只證明數字可追溯。
 - 若 Owner 仍覺得查詢慢，下一步應開 performance measurement 任務，量測 production 實際秒數，不再只看 query contract。
 - 若後續 Owner 發現完整詳情或行情標籤也有 phase drift，再另開 `price-label-phase-consistency` 任務；本輪只收斂 Telegram message list contract。
+- 若要讓 production 報文真正產生 confirmed market theme，需另開 structured provider / cache 任務；若要保留歷史或跨日追溯，進入 DB schema / 建表決策點，必須先通知 Owner。
 - 需要重跑一次真正的清理審計：
   - `core/holdings.py`
   - `docs/v19_*`：已刪除本地 SQL 草案。

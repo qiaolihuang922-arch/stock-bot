@@ -33,6 +33,10 @@ from services.position_store import (
     load_today_position_events
 )
 from core.watchlist import STOCKS
+from core.market_theme_evidence import (
+    build_market_theme_evidence,
+    format_market_theme_summary_lines
+)
 
 from services.signal_store import record_daily_signals
 from services.daily_snapshot_store import (
@@ -47,7 +51,7 @@ from services.strategy_evidence import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.0.14"
+VERSION = "v20.1.0"
 
 EXECUTION_LEVELS = {
     "TAKE_PROFIT_50": "TP50",
@@ -3909,16 +3913,28 @@ def rejected_trace_line(watch_items):
 
 def ai_supply_chain_mainline_supported(market_summary):
 
-    summary_text = str(market_summary or "")
-    has_theme_keyword = any(
-        keyword in summary_text
-        for keyword in ["AI", "人工智慧", "電子供應鏈"]
+    if isinstance(market_summary, dict):
+        evidence = market_summary.get("market_theme_evidence") or market_summary
+        return bool(
+            evidence.get("confirmed")
+            and evidence.get("theme_direction") == "bullish"
+        )
+
+    return False
+
+
+def market_theme_summary_evidence(results_map, market_summary):
+
+    if isinstance(market_summary, dict):
+        evidence = market_summary.get("market_theme_evidence")
+        if isinstance(evidence, dict):
+            return evidence
+        return build_market_theme_evidence(formatter_report_input=market_summary)
+
+    return build_market_theme_evidence(
+        results_map=results_map,
+        formatter_report_input=market_summary,
     )
-    has_explicit_evidence = any(
-        token in summary_text
-        for token in ["market_theme_evidence", "source:", "來源:", "confirmed", "證據確認"]
-    )
-    return has_theme_keyword and has_explicit_evidence
 
 
 def market_execution_bridge_lines(holding_items, watch_items, market_mode, market_summary=None):
@@ -3986,6 +4002,9 @@ def formatTelegramSummary(results_map, best, score, market_summary, now, positio
     lines.extend([
         f"📊 市場：{market_mode}｜{risk_level}",
     ])
+    lines.extend(format_market_theme_summary_lines(
+        market_theme_summary_evidence(results_map, market_summary)
+    ))
 
     if report_phase == "盤中":
         lines.append(source_summary_text(results_map))

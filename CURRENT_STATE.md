@@ -122,6 +122,22 @@
   - 未改 DB schema / payload、watchlist、Supabase write、live Telegram、scheduler。
 - QA 結論：`通過`；驗證 `tests/test_generator_report.py tests/test_notifier.py` 為 `52 passed, 21 warnings`，並補反向 phase drift smoke。
 
+## Market Theme Evidence Dry-run v20.1.0 已完成
+
+- Owner 確認可繼續證據鏈下一步；本輪完成不建表的 dry-run market theme evidence contract。
+- 已完成變更：
+  - 新增 `core/market_theme_evidence.py`，提供 `build_market_theme_evidence()` 與 `format_market_theme_summary_lines()`。
+  - `results_map`、`watchlist_groups`、formatter report input 被視為同一 `report_derived` source family，不能互相湊成 confirmed。
+  - confirmed 需至少兩類完整 structured sources，且每類具備 `as_of/freshness/confidence/supports_claims/limitations`。
+  - Telegram summary 新增市場主題 evidence 行；report-derived only 顯示 `weak｜來源不足｜只追蹤`，不輸出 confirmed 或 AI/電子供應鏈偏多。
+  - confirmed market theme 不改個股交易行動；買點未成立仍顯示不可買 / 無有效進場。
+  - 使用者可見版本升為 `v20.1.0`。
+- 未做：
+  - 未新增 DB table / schema / cache。
+  - 未接 production structured provider；`generate_report()` 預設最多 weak/absent。
+  - 未改策略 decision、watchlist、DB write path、live Telegram、Supabase write、scheduler。
+- QA 結論：`conditional pass`；驗證 `tests/test_market_theme_evidence.py tests/test_generator_report.py tests/test_notifier.py` 為 `59 passed, 21 warnings`。條件是吸收時必須納入新檔 `core/market_theme_evidence.py` 與 `tests/test_market_theme_evidence.py`，本地候選已納入。
+
 ## Post Trade Reduce Cooldown Strategy Fix 已完成本地修復
 
 - 修復 Owner 指出的持倉策略衝突：

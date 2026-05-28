@@ -2,58 +2,62 @@
 
 ## 測試範圍
 
-- 依據：`TASK.md`、`CHANGELOG.md`、git diff、`core/generator.py` 局部 diff、`tests/test_generator_report.py`、`tests/test_notifier.py`。
-- 本輪不是清理 / 瘦身 / refactor 任務，path / claim / evidence / risk / action 證據表不適用。
-- 可吸收 diff 僅限本輪任務相關：
-  - `core/generator.py`
-  - `tests/test_generator_report.py`
-  - `tests/test_notifier.py`
-  - `CHANGELOG.md`
-- worktree 殘留：git status 只顯示上述 4 個 modified tracked files，未見其他 unrelated tracked diff；Architect 仍只吸收上述任務 diff。
-- 已跑測試：
-  - `arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py tests/test_notifier.py`
-  - 結果：`52 passed, 21 warnings`
-- QA 額外 smoke：
-  - 補反向 phase drift：第一次 `get_market_phase()` 回傳 `盤後`，後續若被錯誤重讀會變 `盤中`。
-  - 結果：`phase_mock.call_count == 1`，summary / 未持倉卡均維持盤後語意，未出現盤中交易執行或可買卡。
+- 依據：`TASK.md`、`CHANGELOG.md`、git status、git diff、`core/generator.py`、`core/market_theme_evidence.py`、`tests/test_market_theme_evidence.py`、`tests/test_generator_report.py`、`tests/test_notifier.py`。
+- 實測命令：
+  - `TMPDIR=.qa_tmp PYTHONPATH=.qa_tmp:. PYTHONDONTWRITEBYTECODE=1 arch -arm64 .venv/bin/python -m pytest -p no:cacheprovider tests/test_market_theme_evidence.py tests/test_generator_report.py tests/test_notifier.py`
+  - 結果：`59 passed, 21 warnings`
+- QA 補充反證：
+  - 用 dict 型 `market_summary`，內含 `strategy_evidence_summary: market_theme_evidence:confirmed｜AI 主線偏多` 與未成立買點，直接走 `formatTelegramMessages()`。
+  - 結果：summary 第一屏顯示 `v20.1.0`、`weak｜來源不足｜只追蹤`、不可買，且未出現 `confirmed`、`AI/電子供應鏈偏多`、今日可買。
 
 ## 關聯風險掃描
 
-- `formatTelegramMessages()`：未傳入 `report_phase` 時只讀一次 `get_market_phase()`，並傳入未持倉卡與 summary；符合 TASK。
-- `formatTelegramSummary()`：由 message list 路徑傳入 `report_phase` 時不重讀 phase；直接呼叫未傳入時仍自行讀一次，屬 optional contract，與 `CHANGELOG.md` 一致。
-- phase-sensitive helpers：`today_conclusion_text()`、`today_reason_text()`、`format_execution_checklist()`、`detail_index_text()` 已接收 `report_phase`。
-- notifier 直接消費者：`tests/test_notifier.py` 驗證最後一則 summary header 仍保留 `v20.0.14`，`send_many()` 介面未改。
-- `generate_report()`：同輪固定一次 `report_phase` 並傳入 DB/evidence 記錄參數與 `formatTelegramMessages()`；未發現 live write、新 schema 或策略 decision diff。
-- `price_label_for_source()` 仍即時讀 phase；`CHANGELOG.md` 已列為殘留風險。本輪 TASK 目標是 Telegram message list phase drift，不把行情標籤層擴大為阻塞。
+- 直接消費者已檢查：
+  - `formatTelegramSummary()`：會在市場狀態後插入 market theme lines。
+  - `formatTelegramMessages()`：summary 仍是最後一則 message，符合 Owner 手機先看最後 summary 的路徑。
+  - `services/notifier.py::send_many()`：payload shape 未改，測試確認最後一則 summary 原樣送出。
+  - DB / migration：本輪未新增 `.sql` 或 migration 檔。
+  - strategy / watchlist / scheduler：本輪 diff 未觸及 `services/analysis.py`、watchlist、scheduler。
+- 可吸收候選必須包含：
+  - tracked 修改：`core/generator.py`、`tests/test_generator_report.py`、`tests/test_notifier.py`、`CHANGELOG.md`。
+  - 新檔：`core/market_theme_evidence.py`、`tests/test_market_theme_evidence.py`。
+- 若只吸收 tracked diff，`core/generator.py` 會 import 不存在的 module；Architect 已將兩個新檔納入同一變更集。
 
 ## 跨區塊語意一致性
 
 - Owner 手機閱讀順序檢查：
-  - 最後一則 summary header 顯示單一 phase 與 `v20.0.14`。
-  - 盤中 fixture：summary 出現 `今日盤中交易執行`，未持倉卡出現 `可買｜10%倉` 與 `盤中觸發`，未混入 `明日計畫`。
-  - 盤後 fixture：summary 出現 `今日交易紀錄 / 無新增` 與 `明日計畫 1`，未持倉卡出現 `明日追蹤` 與 `明日觸發`，未混入 `今日盤中交易執行`、`交易執行 1`、`分批執行`。
-- message list 順序仍是持倉、未持倉、summary；未超出本輪結構契約。
+  - Header 為 `【05/28 盤中｜v20.1.0】`，符合版本契約。
+  - 市場主題區在 source summary 與今日結論前出現。
+  - report-derived only 顯示：
+    - `市場主題：AI/電子供應鏈`
+    - `狀態：weak｜來源不足｜只追蹤`
+    - `行動：不可買，等 structured evidence 補強`
+  - 後續今日結論、主線、執行、新倉仍維持 `無有效進場 / 不追高 / 僅追蹤` 語意。
+  - confirmed 主題但個股買點未成立的測試覆蓋顯示 market theme confirmed，但未把個股列成今日可買。
 
 ## 使用者誤讀風險
 
-- 盤後路徑已避免把未持倉有效買點寫成今日可買或分批執行，降低 Owner 誤判「今天要買」的風險。
-- Summary 的「今日結論」標籤下仍會包含「明日計畫 N」，但同段下方有 `今日交易紀錄 / 無新增` 與 `明日計畫` 區塊，未達阻塞。
-- 未發現同一批 Telegram messages 中 summary 是盤後、卡片是盤中，或反向混用的可見輸出問題。
+- 已反證上一輪阻塞風險：legacy 字串或 report-derived input 不能讓 Owner 誤讀為 confirmed bullish。
+- 殘留風險：
+  - 這一輪完成的是 dry-run contract 與 formatter 呈現，production `generate_report()` 尚未接 structured provider。
+  - 真實預設路徑目前通常只會 absent / weak，不會自動 confirmed。
+  - 若後續要 production confirmed，需要接 structured market_state / strategy evidence provider；若要持久化歷史，會進入建表決策點。
 
 ## 質疑與反證
 
-- PM 是否漏需求：TASK 有列直接消費者、輸出契約、手機閱讀路徑與驗收案例，未缺阻塞欄位。
-- Tech 是否漏同步：diff 顯示 summary、未持倉卡、execution/checklist/index/reason helper 與 `generate_report()` 都同步 `report_phase`；未見只修測試。
-- 測試是否能證明沒有破壞直接消費者：除 Tech 指定測試外，QA 補了反向 drift smoke，覆蓋「第一次盤後、後續盤中」的負面路徑。
-- TASK / CHANGELOG / diff 是否一致：一致。版本契約為沿用 `v20.0.14`，未升到新版本。
-- 主動風險：`price_label_for_source()` 仍可在完整詳情或行情標籤層即時讀 phase；本輪 scope 沒有要求重構行情來源，且 `generate_report()` 的主 Telegram header / message list 已固定，不列阻塞。
+- PM 是否漏需求：TASK 已列 source family contract、Telegram summary contract、版本契約、直接消費者與負面 fixtures，足以驗收。
+- Tech 是否漏同步：formatter、notifier 測試與 header 已同步；新檔已被列為必須吸收範圍。
+- 測試是否能證明沒有破壞直接消費者：helper / formatter / notifier 測試通過；QA 另補 dict 型 `market_summary` 反證，避免 legacy confirmed 字串藏在 dict 中造成誤判。
+- QA 主動找到指定清單之外風險：git diff --stat 遺漏 untracked 新檔，已要求 Architect 吸收時納入。
 
 ## 未測項目
 
-- 未跑 full pytest、replay/backfill dry-run、DB payload 實寫；本輪 TASK 禁止 live write / 正式 backfill。
-- 未測 live Telegram delivery；符合禁止事項。
-- 未全面檢查行情來源與 `price_label_for_source()` 的 phase label drift；`CHANGELOG.md` 已列殘留風險，非本輪直接 message list contract。
+- 未跑 full pytest：本輪 QA 分級為 L2，且 TASK 限定 helper / formatter / notifier 相關驗證。
+- 未跑 replay/backfill dry-run、live Telegram、live Supabase write：TASK 明確禁止或非目標。
+- 未驗證真正 structured provider 接線：`CHANGELOG.md` 已聲明 production 尚未接線，本輪只驗 helper contract 與 formatter 呈現。
 
 ## QA 結論
 
-通過
+conditional pass
+
+功能與使用者可見語意驗證通過；條件是 Architect 必須把 `core/market_theme_evidence.py` 與 `tests/test_market_theme_evidence.py` 兩個新檔納入候選 diff。Architect 已按此條件吸收。
