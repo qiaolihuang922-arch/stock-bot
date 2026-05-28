@@ -4,44 +4,36 @@
 
 ## Current Task
 
-- task_id: `telegram-holding-risk-tomorrow-plan-dedupe-v20-1-3`
-- task_name: `Telegram Holding Risk Tomorrow Plan Dedupe v20.1.3`
-- task_type: `development`
-- version_level: `patch`
-- qa_level: `L1`
+- task_id: `workflow-full-audit-and-compression-20260528`
+- task_name: `Workflow Full Audit and Compression`
+- task_type: `process`
+- version_level: `none`
+- qa_level: `process`
 - owner_status: `requested`
 - architect_status: `completed`
-- pm_status: `task_ready`
-- tech_status: `changelog_ready`
-- qa_status: `qa_passed`
-- commit: `pushed`
+- pm_status: `not_required`
+- tech_status: `not_required`
+- qa_status: `not_required`
+- commit: `pending`
 
 ## Current Result
 
-- CAO 前端：`http://127.0.0.1:5173/`
-- Owner 指出 `v20.1.2` 報文中 `隔日計畫` 與 `持倉風控檢查` 重複：智原 / 緯創同一個明日未修復降級行動被兩個區塊重複描述。
-- PM 定義 `v20.1.3` tiny patch：同一檔同一風控 / 降級行動只能出現一次；`明日計畫` 只承載真正非重複待觸發事項。
-- Tech 已交付 `CHANGELOG.md`，QA 結論 `通過`。
-- 本輪實作：
-  - Telegram header / formatter `VERSION` 升為 `v20.1.3`。
-  - 移除獨立 `隔日計畫` 與舊 `format_next_day_plan()` helper。
-  - 持倉未修復 / 降級檢查只保留在 `持倉風控檢查`。
-  - `明日計畫` 只顯示非重複 pending items，例如 `技嘉｜待觸發加碼10`。
-  - 沒有非重複明日事項時，不輸出 `明日計畫 0`、`明日計畫：無新增下單` 或空明日計畫區塊。
-  - Summary 手機閱讀順序改為先持倉風控，再明日計畫。
-  - 未改策略 decision、持倉 action 判斷來源、DB、watchlist、market theme evidence provider、live Telegram / Supabase、replay/backfill。
-- QA 驗證：
-  - `tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py`：`64 passed, 21 warnings`。
-  - 補手機閱讀 fixture：risk_only 無明日計畫噪音；risk_plus_add 中持倉風控早於明日計畫 1，技嘉待觸發加碼保留。
-- Post-cycle review：
-  - QA 兩次 conditional pass 有效攔住殘留噪音：先攔下 `明日計畫 0 / 無新增下單`，再攔下 `明日計畫` 排在持倉風控之前。
-  - 已補 `AGENTS.md` 手機 Telegram 報文硬規則：空區塊 / 0 計數 / no-op 文案也算手機噪音；同義區塊不得重複同一行動；持倉風控優先於待觸發明日事項。
+- 本輪只做流程治理與固定 Markdown 壓縮，不改產品代碼、不改策略、不改測試。
+- Owner 指出：不能每次把單點問題硬塞進 `AGENTS.md`，應該抽象成 agent / 流程方向，並清除冗餘內容。
+- Architect 已確認身份為總控；本輪允許直接改 `AGENTS.md`、`DISPATCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`RESEARCH.md`，不得手寫 `TASK.md` / `CHANGELOG.md` / `QA_REPORT.md`，也不得碰產品代碼。
+- 本輪目標：
+  - 壓縮 `CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`RESEARCH.md`，移除舊版本流水與終端過程。
+  - 補強 `AGENTS.md` 的規則治理：先分類根因，再決定是否升級為硬規則；一次性事故不得直接塞進硬規則。
+  - 保留固定 8 份 Markdown，不刪除。
+- 已完成初步檢查：
+  - 文件層驗證 `git diff --check` 通過。
+  - 本輪 diff 只包含 `AGENTS.md`、`DISPATCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`RESEARCH.md`。
+  - 未修改產品代碼、測試、策略、DB 或 runner。
 
 ## Next Action
 
-- Architect final review 已在主 repo 跑同組驗證，通過後提交並推送。
-- 推送後清理 CAO worktree，並確認 CAO API / 前端服務可用。
-- 後續報文任務如新增區塊，PM 必須定義空區塊 / 0 計數是否顯示；未定義則預設不顯示。QA 必須檢查手機閱讀順序。
+- commit / push。
+- 推送後執行 CAO worktree cleanup 與服務確認。
 
 ## Status Values
 
@@ -57,7 +49,6 @@
 - `blocked`: 該角色遇到阻塞，需 Architect 或 Owner 判斷。
 - `completed`: 非開發類任務已由負責角色完成。
 - `not_required`: 本輪不需要該角色處理。
-- `qa_accepted`: Architect 已吸收 QA 結論並更新狀態。
 - `pushed`: Architect 已提交並推送。
 - `research_dispatched`: Architect 已建立研究任務。
 - `research_ready`: 該角色已提交研究摘要。
@@ -83,7 +74,7 @@ Owner 對 Architect：
 你是 Architect / 總控，不是 PM、Tech、QA。先讀 AGENTS.md 和 DISPATCH.md；若是產品 bug / 顯示 bug / feature request，只能先更新 DISPATCH.md 分派 PM，不得直接寫 TASK.md、不得搜尋或修改產品代碼，除非 Owner 明確說你直接代該角色。
 ```
 
-Architect 可用 CAO online research：
+Architect 可用 CAO：
 
 ```text
 研究：/Users/liveroom/stock-bot-agent-context/run_architect_task.sh research "<研究問題>"
@@ -92,9 +83,8 @@ Architect 可用 CAO online research：
 
 CAO API：/Users/liveroom/.local/bin/cao-server --host 127.0.0.1 --port 9889
 CAO 中文前端：cd /Users/liveroom/.local/share/cao-web-zh/web && npm run dev -- --host 127.0.0.1 --port 5173
-分配或啟動 CAO agents 後，Architect 必須回覆 Owner 前端地址：http://127.0.0.1:5173/
-
-底層 run_project_research.sh / run_tech_plan.sh / run_auto_dev_cycle.sh / run_tech_write.sh / run_qa_code.sh 只作為內部工具，不作為 Owner 日常入口。
+CAO 服務確認：/Users/liveroom/stock-bot-agent-context/ensure_cao_services.sh
+分配或啟動 CAO agents 後，Architect 必須先確認服務已啟動，再回覆 Owner 前端地址：http://127.0.0.1:5173/
 ```
 
 Owner 對 PM：

@@ -90,9 +90,21 @@ Architect 必須檢查並記錄：
 - 本輪問題根因：需求不清、PM 漏契約、Tech 漏同步、QA 漏反證、runner / worktree 問題、版本契約、手機閱讀、證據鏈、或流程文件不足。
 - QA 是否真的攔住風險；若 QA 沒攔住，需補 QA 規則。
 - Tech 是否把既有已修契約改回去；若有，需補禁止回退 guard。
-- 是否有可抽象成通用規則的失誤；若有，直接更新 `AGENTS.md`、`DISPATCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`。
+- 是否有可抽象成通用規則的失誤；若有，按「規則治理」分類後更新 `AGENTS.md`、`DISPATCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`。
 - 是否需要補 runner / agent prompt；若需要，記入 `CLEANUP_PLAN.md`，需要改腳本時另開流程任務。
 - 是否需要新任務；若是產品 / 策略 / 顯示 / feature，仍需先分派 PM，不得用復盤名義直接改產品代碼。
+
+規則治理：
+
+- 不得把每次事故直接追加成硬規則。Architect 必須先分類：
+  - `one_off`：單次上下文或單一任務問題，只寫入 `CURRENT_STATE.md` 或 `CLEANUP_PLAN.md` 短摘要。
+  - `repeated_pattern`：同類問題重複發生，合併到既有規則或任務卡契約。
+  - `high_risk_invariant`：會造成越權、錯單、live 副作用、版本回退、手機誤讀、資料寫入風險，可升級為 `AGENTS.md` 硬規則。
+  - `runner_gap`：應補 runner / agent prompt / worktree gate，不用文件文案硬撐。
+  - `doc_bloat`：刪除或壓縮過期流水。
+- 新規則必須優先改寫或合併既有段落；只有沒有合適位置時才新增小節。
+- 若新增硬規則讓文件變長，必須同時刪除或壓縮已被取代的舊描述，避免固定文件膨脹。
+- `AGENTS.md` 只保存跨任務不變的行為約束；任務案例、舊版本流水、一次性提醒不得長期留在 `AGENTS.md`。
 
 收口輸出要求：
 
@@ -107,6 +119,7 @@ Architect 必須檢查並記錄：
 - QA 曾阻塞但 Architect 沒把阻塞原因轉成可重用 guard。
 - runner / worktree / 前端服務問題重複發生但沒有寫入流程待補。
 - 已修契約被新任務回退，卻沒有把「不得回退既有契約」寫進下一輪任務指令或流程文件。
+- 把 `one_off` 事故直接塞進硬規則，或新增規則時沒有清理被取代的冗餘描述。
 
 ### 2. 代碼規則
 
@@ -651,3 +664,4 @@ Runner hygiene gates：
 - `CURRENT_STATE.md`：每個版本只保留高信號摘要，不貼完整報文、不貼完整 diff。
 - `CLEANUP_PLAN.md`：只保留待處理項與清理規則，不保留已完成流水帳。
 - 壓縮不得刪除固定 8 份 Markdown 文件，只能改寫內容。
+- 壓縮時必須檢查 `AGENTS.md` 是否有案例化、重複化或已被新規則取代的文字；能合併就合併，不能確認用途就先記入 `CLEANUP_PLAN.md`，不得靠文件膨脹維持記憶。
