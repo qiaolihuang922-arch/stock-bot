@@ -4,55 +4,45 @@
 
 ## Current Task
 
-- task_id: `cao-local-deployment-assets-20260528`
-- task_name: `CAO Local Deployment Assets`
-- task_type: `process`
-- version_level: `none`
-- qa_level: `process`
+- task_id: `market-theme-evidence-production-pm-20260528`
+- task_name: `Market Theme Evidence Production PM Definition`
+- task_type: `feature`
+- version_level: `minor`
+- qa_level: `L3`
 - owner_status: `requested`
-- architect_status: `completed`
-- pm_status: `not_required`
-- tech_status: `not_required`
-- qa_status: `not_required`
-- commit: `pushed`
+- architect_status: `blocked_reviewed`
+- pm_status: `task_ready`
+- tech_status: `blocked`
+- qa_status: `waiting_tech`
+- commit: `pending`
 
 ## Current Result
 
-- 本輪只做 CAO 本機部署資產整理，不改產品代碼、不改策略、不改測試。
-- Owner 指出：環境可下載的只需記錄來源與重部署流程；不可下載且屬於手寫代碼 / 規則的內容要放入 repo。
-- 已在 repo 內保存可遷移 runner：
-  - `tools/cao_agent/run_auto_dev_cycle.sh`：PM 必須先判斷任務尺寸，tiny patch 只允許單一主 bug、單一輸出契約、1-2 個驗收案例，並寫停止條件。
-  - `tools/cao_agent/run_tech_write.sh`：Tech 必須先寫任務尺寸、最小改動策略、旁支待辦；禁止順手重構、測試過擬合、回退既有契約。
-  - `tools/cao_agent/run_qa_code.sh`：QA 必須先寫風險預算與停止條件；驗證範圍需匹配任務尺寸，tiny patch 不得無理由擴成全量矩陣。
-  - `tools/cao_agent/run_tech_plan.sh`：規劃代理必須輸出任務尺寸、最小影響面與不應觸碰模組。
-  - `tools/cao_agent/env.sh`：集中 repo-relative path、CAO binary、context、outputs、worktree 設定。
-  - `tools/cao_agent/setup_agent_worktree.sh`：新電腦初始化隔離 worktree。
-  - `tools/cao_agent/README.md`：部署、環境變數、日常入口與安全邊界。
-  - `tools/cao_agent/bin/codex` 與 `sandbox/codex_no_network.sb`：可遷移 sandbox wrapper，不再寫死 `/Users/liveroom`。
-- 本輪新增並已推送：
-  - `tools/cao_agent/profiles/stock_*.md.template`：PM / Tech / QA / online research 等 stock agent profile 模板，避免新機器缺角色卡。
-  - `tools/cao_agent/install_agent_profiles.sh`：把 profile 模板按本機路徑渲染到 CAO profile 目錄。
-  - `tools/cao_agent/bootstrap_local.sh`：檢查可下載依賴、安裝 profiles、建立 tech worktree。
-  - `tools/cao_agent/DEPLOYMENT.md`：記錄 CAO / uv / tmux / Node / Codex app / CAO web UI 來源與重部署步驟。
-- 大型外部資產處理：
-  - 本機中文 CAO UI 位於 `$HOME/.local/share/cao-web-zh`，是 `awslabs/cli-agent-orchestrator` checkout 上的本地修改，約 186MB。
-  - 不直接整包塞入 `stock-bot-main`；已在部署文件記錄來源與 `CAO_WEB_DIR` 覆蓋方式。若中文化需長期固定，另開任務抽最小中文 patch 或維護獨立 fork。
-- 關閉對話後的接力方式：
-  - 新對話先讀 `AGENTS.md`、`DISPATCH.md`、`CURRENT_STATE.md`。
-  - 本輪 runner 腳本已納入 repo 的 `tools/cao_agent/`，重新部署到其他電腦時會隨 repo 一起取得。
-  - 若要重新核對 runner，直接讀 `tools/cao_agent/README.md` 與相關腳本。
-- 已驗證：
-  - Runner shell syntax：`bash -n tools/cao_agent/*.sh tools/cao_agent/bin/codex` 通過。
-  - 本機 bootstrap：`tools/cao_agent/bootstrap_local.sh` 通過，已確認 git / tmux / npm / uv / Codex app / CAO CLI / CAO server / CAO MCP server / CAO web UI。
-  - Profile render：`tools/cao_agent/install_agent_profiles.sh` 通過，已渲染到本機 CAO profile 目錄。
-  - Repo 內 `tools/cao_agent/setup_agent_worktree.sh` 可執行並能定位 repo、context、worktree。
-  - Repo 內 `tools/cao_agent/ensure_cao_services.sh` 可確認 CAO API / UI。
-  - Repo 文件 diff：`git diff --check` 通過。
+- Owner 要求開始證據鏈下一步。
+- 當前只進入 PM 定義階段，不直接改產品代碼、不建表、不做 live Supabase write、不做正式 backfill、不做 live Telegram。
+- PM 必須定義：
+  - production confirmed 需要哪些 runtime sources。
+  - source freshness、cache / schema 邊界、payload contract。
+  - 什麼情況需要先通知 Owner 才能建表 / cache / external provider。
+  - evidence 如何進 Telegram 報文，但不得改策略 decision 或放寬買點。
+  - 驗收條件與 QA L3 範圍。
+- CAO 服務已確認：
+  - API: `http://127.0.0.1:9889/`
+  - UI: `http://127.0.0.1:5173/`
+- PM 已交付 `TASK.md`，Architect 已檢查：
+  - `# TASK:` 標題存在。
+  - 已列直接消費者、輸出契約、版本契約、approval gates、阻塞條件。
+  - 明確禁止本輪建表、live write、正式 backfill、live Telegram。
+- Tech runner 狀態：
+  - 第一輪 Tech 在隔離 worktree 產生候選 diff，局部測試一度通過，但在重寫 `CHANGELOG.md` 時超時退出。
+  - 第二輪收口仍未產生有效輸出，`CHANGELOG.md` 仍是舊任務內容。
+  - Architect 拒收本輪 Tech 交付：不進 QA、不合併產品 diff、不推送產品變更。
+  - 主 repo 只保留 PM 任務卡與本阻塞狀態；隔離 worktree 候選 diff 待清理或重跑。
 
 ## Next Action
 
-- 等待 Owner 下一個需求。
-- 若下次需要本機重部署，先讀 `tools/cao_agent/DEPLOYMENT.md`，再跑 `tools/cao_agent/bootstrap_local.sh`。
+- 先修 Tech runner / agent 收口問題，或重跑 Tech 但必須取得正確 `# CHANGELOG:`。
+- 在 Tech 交付合格前，不進 QA、不合併候選 diff。
 
 ## Status Values
 

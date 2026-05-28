@@ -1,216 +1,259 @@
-# TASK: Telegram Holding Risk / Tomorrow Plan Noise Reduction v20.1.3
+# TASK: Market Theme Evidence Production Confirmed
 
 ## 任務狀態
 
-- task_id: telegram-holding-risk-tomorrow-plan-dedupe-v20-1-3
-- 任務類型: tiny_patch
-- 狀態: ready
-- 版本建議: patch，使用者可見 Telegram 報文變更，版本升為 v20.1.3
-- QA 分級建議: L1
-- 理由: 只改 Telegram formatter / tests，不改策略 decision、資料來源、DB payload 或排程。
-- L1 必須包含 formatter snapshot、接近真實手機長報文 fixture、Telegram message list / notifier 直接消費者 smoke、手機閱讀順序檢查。
-- 不升 L2，除非 Tech 實作碰到策略 action、持倉 decision 來源、payload shape 或非 formatter 公用契約。
+- task_id: market-theme-evidence-production-pm-20260528
+- 任務類型: feature
+- 狀態: ready_for_tech
+- 版本建議: minor
+- QA 分級建議: L3
+- 建議使用者可見版本: v20.2.0
+- 任務目標: 定義「市場 / 題材證據鏈 production confirmed」的產品需求、輸出契約與安全邊界；本輪只允許 dry-run / runtime evidence 接入與報文呈現，不要求建表、不做 live write。
 
 ## Owner 問題
 
-Owner 在 v20.1.2 Telegram 報文中看到同一檔持倉的同一個降級 / 風控行動跨區塊重複：
+Owner 要解決的是：目前 v20.1.x 已有 dry-run helper 與 structured provider adapter，但還不能真正稱為 production confirmed，因為缺少第二類 production runtime source 來佐證市場 / 題材判斷。
 
-- 持倉風控檢查 已寫：智原 / 緯創 明日未修復降級
-- 隔日計畫 又寫：收盤未修復，列入明日降級檢查
-
-手機閱讀時這兩段表達同一個行動，造成噪音，且讓 隔日計畫 看起來像沒有提供新資訊。
-
-本輪要降低 Telegram 手機報文噪音：同一檔同一風控 / 降級行動只能出現一次；明日相關區塊只保留真正不同於風控檢查的待觸發事項。
+本輪要讓 Telegram 報文可以在有足夠 runtime evidence 時顯示「confirmed」等級，並在證據不足、過期、混雜或來源缺失時自動降級，避免無證據寫出市場主線、AI / 電子供應鏈偏多、或類似可買暗示。
 
 ## 使用者可見結果
 
-Owner 手機打開 Telegram 後，閱讀順序應是：
+Owner 在 Telegram 報文手機第一屏或接近第一屏位置，應看到一段短而可追溯的市場 / 題材證據區塊：
 
-1. Header 顯示 v20.1.3
-2. Summary 先看今日結論 / 新倉是否可買
-3. 再看今日交易紀錄或已執行項
-4. 再看 持倉風控檢查
-- 智原 / 緯創這類「未修復降級」只在這裡出現一次
-5. 最後才看 明日計畫
-- 只放真正不同的待觸發事項，例如技嘉 待觸發加碼10
-- 若沒有非風控的明日事項，整個 明日計畫 區塊不輸出
-
-Owner 不應再看到同一檔股票在 持倉風控檢查 與 隔日計畫 / 明日計畫 中用不同話術重複同一個降級檢查。
+- 明確顯示 evidence 等級：confirmed / weak / mixed / stale / absent。
+- 明確顯示 runtime source freshness：例如 watchlist breadth: T+0、sector index: T+0、flow: unavailable。
+- 明確顯示行動限制：市場 / 題材 confirmed 只代表可追蹤背景，不代表個股可買。
+- 若買點、RR、冷卻、回測或風控未成立，仍需顯示 新倉：無有效進場 或等價不可買文案。
+- 缺證據時，不得出現 AI / 電子供應鏈仍偏多、市場主線仍在、不代表看空產業 等高風險句。
 
 ## 非目標
 
 - 不改策略 decision。
-- 不改持倉 action 判斷來源。
-- 不改加碼 / 減碼 / 停損 / 降級規則。
-- 不改 DB schema、DB payload、cache、watchlist。
-- 不改 market theme evidence provider / source family 判定。
-- 不做 live Telegram delivery。
+- 不放寬買點、RR、冷卻、回測、量能或風控條件。
+- 不新增 DB schema。
+- 不建 Supabase table。
 - 不做 live Supabase write。
-- 不做 replay / backfill。
-- 不重新設計整份 Telegram 報文結構。
+- 不做正式 backfill。
+- 不做 live Telegram delivery。
+- 不接未經 Owner approval 的外部付費 provider、news provider、browser scraping 或長期 scheduler。
+- 不把外部產業新聞單獨轉成個股交易建議。
+- 不重構 unrelated formatter、watchlist、position、snapshot 或策略模組。
 
 ## 影響模組
 
 - 直接模組:
-- Telegram formatter / summary 組裝邏輯
-- 報文區塊生成 helper
-- formatter snapshot / regression tests
-- 可能涉及但只能作為直接消費者 smoke:
-- Telegram message list 產生器
-- notifier last-message / send payload 測試
+- core/market_theme_evidence.py
+- core/generator.py
+- 既有 market theme evidence provider / formatter path
+- 可能讀取但不得改變策略語意的來源:
+- core/watchlist.py
+- services/analysis.py
+- services/stock_api.py
+- snapshot / strategy evidence 相關既有 dry-run 資料
+- 測試影響:
+- market theme evidence tests
+- generator / Telegram formatter snapshot tests
+- notifier payload smoke tests
+- strategy invariance tests
 
 ## 直接消費者
 
 - Owner 手機 Telegram 報文。
-- Telegram message list contract。
-- notifier / Telegram payload 直接消費者。
-- formatter snapshot tests。
-- QA 手機閱讀 fixture。
+- core/generator.py 報文組裝與 header version。
+- Telegram notifier message list / payload contract。
+- QA snapshot / formatter tests。
+- 後續可能接 DB 或 cache 的 Architect / Tech 規劃，但本輪不得直接落地 DB 或 live write。
 
 ## 輸出契約
 
-### 版本契約
+### Evidence Object Contract
 
-- 本輪必須升為 v20.1.3。
-- Telegram header / formatter VERSION 或等價使用者可見版本常量必須同步。
-- 測試期望中的 header 版本也必須同步。
-- 不得回退到 v20.1.1 或 v20.1.2 header。
+market_theme_evidence 必須維持或擴充為結構化 payload，至少包含：
 
-### 區塊契約
+as_of: "2026-05-28"
+level: "confirmed | weak | mixed | stale | absent"
+theme: "AI / electronics / semiconductor / broad_market / unknown"
+market_direction: "supportive | neutral | weak | mixed | unknown"
+execution_implication: "track_only | no_valid_entry | risk_first | unavailable"
+sources:
+- source_type: "watchlist_breadth | market_index | sector_index | flow | official | external_context"
+source_name: "watchlist_strategy_snapshot | TAIEX | electronics_index | ..."
+as_of: "2026-05-28"
+freshness: "fresh | stale | unavailable"
+freshness_reason: "same_trade_date | previous_trade_date_allowed | older_than_threshold | missing"
+level: "supportive | neutral | weak | mixed | unavailable"
+limitations:
+- "只佐證題材背景，不改變個股買點"
+supports_claims:
+- "市場偏多但買點未成立"
+limitations:
+- "confirmed 不代表可買"
+formatter_allowed_phrases:
+- "市場 / 題材證據 confirmed，但新倉仍需個股買點成立"
+formatter_forbidden_phrases:
+- "AI / 電子供應鏈仍偏多"
 
-- 不再輸出獨立標題 隔日計畫。
-- Canonical tomorrow section 使用 明日計畫。
-- 持倉風控檢查 承擔持倉風控 / 降級 / 未修復檢查。
-- 明日計畫 只承擔非重複的待觸發事項，例如：
-- 待觸發加碼10
-- 待觸發加碼20
-- 待觸發加碼30
-- 其他不是同一檔同一風控 / 降級行動的明日觸發項
-- 若 明日計畫 沒有非重複事項，整個區塊不輸出。
+### Runtime Source 類型
 
-### 去重契約
+本輪 confirmed 至少需要兩類 independent runtime source 同向，且不得只靠 report-derived 文字：
 
-同一檔股票在同一份報文中：
+- 必要 source 1: watchlist_breadth
+- 來源: 既有 watchlist / strategy snapshot / strategy evidence runtime 結果。
+- 用途: 判斷題材內標的是否多數維持強勢、分類未惡化、量能或策略條件是否支持追蹤。
+- 必要 source 2: market_index 或 sector_index
+- 來源: production runtime 可取得的 TAIEX、電子類、半導體 / 科技相關 index 或可替代的市場層行情資料。
+- 用途: 佐證市場層是否 supportive。
+- 可選 source:
+- flow: 法人買賣超、外資持股或產業持股比。
+- official: TWSE、MOPS、MOEA、MOF、公司 IR。
+- external_context: 外部產業背景，只能輔助，不得單獨 confirmed。
 
-- 若 持倉風控檢查 已輸出 明日未修復降級、未修復降級檢查、收盤未修復降級 或同義風控行動，明日計畫 不得再次輸出同一行動。
-- 不得用改寫話術規避去重，例如：
-- 明日未修復降級
-- 收盤未修復，列入明日降級檢查
-- 明日降級檢查
-以上對同一檔視為同一風控 / 降級行動。
-- 非同一行動可以保留，例如同一檔若有 PM 明確定義的非風控待觸發加碼事項，才可進 明日計畫；本輪不得自行新增這種策略含義。
+若本輪實作找不到第二類可用 runtime source，必須降級為 weak / absent，不得硬湊 confirmed。
 
-### 不得回退既有契約
+### Source Freshness
 
-本輪不得破壞 v20.1.1 / v20.1.2 已修契約：
+Tech 必須讓每個 source 明確標示 freshness，不得只有來源名稱。
 
-- 未持倉短買點句仍要短，先呈現 不買 / 不可買 / 等條件。
-- 盤後明日加碼語意仍為 待觸發加碼10/20/30，不得回到 明日風控｜加碼10。
-- 盤後報文不得再出現未收盤語意 若收盤。
-- 淘汰 / 不可買文案不得回到 不代表看空產業。
-- 不得輸出 明日風控｜加碼10。
-- market theme evidence 行仍必須在新倉結論後。
-- report-derived only evidence 不得變成 confirmed。
-- confirmed market theme 不得放寬個股買點或讓不可買變可買。
+- watchlist_breadth: 必須是本次報文同一交易日或同一 run 的 strategy snapshot；缺失則 unavailable。
+- market_index / sector_index: 預設需同一交易日收盤或最新可得交易日；若遇假日或資料延遲，最多允許上一個有效交易日，但必須標示 previous_trade_date_allowed。
+- flow: 若使用，最多允許上一個官方公布交易日；超過則 stale。
+- official / external_context: 若使用，只能做背景；超過 PM/Tech 定義 freshness threshold 時不得支撐 confirmed。
+- 任一 required source stale / unavailable 時，不得輸出 confirmed。
+- 任一 source 無 as_of 時，視為 unavailable。
+
+### Cache / Schema 邊界
+
+- 本輪不得新增 Supabase schema、table、migration、RLS policy、index 或 rollback。
+- 本輪不得寫 Supabase cache。
+- 本輪不得新增長期 disk cache 或排程 cache。
+- 允許使用既有 runtime memory、既有 dry-run fixture、既有 provider adapter、或單次 report generation 內的 ephemeral cache。
+- 若 Tech 判斷沒有 cache 就無法穩定 production confirmed，必須 blocked，回報需要 Owner approval，不能自行建 cache。
+- 若需要新增欄位到持久層、snapshot DB、signal table 或 daily snapshot payload，必須先通知 Owner，不能在本輪直接做。
+
+### Telegram Message Contract
+
+- Evidence 區塊需短句、短行，手機優先。
+- Evidence 區塊必須先給結論與限制，再列來源摘要。
+- 市場 / 題材證據只影響 Telegram 文案與 evidence 區塊。
+- 不得改變策略分類、買賣建議、持倉主行動或下單清單。
+- confirmed 也不得讓 新倉 從不可買變可買。
+- 若 evidence 與策略買點衝突，策略買點與風控優先，文案應寫 題材可追蹤，買點未成立。
+
+## 版本契約
+
+- 本輪是使用者可見 Telegram 報文能力新增，建議升版到 v20.2.0。
+- Tech 必須同步 core/generator.py 的 VERSION 或等價 Telegram header 常量。
+- QA 必須核對實際輸出 header 顯示 v20.2.0。
+- 若 Tech 判斷本輪只完成 blocked / dry-run 無使用者可見變更，必須在 CHANGELOG.md 說明為何不升版，並由 Architect / Owner 決定是否接受。
 
 ## 驗收條件
 
-1. v20.1.3 報文 header 正確顯示。
-2. 智原 / 緯創類 fixture 中，持倉風控檢查 已有 明日未修復降級 時，明日計畫 不得再出現同一檔的 收盤未修復，列入明日降級檢查 或同義句。
-3. 若所有明日項目都只是持倉風控重複項，明日計畫 區塊不輸出。
-4. 若有真正不同的明日待觸發事項，例如技嘉 待觸發加碼10，明日計畫 仍輸出且只包含該類非重複事項。
-5. 手機閱讀順序中，Owner 不需要在兩個區塊比對同一檔同一降級行動。
-6. 持倉風控檢查 與 明日計畫 的分類名稱、數量、股票名單不得互相矛盾。
-7. Telegram message list / notifier 直接消費者仍能取得最後一則完整報文，不因移除空區塊而破壞 payload。
-8. 已修契約不得回退：短買點句、待觸發加碼10、無 若收盤、無 不代表看空產業、無 明日風控｜加碼10、market theme evidence 在新倉結論後、report-derived only 不得 confirmed。
-9. 不改策略 decision、DB/schema/cache、watchlist、live Telegram/Supabase、backfill。
+1. confirmed 只能在至少兩類 runtime source 同向且 fresh 時出現，其中一類必須是 watchlist_breadth，另一類必須是 market_index 或 sector_index。
+2. 只有 report-derived、單一 source、缺 as_of、source stale、source unavailable 時，不得輸出 confirmed。
+3. mixed 場景：外部或官方背景偏強，但 watchlist breadth 或策略分類不支持時，只能 mixed / weak，不得 confirmed。
+4. stale 場景：任一 required source 過期時，Telegram 必須標示 stale 並降級，不得使用主線偏多文案。
+5. absent 場景：無足夠 evidence 時，Telegram 必須寫 市場證據不足，僅依策略分類追蹤 或等價短句。
+6. confirmed 場景：Telegram 可以寫 市場 / 題材證據 confirmed，但同屏必須寫 不代表可買 或 買點仍需個股條件成立。
+7. 證據鏈不得改變任何 strategy decision、個股買點、持倉主行動、watchlist 成員、DB write path 或 Telegram delivery 行為。
+8. 報文不得新增空區塊、0-count 占位、或重複長句。
+9. Telegram message list / notifier payload shape 不得破壞既有直接消費者。
+10. QA 需執行 L3，但停止條件如下：
+- 已覆蓋 confirmed / weak / mixed / stale / absent 五類 fixture。
+- 已驗證 strategy decision before/after 不變。
+- 已驗證 formatter header version。
+- 已驗證 notifier payload smoke。
+- 已完成 replay/backfill dry-run 或等價 no-live-write path 檢查，且確認沒有 Supabase live write、正式 backfill、live Telegram。
+- 不要求正式 live delivery、不要求 production Supabase write、不要求真實 backfill 寫庫。
 
 ## 範例或 fixture
 
-### Fixture A: 只有重複風控項
+### Fixture A: confirmed 但不可買
 
-輸入語意：
+市場 / 題材證據：confirmed
+限制：題材可追蹤，不代表可買
+來源：watchlist breadth fresh；電子類指數 fresh
+新倉：無有效進場
+原因：個股買點 / RR / 冷卻仍未全部成立
 
-- 智原: 持倉，未修復，需明日降級檢查
-- 緯創: 持倉，未修復，需明日降級檢查
-- 沒有非風控明日待觸發事項
+期望：
 
-期望輸出形狀：
+- 可出現 confirmed。
+- 不得出現 今日可買，除非原策略買點成立。
+- 不得把 confirmed 轉成 BUY。
 
-【05/28 盤後｜v20.1.3】
+### Fixture B: stale 降級
 
-...今日結論 / 新倉結論...
+市場 / 題材證據：stale
+限制：市場資料過期，本輪不判斷主線
+來源：watchlist breadth fresh；sector index stale
+新倉：無有效進場
 
-持倉風控檢查
-- 智原：明日未修復降級
-- 緯創：明日未修復降級
+期望：
 
-...詳情...
+- 不得出現 AI / 電子供應鏈仍偏多。
+- 不得出現 市場主線仍在。
+- 不得 confirmed。
 
-不得出現：
+### Fixture C: mixed 背景強但 watchlist 弱
 
-隔日計畫
-- 智原：收盤未修復，列入明日降級檢查
-- 緯創：收盤未修復，列入明日降級檢查
+市場 / 題材證據：mixed
+限制：外部背景偏強，但 watchlist 未支持
+來源：official context fresh；watchlist breadth weak
+新倉：無有效進場
 
-也不得出現空的：
+期望：
 
-明日計畫
+- 只能寫背景或追蹤。
+- 不得寫 confirmed。
+- 不得放寬買點。
 
-### Fixture B: 風控項 + 真正明日觸發項
+### Fixture D: absent
 
-輸入語意：
+市場 / 題材證據：absent
+限制：市場證據不足，僅依策略分類追蹤
+新倉：無有效進場
 
-- 智原: 持倉，未修復，需明日降級檢查
-- 緯創: 持倉，未修復，需明日降級檢查
-- 技嘉: 持倉，非風控待觸發加碼10
+期望：
 
-期望輸出形狀：
+- 不得輸出主線、偏多、供應鏈仍強等文案。
+- 不得新增空來源清單。
 
-【05/28 盤後｜v20.1.3】
+## 禁止事項
 
-...今日結論 / 新倉結論...
+- 禁止改策略 decision。
+- 禁止放寬買點。
+- 禁止新增 Supabase schema / table / migration。
+- 禁止 live Supabase write。
+- 禁止正式 backfill。
+- 禁止 live Telegram。
+- 禁止自行接 external provider、news scraping、付費 API 或長期 scheduler。
+- 禁止用 stale / missing source 推出 confirmed。
+- 禁止用外部產業背景單獨推出今日可買。
+- 禁止將 evidence 寫入持久 DB。
+- 禁止刪除固定 8 份 Markdown。
+- 禁止順手重構 unrelated module。
 
-持倉風控檢查
-- 智原：明日未修復降級
-- 緯創：明日未修復降級
+## 需要先通知 Owner 的 Approval Gates
 
-明日計畫
-- 技嘉：待觸發加碼10
+Tech 遇到以下任一情況必須 blocked，回報 Architect / Owner，不得自行實作：
 
-...詳情...
-
-不得把智原 / 緯創重複放進 明日計畫。
-
-## 明確禁止事項
-
-- 禁止修改策略 decision、持倉 action 優先級、加碼 / 降級判斷規則。
-- 禁止修改 DB schema、DB payload、cache、watchlist。
-- 禁止新增 live Telegram delivery、live Supabase write、正式 backfill。
-- 禁止改 market theme evidence confirmed 條件。
-- 禁止讓 report-derived only evidence confirmed。
-- 禁止回退 v20.1.1 / v20.1.2 手機降噪與 evidence contract。
-- 禁止把 明日計畫 當成風控檢查的第二份摘要。
-- 禁止用同義句跨區塊重複同一檔同一風控 / 降級行動。
-- 禁止為了通過測試刪掉必要的非重複明日觸發事項，例如技嘉 待觸發加碼10。
+- 需要新增 DB table、schema、migration、RLS、index 或 rollback。
+- 需要寫 Supabase cache 或任何持久 cache。
+- 需要正式 backfill 或 production data migration。
+- 需要 live Supabase write。
+- 需要 live Telegram delivery。
+- 需要新增 external provider、付費 API、browser scraping、新聞 ingestion 或 scheduler。
+- 需要擴大 watchlist 或改股票清單來源。
+- 需要讓 evidence 參與 strategy decision、買點、持倉行動或下單清單。
+- 無法取得第二類 runtime source，但仍想顯示 confirmed。
+- freshness threshold 需要改成超過上一個有效交易日。
 
 ## 阻塞條件
 
-- Tech 發現去重需要改策略 decision 或 action 來源，而不只是 formatter 分流時，必須 blocked。
-- Tech 發現現有資料無法區分「風控降級」與「非風控明日觸發」時，必須 blocked，回報需要的欄位或分類契約。
-- 若版本常量位置不明，或 Telegram header 不是由 formatter 控制，必須 blocked。
-- 若測試 fixture 無法覆蓋接近真實手機長報文，QA 不得通過。
-- 若移除 隔日計畫 會導致真正不同的明日待觸發事項消失，必須 blocked 或 conditional pass，不能直接吸收。
-
-## PM 自檢
-
-- 已列使用者可見結果: 是。
-- 已列非目標: 是。
-- 已列影響模組: 是。
-- 已列直接消費者: 是。
-- 已列輸出契約: 是。
-- 已列版本契約: 是，升為 v20.1.3。
-- 已列手機閱讀路徑與示例輸出形狀: 是。
-- 已列驗收條件: 是。
-- 已列禁止事項與阻塞條件: 是。
-- 公開來源: 本任務為 Owner 指定的既有 Telegram 報文降噪 patch，未使用新增公開網路資料。
+- 找不到可用第二類 production runtime source，且只能依 report-derived 或單一 source 判斷。
+- 現有 runtime source 無 as_of，導致 freshness 無法判斷。
+- 需要建表、cache、external provider、正式 backfill 或 live write 才能達成本輪目標。
+- 無法在測試中證明 strategy decision before/after 不變。
+- 無法在測試中證明 Telegram header version 與 VERSION 常量同步。
+- 無法提供 confirmed / weak / mixed / stale / absent 五類 fixture 驗證。
+- 任一實作會讓 evidence 影響可買、加碼、減碼、停損、停利或持倉主行動。
