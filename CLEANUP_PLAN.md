@@ -87,6 +87,11 @@
   - 移除 `若收盤`、`不代表看空產業`、`明日風控｜加碼10` 等誤讀文案。
   - 未改策略 decision、DB、watchlist、證據鏈 provider 或 live delivery。
   - QA 結論為 `通過`；`tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py` 為 `60 passed, 21 warnings`。
+- v20.1.2 Market Theme Evidence Structured Provider 已分派但未吸收：
+  - PM 任務卡已建立。
+  - Tech runner 在隔離 worktree 失敗，沒有合法 `CHANGELOG.md`，QA 未跑。
+  - 不吸收部分候選 diff；清理 worktree 回主 repo `HEAD`。
+  - 後續需重跑 Tech / QA，若需要建表或 cache 先通知 Owner。
 - push 後仍需壓縮：
   - `DISPATCH.md`
   - `TASK.md`

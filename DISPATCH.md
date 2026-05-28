@@ -4,40 +4,39 @@
 
 ## Current Task
 
-- task_id: `telegram-mobile-noise-reduction-v20-1-1`
-- task_name: `Telegram Mobile Noise Reduction v20.1.1`
+- task_id: `market-theme-evidence-structured-provider-v20-1-2`
+- task_name: `Market Theme Evidence Structured Provider v20.1.2`
 - task_type: `development`
 - version_level: `patch`
 - qa_level: `L2`
 - owner_status: `requested`
-- architect_status: `completed`
+- architect_status: `blocked`
 - pm_status: `task_ready`
-- tech_status: `changelog_ready`
-- qa_status: `qa_passed`
-- commit: `pushed`
+- tech_status: `blocked`
+- qa_status: `waiting_tech`
+- commit: `not_applicable`
 
 ## Current Result
 
 - CAO 前端：`http://127.0.0.1:5173/`
-- Owner 檢查 `v20.1.0` 盤後報文後，指出手機排版仍偏重，要求先修報文閱讀，再繼續證據鏈下一步。
-- 本輪實作為 `v20.1.1` Telegram 手機閱讀降噪：
-  - 使用者可見 header / formatter `VERSION` 升為 `v20.1.1`。
-  - 盤後明日計畫中，持倉加碼項目改為 `待觸發加碼10/20/30`，不再輸出 `明日風控｜加碼10`。
-  - 持倉風控區收斂為 `風控：守警戒線，不追價`，避免重複完整加碼下一步。
-  - 盤後輸出移除 `若收盤` 等未收盤語意。
-  - 淘汰卡移除 `不代表看空產業`，改成單次短句 `產業：未判斷產業多空`。
-  - 未持倉長卡買點句改短，先呈現 `不買 / 不可買 / 等條件`。
-  - 未改策略 decision、DB schema / payload、watchlist、證據鏈 provider、live Telegram、Supabase write、replay/backfill。
-- QA 結論：`通過`。
-  - 驗證 `tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py`：`60 passed, 21 warnings`。
-  - QA 補盤後持倉加碼 + 未持倉追蹤 fixture，確認 summary 最後、header `v20.1.1`、無 `v20.1.0`、無 `若收盤`、無 `不代表看空產業`、無 `技嘉｜明日風控｜加碼10`。
-- 證據鏈 production structured provider / evidence cache / DB schema 尚未開始；進入建表或正式寫庫前必須先通知 Owner。
+- `v20.1.1` Telegram 手機閱讀降噪已於 commit `3f15ee5` 推送。
+- Owner 要求繼續證據鏈下一步；Architect 已分派 PM 定義 `v20.1.2` structured provider 接線任務。
+- PM 已交付 `TASK.md`：
+  - 目標是把 dry-run `market_theme_evidence` 往 production formatter 可用 structured provider / adapter 推進。
+  - 僅允許使用現有 runtime 可取得的結構化輸入。
+  - 若需要 DB table / schema / cache、正式 Supabase write、live Telegram、backfill 或外部 provider，必須 blocked 並通知 Owner。
+  - report-derived only 仍只能 weak / track only；confirmed 仍需兩類完整 structured source family 且不放寬個股買點。
+- Tech runner 本輪失敗：
+  - 隔離 worktree 產生了部分候選 diff，並曾跑到 `61 passed, 21 warnings`。
+  - 但 Tech 未完成合法 `CHANGELOG.md` 交付，QA 未執行；Architect 不吸收、不合併產品代碼。
+  - 隔離 worktree 將清理回主 repo `HEAD`。
+- 本輪沒有建表、沒有寫庫、沒有 live delivery，也沒有把未 QA 的證據鏈代碼合入主 repo。
 
 ## Next Action
 
-- 本輪限定 diff 已通過 Architect final review、驗證、提交並推送。
-- 推送後清理 CAO worktree，並確認 CAO API / 前端服務可用。
-- 下一步才繼續 production structured provider / evidence cache / DB schema 規劃；若需要建表，先通知 Owner。
+- 先清理失敗的 Tech worktree，保留 `TASK.md` 作為下一輪接力入口。
+- 後續重跑 Tech / QA 前，需提醒 Tech 必須先交付合法 `CHANGELOG.md`；未完成 QA 前不得吸收產品代碼。
+- 若下一輪確認需要建表 / schema / cache，先通知 Owner。
 
 ## Status Values
 

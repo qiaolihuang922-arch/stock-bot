@@ -153,6 +153,19 @@
   - 未改 DB schema / payload、watchlist、證據鏈 provider、live Telegram、Supabase write、replay/backfill。
 - QA 結論：`通過`；驗證 `tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py` 為 `60 passed, 21 warnings`，並補盤後手機閱讀 fixture。
 
+## Market Theme Evidence Structured Provider v20.1.2 已分派但未吸收
+
+- Owner 要求在 v20.1.1 手機報文修復後繼續證據鏈下一步。
+- PM 已定義 `v20.1.2` 任務：在不建表、不寫庫、不接外部 provider 的前提下，把 dry-run `market_theme_evidence` 往 production formatter 可用 structured provider / adapter 推進。
+- 邊界：
+  - 若需要 DB table / schema / cache、正式 Supabase write、live Telegram、backfill 或外部 provider，必須先通知 Owner。
+  - report-derived only 仍只能 weak / track only。
+  - confirmed 仍需兩類完整 structured source family，且不放寬個股買點。
+- Tech runner 本輪失敗：
+  - 隔離 worktree 曾產生部分候選 diff，並跑到局部 `61 passed, 21 warnings`。
+  - 但 Tech 未完成合法 `CHANGELOG.md`，QA 未執行。
+  - Architect 未吸收產品代碼，需清理 worktree 後另行重跑。
+
 ## Post Trade Reduce Cooldown Strategy Fix 已完成本地修復
 
 - 修復 Owner 指出的持倉策略衝突：
