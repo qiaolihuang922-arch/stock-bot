@@ -4,8 +4,8 @@
 
 ## Current Task
 
-- task_id: `market-theme-evidence-v20-0-13-guard`
-- task_name: `Market Theme Evidence Guard v20.0.13`
+- task_id: `post-market-phase-message-consistency-v20-0-14`
+- task_name: `Post-market Phase Message Consistency v20.0.14`
 - task_type: `development`
 - version_level: `patch`
 - qa_level: `L1`
@@ -13,29 +13,31 @@
 - architect_status: `qa_accepted`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
-- qa_status: `conditional_pass`
+- qa_status: `qa_passed`
 - commit: `pushed`
 
 ## Current Result
 
 - CAO 前端：`http://127.0.0.1:5173/`
-- Owner 確認：先做能做的市場 / 題材證據保護；需要建表時再通知。
-- 本輪實作為 `v20.0.13` patch guard，不是完整 `v20.1.0` evidence chain：
-  - Telegram header / formatter `VERSION` 升為 `v20.0.13`。
-  - 舊 `market_summary="AI / 電子供應鏈仍偏多"` 不得自我證明為 confirmed bullish。
-  - 缺 explicit evidence token 時，summary 降級為 `市場偏多但買點未成立` / `新倉：無有效進場`，不輸出 AI / 電子供應鏈 confirmed bullish。
-  - 新增 notifier 直接消費者測試，確認 summary 仍是最後一則並保留 `v20.0.13` header。
+- Owner 要求修復最新 `v20.0.13` 報文檢查出的盤後 phase / 行動一致性問題。
+- 本輪實作為 `v20.0.14` patch：
+  - 盤後 summary 不再輸出 `今日盤中交易執行` / `不列入今日盤中交易執行`。
+  - 盤後改用 `今日交易紀錄`、`明日計畫`、`持倉風控檢查`。
+  - 持倉卡 `今日 無` 的待加碼不再被列為今日已執行，改列明日待觸發。
+  - 盤後不再輸出 `若收盤仍未修復`，改為收盤已知或明日檢查語意。
+  - 淘汰卡無產業證據時不再寫 `不代表看空產業`，改為中性 `未判斷產業多空`。
+  - `formatTelegramMessages()` 同一輪只決定一次 `report_phase`，並傳入 summary、卡片、index、reason 等 phase-sensitive helper，避免卡片盤中、summary 盤後的混合語意。
   - 未改策略 decision、DB schema、watchlist、Supabase write、live Telegram、scheduler。
-- QA 結論：`conditional pass`。
-  - 指定 formatter / notifier 驗證通過：`6 passed, 13 warnings`。
-  - broader related smoke 仍有 3 個既有 / 殘留 phase-sensitive failures，與本輪版本 / evidence guard 不同軸，不宣告整體 formatter suite 全綠。
-  - Architect 有條件吸收限定 diff；phase-sensitive failures 需另開任務處理。
+- QA 結論：`通過`。
+  - formatter / notifier 驗證：`52 passed, 21 warnings`。
+  - QA 補反向 phase drift smoke，確認同一輪 messages 不會重讀不同 phase。
+  - 殘留風險：`price_label_for_source()` 仍屬行情 / 詳情標籤層即時 phase helper，非本輪 message list contract。
 - 需要建表 / schema / cache 的真正 evidence provider 尚未開始；進入該階段前必須再通知 Owner。
 
 ## Next Action
 
 - 本輪限定 diff 已通過 Architect final review，提交並推送。
-- 後續另開任務處理 broader formatter phase-sensitive failures，並規劃真正 `market_theme_evidence` provider / payload / schema；若需要建表，先通知 Owner。
+- 後續如要處理行情 / 詳情標籤層 phase drift 或真正 `market_theme_evidence` provider / payload / schema，另開任務；若需要建表，先通知 Owner。
 
 ## Status Values
 

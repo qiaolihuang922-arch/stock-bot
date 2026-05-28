@@ -73,6 +73,10 @@
   - 不建表、不新增 evidence provider，只防止舊 `market_summary` 自我證明 AI / 電子供應鏈 confirmed bullish。
   - QA 結論為 `conditional pass`；指定 formatter / notifier 驗證通過。
   - broader formatter smoke 仍有 3 個 phase-sensitive failures，需另開任務處理，不得宣告整體 formatter suite 全綠。
+- v20.0.14 Post-market Phase Message Consistency 已形成限定可吸收候選：
+  - 修復盤後 summary / index / reason / unheld card 的 phase 語意一致性。
+  - `formatTelegramMessages()` 同輪固定一次 `report_phase`，避免卡片盤中、summary 盤後。
+  - QA 結論為 `通過`；`tests/test_generator_report.py tests/test_notifier.py` 為 `52 passed, 21 warnings`。
 - push 後仍需壓縮：
   - `DISPATCH.md`
   - `TASK.md`
@@ -95,7 +99,7 @@
 - 下一次 auto 開發需觀察 Tech / QA 是否使用 worktree `.venv` 正常跑必要測試；不得再因缺環境跳過驗證。
 - 後續所有報文任務需按 `AGENTS.md` 的手機 Telegram 報文硬規則驗收，不得只證明數字可追溯。
 - 若 Owner 仍覺得查詢慢，下一步應開 performance measurement 任務，量測 production 實際秒數，不再只看 query contract。
-- 另開 `formatter-phase-sensitive-tests` 任務：固定或重設 `get_market_phase()` 相關測試期望，處理 `tests/test_generator_report.py tests/test_notifier.py` broader smoke 中 3 個盤中 / 明日文案相位敏感失敗。
+- 若後續 Owner 發現完整詳情或行情標籤也有 phase drift，再另開 `price-label-phase-consistency` 任務；本輪只收斂 Telegram message list contract。
 - 需要重跑一次真正的清理審計：
   - `core/holdings.py`
   - `docs/v19_*`：已刪除本地 SQL 草案。

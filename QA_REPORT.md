@@ -2,72 +2,58 @@
 
 ## 測試範圍
 
-- 依據 `TASK.md`、`CHANGELOG.md`、候選 diff 驗證本輪 patch：Telegram header / `VERSION` 由 `v20.0.12` 升到 `v20.0.13`，並保留 evidence blocker 負面語意。
-- 可吸收候選 diff：
+- 依據：`TASK.md`、`CHANGELOG.md`、git diff、`core/generator.py` 局部 diff、`tests/test_generator_report.py`、`tests/test_notifier.py`。
+- 本輪不是清理 / 瘦身 / refactor 任務，path / claim / evidence / risk / action 證據表不適用。
+- 可吸收 diff 僅限本輪任務相關：
   - `core/generator.py`
   - `tests/test_generator_report.py`
   - `tests/test_notifier.py`
   - `CHANGELOG.md`
-- 實測命令：
-  - `arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py::GeneratorReportTest::test_intraday_v20_0_12_separates_mainline_from_execution tests/test_generator_report.py::GeneratorReportTest::test_intraday_v20_0_12_hot_market_without_ai_evidence_uses_neutral_mainline tests/test_generator_report.py::GeneratorReportTest::test_intraday_v20_0_13_legacy_market_summary_cannot_confirm_theme tests/test_notifier.py -q`
-  - 結果：`6 passed, 13 warnings`
-- 補充 Owner 手機閱讀順序 smoke：直接呼叫 `formatTelegramMessages()`，驗證最後一則 summary header 為 `【05/28 盤中｜v20.0.13】`，前 9 行未出現 forbidden confirmed bullish 文案；結果通過。
-- broader related smoke：`arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py tests/test_notifier.py -q`
-  - 結果：`47 passed, 3 failed, 21 warnings`
-  - 3 個失敗為既有 / 殘留 phase-sensitive 測試，未固定 `get_market_phase()` 時輸出 `明日觸發` / `明日未修復`，舊斷言期待 `盤中觸發` / `盤中觀察修復狀況`。
+- worktree 殘留：git status 只顯示上述 4 個 modified tracked files，未見其他 unrelated tracked diff；Architect 仍只吸收上述任務 diff。
+- 已跑測試：
+  - `arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py tests/test_notifier.py`
+  - 結果：`52 passed, 21 warnings`
+- QA 額外 smoke：
+  - 補反向 phase drift：第一次 `get_market_phase()` 回傳 `盤後`，後續若被錯誤重讀會變 `盤中`。
+  - 結果：`phase_mock.call_count == 1`，summary / 未持倉卡均維持盤後語意，未出現盤中交易執行或可買卡。
 
 ## 關聯風險掃描
 
-- `core/generator.py`：
-  - `VERSION = "v20.0.13"`，符合本輪 patch 版本契約。
-  - `ai_supply_chain_mainline_supported()` 新增 explicit evidence token gate；只有題材 keyword 加 explicit token 才能輸出 `主線：AI / 電子供應鏈仍偏多。`
-- `tests/test_generator_report.py`：
-  - header 期望已同步 `v20.0.13`。
-  - 新增 legacy market summary 負面 fixture，驗證無 explicit source 時不能 confirmed。
-- `tests/test_notifier.py`：
-  - 新增 `send_many()` 直接消費者測試，確認 summary 作為最後一則送出且保留 `v20.0.13` header。
-- 未見 DB schema、watchlist、scheduler、live Telegram sender、Supabase write path diff。
-- 本輪不是清理 / 瘦身 / refactor 任務，path / claim / evidence / risk / action 證據表不適用。
+- `formatTelegramMessages()`：未傳入 `report_phase` 時只讀一次 `get_market_phase()`，並傳入未持倉卡與 summary；符合 TASK。
+- `formatTelegramSummary()`：由 message list 路徑傳入 `report_phase` 時不重讀 phase；直接呼叫未傳入時仍自行讀一次，屬 optional contract，與 `CHANGELOG.md` 一致。
+- phase-sensitive helpers：`today_conclusion_text()`、`today_reason_text()`、`format_execution_checklist()`、`detail_index_text()` 已接收 `report_phase`。
+- notifier 直接消費者：`tests/test_notifier.py` 驗證最後一則 summary header 仍保留 `v20.0.14`，`send_many()` 介面未改。
+- `generate_report()`：同輪固定一次 `report_phase` 並傳入 DB/evidence 記錄參數與 `formatTelegramMessages()`；未發現 live write、新 schema 或策略 decision diff。
+- `price_label_for_source()` 仍即時讀 phase；`CHANGELOG.md` 已列為殘留風險。本輪 TASK 目標是 Telegram message list phase drift，不把行情標籤層擴大為阻塞。
 
 ## 跨區塊語意一致性
 
 - Owner 手機閱讀順序檢查：
-  - 最後一則 summary 第一行為 `【05/28 盤中｜v20.0.13】`。
-  - 市場段落顯示 `進攻偏熱｜R3`，但主線降級為 `市場偏多但買點未成立`。
-  - 執行段落顯示 `新增買點未成立，等觸發，不追高`。
-  - 新倉段落顯示 `無有效進場`。
-  - `🔥 最強` 顯示 `無有效進場標的`。
-- 負面 fixture 中未出現：
-  - `AI / 電子供應鏈仍偏多`
-  - `AI 題材偏多`
-  - `電子供應鏈偏多`
-  - `v20.1.0`
-- summary、header、notifier last message 的版本語意一致；未看到把「追蹤 / 等待」誤包成「可買」的本輪新增問題。
+  - 最後一則 summary header 顯示單一 phase 與 `v20.0.14`。
+  - 盤中 fixture：summary 出現 `今日盤中交易執行`，未持倉卡出現 `可買｜10%倉` 與 `盤中觸發`，未混入 `明日計畫`。
+  - 盤後 fixture：summary 出現 `今日交易紀錄 / 無新增` 與 `明日計畫 1`，未持倉卡出現 `明日追蹤` 與 `明日觸發`，未混入 `今日盤中交易執行`、`交易執行 1`、`分批執行`。
+- message list 順序仍是持倉、未持倉、summary；未超出本輪結構契約。
 
 ## 使用者誤讀風險
 
-- 本輪目標風險已被控制：無 explicit evidence 時，Owner 不會在手機 summary 第一屏看到 AI / 電子供應鏈 confirmed bullish。
-- Header 顯示 `v20.0.13`，避免同一可見版本停在舊行為。
-- 殘留風險：
-  - `market_theme_evidence:confirmed`、`source:`、`來源:`、`confirmed`、`證據確認` 目前是字串 token gate，不是真正 evidence payload/schema。
-  - 本輪不能被解讀成已建立 `v20.1.0` 題材證據鏈或正式 evidence provider。
-  - broader formatter suite 的 3 個 phase-sensitive failures 涉及「盤中 / 明日」文案；非本輪修改，但屬使用者可見語意，建議另開任務固定 phase。
+- 盤後路徑已避免把未持倉有效買點寫成今日可買或分批執行，降低 Owner 誤判「今天要買」的風險。
+- Summary 的「今日結論」標籤下仍會包含「明日計畫 N」，但同段下方有 `今日交易紀錄 / 無新增` 與 `明日計畫` 區塊，未達阻塞。
+- 未發現同一批 Telegram messages 中 summary 是盤後、卡片是盤中，或反向混用的可見輸出問題。
 
 ## 質疑與反證
 
-- PM 是否漏需求：本輪 TASK 限定 patch、版本契約、notifier 直接消費者、evidence 負面 fixture，未要求 full evidence provider；可接受。
-- Tech 是否漏同步：`core/generator.py` 版本常量為 `v20.0.13`，相關 formatter / notifier 測試已同步，未發現程式測試仍期待 `v20.0.12`。
-- 測試是否能證明沒有破壞直接消費者：已補 notifier `send_many()` last-message 消費者測試與直接 `formatTelegramMessages()` 手機閱讀 smoke，不只重跑 Tech 單一 formatter assertion。
-- QA 主動反證路徑：使用舊 `market_summary="AI / 電子供應鏈仍偏多"` 且無 explicit token 的高熱市場 fixture 檢查 summary，確認不會輸出 AI / 電子供應鏈 confirmed bullish，也不會把不可買誤讀成可買。
+- PM 是否漏需求：TASK 有列直接消費者、輸出契約、手機閱讀路徑與驗收案例，未缺阻塞欄位。
+- Tech 是否漏同步：diff 顯示 summary、未持倉卡、execution/checklist/index/reason helper 與 `generate_report()` 都同步 `report_phase`；未見只修測試。
+- 測試是否能證明沒有破壞直接消費者：除 Tech 指定測試外，QA 補了反向 drift smoke，覆蓋「第一次盤後、後續盤中」的負面路徑。
+- TASK / CHANGELOG / diff 是否一致：一致。版本契約為沿用 `v20.0.14`，未升到新版本。
+- 主動風險：`price_label_for_source()` 仍可在完整詳情或行情標籤層即時讀 phase；本輪 scope 沒有要求重構行情來源，且 `generate_report()` 的主 Telegram header / message list 已固定，不列阻塞。
 
 ## 未測項目
 
-- 未執行 full pytest、replay/backfill dry-run、live Telegram delivery、live Supabase write；符合 TASK 禁止事項與 L1 停止條件。
-- 未驗證真正 evidence provider / schema / cache，因本輪不是 `v20.1.0` 新能力發布。
-- 未修 broader formatter suite 的 3 個 phase-sensitive failures；QA 只標記為殘留，不視為本輪可吸收 diff 的阻塞。
+- 未跑 full pytest、replay/backfill dry-run、DB payload 實寫；本輪 TASK 禁止 live write / 正式 backfill。
+- 未測 live Telegram delivery；符合禁止事項。
+- 未全面檢查行情來源與 `price_label_for_source()` 的 phase label drift；`CHANGELOG.md` 已列殘留風險，非本輪直接 message list contract。
 
 ## QA 結論
 
-conditional pass
-
-條件：可吸收本輪限定 diff（`core/generator.py` 版本與 evidence gate、相關 formatter / notifier tests、`CHANGELOG.md`），但不得宣告 broader formatter suite 全綠；3 個既有 / 殘留 phase-sensitive 測試失敗需另開任務處理或由 Architect 明確接受為本輪非阻塞殘留。
+通過

@@ -2,11 +2,12 @@
 
 ## 修改內容
 
-- 將 Telegram 使用者可見版本由 `v20.0.12` 升為 `v20.0.13`。
-- 同步 formatter header 相關測試期望為 `v20.0.13`。
-- 新增 notifier 直接消費者測試，確認 `send_many()` 會把含 `v20.0.13` header 的 summary 保留在最後一則送出。
-- 補強 evidence blocker 防回退：舊 `market_summary="AI / 電子供應鏈仍偏多"` 不能自我證明為 confirmed bullish；只有同時帶有 explicit evidence token 與 AI / 電子供應鏈關鍵字時，才輸出 `主線：AI / 電子供應鏈仍偏多。`
-- 本輪是 `v20.0.13` QA blocker patch 修復，不是 `v20.1.0` 新能力發布。
+- 修復 `formatTelegramMessages()` 同一輪 Telegram message list 內的 phase drift 風險：message list 生成時只決定一次 `report_phase`，並傳入 summary、未持倉卡、execution/checklist/index/reason 類 phase-sensitive helper。
+- `formatTelegramSummary()` 新增 optional `report_phase` 參數；由 `formatTelegramMessages()` 呼叫時不再自行重新讀取不同 phase，直接沿用同輪 phase。
+- 盤後路徑改用 `今日交易紀錄` / `明日計畫 N` / `明日追蹤` 語意，避免 summary/index/reason/unheld card 出現盤中 `今日盤中交易執行`、`交易執行 N`、`分批執行` 或可被讀成今日下單的未持倉可買文案。
+- `generate_report()` 也在同輪開頭固定一次 `report_phase`，同步用於 header、DB/evidence 記錄參數與 `formatTelegramMessages()`。
+- 依 `TASK.md` 版本契約同步使用者可見 header / `VERSION` 為 `v20.0.14`。
+- 補上 phase drift fixture 與穩定盤後 fixture；既有盤中文案測試改成明確傳入 `report_phase="盤中"`，避免測試受實際執行時間影響。
 
 ## 修改檔案
 
@@ -17,52 +18,51 @@
 
 ## 契約影響
 
-- 使用者可見 Telegram header 改為 `v20.0.13`。
-- `core/generator.py` 的 `VERSION` 改為 `v20.0.13`。
-- 未改 message list 順序，仍為持倉、未持倉、summary。
-- 未改 Telegram payload shape。
-- 未改 DB 寫入、DB schema、watchlist、scheduler 或 live delivery 行為。
-- Evidence regression contract 保留：缺 explicit source / evidence token 時，不得把舊 market summary 轉成 AI / 電子供應鏈 confirmed bullish 語意。
+- `formatTelegramMessages()` 新增 optional `report_phase=None` 參數；未傳入時仍由函式內部決定一次 phase，message list 順序仍維持：持倉、未持倉、summary。
+- `formatTelegramSummary()` 新增 optional `report_phase=None` 參數；直接呼叫且未傳入時仍可自行讀取 phase，從 `formatTelegramMessages()` 呼叫時使用同輪 phase。
+- `today_conclusion_text()`、`today_reason_text()`、`format_execution_checklist()`、`detail_index_text()` 也新增 optional phase 傳遞；未傳入時保留既有盤中 helper 預設語意，避免直接 helper 呼叫方被迫同步。
+- 使用者可見 header / version 字串為 `v20.0.14`。
+- Telegram payload shape、notifier `send_many()` 介面、DB schema、DB payload、watchlist、scheduler、策略 decision 均未改。
 
 ## 版本同步
 
-- `core/generator.py` 已同步 `VERSION = "v20.0.13"`。
-- `tests/test_generator_report.py` 已同步 header 版本期望為 `v20.0.13`。
-- `tests/test_notifier.py` 已新增 notifier 消費含 `v20.0.13` summary 的直接測試。
-- 本輪未輸出或新增 `v20.1.0` 發布語意。
+- `core/generator.py` 已同步 `VERSION = "v20.0.14"`。
+- `tests/test_generator_report.py` header 期望已同步為 `v20.0.14`。
+- `tests/test_notifier.py` notifier 直接消費者測試已同步含 `v20.0.14` header 的 summary。
 
 ## 直接消費者同步
 
-- Telegram 報文 header formatter：`formatTelegramSummary()` 使用的 `VERSION` 已升為 `v20.0.13`。
-- Telegram message list formatter：`formatTelegramMessages()` 未改順序，summary 仍在最後一則。
-- Notifier 直接路徑：`services/notifier.py::send_many()` 行為未改，測試已覆蓋含 `v20.0.13` header 的 summary 會作為最後一則送出。
-- Formatter tests：版本 header 正向案例、include_detail summary header、evidence blocker 負面 fixture 已同步。
+- `formatTelegramMessages()`：固定同輪 `report_phase` 後傳入未持倉卡與 summary；summary 仍作為最後一則 message。
+- `formatTelegramSummary()`：改用傳入的 `report_phase` 產生 header、source summary、今日結論、原因、execution/checklist/index。
+- 未持倉卡 formatter：使用同輪 `report_phase` 決定 `盤中觸發` / `明日觸發` 與盤後 `明日追蹤` 文案。
+- Execution/checklist/index/reason helpers：已同步 `report_phase`，盤後不再輸出 `交易執行 N` 或 `分批執行` 類盤中語意。
+- `generate_report()`：同輪 report phase 傳入 `formatTelegramMessages()`，並同步 DB/evidence 記錄參數；未新增 live write 行為。
+- Notifier 直接路徑：`services/notifier.py::send_many()` 行為未改，測試確認最後一則 summary header 仍保留。
 
 ## 未影響模組
 
 - 未改 `services/analysis.py` 策略 decision。
 - 未改 `core/condition_engine.py` 條件映射。
-- 未改 DB schema / migrations / Supabase write path。
+- 未改行情來源與 `get_market_phase()` 判斷邏輯本身。
+- 未改 DB schema / migrations / payload shape。
 - 未改 watchlist。
-- 未改 replay/backfill。
 - 未改 scheduler / cron。
+- 未改 replay/backfill。
 - 未執行 live Telegram delivery。
 - 未執行 live Supabase write。
 - 未執行正式 backfill。
 
 ## 已跑自檢命令
 
-- `PYTHONPATH=$PWD arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py::GeneratorReportTest::test_intraday_v20_0_12_separates_mainline_from_execution tests/test_generator_report.py::GeneratorReportTest::test_intraday_v20_0_12_hot_market_without_ai_evidence_uses_neutral_mainline tests/test_generator_report.py::GeneratorReportTest::test_intraday_v20_0_13_legacy_market_summary_cannot_confirm_theme -q`
-  - 結果：`3 passed, 13 warnings`
-- `PYTHONPATH=$PWD arch -arm64 .venv/bin/python -m pytest tests/test_notifier.py -q`
-  - 結果：`3 passed`
-- `PYTHONPATH=$PWD arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py tests/test_notifier.py -q`
-  - 結果：`47 passed, 3 failed, 21 warnings`
-  - 失敗項目：`test_rejected_weak_rr_uses_true_reject_reason_not_rr`、`test_telegram_messages_use_summary_cards_and_detail`、`test_today_buy_holding_overrides_add_level_in_all_summary_surfaces`
-  - 失敗原因：這三項未固定 `get_market_phase()`，目前環境輸出 `明日觸發` / `明日未修復`，舊斷言期待 `盤中觸發` / `盤中觀察修復狀況`；不涉及本輪 `v20.0.13` 版本同步或 evidence blocker 變更。
+- `pytest tests/test_generator_report.py tests/test_notifier.py`
+  - 結果：失敗，`pytest: command not found`；shell PATH 未包含 pytest。
+- `.venv/bin/python -m pytest tests/test_generator_report.py tests/test_notifier.py`
+  - 結果：collection 失敗；目前 Python 以 `x86_64` 執行，但已準備套件中的 `pydantic_core` 為 `arm64`。
+- `arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py tests/test_notifier.py`
+  - 結果：`52 passed, 21 warnings`。
 
 ## 殘留風險
 
-- Evidence confirmed 判斷仍沿用本輪 patch 內的保守 token gate，未新增市場 / 題材 evidence provider、schema、cache 或外部資料源；這符合本輪不是 `v20.1.0` 新能力發布的限制。
-- 完整 `tests/test_generator_report.py tests/test_notifier.py` broader smoke 有 3 個既有時間相位敏感測試失敗；本輪未修改該相位契約，需由後續任務決定是否將舊測試固定 phase。
-- 未執行 full pytest、replay/backfill dry-run、live Telegram delivery 或 live Supabase write；依 `TASK.md` 禁止事項未執行。
+- 本輪只固定 Telegram message list 同輪 `report_phase` 與 phase-sensitive formatter/helper 文案；未重新設計 market phase 判斷、策略 decision 或 DB 寫入時機。
+- `price_label_for_source()` 仍是行情載入 / 詳情渲染層的即時 phase helper；本輪未擴大到行情來源與完整詳情備份的重構。
+- 測試需用 `arch -arm64 .venv/bin/python` 執行；直接 `pytest` 不在 PATH，直接 `.venv/bin/python` 會因架構不符失敗。

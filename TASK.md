@@ -1,167 +1,176 @@
-# TASK: market_theme_evidence_dry_run_contract_v20_1_0 版本契約 QA blocker patch
+# TASK: v20.0.14 盤後 phase / 同輪 Telegram message list phase 一致性修復
 
 ## 任務狀態
 
-- task_id: market_theme_evidence_dry_run_contract_v20_1_0_version_contract_patch
-- 任務類型: tiny_patch
-- 狀態: ready_for_tech
-- 版本建議: patch
-- 版本契約: 將使用者可見 Telegram header / VERSION / 相關測試期望 / CHANGELOG.md 版本同步由 v20.0.12 升到 v20.0.13
-- QA 分級建議: L1
-- QA 停止條件: 只驗版本字串同步、相關 formatter tests、notifier 直接消費者、以及 evidence blocker 修復未回退；不得擴大到 v20.1.0 新能力驗收
+- task_id：v20.0.14-phase-drift-message-list-consistency
+- 任務類型：Telegram 報文一致性 bugfix
+- 狀態：ready_for_tech
+- 版本契約：本輪不升版，沿用目前 v20.0.14
+- QA 分級建議：L1，但必須包含直接消費者一致性檢查與手機閱讀順序反證
 
 ## Owner 問題
 
-上一輪 market_theme_evidence_dry_run_contract_v20_1_0_qa_blocker 的 evidence blocker 修復已獲 QA conditional pass，只剩版本契約衝突：使用者可見版本仍卡在 v20.0.12，但 Owner 要求修 bug 後應正常進 patch。
+上一輪 v20.0.14 盤後 phase / 行動一致性修復已達 QA conditional pass，但 QA 指出同一輪 formatTelegramMessages() message list 內存在 phase drift 風險：
 
-本輪只修正版本契約，明確標示這是 QA blocker patch 修復，不是 v20.1.0 新能力發布。
+- formatTelegramMessages() 先讀一次 phase，供持倉 / 未持倉卡使用。
+- formatTelegramSummary() 內又自行讀一次 phase。
+- 若生成過程剛好跨過盤中 / 盤後邊界，同一批 Telegram messages 可能同時出現：
+- 未持倉卡：盤中語意，例如 可買｜10%倉 / 分批
+- summary：盤後語意，例如 明日計畫
+
+Owner 要修的是「同一輪 Telegram messages 只使用同一個 report_phase」，不是重開策略或報文大改。
 
 ## 使用者可見結果
 
-Owner 在 Telegram 手機報文第一眼 header 應看到版本升為 v20.0.13。
+Owner 手機打開 Telegram 時，同一批連續 messages 的盤中 / 盤後語意必須一致。
 
 手機閱讀路徑：
 
-1. Owner 打開 Telegram。
-2. 第一行 header 看到類似 【05/28 盤中｜v20.0.13】 或 【05/28 盤後｜v20.0.13】。
-3. Summary 仍保留已通過的 evidence blocker 語意：缺 explicit source 時，不得把 AI / 電子供應鏈寫成 confirmed bullish。
-4. Owner 不應看到任何 v20.1.0 新能力發布語意。
+1. 先看到 summary。
+2. 再看今日交易 / 明日計畫 / 執行清單。
+3. 再往下看持倉卡、未持倉卡、詳情索引與原因。
+4. 全部區塊必須使用同一個 report_phase，不得 summary 是盤後、卡片是盤中，或反過來。
+
+使用者可見行為：
+
+- 同一輪報文中，summary、持倉卡、未持倉卡、execution/checklist/index/reason 類 phase-sensitive 區塊都採用同一個 phase。
+- 若本輪決定為盤後，報文維持盤後語意：
+- summary 顯示 明日計畫 N
+- 今日交易紀錄無新增時不誤導為今日可執行
+- 詳情索引不出現 交易執行 N
+- 原因不寫 分批執行
+- 若本輪決定為盤中，summary 與卡片也一致使用盤中語意，不得中途切成盤後。
 
 ## 非目標
 
-- 不重開 PM 需求範圍。
-- 不改 evidence 判斷邏輯。
 - 不改策略 decision。
-- 不改 DB schema / DB payload。
+- 不改 DB schema / DB write payload。
 - 不改 watchlist。
-- 不做 live Telegram delivery。
-- 不做 live Supabase write。
+- 不改 live Telegram delivery。
 - 不改 scheduler / cron。
-- 不新增 v20.1.0 能力。
-- 不新增外部資料來源。
-- 不修改 market theme confirmed / weak / absent contract，除非是防止本輪版本同步造成回退的測試期望更新。
+- 不改行情來源與 market phase 判斷邏輯本身。
+- 不重排整體報文架構。
+- 不升版，保持 v20.0.14。
+- 不處理本輪以外的新文案、分類或策略問題。
 
 ## 影響模組
 
-- 直接模組:
-- Telegram formatter header 版本常量所在模組。
-- VERSION 或等價使用者可見版本常量。
-- formatter 版本 header 測試。
-- notifier 直接消費者測試。
-- CHANGELOG.md 版本描述。
-- 不應影響模組:
-- market theme evidence 判斷邏輯。
-- strategy decision core。
-- DB write path。
-- watchlist generation。
-- live Telegram sender 的實際發送行為。
-- Supabase write path。
-- scheduler / cron entrypoint。
+- 主要模組：
+- core/generator.py
+- 相關測試：
+- tests/test_generator_report.py
+- tests/test_notifier.py
 
 ## 直接消費者
 
-Tech 必須確認並同步以下直接消費者：
-
-- Telegram 報文 header formatter。
-- notifier 組裝 / 傳送前讀取 formatter output 的直接路徑。
-- 相關 formatter tests 中的 header 版本期望。
-- 相關 notifier tests 中的版本字串期望。
-- CHANGELOG.md 中本輪版本說明。
+- formatTelegramMessages() 的完整 Telegram message list 產出。
+- formatTelegramSummary() 的 summary message。
+- 持倉卡 formatter。
+- 未持倉卡 formatter。
+- execution / checklist / index / reason helpers 中任何依賴 phase 的輸出。
+- notifier 發送前取得的 message list contract。
 
 ## 輸出契約
 
-### Version Contract
-
-- 使用者可見 Telegram header 必須顯示 v20.0.13。
-- 程式版本常量 VERSION 或等價來源必須為 v20.0.13。
-- formatter tests / notifier tests 不得仍期待 v20.0.12。
-- CHANGELOG.md 必須說明：
-- 本輪是 v20.0.13 QA blocker patch 修復。
-- 本輪不是 v20.1.0 新能力發布。
-- 保留已通過的 evidence blocker 修復。
-
-### Evidence Regression Contract
-
-必須保留上一輪已通過修復：
-
-- 舊 market_summary 不能自我證明。
-- 缺 explicit source 不得 confirmed。
-- market_summary='AI / 電子供應鏈仍偏多' 加 market_mode='進攻偏熱' 不得湊成 confirmed。
-- 缺 source 時 summary 不得輸出 AI / 電子供應鏈 confirmed bullish 語意。
+- formatTelegramMessages() 在同一輪生成中只能決定一次 report_phase。
+- 該 report_phase 必須傳入所有 phase-sensitive formatter / helper。
+- formatTelegramSummary() 不得在同一輪 message list 生成中再次自行讀取不同 phase。
+- 同一輪 messages 內不可混用盤中與盤後行動語意。
+- Telegram message list 的整體結構不因本輪重排；只修正 phase 來源一致性。
+- Header / version 字串維持 v20.0.14。
+- 穩定盤後 fixture 的既有契約需保持：
+- 今日交易紀錄無新增。
+- summary 顯示 明日計畫 N。
+- 詳情索引不含 交易執行 N。
+- reason 不寫 分批執行。
 
 ## 驗收條件
 
-1. Telegram header 實際輸出版本為 v20.0.13。
-2. VERSION 或等價版本常量為 v20.0.13。
-3. 相關 formatter tests 的版本期望已同步為 v20.0.13。
-4. 相關 notifier tests 的版本期望已同步為 v20.0.13。
-5. CHANGELOG.md 明確寫本輪是 v20.0.13 QA blocker patch，不是 v20.1.0 新能力發布。
-6. 負面 evidence fixture 仍通過：舊 market_summary + market_mode='進攻偏熱' + 無 explicit source 時不得 confirmed。
-7. 同一負面 fixture 的 Telegram summary 不得出現 AI 題材偏多、電子供應鏈偏多或等價 confirmed bullish 文案。
-8. 不得改策略、DB、watchlist、live delivery、scheduler。
-9. QA 只復驗版本字串、相關 formatter tests、notifier 直接消費者，以及 evidence 邏輯未回退。
-10. QA 結論只能是 通過 或 conditional pass，且 QA_REPORT.md 格式必須符合 runner。
+1. 新增 phase drift fixture：
+- mock get_market_phase 第一次回傳盤中。
+- 第二次回傳盤後。
+- 執行同一輪 formatTelegramMessages()。
+- 驗證整批 messages 使用同一個 phase。
+- 不得出現未持倉卡是盤中 可買｜10%倉 / 分批，summary 卻是盤後 明日計畫 的混合語意。
+2. 驗證 formatTelegramSummary()：
+- 在 formatTelegramMessages() 已決定 report_phase 的路徑中，不得自行重新讀取不同 phase。
+- summary phase 必須來自同一輪 message list 的 report_phase。
+3. 驗證 phase-sensitive helper 同步：
+- position / unheld cards 使用同一個 report_phase。
+- summary 使用同一個 report_phase。
+- execution / checklist / index / reason helpers 如有 phase 依賴，也必須使用同一個 report_phase。
+4. 穩定盤後 fixture 仍通過：
+- 今日交易紀錄無新增。
+- 明日計畫 N 仍存在。
+- 詳情索引不含 交易執行 N。
+- 原因不寫 分批執行。
+5. 版本驗收：
+- 使用者可見 header / version 仍為 v20.0.14。
+- 不得升版或回退版本。
+6. 測試命令：
+- Tech 自檢至少跑：
+- pytest tests/test_generator_report.py tests/test_notifier.py
+- QA 需重跑：
+- pytest tests/test_generator_report.py tests/test_notifier.py
+- QA 另需補手機閱讀順序反證，檢查 summary、卡片、索引、原因沒有跨 phase 混合語意。
 
 ## 範例或 fixture
 
-### Telegram header 期望形狀
+### phase drift fixture 形狀
 
-【05/28 盤中｜v20.0.13】
+- mock:
+- 第一次 get_market_phase() -> intraday
+- 第二次 get_market_phase() -> post_market
+- 執行：
+- formatTelegramMessages(...)
+- 期望：
+- 同一批 messages 只採用第一次決定的 report_phase，或產品邏輯指定的單一 report_phase。
+- 不允許同批 messages 同時包含：
 
-或：
+未持倉：
+可買｜10%倉 / 分批
 
-【05/28 盤後｜v20.0.13】
+以及：
 
-### Evidence 負面 fixture
+Summary：
+明日計畫 3
 
-input_fixture = {
-"market_mode": "進攻偏熱",
-"market_summary": "AI / 電子供應鏈仍偏多",
-"internal_report_input": {
-"summary": "AI / 電子供應鏈仍偏多",
-},
-"market_theme_evidence_sources": [],
-}
+除非兩者在同一個 phase 語意下被明確定義為可共存；本輪預設不可共存。
 
-### 負面 fixture 期望 summary 形狀
+### 穩定盤後示例輸出形狀
 
-今日新倉：無有效進場
-AI 題材：可追蹤，證據不足
-電子供應鏈：可追蹤，證據不足
-買點未成立，不可買
+Summary：
+今日交易：無新增
+明日計畫 3
+新倉：盤後僅列明日追蹤，不提示今日分批執行
 
-### 禁止輸出形狀
+詳情索引：
+持倉 ...
+未持倉 ...
 
-【05/28 盤中｜v20.0.12】
-AI 題材偏多
-電子供應鏈偏多
+不得出現：
 
-【05/28 盤中｜v20.1.0】
+交易執行 3
+分批執行
+可買｜10%倉 / 分批
 
 ## 明確禁止事項
 
-- 禁止重開 PM 需求範圍。
-- 禁止改 evidence 判斷邏輯，除非 Tech 發現版本同步造成測試回退且必須阻塞說明。
-- 禁止改策略 decision。
-- 禁止改 DB schema / DB payload。
-- 禁止 live Supabase write。
-- 禁止 live Telegram delivery。
+- 禁止改策略判斷。
+- 禁止改 DB schema 或 DB 寫入。
 - 禁止改 watchlist。
+- 禁止 live Telegram delivery。
+- 禁止 live Supabase write。
+- 禁止正式 backfill。
 - 禁止改 scheduler / cron。
-- 禁止新增 v20.1.0 新能力。
-- 禁止把本輪描述成 v20.1.0 發布。
-- 禁止讓舊 market_summary 字串支撐 confirmed。
-- 禁止讓缺 explicit source 的 AI / 電子供應鏈寫成 bullish confirmed 語意。
-- 禁止刪除固定 8 份 Markdown。
-- 禁止 Tech 修改 TASK.md。
-- 禁止 QA 擴大為 full pytest、replay、backfill 或 live path 驗證，除非發現版本同步直接破壞契約。
+- 禁止擴大到其他報文重構。
+- 禁止升版，必須保持 v20.0.14。
+- 禁止用再次呼叫 get_market_phase() 讓 summary 自行決定不同 phase。
+- 禁止只修測試不修直接消費者一致性風險。
 
 ## 阻塞條件
 
-若出現以下任一情況，Tech 必須標記 blocked：
-
-- 無法定位使用者可見 Telegram header 的唯一版本來源。
-- 程式中存在多個互相衝突的使用者可見版本來源，且無法在 tiny patch 範圍內安全同步。
-- 版本同步會迫使改動 evidence 邏輯、策略、DB、watchlist、live delivery 或 scheduler。
-- formatter / notifier 測試無法在 runner 準備的環境中執行。
-- 上游文件同時要求 v20.0.13 與 v20.1.0 作為同一 Telegram header 版本。
+- 若現有 formatter 架構無法在不改 public contract 的情況下傳入單一 report_phase，Tech 必須 blocked 並說明需要 PM/Architect 重新定義輸出契約。
+- 若發現 phase-sensitive helper 範圍超出本 TASK 列出的直接消費者，且會影響策略或 DB，Tech 必須 blocked，不得自行擴大。
+- 若測試環境缺 pytest 或必要依賴，runner 應補環境；補完仍無法執行時，Tech/QA 必須 blocked 並列出實際錯誤。
+- 若修復需要升版或改變使用者可見報文結構，Tech 必須 blocked，交回 PM 重新定義版本契約。

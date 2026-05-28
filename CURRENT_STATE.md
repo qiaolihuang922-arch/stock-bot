@@ -106,6 +106,22 @@
   - 未改策略 decision、watchlist、Supabase write、live Telegram、scheduler。
 - QA 結論：`conditional pass`；限定 diff 可吸收，但 `tests/test_generator_report.py tests/test_notifier.py` broader smoke 仍有 3 個既有 phase-sensitive failures，需另開任務固定 `get_market_phase()` 或調整期望。
 
+## Post-market Phase Message Consistency v20.0.14 已完成
+
+- 修復 Owner 檢查最新報文指出的盤後 phase / 行動一致性問題。
+- 已完成變更：
+  - Telegram header / formatter `VERSION` 升為 `v20.0.14`。
+  - 盤後 summary 改為 `今日交易紀錄` / `明日計畫` / `持倉風控檢查`，不再用 `今日盤中交易執行`。
+  - 持倉卡 `今日 無` 的待加碼不再放入今日已執行，改列明日待觸發；持倉風控檢查只保留短句，避免重複完整加碼文案。
+  - 盤後 `詳情索引` 改為 `今日交易紀錄 N｜明日計畫 N`，不再用 `交易執行 N` 統計待觸發項。
+  - 盤後原因不再寫 `分批執行`，改為列入明日待觸發 / 不追價。
+  - 淘汰卡無產業證據時改為 `僅策略條件未通過，未判斷產業多空`。
+  - 同一輪 `formatTelegramMessages()` 只決定一次 `report_phase`，並傳入 summary、未持倉卡、execution/checklist/index/reason helper，避免 phase drift。
+- 未做：
+  - 未改策略 decision。
+  - 未改 DB schema / payload、watchlist、Supabase write、live Telegram、scheduler。
+- QA 結論：`通過`；驗證 `tests/test_generator_report.py tests/test_notifier.py` 為 `52 passed, 21 warnings`，並補反向 phase drift smoke。
+
 ## Post Trade Reduce Cooldown Strategy Fix 已完成本地修復
 
 - 修復 Owner 指出的持倉策略衝突：
