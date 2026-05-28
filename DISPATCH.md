@@ -4,42 +4,38 @@
 
 ## Current Task
 
-- task_id: `market-context-execution-bridge`
-- task_name: `Market Context and Execution Bridge`
-- task_type: `telegram_strategy_report_review`
-- version_level: `patch`
-- qa_level: `L2`
+- task_id: `market-theme-evidence-chain-research`
+- task_name: `Market Theme Evidence Chain Research`
+- task_type: `research`
+- version_level: `major`
+- qa_level: `research`
 - owner_status: `requested`
-- architect_status: `qa_accepted`
-- pm_status: `task_ready`
-- tech_status: `changelog_ready`
-- qa_status: `qa_passed`
+- architect_status: `research_accepted`
+- pm_status: `research_ready`
+- tech_status: `not_required`
+- qa_status: `research_ready`
 - commit: `pushed`
 
 ## Current Result
 
-- Owner 問「有沒有要優化的，有的話安排下」。
-- Architect 依剛才市場 / 網路方向比對，判斷可做一個產品語意優化，不改策略核心：
-  - 目前報文能說清楚 `交易執行：無新增下單`，但缺少橋接語義：市場大方向 / AI 主線仍偏多，和系統當前不追高 / 等回測並不衝突。
-  - PM 需定義 summary 增加一行短句或調整原因句，例如 `主線仍偏多，但買點未成立，先等回測`；重點是把「方向」與「下單」分開。
-  - 對未持倉淘汰或等回測標的，若產業方向仍屬主流但技術條件失效，文案應表達為 `題材未壞，技術觸發未成立 / 已失效`，避免 Owner 誤讀為看空產業。
-  - 對持倉 AI / 電子供應鏈標的，summary 可保留持倉風控，但不要產生加碼暗示；語意應是 `主線持倉保留，新增倉位等觸發`。
-  - 不改買賣決策、不改策略門檻、不新增外部即時新聞依賴、不做 live Telegram / Supabase / backfill。
-  - 若修改使用者可見 Telegram 報文，版本需升為 `v20.0.12`。
+- Owner 指出：目前完成的是「保護邏輯 / 文案橋接」，真正的市場 / 題材證據鏈尚未建立。
+- Architect 判斷本輪不可直接進入開發，需先做研究與產品契約：
+  - 定義「市場主線 / 題材偏多」的證據來源：價格 / 量能 / watchlist 結構、類股 / 指數 / 新聞或外部資料是否納入。
+  - 定義證據等級：confirmed / weak / absent / stale；沒有證據時報文如何降級。
+  - 定義報文如何引用證據：不能只寫 `AI 主線偏多`，必須能追溯到來源、時間、樣本與限制。
+  - 定義是否需要資料表、快取、來源更新頻率、失敗 fallback、production benchmark 與 QA 驗收。
+  - 禁止未研究先改 DB schema、策略決策、live write、正式 backfill 或 live Telegram。
 - CAO 前端：`http://127.0.0.1:5173/`
-- PM 已交付 `TASK.md`，版本契約升為 `v20.0.12`。
-- Tech 已完成候選 diff：
-  - `core/generator.py`
-  - `tests/test_generator_report.py`
-  - `CHANGELOG.md`
-- QA 首輪阻塞：`進攻偏熱` 被硬寫成 `AI / 電子供應鏈仍偏多`，在非 AI 場景會誤導。
-- Tech retry 已修正：只有 `market_summary` 明確含 AI / 人工智慧 / 電子供應鏈證據時才寫 AI 主線；否則用中性 `市場偏多但買點未成立`。
-- QA 最終結論：`通過`。
-- QA 驗證：`tests/test_generator_report.py tests/test_notifier.py -q`，`48 passed, 21 warnings`；補手機正反例渲染，確認 AI 有證據時可寫 AI 主線但仍顯示不追高 / 無有效進場，非 AI 場景不硬套 AI，等回測 / 淘汰不被誤讀成可買或產業轉空。
+- PM / QA research 已寫入 `RESEARCH.md`。
+- Architect 結論：
+  - `v20.0.12` 只是保護邏輯，不是真正證據鏈。
+  - 下一步應先做 `market_theme_evidence` dry-run / payload contract，不改策略 decision、不 live write。
+  - 證據鏈需支援 `confirmed / weak / absent / stale`，每句市場 / 題材文案都要能追溯 `source_type / source_name / as_of / level / limitations`。
+  - 無證據或過期時必須降級；非 AI 場景不得硬寫 AI；產業背景強不得推導成可買。
 
 ## Next Action
 
-- 本輪已通過主 repo 驗證，完成 commit / push；等待 Owner 下一個任務。
+- 等 Owner 確認是否進入 PM 任務卡：`market_theme_evidence` dry-run / payload contract。
 
 ## Status Values
 
