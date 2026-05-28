@@ -35,13 +35,13 @@
   - 補手機閱讀 fixture：risk_only 無明日計畫噪音；risk_plus_add 中持倉風控早於明日計畫 1，技嘉待觸發加碼保留。
 - Post-cycle review：
   - QA 兩次 conditional pass 有效攔住殘留噪音：先攔下 `明日計畫 0 / 無新增下單`，再攔下 `明日計畫` 排在持倉風控之前。
-  - 本輪已把「空計畫 / 0 計數 / 同義區塊」納入測試 guard；暫不需新增 `AGENTS.md` 大規則，但後續報文任務需把空區塊也視為手機噪音。
+  - 已補 `AGENTS.md` 手機 Telegram 報文硬規則：空區塊 / 0 計數 / no-op 文案也算手機噪音；同義區塊不得重複同一行動；持倉風控優先於待觸發明日事項。
 
 ## Next Action
 
 - Architect final review 已在主 repo 跑同組驗證，通過後提交並推送。
 - 推送後清理 CAO worktree，並確認 CAO API / 前端服務可用。
-- 後續報文任務如新增區塊，PM 必須定義空區塊 / 0 計數是否顯示；QA 必須檢查手機閱讀順序。
+- 後續報文任務如新增區塊，PM 必須定義空區塊 / 0 計數是否顯示；未定義則預設不顯示。QA 必須檢查手機閱讀順序。
 
 ## Status Values
 

@@ -204,6 +204,7 @@
 - Post-cycle review：
   - QA 兩次 conditional pass 有效攔截殘留：空明日計畫 / 0 計數，以及明日計畫排序早於持倉風控。
   - 本輪已用測試 guard 固定「空區塊也算手機噪音」與「持倉風控優先於明日計畫」。
+  - 已同步 `AGENTS.md` 手機 Telegram 報文硬規則：空區塊 / 0-count / no-op 文案預設不顯示；同義區塊不得重複同一行動；持倉風控優先於待觸發明日事項。
 
 ## Post Trade Reduce Cooldown Strategy Fix 已完成本地修復
 
