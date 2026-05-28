@@ -24,8 +24,8 @@
 
 - CAO API：`http://127.0.0.1:9889/`
 - CAO 中文前端：`http://127.0.0.1:5173/`
-- 中文前端目錄：`/Users/liveroom/.local/share/cao-web-zh/web`
-- 服務確認 / 啟動腳本：`/Users/liveroom/stock-bot-agent-context/ensure_cao_services.sh`
+- 中文前端預設目錄：`$HOME/.local/share/cao-web-zh/web`，可用 `CAO_WEB_DIR` 覆蓋。
+- 服務確認 / 啟動腳本：`tools/cao_agent/ensure_cao_services.sh`
 - Architect 只要分配、啟動或回覆 CAO 前端地址，必須先確認 `9889` API 與 `5173` 前端正在 listen；未啟動則先跑服務確認腳本。
 
 ## Recent High-Signal Milestones
@@ -90,18 +90,18 @@
 ## Workflow Health
 
 - CAO 入口收斂為：
-  - `/Users/liveroom/stock-bot-agent-context/run_architect_task.sh research "<研究問題>"`
-  - `/Users/liveroom/stock-bot-agent-context/run_architect_task.sh plan "<技術規劃問題>"`
-  - `/Users/liveroom/stock-bot-agent-context/run_architect_task.sh auto "<Owner 任務>"`
-- Tech write 只在 `/Users/liveroom/stock-bot-agent-worktrees/tech_write` 產生候選 diff。
+  - `tools/cao_agent/run_architect_task.sh research "<研究問題>"`
+  - `tools/cao_agent/run_architect_task.sh plan "<技術規劃問題>"`
+  - `tools/cao_agent/run_architect_task.sh auto "<Owner 任務>"`
+- Tech write 只在隔離 worktree 產生候選 diff；預設位置為 repo 同級 `stock-bot-agent-worktrees/tech_write`。
 - QA code runner read-only，只允許 `.qa_tmp/` 測試暫存，hash gate 防止改 tracked files。
 - CAO runner prompt 已補效率 guard：
   - PM 先判斷任務尺寸與停止條件，避免小 bug 膨脹。
   - Tech 先定義最小改動策略，避免順手重構、過擬合測試或回退既有契約。
   - QA 先定義 1-3 個風險預算與停止條件，避免 tiny patch 被驗成大任務。
   - Tech plan 先輸出任務尺寸、最小影響面與不應觸碰模組。
-  - 實際本機腳本位於 `/Users/liveroom/stock-bot-agent-context/run_auto_dev_cycle.sh`、`run_tech_write.sh`、`run_qa_code.sh`、`run_tech_plan.sh`。
-- commit / push 後需執行 `/Users/liveroom/stock-bot-agent-context/cleanup_agent_worktrees.sh`，讓隔離 worktree 對齊主 repo。
+  - 實際腳本已納入 repo：`tools/cao_agent/run_auto_dev_cycle.sh`、`run_tech_write.sh`、`run_qa_code.sh`、`run_tech_plan.sh`。
+- commit / push 後需執行 `tools/cao_agent/cleanup_agent_worktrees.sh`，讓隔離 worktree 對齊主 repo。
 - 清理任務若涉及產品代碼、測試或 runtime 文件，必須有 PM 任務、Tech 證據表與 QA 反證；流程文件壓縮可由 Architect 直接處理。
 
 ## Open Follow-Ups

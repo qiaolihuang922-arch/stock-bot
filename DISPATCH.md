@@ -4,8 +4,8 @@
 
 ## Current Task
 
-- task_id: `cao-agent-prompt-efficiency-20260528`
-- task_name: `CAO Agent Prompt Efficiency and Closeable Handoff`
+- task_id: `cao-agent-runners-in-repo-20260528`
+- task_name: `CAO Agent Runners In Repo`
 - task_type: `process`
 - version_level: `none`
 - qa_level: `process`
@@ -18,20 +18,25 @@
 
 ## Current Result
 
-- 本輪只做 CAO runner prompt 與流程文件補強，不改產品代碼、不改策略、不改測試。
-- Owner 擔心：agent 不夠聰明、效率低，且關掉對話後狀態會錯亂。
-- 已完成本機 runner prompt 補丁：
-  - `/Users/liveroom/stock-bot-agent-context/run_auto_dev_cycle.sh`：PM 必須先判斷任務尺寸，tiny patch 只允許單一主 bug、單一輸出契約、1-2 個驗收案例，並寫停止條件。
-  - `/Users/liveroom/stock-bot-agent-context/run_tech_write.sh`：Tech 必須先寫任務尺寸、最小改動策略、旁支待辦；禁止順手重構、測試過擬合、回退既有契約。
-  - `/Users/liveroom/stock-bot-agent-context/run_qa_code.sh`：QA 必須先寫風險預算與停止條件；驗證範圍需匹配任務尺寸，tiny patch 不得無理由擴成全量矩陣。
-  - `/Users/liveroom/stock-bot-agent-context/run_tech_plan.sh`：規劃代理必須輸出任務尺寸、最小影響面與不應觸碰模組。
-  - `/Users/liveroom/stock-bot-agent-context/README.md`：更新 Tech write / QA runner 已啟用狀態，移除舊「Tech 自動寫碼尚未啟用」誤導。
+- 本輪只做 CAO runner 遷移與流程文件補強，不改產品代碼、不改策略、不改測試。
+- Owner 指出：CAO runner 也應合併到 `stock-bot-main`，否則重新部署到別的電腦抓不到這些文件。
+- 已完成 repo 內可遷移 runner：
+  - `tools/cao_agent/run_auto_dev_cycle.sh`：PM 必須先判斷任務尺寸，tiny patch 只允許單一主 bug、單一輸出契約、1-2 個驗收案例，並寫停止條件。
+  - `tools/cao_agent/run_tech_write.sh`：Tech 必須先寫任務尺寸、最小改動策略、旁支待辦；禁止順手重構、測試過擬合、回退既有契約。
+  - `tools/cao_agent/run_qa_code.sh`：QA 必須先寫風險預算與停止條件；驗證範圍需匹配任務尺寸，tiny patch 不得無理由擴成全量矩陣。
+  - `tools/cao_agent/run_tech_plan.sh`：規劃代理必須輸出任務尺寸、最小影響面與不應觸碰模組。
+  - `tools/cao_agent/env.sh`：集中 repo-relative path、CAO binary、context、outputs、worktree 設定。
+  - `tools/cao_agent/setup_agent_worktree.sh`：新電腦初始化隔離 worktree。
+  - `tools/cao_agent/README.md`：部署、環境變數、日常入口與安全邊界。
+  - `tools/cao_agent/bin/codex` 與 `sandbox/codex_no_network.sb`：可遷移 sandbox wrapper，不再寫死 `/Users/liveroom`。
 - 關閉對話後的接力方式：
   - 新對話先讀 `AGENTS.md`、`DISPATCH.md`、`CURRENT_STATE.md`。
-  - 本輪 runner 腳本不在 git repo 內，但已在本機實際路徑改好；本文件與 `CURRENT_STATE.md` 記錄改動位置。
-  - 若要重新核對 runner，直接讀上述 5 個本機檔案。
+  - 本輪 runner 腳本已納入 repo 的 `tools/cao_agent/`，重新部署到其他電腦時會隨 repo 一起取得。
+  - 若要重新核對 runner，直接讀 `tools/cao_agent/README.md` 與相關腳本。
 - 已驗證：
-  - Runner shell syntax：`bash -n run_auto_dev_cycle.sh run_tech_write.sh run_qa_code.sh run_tech_plan.sh run_online_agent.sh` 通過。
+  - Runner shell syntax：`bash -n tools/cao_agent/*.sh tools/cao_agent/bin/codex` 通過。
+  - Repo 內 `tools/cao_agent/setup_agent_worktree.sh` 可執行並能定位 repo、context、worktree。
+  - Repo 內 `tools/cao_agent/ensure_cao_services.sh` 可確認 CAO API / UI。
   - Repo 文件 diff：`git diff --check` 通過。
 
 ## Next Action
@@ -80,13 +85,11 @@ Owner 對 Architect：
 Architect 可用 CAO：
 
 ```text
-研究：/Users/liveroom/stock-bot-agent-context/run_architect_task.sh research "<研究問題>"
-規劃：/Users/liveroom/stock-bot-agent-context/run_architect_task.sh plan "<技術規劃問題>"
-自動開發：/Users/liveroom/stock-bot-agent-context/run_architect_task.sh auto "<Owner 任務>"
+研究：tools/cao_agent/run_architect_task.sh research "<研究問題>"
+規劃：tools/cao_agent/run_architect_task.sh plan "<技術規劃問題>"
+自動開發：tools/cao_agent/run_architect_task.sh auto "<Owner 任務>"
 
-CAO API：/Users/liveroom/.local/bin/cao-server --host 127.0.0.1 --port 9889
-CAO 中文前端：cd /Users/liveroom/.local/share/cao-web-zh/web && npm run dev -- --host 127.0.0.1 --port 5173
-CAO 服務確認：/Users/liveroom/stock-bot-agent-context/ensure_cao_services.sh
+CAO 服務確認：tools/cao_agent/ensure_cao_services.sh
 分配或啟動 CAO agents 後，Architect 必須先確認服務已啟動，再回覆 Owner 前端地址：http://127.0.0.1:5173/
 ```
 

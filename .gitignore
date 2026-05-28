@@ -12,3 +12,6 @@ config.py
 
 # 執行期間產生的防重複/暫存檔。
 sent_*.txt
+
+# CAO 本機 runner 產物。
+.cao_agent_context/

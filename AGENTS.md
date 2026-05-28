@@ -125,7 +125,7 @@ Architect 必須檢查並記錄：
 
 - Architect 預設不改產品代碼；只有 Owner 明確說「你直接改代碼 / 直接實作 / 不走部門」才可臨時作為 Tech。
 - 傳統 Tech 只按 `TASK.md` 指定範圍改代碼與測試，並改寫 `CHANGELOG.md`。
-- CAO Tech write 只允許在 `/Users/liveroom/stock-bot-agent-worktrees/tech_write` 產生 diff，不得直接寫主 repo。
+- CAO Tech write 只允許在隔離 worktree 產生 diff，不得直接寫主 repo；預設 worktree 為 repo 同級 `stock-bot-agent-worktrees/tech_write`，可用 `STOCK_BOT_AGENT_WORKTREE` 覆蓋。
 - 任何代碼 diff 合併主 repo 前，Architect 必須檢查 `git status`、`git diff --stat`、必要 diff 與對應 `TASK.md` / `CHANGELOG.md` / `QA_REPORT.md`。
 - 未定義需求前，不改策略、報文分類、DB schema、Telegram payload、watchlist、排程入口。
 - 禁止 live Supabase write、正式 backfill、live Telegram delivery，除非 Owner 對該動作單獨批准。
@@ -521,8 +521,8 @@ Architect 狀態輸出固定為：
 
 CAO 自動開發例外：
 
-- CAO Tech 可寫代理不得直接寫 `/Users/liveroom/stock-bot-main` 主工作區。
-- CAO Tech 可寫代理只允許在 `/Users/liveroom/stock-bot-agent-worktrees/tech_write` 隔離 worktree 修改代碼、測試與 `CHANGELOG.md`。
+- CAO Tech 可寫代理不得直接寫主工作區。
+- CAO Tech 可寫代理只允許在隔離 worktree 修改代碼、測試與 `CHANGELOG.md`。
 - CAO QA 代碼代理可讀隔離 worktree，不修改 tracked files；只允許 runner 準備的 `.qa_tmp/` 作為測試暫存。
 - Architect-controlled runner 可將 PM / QA 交付摘要寫回主 repo 的 `TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`，但代碼改動仍停留在隔離 worktree，需 Architect 檢查 diff 後才可合併。
 - CAO 自動開發不得 commit、push、live Telegram、live Supabase write 或正式 backfill。
@@ -569,9 +569,9 @@ CAO 自動開發例外：
 
 Owner 與 Architect 的使用層只保留一個入口腳本：
 
-- `/Users/liveroom/stock-bot-agent-context/run_architect_task.sh research "<研究問題>"`
-- `/Users/liveroom/stock-bot-agent-context/run_architect_task.sh plan "<技術規劃問題>"`
-- `/Users/liveroom/stock-bot-agent-context/run_architect_task.sh auto "<Owner 任務>"`
+- `tools/cao_agent/run_architect_task.sh research "<研究問題>"`
+- `tools/cao_agent/run_architect_task.sh plan "<技術規劃問題>"`
+- `tools/cao_agent/run_architect_task.sh auto "<Owner 任務>"`
 
 底層 runner 只作為內部工具，不作為日常入口。Owner 不需要直接操作 PM / Tech / QA agent。
 
@@ -585,21 +585,21 @@ Owner 與 Architect 的使用層只保留一個入口腳本：
 
 可用 runner：
 
-- `/Users/liveroom/stock-bot-agent-context/run_architect_task.sh "<mode>" "<任務>"`
-- `/Users/liveroom/stock-bot-agent-context/run_project_research.sh "<研究問題>"`
-- `/Users/liveroom/stock-bot-agent-context/run_tech_plan.sh "<技術規劃問題>"`
-- `/Users/liveroom/stock-bot-agent-context/run_tech_write.sh "<實作指令>"`
-- `/Users/liveroom/stock-bot-agent-context/run_qa_code.sh "<驗證指令>"`
-- `/Users/liveroom/stock-bot-agent-context/run_auto_dev_cycle.sh "<Owner 任務>"`
+- `tools/cao_agent/run_architect_task.sh "<mode>" "<任務>"`
+- `tools/cao_agent/run_project_research.sh "<研究問題>"`
+- `tools/cao_agent/run_tech_plan.sh "<技術規劃問題>"`
+- `tools/cao_agent/run_tech_write.sh "<實作指令>"`
+- `tools/cao_agent/run_qa_code.sh "<驗證指令>"`
+- `tools/cao_agent/run_auto_dev_cycle.sh "<Owner 任務>"`
 
 CAO 前端 UI 固定入口：
 
 - API server：`http://127.0.0.1:9889/`
 - 前端 UI：`http://127.0.0.1:5173/`
-- 中文化前端固定目錄：`/Users/liveroom/.local/share/cao-web-zh/web`
-- 啟動前端命令：`cd /Users/liveroom/.local/share/cao-web-zh/web && npm run dev -- --host 127.0.0.1 --port 5173`
-- 啟動 API 命令：`/Users/liveroom/.local/bin/cao-server --host 127.0.0.1 --port 9889`
-- CAO 服務確認命令：`/Users/liveroom/stock-bot-agent-context/ensure_cao_services.sh`
+- 中文化前端預設目錄：`$HOME/.local/share/cao-web-zh/web`，可用 `CAO_WEB_DIR` 覆蓋。
+- 啟動前端由 `tools/cao_agent/ensure_cao_services.sh` 負責。
+- 啟動 API 由 `tools/cao_agent/ensure_cao_services.sh` 負責，預設使用 `$HOME/.local/bin/cao-server`。
+- CAO 服務確認命令：`tools/cao_agent/ensure_cao_services.sh`
 - Architect 只要分配 / 啟動 / 使用 CAO agents，或回覆 Owner 前端 UI 地址前，必須先確認 `9889` API 與 `5173` 前端正在 listen；若未啟動，必須先執行 `ensure_cao_services.sh` 啟動，再回覆前端 UI 地址 `http://127.0.0.1:5173/`。
 - 不得再用 `/tmp` 內重新 clone 的 upstream 英文前端作為日常 UI；若固定中文化目錄缺失，必須先重建中文化 UI 並更新本節。
 
@@ -618,7 +618,7 @@ Runner hygiene gates：
 
 - `run_tech_write.sh` 每輪必須從乾淨隔離 worktree 開始，並清掉上一輪 tracked / untracked 殘留；`.venv` 只作測試環境保留，不得成為候選 diff。
 - `run_tech_write.sh` 清理起點必須對齊主 repo 當前 `HEAD`，不得只 reset 到隔離 worktree 自己的舊 `HEAD`；避免舊版本基線反覆污染新任務。
-- Architect 每次已吸收候選 diff 並完成 commit / push 後，必須執行 `/Users/liveroom/stock-bot-agent-context/cleanup_agent_worktrees.sh`，把隔離 worktree reset 到主 repo 當前 `HEAD` 並移除 tracked / untracked / `.qa_tmp` 殘留；只保留 `.venv`。
+- Architect 每次已吸收候選 diff 並完成 commit / push 後，必須執行 `tools/cao_agent/cleanup_agent_worktrees.sh`，把隔離 worktree reset 到主 repo 當前 `HEAD` 並移除 tracked / untracked / `.qa_tmp` 殘留；只保留 `.venv`。
 - `cleanup_agent_worktrees.sh` 只能在主 repo clean 時執行；若主 repo 仍有未提交 diff，必須先完成 commit / push 或明確放棄本輪修改，不得清理隔離 worktree 造成候選 diff 遺失。
 - Tech runner 可同步主 repo 的交接文件供 agent 閱讀，但 `AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`QA_REPORT.md` 都是 read-only handoff context，不得出現在候選 diff；runner 必須用 hash 檢查代理是否偷改。
 - Tech 候選 diff 只應包含 `TASK.md` 允許的產品 / 測試檔，以及 Tech 交付的 `CHANGELOG.md`；其他固定 Markdown 殘留一律不得整包合併。

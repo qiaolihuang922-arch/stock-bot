@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REAL_CODEX="/Applications/Codex.app/Contents/Resources/codex"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+AGENT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$AGENT_DIR/env.sh"
+
+SANDBOX_TEMPLATE="$AGENT_DIR/sandbox/codex_no_network.sb"
+SANDBOX_PROFILE="$(mktemp "${TMPDIR:-/tmp}/stock-bot-codex-sandbox.XXXXXX.sb")"
+trap 'rm -f "$SANDBOX_PROFILE"' EXIT
+
+sed \
+  -e "s#__HOME__#$HOME#g" \
+  -e "s#__REPO_ROOT__#$REPO_ROOT#g" \
+  -e "s#__CAO_TECH_WORKTREE__#$CAO_TECH_WORKTREE#g" \
+  "$SANDBOX_TEMPLATE" > "$SANDBOX_PROFILE"
+
+exec /usr/bin/sandbox-exec -f "$SANDBOX_PROFILE" "$REAL_CODEX" "$@"

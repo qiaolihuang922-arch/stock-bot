@@ -1,0 +1,23 @@
+(version 1)
+
+; Outer safety layer for CAO write-capable Codex agents.
+; Codex still applies its own workspace-write sandbox inside this process.
+
+(allow default)
+
+; No external network from write-capable agents.
+(deny network*)
+
+; Do not allow accidental secret reads.
+(deny file-read*
+  (subpath "__HOME__/.ssh")
+  (subpath "__HOME__/.aws/credentials")
+  (subpath "__HOME__/.aws/sso")
+  (subpath "__HOME__/Library/Application Support/Google")
+  (subpath "__HOME__/Library/Application Support/Google/Chrome")
+  (subpath "__HOME__/Library/Application Support/Firefox")
+  (subpath "__HOME__/Library/Keychains"))
+
+(deny file-read*
+  (literal "__REPO_ROOT__/.env")
+  (literal "__CAO_TECH_WORKTREE__/.env"))
