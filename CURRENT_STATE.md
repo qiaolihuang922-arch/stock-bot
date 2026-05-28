@@ -7,10 +7,22 @@
 - 專案：台股策略報文機器人。
 - 目前穩定線：`Telegram Unheld Funnel Count Bug` 已完成、QA L1 通過並推送。
 - 最新流程線：`Architect Role Self Lock` 與 `Auto Push After Final Review` 已寫入工作流程。
-- 最新已推送 commit：本次 `fix: repair strategy state transitions` 提交；以 `git log -1` 為準。
+- 最新已推送 commit：本次 `chore: clean agent worktrees after delivery` 提交；以 `git log -1` 為準。
 - 交付形態維持不變：定時 GitHub Actions / 腳本 -> 產生 Telegram 報文 -> 發送給 Owner。
 - 預設只處理 `core/watchlist.py` 的 12 檔股票。
-- CAO 中文前端固定為 `http://127.0.0.1:5173/`，目錄 `/Users/liveroom/.local/share/cao-web-zh/web`；Architect 只要分配 / 啟動 CAO agents，就必須把此前端地址回覆給 Owner。
+- CAO 中文前端固定為 `http://127.0.0.1:5173/`，目錄 `/Users/liveroom/.local/share/cao-web-zh/web`；Architect 只要分配 / 啟動 CAO agents，或準備回覆此前端地址，就必須先確認 `9889` API 與 `5173` 前端已啟動；若未啟動，先執行 `/Users/liveroom/stock-bot-agent-context/ensure_cao_services.sh`，再把前端地址回覆給 Owner。
+
+## CAO Frontend Availability Gate 已完成
+
+- 修復「提供 CAO 前端地址但服務未啟動」的流程缺口。
+- 新增 `/Users/liveroom/stock-bot-agent-context/ensure_cao_services.sh`：
+  - 若 `127.0.0.1:9889` 未 listen，啟動 CAO API server。
+  - 若 `127.0.0.1:5173` 未 listen，從中文化前端目錄啟動 Vite dev server。
+  - 啟動後再次檢查兩個 port，失敗則退出非 0。
+- `AGENTS.md` 已寫入硬規則：Architect 給 Owner 前端地址前，必須先確認 / 啟動服務。
+- 本輪已實際啟動並驗證：
+  - CAO API：`http://127.0.0.1:9889/`
+  - CAO UI：`http://127.0.0.1:5173/`
 
 ## Telegram Version v20.0.9 已完成本地修復
 

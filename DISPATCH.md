@@ -4,8 +4,8 @@
 
 ## Current Task
 
-- task_id: `cao-worktree-post-push-cleanup`
-- task_name: `CAO Worktree Post Push Cleanup`
+- task_id: `cao-frontend-availability-gate`
+- task_name: `CAO Frontend Availability Gate`
 - task_type: `workflow_runner_hardening`
 - version_level: `none`
 - qa_level: `process`
@@ -18,15 +18,14 @@
 
 ## Current Result
 
-- Owner 指出隔離 worktree 每次開發後仍殘留舊 diff / 舊基線，導致下一輪代理容易踩到前一版內容。
+- Owner 指出 Architect 提供 CAO 前端地址時，前端服務未必已啟動，導致地址不可用。
 - 本輪是流程 / runner hardening，不改產品策略、不改 Telegram formatter、不改測試。
-- 已新增 `/Users/liveroom/stock-bot-agent-context/cleanup_agent_worktrees.sh`：
-  - 只在主 repo clean 時執行。
-  - 將 `tech_write` reset 到主 repo 當前 `HEAD`。
-  - 清掉 tracked / untracked / `.qa_tmp` 殘留，只保留 `.venv`。
-- 已修正 `/Users/liveroom/stock-bot-agent-context/run_tech_write.sh`：每輪開始清理時對齊主 repo 當前 `HEAD`，不再 reset 到隔離 worktree 自己的舊 `HEAD`。
-- 已實際清理 `/Users/liveroom/stock-bot-agent-worktrees/tech_write`，目前對齊 `8f0e38f` 且 status clean。
-- `AGENTS.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md` 已寫入 post-push cleanup 規則。
+- 已新增 `/Users/liveroom/stock-bot-agent-context/ensure_cao_services.sh`：
+  - 檢查 `127.0.0.1:9889`，未啟動則啟動 CAO API server。
+  - 檢查 `127.0.0.1:5173`，未啟動則從中文化前端目錄啟動 Vite dev server。
+  - 啟動後再次確認兩個 port listen，失敗則退出非 0。
+- `AGENTS.md`、`CURRENT_STATE.md` 已寫入硬規則：Architect 只要回覆 CAO 前端地址，必須先確認服務已啟動；未啟動就先執行 `ensure_cao_services.sh`。
+- 本輪已實際啟動並驗證 `http://127.0.0.1:5173/` 回傳前端 HTML。
 - CAO 前端：`http://127.0.0.1:5173/`
 
 ## Next Action

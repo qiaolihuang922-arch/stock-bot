@@ -542,7 +542,8 @@ CAO 前端 UI 固定入口：
 - 中文化前端固定目錄：`/Users/liveroom/.local/share/cao-web-zh/web`
 - 啟動前端命令：`cd /Users/liveroom/.local/share/cao-web-zh/web && npm run dev -- --host 127.0.0.1 --port 5173`
 - 啟動 API 命令：`/Users/liveroom/.local/bin/cao-server --host 127.0.0.1 --port 9889`
-- Architect 只要分配 / 啟動 / 使用 CAO agents，就必須在回覆 Owner 時提供前端 UI 地址 `http://127.0.0.1:5173/`，方便 Owner 直接查看代理狀態。
+- CAO 服務確認命令：`/Users/liveroom/stock-bot-agent-context/ensure_cao_services.sh`
+- Architect 只要分配 / 啟動 / 使用 CAO agents，或回覆 Owner 前端 UI 地址前，必須先確認 `9889` API 與 `5173` 前端正在 listen；若未啟動，必須先執行 `ensure_cao_services.sh` 啟動，再回覆前端 UI 地址 `http://127.0.0.1:5173/`。
 - 不得再用 `/tmp` 內重新 clone 的 upstream 英文前端作為日常 UI；若固定中文化目錄缺失，必須先重建中文化 UI 並更新本節。
 
 安全邊界：
