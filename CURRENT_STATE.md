@@ -107,6 +107,7 @@
   - `tools/cao_agent/run_architect_task.sh plan "<技術規劃問題>"`
   - `tools/cao_agent/run_architect_task.sh auto "<Owner 任務>"`
 - Tech write 只在隔離 worktree 產生候選 diff；預設位置為 repo 同級 `stock-bot-agent-worktrees/tech_write`。
+- Tech runner 不得默默丟棄 dirty worktree candidate diff；`run_tech_write.sh` 預設會拒絕 reset，除非顯式 `ALLOW_DISCARD_TECH_WORKTREE=1`。只修 handoff 摘要時用 `CLEAN_TECH_WORKTREE=0`。
 - QA code runner read-only，只允許 `.qa_tmp/` 測試暫存，hash gate 防止改 tracked files。
 - CAO runner prompt 已補效率 guard：
   - PM 先判斷任務尺寸與停止條件，避免小 bug 膨脹。

@@ -50,7 +50,7 @@
 - 本輪 `v20.2.1` tiny patch 中，QA 曾攔下 `CHANGELOG.md` / tracked diff / VERSION 不一致：
   - 根因分類：`runner_gap` / handoff drift，不是產品規則缺失。
   - 已用 QA 重跑與主 repo 驗證收口。
-  - 後續觀察：Tech 修交付摘要時不得讓 worktree 產品 diff 被重置；若再發生，應補 runner guard，而不是新增硬規則。
+  - 已補 runner guard：`run_tech_write.sh` 遇到 dirty tech worktree 時預設拒絕 reset，避免修交付摘要時丟掉候選產品 diff；若要修 handoff 文件，需用 `CLEAN_TECH_WORKTREE=0`，若要刻意丟棄需顯式 `ALLOW_DISCARD_TECH_WORKTREE=1`。
 - 下一次產品任務完成後，確認 Post-cycle Review Gate 是否有做到：
   - 根因分類。
   - QA 攔截是否沉澱成 guard。

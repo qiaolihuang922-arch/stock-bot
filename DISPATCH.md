@@ -47,6 +47,10 @@
   - 根因分類：正常 tiny_patch，外加一次 runner / worktree 交付摘要不一致被 QA 攔下。
   - QA 有效攔截：版本 / CHANGELOG 與實際 diff 不一致時 blocked，修正後通過。
   - 不新增硬規則；此屬 runner handoff 風險，已按既有 Post-cycle Review Gate 記錄到 `CLEANUP_PLAN.md`。
+- Owner 追問本輪耗時過長後，Architect 已補 runner guard：
+  - `run_tech_write.sh` 遇到 dirty tech worktree 時預設拒絕 reset。
+  - 修交付摘要需顯式 `CLEAN_TECH_WORKTREE=0`，刻意丟棄候選 diff 需顯式 `ALLOW_DISCARD_TECH_WORKTREE=1`。
+  - 目的：避免小修正因 worktree diff 被沖掉而重跑整輪。
 
 ## Next Action
 

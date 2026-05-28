@@ -25,9 +25,20 @@ chmod 700 "$CAO_AGENT_CONTEXT" "$OUT_DIR"
 
 ensure_tech_worktree
 
+worktree_dirty() {
+  [[ -n "$(git -C "$WORKTREE" status --porcelain)" ]]
+}
+
 # Start each Tech run from a clean isolated worktree unless explicitly disabled.
 # This worktree is disposable agent scratch space; never use it as the source of truth.
 if [[ "${CLEAN_TECH_WORKTREE:-1}" == "1" ]]; then
+  if worktree_dirty && [[ "${ALLOW_DISCARD_TECH_WORKTREE:-0}" != "1" ]]; then
+    echo "Tech worktree has uncommitted candidate diff; refusing to reset it." >&2
+    echo "Inspect or absorb the diff first, or rerun with CLEAN_TECH_WORKTREE=0 for a handoff-only fix." >&2
+    echo "To intentionally discard the candidate diff, set ALLOW_DISCARD_TECH_WORKTREE=1." >&2
+    git -C "$WORKTREE" status --short >&2
+    exit 1
+  fi
   TARGET_HEAD="$(git -C "$REPO" rev-parse HEAD)"
   for f in "${READONLY_HANDOFF_FILES[@]}" "${WRITABLE_HANDOFF_FILES[@]}"; do
     git -C "$WORKTREE" update-index --no-skip-worktree "$f" >/dev/null 2>&1 || true
