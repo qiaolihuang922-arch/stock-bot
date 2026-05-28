@@ -966,7 +966,7 @@ class GeneratorReportTest(unittest.TestCase):
                 datetime(2026, 5, 26),
             )
 
-        self.assertIn("v20.0.11", messages[-1])
+        self.assertIn("v20.0.12", messages[-1])
         self.assertIn("📡 資料：即時價 realtime｜日線 yahoo", messages[-1])
         self.assertIn("🧭 今日結論：R3 進攻偏熱；交易執行：無新增下單；持倉風控檢查 5 檔；未持倉 6 檔僅追蹤", messages[-1])
         self.assertIn("🧭 原因：強勢股多過熱，RR不足，不追高", messages[-1])
@@ -1556,7 +1556,7 @@ class GeneratorReportTest(unittest.TestCase):
             datetime(2026, 5, 27),
         )
 
-        self.assertIn("v20.0.11", messages[-1])
+        self.assertIn("v20.0.12", messages[-1])
         self.assertEqual(payload["holding_decision"]["level"], "POST_PROFIT_WATCH")
         self.assertIn("【智原 3035】📌 停利後觀察", card)
         self.assertIn("決策：停利後觀察，暫不加碼", card)
@@ -1627,7 +1627,7 @@ class GeneratorReportTest(unittest.TestCase):
         position = messages[0]
         unheld = messages[1]
 
-        self.assertIn("【05/28 盤中｜v20.0.11】", summary)
+        self.assertIn("【05/28 盤中｜v20.0.12】", summary)
         self.assertIn("✅ 今日盤中交易執行", summary)
         self.assertNotIn("明日執行", summary)
         self.assertIn("交易執行 1 項；持倉風控檢查 1 檔；已執行 1 項不重複", summary)
@@ -1723,7 +1723,7 @@ class GeneratorReportTest(unittest.TestCase):
         position = messages[0]
         unheld = messages[1]
 
-        self.assertIn("【05/28 盤中｜v20.0.11】", summary)
+        self.assertIn("【05/28 盤中｜v20.0.12】", summary)
         self.assertIn("🧭 今日結論：", summary)
         self.assertIn("交易執行：無新增下單", summary)
         self.assertIn("✅ 今日盤中交易執行\n無新增下單", summary)
@@ -1749,6 +1749,176 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("原因：前次可買條件已失效：突破失敗或跌破進場條件｜補充：追價風險 / 過熱、RR不可用，不作主因", unheld)
         self.assertIn("【光寶科 2301】⛔ 淘汰｜突破失敗", unheld)
         self.assertIn("前次可買條件已失效：突破失敗或跌破進場條件", unheld)
+
+    def test_intraday_v20_0_12_separates_mainline_from_execution(self):
+        holding_payload = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 126],
+            {"shares": 100, "avg_price": 100},
+            price=126,
+            change=2.4,
+        )
+        holding_payload["stock_code"] = "2330"
+        holding_payload["holding_decision"] = {
+            "action": "核心續抱",
+            "level": "HOLD_CORE",
+            "note": "高浮盈回落，暫不加碼",
+            "warning_price": 118,
+            "hard_stop_price": 112,
+            "allow_add": False,
+        }
+
+        pullback_payload = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 126],
+            None,
+            price=126,
+            change=3.1,
+        )
+        pullback_payload["stock_code"] = "3661"
+        pullback_payload["result"].update({
+            "decision": "WAIT",
+            "action": 0,
+            "breakout_distance": 7.5,
+            "rr": 1.8,
+            "market_grade": "A",
+            "heat_state": "NORMAL",
+            "trade_state": "WAIT",
+        })
+
+        hot_payload = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 132],
+            None,
+            price=132,
+            change=6.4,
+        )
+        hot_payload["stock_code"] = "2308"
+        hot_payload["result"].update({
+            "decision": "WAIT",
+            "action": 0,
+            "breakout_distance": 1,
+            "price_behavior": "NORMAL",
+            "heat_state": "HOT",
+            "trade_state": "EXTENDED",
+            "rr": 1.4,
+            "market_grade": "A",
+        })
+
+        rejected_payload = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 111],
+            None,
+            price=111,
+            change=-4.8,
+        )
+        rejected_payload["stock_code"] = "0000"
+        rejected_payload["result"].update({
+            "decision": "FAIL",
+            "action": 0,
+            "structure_phase": "FAILED_BREAKOUT",
+            "heat_state": "EXTREME",
+            "trade_state": "AVOID",
+            "rr": 0.4,
+            "market_grade": "A",
+        })
+
+        with patch.object(generator, "get_market_phase", return_value="盤中"):
+            messages = generator.formatTelegramMessages(
+                {
+                    "台積電": holding_payload,
+                    "世芯-KY": pullback_payload,
+                    "台達電": hot_payload,
+                    "範例股": rejected_payload,
+                },
+                "FULL DETAIL",
+                None,
+                None,
+                "🟢 AI 主線偏多",
+                datetime(2026, 5, 28),
+            )
+
+        summary = messages[-1]
+        position = messages[0]
+        unheld = messages[1]
+
+        self.assertIn("【05/28 盤中｜v20.0.12】", summary)
+        self.assertIn("🧭 主線：AI / 電子供應鏈仍偏多。", summary)
+        self.assertIn("🧭 執行：新增買點未成立，先等回測，不追高。", summary)
+        self.assertIn("🧭 新倉：無有效進場。", summary)
+        self.assertIn("交易執行：無新增下單", summary)
+        self.assertIn("未持倉 2 檔僅追蹤，等觸發，不列入今日盤中交易執行", summary)
+        self.assertIn("可買 0｜可準備 0（不可買）｜僅追蹤 2｜淘汰 1", summary)
+        self.assertIn("其中僅追蹤 2 檔拆分：等冷卻 1、等回測 1、等RR修復 0、等量能 0", summary)
+        self.assertIn("淘汰 1 檔｜主因：突破失敗｜詳情見未持倉卡", summary)
+        self.assertIn("【台積電 2330】📌 核心續抱", position)
+        self.assertIn("決策：核心續抱，暫不加碼", position)
+        self.assertIn("下一步：保留核心倉，觀察是否轉弱", position)
+        self.assertIn("台積電｜+26.00%｜核心續抱｜守警戒價，觀察是否轉弱", summary)
+        self.assertEqual(generator.position_summary_note("台積電", holding_payload), "現有持倉保留，按風控續抱；新增倉位等觸發")
+        self.assertNotIn("主線持倉保留", summary + position)
+        self.assertIn("【世芯-KY 3661】⏳ 等回測｜遠離觸發", unheld)
+        self.assertIn("買點：不買｜題材仍可追蹤｜買點未成立，等回測確認｜不可立即買入", unheld)
+        self.assertIn("【範例股 0000】⛔ 淘汰｜突破失敗", unheld)
+        self.assertIn("買點：不買｜追價風險｜等重新轉強｜技術觸發失效，暫不行動｜不代表看空產業", unheld)
+        self.assertIn("不代表看空產業", unheld)
+        self.assertNotIn("今天可進場追", summary)
+        self.assertNotIn("可加碼", summary + position)
+        self.assertNotIn("產業轉空", summary + unheld)
+
+    def test_intraday_v20_0_12_hot_market_without_ai_evidence_uses_neutral_mainline(self):
+        hot_payload = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 132],
+            None,
+            price=132,
+            change=6.4,
+        )
+        hot_payload["stock_code"] = "1216"
+        hot_payload["result"].update({
+            "decision": "WAIT",
+            "action": 0,
+            "breakout_distance": 1,
+            "price_behavior": "NORMAL",
+            "heat_state": "HOT",
+            "trade_state": "EXTENDED",
+            "rr": 1.4,
+            "market_grade": "A",
+        })
+
+        pullback_payload = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 126],
+            None,
+            price=126,
+            change=3.1,
+        )
+        pullback_payload["stock_code"] = "2603"
+        pullback_payload["result"].update({
+            "decision": "WAIT",
+            "action": 0,
+            "breakout_distance": 7.5,
+            "rr": 1.8,
+            "market_grade": "A",
+            "heat_state": "NORMAL",
+            "trade_state": "WAIT",
+        })
+
+        with patch.object(generator, "get_market_phase", return_value="盤中"):
+            messages = generator.formatTelegramMessages(
+                {
+                    "食品甲": hot_payload,
+                    "航運乙": pullback_payload,
+                },
+                "FULL DETAIL",
+                None,
+                None,
+                "🟢 市場偏強",
+                datetime(2026, 5, 28),
+            )
+
+        summary = messages[-1]
+
+        self.assertIn("📊 市場：進攻偏熱｜R3", summary)
+        self.assertIn("🧭 主線：市場偏多但買點未成立。", summary)
+        self.assertIn("🧭 執行：新增買點未成立，先等回測，不追高。", summary)
+        self.assertNotIn("AI / 電子供應鏈仍偏多", summary)
+        self.assertNotIn("AI 主線", summary)
+        self.assertNotIn("電子供應鏈", summary)
 
     def test_intraday_holding_control_keeps_next_day_text_in_next_day_plan(self):
         payload = render_payload(
@@ -1808,7 +1978,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("FULL DETAIL", messages[0])
         self.assertIn("【持倉標的】", messages[1])
         self.assertIn("【未持倉標的】", messages[2])
-        self.assertIn("｜v20.0.11】", messages[-1])
+        self.assertIn("｜v20.0.12】", messages[-1])
 
 
 if __name__ == "__main__":

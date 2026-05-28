@@ -47,7 +47,7 @@ from services.strategy_evidence import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.0.11"
+VERSION = "v20.0.12"
 
 EXECUTION_LEVELS = {
     "TAKE_PROFIT_50": "TP50",
@@ -3068,10 +3068,10 @@ def position_summary_note(name, data):
         return f"{decision.get('action')}，{note or '補足增量風控'}"
 
     if action == "核心續抱":
-        return decision.get("note") or "高浮盈回落，暫不加碼"
+        return "現有持倉保留，按風控續抱；新增倉位等觸發"
 
     if action == "核心風控觀察":
-        return "守警戒價，觀察是否轉弱"
+        return "按風控續抱，守警戒價；新增倉位等觸發"
 
     if action == "停利後核心倉":
         return "保留核心倉，等待冷卻"
@@ -3094,7 +3094,7 @@ def position_summary_note(name, data):
         return note or "今日剛買入，先看是否守住警戒"
 
     if action == "續抱觀察":
-        return decision.get("note") or "轉弱觀察，不加碼"
+        return decision.get("note") or "按風控續抱觀察；新增倉位等觸發"
 
     if risk_weight(data) == 0 and decision:
         return "過熱，不加碼"
@@ -3886,6 +3886,48 @@ def rejected_trace_line(watch_items):
     return f"淘汰 {len(rejected)} 檔｜主因：{dominant_reject_reasons(watch_items)}｜詳情見未持倉卡"
 
 
+def ai_supply_chain_mainline_supported(market_summary):
+
+    summary_text = str(market_summary or "")
+    return any(
+        keyword in summary_text
+        for keyword in ["AI", "人工智慧", "電子供應鏈"]
+    )
+
+
+def market_execution_bridge_lines(holding_items, watch_items, market_mode, market_summary=None):
+
+    funnel = build_unheld_funnel(watch_items)
+    pending_count = len(pending_trade_items(holding_items, watch_items))
+    tracking_count = unheld_tracking_count(funnel)
+
+    if pending_count:
+        return []
+
+    if market_mode == "轉弱":
+        mainline = "主線：盤勢轉弱，題材先降速觀察。"
+    elif market_mode == "進攻偏熱":
+        if ai_supply_chain_mainline_supported(market_summary):
+            mainline = "主線：AI / 電子供應鏈仍偏多。"
+        else:
+            mainline = "主線：市場偏多但買點未成立。"
+    else:
+        mainline = "主線：題材仍可追蹤，不等於今日可買。"
+
+    if funnel["等回測"]:
+        execution = "執行：新增買點未成立，先等回測，不追高。"
+    elif tracking_count:
+        execution = "執行：新增買點未成立，等觸發，不追高。"
+    else:
+        execution = "執行：新增買點未成立，不追高。"
+
+    return [
+        f"🧭 {mainline}",
+        f"🧭 {execution}",
+        "🧭 新倉：無有效進場。",
+    ]
+
+
 def formatTelegramSummary(results_map, best, score, market_summary, now, position_warning=None, daily_write_warning=None, strategy_evidence_summary=None):
 
     holding_items = [
@@ -3922,6 +3964,7 @@ def formatTelegramSummary(results_map, best, score, market_summary, now, positio
     lines.extend([
         f"🧭 今日結論：{today_conclusion_text(holding_items, watch_items, market_mode, risk_level)}",
         f"🧭 原因：{today_reason_text(watch_items, market_mode)}",
+        *market_execution_bridge_lines(holding_items, watch_items, market_mode, market_summary),
         f"🔥 最強：{best_stock_text(results_map, best, score)}",
         f"🚨 風險：{compact_risk_text(results_map)}",
         f"📌 持倉：{holding_names}",
@@ -4259,6 +4302,10 @@ def formatTelegramUnheldCard(name, data, report_phase=None):
         buy_line = f"買點：可買｜{detail_size_text}｜分批，不追價"
     elif valid_entry:
         buy_line = f"買點：可買｜建議 {raw_size_text}｜{wait_text}"
+    elif funnel_state == "等回測":
+        buy_line = "買點：不買｜題材仍可追蹤｜買點未成立，等回測確認｜不可立即買入"
+    elif funnel_state == "淘汰":
+        buy_line = f"買點：不買｜{risk_label}｜{wait_text}｜技術觸發失效，暫不行動｜不代表看空產業"
     else:
         buy_line = f"買點：不買｜{risk_label}｜{wait_text}｜{entry_conclusion(result)}"
     trigger_label = "盤中觸發" if report_phase == "盤中" else "明日觸發"
@@ -4317,9 +4364,9 @@ def rejected_transition_reason_line(result):
         cause += f"：{primary}"
 
     if supplements:
-        return f"原因：{cause}｜補充：{'、'.join(supplements[:2])}，不作主因"
+        return f"原因：{cause}｜補充：{'、'.join(supplements[:2])}，不作主因｜不代表看空產業"
 
-    return f"原因：{cause}"
+    return f"原因：{cause}｜不代表看空產業"
 
 
 def unheld_buy_risk_label(result, title_label):

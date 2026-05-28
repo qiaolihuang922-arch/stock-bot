@@ -7,7 +7,7 @@
 - 專案：台股策略報文機器人。
 - 目前穩定線：`Telegram Unheld Funnel Count Bug` 已完成、QA L1 通過並推送。
 - 最新流程線：`Architect Role Self Lock` 與 `Auto Push After Final Review` 已寫入工作流程。
-- 最新已推送 commit：本次 `fix: refine intraday follow-up report` 提交；以 `git log -1` 為準。
+- 最新已推送 commit：本次 `fix: add market execution bridge` 提交；以 `git log -1` 為準。
 - 交付形態維持不變：定時 GitHub Actions / 腳本 -> 產生 Telegram 報文 -> 發送給 Owner。
 - 預設只處理 `core/watchlist.py` 的 12 檔股票。
 - CAO 中文前端固定為 `http://127.0.0.1:5173/`，目錄 `/Users/liveroom/.local/share/cao-web-zh/web`；Architect 只要分配 / 啟動 CAO agents，或準備回覆此前端地址，就必須先確認 `9889` API 與 `5173` 前端已啟動；若未啟動，先執行 `/Users/liveroom/stock-bot-agent-context/ensure_cao_services.sh`，再把前端地址回覆給 Owner。
@@ -70,6 +70,26 @@
   - `DISPATCH.md`
 - QA 前兩輪 conditional pass 被 Architect 退回；第三輪 QA 結論：`通過`。
 - 驗證：`tests/test_generator_report.py tests/test_notifier.py`，`46 passed, 21 warnings`。
+
+## Market Context and Execution Bridge 已完成本地修復
+
+- 修復 Owner 要求的產品語意優化：把「市場 / 題材方向」與「今日能否下單」拆開說明。
+- 版本升為 `v20.0.12`。
+- Summary 新增橋接句：
+  - 有 AI / 電子供應鏈證據時，可寫 `AI / 電子供應鏈仍偏多`。
+  - 無明確 AI 證據時，只寫中性 `市場偏多但買點未成立`，避免硬套主線。
+  - 同時保留 `新增買點未成立 / 不追高 / 新倉無有效進場`，避免偏多主線被讀成可買。
+- 持倉文案改為中性風控續抱，不再暗示所有持倉都是主線或可加碼。
+- 未持倉等回測 / 淘汰卡補強：`不可立即買入`、`技術觸發失效`、`不代表看空產業`。
+- 修改檔案：
+  - `core/generator.py`
+  - `tests/test_generator_report.py`
+  - `TASK.md`
+  - `CHANGELOG.md`
+  - `QA_REPORT.md`
+  - `DISPATCH.md`
+- QA 首輪阻塞硬寫 AI 主線；retry 後 QA 結論：`通過`。
+- 驗證：`tests/test_generator_report.py tests/test_notifier.py`，`48 passed, 21 warnings`。
 
 ## Post Trade Reduce Cooldown Strategy Fix 已完成本地修復
 

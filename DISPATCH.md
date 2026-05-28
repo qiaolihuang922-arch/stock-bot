@@ -4,8 +4,8 @@
 
 ## Current Task
 
-- task_id: `intraday-v20-0-10-report-followup-review`
-- task_name: `Intraday v20.0.10 Report Follow-up Review`
+- task_id: `market-context-execution-bridge`
+- task_name: `Market Context and Execution Bridge`
 - task_type: `telegram_strategy_report_review`
 - version_level: `patch`
 - qa_level: `L2`
@@ -18,25 +18,24 @@
 
 ## Current Result
 
-- Owner 提供新的 `05/28 盤中｜v20.0.10` 報文，要求繼續檢查報文。
-- Architect 初判本輪需 PM 定義的問題：
-  - 報文 header 是 `盤中`，但持倉下一步仍使用 `明日未修復降級`、`隔日未修復`；需要 PM 定義盤中報文中「今日盤中執行」、「盤中觀察」與「隔日計畫」如何分區，避免時間語意再次混用。
-  - `✅ 今日盤中執行清單` 內 4 項全是持倉觀察 / 續抱 / 減碼後觀察，沒有真正下單動作；summary 也寫 `持倉優先處理`。PM 需定義這些是否應叫 `執行清單`，還是改為 `持倉檢查清單 / 風控觀察清單`，避免把觀察誤讀成今日要交易。
-  - 英業達今日已賣 25%，持倉卡為 `減碼後觀察`，summary 清單列 `修復才恢復優先級`，但沒有明確標示 `今日已減碼 / 不再減碼`；可能仍有二次賣出誤讀風險。
-  - 未持倉漏斗數量本次對得上：未持倉總數 8 = 僅追蹤 4 + 淘汰 4；僅追蹤拆分 2+1+0+1 = 4。此項目前看起來正常。
-  - 淘汰股 `群創` 顯示 `淘汰｜突破失敗`，但買點行是 `不買｜追價風險｜等重新轉強｜失敗訊號`，`數據 RR -（過熱）`；主因、買點原因與數據原因混用，需 PM 定義單一主因優先級。
-  - `光寶科` 從前一版可買變成 `淘汰｜突破失敗`，價格 -6.20% 且 RR 不可用，策略上可能合理；但若從「可買候選」快速轉「淘汰」，報文需顯示轉弱觸發，避免 Owner 不知道是價格破位、RR 不可用還是突破失敗。
-  - `旺宏` +4.66% 仍淘汰，若是弱反彈未修復可以合理；目前有 `弱反彈待確認`，但 summary 主因只寫 `突破失敗、弱反彈待確認`，仍可接受但 PM 需確認是否需要 `上漲但結構未修復` 的短句。
-  - 版本已為 `v20.0.10`，本輪若只是 PM 檢查不改輸出可不升版；若 Tech 修改使用者可見報文，需按版本規則至少升到 `v20.0.11`。
+- Owner 問「有沒有要優化的，有的話安排下」。
+- Architect 依剛才市場 / 網路方向比對，判斷可做一個產品語意優化，不改策略核心：
+  - 目前報文能說清楚 `交易執行：無新增下單`，但缺少橋接語義：市場大方向 / AI 主線仍偏多，和系統當前不追高 / 等回測並不衝突。
+  - PM 需定義 summary 增加一行短句或調整原因句，例如 `主線仍偏多，但買點未成立，先等回測`；重點是把「方向」與「下單」分開。
+  - 對未持倉淘汰或等回測標的，若產業方向仍屬主流但技術條件失效，文案應表達為 `題材未壞，技術觸發未成立 / 已失效`，避免 Owner 誤讀為看空產業。
+  - 對持倉 AI / 電子供應鏈標的，summary 可保留持倉風控，但不要產生加碼暗示；語意應是 `主線持倉保留，新增倉位等觸發`。
+  - 不改買賣決策、不改策略門檻、不新增外部即時新聞依賴、不做 live Telegram / Supabase / backfill。
+  - 若修改使用者可見 Telegram 報文，版本需升為 `v20.0.12`。
 - CAO 前端：`http://127.0.0.1:5173/`
-- PM 已交付 `TASK.md`，版本契約升為 `v20.0.11`。
+- PM 已交付 `TASK.md`，版本契約升為 `v20.0.12`。
 - Tech 已完成候選 diff：
   - `core/generator.py`
   - `tests/test_generator_report.py`
   - `CHANGELOG.md`
-- QA 前兩輪分別指出已執行長句重複與 `明日/隔日未修復` 舊語意殘留；Architect 已退回 Tech 收斂。
+- QA 首輪阻塞：`進攻偏熱` 被硬寫成 `AI / 電子供應鏈仍偏多`，在非 AI 場景會誤導。
+- Tech retry 已修正：只有 `market_summary` 明確含 AI / 人工智慧 / 電子供應鏈證據時才寫 AI 主線；否則用中性 `市場偏多但買點未成立`。
 - QA 最終結論：`通過`。
-- QA 驗證：`tests/test_generator_report.py tests/test_notifier.py -q`，`46 passed, 21 warnings`；補手機長報文 fixture，確認 summary 與持倉 detail card 無 `明日未修復 / 隔日未修復`，英業達已執行長句不重複，交易執行 0 不把觀察項算成下單，群創 / 光寶科淘汰主因一致，漏斗數量未回歸。
+- QA 驗證：`tests/test_generator_report.py tests/test_notifier.py -q`，`48 passed, 21 warnings`；補手機正反例渲染，確認 AI 有證據時可寫 AI 主線但仍顯示不追高 / 無有效進場，非 AI 場景不硬套 AI，等回測 / 淘汰不被誤讀成可買或產業轉空。
 
 ## Next Action
 
