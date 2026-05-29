@@ -10,11 +10,11 @@
 - version_level: `none`
 - qa_level: `L2+`
 - owner_status: `requested`
-- architect_status: `qa_passed_pending_commit`
+- architect_status: `pushed`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
 - qa_status: `qa_passed`
-- commit: `pending`
+- commit: `e33064d pushed`
 
 ## Current Result
 
@@ -39,7 +39,7 @@
 
 ## Next Action
 
-- Architect commit / push 本輪 diff，清理 CAO worktree。
+- 本輪 diff 已 commit / push：`e33064d fix: guard evidence source family`。
 - 下一步若 Owner 要真正進 production：不需要先擴表；先準備 approved payload / read-only env，跑 validation + manual SQL review + read-only smoke。正式 backfill / RLS / grant / live write 仍需單獨批准。
 
 ## Status Values
