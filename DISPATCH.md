@@ -10,11 +10,11 @@
 - version_level: `patch`
 - qa_level: `L2`
 - owner_status: `requested`
-- architect_status: `qa_passed_absorbed_pending_push`
+- architect_status: `pushed`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
 - qa_status: `qa_passed`
-- commit: `pending`
+- commit: `835e6ef`
 
 ## Current Result
 
@@ -46,7 +46,7 @@
 
 ## Next Action
 
-- commit / push 後清理 tech worktree。
+- 已 push；執行 tech worktree cleanup 後等待 Owner 下一個需求。
 - 後續若要讓 market/theme evidence 真的引用外部市場 / 產業資料，需要另開 provider / DB / cache 任務並先通知 Owner。
 
 ## Status Values
