@@ -36,13 +36,14 @@
 - Post-cycle review：
   - 根因分類：`repeated_pattern` + `high_risk_invariant`；歷史記憶只能去重同級行動，不得壓過更高級風控。
   - QA 攔截有效：抓到測試全綠仍會造成 Owner 手機誤判的跨區塊語意衝突。
+  - Owner 追加指出正式流程是 git / runner 啟動產生 TG 報文，本地臨時狀態不能當跨日記憶；已補 `AGENTS.md` 硬規則。
   - Runner gap：Tech runner 在 worktree 以 x86_64 載入 arm64 `pydantic_core`，需統一 `arch -arm64` 或重建 matching venv；auto cycle QA parser / conditional pass handling 仍需補。
-  - 不新增 `AGENTS.md` 硬規則；既有「持倉行動一致性」「手機閱讀」「DB source-of-truth / fail-closed」規則已覆蓋，本輪沉澱為 fixture 與 runner 待補。
+  - 下一張產品任務需檢查 `services/cross_day_context.py` 的 local/runtime context 是否只作同 run guard，跨日判斷必須可由 DB fresh run 重建。
 
 ## Next Action
 
 - 已 commit / push 本輪 `v20.4.0`；完成後執行 tech worktree cleanup。
-- 下一步若繼續 DB strategy consumption，先開 Phase 2：真實 schema mapping、`signal_runs / signal_items / signal_outcomes` source precedence、production read-only 驗證；若要建表或 backfill 需先通知 Owner。
+- 下一步先開一張 risk_patch 檢查 `cross_day_context` source boundary：DB / persistent source 才能做跨日記憶，local/runtime 只能同 run guard。若通過，再進 Phase 2 真實 schema mapping、`signal_runs / signal_items / signal_outcomes` source precedence、production read-only 驗證；若要建表或 backfill 需先通知 Owner。
 
 ## Status Values
 

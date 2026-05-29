@@ -94,7 +94,8 @@
   - 交付文件一致性問題已補：`CHANGELOG.md` 必須列入 untracked 新檔 `services/cross_day_context.py`、`tests/test_cross_day_context.py`，Architect 吸收時不得只看 `git diff --stat`。
   - Runner gap：Tech worktree `.venv` 以 x86_64 執行時載入 arm64 `pydantic_core` 會 collection fail；後續 runner 應固定使用 `arch -arm64` 或建立架構一致 venv。
   - Runner gap：auto cycle 仍需改善 QA 結論 parser 與 conditional pass 後續收口，避免有效 QA 報告被標成 runner failed。
-  - 暫不新增 `AGENTS.md` 硬規則，既有持倉行動一致性、手機閱讀、DB source-of-truth / fail-closed 規則已覆蓋；本輪沉澱為 fixture 與 runner 待補。
+  - Owner 追問後補硬規則：正式 TG 報文由 git / runner 啟動，runner 無狀態；跨日策略記憶與執行去重必須來自 DB / 持久 source-of-truth，local/runtime 只能作同 run 輔助，不得作下次判斷依據。
+  - 待補產品任務：檢查 `services/cross_day_context.py` 的 `local_position_events` 是否只作同 run guard，並確認所有跨日判斷都可由 DB fresh run 重建。
 - 下一次產品任務完成後，確認 Post-cycle Review Gate 是否有做到：
   - 根因分類。
   - QA 攔截是否沉澱成 guard。

@@ -120,6 +120,8 @@
 - 今日已減碼 / 停利達同級建議時，預設轉為觀察；只有更高級風控或硬停損可覆蓋。
 - DB / cross-day history 只能壓制同級重複行動；不得覆蓋硬風控、停損、`REDUCE_50`、`STOP_100` 或風控升級。
 - DB / cross-day history 可提升排序、追蹤優先級或可準備呈現，但不得單獨把不可買改成可買或放入交易執行清單。
+- 正式 TG 報文由 git / runner 啟動生成，runner 必須視為無狀態；跨日策略記憶、歷史證據、已執行事件必須來自 production DB 或 Owner 指定持久來源。
+- Runtime / local context 只能作為同一次報文內的輔助 guard 或顯示材料；不得當作下一次 GitHub runner 的跨日判斷依據。
 - 同日第二段 / 額外停利必須尊重 execution 資料：completed 轉觀察、partial 只顯示剩餘、unexecuted 才顯示完整第二段建議。
 - 持倉卡、summary、風控檢查的今日已賣、剩餘、建議股數必須使用一致來源；不得同卡出現 `今日 無` 與 `今日已賣 N 股`。
 - 空區塊、0 計數、無行動占位都是手機噪音；未定義必要性時不顯示。

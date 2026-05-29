@@ -130,6 +130,17 @@ Architect 必須檢查並記錄：
 - 未定義需求前，不改策略、報文分類、DB schema、Telegram payload、watchlist、排程入口。
 - 禁止 live Supabase write、正式 backfill、live Telegram delivery，除非 Owner 對該動作單獨批准。
 
+### 2.1 GitHub Runtime / State Source 硬規則
+
+本專案正式流程是由 git / runner 啟動後產生 Telegram 報文。Runner 環境必須視為無狀態；任何策略記憶、跨日判斷或已執行事件，若只存在本機、worktree、暫存檔、runtime dict、cache 或 agent 對話中，對正式 TG 報文都不可靠。
+
+- 跨日狀態、歷史分類、連續觀察天數、歷史證據權重、已停利 / 已減碼 / 已買入等執行記憶，必須以 production DB 或 Owner 明確指定的持久 source-of-truth 為準。
+- Runtime / local context 只能作為同一次報文生成內的輔助 guard 或顯示材料；不得被描述成跨日記憶，不得作為下一次 GitHub runner 判斷依據。
+- 若 production DB / 持久來源缺資料、讀取失敗、欄位不足或可信度不足，必須 `missing-source` / `source-error` / `insufficient-data` / fail closed；不得用本地暫存或 runtime fallback 補成 confirmed history。
+- PM 任務卡凡涉及跨日、證據鏈、執行去重、持倉狀態或 DB consumption，必須明確列出 production source-of-truth、local/runtime source 的允許用途與禁止用途。
+- Tech 若新增 helper / context / cache，必須在 `CHANGELOG.md` 說明它是否持久化、GitHub runner 是否可重建、資料來自 DB 還是同 run runtime；不得用「local」含糊帶過。
+- QA 必須至少反證一個「關掉本地對話 / 清空 worktree / GitHub fresh run 後是否仍成立」案例；若正式 runner 不能重建同樣判斷，必須 `blocked`。
+
 ### 3. 文件規則
 
 - 固定 8 份 Markdown 永遠不可刪，只可改寫內容。
