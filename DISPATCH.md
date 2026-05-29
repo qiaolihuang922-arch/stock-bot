@@ -10,11 +10,11 @@
 - version_level: `minor`
 - qa_level: `L2`
 - owner_status: `requested`
-- architect_status: `qa_passed_absorbed_pending_push`
+- architect_status: `pushed`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
 - qa_status: `qa_passed`
-- commit: `pending`
+- commit: `a627c12`
 
 ## Current Result
 
@@ -49,7 +49,7 @@
 
 ## Next Action
 
-- commit / push 後清理 tech worktree。
+- 已 push；執行 tech worktree cleanup 後等待 Owner 下一個需求。
 - 下一步若要 market_index / sector_index、DB cache/table、external provider 或持久化 evidence，先通知 Owner。
 
 ## Status Values
