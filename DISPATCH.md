@@ -10,7 +10,7 @@
 - version_level: `patch`
 - qa_level: `L3-lite`
 - owner_status: `requested`
-- architect_status: `committed`
+- architect_status: `pushed`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
 - qa_status: `qa_passed`
@@ -46,7 +46,7 @@
 
 ## Next Action
 
-- 待 push；成功後執行 tech worktree cleanup。
+- 已 push；執行 tech worktree cleanup 後等待 Owner 下一個需求。
 - 下一步可回到證據鏈 production 化；若要 market_index / sector_index、DB cache/table、external provider 或持久化 evidence，先通知 Owner。
 
 ## Status Values
