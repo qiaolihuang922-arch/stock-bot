@@ -1,110 +1,72 @@
-# CHANGELOG: Evidence Phase 3 Production Source Mapping Blocked
+# CHANGELOG: Evidence Phase 4 confirmed market/theme evidence SQL
 
-## 任務尺寸與結論
+  ## 任務尺寸與風險
 
-- 任務尺寸：normal_patch。
-- 結論：blocked。現有 code / schema / docs 無法證明 production DB 或 Owner-approved persistent source 已足夠支撐 market/theme evidence confirmed。
-- 本輪未修改產品代碼、測試、DB schema、DB write path、Telegram wording、watchlist 或交易門檻。
+  - 任務尺寸: normal_patch
+  - 風險判斷: repo-local SQL artifact only；不改 runtime、策略、Telegram、runner、DB write path。
 
-## 修改內容
+  ## 修改內容
 
-- 只完成 source mapping 判斷。
-- 保留 v20.4.2 source-family gate：confirmed / ready 只能來自 `production_db` 或 `owner_approved_persistent`，且 required fields / freshness 完整。
-- 停止實作 read-only loader。若硬接現有來源，會把個股策略分類、runtime 聚合或 payload dict 誤升級成 market/theme confirmed。
+  - 新增一個手動執行用 Postgres/Supabase-compatible SQL artifact。
+  - 建立 public.market_theme_confirmed_evidence schema，支援 future GitHub fresh runner 從 production DB read-only reconstruction confirmed market/theme evidence。
+  - SQL 內含 execution notes、欄位 comments、idempotent create table if not exists / create index if not exists。
+  - RLS / permissions 僅提供 comment guidance，未啟用 policy，未假設 production role。
 
-## 修改檔案
+  ## 修改檔案
 
-- 無產品代碼修改。
+  - db/sql/evidence_phase_4_market_theme_confirmed_evidence.sql
 
-## Source Mapping 判斷
+  ## 最小改動策略
 
-- `daily_signal_snapshot`
-  - 可用：`production_db`、`trade_date`、`version`、個股策略狀態。
-  - 不足：不是 market index；缺 sector/theme key；watchlist breadth 需 runtime 聚合；support level 不足。
-  - 判斷：只能作 detail / backtest context，不得 confirmed。
-- `strategy_feature_snapshots`
-  - 可用：`production_db`、`trade_date`、`strategy_version`、`watch_category`、`reject_family`。
-  - 不足：策略分類不是 market index；缺 sector/theme key；無 theme-level support value。
-  - 判斷：只能作 detail / sorting hint，不得 confirmed。
-- `strategy_outcome_metrics`
-  - 可用：`production_db`、回測 outcome、`trade_date`、`strategy_version`、`horizon_days`。
-  - 不足：缺 market index、theme key、watchlist breadth；不是當日 market/theme support。
-  - 判斷：只能作 evidence / audit trace，不得 confirmed。
-- `strategy_classification_audit`
-  - 可用：`production_db`、audit severity、`trade_date`、`strategy_version`。
-  - 不足：缺 confirmed 所需 market/theme source 欄位。
-  - 判斷：只能作 audit trace，不得 confirmed。
-- `market_daily_bars`
-  - 可用：`production_db`、OHLCV、`stock_id`、`trade_date`、`source`。
-  - 不足：目前是 watchlist 個股日線，不是 TAIEX / sector index contract；缺 sector/theme mapping 與 breadth。
-  - 判斷：只能作 price trace，不得 confirmed。
-- `daily_price`
-  - 可用：`production_db`、個股 close price、`trade_date`。
-  - 不足：缺 evidence contract、market index、theme key、breadth。
-  - 判斷：只能作 backtest price trace，不得 confirmed。
-- `runtime results_map / watchlist diagnostic`
-  - 可用：同 run 診斷。
-  - 不足：`runtime_diagnostic`，無 production lineage，fresh runner 不可重建。
-  - 判斷：v20.4.2 gate 已禁止 fake confirmed，只能 detail。
-- `market_summary.market_theme_evidence`
-  - 可用：payload 已帶入時可被 formatter 顯示。
-  - 不足：不是 fresh runner 可重建的 production loader；source family 與 lineage 未證明。
-  - 判斷：不得自行信任為 confirmed source。
+  - 只新增 TASK.md 指定的 SQL artifact。
+  - 未修改產品代碼、測試、runner、formatter、strategy、watchlist 或既有 DB 存取層。
+  - Repo 沒有既有 .sql 或 migration 慣例；supabase/ 僅見 functions，因此新增 db/sql/ 作為手動 artifact，避免放入可能被自動套用的路徑。
 
-## 阻塞缺口
+  ## 契約影響
 
-要讓 market/theme evidence 變成 confirmed，需先由 Owner / PM 確認或批准 production source contract，至少包含：
+  - 新增 repo-local SQL schema artifact。
+  - 不改函式回傳、message list、payload、報文排序、CLI output、DB runtime write path。
+  - SQL 欄位覆蓋: market_index、sector_theme_key、watchlist_breadth、as_of、trade_date、freshness、evidence_value、support_level、lineage、source_family、source_name。
+  - 索引覆蓋: trade_date、(market_index, trade_date)、(sector_theme_key, trade_date)、(source_family, source_name, trade_date)、(trade_date, as_of desc)，另含 latest confirmed partial index。
+  - Unique index 語意: 同一 trade_date + market_index + sector_theme_key + source_family + source_name 可因不同 as_of 保留多版本。
 
-- 可由 GitHub fresh runner read-only 存取的 market/theme evidence table、view 或 helper。
-- `market_index` 或等價市場指標來源，例如 TAIEX / sector index source contract。
-- `sector_theme_key` 或等價 theme / sector key，且可映射到 watchlist 股票。
-- production / persistent 的 `watchlist_breadth` source contract，或可由 production source read-only 重建的廣度計算契約。
-- `as_of` / `trade_date` / freshness 欄位與過期判斷。
-- `evidence_value` / `support_level` 欄位或可追溯計算契約。
-- lineage：`run_id`、`snapshot_id`、`symbol`、`theme_key`、`source_name` 或等價追溯欄位。
+  ## 直接消費者同步
 
-## 契約影響
+  - Owner / Production DB admin: SQL 檔案內已寫明手動在 Supabase SQL editor / Postgres console review 後執行。
+  - Architect: 可依 SQL path、execution notes、no-live-write 邊界收口。
+  - Future Tech: 可用本 schema 作為 production source-of-truth contract 實作 read-only loader。
+  - Future QA: 可靜態驗證欄位、索引、freshness / lineage / source traceability 與 fail-closed 支援。
+  - 無 runtime 直接呼叫方需同步，因本輪未改 public helper、payload、formatter 或 runner consumption logic。
 
-- 函式回傳結構：未改。
-- message list / Telegram 報文順序：未改。
-- payload shape：未改。
-- 報文分組：未改。
-- public helper：未改。
-- version/header：未改；因未修改使用者可見 wording/header，未升到 v20.4.3。
+  ## 未影響模組
 
-## 直接消費者同步
+  - 未改 Telegram formatter。
+  - 未改 strategy decision / trading threshold / watchlist threshold。
+  - 未改持倉狀態機。
+  - 未改 replay / backfill / cron / live delivery。
+  - 未執行 production DB write、live Supabase write、production backfill、live Telegram。
+  - 未讀取或輸出 secrets、connection string、service role key、.env。
 
-- `core/generator.py`：未改，仍消費既有 `build_market_theme_evidence_provider()` 與 `format_market_theme_summary_lines()`。
-- Owner 手機 Telegram 報文：未改，source 不足時仍 fail closed。
-- market/theme evidence provider：未改，v20.4.2 source-family gate 保持。
-- GitHub fresh runner：未新增不可重建 local/runtime/cache 依賴。
+  ## 已跑自檢命令
 
-## 未影響模組
+  - git diff --check：通過。
+  - git diff --no-index --check /dev/null db/sql/evidence_phase_4_market_theme_confirmed_evidence.sql：無 whitespace errors。
+  - rg -n "drop table|truncate|delete from|update\\s+public\\.|insert into|alter table|grant\\s|service_role|password|secret|token|connection string|supabase db|psql\\s|curl\\s|wget\\s" db/sql/
+    evidence_phase_4_market_theme_confirmed_evidence.sql：無命中。
+  - rg -n "market_index|sector_theme_key|watchlist_breadth|as_of|trade_date|freshness|evidence_value|support_level|lineage|source_family|source_name|idx_market_theme_evidence_trade_date|
+    idx_market_theme_evidence_market_trade_date|idx_market_theme_evidence_theme_trade_date|idx_market_theme_evidence_source_trade_date|idx_market_theme_evidence_trade_date_as_of" db/sql/
+    evidence_phase_4_market_theme_confirmed_evidence.sql：必要欄位與索引命中。
+  - command -v psql || true：本環境未提供 psql；未執行 SQL，符合本輪 no-live-execution 邊界。
 
-- 策略門檻：未改 BUY / SELL / RR / overheat / trading thresholds。
-- DB schema / migration / SQL：未改。
-- DB write stores：未改。
-- watchlist：未改。
-- replay/backfill：未改。
-- live Supabase write：未執行。
-- live Telegram：未執行。
+  ## 殘留風險
 
-## 已跑自檢命令
+  - 未在本地或 production DB execute SQL；需 QA 做 static SQL review。
+  - RLS / permissions 需要 Owner 依 production role 手動決定，本輪未啟用 executable policy。
+  - Future write/upsert path 需自行維護 updated_at；本輪未安裝 trigger，避免額外 function / trigger idempotency 風險。
+  - 若 production 已存在同名 table 但欄位不完整，Owner 需先在 DB console review schema 差異後再手動處理。
 
-- `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py`
-  - 結果：17 passed, 13 warnings。
-- `git diff --check`
-  - 結果：通過。
-- `git diff --stat`
-  - 結果：無產品 diff。
+  ## 旁支待辦
 
-## 殘留風險
-
-- 未連 production DB 驗證實際資料品質；本輪只依現有 code / schema / docs 可見 contract 判斷。
-- 若 production DB 實際已有未寫入 repo 的 table / view / helper，需要 Owner 提供明確名稱與欄位 contract 後再開發。
-- 現有 runtime diagnostic 仍可顯示 detail 診斷，但不會 confirmed。
-
-## 旁支待辦
-
-- 另開任務定義 production market/theme evidence source contract。
-- 若需要新增 schema / table / provider / backfill，需 Owner 明確批准，不能併入本輪 normal_patch。
+  - 後續另開任務實作 GitHub fresh runner read-only loader。
+  - 後續另開任務定義 production RLS / permissions 與 runner role access。
+  - 後續另開任務規劃 backfill / writer path；正式 DB write、backfill、live delivery 仍需 Owner 單獨批准。

@@ -33,6 +33,13 @@
 
 ## Recent High-Signal Milestones
 
+- Evidence Phase 4 Production DB Schema SQL For Confirmed Market/Theme Evidence 已通過 QA：
+  - 新增手動 SQL artifact：`db/sql/evidence_phase_4_market_theme_confirmed_evidence.sql`。
+  - SQL 建立 `public.market_theme_confirmed_evidence`，用於未來 GitHub fresh runner 從 production DB read-only reconstruction confirmed market/theme evidence。
+  - 欄位契約包含：`market_index`、`sector_theme_key`、`watchlist_breadth`、`as_of`、`trade_date`、`freshness`、`evidence_value`、`support_level`、`lineage`、`source_family`、`source_name`。
+  - SQL 只包含 manual execution DDL / comments / indexes；未由 agent 執行，未 backfill、未 live write、未 live Telegram、未改策略 / watchlist / runner。
+  - QA 靜態驗證：無 destructive DDL/DML、無 broad grant、無 secret / connection string / live command pattern；`git diff --check` 通過。
+  - 執行風險：若 production 已有同名但欄位不完整 table，Owner 需先在 DB console review schema 差異後手動處理。
 - Evidence Phase 3 Production Confirmed Source Mapping 已由 Tech 判定 blocked：
   - 目標：確認現有 production DB / Owner-approved persistent source 是否足夠讓 market/theme evidence 從 fail-closed 進入 confirmed。
   - 結論：現有 repo 可證明 source contract 不足，未實作 read-only loader，未改產品代碼。
@@ -213,4 +220,4 @@
 - 證據鏈 v20.3.1 已將 runtime breadth fallback 收斂為非交易診斷；若要自動取得 market_index / sector_index、建表、cache、external provider 或持久化 evidence，先通知 Owner。
 - 若 Owner 仍覺得查詢慢，另開 performance measurement 任務，量測 production 實際秒數。
 - 後續可改善 `load_strategy_evidence_summary()` 顯式排序與 `漏失` 文案，但需另開任務。
-- Evidence Phase 3 下一步需 Owner 決策：若 DB 已有 market/theme evidence source，提供 table/view/helper 與欄位；若沒有，需批准新增 schema/provider 任務，正式 write/backfill/live delivery 仍需單獨批准。
+- Evidence Phase 4 下一步：Owner 手動 review / execute `db/sql/evidence_phase_4_market_theme_confirmed_evidence.sql` 後，另開 read-only loader 任務；正式 writer / backfill / RLS policy / live delivery 仍需單獨批准。

@@ -117,6 +117,12 @@
   - 已清理交付：Tech 原始寬表格壓縮成 `CHANGELOG.md` 高信號 source mapping，避免固定文件膨脹與手機難讀。
   - 不新增 `AGENTS.md` 硬規則：既有 GitHub runner / state source / fail-closed 規則已覆蓋；本輪只是依規則 blocked。
   - 後續待辦：若 Owner 提供既有 table/view/helper 名稱與欄位，開 read-only loader 任務；若沒有，需 Owner 批准 schema/provider 任務，且正式 write/backfill/live delivery 另行批准。
+- 本輪 Evidence Phase 4 Production DB Schema SQL：
+  - 根因分類：`schema_contract_needed`。Phase 3 缺口需要先有 production source-of-truth table，再談 read-only loader。
+  - 已守住流程：產出 repo-local 手動 SQL artifact；agent 未 live execute SQL、未 backfill、未改策略 / runner / Telegram。
+  - QA 攔截點有效：特別檢查 Owner/DB admin 誤讀風險、destructive/live/secret patterns、fresh runner read-only reconstruction 欄位、artifact 放置不會被自動 migration 套用。
+  - 不新增 `AGENTS.md` 硬規則：既有 DB/live write 禁令與 GitHub runner source-of-truth 規則已覆蓋。
+  - 後續待辦：Owner 手動執行 SQL 後，另開 read-only loader 任務；RLS / permissions、writer / backfill、live delivery 需各自單獨批准。
 - 下一次產品任務完成後，確認 Post-cycle Review Gate 是否有做到：
   - 根因分類。
   - QA 攔截是否沉澱成 guard。
