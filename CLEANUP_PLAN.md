@@ -111,6 +111,12 @@
   - 不新增 `AGENTS.md` 硬規則：現有 source-of-truth、fail-closed、手機閱讀規則已覆蓋；本輪沉澱為 fixture 與 stable contract。
   - Runner gap：auto cycle 對 QA `阻塞` 結論 parser 仍 false fail；Tech runner 自檢曾未用 `arch -arm64`，後續需把 arm64 pytest 入口固化到 runner。
   - 後續待辦：若要 confirmed market/theme evidence，需 Owner 批准 production table/view 欄位 mapping；可能涉及 market_index、sector/theme key、watchlist_breadth、freshness、evidence value。
+- 本輪 Evidence Phase 3 Production Confirmed Source Mapping：
+  - 根因分類：`blocked_by_missing_production_source_contract`。不是程式錯誤，而是現有 repo 可證明 DB / persistent source contract 不足。
+  - 已守住流程：Tech 未硬寫 loader、未建 schema、未 live write、未把 runtime/report-derived/payload dict 升為 confirmed。
+  - 已清理交付：Tech 原始寬表格壓縮成 `CHANGELOG.md` 高信號 source mapping，避免固定文件膨脹與手機難讀。
+  - 不新增 `AGENTS.md` 硬規則：既有 GitHub runner / state source / fail-closed 規則已覆蓋；本輪只是依規則 blocked。
+  - 後續待辦：若 Owner 提供既有 table/view/helper 名稱與欄位，開 read-only loader 任務；若沒有，需 Owner 批准 schema/provider 任務，且正式 write/backfill/live delivery 另行批准。
 - 下一次產品任務完成後，確認 Post-cycle Review Gate 是否有做到：
   - 根因分類。
   - QA 攔截是否沉澱成 guard。

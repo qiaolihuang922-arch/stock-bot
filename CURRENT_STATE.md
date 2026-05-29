@@ -33,6 +33,13 @@
 
 ## Recent High-Signal Milestones
 
+- Evidence Phase 3 Production Confirmed Source Mapping 已由 Tech 判定 blocked：
+  - 目標：確認現有 production DB / Owner-approved persistent source 是否足夠讓 market/theme evidence 從 fail-closed 進入 confirmed。
+  - 結論：現有 repo 可證明 source contract 不足，未實作 read-only loader，未改產品代碼。
+  - 不足來源：`daily_signal_snapshot`、`strategy_feature_snapshots` 可作個股策略 / 分類 trace，但不是 market index，缺 sector/theme key 與 persistent breadth；`strategy_outcome_metrics` / `strategy_classification_audit` 是回測 / audit trace；`market_daily_bars` / `daily_price` 是個股價格資料，不是 TAIEX / sector index contract。
+  - runtime diagnostic、report-derived、payload dict 仍只能 detail / 診斷，不得 confirmed。
+  - 若要繼續，需要 Owner 確認或批准 production table / view / helper contract，至少包含 market_index、sector_theme_key、watchlist_breadth、freshness/as_of、evidence_value/support_level、lineage。
+  - 驗證：`tests/test_market_theme_evidence.py` 17 passed, 13 warnings；`git diff --check` 通過；無 schema / SQL / DB write / backfill / live Telegram / watchlist / 策略門檻變更。
 - `v20.4.2` Evidence Phase 2 Source-Family Gate And Wording Cleanup 已通過 QA：
   - Telegram evidence summary 缺 production source 時收斂為短句：`證據：production 來源不足，不作確認。`，避免 absent/missing-source 長清單干擾手機主決策。
   - `core/market_theme_evidence.py` confirmed / ready 收斂為 source-family gate：只有 `production_db` 或 `owner_approved_persistent`，且 required fields / freshness 滿足時才可 confirmed。
@@ -206,3 +213,4 @@
 - 證據鏈 v20.3.1 已將 runtime breadth fallback 收斂為非交易診斷；若要自動取得 market_index / sector_index、建表、cache、external provider 或持久化 evidence，先通知 Owner。
 - 若 Owner 仍覺得查詢慢，另開 performance measurement 任務，量測 production 實際秒數。
 - 後續可改善 `load_strategy_evidence_summary()` 顯式排序與 `漏失` 文案，但需另開任務。
+- Evidence Phase 3 下一步需 Owner 決策：若 DB 已有 market/theme evidence source，提供 table/view/helper 與欄位；若沒有，需批准新增 schema/provider 任務，正式 write/backfill/live delivery 仍需單獨批准。

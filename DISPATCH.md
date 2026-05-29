@@ -4,46 +4,51 @@
 
 ## Current Task
 
-- task_id: `evidence_phase2_source_mapping_wording_cleanup_20260529`
-- task_name: `Evidence Phase 2 Source Mapping And Telegram Wording Cleanup`
+- task_id: `evidence_phase3_production_confirmed_source_mapping_20260529`
+- task_name: `Evidence Phase 3 Production Confirmed Market Theme Source Mapping`
 - task_type: `normal_patch`
 - version_level: `patch`
 - qa_level: `L2`
 - owner_status: `requested`
-- architect_status: `validated_pending_push`
+- architect_status: `blocked_pending_owner_source_contract`
 - pm_status: `task_ready`
-- tech_status: `changelog_ready`
-- qa_status: `qa_passed`
+- tech_status: `blocked`
+- qa_status: `not_required`
 - commit: `pending`
 
 ## Current Result
 
-- Owner 要求：針對最新 `v20.4.1` 報文，處理 market/theme evidence 仍顯示 absent/missing-source 與策略證據未啟用造成的手機噪音；若需要擴字段或建表，必須先通知 Owner。
-- 本輪完成 `v20.4.2` Evidence Phase 2 wording / source-family gate，不改 DB schema、不新增 table / field、不 live write、不 live Telegram、不正式 backfill、不改 watchlist、不重設核心 BUY / SELL / RR 門檻。
-- 已吸收候選 diff：
-  - `core/generator.py` VERSION 升為 `v20.4.2`，缺 production source 時 summary 收斂為短句 `證據：production 來源不足，不作確認。`
-  - `core/market_theme_evidence.py` 新增 / 收斂 source boundary 欄位與 source-family gate；confirmed / ready 只能由 `production_db` 或 `owner_approved_persistent` 來源成立。
-  - `runtime_diagnostic`、runtime、local、cache、worktree、test fixture、report-derived source 可作 detail / limitations trace，但不得 confirmed / ready，不得污染頂層 source_family。
-  - market/theme 現有資料不足以 confirmed：需要 production persistent market_index / sector_index / watchlist_breadth 類 source，且具備 freshness、required fields 與 evidence value。
-  - `services/strategy_evidence.py` 本輪未改；用既有 read-only tests 驗證未受影響。
-- QA 有效阻塞：
-  - 首輪抓到 `runtime_diagnostic + watchlist_breadth + market_index` 可被誤判 confirmed / ready。
-  - 二輪抓到 production source 已足夠時，report-derived theme text 會污染頂層 `source_family=runtime_diagnostic`。
-  - Tech 修正後，QA 反證六種非持久 source family 全部不能 confirmed / ready，production + report-derived 混合時頂層 source_family 保持 `production_db`。
-- QA 最終通過：
-  - `100 passed, 13 warnings`
-  - `git diff --check` 通過
-  - forbidden diff 掃描無 schema / migration / SQL / backfill / watchlist / live Supabase write / live Telegram / 策略門檻變更。
+- Owner 要求：開始 Evidence Phase 3，確認現有 production DB / persistent source 是否足以讓 market/theme evidence confirmed；若需要擴字段或建表，先通知 Owner。
+- PM 已定義 source contract 與停止條件：Tech 先檢查既有 code / schema / docs；只在既有 production source 完整時才做 read-only loader，否則 blocked。
+- Tech 結論：blocked，未改產品代碼。現有 repo 可證明的 production source 不足，若硬做 loader 會把個股策略資料、runtime 聚合或 payload dict 誤升級成 market/theme confirmed。
+- 已確認不足：
+  - `daily_signal_snapshot` / `strategy_feature_snapshots` 有個股策略狀態或分類，但不是 market index，缺 sector/theme key 與 production breadth contract。
+  - `strategy_outcome_metrics` / `strategy_classification_audit` 是回測或 audit trace，不是當日 market/theme support。
+  - `market_daily_bars` / `daily_price` 是個股價格資料，不是 TAIEX / sector index contract，缺 theme mapping 與 breadth。
+  - runtime diagnostic / report-derived / payload dict 仍只能 detail，不得 confirmed。
+- 需要 Owner/PM 確認或批准的 production source contract：
+  - market/theme evidence table、view 或 helper，且 GitHub fresh runner 可 read-only 存取。
+  - `market_index` 或等價市場指標，例如 TAIEX / sector index。
+  - `sector_theme_key` 或等價 theme / sector key，可映射到 watchlist 股票。
+  - production / persistent `watchlist_breadth`，或可 read-only 重建的廣度計算契約。
+  - `as_of` / `trade_date` / freshness。
+  - `evidence_value` / `support_level`。
+  - lineage：`run_id`、`snapshot_id`、`symbol`、`theme_key`、`source_name` 或等價追溯欄位。
+- 驗證：
+  - Tech 自檢 `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py`：17 passed, 13 warnings。
+  - `git diff --check` 通過。
+  - 無 schema / migration / SQL / DB write / backfill / watchlist / live Telegram / 策略門檻變更。
 - Post-cycle review：
-  - 根因分類：`repeated_pattern` / evidence source boundary；不能只排除單一 `runtime_fallback`，必須以 source_family whitelist 控制 confirmed / ready。
-  - QA 攔截有效：兩次抓到測試全綠以外的 source-family 污染路徑，避免 fake confirmed 進 Owner 手機 summary。
-  - 不新增 `AGENTS.md` 硬規則：現有 source-of-truth / fail-closed / 手機閱讀規則已覆蓋，本輪沉澱為 fixture 與狀態契約。
-  - Runner gap：auto cycle 對 QA `阻塞` parser 仍 false fail；Tech runner 第一次未用 `arch -arm64`，但 QA / 主 repo 驗證已用 arm64 命令通過。
+  - 根因分類：`blocked_by_missing_production_source_contract`，不是產品 bug 或程式 diff。
+  - 既有 `AGENTS.md` GitHub runner / state source 硬規則已覆蓋，不新增硬規則，避免文件膨脹。
+  - 待補流程：下一輪若 Owner 批准建表或指定既有表名，需開 schema / provider 任務，且不得 live write / backfill，除非 Owner 單獨批准。
 
 ## Next Action
 
-- 完成 commit / push 後執行 tech worktree cleanup。
-- 後續若 Owner 要 confirmed market/theme evidence，需另開任務定義 production table/view 欄位與 read-only loader；可能需要新增 / 確認 market_index、sector/theme key、watchlist_breadth、freshness、evidence value 等 source，必須先通知 Owner。
+- 等 Owner 決定：
+  - 若 production DB 已有相關表 / view，提供名稱與欄位 contract 後重開 Tech read-only loader 任務。
+  - 若沒有，需 Owner 批准新增 schema/table/view/provider 的任務；正式 write / backfill / live Telegram 仍需另外批准。
+- 本輪只提交 PM/Tech blocked 文件與總控狀態，不合併產品 diff。
 
 ## Status Values
 
