@@ -4,8 +4,8 @@
 
 ## Current Task
 
-- task_id: `postprofit-state-consistency-v20.2.2`
-- task_name: `Post-profit State Consistency`
+- task_id: `second-take-profit-execution-dedupe-v20.2.3`
+- task_name: `Second Take-profit Execution Dedupe`
 - task_type: `risk_patch`
 - version_level: `patch`
 - qa_level: `L2`
@@ -18,33 +18,38 @@
 
 ## Current Result
 
-- Owner 要求開始修 `v20.2.2`：只處理 05/29 報文中「已執行同級停利後仍顯示停利」的狀態 / 報文一致性問題。
-- 本輪不處理強勢市場準備層，不改 RR / 過熱 / 漲停不追門檻，不改市場證據鏈，不建表、不 live、不 backfill。
+- Owner 指出已依第二次停利建議賣出 75 股後，`v20.2.2` 仍顯示 `第二段停利 / 本次建議 56 股`，要求嚴格避免同日第二段重複賣出建議。
+- 本輪只處理第二段 / 額外停利 execution 去重與手機報文一致性；不改 RR / 過熱 / 漲停不追門檻，不改市場證據鏈，不改 DB schema，不 live、不 backfill。
 - CAO 服務已確認：
   - API: `http://127.0.0.1:9889/`
   - UI: `http://127.0.0.1:5173/`
 - PM 已交付 `TASK.md`，定義：
-  - 同一股票同一交易日已執行同級停利 / 減碼且達建議比例後，不得再次把同級 `停利` 作為主行動。
-  - 預設轉為 `停利後觀察 / 減碼後觀察 / 剩餘觀察`。
-  - 若仍有第二段 / 更高級停利，必須同行說明觸發條件、今日已賣、剩餘股數、本次建議股數。
+  - 優先使用既有 DB execution / local execution，再 fallback 到 `position_events`，不得只靠 formatter 文案猜。
+  - 第二段已完整或超額執行後，主行動改為 `第二段停利後觀察 / 停利完成觀察`，不得再輸出完整可執行建議。
+  - 部分執行只顯示剩餘建議股數；未執行時仍可顯示 `第二段停利 / 本次建議 N 股`。
+  - summary、持倉卡、持倉風控檢查的今日已賣、剩餘、建議股數不得互相矛盾。
 - Tech 已交付候選 diff：
-  - `core/generator.py` VERSION 升為 `v20.2.2`。
-  - POST_PROFIT_WATCH + 今日已賣主案例顯示 `停利後觀察`。
-  - 同日已賣後若仍出現可執行停利，顯示 `第二段停利｜今日已賣 N 股｜剩餘 N 股｜本次建議 N 股`。
-  - 同步 formatter / notifier / market evidence header 測試。
+  - `core/generator.py` VERSION 升為 `v20.2.3`。
+  - 新增 execution 狀態 helper，依序讀取 DB / local execution / position_events 今日已賣股數。
+  - completed：`第二段停利後觀察｜今日已賣 N 股｜剩餘 N 股｜第二段已執行`。
+  - partial：`第二段停利剩餘建議 X 股｜今日已賣 Y 股｜原建議 Z 股`。
+  - unexecuted：保留 `第二段停利｜本次建議 N 股｜剩餘 N 股`。
+  - 持倉卡 `今日 ...` 欄同步使用同一 execution state，避免 `今日 無` 與 `今日已賣` 同卡矛盾。
 - QA 最終驗證通過：
-  - POST_PROFIT_WATCH 今日已賣不再被誤讀成同級再次停利。
-  - 第二段停利跨 summary / 持倉卡 / 風控檢查均帶今日已賣、剩餘與本次建議股數。
+  - completed DB execution 已賣 75 股後不再出現完整 `第二段停利 / 本次建議 56`。
+  - partial local execution 只顯示剩餘建議 36 股。
+  - unexecuted 仍顯示 `第二段停利 / 本次建議 56 / 剩餘`。
+  - 持倉卡、summary、風控檢查不再有 `今日 無` 與 `今日已賣 N 股` 矛盾。
   - 無策略門檻、DB、watchlist、live Telegram、backfill diff。
-  - 主 repo 驗證：`108 passed, 21 warnings`，`git diff --check` 通過。
+  - 主 repo 驗證：`76 passed, 21 warnings`；策略 smoke `8 passed`；`git diff --check` 通過。
 - Post-cycle review：
-  - QA 有效攔下兩個問題：第二段停利文案不明、CHANGELOG 與 diff 不一致。
-  - runner guard 已微調：dirty worktree guard 只攔產品 / 測試候選 diff，不攔正常 `TASK.md` handoff。
+  - QA 有效攔下三個問題：未執行第二段被過度去重、持倉卡 `今日 無` 與 execution 文案矛盾、`CHANGELOG.md` 自述與 diff 不一致。
+  - 根因分類：`repeated_pattern` / 手機跨區塊一致性不足；已沉澱到本輪 `TASK.md` / `QA_REPORT.md`，並更新 `CURRENT_STATE.md` / `CLEANUP_PLAN.md`，不新增硬規則避免文件膨脹。
 
 ## Next Action
 
 - commit / push 後清理 tech worktree。
-- 下一張任務可處理強勢市場準備層 / 手機文案；不得直接放寬策略買點。
+- 若要精準區分第一段、第二段、額外停利、風控賣出，另開 execution stage / DB 設計任務；不得在 formatter 裡無限猜。
 
 ## Status Values
 

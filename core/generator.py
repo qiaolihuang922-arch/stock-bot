@@ -52,7 +52,7 @@ from services.strategy_evidence import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.2.2"
+VERSION = "v20.2.3"
 
 EXECUTION_LEVELS = {
     "TAKE_PROFIT_50": "TP50",
@@ -2896,30 +2896,161 @@ def position_summary_rank(name, data):
     return (bucket, -pnl)
 
 
-def is_same_day_second_take_profit(data, decision=None):
+def numeric_execution_value(record, *keys):
+
+    for key in keys:
+        try:
+            value = record.get(key)
+            if value is not None:
+                return int(value)
+        except (TypeError, ValueError, AttributeError):
+            pass
+
+    return 0
+
+
+def sold_shares_from_execution_record(record):
+
+    if not isinstance(record, dict):
+        return 0
+
+    explicit_sold = numeric_execution_value(
+        record,
+        "sold_shares",
+        "today_sold_qty",
+        "executed_sell_shares",
+        "sell_shares",
+    )
+    if explicit_sold > 0:
+        return explicit_sold
+
+    shares_delta = numeric_execution_value(record, "shares_delta", "delta_shares")
+    if shares_delta < 0:
+        return abs(shares_delta)
+
+    action_text = " ".join(
+        str(record.get(key) or "")
+        for key in ["action", "action_label", "action_code", "event_type", "side"]
+    ).upper()
+    if any(token in action_text for token in ["賣", "停利", "REDUCE", "TAKE_PROFIT", "SELL", "STOP"]):
+        return numeric_execution_value(record, "shares", "qty", "quantity", "executed_shares")
+
+    return 0
+
+
+def today_sold_shares_from_execution_data(data):
+
+    for key in [
+        "db_execution",
+        "db_execution_record",
+        "today_execution",
+        "execution",
+        "local_execution",
+    ]:
+        sold_shares = sold_shares_from_execution_record(data.get(key) or {})
+        if sold_shares > 0:
+            return sold_shares, key
+
+    for key in [
+        "db_executions",
+        "today_executions",
+        "executions",
+        "local_executions",
+    ]:
+        total = sum(
+            sold_shares_from_execution_record(record)
+            for record in data.get(key) or []
+        )
+        if total > 0:
+            return total, key
+
+    events = data.get("position_events") or {}
+    return sold_shares_from_execution_record(events), "position_events"
+
+
+def second_take_profit_execution_state(data, decision=None):
 
     decision = decision or ensure_holding_decision("", data) or {}
-    events = data.get("position_events") or {}
+    holding = data.get("holding") or {}
 
-    return (
+    sold_shares, source = today_sold_shares_from_execution_data(data)
+
+    try:
+        suggested_shares = int(decision.get("shares") or 0)
+    except (TypeError, ValueError):
+        suggested_shares = 0
+
+    try:
+        remaining_shares = int(holding.get("shares") or 0)
+    except (TypeError, ValueError):
+        remaining_shares = 0
+
+    is_take_profit = (
         data.get("holding")
-        and events.get("sold_shares", 0) > 0
         and decision.get("level") in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]
-        and decision.get("shares", 0) > 0
+        and suggested_shares > 0
     )
+    try:
+        realized_ratio = float(holding.get("realized_profit_taken_ratio") or 0)
+    except (TypeError, ValueError):
+        realized_ratio = 0
+    is_second_stage = is_take_profit and realized_ratio > 0
+
+    if not is_take_profit or sold_shares <= 0:
+        status = "none"
+    elif sold_shares >= suggested_shares:
+        status = "completed"
+    else:
+        status = "partial"
+
+    return {
+        "status": status,
+        "sold_shares": sold_shares,
+        "suggested_shares": suggested_shares,
+        "remaining_suggestion": max(suggested_shares - sold_shares, 0),
+        "remaining_shares": remaining_shares,
+        "source": source,
+        "is_second_stage": is_second_stage,
+    }
+
+
+def is_same_day_second_take_profit(data, decision=None):
+
+    return second_take_profit_execution_state(data, decision).get("status") in ["completed", "partial"]
 
 
 def second_take_profit_context_text(data, decision=None):
 
-    decision = decision or ensure_holding_decision("", data) or {}
-    events = data.get("position_events") or {}
-    holding = data.get("holding") or {}
+    state = second_take_profit_execution_state(data, decision)
+
+    if state["status"] == "completed":
+        return (
+            f"今日已賣 {state['sold_shares']} 股"
+            f"｜剩餘 {state['remaining_shares']} 股"
+            f"｜第二段已執行"
+        )
+
+    if state["status"] == "partial":
+        return (
+            f"第二段停利剩餘建議 {state['remaining_suggestion']} 股"
+            f"｜今日已賣 {state['sold_shares']} 股"
+            f"｜原建議 {state['suggested_shares']} 股"
+            f"｜剩餘持倉 {state['remaining_shares']} 股"
+        )
 
     return (
-        f"今日已賣 {events.get('sold_shares', 0)} 股"
-        f"｜剩餘 {holding.get('shares', 0)} 股"
-        f"｜本次建議 {decision.get('shares', 0)} 股"
+        f"本次建議 {state['suggested_shares']} 股"
+        f"｜剩餘 {state['remaining_shares']} 股"
     )
+
+
+def holding_today_trade_text(data, decision=None):
+
+    state = second_take_profit_execution_state(data, decision)
+    if state["status"] in ["completed", "partial"] and state["sold_shares"] > 0:
+        return f"賣 {state['sold_shares']}股"
+
+    return event_summary_text(data.get("position_events") or {})
 
 
 def position_summary_action(name, data):
@@ -2939,7 +3070,14 @@ def position_summary_action(name, data):
     if str(action).startswith("增量"):
         return "增量減碼"
 
-    if is_same_day_second_take_profit(data, decision):
+    second_profit_state = second_take_profit_execution_state(data, decision)
+    if second_profit_state.get("status") == "completed":
+        return "第二段停利後觀察"
+
+    if second_profit_state.get("status") == "partial":
+        return "第二段停利剩餘建議"
+
+    if second_profit_state.get("is_second_stage"):
         return "第二段停利"
 
     if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]:
@@ -3099,7 +3237,7 @@ def position_summary_note(name, data):
     if action == "停損":
         return decision.get("note") or "停損優先，避免虧損擴大"
 
-    if action == "第二段停利":
+    if action in ["第二段停利", "第二段停利剩餘建議", "第二段停利後觀察"]:
         return second_take_profit_context_text(data, decision)
 
     if action == "停利":
@@ -3287,7 +3425,7 @@ def holding_tomorrow_trigger(name, data):
     if level == "STOP_100":
         return "清出後等重新買點"
 
-    if action == "第二段停利":
+    if action in ["第二段停利", "第二段停利剩餘建議", "第二段停利後觀察"]:
         return second_take_profit_context_text(data, decision)
 
     if level in ["REDUCE_25", "REDUCE_50"]:
@@ -3345,6 +3483,7 @@ def position_priority_rank(name, data):
         "增量減碼": 1,
         "減碼": 1,
         "第二段停利": 1,
+        "第二段停利剩餘建議": 1,
         "停利": 1,
         "新倉風控觀察": 2,
         "風控觀察": 3,
@@ -3403,6 +3542,7 @@ def holding_execution_priority(name, data):
         "增量減碼": 1,
         "減碼": 1,
         "第二段停利": 2,
+        "第二段停利剩餘建議": 2,
         "停利": 2,
         "新倉風控觀察": 3,
         "風控觀察": 4,
@@ -3428,9 +3568,22 @@ def holding_execution_item(name, data):
     trigger = holding_tomorrow_trigger(name, data)
     events = data.get("position_events") or {}
     decision = ensure_holding_decision(name, data) or {}
+    second_profit_state = second_take_profit_execution_state(data, decision)
 
     if label == "續抱觀察" and trigger == "暫不加碼":
         trigger = "暫不加碼，守警戒"
+
+    if second_profit_state["status"] == "completed":
+        context = second_take_profit_context_text(data, decision)
+        return {
+            "name": name,
+            "kind": "holding",
+            "state": "已執行",
+            "priority": holding_execution_priority(name, data),
+            "is_control": True,
+            "control_line": f"{name}｜第二段停利後觀察｜{context}",
+            "line": f"{name}｜已執行｜{context}",
+        }
 
     if (
         events.get("sold_shares", 0) > 0
@@ -3480,6 +3633,7 @@ def holding_execution_item(name, data):
             "增量減碼",
             "減碼",
             "第二段停利",
+            "第二段停利剩餘建議",
             "停利",
             "新倉風控觀察",
             "風控觀察",
@@ -3779,6 +3933,7 @@ def pending_trade_items(holding_items, watch_items):
         "增量減碼",
         "減碼",
         "第二段停利",
+        "第二段停利剩餘建議",
         "停利",
         "加碼10",
         "加碼20",
@@ -4120,7 +4275,7 @@ def formatTelegramPositionCard(name, data):
     holding = data["holding"]
     decision = ensure_holding_decision(name, data)
     result = data["result"]
-    today_text = event_summary_text(data.get("position_events") or {}) or "無"
+    today_text = holding_today_trade_text(data, decision) or "無"
     dist = card_breakout_distance(data)
     decision_line, condition_line = holding_detail_decision_lines(name, data)
     reason_line = holding_reason_line(name, data)
@@ -4155,7 +4310,11 @@ def holding_reason_line(name, data):
     decision = ensure_holding_decision(name, data)
     level = decision.get("level") if decision else ""
 
-    if is_same_day_second_take_profit(data, decision):
+    second_profit_state = second_take_profit_execution_state(data, decision).get("status")
+    if second_profit_state == "completed":
+        return "今日第二段停利已執行，避免重複賣出"
+
+    if second_profit_state == "partial":
         return "同日已賣後再次觸發停利，需標明第二段與股數"
 
     if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]:
@@ -4185,6 +4344,12 @@ def holding_next_step_line(name, data):
 
     if level == "STOP_100":
         return "清出後不急回補，等重新出現買點"
+
+    if action == "第二段停利後觀察":
+        return "第二段已執行，剩餘部位回到風控觀察"
+
+    if action == "第二段停利剩餘建議":
+        return "只執行扣除今日已賣後的剩餘建議股數"
 
     if action == "第二段停利":
         return "執行本次建議後，剩餘部位回到風控觀察"
@@ -4260,6 +4425,18 @@ def holding_detail_decision_lines(name, data):
 
     if level == "ADD_10":
         return f"{action_text}，{note or '小幅轉強'}", "RR達標，信心達標"
+
+    if summary_action == "第二段停利後觀察":
+        return (
+            f"第二段停利後觀察，{second_take_profit_context_text(data, decision)}",
+            "今日已執行，避免重複賣出"
+        )
+
+    if summary_action == "第二段停利剩餘建議":
+        return (
+            second_take_profit_context_text(data, decision),
+            f"觸發條件：{note or '停利條件再次成立'}"
+        )
 
     if summary_action == "第二段停利":
         return (

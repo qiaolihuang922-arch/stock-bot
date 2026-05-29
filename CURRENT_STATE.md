@@ -7,7 +7,7 @@
 - 專案：台股策略報文機器人。
 - 交付形態：排程 / 腳本產生 Telegram 報文並發送給 Owner。
 - 股票清單唯一來源：`core/watchlist.py`，預設 12 檔。
-- 最新使用者可見 Telegram 版本：`v20.2.1`。
+- 最新使用者可見 Telegram 版本：`v20.2.3`。
 - 最新 pushed commit 以 `git log -1` 為準。
 - 固定 8 份 Markdown 不刪除，只改寫內容：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 
@@ -33,6 +33,13 @@
 
 ## Recent High-Signal Milestones
 
+- `v20.2.3` Second Take-profit Execution Dedupe 已通過 QA：
+  - 報文優先使用既有 DB execution / local execution，再 fallback 到 `position_events` 判斷今日已賣。
+  - 第二段停利 completed：顯示 `第二段停利後觀察`、今日已賣、剩餘股數、第二段已執行，不再顯示完整可執行建議。
+  - 第二段停利 partial：只顯示剩餘建議股數，不回吐完整原建議。
+  - 第二段停利 unexecuted：仍保留 `第二段停利 / 本次建議 / 剩餘`，避免合法第二段被藏掉。
+  - 持倉卡 `今日 ...` 欄與 summary / 風控檢查共用 execution state，不再出現 `今日 無` 與 `今日已賣 N 股` 同卡矛盾。
+  - QA 驗證：`tests/test_generator_report.py tests/test_notifier.py tests/test_market_theme_evidence.py`，`76 passed, 21 warnings`；策略 smoke `8 passed`。
 - `v20.2.2` Post-profit State Consistency 已通過 QA：
   - 同日已執行同級停利後，報文主行動轉為 `停利後觀察`，不再讓 Owner 誤讀為再次同級停利。
   - 若同日已賣後仍有更高級 / 第二段停利建議，報文顯示 `第二段停利`，並同行列出今日已賣、剩餘股數、本次建議股數。
@@ -74,6 +81,8 @@
 - 同一檔持倉同一份報文只能有一個主行動；持倉風控優先於高分、最強、待觸發加碼。
 - 今日買入後預設是 `新倉風控觀察`；若要賣 / 減碼 / 停損，必須說明明確觸發條件。
 - 今日已減碼 / 停利達同級建議時，預設轉為觀察；只有更高級風控或硬停損可覆蓋。
+- 同日第二段 / 額外停利必須尊重 execution 資料：completed 轉觀察、partial 只顯示剩餘、unexecuted 才顯示完整第二段建議。
+- 持倉卡、summary、風控檢查的今日已賣、剩餘、建議股數必須使用一致來源；不得同卡出現 `今日 無` 與 `今日已賣 N 股`。
 - 空區塊、0 計數、無行動占位都是手機噪音；未定義必要性時不顯示。
 - 市場 / 題材 evidence 不得放寬個股買點；confirmed theme 也不能自動產生 BUY。
 
@@ -130,6 +139,7 @@
 
 - 2026-05-29 報文研究結論：
   - 英業達今日已停利後主決策仍顯示 `停利` 的高風險誤讀已由 `v20.2.2` 修正。
+  - 英業達第二段已執行後仍重複建議第二段停利的高風險誤讀已由 `v20.2.3` 修正。
   - 本週台股 / AI / 電子偏強有公開資料支持，但零 BUY 不必然是錯；需補「強勢市場但不可追」的準備層 / 手機文案，不得直接放寬買點。
 - 證據鏈 v20.2.0 只建立 production contract 與 runtime source gate；若要自動取得 market_index / sector_index、建表、cache、external provider 或持久化 evidence，先通知 Owner。
 - 若 Owner 仍覺得查詢慢，另開 performance measurement 任務，量測 production 實際秒數。

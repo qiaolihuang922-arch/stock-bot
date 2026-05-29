@@ -55,6 +55,12 @@
   - 根因分類：`runner_gap`，guard 把正常 `TASK.md` handoff 當成 candidate diff。
   - 已補腳本：dirty worktree guard 只攔手稿 / 產品 / 測試候選 diff，不攔固定 handoff files。
   - QA 另攔下第二段停利文案不明與 CHANGELOG 不一致，已修正並通過。
+- 本輪 `v20.2.3` 第二段停利去重：
+  - 根因分類：`repeated_pattern` / 手機跨區塊一致性不足，不是單純文案 bug。
+  - QA 三次攔截有效：未執行第二段被過度去重、持倉卡 `今日 無` 與 execution 文案同卡矛盾、`CHANGELOG.md` 自述與 diff 不一致。
+  - 已用任務卡與測試沉澱：completed / partial / unexecuted 三段 fixture，以及持倉卡 / summary / 風控檢查同源驗證。
+  - 暫不新增 `AGENTS.md` 硬規則，因既有手機閱讀、持倉一致性、QA 主動反證規則已覆蓋；本輪屬於執行不到位，後續用 QA fixture / runner review 追蹤。
+  - 待補流程：若類似問題再發生，將「execution state 必須單一來源供應卡片 / summary / checklist」升級為高風險 invariant。
 - 下一次產品任務完成後，確認 Post-cycle Review Gate 是否有做到：
   - 根因分類。
   - QA 攔截是否沉澱成 guard。

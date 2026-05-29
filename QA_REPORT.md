@@ -2,77 +2,114 @@
 
   ## 測試範圍
 
-  - 任務尺寸 / QA 分級：risk_patch / L2。範圍收斂在 Telegram formatter、持倉主行動一致性、版本 header、直接 consumer smoke。
-  - 已讀：TASK.md、CHANGELOG.md、git status --short、git diff --stat、git diff --name-only、core/generator.py 與相關測試 diff。
-  - 可吸收 diff：
-      - CHANGELOG.md
-      - core/generator.py
-      - tests/test_generator_report.py
-      - tests/test_market_theme_evidence.py
-      - tests/test_notifier.py
-  - worktree 殘留：未看到上述以外的 modified / untracked 檔案；QA 未修改 tracked file。
-  - CHANGELOG.md 與 git diff 一致：修改檔案清單已列 CHANGELOG.md，且內容改為「CHANGELOG.md 僅同步本輪交付摘要，未承載產品邏輯」，不再宣稱未直接編輯。
+  任務尺寸：risk_patch，QA level：L2。未擴成 full pytest / replay / backfill。
+
+  讀取與核對：
+
+  - TASK.md
+  - CHANGELOG.md
+  - git status --short
+  - git diff --stat
+  - git diff -- core/generator.py tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py CHANGELOG.md
+
+  可吸收 diff：
+
+  - CHANGELOG.md
+  - core/generator.py
+  - tests/test_generator_report.py
+  - tests/test_market_theme_evidence.py
+  - tests/test_notifier.py
+
+  worktree 殘留：
+
+  - 未發現超出上述清單的 tracked diff。
+  - CHANGELOG.md 已列自身，上一輪「CHANGELOG 未列自身」阻塞點已解除。
+
+  執行命令：
+
+  - git diff --check：通過
+  - arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py -k "v20_2_3 or intraday_v20_0_10_execution_contract" tests/test_notifier.py tests/test_market_theme_evidence.py：4 passed
+  - arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py tests/test_notifier.py tests/test_market_theme_evidence.py：76 passed
+  - arch -arm64 .venv/bin/python -m pytest tests/test_analysis_engine.py -k "same_day_profit_taken or overheat or stop or take_profit"：8 passed
 
   ## 風險預算與停止條件
 
-  - 風險 1：CHANGELOG / diff 不一致，造成 Architect 吸收錯誤範圍。
-      - 驗證：git diff --name-only 對照 CHANGELOG.md 修改檔案。
-      - 結果：一致。
-  - 風險 2：Owner 手機看到同日已賣後仍像同級停利，誤以為再賣一次。
-      - 驗證：直接 formatter fixture 檢查 summary / 今日交易執行 / 持倉風控檢查 / 持倉卡。
-      - 結果：POST_PROFIT_WATCH 顯示「停利後觀察」，第二段停利顯示「今日已賣 / 剩餘 / 本次建議」。
-  - 風險 3：版本 header 或直接 consumer 未同步。
-      - 驗證：formatter header、notifier header consumer、market evidence header smoke。
-      - 結果：均為 v20.2.2。
-  - 停止條件：不跑 full pytest / replay / backfill / live delivery；本輪不擴到策略門檻、DB、watchlist、正式寫入。
+  本輪最值得抓的 3 個風險：
+
+  1. completed DB execution 仍讓 Owner 誤以為今日要再賣一次。
+     驗證：英業達 db_execution shares_delta=-75，原建議 56，檢查 summary / 持倉卡 / 風控檢查。
+     結果：顯示 今日 賣 75股、第二段停利後觀察、今日已賣 75 股｜剩餘 225 股｜第二段已執行；未出現 今日 無、無本次建議 56、本次建議 56 股。
+  2. partial local execution 仍顯示完整原建議 56 股。
+     驗證：local_executions shares=20，原建議 56。
+     結果：顯示 今日 賣 20股、第二段停利剩餘建議 36 股｜今日已賣 20 股｜原建議 56 股｜剩餘持倉 280 股；未出現 今日 無 或 本次建議 56 股 作為完整待執行建議。
+  3. unexecuted 被誤去重，導致真正第二段停利消失。
+     驗證：無 DB / local execution。
+     結果：仍顯示 第二段停利｜本次建議 56 股｜剩餘 300 股，符合 TASK 未執行案例。
+
+  停止條件：
+
+  - 三個 fixture 已覆蓋 completed / partial / unexecuted。
+  - header 已核對為 v20.2.3。
+  - touched tests 與策略 smoke 通過。
+  - diff 未觸及 DB schema、watchlist、live/backfill 入口或策略門檻檔案。
 
   ## 關聯風險掃描
 
-  - git diff --check：通過。
-  - git diff --name-only：只包含 CHANGELOG、formatter 與三個直接測試檔。
-  - 未見 services/analysis.py、DB / Supabase、watchlist、live Telegram、backfill 相關 diff。
-  - 已跑命令：
-      - arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py -k "v20_2_2"：3 passed。
-      - arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py::...v20_2_2... tests/test_generator_report.py::...test_intraday_v20_0_10_execution_contract：4 passed。
-      - arch -arm64 .venv/bin/python -m pytest tests/test_notifier.py tests/test_market_theme_evidence.py tests/test_analysis_engine.py -k "version_header or market_theme or profit"：23 passed。
-  - pytest warnings 為既有依賴 deprecation / Python 版本警告，未影響本輪驗收。
+  - core/generator.py 版本常量由 v20.2.2 升為 v20.2.3，相關 formatter / notifier 測試已同步。
+  - diff 未包含 DB schema、migration、Supabase write path、watchlist、backfill script。
+  - strategy smoke 測試通過；未看到 RR、過熱、漲停不追、停損停利策略門檻被改。
+  - CHANGELOG.md 與 diff 一致：已列出自身、core/generator.py 與三個測試檔。
 
   ## 跨區塊語意一致性
 
-  - POST_PROFIT_WATCH 今日已賣案例：
-      - 持倉卡：停利後觀察、今日 賣 112股（25%）、決策：停利後觀察，暫不加碼。
-      - 今日交易執行：今日已執行停利 112 股｜成交後剩餘 188 股｜同級停利已完成。
-      - 持倉風控檢查：停利後觀察｜成交後剩餘 188 股｜同級停利已完成。
-      - 未再出現同級 停利 25% 作為主行動。
-  - 第二段停利案例：
-      - 持倉卡：第二段停利｜+30.00%。
-      - 決策：第二段停利，今日已賣 112 股｜剩餘 188 股｜本次建議 47 股。
-      - summary 與持倉風控檢查同樣顯示 第二段停利｜今日已賣 112 股｜剩餘 188 股｜本次建議 47 股。
-      - 有觸發條件：過熱延伸再次達停利條件。
+  Owner 手機閱讀順序反證：
+
+  completed：
+
+  - header：【05/29 盤中｜v20.2.3】
+  - 持倉卡：【英業達 2356】📌 第二段停利後觀察，今日 賣 75股
+  - 決策：今日已賣 75 股｜剩餘 225 股｜第二段已執行
+  - summary 今日執行：英業達｜已執行｜今日已賣 75 股｜剩餘 225 股｜第二段已執行
+  - 風控檢查：英業達｜第二段停利後觀察｜今日已賣 75 股｜剩餘 225 股｜第二段已執行
+  - 未出現互相矛盾的完整待賣 56 股。
+
+  partial：
+
+  - 持倉卡：第二段停利剩餘建議，今日 賣 20股
+  - summary / 風控檢查同樣顯示剩餘建議 36 股、今日已賣 20 股、原建議 56 股。
+  - 沒有把 56 股重新包裝成「本次建議 56 股」。
+
+  unexecuted：
+
+  - 持倉卡、summary、風控檢查都保留 第二段停利｜本次建議 56 股｜剩餘 300 股。
+  - 今日 無 只出現在未執行持倉卡，未污染 completed / partial。
 
   ## 使用者誤讀風險
 
-  - Owner 手機閱讀順序檢查：
-      - 先看到 header：【05/29 盤中｜v20.2.2】。
-      - 再看到今日結論：已區分「無新增下單」與「已執行 1 項不重複」。
-      - 再看今日交易執行：已賣股數與剩餘股數清楚。
-      - 再看持倉風控檢查 / 持倉卡：主行動與前段一致。
-  - 未發現會讓 Owner 把 POST_PROFIT_WATCH 誤讀成同級再次停利的輸出。
-  - 第二段停利不是裸 停利，已同行帶出今日已賣、剩餘、本次建議與觸發條件，可接受。
+  未發現會讓 Owner 在 completed 案例重複賣出的文案。completed 第一眼看到的是「已執行 / 後觀察」，不是可執行第二段停利。
+
+  partial 仍有 原建議 56 股，但上下文同列 剩餘建議 36 股｜今日已賣 20 股，語意可接受；不會被讀成完整再賣 56 股。
+
+  unexecuted 保留完整建議，符合 TASK，不視為噪音或誤導。
 
   ## 質疑與反證
 
-  - 主動反證 1：檢查策略既有 POST_PROFIT_WATCH 測試，確認策略層同級已停利仍維持觀察語意，未被 formatter patch 回退。
-  - 主動反證 2：檢查 notifier 直接 consumer，確認最後一則 message header 保留 v20.2.2，不是只改 formatter 單元輸出。
-  - 主動反證 3：檢查第二段停利負面 / 邊界案例，確認同日已賣後若策略仍給 TAKE_PROFIT_25 且有可賣股數，輸出升級為明確 第二段停利，不是含糊的同級 停利。
-  - 清理 / 瘦身 / refactor 證據表：本輪不是清理任務，不適用 path / claim / evidence / risk / action 表要求。
+  主動質疑 1：Tech 是否只修持倉卡，漏掉 summary / 風控檢查。
+  反證：獨立 fixture 實際輸出顯示 completed / partial 的 summary 與風控檢查均同步同一 action 與股數。
+
+  主動質疑 2：DB execution 與 local execution 來源不同，是否只覆蓋其中一種。
+  反證：completed 用 db_execution，partial 用 local_executions，兩者皆通過手機順序檢查。
+
+  主動質疑 3：修 completed / partial 後，未執行第二段是否被錯誤吞掉。
+  反證：unexecuted 仍顯示 第二段停利 / 本次建議 56 股 / 剩餘 300 股。
 
   ## 未測項目
 
-  - 未跑 full pytest，符合本輪 L2 窄範圍與 Architect 指令。
+  - 未跑 full pytest，因本輪 L2 不要求且會超出停止條件。
   - 未跑 replay / backfill dry-run。
-  - 未測 live Telegram delivery、live Supabase write。
-  - 未驗 DB payload / schema / watchlist，因 diff 未觸及且 TASK 明列非目標。
+  - 未做 live Telegram delivery。
+  - 未做 live Supabase write。
+  - 未驗證正式 DB execution stage 歷史資料精準分類；CHANGELOG.md 已將 execution stage 限制列為殘留風險。
 
   ## QA 結論
 
