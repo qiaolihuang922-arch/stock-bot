@@ -2,62 +2,114 @@
 
   ## 測試範圍
 
-  - QA 風險預算: L1 / process，符合 TASK.md。本輪不擴大到 full pytest、replay、backfill、loader、writer、RLS、Telegram。
-  - 檢查輸入: TASK.md、CHANGELOG.md、git status --short、git diff --stat、git diff -- CHANGELOG.md、SQL contract artifact、handoff verification SQL。
-  - 可吸收 diff: CHANGELOG.md 的本輪摘要更新，以及未追蹤但符合本輪目的的 docs/handoff/evidence_phase_4_market_theme_confirmed_evidence_readonly_verification.sql。
-  - worktree 殘留: 新增 SQL 目前是 untracked；git diff --stat 不會顯示它，Architect 合併時不能只看 tracked diff 或整包合併。
+  本輪判定為 normal_patch / L2。未擴大到 full pytest、replay、backfill、live Supabase、live Telegram。
+
+  已驗證：
+
+  - TASK.md / CHANGELOG.md / worktree diff 對齊。
+  - read-only loader contract。
+  - provider 直接消費者。
+  - Telegram header 與手機 summary。
+  - support_level=strong 只能作為負面測試，不能被接受。
+  - clean/fresh runner 反證：無 DB source 時不得 fake confirmed。
+
+  執行命令：
+
+  - PYTHONPATH=.qa_tmp:. arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_generator_report.py tests/test_notifier.py
+      - 結果：93 passed, 161 warnings
+  - git diff --check
+      - 結果：passed
+  - 額外 QA 反證：patch _build_client=None 後呼叫 generator.market_theme_summary_evidence(..., None)
+      - 結果：missing-source False production_db
+      - 手機摘要首句：證據：production 來源不足，不作確認。
 
   ## 風險預算與停止條件
 
-  1. 最值得抓的風險: handoff SQL 是否只讀、無 secret、無 live write。
-      - 驗證: keyword/secret 靜態掃描、粗略 statement shape check。
-      - 停止條件: 發現 write SQL 或 secret pattern 即 blocked。
-  2. 最值得抓的風險: SQL 是否足以讓 Owner/QA 判定 TASK.md 要求的 schema matrix。
-      - 驗證: 對照 db/sql/evidence_phase_4_market_theme_confirmed_evidence.sql 的欄位、constraint、index、latest partial index。
-      - 停止條件: 缺 hard-contract 欄位/constraint/index 比對項，或可能 false pass，即 conditional / blocked。
-  3. 最值得抓的風險: 無 production connection 時是否誤宣告 schema pass。
-      - 驗證: 檢查 CHANGELOG.md 與新增 SQL 是否只提供手動只讀 verification，不宣告 production pass。
-      - 停止條件: 若宣告 production schema 已通過，即 blocked。
+  本輪最值得抓的風險：
+
+  1. DB source 缺失或錯誤時被 runtime / watchlist 補成 confirmed。
+      - 驗證：loader fail-closed tests + QA 額外 fresh-run 反證。
+      - 停止條件：missing-source/source-error/absent/insufficient-data 都不得 confirmed=true。
+  2. support_level=strong 被回收成合法 enum。
+      - 驗證：掃描本輪變更與負面測試。
+      - 停止條件：accepted enum 僅 confirmed/supporting/weak/invalidated，strong 只出現在 fail-closed 測試或說明。
+  3. 手機 Telegram 讓 Owner 把 evidence confirmed 誤讀成可買。
+      - 驗證：summary 閱讀順序與既有 fixture。
+      - 停止條件：先出現今日結論 / 新倉結論，再出現 evidence；confirmed evidence 必須帶 不代表可買 限制。
 
   ## 關聯風險掃描
 
-  - git status --short: CHANGELOG.md modified，新增 SQL untracked。
-  - git diff --check -- docs/handoff/... CHANGELOG.md: 通過。
-  - 靜態只讀掃描: insert/update/delete/drop/truncate/create/alter/grant/revoke、service_role/token/secret/connection string/postgres://supabase_key 無命中。
-  - 粗略 statement check: 16 個 statement，皆為 select 開頭，尾端有分號。
-  - 直接消費者補充檢查: Owner/Supabase SQL editor 會看到多個 result sets；未連 production，因此不能產出真正 observed matrix，只能交 Owner 手動執行。
+  可吸收 diff：
+
+  - core/generator.py
+  - core/market_theme_evidence.py
+  - tests/test_generator_report.py
+  - tests/test_market_theme_evidence.py
+  - CHANGELOG.md
+  - services/market_theme_evidence_store.py
+
+  注意：services/market_theme_evidence_store.py 目前是 untracked，不在 git diff --name-status 內，但 core/generator.py 已 import 它。Architect 合併時必須把此 untracked 新檔一併吸收；若只套 tracked diff，會造成 import
+  failure。
+
+  worktree 殘留 / 不建議吸收：
+
+  - .qa_tmp/config.py 是本地測試 shim，不在 git status，不能當產品 diff。
+  - CURRENT_STATE.md 仍舊版屬 Architect 收口文件，不是本輪 Tech diff。
+
+  清理 / 瘦身 / refactor 任務證據表：不適用，本輪不是清理任務。
 
   ## 跨區塊語意一致性
 
-  - TASK.md 要求無安全只讀連線時輸出 read-only SQL，並標記 blocked 或 conditional，不得宣告 schema pass。
-  - CHANGELOG.md 與 diff 一致地表示未連 production、不宣告 pass，只新增 handoff SQL。
-  - 主要不一致/不足: CHANGELOG.md 宣稱 SQL 覆蓋 allowed values，但新增 SQL 的 freshness/support_level/evidence_status values 只檢查必要值是否出現在 constraint definition，沒有反證額外允許值。因此 production constraint 若
-    多允許 experimental，仍可能顯示 pass。
-  - 新增 SQL 有 raw check constraints result set，可供人工精確反證，但 summary pass/fail row 本身不足以完成 TASK.md 的「allowed values 與 SQL artifact 一致」硬契約。
+  版本契約一致：
+
+  - core/generator.py VERSION 已是 v20.4.3。
+  - Telegram snapshot 測試已同步 v20.4.3。
+
+  Source contract 一致：
+
+  - loader accepted support levels 不含 strong。
+  - confirmed 條件限定 support_level in confirmed/supporting、evidence_status=confirmed、freshness=fresh。
+  - provider 保留 fail-closed status，不把 DB 缺失壓成 confirmed。
+
+  手機閱讀順序：
+
+  - 既有 fixture 驗證 🧭 新倉：無有效進場。 早於 evidence summary。
+  - confirmed wording 後仍有 限制：題材可追蹤，不代表可買。
+  - fail-closed wording 是短句：證據：production 來源不足，不作確認。
 
   ## 使用者誤讀風險
 
-  - 本輪無 Telegram / summary / dashboard 輸出，手機報文閱讀順序不適用。
-  - Owner 可見風險在 Supabase result sets：若 Owner 只看 freshness values = pass、support_level values = pass、evidence_status values = pass，可能誤以為 allowed values 已精確一致；實際上該 SQL 沒有排除額外值。
-  - 建議 Architect 吸收時明確提醒: 只能把 raw check constraints 與 SQL artifact 做人工精確比對；不能只依三個 allowed-values pass row 判定 production schema pass。
+  目前未看到會讓 Owner 誤判買入的輸出。confirmed evidence 只說市場/題材支持成立，並保留不可買限制；缺資料也沒有被寫成市場偏弱或 confirmed。
+
+  殘留風險：若 production role / RLS 不可讀，正式 runner 會 fail closed 為來源不足，這符合本輪契約，但 Owner 可能需要後續驗 production read-only 權限，不屬本輪 live 驗證範圍。
 
   ## 質疑與反證
 
-  - 反證「只讀」: 去註解後粗略拆 statement，未發現非 select statement；keyword/secret scan 無命中。
-  - 反證「完整 matrix」: 欄位、expected columns、unexpected columns、indexes、latest partial index、comments 都有 result set；但 allowed values pass/fail 非 exact match，存在 false-pass 契約風險。
-  - 反證「GitHub fresh run / runtime source-of-truth」: 本輪未新增 runtime cache、loader、writer，也未把 local context 宣告為 production source-of-truth；符合只讀 verification 範圍。
-  - 反證「schema artifact intent 被改」: db/sql/evidence_phase_4_market_theme_confirmed_evidence.sql 未出現在本輪 tracked diff；新增 SQL是 verification artifact，不是 migration。
+  主動質疑 1：無本地 cache / 無 DB source 時，generator 是否仍會用 results_map 或 runtime 診斷 fake confirmed？
+
+  - 反證：QA 額外直接呼叫 market_theme_summary_evidence，patch DB client missing。
+  - 結果：missing-source、confirmed=False、手機摘要不作確認。
+
+  主動質疑 2：strong 是否被 accepted enum 或 mapping 接回 confirmed？
+
+  - 反證：掃描本輪 loader / provider / tests / changelog。
+  - 結果：loader accepted enum 不含 strong；唯一 support_level="strong" 是負面測試，預期 source-error。
+
+  主動質疑 3：Tech 宣稱新增 loader，但 git diff 是否完整包含？
+
+  - 反證：git diff --name-status 不含新 service，git ls-files --others --exclude-standard 顯示 services/market_theme_evidence_store.py。
+  - 結果：行為可接受，但合併條件必須明確納入 untracked 新檔。
 
   ## 未測項目
 
-  - 未連 production DB，未驗證 public.market_theme_confirmed_evidence 實際存在或 schema pass。
-  - 未跑 PostgreSQL parser validation；本機缺 pglast/psql/Docker/Podman 的狀態已由 Tech 記錄，QA 只做靜態檢查。
-  - 未驗證 Supabase SQL editor 實際 result-set 格式。
-  - 未測 loader、writer、backfill、RLS、strategy、watchlist、Telegram，符合 TASK 非目標。
+  - 未連 production DB。
+  - 未驗 production read-only role / RLS / 實際資料內容。
+  - 未做 live Supabase write、backfill、replay、live Telegram。
+  - 未跑 full pytest，符合 normal_patch / L2 停止條件。
 
   ## QA 結論
 
   conditional pass
 
-  條件: 本輪可吸收為「提供只讀手動 verification SQL」，但不得宣告 production schema 通過。Owner/Architect 使用結果時，必須人工比對 raw check constraints 是否與 SQL artifact 完全一致，不能只依新增 SQL 的 allowed-values
-  pass/fail row；該 row 目前可能漏掉額外允許值。新增 SQL 仍是 untracked，合併時需單獨納入，不可只合併 tracked CHANGELOG.md 或整包 worktree。
+  條件：Architect 吸收 diff 時必須包含 untracked 的 services/market_theme_evidence_store.py，不能只套 git diff --name-status 顯示的 tracked files。若該檔未被納入，本輪應視為阻塞，因 core/generator.py 會 import 不存在的
+  module。

@@ -4,50 +4,44 @@
 
 ## Current Task
 
-- task_id: `verify_evidence_phase_4_production_table_schema`
-- task_name: `Verify Evidence Phase 4 Production Table Schema`
-- task_type: `process`
+- task_id: `evidence_phase_5_readonly_confirmed_evidence_loader`
+- task_name: `Evidence Phase 5 Read-only Confirmed Evidence Loader`
+- task_type: `normal_patch`
 - version_level: `patch`
-- qa_level: `L1`
+- qa_level: `L2`
 - owner_status: `requested`
-- architect_status: `schema_verified_pending_push`
+- architect_status: `absorbed_pending_commit`
 - pm_status: `task_ready`
-- tech_status: `handoff_sql_ready`
-- qa_status: `qa_passed`
+- tech_status: `changelog_ready`
+- qa_status: `conditional_pass`
 - commit: `pending`
 
 ## Current Result
 
-- Owner 回報：production table 已建立，要求檢查；Owner 已回傳單表 verification SQL 結果。
-- 本輪只做 read-only schema verification；不寫 production DB、不 backfill、不 live Telegram、不改產品代碼 / 策略 / watchlist。
-- 當前執行環境沒有可用 `SUPABASE_*` / `DATABASE_*` connection env，不能直接連線檢查線上表，也不能輸出或讀取 secrets。
-- Tech 依停止條件新增只讀 metadata verification SQL：
-  - `docs/handoff/evidence_phase_4_market_theme_confirmed_evidence_readonly_verification.sql`
-  - 只讀 `information_schema` 與 `pg_catalog` metadata。
-  - 覆蓋 table exists、columns、unexpected columns、check constraints、freshness / support_level / evidence_status、indexes、latest confirmed partial index、comments。
-- QA conditional pass：
-  - 可吸收為「提供 Owner 手動執行的只讀 verification SQL」，不得宣告 production schema 已通過。
-  - SQL 只讀掃描通過：無 insert/update/delete/drop/truncate/create/alter/grant/revoke、secret/token/connection string。
-  - 粗略 statement check：16 個 statement，皆為 `select`，尾端有分號。
-  - 風險：allowed-values summary rows 只檢查必要值存在，不能排除 production constraint 多允許額外值；必須人工比對 raw check constraints 與 SQL artifact。
-- Architect 額外驗證：
-  - 使用 `.qa_tmp/` 臨時 `pglast` parser 解析 verification SQL：parse OK，16 statements。
-  - 在 verification SQL header 補明 raw check constraints 是 allowed values 的 source of truth，不得只看 summary rows 宣告 pass。
-- Owner 回傳 production result sets，Architect 判定 hard schema PASS：
-  - table exists：PASS。
-  - columns：17 個 contract 欄位全部 PASS，包含 type、nullable、default；未回報 unexpected columns。
-  - constraints：`freshness`、`support_level`、`evidence_status` allowed values 全部 PASS，observed raw check constraints 未見額外允許值。
-  - indexes：7 個 expected indexes 全部 PASS，包含 `idx_market_theme_evidence_latest_confirmed` partial index。
-  - 本結論只代表 schema contract 已通過；尚未代表資料內容、writer/backfill、RLS、loader 或 Telegram confirmed evidence 已完成。
+- Owner 要求繼續證據鏈；Phase 4 production table schema 已由 Owner 回傳 verification result，hard schema PASS。
+- Phase 5 已完成候選開發並吸收：
+  - 新增 `services/market_theme_evidence_store.py` read-only loader，讀取 `public.market_theme_confirmed_evidence`。
+  - confirmed 條件固定為 `support_level in ('confirmed','supporting')`、`evidence_status='confirmed'`、`freshness='fresh'`。
+  - `support_level=strong` 只作負面案例，回 `source-error` / fail closed，不得 accepted。
+  - `core/generator.py` 接入 loader；GitHub / fresh runner 缺 DB env、query error、no rows、資料不足時輸出 fail-closed，不用 local/runtime/report-derived fake confirmed。
+  - Telegram 使用者可見版本升至 `v20.4.3`。
+- QA conditional pass 條件已由 Architect 吸收時滿足：untracked 新檔 `services/market_theme_evidence_store.py` 已一併納入主 repo，不只套 tracked diff。
+- 主 repo 驗證：
+  - `PYTHONPATH=.qa_tmp:. arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_generator_report.py tests/test_notifier.py`
+  - 結果：`93 passed, 161 warnings`；warnings 為依賴 deprecation / Python 版本警告，非本輪 contract failure。
+  - `git diff --check` 通過。
+- 未完成 / 未批准：production read-only role / RLS 實際可讀驗證、writer、backfill、live Telegram、策略門檻調整。
 - Post-cycle review：
-  - 根因分類：`no_safe_db_connection` + `manual_verification_required`。
-  - 不新增 `AGENTS.md` 硬規則；既有 no secret / no live write 規則已覆蓋，本輪沉澱為 handoff SQL。
+  - 根因分類：`pm_schema_contract_drift` + `runner_gap`。
+  - 首輪 PM 把 `support_level=strong` 寫成合法 fixture，與剛驗過的 production constraint 不符；QA 有效阻塞，第二輪已修正為負面案例。
+  - Auto cycle 對 QA `conditional pass` 仍 false fail；已人工讀取 QA 原文並吸收條件，runner parser 待補。
+  - 不新增 `AGENTS.md` 硬規則；既有 source-of-truth / fail-closed / schema contract 規則已覆蓋，本輪寫入 `CLEANUP_PLAN.md` 待補 runner / PM guard。
 
 ## Next Action
 
-- commit / push schema verified 狀態。
-- 下一輪可開 read-only loader 任務，把 GitHub fresh runner 接到 `public.market_theme_confirmed_evidence`。
-- 仍未批准 / 未完成：writer、backfill、RLS policy、live Telegram、策略門檻變更。
+- commit / push Phase 5 loader。
+- push 後清理 agent worktrees。
+- 下一步可做 production read-only role / RLS / actual data smoke；若需要建 role/policy 或 writer/backfill，需 Owner 單獨批准。
 
 ## Status Values
 

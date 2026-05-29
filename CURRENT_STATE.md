@@ -7,7 +7,7 @@
 - 專案：台股策略報文機器人。
 - 交付形態：排程 / 腳本產生 Telegram 報文並發送給 Owner。
 - 股票清單唯一來源：`core/watchlist.py`，預設 12 檔。
-- 最新使用者可見 Telegram 版本：`v20.4.2`。
+- 最新使用者可見 Telegram 版本：`v20.4.3`。
 - 最新 pushed commit 以 `git log -1` 為準。
 - 固定 8 份 Markdown 不刪除，只改寫內容：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 
@@ -33,6 +33,15 @@
 
 ## Recent High-Signal Milestones
 
+- `v20.4.3` Evidence Phase 5 Read-only Confirmed Evidence Loader 已通過 QA conditional pass，且 Architect 已滿足吸收條件：
+  - 新增 `services/market_theme_evidence_store.py`，只讀 `public.market_theme_confirmed_evidence`；不寫 DB、不 backfill、不改 RLS、不 live Telegram。
+  - Confirmed 條件固定為 `support_level in ('confirmed','supporting')`、`evidence_status='confirmed'`、`freshness='fresh'`；`support_level=strong` 只能作負面案例，fail closed，不得 accepted。
+  - `core/generator.py` 接入 loader；GitHub / fresh runner 缺 DB env、DB error、0 rows、資料不足時只能 `missing-source / source-error / absent / insufficient-data`，不得使用 local/runtime/report-derived fake confirmed。
+  - Provider 保留 loader fail-closed status，避免把 absent/source-error/missing-source/insufficient-data 壓成泛用狀態。
+  - Telegram evidence confirmed 只作背景證據，不改 BUY / SELL / RR / 加減碼 / 過熱 / 漲停不追門檻。
+  - QA 條件是吸收 untracked 新檔 `services/market_theme_evidence_store.py`；Architect 已納入主 repo。
+  - 驗證：`tests/test_market_theme_evidence.py tests/test_generator_report.py tests/test_notifier.py`，`93 passed, 161 warnings`；`git diff --check` 通過。
+  - 尚未驗證 production read-only role / RLS / 實際資料內容；若 production runner 無權讀取，預期 fail closed 為來源不足。
 - Evidence Phase 4 production table schema verification 已轉為 Owner 手動只讀檢查：
   - Owner 表示 production table 已建好，但本機沒有安全可用 `SUPABASE_*` / `DATABASE_*` connection env，不能直接連線驗證。
   - 新增只讀 verification SQL：`docs/handoff/evidence_phase_4_market_theme_confirmed_evidence_readonly_verification.sql`。
@@ -40,7 +49,7 @@
   - QA conditional pass：此 artifact 只代表可手動驗證，不代表 production schema 已通過；allowed-values summary rows 不能排除額外允許值，必須人工比對 raw check constraints。
   - Architect 額外用 `.qa_tmp/` 臨時 `pglast` parser 驗證 verification SQL parse OK，16 statements。
   - Owner 回傳 production verification 結果：table exists PASS；17 個 contract 欄位全部 PASS；`freshness`、`support_level`、`evidence_status` raw check constraints 全部符合且未見額外值；7 個 expected indexes 全部 PASS，包含 latest confirmed partial index。
-  - 結論：production schema contract 已通過，可作下一輪 read-only loader 的 source-of-truth table；尚未完成 writer、backfill、RLS、loader 或 Telegram confirmed evidence。
+  - 結論：production schema contract 已通過，已由 `v20.4.3` 接入 read-only loader；尚未完成 writer、backfill、RLS / read-only role 驗證或實際 production data smoke。
 - SQL artifact syntax/copy safety tiny patch 已完成：
   - Owner 執行 Evidence Phase 4 SQL 時遇到 Supabase `ERROR 42601 syntax error at end of input`。
   - 修正範圍只限 `db/sql/evidence_phase_4_market_theme_confirmed_evidence.sql` 與 `docs/handoff/evidence_phase_4_market_theme_confirmed_evidence.md`；未改 schema intent、產品代碼、策略、Telegram、runner、DB write path。
@@ -181,6 +190,7 @@
 - 策略判斷：`services/analysis.py`
 - 報文與 Telegram formatter：`core/generator.py`
 - 市場 / 題材證據 dry-run 與 provider：`core/market_theme_evidence.py`
+- 市場 / 題材 confirmed evidence read-only loader：`services/market_theme_evidence_store.py`
 - 條件映射：`core/condition_engine.py`
 - 行情來源：`services/stock_api.py`
 - 股票清單：`core/watchlist.py`
@@ -195,7 +205,7 @@
 
 ## Known Boundaries
 
-- 未完成 production schema apply。
+- Production schema 已由 Owner 回傳 result sets 並判定 hard schema PASS；尚未驗 production read-only role / RLS / 實際資料內容。
 - 未做 live Supabase write。
 - 未做 live Telegram delivery。
 - 未做 TWSE live replay / live backfill。
@@ -235,4 +245,4 @@
 - 證據鏈 v20.3.1 已將 runtime breadth fallback 收斂為非交易診斷；若要自動取得 market_index / sector_index、建表、cache、external provider 或持久化 evidence，先通知 Owner。
 - 若 Owner 仍覺得查詢慢，另開 performance measurement 任務，量測 production 實際秒數。
 - 後續可改善 `load_strategy_evidence_summary()` 顯式排序與 `漏失` 文案，但需另開任務。
-- Evidence Phase 4 下一步：Owner 手動 review / execute `db/sql/evidence_phase_4_market_theme_confirmed_evidence.sql` 後，另開 read-only loader 任務；正式 writer / backfill / RLS policy / live delivery 仍需單獨批准。
+- Evidence 下一步：可做 production read-only role / RLS / actual data smoke；正式 writer / backfill / live delivery 仍需單獨批准。

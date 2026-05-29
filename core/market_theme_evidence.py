@@ -30,7 +30,7 @@ NON_PERSISTENT_SOURCE_FAMILIES = {
     "test fixture",
     REPORT_DERIVED_FAMILY,
 }
-SUPPORTIVE_LEVELS = {"supportive"}
+SUPPORTIVE_LEVELS = {"supportive", "confirmed", "supporting"}
 WEAK_LEVELS = {"weak"}
 MIXED_LEVELS = {"mixed", "neutral"}
 EVIDENCE_ALLOWED_EFFECTS = ["wording", "排序提示", "detail trace"]
@@ -41,6 +41,12 @@ EVIDENCE_FORBIDDEN_EFFECTS = [
     "不得 fake confirmed",
     "不得用 runtime 補 DB",
 ]
+FAIL_CLOSED_SOURCE_STATUSES = {
+    "absent",
+    "missing-source",
+    "source-error",
+    "insufficient-data",
+}
 
 
 def _theme_from_text(text):
@@ -167,6 +173,9 @@ def _source_is_stale(source):
 
 
 def _source_level(source):
+    support_level = str(source.get("support_level") or "").lower()
+    if support_level in {"confirmed", "supporting"}:
+        return support_level
     return str(source.get("level") or source.get("market_direction") or "").lower()
 
 
@@ -592,6 +601,34 @@ def build_market_theme_evidence_provider(
     market_theme_evidence=None,
     **structured_sources,
 ):
+    if (
+        isinstance(market_theme_evidence, dict)
+        and not market_theme_evidence.get("confirmed")
+        and market_theme_evidence.get("status") in FAIL_CLOSED_SOURCE_STATUSES
+    ):
+        status = market_theme_evidence.get("status")
+        reason = market_theme_evidence.get("reason")
+        evidence = build_market_theme_evidence(
+            results_map=results_map,
+            watchlist_groups=watchlist_groups,
+            formatter_report_input=formatter_report_input,
+            theme=(
+                market_theme_evidence.get("theme_label")
+                or market_theme_evidence.get("theme")
+                or market_theme_evidence.get("sector_theme_key")
+            ),
+            missing_db_evidence=True,
+            **structured_sources,
+        )
+        evidence["source_status"] = status
+        evidence["source_family"] = "production_db"
+        evidence["source_of_truth"] = market_theme_evidence.get("source_of_truth") or "production_db"
+        if reason:
+            evidence["source_name"] = [reason]
+            if reason not in evidence["missing_source_reasons"]:
+                evidence["missing_source_reasons"].append(reason)
+        return evidence
+
     existing_sources = _sources_from_existing_evidence(market_theme_evidence)
     theme = None
     missing_db_evidence = not existing_sources
@@ -630,7 +667,10 @@ def format_market_theme_summary_lines(evidence):
 
     theme_label = evidence.get("theme_label") or "未命名主題"
     level = evidence.get("level") or evidence.get("theme_status")
-    lines = [f"市場 / 題材證據：{level}"]
+    if evidence.get("confirmed"):
+        lines = ["證據：production confirmed，市場/題材支持成立。"]
+    else:
+        lines = [f"市場 / 題材證據：{level}"]
     if evidence.get("confirmed"):
         lines.append("限制：題材可追蹤，不代表可買")
     elif level == "stale":

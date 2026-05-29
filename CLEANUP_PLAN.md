@@ -136,6 +136,13 @@
   - Owner 回傳結果後已完成 schema contract 判定：table / columns / hard constraints / indexes 全 PASS，且 raw constraints 未見額外允許值。
   - 不新增 `AGENTS.md` 硬規則：已有 secret / live write 禁令；本輪只是無連線時的 handoff artifact。
   - 待補流程：後續若要由 agent 直接驗 production schema，需先建立明確 read-only connection / role 與不輸出 secrets 的 runner 機制。
+- 本輪 `v20.4.3` Evidence Phase 5 read-only loader：
+  - 根因分類：`pm_schema_contract_drift` + `runner_gap`。首輪 PM 把已驗過的 `support_level` enum 寫錯成 `strong` 可 confirmed；QA 有效阻塞，重跑後改成負面案例。
+  - 已修正：loader 只接受 `confirmed/supporting/weak/invalidated` enum；confirmed 僅 `confirmed/supporting + evidence_status=confirmed + freshness=fresh`；`strong` fail closed。
+  - QA conditional pass 條件有效：untracked 新檔 `services/market_theme_evidence_store.py` 必須一起吸收；Architect 已納入主 repo。
+  - Runner gap 重複：auto cycle 仍把 QA `conditional pass` 判為 failed；後續需修 parser，只讀 `## QA 結論` 下第一個有效結論詞與條件段。
+  - PM guard 待補：PM 生成 fixture 時必須引用最近 schema verification result / SQL artifact enum，不得自行發明 DB enum；若任務涉及已建表欄位，PM 需把 enum 原文列入 task contract。
+  - 不新增 `AGENTS.md` 硬規則：既有 source-of-truth / fail-closed / schema contract 規則已覆蓋，本輪先補 runner / PM guard 待辦，避免硬規則膨脹。
 - 下一次產品任務完成後，確認 Post-cycle Review Gate 是否有做到：
   - 根因分類。
   - QA 攔截是否沉澱成 guard。

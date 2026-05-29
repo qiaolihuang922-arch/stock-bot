@@ -1,225 +1,266 @@
-# TASK: Evidence Phase 4 production schema read-only verification
+# TASK: Evidence Phase 5 Read-only Confirmed Evidence Loader
 
 ## 任務狀態
 
-- task_id: evidence_phase_4_prod_schema_readonly_verify_20260529
-- 任務類型: process
-- 任務尺寸判斷: process
-- 狀態: ready_for_qa
-- 版本建議: 本輪不升版；不影響 Telegram / CLI / 產品報文版本字串
-- QA 分級建議: L1
-- 單一主問題: Owner 已建立 production table，需要只讀確認 public.market_theme_confirmed_evidence 是否存在且符合 Evidence Phase 4 SQL contract
-- 單一輸出契約: 產出一份可核驗的 schema verification 結論：pass / blocked / conditional，並列出 table、columns、check constraints、indexes、optional comments 的比對結果
-- 不擴大到 loader、writer、backfill、RLS policy、strategy consumption、watchlist 或 Telegram 報文修改
+- task_id: evidence_phase_5_readonly_confirmed_evidence_loader
+- 任務類型：normal_patch
+- 狀態：ready_for_tech
+- 版本建議：patch，Telegram / CLI 使用者可見版本升至 v20.4.3
+- QA 分級建議：L2
+- 任務尺寸判斷：normal_patch
+- 理由：本輪不是單一文案 tiny patch；會新增 read-only DB consumption / loader，並接到 GitHub fresh runner 產生 Telegram 報文的 market/theme evidence source contract。
+- 不升為 risk_patch：本輪不改策略買賣門檻、不改 DB schema、不寫 production DB、不做 backfill、不 live Telegram。
 
 ## Owner 問題
 
-Owner 已表示 production table 已建立。現在需要確認 production DB 內的 public.market_theme_confirmed_evidence 是否真的存在，且是否符合前一輪 SQL artifact 的契約，避免後續 read-only loader 或 GitHub fresh runner 依賴錯誤
-schema。
+上一輪 PM/TASK 錯把 support_level 寫成 strong，與已驗過的 production schema 不符。Owner 要重跑 Evidence Phase 5：開發 read-only confirmed evidence loader，讓 GitHub / fresh runner 生成 TG 報文時，從 production table
+public.market_theme_confirmed_evidence 讀取 market/theme confirmed evidence 的唯一持久 source-of-truth。
 
-本輪只做 schema / contract read-only verification。若安全、已配置的只讀 Supabase/Postgres connection 存在，QA 只能跑 schema introspection 查詢；若沒有連線，必須提供 Owner 可手動執行的精確只讀 SQL，並標記 blocked 或
-conditional。
+本輪必須修正契約：support_level 不得接受 strong。fresh confirmed row 只有在同時滿足：
+
+- support_level in ('confirmed', 'supporting')
+- evidence_status = 'confirmed'
+- freshness = 'fresh'
+
+才可輸出 confirmed。
 
 ## 使用者可見結果
 
-- Owner 會看到 QA/交接摘要明確回答：
-- public.market_theme_confirmed_evidence 是否存在
-- 欄位是否符合 SQL artifact contract
-- freshness、support_level、evidence_status 等 check constraint 允許值是否符合 SQL contract
-- indexes 是否存在，包含 latest confirmed partial index
-- optional comments 是否存在或缺失
-- 若無安全連線，Owner 會得到可直接貼到 Supabase SQL editor 的 read-only verification SQL
-- 本輪不會改 Telegram 報文，也不會產生交易建議變化。
+Owner 在手機打開 Telegram 報文時，market/theme evidence 區塊會依 production DB read-only loader 顯示：
+
+- 有 fresh confirmed production row：可顯示 confirmed evidence 摘要。
+- DB env 缺失、查詢錯誤、無資料或資料不足：只能顯示 fail-closed 狀態，不得假裝 confirmed。
+- 不會出現或接受 support_level=strong 的證據狀態。
+
+手機閱讀路徑：
+
+1. Header 顯示 v20.4.3。
+2. 主決策 summary 仍先回答今日能不能買、持倉先處理什麼。
+3. Evidence 摘要只用短句補充 production confirmed evidence 是否成立。
+4. 若 evidence 不足，顯示限制句，不把缺資料誤寫成市場偏弱或 confirmed。
 
 ## 非目標
 
-- 不改產品 Python / app code
-- 不改 SQL artifact 的 schema intent
-- 不新增 migration / rollback / RLS policy
-- 不新增 loader / writer / backfill
-- 不做 live Supabase write
-- 不做正式 backfill
-- 不做 live Telegram delivery
-- 不改 strategy / watchlist / scheduler
-- 不驗證其他 production table
-- 不驗證資料內容是否足夠 confirmed，只驗 schema contract
-- 不輸出 secrets、connection string、token、service role key 或憑證片段
+- 不改 production DB schema。
+- 不改 RLS policy。
+- 不做 live Supabase write。
+- 不做 backfill。
+- 不做 live Telegram delivery。
+- 不改策略核心買賣門檻。
+- 不新增 local/runtime/report-derived confirmed fallback。
+- 不接受、轉譯或兼容 support_level=strong。
+- 不重做 Evidence Phase 4 schema verification。
+- 不清理全 repo、不重構 unrelated evidence pipeline。
 
 ## 影響模組
 
-- 直接 scope:
-- public.market_theme_confirmed_evidence
-- Evidence Phase 4 SQL artifact contract: db/sql/evidence_phase_4_market_theme_confirmed_evidence.sql
-- handoff/status docs 的 verification 摘要
-- 直接消費者:
-- Owner / operator：判斷 production table 是否已正確建立
-- Architect：根據 QA 結論更新狀態與下一步
-- 未來 Tech：若後續開 read-only loader，只能依通過的 schema contract 接手
-- 不應影響:
-- Telegram formatter
-- strategy decision
-- DB write path
-- replay / backfill
-- watchlist
+- Read-only DB loader / data access：新增或擴充讀取 public.market_theme_confirmed_evidence 的 production loader。
+- Market/theme evidence provider：將 loader 結果接入現有 evidence source contract。
+- Telegram formatter / generator：使用 loader 結果輸出 evidence summary 與 fail-closed wording。
+- GitHub / fresh runner path：fresh run 必須能只靠 production DB 重建 confirmed evidence 判斷。
+- 測試：loader contract、provider consumer、Telegram evidence summary / snapshot 類測試。
 
 ## 直接消費者
 
-- Owner：需要知道 production table 是否可作為 Phase 4 confirmed evidence 的持久 source-of-truth。
-- QA：需要只讀 introspection query 與明確比對項目。
-- Architect：需要可吸收進 DISPATCH.md / CURRENT_STATE.md 的簡短狀態。
-- 後續 Tech：若 schema 通過，才可另開 read-only loader 任務；不得依聊天紀錄猜 schema。
+- core/market_theme_evidence.py 或等價 market/theme evidence provider。
+- core/generator.py 或等價 Telegram 報文產生器。
+- GitHub fresh runner / scheduled report generation path。
+- QA fixture / tests that validate evidence summary and fail-closed source contract.
 
 ## 輸出契約
 
-QA 輸出必須包含以下 verification matrix：
+### Source-of-truth
 
-┌────────────────────────────────┬───────────────────────┬──────────────────────────────────┬────────────────────┐
-item                           │ expected source       │ observed                         │ result             │
-├────────────────────────────────┼───────────────────────┼──────────────────────────────────┼────────────────────┤
-table exists                   │ SQL artifact contract │ production introspection result  │ pass/fail          │
-columns                        │ SQL artifact contract │ column name/type/null/default    │ pass/fail          │
-check constraints              │ SQL artifact contract │ constraint definitions           │ pass/fail          │
-freshness values               │ SQL artifact contract │ allowed values from constraint   │ pass/fail          │
-support_level values           │ SQL artifact contract │ allowed values from constraint   │ pass/fail          │
-evidence_status values         │ SQL artifact contract │ allowed values from constraint   │ pass/fail          │
-indexes                        │ SQL artifact contract │ index definitions                │ pass/fail          │
-latest confirmed partial index │ SQL artifact contract │ partial index predicate/order    │ pass/fail          │
-comments                       │ SQL artifact contract │ comment presence/content summary │ optional/pass/warn │
-└────────────────────────────────┴───────────────────────┴──────────────────────────────────┴────────────────────┘
+- public.market_theme_confirmed_evidence 是本輪 market/theme confirmed evidence 的唯一持久 source-of-truth。
+- GitHub fresh runner 必須可從 production DB read-only query 重建相同 confirmed / fail-closed 判斷。
+- local file、runtime dict、report-derived text、cache、worktree fixture、agent 對話內容不得成為 confirmed source。
 
-本輪 PM 摘要已知欄位契約至少包含：market_index、sector_theme_key、watchlist_breadth、as_of、trade_date、freshness、evidence_value、support_level、lineage、source_family、source_name。若 SQL artifact 另有
-evidence_status 或其他欄位，QA 必須以 SQL artifact 為準；若 production table 與 SQL artifact 不一致，不能自行判定可接受。
+### Production schema enum contract
 
-若沒有安全只讀連線，QA 必須輸出 Owner 可手動執行的 read-only SQL，不得宣告 schema pass。
+已存在且不得回退的契約：
 
-## 已存在且不得回退的契約
+- support_level 只允許：
+- confirmed
+- supporting
+- weak
+- invalidated
+- support_level=strong 不存在於 production schema contract，且不得出現在 TASK、code、test、fixture、validator、fallback mapping 或文件範例中作為可接受值。
+- Fresh confirmed row 判定只能是：
+- support_level in ('confirmed', 'supporting')
+- evidence_status = 'confirmed'
+- freshness = 'fresh'
 
-- public.market_theme_confirmed_evidence 是 Phase 4 production confirmed market/theme evidence table。
-- 目的為未來 GitHub fresh runner 從 production DB read-only reconstruction confirmed market/theme evidence。
-- confirmed / ready evidence 必須來自 production_db 或 owner_approved_persistent source family，runtime / local / report-derived / diagnostic 不得 confirmed。
-- runtime / local context 不得作為跨日 source-of-truth。
-- 本輪只允許 read-only schema introspection；不得 write、backfill、live Telegram。
-- 固定 8 份 Markdown 不得刪除。
-- 本輪不升 Telegram / CLI 版本，因無使用者可見報文變更。
-- 若 SQL artifact 的完整 constraint/index contract 與摘要不一致，以 SQL artifact 為唯一比對來源；QA 不得用 PM 摘要覆蓋 SQL contract。
+### Loader result contract
+
+Loader / provider 對下游輸出必須能區分：
+
+- confirmed：只在 fresh confirmed row 條件全部成立時輸出。
+- absent：production table 可讀但沒有可用 row。
+- missing-source：缺 DB env、缺 production source config，或 runner 無法建立 production source。
+- source-error：DB query error、permission error、timeout、schema mismatch、unexpected enum value。
+- insufficient-data：row 存在但缺 required fields，或 freshness / evidence_status / support_level 不足以 confirmed。
+
+Fail-closed 規則：
+
+- 缺 DB env 不得 confirmed。
+- 查詢錯誤不得 confirmed。
+- 無資料不得 confirmed。
+- 資料不足不得 confirmed。
+- enum unexpected，包括 support_level=strong，不得 confirmed；應視為 source-error 或 insufficient-data，由 Tech 依現有 error model 收斂，但不可 silent fallback。
+
+## 版本契約
+
+- 本輪改變 GitHub fresh runner / Telegram 使用者可見 evidence source 行為，版本升至 v20.4.3。
+- Tech 必須同步 core/generator.py 的 VERSION 或等價 header 常量與相關測試期望。
+- QA 必須核對實際輸出 header 顯示 v20.4.3。
 
 ## 驗收條件
 
-1. 有安全只讀 connection 時，QA 必須完成只讀 introspection 並列出：
-- table existence
-- all columns with type/null/default
-- all check constraints
-- allowed values for freshness、support_level、evidence_status
-- all indexes
-- latest confirmed partial index 是否存在且 predicate/order 符合 SQL artifact
-- comments 是否存在；comments 缺失只可列 warning，除非 SQL artifact 明確要求 comments 為硬契約
-2. 無安全只讀 connection 時，QA 必須：
-- 標記 blocked 或 conditional
-- 提供完整 read-only verification SQL
-- 說明 Owner 執行後需回傳哪些結果欄位
-- 不得宣告 production schema 已通過
-3. 驗證 SQL 必須只讀：
-- 只能查 information_schema、pg_catalog、obj_description / col_description 等 metadata
-- 不得 insert/update/delete/drop/truncate/create/alter/grant/revoke
-- 不得查 secrets 或輸出 connection settings
-4. 若 production table 缺欄位、constraint、index 或 latest confirmed partial index，QA 必須標記 blocked，並列出差異；不得自行修 DB。
-5. 若只發現 optional comments 缺失，QA 可標記 conditional pass，但必須說明 comments 不阻塞 runtime schema consumption。
-6. 驗證完成即停止，不做任何 product code、strategy、Telegram、loader、backfill 或其他 table 檢查。
+1. Fresh confirmed production row 可 confirmed：
+- fixture row support_level=confirmed 或 supporting
+- evidence_status=confirmed
+- freshness=fresh
+- required fields 足夠
+- loader / provider 輸出 confirmed
+- Telegram evidence summary 顯示 production confirmed evidence，不使用 local/runtime fallback。
+2. Fail-closed cases 不得 confirmed：
+- 缺 DB env -> missing-source
+- query error -> source-error
+- no rows -> absent
+- row 缺 required fields -> insufficient-data
+- freshness != fresh -> 不得 confirmed
+- evidence_status != confirmed -> 不得 confirmed
+- support_level in ('weak', 'invalidated') -> 不得 confirmed
+3. strong 禁止契約：
+- code、tests、fixtures、validators、docs changed in this task 不得把 strong 當作 accepted support_level。
+- 若測試故意注入 support_level=strong，期望結果必須是 fail-closed，不得 normalized to confirmed / supporting。
+4. Fresh runner 可重建：
+- 在 clean / fresh run、無本地 cache、無 agent runtime context 時，只靠 production DB read-only source 得出相同 confirmed / fail-closed 結果。
+- Tech 必須在 CHANGELOG.md 說明本輪無新增本地持久狀態，任何 helper/cache 是否只限同一次 run。
+5. 直接消費者同步：
+- market/theme evidence provider 使用 loader contract。
+- Telegram formatter 使用 provider result，不直接讀 local fallback。
+- 使用者可見 fail-closed wording 短句、手機可讀，不輸出 debug enum dump。
 
 ## 範例或 fixture
 
-QA 若無安全連線，應提供形狀接近以下的 read-only SQL 給 Owner：
+### Fixture A: confirmed
 
--- Read-only schema verification for public.market_theme_confirmed_evidence.
--- Do not include credentials. Do not run write/backfill statements.
+Input row shape:
 
-select to_regclass('public.market_theme_confirmed_evidence') as table_regclass;
+market_index=TAIEX
+sector_theme_key=semiconductor
+trade_date=2026-05-29
+as_of=2026-05-29T...
+freshness=fresh
+evidence_status=confirmed
+support_level=supporting
+evidence_value=...
+source_family=production_db
+lineage=...
 
-select
-column_name,
-data_type,
-udt_name,
-is_nullable,
-column_default,
-ordinal_position
-from information_schema.columns
-where table_schema = 'public'
-and table_name = 'market_theme_confirmed_evidence'
-order by ordinal_position;
+Expected loader/provider:
 
-select
-conname,
-pg_get_constraintdef(c.oid) as constraint_def
-from pg_constraint c
-join pg_class t on t.oid = c.conrelid
-join pg_namespace n on n.oid = t.relnamespace
-where n.nspname = 'public'
-and t.relname = 'market_theme_confirmed_evidence'
-order by conname;
+status=confirmed
+source_of_truth=production_db
+support_level=supporting
+freshness=fresh
+evidence_status=confirmed
 
-select
-indexname,
-indexdef
-from pg_indexes
-where schemaname = 'public'
-and tablename = 'market_theme_confirmed_evidence'
-order by indexname;
+Expected Telegram shape:
 
-select
-obj_description('public.market_theme_confirmed_evidence'::regclass, 'pg_class') as table_comment;
+版本：v20.4.3
+證據：production confirmed，市場/題材支持成立。
 
-QA report expected shape:
+### Fixture B: unsupported enum must fail closed
 
-schema verification: blocked
+Input row shape:
 
-table exists: pass
-columns: fail
-- missing from production: evidence_status
-constraints: fail
-- freshness values observed: fresh, stale
-- expected from SQL artifact: fresh, stale, missing, source-error
-indexes: fail
-- missing latest confirmed partial index
-comments: warning only
-no writes/backfill/live Telegram executed
+freshness=fresh
+evidence_status=confirmed
+support_level=strong
+source_family=production_db
+
+Expected result:
+
+status=source-error 或 insufficient-data
+confirmed=false
+
+Expected Telegram shape:
+
+證據：production 來源不足，不作確認。
+
+### Fixture C: missing DB source
+
+Input:
+
+DB env missing 或 production connection unavailable
+
+Expected result:
+
+status=missing-source
+confirmed=false
+
+Expected Telegram shape:
+
+證據：production 來源不足，不作確認。
 
 ## 明確禁止事項
 
-- 禁止輸出 secrets、connection string、token、service role key
-- 禁止任何 write SQL：insert/update/delete/drop/truncate/create/alter/grant/revoke
-- 禁止 backfill、replay write、live Supabase write
-- 禁止 live Telegram delivery
-- 禁止改產品代碼、測試或 SQL artifact schema intent
-- 禁止檢查其他 table，除非 metadata query 為定位 public.market_theme_confirmed_evidence 必要
-- 禁止把無連線狀態說成驗證通過
-- 禁止把 optional comments 缺失擴大成 schema 重建任務，除非 SQL artifact 明確定義 comments 為硬契約
-- 禁止把本輪擴成 read-only loader、RLS、performance、資料品質或 confirmed evidence 策略任務
+- 禁止 live Supabase write。
+- 禁止 backfill。
+- 禁止修改 RLS。
+- 禁止 live Telegram delivery。
+- 禁止新增或使用 local/runtime/report-derived fake confirmed fallback。
+- 禁止在任何契約中接受 support_level=strong。
+- 禁止把 weak、invalidated、stale row、non-confirmed status 包裝成 confirmed。
+- 禁止改策略 BUY / SELL / 加減碼門檻。
+- 禁止把缺資料解讀成市場不強；只能輸出 source absent / missing / error / insufficient。
+- 禁止順手重構 unrelated DB layer、watchlist、position state、backfill scripts。
 
 ## 阻塞條件
 
-- 沒有安全、已配置、明確只讀的 Supabase/Postgres connection。
-- 連線存在但權限不足以查 schema metadata。
-- SQL artifact contract 無法取得或與 handoff/status 摘要矛盾，導致無法判定 expected columns / constraints / indexes。
-- production table 不存在。
-- production table 存在但缺少 SQL artifact 定義的 hard-contract column、check constraint 或 index。
-- freshness、support_level、evidence_status allowed values 與 SQL artifact 不一致。
-- latest confirmed partial index 缺失或 predicate/order 與 SQL artifact 不一致。
-- 驗證過程需要 write / migration / backfill 才能繼續。
+Tech 必須 blocked，而不是自行假設：
+
+- 找不到可接入的 production DB read-only config pattern。
+- 現有 schema summary 與 Owner 指定 enum 衝突。
+- 直接消費者無法在不改策略門檻的情況下接入 loader。
+- 無法區分 missing-source、source-error、absent、insufficient-data。
+- 需要 live DB write、RLS change、backfill 或 live Telegram 才能完成本輪驗收。
+- 任何上游文件仍要求或暗示 support_level=strong 是合法值。
 
 ## 本輪停止條件
 
-完成以下任一結果即停止：
+本輪完成到以下範圍即停止：
 
-- 有安全只讀連線：完成 public.market_theme_confirmed_evidence schema introspection，輸出完整 verification matrix 與 pass / blocked / conditional 結論。
-- 無安全只讀連線：輸出 Owner 可手動執行的精確 read-only SQL，標記 blocked 或 conditional，並說明需回傳的結果。
-- 發現 schema drift：列出 drift，標記 blocked，不修 DB。
+- Read-only loader contract 已實作。
+- Direct consumers 已同步。
+- Telegram evidence summary 可用 fixture 驗證 confirmed / fail-closed。
+- support_level=strong 不再被任何本輪 contract 接受。
+- L2 QA 完成 clean/fresh run 反證與直接消費者驗證。
 
-旁支問題只記待辦，不納入本輪：
+以下旁支只記待辦，不納入本輪：
 
-- 是否實作 read-only loader
-- 是否寫入 confirmed evidence
-- 是否 backfill historical evidence
-- 是否新增 RLS / grants / policies
-- 是否做 data freshness runtime consumption
-- 是否優化 query performance
-- 是否讓 Telegram 顯示 confirmed evidence
+- writer / ingestion。
+- production backfill。
+- RLS policy。
+- schema migration update。
+- live Telegram delivery。
+- 策略門檻調整。
+- 外部新聞 / 題材 provider。
+- 全量 replay / full pytest，除非 QA 發現本輪 contract 風險必須升級並說明停止條件。
+
+## QA 分級建議
+
+- 建議：L2
+- 必驗：
+- loader unit / contract tests
+- provider consumer tests
+- Telegram evidence summary fixture / snapshot
+- clean/fresh run 反證：清空 local/runtime/cache context 後不得 fake confirmed
+- repo/test fixture 掃描：本輪契約不得接受 support_level=strong
+- 不要求：
+- live Supabase write
+- live Telegram
+- backfill dry-run
+- full pytest，除非 L2 發現 contract 擴散風險

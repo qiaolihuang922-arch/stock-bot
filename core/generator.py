@@ -50,10 +50,11 @@ from services.strategy_evidence import (
     record_strategy_evidence
 )
 from services.cross_day_context import build_cross_day_contexts
+from services.market_theme_evidence_store import load_confirmed_market_theme_evidence
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.2"
+VERSION = "v20.4.3"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -4422,12 +4423,26 @@ def market_theme_summary_evidence(results_map, market_summary):
 
     if isinstance(market_summary, dict):
         evidence = market_summary.get("market_theme_evidence")
+        if not evidence:
+            loaded = load_confirmed_market_theme_evidence(
+                trade_date=market_summary.get("trade_date")
+            )
+            evidence = loaded
         report_date = market_summary.get("as_of")
         return build_market_theme_evidence_provider(
             results_map=results_map,
             formatter_report_input=market_summary,
             market_theme_evidence=evidence,
             as_of=report_date,
+        )
+
+    loaded = load_confirmed_market_theme_evidence()
+    if loaded.get("status") in {"confirmed", "absent", "missing-source", "source-error", "insufficient-data"}:
+        return build_market_theme_evidence_provider(
+            results_map=results_map,
+            formatter_report_input=market_summary,
+            market_theme_evidence=loaded,
+            as_of=loaded.get("as_of"),
         )
 
     return build_market_theme_evidence(

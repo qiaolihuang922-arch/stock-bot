@@ -1,5 +1,6 @@
 import unittest
 from datetime import datetime
+from unittest.mock import patch
 
 from core import generator
 from core.market_theme_evidence import (
@@ -7,6 +8,8 @@ from core.market_theme_evidence import (
     build_market_theme_evidence_provider,
     format_market_theme_summary_lines,
 )
+from services import market_theme_evidence_store
+from services.market_theme_evidence_store import load_confirmed_market_theme_evidence
 from tests.test_generator_report import render_payload
 
 
@@ -25,7 +28,142 @@ def source(source_type, level="supportive", freshness="fresh", freshness_reason=
     }
 
 
+class EvidenceTable:
+    def __init__(self, rows=None, error=None):
+        self.rows = rows or []
+        self.error = error
+        self.calls = []
+
+    def select(self, fields):
+        self.calls.append(("select", fields))
+        return self
+
+    def eq(self, key, value):
+        self.calls.append(("eq", key, value))
+        return self
+
+    def order(self, key, desc=False):
+        self.calls.append(("order", key, desc))
+        return self
+
+    def limit(self, limit):
+        self.calls.append(("limit", limit))
+        return self
+
+    def execute(self):
+        if self.error:
+            raise self.error
+        return type("Result", (), {"data": self.rows})()
+
+
+class EvidenceClient:
+    def __init__(self, rows=None, error=None):
+        self.table_obj = EvidenceTable(rows, error=error)
+        self.tables = []
+
+    def table(self, name):
+        self.tables.append(name)
+        return self.table_obj
+
+
+def confirmed_row(**overrides):
+    row = {
+        "market_index": "TAIEX",
+        "sector_theme_key": "semiconductor",
+        "trade_date": "2026-05-29",
+        "as_of": "2026-05-29T13:40:00+08:00",
+        "freshness": "fresh",
+        "evidence_status": "confirmed",
+        "support_level": "supporting",
+        "evidence_value": {"market": "supportive"},
+        "watchlist_breadth": {"supportive": 7, "tracked": 12},
+        "source_family": "production_db",
+        "source_name": "market_theme_confirmed_evidence",
+        "lineage": {"table": "market_theme_confirmed_evidence"},
+    }
+    row.update(overrides)
+    return row
+
+
 class MarketThemeEvidenceTest(unittest.TestCase):
+    def test_loader_reads_production_row_and_builds_provider_sources(self):
+        client = EvidenceClient([confirmed_row()])
+
+        loaded = load_confirmed_market_theme_evidence(
+            client=client,
+            trade_date="2026-05-29",
+        )
+
+        self.assertEqual(client.tables, ["market_theme_confirmed_evidence"])
+        self.assertIn(("eq", "trade_date", "2026-05-29"), client.table_obj.calls)
+        self.assertEqual(loaded["status"], "confirmed")
+        self.assertTrue(loaded["confirmed"])
+        self.assertEqual(loaded["source_of_truth"], "production_db")
+        self.assertEqual(loaded["support_level"], "supporting")
+
+        evidence = build_market_theme_evidence_provider(
+            market_theme_evidence=loaded,
+        )
+        self.assertTrue(evidence["confirmed"])
+        self.assertEqual(evidence["source_status"], "ready")
+        self.assertEqual(evidence["source_family"], "production_db")
+        self.assertEqual(
+            evidence["confirmed_source_types"],
+            ["watchlist_breadth", "sector_index"],
+        )
+
+    def test_loader_fails_closed_when_source_missing_or_empty_or_error(self):
+        with patch.object(market_theme_evidence_store, "_build_client", return_value=None):
+            self.assertEqual(
+                load_confirmed_market_theme_evidence()["status"],
+                "missing-source",
+            )
+        self.assertEqual(
+            load_confirmed_market_theme_evidence(client=EvidenceClient([]))["status"],
+            "absent",
+        )
+        self.assertEqual(
+            load_confirmed_market_theme_evidence(
+                client=EvidenceClient(error=RuntimeError("permission denied"))
+            )["status"],
+            "source-error",
+        )
+
+    def test_loader_fails_closed_for_non_confirming_rows_and_unsupported_enum(self):
+        fail_closed_rows = [
+            (confirmed_row(freshness="stale"), "insufficient-data"),
+            (confirmed_row(evidence_status="rejected"), "insufficient-data"),
+            (confirmed_row(support_level="weak"), "insufficient-data"),
+            (confirmed_row(support_level="invalidated"), "insufficient-data"),
+            (confirmed_row(evidence_value=None), "insufficient-data"),
+            (confirmed_row(support_level="strong"), "source-error"),
+        ]
+
+        for row, expected in fail_closed_rows:
+            with self.subTest(row=row):
+                loaded = load_confirmed_market_theme_evidence(
+                    client=EvidenceClient([row])
+                )
+                self.assertEqual(loaded["status"], expected)
+                self.assertFalse(loaded["confirmed"])
+
+    def test_provider_preserves_loader_fail_closed_statuses(self):
+        for status in ["absent", "missing-source", "source-error", "insufficient-data"]:
+            with self.subTest(status=status):
+                evidence = build_market_theme_evidence_provider(
+                    market_theme_evidence={
+                        "status": status,
+                        "confirmed": False,
+                        "source_of_truth": "production_db",
+                        "reason": f"{status} reason",
+                    },
+                )
+
+                self.assertFalse(evidence["confirmed"])
+                self.assertEqual(evidence["source_status"], status)
+                self.assertEqual(evidence["source_family"], "production_db")
+                self.assertEqual(evidence["source_of_truth"], "production_db")
+
     def test_report_derived_results_and_watchlist_cannot_confirm_theme(self):
         evidence = build_market_theme_evidence(
             results_map={
@@ -334,7 +472,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         )
 
         summary = messages[-1]
-        self.assertIn("【05/28 盤中｜v20.4.2】", summary)
+        self.assertIn("【05/28 盤中｜v20.4.3】", summary)
         self.assertIn("證據：production 來源不足，不作確認。", summary)
         self.assertIn("詳情：runtime 觀察僅供診斷，非確認來源。", summary)
         self.assertIn("🧭 主線：市場偏多但買點未成立。", summary)
@@ -382,14 +520,14 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         )
 
         summary = messages[-1]
-        self.assertIn("市場 / 題材證據：confirmed", summary)
+        self.assertIn("證據：production confirmed，市場/題材支持成立。", summary)
         self.assertIn("限制：題材可追蹤，不代表可買", summary)
         self.assertIn("來源：watchlist_breadth same_trade_date; sector_index same_trade_date", summary)
         self.assertIn("🧭 新倉：無有效進場。", summary)
         self.assertIn("未持倉 1 檔僅追蹤", summary)
         self.assertLess(
             summary.index("🧭 新倉：無有效進場。"),
-            summary.index("市場 / 題材證據：confirmed"),
+            summary.index("證據：production confirmed，市場/題材支持成立。"),
         )
         self.assertNotIn("今日可買：台積電", summary)
         self.assertNotIn("台積電｜可買", summary)
