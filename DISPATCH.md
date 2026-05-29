@@ -4,46 +4,44 @@
 
 ## Current Task
 
-- task_id: `urgent_tiny_patch_sql_evidence_phase_4_syntax`
-- task_name: `Fix Supabase SQL Artifact End-Of-Input Error`
-- task_type: `tiny_patch`
+- task_id: `verify_evidence_phase_4_production_table_schema`
+- task_name: `Verify Evidence Phase 4 Production Table Schema`
+- task_type: `process`
 - version_level: `patch`
 - qa_level: `L1`
 - owner_status: `requested`
-- architect_status: `validated_pending_push`
+- architect_status: `conditional_pending_owner_results`
 - pm_status: `task_ready`
-- tech_status: `changelog_ready`
+- tech_status: `handoff_sql_ready`
 - qa_status: `conditional_pass`
 - commit: `pending`
 
 ## Current Result
 
-- Owner 回報：手動執行 `db/sql/evidence_phase_4_market_theme_confirmed_evidence.sql` 時 Supabase 顯示 `ERROR 42601 syntax error at end of input`。
-- PM 已收斂為 tiny patch：只修 SQL artifact 的可複製完整性與 handoff notes，不改 schema intent、不改產品代碼、不連 production、不 backfill。
-- Tech 已完成最小修正：
-  - SQL header 補明「整段複製執行」，不可只複製中段；漏掉尾端 statement terminator 可能造成 `42601 end of input`。
-  - SQL 尾端新增只讀 validation marker：`select 'evidence_phase_4_market_theme_confirmed_evidence.sql complete' as sql_artifact_validation_marker;`
-  - 新增 handoff 文件：`docs/handoff/evidence_phase_4_market_theme_confirmed_evidence.md`，說明用途、整段複製方式、不可 production 驗證 / backfill / 加 credentials。
-  - 未改 table、欄位、constraint、index、schema intent。
+- Owner 回報：production table 已建立，要求檢查。
+- 本輪只做 read-only schema verification；不寫 production DB、不 backfill、不 live Telegram、不改產品代碼 / 策略 / watchlist。
+- 當前執行環境沒有可用 `SUPABASE_*` / `DATABASE_*` connection env，不能直接連線檢查線上表，也不能輸出或讀取 secrets。
+- Tech 依停止條件新增只讀 metadata verification SQL：
+  - `docs/handoff/evidence_phase_4_market_theme_confirmed_evidence_readonly_verification.sql`
+  - 只讀 `information_schema` 與 `pg_catalog` metadata。
+  - 覆蓋 table exists、columns、unexpected columns、check constraints、freshness / support_level / evidence_status、indexes、latest confirmed partial index、comments。
 - QA conditional pass：
-  - 可吸收範圍限於 `CHANGELOG.md`、SQL artifact、handoff 文件；不得整包吸收 untracked `docs/`。
-  - 靜態完整性通過：最後有效字元為 `;`，括號平衡，無 dollar quote 未閉合。
-  - 危險詞掃描無 destructive DML、grant、secret、token、connection string。
-  - QA 本身未做真正 Postgres parser validation，因無 `psql` / Docker / Podman；仍禁止連 production。
+  - 可吸收為「提供 Owner 手動執行的只讀 verification SQL」，不得宣告 production schema 已通過。
+  - SQL 只讀掃描通過：無 insert/update/delete/drop/truncate/create/alter/grant/revoke、secret/token/connection string。
+  - 粗略 statement check：16 個 statement，皆為 `select`，尾端有分號。
+  - 風險：allowed-values summary rows 只檢查必要值存在，不能排除 production constraint 多允許額外值；必須人工比對 raw check constraints 與 SQL artifact。
 - Architect 額外驗證：
-  - 使用臨時 `.qa_tmp/` 安裝 `pglast` 做本地非 production PostgreSQL parser 驗證。
-  - 舊 SQL 與修正版 SQL 均可 parse；修正版 `pglast_parse_ok statements=27`。
-  - 因此本次 `end of input` 高機率是 Supabase editor 只執行到不完整片段、貼上時漏掉尾段 / 分號，或 selection 沒包含完整 SQL block。
+  - 使用 `.qa_tmp/` 臨時 `pglast` parser 解析 verification SQL：parse OK，16 statements。
+  - 在 verification SQL header 補明 raw check constraints 是 allowed values 的 source of truth，不得只看 summary rows 宣告 pass。
 - Post-cycle review：
-  - 根因分類：`qa_static_gap` + `operator_copy_risk`。前輪 QA 只有靜態掃描，未做 parser 驗證，也沒有足夠強調整段複製。
-  - 已補 artifacts：SQL 尾端 marker、handoff 文件、Architect parser 驗證。
-  - 待補流程：後續 SQL artifact 任務需優先嘗試 local parser；若 parser 不可用，需明確標記只做 static review，不得說成可在 Supabase 實際通過。
+  - 根因分類：`no_safe_db_connection` + `manual_verification_required`。
+  - 不新增 `AGENTS.md` 硬規則；既有 no secret / no live write 規則已覆蓋，本輪沉澱為 handoff SQL。
 
 ## Next Action
 
-- commit / push tiny patch。
-- Owner 重新打開 `db/sql/evidence_phase_4_market_theme_confirmed_evidence.sql`，整份全選複製到 Supabase SQL editor 執行，不要只選中間建表段。
-- 若仍失敗，請回傳 Supabase 顯示的錯誤位置 / line / column；下一輪只修該 SQL syntax，不擴大到 loader / backfill。
+- commit / push verification SQL artifact。
+- Owner 在 Supabase SQL editor 執行 `docs/handoff/evidence_phase_4_market_theme_confirmed_evidence_readonly_verification.sql`，回傳全部 result sets。
+- Architect 根據回傳結果判定 table schema pass / blocked；若 pass，下一輪才開 read-only loader 任務。
 
 ## Status Values
 

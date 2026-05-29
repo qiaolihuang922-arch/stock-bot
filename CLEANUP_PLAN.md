@@ -129,6 +129,12 @@
   - QA conditional pass 合理：QA 無本地 parser 且不可連 production；Architect 額外用臨時 `.qa_tmp/` `pglast` parser 驗證修正版 SQL parse OK。
   - 不新增 `AGENTS.md` 硬規則：屬於 SQL artifact QA 方法補強，先記入流程待辦；若 SQL artifact 再次因 parser 未驗出錯，升級為任務卡固定驗收。
   - 待補流程：後續 SQL artifact 任務優先使用 local parser / non-production DB parser；不可用時必須在 final 明確說「未做 parser 驗證」，不得只說靜態通過。
+- 本輪 production table schema verification：
+  - 根因分類：`no_safe_db_connection`。Owner 已建表，但本地 / runner 無安全只讀 connection env，不能直接 introspect production。
+  - 已交付：只讀 metadata verification SQL，讓 Owner 在 Supabase 執行後回傳 result sets。
+  - QA conditional pass 有效：指出 allowed-values summary rows 只確認必要值存在，無法排除額外允許值；需看 raw check constraints。
+  - 不新增 `AGENTS.md` 硬規則：已有 secret / live write 禁令；本輪只是無連線時的 handoff artifact。
+  - 待補流程：後續若要由 agent 直接驗 production schema，需先建立明確 read-only connection / role 與不輸出 secrets 的 runner 機制。
 - 下一次產品任務完成後，確認 Post-cycle Review Gate 是否有做到：
   - 根因分類。
   - QA 攔截是否沉澱成 guard。

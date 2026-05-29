@@ -33,6 +33,12 @@
 
 ## Recent High-Signal Milestones
 
+- Evidence Phase 4 production table schema verification 已轉為 Owner 手動只讀檢查：
+  - Owner 表示 production table 已建好，但本機沒有安全可用 `SUPABASE_*` / `DATABASE_*` connection env，不能直接連線驗證。
+  - 新增只讀 verification SQL：`docs/handoff/evidence_phase_4_market_theme_confirmed_evidence_readonly_verification.sql`。
+  - SQL 只讀 `information_schema` / `pg_catalog`，檢查 table exists、columns、unexpected columns、check constraints、freshness / support_level / evidence_status、indexes、latest confirmed partial index、comments。
+  - QA conditional pass：此 artifact 只代表可手動驗證，不代表 production schema 已通過；allowed-values summary rows 不能排除額外允許值，必須人工比對 raw check constraints。
+  - Architect 額外用 `.qa_tmp/` 臨時 `pglast` parser 驗證 verification SQL parse OK，16 statements。
 - SQL artifact syntax/copy safety tiny patch 已完成：
   - Owner 執行 Evidence Phase 4 SQL 時遇到 Supabase `ERROR 42601 syntax error at end of input`。
   - 修正範圍只限 `db/sql/evidence_phase_4_market_theme_confirmed_evidence.sql` 與 `docs/handoff/evidence_phase_4_market_theme_confirmed_evidence.md`；未改 schema intent、產品代碼、策略、Telegram、runner、DB write path。
