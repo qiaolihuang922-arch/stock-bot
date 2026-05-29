@@ -10,11 +10,11 @@
 - version_level: `patch`
 - qa_level: `L2`
 - owner_status: `requested`
-- architect_status: `absorbed_pending_commit`
+- architect_status: `pushed`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
 - qa_status: `conditional_pass`
-- commit: `pending`
+- commit: `fb8aa2d`
 
 ## Current Result
 
@@ -39,7 +39,7 @@
 
 ## Next Action
 
-- commit / push Phase 5 loader。
+- Phase 5 loader 已 commit / push：`fb8aa2d`.
 - push 後清理 agent worktrees。
 - 下一步可做 production read-only role / RLS / actual data smoke；若需要建 role/policy 或 writer/backfill，需 Owner 單獨批准。
 
