@@ -1,138 +1,139 @@
-# TASK: Telegram Breakout Distance Always Visible
+# TASK: v20.2.2 已執行同級停利後主行動不得再顯示同級停利
 
 ## 任務狀態
 
-- task_id: telegram-breakout-distance-always-visible-v20.2.1
-- 任務類型: tiny_patch
-- 狀態: ready_for_tech
-- 主 bug: Telegram / 報文卡片的盤面行在部分突破狀態下未保留「突破距離」資訊，Owner 手機閱讀時無法快速判斷距離突破點遠近。
-- 版本建議: patch v20.2.1
-- QA 分級建議: L1
-- 停止條件: 完成持倉與未持倉卡片「盤面行」突破距離顯示契約，並通過直接 formatter / snapshot / notifier consumer smoke；不延伸到策略、資料來源、DB、watchlist、backfill 或全量報文重設。
+- task_id：v20.2.2_take_profit_after_execution_observe_patch
+- 任務類型：risk_patch
+- 狀態：ready_for_tech
+- 版本契約：升版至 v20.2.2，Telegram 使用者可見 header / formatter 版本字串 / 相關測試期望必須同步。
+- QA 分級建議：L2
+- 任務尺寸判斷：本輪只修單一主 bug：同一股票同一交易日已執行同級停利 / 減碼且達建議比例後，報文仍讓 Owner 誤讀要再次同級賣出。因涉及持倉賣出行動與風控語意，歸類為 risk_patch，但範圍收斂在 Telegram formatter / 持倉行動
+一致性與相關 tests。
 
 ## Owner 問題
 
-Owner 要解決的是：目前 Telegram / 報文中，突破距離資訊可能只在部分狀態顯示，導致手機上看到「已突破 / 臨界突破 / 接近突破 / 遠離突破」時，無法一致判斷距離突破點多少。
-
-本輪只修顯示契約：不管距離突破點多少，只要有突破距離資料，持倉與未持倉卡片的盤面行都要保留括號距離資訊。
+05/29 報文中，同一股票今日交易已執行同級停利 / 減碼後，剩餘持倉仍在 summary、交易執行、持倉卡或風控檢查中顯示同級「停利」語意，容易讓 Owner 以為同一批建議比例還要再賣一次。
 
 ## 使用者可見結果
 
-Owner 在 Telegram 手機報文中查看持倉或未持倉卡片時，盤面行會一致看到突破距離，例如：
+Owner 手機打開 Telegram 後：
 
-- 已突破也顯示距離。
-- 臨界突破也顯示距離。
-- 接近突破也顯示距離。
-- 遠離突破也顯示距離。
-- 只有資料缺失時，才可省略距離或顯示明確缺資料文案。
+- 已執行同級停利 / 減碼且達到建議比例的股票，主行動改顯示為觀察狀態，例如 停利後觀察、減碼後觀察、剩餘觀察。
+- 不再出現會被理解為「同級停利還要再賣」的主行動。
+- 若真的需要再次賣出，只能是更高級風控、硬停損、策略失效，或明確第二段停利條件成立；同一行必須說明觸發條件與剩餘股數。
+- summary、交易執行、持倉卡、風控檢查對同一股票的主行動一致，不互相矛盾。
 
 ## 非目標
 
-- 不改策略 decision。
-- 不改買 / 賣 / 加碼 / 減碼 / 停損 / 停利判斷。
-- 不改突破分類邏輯或門檻。
-- 不改 DB schema。
-- 不改 watchlist。
-- 不做 live Supabase write。
-- 不做 live Telegram delivery。
-- 不做 replay / backfill。
-- 不重構整份報文、summary、漏斗、持倉主行動或市場 / 題材 evidence。
+- 不處理強勢市場準備層。
+- 不改 RR、過熱、漲停不追門檻。
+- 不改市場證據鏈。
+- 不改策略核心買賣規則。
+- 不建表、不改 DB schema。
+- 不 live Supabase write。
+- 不 live Telegram delivery。
+- 不 backfill。
+- 不做全量報文重排、全量文案清理或跨版本重構。
 
 ## 影響模組
 
-- 直接模組:
-- Telegram / 報文 formatter：core/generator.py 或等價卡片盤面行 formatter。
-- 相關 formatter / snapshot tests。
-- notifier direct-consumer smoke tests。
-- 不應影響模組:
-- services/analysis.py
-- core/watchlist.py
-- DB store / schema / migration
-- replay / backfill scripts
-- live Telegram sender behavior
+- Telegram 報文 formatter。
+- 持倉主行動顯示邏輯。
+- 今日交易執行結果與剩餘持倉的報文整合。
+- 與上述直接相關的 formatter / snapshot / consumer tests。
 
 ## 直接消費者
 
-- Owner 手機 Telegram 報文。
-- Telegram message list formatter output。
-- Telegram notifier payload consumer。
-- 既有 formatter / snapshot tests。
+- Owner 手機 Telegram 報文閱讀路徑。
+- Telegram message list / formatter output。
+- 持倉 summary 區塊。
+- 今日交易執行區塊。
+- 持倉卡片。
+- 持倉風控檢查區塊。
+- 相關 snapshot 或 formatter tests。
+
+## 已存在且不得回退的契約
+
+- 同一檔股票在同一份報文中只能有一個主行動，不得 summary 顯示觀察、持倉卡又顯示同級停利。
+- 今日已執行的賣出 / 減碼結果不得被重新包裝成同級待執行賣出建議。
+- 風控優先於強勢描述；若風控成立，不能用高分、最強、準備等文案弱化風控。
+- Telegram summary 手機優先：短句、短行、行動明確，不用 0-count 或空區塊占位。
+- 報文 header 版本必須與本輪使用者可見變更一致，不得停留在舊版。
+- 不得回退既有分類一致性契約：summary、漏斗、索引、詳情的狀態名稱必須一致。
 
 ## 輸出契約
 
-### 單一輸出契約
+- 單一輸出契約：同一股票同一交易日若 今日交易已執行同級停利 / 減碼 且 已達建議比例，則該股票在所有 Telegram 使用者可見持倉相關區塊的主行動必須改為觀察語意。
+- 允許文案形狀：
+- 停利後觀察：已賣 112 股，剩餘 N 股；同級停利已完成
+- 減碼後觀察：今日已減碼 112 股，剩餘 N 股；等待下一觸發
+- 剩餘觀察：同級停利已執行，剩餘 N 股只做風控追蹤
+- 禁止文案形狀：
+- 停利：英業達 ...，但同日已完成同級停利建議比例。
+- 可停利 / 建議停利 / 明日停利，但沒有更高級風控、硬停損、策略失效或第二段停利條件。
+- summary 寫觀察，持倉卡或風控檢查又寫同級停利。
+- 若再次出現可執行賣出動作，必須同一行包含：
+- 觸發類型：更高級風控 / 硬停損 / 策略失效 / 第二段停利。
+- 觸發條件。
+- 剩餘股數。
+- 不得只寫 停利。
 
-持倉與未持倉卡片的「盤面行」若有突破距離資料，必須一律顯示括號距離，不得因狀態是已突破、臨界突破、接近突破或遠離突破而省略。
+## 手機閱讀路徑
 
-### 顯示規則
-
-- 有距離資料:
-- 盤面行必須包含突破狀態 + 括號距離。
-- 括號距離格式沿用既有報文風格，不新增新的長句。
-- 無距離資料:
-- 可省略距離。
-- 或顯示明確缺資料，例如 距離缺資料。
-- 不得用 0%、空括號或看似有效的假距離代替缺資料。
-- 持倉與未持倉卡片需一致套用。
-- 不改卡片排序、分組、主行動、summary 結論或漏斗計數。
-
-### 版本契約
-
-- 本輪是使用者可見 Telegram 報文顯示修正，建議 header / VERSION 升為 v20.2.1。
-- 已存在且不得回退的契約:
-- Telegram 報文手機優先。
-- 使用者可見報文變更需同步 core/generator.py 的 VERSION 或等價 header 常量。
-- 不得低於已推送的 v20.2.0 使用者可見契約；若程式目前 header 與摘要文件版本不一致，Tech 必須 blocked 要求 Architect 釐清，不得自行降版。
-- 市場 / 題材 evidence 不得放寬個股買點。
-- 同一檔持倉同一份報文只能有一個主行動。
-- 空區塊、0 計數、無行動占位不得新增。
+1. Owner 先看 Telegram summary：應看到英業達已是 停利後觀察 / 剩餘觀察，不是新一筆同級停利。
+2. 再看今日交易執行：應看到今日已賣出數量，例如 已賣 112 股。
+3. 再看持倉卡：主行動仍是觀察，並標示剩餘股數。
+4. 再看風控檢查：不得重複列出同級停利待執行；若有更高級風控，必須說明觸發條件與剩餘股數。
 
 ## 驗收條件
 
-1. Formatter 產出的持倉卡片盤面行，在已突破、臨界突破、接近突破、遠離突破任一狀態且有距離資料時，都保留括號距離。
-2. Formatter 產出的未持倉卡片盤面行，在已突破、臨界突破、接近突破、遠離突破任一狀態且有距離資料時，都保留括號距離。
-3. 距離資料缺失時，不輸出假距離；可省略或顯示明確缺資料。
-4. Telegram header / version 顯示 v20.2.1，且測試期望同步。
-5. Notifier direct-consumer smoke 確認 message list / payload shape 未破壞。
-6. 驗證到 formatter / snapshot / notifier direct consumer 即可停止；若發現策略分類、突破門檻、資料來源缺漏或其他報文噪音問題，只記待辦，不納入本輪。
+- 案例 1：英業達 05/29 今日已賣 112 股且仍有剩餘持倉時，summary、交易執行、持倉卡、風控檢查不得再顯示同級 停利 作為主行動；應顯示觀察狀態與剩餘持倉語意。
+- 案例 2：若同一股票今日已完成同級停利，但另有更高級風控 / 硬停損 / 策略失效 / 第二段停利條件成立，報文可顯示再次賣出動作，但必須同行寫明觸發條件與剩餘股數。
+- 驗收必須核對實際 Telegram formatter output header 顯示 v20.2.2。
+- 驗收必須檢查 message list / formatter output 中同一股票跨區塊主行動一致。
+- 驗收不得擴大到策略門檻、DB、backfill、live delivery 或全量市場證據鏈。
 
 ## 範例或 fixture
 
-手機閱讀路徑：Owner 打開 Telegram，先掃 summary，再往下看持倉與未持倉卡片；在每張卡片的盤面行應直接看到突破狀態與距離，不需要進詳情或自行推算。
+[Summary]
+持倉先處理：
+- 英業達：停利後觀察，今日已賣 112 股，剩餘 188 股；同級停利已完成
 
-期望輸出形狀：
+[今日交易執行]
+- 英業達：已執行停利 112 股，成交後剩餘 188 股
 
-持倉｜2330 台積電
-盤面：已突破（距突破點 +1.8%）
-行動：續抱
+[持倉卡]
+英業達
+主行動：停利後觀察
+狀態：今日同級停利已達建議比例，剩餘 188 股只做風控追蹤
 
-未持倉｜2454 聯發科
-盤面：遠離突破（距突破點 -6.4%）
-狀態：僅追蹤
+[持倉風控檢查]
+- 英業達：剩餘觀察；未觸發更高級風控 / 硬停損 / 策略失效，今日不再提示同級停利
 
-缺資料可接受形狀：
+若第二段停利成立，示例形狀必須類似：
 
-未持倉｜XXXX 範例股
-盤面：接近突破（距離缺資料）
-狀態：僅追蹤
-
-或沿用既有風格省略距離，但不得輸出假距離。
+- 英業達：第二段停利，觸發條件：收盤再達 X 且剩餘 188 股；可賣 Y 股
 
 ## 明確禁止事項
 
-- 禁止修改策略 decision、突破門檻、買賣 / 加減碼判斷。
-- 禁止修改 DB schema、migration、Supabase write path。
-- 禁止修改 watchlist。
-- 禁止 live Supabase write。
-- 禁止 live Telegram delivery。
-- 禁止正式 replay / backfill。
-- 禁止把本 tiny patch 擴成報文重排、summary 改寫、market evidence 改寫或 L3 驗證。
-- 禁止新增空區塊、0-count 文案、無行動占位。
-- 禁止回退既有 v20.2.0 Telegram / evidence / 手機閱讀契約。
+- 不得把本輪擴成策略重設。
+- 不得修改 RR、過熱、漲停不追、強勢市場準備層。
+- 不得改 DB schema、Supabase 寫入、正式 backfill、live Telegram delivery。
+- 不得用空區塊、0-count 或 無新增下單 來掩蓋狀態。
+- 不得讓同一股票在不同區塊出現 停利後觀察 與同級 停利 並存。
+- 不得只修單一欄位存在，卻不檢查手機連續報文閱讀後是否會誤導再次賣出。
+- 不得回退既有版本與報文一致性契約。
+
+## 本輪停止條件
+
+- 完成英業達今日已賣 112 股仍有剩餘持倉 fixture 驗收。
+- 完成一個再次賣出允許條件的負面 / 邊界驗收，確認只有更高級風控、硬停損、策略失效或第二段停利條件才可再次顯示賣出。
+- 完成 formatter / snapshot / 直接 consumer smoke，確認 header 為 v20.2.2 且跨區塊主行動一致。
+- 若發現強勢市場準備層、RR、過熱、漲停不追、市場證據鏈或 DB payload 旁支問題，只記入待辦，不納入本輪。
 
 ## 阻塞條件
 
-- 若 formatter 卡片資料模型完全沒有突破距離欄位，且無法從既有 formatter input 取得距離，Tech 必須 blocked，要求 Architect 補充資料來源邊界；不得新增策略計算或改資料來源。
-- 若目前程式 header / VERSION 不是已推送的 v20.2.0 或更高，且摘要文件互相矛盾，Tech 必須 blocked 要求 Architect 釐清版本基準；不得自行降版或沿用舊版。
-- 若完成本顯示契約需要改策略分類、DB schema、watchlist、live delivery 或 backfill，必須 blocked，另開任務。
-- 若 QA 發現同一距離資訊在持倉與未持倉卡片顯示規則不一致，或 notifier payload shape 被破壞，本輪不得通過。
+- 若現有摘要無法判斷「今日已執行同級停利 / 減碼且達建議比例」的資料來源或欄位，Tech 必須 blocked，要求 Architect 補充對應 fixture 或欄位契約。
+- 若無法取得 05/29 英業達已賣 112 股且仍有剩餘持倉的可測 fixture，Tech / QA 必須 blocked，不得用假通過替代。
+- 若 formatter header 版本來源不明，Tech 必須 blocked，要求 Architect 指定版本常量位置。
+- 若實作必須改策略門檻或 DB schema 才能完成，停止本輪，回報需求已超出 v20.2.2 patch 範圍。

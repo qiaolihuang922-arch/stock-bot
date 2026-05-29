@@ -1,79 +1,72 @@
-# CHANGELOG: Telegram Breakout Distance Always Visible v20.2.1
+# CHANGELOG:
 
   ## 任務尺寸與風險
 
-  - 任務尺寸：tiny_patch
-  - 風險判斷：只修 Telegram formatter 卡片盤面行顯示與 header 版本，不改策略 decision、突破門檻、資料來源、DB、watchlist、live Telegram 或 backfill。
+  - 任務尺寸：risk_patch。
+  - 原因：本輪涉及持倉停利 / 賣出行動的 Telegram 使用者可見文案，若標示不清會讓 Owner 誤讀為同級重複停利；實作範圍收斂在 formatter 與直接測試，未改策略門檻。
 
   ## 修改內容
 
-  - core/generator.py 的 VERSION 由 v20.2.0 升為 v20.2.1。
-  - 新增卡片專用 card_breakout_distance(data)：
-      - 優先使用 data.breakout_distance。
-      - 若 data.breakout_distance 缺失、None 或空字串，fallback 到 result.breakout_distance。
-      - 缺資料時回傳 None，避免輸出 0%、None%、空括號或假距離。
-  - 持倉卡片 formatTelegramPositionCard 與未持倉卡片 formatTelegramUnheldCard 改用同一距離讀取規則。
-  - 補 tests/test_generator_report.py 覆蓋：
-      - 持倉：已突破、臨界突破、接近突破、遠離突破。
-      - 未持倉：已突破、臨界突破、接近突破、遠離突破。
-      - data.breakout_distance=None 時 fallback 到 result.breakout_distance。
-      - 完全缺距離時不得輸出假距離。
-  - 同步 tests/test_notifier.py、tests/test_market_theme_evidence.py、tests/test_generator_report.py 的 v20.2.1 header 期望。
+  - 保留既有 v20.2.2 候選 diff，補上 QA 阻塞案例：
+      - 同日已有 position_events.sold_shares > 0，但策略層仍回傳 TAKE_PROFIT_25 / TAKE_PROFIT_50 且有可賣股數時，formatter 主行動改顯示 第二段停利。
+      - summary / 今日交易執行 / 持倉風控檢查 / 持倉卡會同行顯示：今日已賣 N 股｜剩餘 N 股｜本次建議 N 股。
+      - 持倉卡補上第二段停利的觸發條件，避免只顯示一般 停利。
+  - 補測 QA 指出的邊界 fixture：
+      - 英業達今日已賣 112 股、剩餘 188 股、策略仍建議本次賣 47 股時，summary 與持倉卡必須顯示 第二段停利｜今日已賣 112 股｜剩餘 188 股｜本次建議 47 股。
+  - 同步 v20.2.2 header 測試期望。
 
   ## 修改檔案
 
   - core/generator.py
   - tests/test_generator_report.py
-  - tests/test_notifier.py
   - tests/test_market_theme_evidence.py
-  - CHANGELOG.md（由 runner 以本回覆覆寫）
+  - tests/test_notifier.py
+  - CHANGELOG.md
 
   ## 最小改動策略
 
-  - 只改卡片盤面行的距離來源選擇，不改 semantic_position 的既有括號距離格式。
-  - 不新增報文區塊、不重排 summary、不改漏斗、不改持倉主行動。
-  - 測試只覆蓋本任務指定 formatter 與 direct consumer header smoke。
+  - 只新增 formatter 內部判斷與文案組裝 helper。
+  - 未修改 services/analysis.py 策略層回傳、停利門檻、股數計算、DB schema、watchlist、live delivery、backfill。
+  - CHANGELOG.md 僅同步本輪交付摘要，未承載產品邏輯。
 
   ## 契約影響
 
-  - 使用者可見 Telegram header 升為 v20.2.1。
-  - 持倉與未持倉卡片盤面行在有距離資料時，一律保留既有括號距離。
-  - 缺距離資料時維持省略距離，不輸出假距離。
-  - 未改函式回傳結構、message list shape、Telegram payload shape、DB payload 或報文分組。
+  - Telegram formatter 使用者可見輸出有變更：
+      - 同日已賣且仍有可執行停利建議時，主行動由一般 停利 改為 第二段停利。
+      - 同行新增今日已賣股數、剩餘股數、本次建議股數。
+  - formatter header 版本同步為 v20.2.2。
+  - 未改 DB payload、Telegram API payload shape、message list 結構、函式回傳結構或策略 decision 結構。
 
   ## 直接消費者同步
 
-  - Owner 手機 Telegram 報文：持倉 / 未持倉卡片盤面行同步。
-  - Telegram message list formatter output：tests/test_generator_report.py header 與卡片輸出同步。
-  - Telegram notifier payload consumer：tests/test_notifier.py header smoke 同步，payload shape 未改。
-  - Market theme evidence formatter coverage：tests/test_market_theme_evidence.py header 期望同步。
+  - Owner 手機 Telegram summary：已同步 第二段停利 與股數文案。
+  - 今日交易執行 / 持倉風控檢查：透過 holding_execution_item、pending_trade_items、priority rank 同步。
+  - 持倉卡：透過 position_summary_action、holding_detail_decision_lines、holding_reason_line、holding_next_step_line 同步。
+  - notifier version header 測試：已同步 v20.2.2 期望。
 
   ## 未影響模組
 
-  - 未改策略 decision。
-  - 未改突破門檻或分類邏輯。
-  - 未改 services/analysis.py。
-  - 未改 core/watchlist.py。
-  - 未改 DB schema / migration / Supabase write path。
-  - 未執行 live Telegram delivery。
-  - 未執行 replay / backfill。
-  - 未改 market / theme evidence 的買點判斷。
+  - 未改策略門檻、RR、過熱、漲停不追。
+  - 未改強勢市場準備層。
+  - 未改 DB / Supabase 寫入。
+  - 未改 watchlist。
+  - 未執行 live Telegram、live Supabase write、正式 backfill。
+  - 未做全量報文重排或旁支清理。
 
   ## 已跑自檢命令
 
-  - arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py tests/test_notifier.py tests/test_market_theme_evidence.py
-      - 結果：72 passed, 21 warnings
-  - git diff --check
-      - 結果：通過，無 whitespace error。
-  - git status --short
-      - 結果：顯示本輪產品 / 測試檔與 CHANGELOG.md 修改，符合本次交付摘要範圍。
+  - python -m pytest tests/test_generator_report.py -k "v20_2_2"：失敗，原因是 python command not found。
+  - .venv/bin/python -m pytest tests/test_generator_report.py -k "v20_2_2"：收集失敗，原因是目前 shell 為 x86_64，但 .venv 依賴含 arm64 pydantic_core。
+  - arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py -k "v20_2_2"：3 passed。
+  - arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py tests/test_analysis_engine.py：108 passed。
+  - git diff --check：通過。
 
   ## 殘留風險
 
-  - 測試環境 .venv 需用 arch -arm64 執行，直接用預設架構 Python 會遇到既有 binary architecture mismatch。
-  - 本輪未跑 full pytest，符合 TASK 的 L1 / tiny_patch 停止條件。
+  - 本輪只處理 formatter 對同日已賣後再次停利的顯示明確性；策略層為何仍回傳 TAKE_PROFIT_25 不在本輪修改範圍。
+  - 測試需用 arch -arm64 .venv/bin/python 執行；直接 .venv/bin/python 在目前 shell 架構下會遇到相依套件架構不相容。
 
   ## 旁支待辦
 
-  - 無本輪阻塞旁支。
-  - 若後續要把缺距離改成明確文案「距離缺資料」，需由 PM 另定顯示契約；本輪沿用可省略距離的 TASK 允許形狀。
+  - 測試 runner 可補強 Python 架構選擇，避免 worktree .venv 在 x86_64 shell 下誤跑。
+  - 若後續 Owner 要求「同日已賣後策略層不得再回傳 TAKE_PROFIT」，需另開策略任務，不能併入本輪 formatter patch。

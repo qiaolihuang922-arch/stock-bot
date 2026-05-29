@@ -33,6 +33,10 @@
 
 ## Recent High-Signal Milestones
 
+- `v20.2.2` Post-profit State Consistency 已通過 QA：
+  - 同日已執行同級停利後，報文主行動轉為 `停利後觀察`，不再讓 Owner 誤讀為再次同級停利。
+  - 若同日已賣後仍有更高級 / 第二段停利建議，報文顯示 `第二段停利`，並同行列出今日已賣、剩餘股數、本次建議股數。
+  - QA 驗證：`tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py tests/test_analysis_engine.py`，`108 passed, 21 warnings`。
 - `v20.2.1` Telegram Breakout Distance Always Visible 已通過 QA：
   - 持倉與未持倉卡片只要有突破距離資料，`已突破 / 臨界突破 / 接近突破 / 遠離突破` 都顯示括號距離。
   - `data.breakout_distance` 缺失時 fallback 到 `result.breakout_distance`。
@@ -125,7 +129,7 @@
 ## Open Follow-Ups
 
 - 2026-05-29 報文研究結論：
-  - 英業達今日已停利後主決策仍顯示 `停利`，屬高風險報文 / 狀態機問題；下一步建議先做 `v20.2.2` patch，修「已執行同級停利後轉觀察」。
+  - 英業達今日已停利後主決策仍顯示 `停利` 的高風險誤讀已由 `v20.2.2` 修正。
   - 本週台股 / AI / 電子偏強有公開資料支持，但零 BUY 不必然是錯；需補「強勢市場但不可追」的準備層 / 手機文案，不得直接放寬買點。
 - 證據鏈 v20.2.0 只建立 production contract 與 runtime source gate；若要自動取得 market_index / sector_index、建表、cache、external provider 或持久化 evidence，先通知 Owner。
 - 若 Owner 仍覺得查詢慢，另開 performance measurement 任務，量測 production 實際秒數。

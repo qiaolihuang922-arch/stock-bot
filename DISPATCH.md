@@ -4,44 +4,47 @@
 
 ## Current Task
 
-- task_id: `postprofit-and-strong-market-review-20260529`
-- task_name: `Post-profit State And Strong Market Preparation Review`
-- task_type: `research_to_product`
-- version_level: `patch_then_possible_minor`
-- qa_level: `research`
+- task_id: `postprofit-state-consistency-v20.2.2`
+- task_name: `Post-profit State Consistency`
+- task_type: `risk_patch`
+- version_level: `patch`
+- qa_level: `L2`
 - owner_status: `requested`
-- architect_status: `research_accepted_waiting_owner_direction`
-- pm_status: `research_ready`
-- tech_status: `not_required`
-- qa_status: `research_ready`
+- architect_status: `qa_passed_absorbed_pending_push`
+- pm_status: `task_ready`
+- tech_status: `changelog_ready`
+- qa_status: `qa_passed`
 - commit: `pending`
 
 ## Current Result
 
-- Owner 暫停證據鏈，要求檢查 05/29 v20.2.1 報文：
-  - 英業達今日已停利賣出 112 股後，主決策仍顯示 `停利`。
-  - 本週台股 / AI / 電子大漲，但系統一檔都沒有推薦。
-- Architect 已走 research，不改產品代碼、不建表、不做 live、不 backfill。
+- Owner 要求開始修 `v20.2.2`：只處理 05/29 報文中「已執行同級停利後仍顯示停利」的狀態 / 報文一致性問題。
+- 本輪不處理強勢市場準備層，不改 RR / 過熱 / 漲停不追門檻，不改市場證據鏈，不建表、不 live、不 backfill。
 - CAO 服務已確認：
   - API: `http://127.0.0.1:9889/`
   - UI: `http://127.0.0.1:5173/`
-- Research 結論：
-  - 英業達已執行同級停利後仍以 `停利` 作主行動，是高風險報文 / 狀態機問題；疑似違反既有契約：今日已減碼 / 停利達同級建議時，預設轉為觀察，只有更高級風控或硬停損可覆蓋。
-  - 公開資料支持本週 AI / 電子 / 台股偏強，但零 BUY 不必然是策略錯；漲停不追、過熱冷卻、RR 不足有風控合理性。
-  - 真正產品缺口是：強勢市場下缺少 `市場強但個股買點未成立` 的準備層與手機文案，導致 Owner 只看到無推薦，感覺系統漏掉行情。
-- 建議下一步：
-  - 先做 `v20.2.2` patch：修已執行停利後主行動，避免同日同級連續停利誤讀。
-  - 再視 Owner 是否同意做 minor 產品層：強勢市場準備層；不直接放寬策略門檻。
-- 禁止事項：
-  - 不直接把市場大漲轉成 BUY。
-  - 不改 RR / 過熱 / 漲停不追門檻，除非 Owner 明確批准 major 策略研究。
-  - 不建表、不 live Supabase write、不 live Telegram、不 backfill。
+- PM 已交付 `TASK.md`，定義：
+  - 同一股票同一交易日已執行同級停利 / 減碼且達建議比例後，不得再次把同級 `停利` 作為主行動。
+  - 預設轉為 `停利後觀察 / 減碼後觀察 / 剩餘觀察`。
+  - 若仍有第二段 / 更高級停利，必須同行說明觸發條件、今日已賣、剩餘股數、本次建議股數。
+- Tech 已交付候選 diff：
+  - `core/generator.py` VERSION 升為 `v20.2.2`。
+  - POST_PROFIT_WATCH + 今日已賣主案例顯示 `停利後觀察`。
+  - 同日已賣後若仍出現可執行停利，顯示 `第二段停利｜今日已賣 N 股｜剩餘 N 股｜本次建議 N 股`。
+  - 同步 formatter / notifier / market evidence header 測試。
+- QA 最終驗證通過：
+  - POST_PROFIT_WATCH 今日已賣不再被誤讀成同級再次停利。
+  - 第二段停利跨 summary / 持倉卡 / 風控檢查均帶今日已賣、剩餘與本次建議股數。
+  - 無策略門檻、DB、watchlist、live Telegram、backfill diff。
+  - 主 repo 驗證：`108 passed, 21 warnings`，`git diff --check` 通過。
+- Post-cycle review：
+  - QA 有效攔下兩個問題：第二段停利文案不明、CHANGELOG 與 diff 不一致。
+  - runner guard 已微調：dirty worktree guard 只攔產品 / 測試候選 diff，不攔正常 `TASK.md` handoff。
 
 ## Next Action
 
-- 等待 Owner 決定：
-  - 若要修，Architect 分派 PM 撰寫 `v20.2.2` TASK.md。
-  - 第一張 TASK 只處理「已執行停利後狀態」，不要同時改強勢市場準備層。
+- commit / push 後清理 tech worktree。
+- 下一張任務可處理強勢市場準備層 / 手機文案；不得直接放寬策略買點。
 
 ## Status Values
 

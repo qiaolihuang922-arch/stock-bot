@@ -52,7 +52,7 @@ from services.strategy_evidence import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.2.1"
+VERSION = "v20.2.2"
 
 EXECUTION_LEVELS = {
     "TAKE_PROFIT_50": "TP50",
@@ -2896,6 +2896,32 @@ def position_summary_rank(name, data):
     return (bucket, -pnl)
 
 
+def is_same_day_second_take_profit(data, decision=None):
+
+    decision = decision or ensure_holding_decision("", data) or {}
+    events = data.get("position_events") or {}
+
+    return (
+        data.get("holding")
+        and events.get("sold_shares", 0) > 0
+        and decision.get("level") in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]
+        and decision.get("shares", 0) > 0
+    )
+
+
+def second_take_profit_context_text(data, decision=None):
+
+    decision = decision or ensure_holding_decision("", data) or {}
+    events = data.get("position_events") or {}
+    holding = data.get("holding") or {}
+
+    return (
+        f"今日已賣 {events.get('sold_shares', 0)} 股"
+        f"｜剩餘 {holding.get('shares', 0)} 股"
+        f"｜本次建議 {decision.get('shares', 0)} 股"
+    )
+
+
 def position_summary_action(name, data):
 
     decision = ensure_holding_decision(name, data)
@@ -2912,6 +2938,9 @@ def position_summary_action(name, data):
 
     if str(action).startswith("增量"):
         return "增量減碼"
+
+    if is_same_day_second_take_profit(data, decision):
+        return "第二段停利"
 
     if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]:
         return "停利"
@@ -3069,6 +3098,9 @@ def position_summary_note(name, data):
 
     if action == "停損":
         return decision.get("note") or "停損優先，避免虧損擴大"
+
+    if action == "第二段停利":
+        return second_take_profit_context_text(data, decision)
 
     if action == "停利":
         return f"{decision.get('action')}，鎖定部分獲利"
@@ -3255,6 +3287,9 @@ def holding_tomorrow_trigger(name, data):
     if level == "STOP_100":
         return "清出後等重新買點"
 
+    if action == "第二段停利":
+        return second_take_profit_context_text(data, decision)
+
     if level in ["REDUCE_25", "REDUCE_50"]:
         return "無法重新站回突破區，繼續降低優先級"
 
@@ -3309,6 +3344,7 @@ def position_priority_rank(name, data):
         "硬風控減碼": 1,
         "增量減碼": 1,
         "減碼": 1,
+        "第二段停利": 1,
         "停利": 1,
         "新倉風控觀察": 2,
         "風控觀察": 3,
@@ -3366,6 +3402,7 @@ def holding_execution_priority(name, data):
         "硬風控減碼": 1,
         "增量減碼": 1,
         "減碼": 1,
+        "第二段停利": 2,
         "停利": 2,
         "新倉風控觀察": 3,
         "風控觀察": 4,
@@ -3399,22 +3436,36 @@ def holding_execution_item(name, data):
         events.get("sold_shares", 0) > 0
         and decision.get("level") == "POST_PROFIT_WATCH"
     ):
-        sell_pct = events.get("sell_pct") or round(
-            (data.get("holding") or {}).get("realized_profit_taken_ratio", 0) * 100
+        sold_shares = events.get("sold_shares", 0)
+        remaining_shares = (data.get("holding") or {}).get("shares", 0)
+        executed_text = (
+            f"今日已執行停利 {sold_shares} 股"
+            if sold_shares
+            else "今日已執行停利"
         )
-        executed_text = f"今日已減碼 {sell_pct}%" if sell_pct else "今日已減碼"
+        remaining_text = (
+            f"成交後剩餘 {remaining_shares} 股"
+            if remaining_shares
+            else "剩餘部位觀察"
+        )
         return {
             "name": name,
             "kind": "holding",
             "state": "已執行",
             "priority": holding_execution_priority(name, data),
             "is_control": True,
+            "control_line": (
+                f"{name}"
+                f"｜停利後觀察"
+                f"｜{remaining_text}"
+                f"｜同級停利已完成"
+            ),
             "line": (
                 f"{name}"
                 f"｜已執行"
                 f"｜{executed_text}"
-                f"｜不再重複減碼"
-                f"｜剩餘部位觀察"
+                f"｜{remaining_text}"
+                f"｜同級停利已完成"
             ),
         }
 
@@ -3428,6 +3479,7 @@ def holding_execution_item(name, data):
             "硬風控減碼",
             "增量減碼",
             "減碼",
+            "第二段停利",
             "停利",
             "新倉風控觀察",
             "風控觀察",
@@ -3726,6 +3778,7 @@ def pending_trade_items(holding_items, watch_items):
         "硬風控減碼",
         "增量減碼",
         "減碼",
+        "第二段停利",
         "停利",
         "加碼10",
         "加碼20",
@@ -3829,6 +3882,8 @@ def intraday_holding_control_line(item, report_phase):
         return line
 
     if item.get("state") == "已執行":
+        if item.get("control_line"):
+            return item["control_line"]
         return f"{item['name']}｜剩餘部位觀察｜不加碼"
 
     if "明日未修復" in line or "隔日未修復" in line:
@@ -4100,6 +4155,9 @@ def holding_reason_line(name, data):
     decision = ensure_holding_decision(name, data)
     level = decision.get("level") if decision else ""
 
+    if is_same_day_second_take_profit(data, decision):
+        return "同日已賣後再次觸發停利，需標明第二段與股數"
+
     if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]:
         return "高浮盈且過熱延伸，先保留獲利"
 
@@ -4127,6 +4185,9 @@ def holding_next_step_line(name, data):
 
     if level == "STOP_100":
         return "清出後不急回補，等重新出現買點"
+
+    if action == "第二段停利":
+        return "執行本次建議後，剩餘部位回到風控觀察"
 
     if level in ["REDUCE_25", "REDUCE_50"]:
         return "若無法重新站回突破區，繼續降低優先級"
@@ -4199,6 +4260,12 @@ def holding_detail_decision_lines(name, data):
 
     if level == "ADD_10":
         return f"{action_text}，{note or '小幅轉強'}", "RR達標，信心達標"
+
+    if summary_action == "第二段停利":
+        return (
+            f"第二段停利，{second_take_profit_context_text(data, decision)}",
+            f"觸發條件：{note or '停利條件再次成立'}"
+        )
 
     if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]:
         return f"{action_text}，鎖定部分獲利", "高浮盈或過熱延伸，保留核心倉"

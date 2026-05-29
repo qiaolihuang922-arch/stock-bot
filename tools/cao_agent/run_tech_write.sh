@@ -25,14 +25,27 @@ chmod 700 "$CAO_AGENT_CONTEXT" "$OUT_DIR"
 
 ensure_tech_worktree
 
-worktree_dirty() {
-  [[ -n "$(git -C "$WORKTREE" status --porcelain)" ]]
+worktree_has_candidate_diff() {
+  local status path
+  status="$(git -C "$WORKTREE" status --porcelain)"
+  [[ -z "$status" ]] && return 1
+  while IFS= read -r line; do
+    path="${line:3}"
+    case "$path" in
+      AGENTS.md|DISPATCH.md|RESEARCH.md|CURRENT_STATE.md|CLEANUP_PLAN.md|TASK.md|QA_REPORT.md|CHANGELOG.md)
+        ;;
+      *)
+        return 0
+        ;;
+    esac
+  done <<< "$status"
+  return 1
 }
 
 # Start each Tech run from a clean isolated worktree unless explicitly disabled.
 # This worktree is disposable agent scratch space; never use it as the source of truth.
 if [[ "${CLEAN_TECH_WORKTREE:-1}" == "1" ]]; then
-  if worktree_dirty && [[ "${ALLOW_DISCARD_TECH_WORKTREE:-0}" != "1" ]]; then
+  if worktree_has_candidate_diff && [[ "${ALLOW_DISCARD_TECH_WORKTREE:-0}" != "1" ]]; then
     echo "Tech worktree has uncommitted candidate diff; refusing to reset it." >&2
     echo "Inspect or absorb the diff first, or rerun with CLEAN_TECH_WORKTREE=0 for a handoff-only fix." >&2
     echo "To intentionally discard the candidate diff, set ALLOW_DISCARD_TECH_WORKTREE=1." >&2
