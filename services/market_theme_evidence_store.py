@@ -68,7 +68,7 @@ def _build_client():
     return create_client(supabase_url, supabase_key)
 
 
-def _empty_result(status, reason):
+def _empty_result(status, reason, rows=None):
     return {
         "status": status,
         "confirmed": False,
@@ -77,7 +77,7 @@ def _empty_result(status, reason):
         "source_status": status,
         "reason": reason,
         "sources": [],
-        "rows": [],
+        "rows": rows or [],
     }
 
 
@@ -251,6 +251,72 @@ def build_market_theme_evidence_handoff(payloads):
         "target_table": f"public.{TABLE_NAME}",
         "rows": rows,
         "sql": render_market_theme_evidence_handoff_sql(rows),
+    }
+
+
+def validate_market_theme_evidence_ingestion_payload(payloads, include_sql=False):
+    handoff = build_market_theme_evidence_handoff(payloads)
+    valid = handoff["status"] == "ready" and handoff["handoff_ready"]
+    result = {
+        "valid": valid,
+        "status": handoff["status"],
+        "reason": handoff["reason"],
+        "may_render_manual_sql": valid,
+        "live_write": False,
+        "target_table": handoff["target_table"],
+        "row_count": len(handoff["rows"]),
+        "rows": handoff["rows"] if valid else [],
+        "sql_rendered": bool(valid and include_sql and handoff["sql"]),
+    }
+    if valid and include_sql:
+        result["manual_sql"] = handoff["sql"]
+    return result
+
+
+def build_market_theme_evidence_readonly_smoke(load_result):
+    result = load_result if isinstance(load_result, dict) else {}
+    status = result.get("status") or "source-error"
+    reason = str(result.get("reason") or "")
+    rows = result.get("rows") if isinstance(result.get("rows"), list) else []
+    confirmed = bool(result.get("confirmed"))
+
+    if status == "missing-source":
+        env_status = "missing"
+        table_read = "skipped"
+        note = "production DB env/config missing"
+    elif status == "source-error":
+        env_status = "present"
+        lowered = reason.lower()
+        table_read = "permission-denied" if "permission denied" in lowered or "permission" in lowered else "error"
+        note = reason or "production table read failed"
+    else:
+        env_status = "present"
+        table_read = "ok"
+        if confirmed:
+            note = "fresh production confirmed/supporting evidence available"
+        elif not rows and status == "absent":
+            note = "no production confirmed evidence available"
+        elif any(str(row.get("freshness") or "").lower() != "fresh" for row in rows if isinstance(row, dict)):
+            note = "production rows are stale or not fresh"
+        elif any(
+            str(row.get("support_level") or "").lower() not in CONFIRMED_SUPPORT_LEVELS
+            for row in rows
+            if isinstance(row, dict)
+        ):
+            note = "production rows do not contain confirmed/supporting support_level"
+        else:
+            note = reason or "production evidence is insufficient"
+
+    return {
+        "title": "market_theme_confirmed_evidence smoke",
+        "mode": "read-only",
+        "write": "disabled",
+        "env": env_status,
+        "table_read": table_read,
+        "rows": len(rows),
+        "status": "ok" if confirmed else "fail-closed",
+        "telegram_confirmed": confirmed,
+        "note": note,
     }
 
 

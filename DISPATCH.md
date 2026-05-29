@@ -4,8 +4,8 @@
 
 ## Current Task
 
-- task_id: `evidence_chain_predev_closure_20260529`
-- task_name: `Evidence Chain Pre-Development Closure`
+- task_id: `evidence_chain_production_ops_artifacts_20260529`
+- task_name: `Evidence Chain Production Ops Artifacts`
 - task_type: `risk_patch`
 - version_level: `none`
 - qa_level: `L2+`
@@ -18,27 +18,31 @@
 
 ## Current Result
 
-- Owner 要求在繼續證據鏈開發前，先把三件事收斂到同一進度：真資料 / DB 資料消費 / 新表端到端流程。
-- 本輪完成非 live repo-side 閉環補丁：
-  - `services/market_theme_evidence_store.py` 新增 `build_market_theme_evidence_handoff()` 與 `render_market_theme_evidence_handoff_sql()`。
-  - helper 只產生 manual SQL handoff；`live_write=False`，不執行 Supabase write、不 backfill、不改 RLS、不 live Telegram。
-  - 允許來源收斂為 `production_db`、`owner_approved_persistent`、`market_data`；runtime/local/cache/worktree/test/report-derived/synthetic/default/unknown source 全部 fail closed。
-  - handoff builder 自身 `confirmed=False`；只有 Owner 手動執行 SQL 寫入 production table 後，GitHub fresh runner 才能透過既有 read-only loader 讀到 confirmed/supporting/fresh rows。
-- 新增測試 `tests/test_market_theme_evidence_handoff.py`，覆蓋合法 manual SQL、fake source、missing status、raw renderer 旁路、empty/None rows。
+- Owner 要求繼續證據鏈，但進入 production ingestion / backfill / RLS / read-only runner smoke 前，必須先把 repo-side 非 live 操作物補齊，且不可誤導成已上線。
+- 本輪完成 production ops artifacts：
+  - `scripts/validate_market_theme_evidence_ingestion.py`：驗證 Owner-approved ingestion payload，合格時可選擇輸出 manual SQL；fake/local/runtime/cache/worktree/report-derived/synthetic/default/test source 全部 fail closed。
+  - `scripts/smoke_market_theme_evidence_readonly.py`：只用 `SUPABASE_READONLY_KEY` 做 read-only smoke，不 fallback service-role key；缺 env / 無 rows / 權限錯誤都 fail closed。
+  - `db/sql/evidence_chain_market_theme_ops_manual_template.sql`：提供 Owner 手動核准後才可使用的 read-only role/grant、RLS policy、optional backfill/upsert template 與 read-only verification queries。
+  - `docs/handoff/evidence_chain_market_theme_ops_artifacts.md`：說明 dry-run、manual SQL、read-only smoke、禁止 live side effect。
+  - `services/market_theme_evidence_store.py` handoff helper 擴充 validation payload 與 CLI 使用所需 contract。
+- 本輪沒有 live Supabase write、沒有正式 backfill、沒有 production RLS / grant 變更、沒有 live Telegram、沒有改策略 decision 或使用者可見 Telegram version。
 - QA 通過：
-  - `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence_handoff.py tests/test_market_theme_evidence.py -q`：25 passed, 17 warnings。
-  - QA 額外 smoke 覆蓋 14 種 fake/local/runtime/report-derived source、renderer empty/None、no DB fresh-run fail closed。
-  - 結論只代表本輪 non-live handoff diff 可吸收；不得解讀為 production ingestion/backfill/RLS/smoke 已完成。
+  - `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence_handoff.py tests/test_market_theme_evidence.py -q`：28 passed, 17 warnings。
+  - read-only smoke 缺 env 時 exit 2 並輸出 `telegram_confirmed: false`。
+  - fake source 即使用 `--include-sql` 也不得產生 manual SQL。
+  - 只設定 `SUPABASE_SERVICE_ROLE_KEY` 不得被 smoke 使用，必須要求 `SUPABASE_READONLY_KEY`。
+  - SQL / docs 無 secrets、無自動 live write、無自動 RLS / grant / backfill。
+- Runner 狀態：CAO auto 實質 PM/Tech/QA 完成，但 runner parser 對 QA 結論 false fail；Architect 已按 QA 報告與主 repo 驗證手動吸收。
 - Post-cycle review：
-  - 根因分類：`integration_fragmentation` + `read_only_chain_incomplete` + `runner_gap`。
-  - QA 有效攔截兩輪：先抓出 missing `evidence_status` default confirmed 與 raw renderer bypass，再抓出 empty/None renderer 旁路；已修並補測。
-  - Tech/QA runner 多次卡在互動提示，需補 runner prompt/session cleanup；本輪用人工審查與 QA 報告收口。
-  - 不新增 `AGENTS.md` 硬規則；既有 DB/live write、source-of-truth、Post-cycle Review 已覆蓋，本輪只更新狀態與待補流程。
+  - 根因分類：`production_ops_boundary` + `manual_sql_operator_risk` + `runner_parser_false_fail`。
+  - QA 有效覆蓋 live side effect、fake confirmed、service-role fallback 與 fresh runner read-only 邊界。
+  - Architect 額外補強 SQL / docs：此 SQL template 不是 one-click SQL，Step D 也需替換 `:TRADE_DATE`。
+  - 不新增 `AGENTS.md` 硬規則；既有 DB/live write、GitHub runner source-of-truth、Post-cycle Review 已覆蓋。本輪只更新狀態與 runner 待補。
 
 ## Next Action
 
 - Architect commit / push 本輪 diff，清理 CAO worktree。
-- 下一步才可繼續證據鏈：production ingestion/backfill/RLS/read-only role/GitHub runner actual data smoke 仍需 Owner 明確批准或手動 SQL / smoke 步驟。
+- 若 Owner 要真正進 production：先審核 SQL template 需要執行的 section、替換 placeholder，提供 read-only env 後跑 smoke；正式 backfill / RLS / grant / live write 仍需單獨批准。
 
 ## Status Values
 

@@ -46,6 +46,13 @@
 
 ## Pending / Watchlist
 
+- 本輪 Evidence Chain Production Ops Artifacts：
+  - 根因分類：`production_ops_boundary` + `manual_sql_operator_risk` + `runner_parser_false_fail`。
+  - 已完成：ingestion payload dry-run validator、read-only smoke CLI、manual SQL template、handoff docs；全部 repo-side non-live。
+  - QA 有效覆蓋：fake source 不產生 SQL、read-only smoke 不 fallback service-role key、缺 env fail closed、SQL/docs 無自動 live write / RLS / grant / backfill。
+  - Architect 額外補強：SQL template 與 docs 明確標示不是 one-click SQL，Step D 也需替換 `:TRADE_DATE`。
+  - Runner gap：auto cycle 實質 QA `通過` 仍被 parser 判 failed；需修 QA conclusion parser 只讀 `## QA 結論` 後第一個有效結論詞。
+  - 不新增 `AGENTS.md` 硬規則：既有 DB/live write、GitHub runner source-of-truth、Post-cycle Review 已覆蓋；本輪沉澱為 docs/SQL guard 與 runner 待補。
 - Tech runner gap 已補：`run_tech_write.sh` 改為讓 Tech 在 final answer 輸出 `# CHANGELOG:`，由 runner 寫入 worktree `CHANGELOG.md`，避免 agent 卡在直接編輯交付文件。
 - 本輪 `v20.2.1` tiny patch 中，QA 曾攔下 `CHANGELOG.md` / tracked diff / VERSION 不一致：
   - 根因分類：`runner_gap` / handoff drift，不是產品規則缺失。

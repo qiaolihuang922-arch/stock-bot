@@ -1,6 +1,15 @@
+import json
+import subprocess
+import sys
+import tempfile
 import unittest
+from pathlib import Path
 
-from services.market_theme_evidence_store import build_market_theme_evidence_handoff
+from services.market_theme_evidence_store import (
+    build_market_theme_evidence_handoff,
+    build_market_theme_evidence_readonly_smoke,
+    validate_market_theme_evidence_ingestion_payload,
+)
 
 
 def handoff_payload(**overrides):
@@ -95,6 +104,115 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
                 self.assertEqual(handoff["target_table"], "public.market_theme_confirmed_evidence")
                 self.assertEqual(handoff["rows"], [])
                 self.assertEqual(handoff["sql"], "")
+
+    def test_ingestion_payload_validation_renders_sql_only_after_valid_dry_run(self):
+        valid = validate_market_theme_evidence_ingestion_payload(
+            [handoff_payload()],
+            include_sql=True,
+        )
+
+        self.assertTrue(valid["valid"])
+        self.assertTrue(valid["may_render_manual_sql"])
+        self.assertFalse(valid["live_write"])
+        self.assertEqual(valid["row_count"], 1)
+        self.assertTrue(valid["sql_rendered"])
+        self.assertIn("manual_sql", valid)
+
+        invalid = validate_market_theme_evidence_ingestion_payload(
+            [handoff_payload(source_family="runtime_diagnostic")],
+            include_sql=True,
+        )
+
+        self.assertFalse(invalid["valid"])
+        self.assertFalse(invalid["may_render_manual_sql"])
+        self.assertFalse(invalid["live_write"])
+        self.assertEqual(invalid["row_count"], 0)
+        self.assertFalse(invalid["sql_rendered"])
+        self.assertNotIn("manual_sql", invalid)
+
+    def test_ingestion_cli_fails_closed_without_sql_for_fake_source(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "payload.json"
+            path.write_text(
+                json.dumps([handoff_payload(source_family="report_derived")]),
+                encoding="utf-8",
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "scripts/validate_market_theme_evidence_ingestion.py",
+                    "--input",
+                    str(path),
+                    "--include-sql",
+                ],
+                cwd=Path(__file__).resolve().parents[1],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+        self.assertEqual(completed.returncode, 2)
+        output = json.loads(completed.stdout)
+        self.assertFalse(output["valid"])
+        self.assertFalse(output["may_render_manual_sql"])
+        self.assertFalse(output["live_write"])
+        self.assertNotIn("manual_sql", output)
+
+    def test_readonly_smoke_matrix_fails_closed_except_valid_confirmed_rows(self):
+        cases = [
+            (
+                {"status": "missing-source", "confirmed": False, "reason": "production DB config missing", "rows": []},
+                "missing",
+                "skipped",
+                "fail-closed",
+                False,
+            ),
+            (
+                {"status": "source-error", "confirmed": False, "reason": "permission denied for table", "rows": []},
+                "present",
+                "permission-denied",
+                "fail-closed",
+                False,
+            ),
+            (
+                {"status": "absent", "confirmed": False, "reason": "production table returned no rows", "rows": []},
+                "present",
+                "ok",
+                "fail-closed",
+                False,
+            ),
+            (
+                {"status": "insufficient-data", "confirmed": False, "reason": "stale", "rows": [handoff_payload(freshness="stale")]},
+                "present",
+                "ok",
+                "fail-closed",
+                False,
+            ),
+            (
+                {"status": "source-error", "confirmed": False, "reason": "unexpected support_level", "rows": [handoff_payload(support_level="strong")]},
+                "present",
+                "error",
+                "fail-closed",
+                False,
+            ),
+            (
+                {"status": "confirmed", "confirmed": True, "reason": "", "rows": [handoff_payload(source_family="production_db")]},
+                "present",
+                "ok",
+                "ok",
+                True,
+            ),
+        ]
+
+        for load_result, env, table_read, status, telegram_confirmed in cases:
+            with self.subTest(load_result=load_result):
+                smoke = build_market_theme_evidence_readonly_smoke(load_result)
+                self.assertEqual(smoke["mode"], "read-only")
+                self.assertEqual(smoke["write"], "disabled")
+                self.assertEqual(smoke["env"], env)
+                self.assertEqual(smoke["table_read"], table_read)
+                self.assertEqual(smoke["status"], status)
+                self.assertEqual(smoke["telegram_confirmed"], telegram_confirmed)
 
 
 if __name__ == "__main__":
