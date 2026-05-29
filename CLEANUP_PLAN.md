@@ -87,6 +87,14 @@
   - Runner gap：第二次 auto 補殘留時，Tech runner 因 dirty tech worktree fail；後續需讓 auto cycle 在既有候選 diff 未吸收前禁止啟動新 Tech，或支援以當前主 repo dirty candidate 建安全續跑。
   - Runner gap 重複：QA conclusion parser 對 `通過` / `conditional pass` 周邊文字仍會 false fail，需修 parser 只讀 `## QA 結論` 後第一個有效結論詞。
   - 暫不新增 `AGENTS.md` 硬規則，因既有 source-of-truth、fail-closed、DB/live 禁令已覆蓋；本輪沉澱為 fixture 與 runner 待補。
+- 本輪 `v20.4.0` DB Strategy Consumption Phase 1：
+  - 根因分類：`repeated_pattern` + `high_risk_invariant` / DB history 可用後，歷史記憶若不分優先級，會把同級去重錯用到硬風控。
+  - QA 阻塞有效：首輪測試全綠仍被 QA 用「歷史已減碼 + 今日硬風控減碼」反證抓出 summary / 卡片主行動矛盾。
+  - 已修正並補 fixture：`REDUCE_50` / 硬風控不被 prior reduce 去重覆蓋；QA 額外 probe `STOP_100` / prior take-profit 通過。
+  - 交付文件一致性問題已補：`CHANGELOG.md` 必須列入 untracked 新檔 `services/cross_day_context.py`、`tests/test_cross_day_context.py`，Architect 吸收時不得只看 `git diff --stat`。
+  - Runner gap：Tech worktree `.venv` 以 x86_64 執行時載入 arm64 `pydantic_core` 會 collection fail；後續 runner 應固定使用 `arch -arm64` 或建立架構一致 venv。
+  - Runner gap：auto cycle 仍需改善 QA 結論 parser 與 conditional pass 後續收口，避免有效 QA 報告被標成 runner failed。
+  - 暫不新增 `AGENTS.md` 硬規則，既有持倉行動一致性、手機閱讀、DB source-of-truth / fail-closed 規則已覆蓋；本輪沉澱為 fixture 與 runner 待補。
 - 下一次產品任務完成後，確認 Post-cycle Review Gate 是否有做到：
   - 根因分類。
   - QA 攔截是否沉澱成 guard。

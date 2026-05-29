@@ -49,10 +49,11 @@ from services.strategy_evidence import (
     load_strategy_evidence_summary,
     record_strategy_evidence
 )
+from services.cross_day_context import build_cross_day_contexts
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.3.1"
+VERSION = "v20.4.0"
 
 EXECUTION_LEVELS = {
     "TAKE_PROFIT_50": "TP50",
@@ -2705,6 +2706,165 @@ def backtest_tracking_adjustment(context):
     return 0
 
 
+def cross_day_context(data):
+
+    context = data.get("cross_day_context")
+    return context if isinstance(context, dict) else {}
+
+
+def cross_day_ready(data):
+
+    return cross_day_context(data).get("source_status") == "ready"
+
+
+def cross_day_sort_adjustment(data):
+
+    context = cross_day_context(data)
+    if context.get("source_status") != "ready":
+        return 0
+
+    weight = context.get("historical_evidence_weight") or 0
+    repair = context.get("repair_status")
+    guard = context.get("dedupe_guard")
+    adjustment = 0
+
+    if repair in ["repaired", "improving"]:
+        adjustment -= 0.75
+    elif repair in ["failed", "deteriorating"]:
+        adjustment += 0.75
+
+    if weight > 0:
+        adjustment -= min(weight, 2) * 0.25
+    elif weight < 0:
+        adjustment += min(abs(weight), 2) * 0.25
+
+    if guard in ["prior_take_profit_completed", "prior_reduce_completed", "same_day_executed", "new_position_guard"]:
+        adjustment += 0.25
+
+    return adjustment
+
+
+def cross_day_repair_label(data):
+
+    context = cross_day_context(data)
+    if context.get("source_status") != "ready":
+        return None
+
+    days = context.get("consecutive_observe_days") or 0
+    repair = context.get("repair_status")
+    if repair in ["repaired", "improving"]:
+        if days:
+            return f"修復中｜連續觀察 {days} 天"
+        return "修復中"
+    if repair in ["failed", "deteriorating"]:
+        if days:
+            return f"連續失效｜連續觀察 {days} 天"
+        return "連續失效"
+    if days >= 2:
+        return f"連續觀察 {days} 天"
+    return None
+
+
+def cross_day_detail_line(data):
+
+    context = cross_day_context(data)
+    if context.get("source_status") != "ready":
+        return None
+
+    parts = []
+    previous_state = context.get("previous_state")
+    if previous_state and previous_state != "unknown":
+        parts.append(f"前次 {previous_state}")
+    repair = cross_day_repair_label(data)
+    if repair:
+        parts.append(repair)
+    weight = context.get("historical_evidence_weight")
+    if weight not in [None, 0]:
+        parts.append(f"權重 {weight:+}")
+    reasons = context.get("weight_reason") or []
+    if reasons:
+        parts.append("、".join(str(item) for item in reasons[:2]))
+    if not parts:
+        return None
+    return "歷史：" + "｜".join(parts[:4])
+
+
+def cross_day_prepare_promotion(data):
+
+    context = cross_day_context(data)
+    if context.get("source_status") != "ready":
+        return False
+
+    result = data.get("result") or {}
+    return (
+        context.get("previous_state") == "eliminated"
+        and context.get("repair_status") in ["repaired", "improving"]
+        and (context.get("historical_evidence_weight") or 0) > 0
+        and result.get("decision") != "BUY"
+        and result.get("action", 0) <= 0
+        and (
+            result.get("market_grade") in ["A+", "A", "B"]
+            or result.get("entry_quality") in ["A+", "A", "B"]
+            or result.get("price_behavior") in ["LIMIT_LOCK", "VOLUME_BREAKOUT", "NORMAL"]
+        )
+    )
+
+
+def cross_day_higher_priority_risk_action(decision):
+
+    decision = decision or {}
+    level = decision.get("level")
+    action = str(decision.get("action") or "")
+    note = str(decision.get("note") or "")
+    risk_text = f"{action} {note}"
+
+    if level in ["STOP_100", "REDUCE_50"]:
+        return True
+
+    return (
+        action.startswith("硬風控")
+        or action.startswith("硬停損")
+        or action.startswith("停損")
+        or "風控升級" in risk_text
+        or "硬停損" in risk_text
+    )
+
+
+def cross_day_duplicate_action(data, decision=None):
+
+    context = cross_day_context(data)
+    if context.get("source_status") != "ready":
+        return None
+
+    decision = decision or data.get("holding_decision") or {}
+    if cross_day_higher_priority_risk_action(decision):
+        return None
+
+    level = decision.get("level")
+    guard = context.get("dedupe_guard")
+    previous_action = context.get("previous_action")
+
+    if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"] and (
+        guard in ["prior_take_profit_completed", "same_day_executed"]
+        or previous_action == "take_profit"
+    ):
+        return "take_profit"
+
+    if level in ["REDUCE_25", "REDUCE_50"] and (
+        guard in ["prior_reduce_completed", "same_day_executed"]
+        or previous_action == "reduce"
+    ):
+        return "reduce"
+
+    if level in ["ADD_10", "ADD_20", "ADD_30"] and (
+        guard in ["new_position_guard", "same_day_executed"]
+        or previous_action == "buy"
+    ):
+        return "buy"
+
+    return None
+
+
 def tracking_sort_key(index, name, data):
 
     state = tomorrow_watch_state(name, data)
@@ -2724,7 +2884,10 @@ def tracking_sort_key(index, name, data):
         pnl_rank -= 0.25
 
     return (
-        state_rank.get(state, 8) + backtest_tracking_adjustment(data.get("backtest_context")) + pnl_rank,
+        state_rank.get(state, 8)
+        + backtest_tracking_adjustment(data.get("backtest_context"))
+        + cross_day_sort_adjustment(data)
+        + pnl_rank,
         list(STOCKS).index(name) if name in STOCKS else index,
     )
 
@@ -3080,6 +3243,17 @@ def position_summary_action(name, data):
     if second_profit_state.get("is_second_stage"):
         return "第二段停利"
 
+    if is_today_buy_holding(data):
+        return "新倉風控觀察"
+
+    duplicate_action = cross_day_duplicate_action(data, decision)
+    if duplicate_action == "take_profit":
+        return "停利後觀察"
+    if duplicate_action == "reduce":
+        return "減碼後觀察"
+    if duplicate_action == "buy":
+        return "新倉風控觀察"
+
     if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]:
         return "停利"
 
@@ -3093,9 +3267,6 @@ def position_summary_action(name, data):
         return "減碼後觀察"
 
     if level == "NEW_POSITION_RISK_WATCH":
-        return "新倉風控觀察"
-
-    if is_today_buy_holding(data):
         return "新倉風控觀察"
 
     if level == "ADD_30":
@@ -3428,6 +3599,12 @@ def holding_tomorrow_trigger(name, data):
     if action in ["第二段停利", "第二段停利剩餘建議", "第二段停利後觀察"]:
         return second_take_profit_context_text(data, decision)
 
+    duplicate_action = cross_day_duplicate_action(data, decision)
+    if duplicate_action == "take_profit":
+        return "歷史停利已完成，等待新條件"
+    if duplicate_action == "reduce":
+        return "歷史減碼已完成，等待新條件"
+
     if level in ["REDUCE_25", "REDUCE_50"]:
         return "無法重新站回突破區，繼續降低優先級"
 
@@ -3691,6 +3868,9 @@ def unheld_funnel_state(name, data, market_mode=None):
     if is_valid_entry(result):
         return "可買"
 
+    if cross_day_prepare_promotion(data):
+        return "可準備"
+
     if state == "弱勢淘汰":
         return "淘汰"
 
@@ -3772,7 +3952,9 @@ def unheld_execution_priority(index, name, data, market_mode=None):
     stock_order = list(STOCKS).index(name) if name in STOCKS else index
 
     return (
-        rank.get(funnel_state, 9) + backtest_tracking_adjustment(data.get("backtest_context")),
+        rank.get(funnel_state, 9)
+        + backtest_tracking_adjustment(data.get("backtest_context"))
+        + cross_day_sort_adjustment(data),
         stock_order,
     )
 
@@ -4302,6 +4484,32 @@ def format_strong_prepare_summary(watch_items, market_mode, limit=3):
     return lines
 
 
+def format_cross_day_tracking_summary(watch_items, limit=3):
+
+    items = []
+    for index, (name, data) in enumerate(watch_items):
+        context = cross_day_context(data)
+        if context.get("source_status") != "ready":
+            continue
+        if unheld_funnel_state(name, data, market_mode=None) == "可買":
+            continue
+        label = cross_day_repair_label(data)
+        if not label:
+            continue
+        items.append((unheld_execution_priority(index, name, data), name, label))
+
+    if not items:
+        return []
+
+    items.sort(key=lambda item: item[0])
+    lines = ["追蹤最強："]
+    for _priority, name, label in items[:limit]:
+        lines.append(f"- {name} {label}，不可買，待觸發")
+    if len(items) > limit:
+        lines.append(f"- 另 {len(items) - limit} 檔見詳情")
+    return lines
+
+
 def formatTelegramSummary(results_map, best, score, market_summary, now, position_warning=None, daily_write_warning=None, strategy_evidence_summary=None, report_phase=None):
 
     if report_phase is None:
@@ -4342,6 +4550,7 @@ def formatTelegramSummary(results_map, best, score, market_summary, now, positio
         f"🧭 今日結論：{today_conclusion_text(holding_items, watch_items, market_mode, risk_level, report_phase=report_phase)}",
         f"🧭 原因：{today_reason_text(watch_items, market_mode, report_phase=report_phase)}",
         *market_execution_bridge_lines(holding_items, watch_items, market_mode, market_summary),
+        *format_cross_day_tracking_summary(watch_items),
         *format_strong_prepare_summary(watch_items, market_mode),
         *format_market_theme_summary_lines(
             market_theme_summary_evidence(results_map, market_summary)
@@ -4418,6 +4627,9 @@ def formatTelegramPositionCard(name, data):
 
     if reason_line:
         lines.insert(6, f"原因：{reason_line}")
+    history_line = cross_day_detail_line(data)
+    if history_line:
+        lines.insert(-1, history_line)
 
     return "\n".join(lines)
 
@@ -4435,9 +4647,13 @@ def holding_reason_line(name, data):
         return "同日已賣後再次觸發停利，需標明第二段與股數"
 
     if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]:
+        if cross_day_duplicate_action(data, decision) == "take_profit":
+            return "歷史停利已執行，避免同級重複"
         return "高浮盈且過熱延伸，先保留獲利"
 
     if level in ["REDUCE_25", "REDUCE_50"]:
+        if cross_day_duplicate_action(data, decision) == "reduce":
+            return "歷史減碼已執行，避免同級重複"
         if str(decision.get("action", "")).startswith("硬風控"):
             return decision.get("note") or "硬風控覆蓋，今日事件後仍需降風險"
         if str(decision.get("action", "")).startswith("增量"):
@@ -4472,6 +4688,8 @@ def holding_next_step_line(name, data):
         return "執行本次建議後，剩餘部位回到風控觀察"
 
     if level in ["REDUCE_25", "REDUCE_50"]:
+        if cross_day_duplicate_action(data, decision) == "reduce":
+            return "修復才恢復優先級，未修復續降級"
         return "若無法重新站回突破區，繼續降低優先級"
 
     if level == "POST_REDUCE_WATCH":
@@ -4481,6 +4699,8 @@ def holding_next_step_line(name, data):
         return "盤中先觀察，未修復再降級"
 
     if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]:
+        if cross_day_duplicate_action(data, decision) == "take_profit":
+            return "歷史停利已完成，等待新條件"
         return "保留核心倉，等待冷卻後再評估"
 
     if level == "POST_PROFIT_WATCH":
@@ -4560,6 +4780,12 @@ def holding_detail_decision_lines(name, data):
             f"第二段停利，{second_take_profit_context_text(data, decision)}",
             f"觸發條件：{note or '停利條件再次成立'}"
         )
+
+    duplicate_action = cross_day_duplicate_action(data, decision)
+    if duplicate_action == "take_profit":
+        return "停利後觀察，暫不加碼", "歷史停利已完成，同級不重複"
+    if duplicate_action == "reduce":
+        return "減碼後觀察，暫不加碼", "歷史減碼已完成，同級不重複"
 
     if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]:
         return f"{action_text}，鎖定部分獲利", "高浮盈或過熱延伸，保留核心倉"
@@ -4759,6 +4985,9 @@ def formatTelegramUnheldCard(name, data, report_phase=None, market_mode=None):
         compact_backtest_line(data.get("backtest_context")),
         price_change_line(data.get("price"), data.get("change")),
     ])
+    history_line = cross_day_detail_line(data)
+    if history_line:
+        lines.insert(-1, history_line)
 
     return "\n".join(lines)
 
@@ -5120,6 +5349,25 @@ def generate_report():
     for name, text in backtest_context.items():
         if name in results_map:
             results_map[name]["backtest_context"] = text
+
+    try:
+        cross_day_contexts = build_cross_day_contexts(
+            results_map,
+            client=get_supabase_client(),
+            today_position_events=position_events,
+            now=now,
+        )
+    except Exception:
+        cross_day_contexts = build_cross_day_contexts(
+            results_map,
+            client=None,
+            today_position_events=position_events,
+            now=now,
+        )
+
+    for name, context in cross_day_contexts.items():
+        if name in results_map:
+            results_map[name]["cross_day_context"] = context
 
     # ================================
     # 🔥 render

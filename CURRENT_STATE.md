@@ -7,7 +7,7 @@
 - 專案：台股策略報文機器人。
 - 交付形態：排程 / 腳本產生 Telegram 報文並發送給 Owner。
 - 股票清單唯一來源：`core/watchlist.py`，預設 12 檔。
-- 最新使用者可見 Telegram 版本：`v20.3.1`。
+- 最新使用者可見 Telegram 版本：`v20.4.0`。
 - 最新 pushed commit 以 `git log -1` 為準。
 - 固定 8 份 Markdown 不刪除，只改寫內容：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 
@@ -33,6 +33,14 @@
 
 ## Recent High-Signal Milestones
 
+- `v20.4.0` DB Strategy Consumption Phase 1 已通過 QA：
+  - 新增 `services/cross_day_context.py`，讓既有 DB / local runtime history 進入策略記憶與證據權重。
+  - Phase 1 context 包含前次狀態、前次行動、連續觀察天數、修復 / 失效、歷史證據權重、去重 guard、allowed / forbidden effects。
+  - `core/generator.py` 在 render 前注入 cross-day context；允許影響排序、summary、準備層、歷史追溯、同級停利 / 減碼去重、今日買入 guard。
+  - DB history 不得單獨把不可買變可買，不得進交易執行清單，不得放寬 BUY / SELL / RR / 過熱 / 漲停不追 / 停損停利核心門檻。
+  - 歷史停利 / 減碼只可去重同級行動；不得覆蓋硬風控、停損、`REDUCE_50`、`STOP_100` 或風控升級。
+  - QA 首輪攔下「歷史減碼覆蓋今日硬風控」跨區塊矛盾；修正後 REDUCE_50 fixture 與 QA STOP_100 probe 均通過。
+  - QA / Architect 驗證：`tests/test_cross_day_context.py tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py`，`89 passed, 13 warnings`；`git diff --check` 通過。
 - `v20.3.1` Data Authenticity Fail-closed 已通過 QA：
   - DB / 真實來源不可用時，production runtime 不得用 fake/default/synthetic/fallback 補成可買、confirmed、持倉、今日交易、價格或 Telegram 結論。
   - `services/position_store.py` 移除全 watchlist 0 股 fallback；缺 Supabase、positions DB error、positions 0 rows 都回 `{}` 並設 `missing-source / source-error / unavailable` warning。
@@ -110,6 +118,8 @@
 - 同一檔持倉同一份報文只能有一個主行動；持倉風控優先於高分、最強、待觸發加碼。
 - 今日買入後預設是 `新倉風控觀察`；若要賣 / 減碼 / 停損，必須說明明確觸發條件。
 - 今日已減碼 / 停利達同級建議時，預設轉為觀察；只有更高級風控或硬停損可覆蓋。
+- DB / cross-day history 只能壓制同級重複行動；不得覆蓋硬風控、停損、`REDUCE_50`、`STOP_100` 或風控升級。
+- DB / cross-day history 可提升排序、追蹤優先級或可準備呈現，但不得單獨把不可買改成可買或放入交易執行清單。
 - 同日第二段 / 額外停利必須尊重 execution 資料：completed 轉觀察、partial 只顯示剩餘、unexecuted 才顯示完整第二段建議。
 - 持倉卡、summary、風控檢查的今日已賣、剩餘、建議股數必須使用一致來源；不得同卡出現 `今日 無` 與 `今日已賣 N 股`。
 - 空區塊、0 計數、無行動占位都是手機噪音；未定義必要性時不顯示。
@@ -131,6 +141,7 @@
 - 每日 snapshot 寫入：`services/daily_snapshot_store.py`
 - snapshot 組裝 / 驗證：`core/signal_snapshot.py`、`core/signal_validator.py`
 - 策略證據資料層：`services/strategy_evidence.py`
+- 跨日策略記憶 / 歷史證據權重：`services/cross_day_context.py`
 - replay / backfill：`scripts/dry_run_replay.py`、`scripts/backfill_signals.py`
 - Telegram 持倉命令：`supabase/functions/telegram-execution/index.ts`
 

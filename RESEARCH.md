@@ -4,42 +4,55 @@
 
 ## Latest Research
 
-- task_id: `20260529_145601_6802_online_research_pair`
+- task_id: `db_end_to_end_usage_audit_20260529`
 - 日期：2026-05-29
-- 狀態：已吸收並轉為 `v20.3.1` data-authenticity fail-closed 任務。
-- 來源輸出：`.cao_agent_context/outputs/20260529_145601_6802_online_research_pair.md`
+- 狀態：已由 Architect 吸收；後續已進入 Phase 1 開發
+- 研究性質：只讀審計，不改 code、不寫 DB、不 live Telegram
 
 ## Question
 
-Owner 要求檢查目前策略 / 報文 / 證據鏈 / 行情 / 持倉 / 回測 / DB 相關 runtime 是否仍在拿假資料。DB 已有資料後，production runtime 必須拒絕 fake/mock/dummy/sample/synthetic/default/hardcoded fallback；缺真實來源時 fail closed。
+Owner 問題：既然 DB 已經有多表資料，策略是不是其實沒有用到？需要從頭到尾檢查 DB 取值 / 存值 / 策略消費鏈路，區分：
+
+- 已入庫且會進 live strategy decision。
+- 已入庫但只進 Telegram / report / evidence / audit。
+- 已入庫但 runtime 未消費。
+- 策略仍使用即時行情 / Yahoo / runtime calculation 而不是 DB 的路徑。
 
 ## Findings
 
-- Online research agent 無法讀完整 repo，因此不能獨立完成逐 path / function / rg / import-chain 證據表。
-- 需求成立，必須進 PM -> Tech -> QA，而不是用口頭結論宣告乾淨。
-- 高風險候選：
-  - `services/position_store.py` 持倉來源 fallback。
-  - `services/position_store.py` 今日 `position_events` 來源錯誤被當成 0 event。
-  - `core/market_theme_evidence.py` runtime watchlist breadth fallback 被誤讀為市場 / 題材證據。
-  - dry-run / backfill synthetic fixture 必須留在 dry-run gate，不可進 production runtime。
-- 允許保留：
-  - tests fixture。
-  - 明確 dry-run 且禁止 live write 的 synthetic replay。
-  - 真實來源重試，例如 TWSE / Yahoo real-source retry，不算 fake data。
+### 已進 live 策略 / 報文決策的 DB 資料
 
-## Outcome
+- `positions`：持倉 source-of-truth。`v20.3.1` 後缺來源時 fail closed，不回全 watchlist 0 股。
+- `position_events`：今日 / 歷史執行事件 source-of-truth。`v20.3.1` 後 source-error / missing-source 不回 fake 0 event；`v20.4.0` 開始用於同級停利 / 減碼 / 今日買入 guard。
 
-- 已開發並驗證 `v20.3.1`：
-  - positions 缺來源不再回 0 股 fallback。
-  - position_events source-error / missing-source 不再回全 0 event summary。
-  - runtime watchlist breadth fallback 降為非交易診斷，不稱市場證據、不 weak/runtime、不 confirmed。
-  - 缺來源時 Telegram / CLI report 先 fail closed，不產生可買 / 持倉 / 今日交易 / evidence confirmed 結論。
-- 驗證：
-  - `tests/test_market_theme_evidence.py tests/test_generator_report.py tests/test_position_store.py tests/test_notifier.py`：`88 passed, 13 warnings`。
-  - full pytest：`162 passed, 13 warnings`。
-  - `git diff --check` 通過。
+### 已入庫但 Phase 1 前主要未進核心買賣門檻
 
-## Next
+- `daily_signal_snapshot`
+- `signal_runs`
+- `signal_items`
+- `signal_outcomes`
+- `strategy_feature_snapshots`
+- `strategy_outcome_metrics`
+- `strategy_classification_audit`
+- `market_daily_bars`
 
-- 若要進一步 production 化證據鏈，需要 Owner 先確認是否建 DB table / cache、接 market_index / sector_index、接 external provider 或持久化 evidence。
-- 若要禁止 dry-run synthetic replay 本身，也需另開任務；目前只禁止它進 production runtime 或 live write。
+結論：這些資料不是「白做」，但原本多數定位是 snapshot / evidence / audit / replay / report，不應未定義就硬塞進 BUY / SELL 門檻。
+
+### 策略仍主要使用 runtime 計算的資料
+
+- 價格、OHLCV、均線、量能、突破、score：主要由 `services/stock_api.py`、Yahoo / TWSE / realtime path 與 `services/analysis.py` runtime 計算。
+- Telegram formatter：`core/generator.py` 消費 strategy result、holding、position events、evidence summary，輸出 Owner 手機報文。
+
+## Product Conclusion
+
+- DB 不是直接替代即時策略引擎，而應先承擔「記憶」與「證據權重」。
+- Phase 1 正確方向：用 DB 影響排序、summary、準備層、歷史追溯、同級行動去重；不得單獨把不可買改成可買。
+- 若要進一步讓 DB 影響核心 strategy decision，需要 Phase 2 任務明確定義 source precedence、欄位 mapping、production schema 與 QA L3 範圍。
+
+## Follow-up
+
+- Phase 1 已進開發：`DB Strategy Consumption Phase 1 - Cross-day State And Evidence Weight`。
+- Phase 2 可選方向：
+  - 接入 `signal_runs / signal_items / signal_outcomes` 的真實 signal history。
+  - 將 `strategy_classification_audit` 轉成 previous classification / audit severity context。
+  - 建立 production DB schema mapping 驗證，不做 live write。

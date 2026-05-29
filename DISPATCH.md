@@ -4,10 +4,10 @@
 
 ## Current Task
 
-- task_id: `data-authenticity-hardening-fail-closed-v20.3.1`
-- task_name: `Data Authenticity Fail Closed`
+- task_id: `db_strategy_consumption_phase1_cross_day_state_evidence_weight_20260529`
+- task_name: `DB Strategy Consumption Phase 1 - Cross-day State And Evidence Weight`
 - task_type: `risk_patch`
-- version_level: `patch`
+- version_level: `minor`
 - qa_level: `L3-lite`
 - owner_status: `requested`
 - architect_status: `pushed`
@@ -18,36 +18,31 @@
 
 ## Current Result
 
-- Owner 要求：DB 已有資料後，策略 / 報文 / 證據鏈 / 行情 / 持倉 / 回測 / DB runtime 拒絕一切假資料；缺真實來源時 fail closed，不補 fake/default/synthetic。
-- 本輪修復三個 runtime 可達高風險點，不改策略、不改 DB schema、不改 watchlist、不 live write/backfill/Telegram：
-  - positions 缺設定 / DB error / 0 rows 不再回全 watchlist 0 股 fallback，改 `{}` + warning。
-  - position_events missing-source / source-error 不再回全 0 event summary；只有 DB query 成功且空資料才代表真實無事件。
-  - watchlist breadth runtime fallback 不再稱市場證據、不再 weak/runtime、不進 sources、不 confirmed；只保留非交易診斷。
-- CAO 服務已確認：
-  - API: `http://127.0.0.1:9889/`
-  - UI: `http://127.0.0.1:5173/`
-- PM 已交付 `TASK.md`，定義 source-of-truth / fail-closed 契約與 position_events 殘留契約。
-- Tech / Architect 吸收 diff：
-  - `core/generator.py` VERSION 升為 `v20.3.1`；持倉或今日交易事件來源 warning 存在時，直接輸出最小不可行動 summary。
-  - `services/position_store.py` 移除 0 股 fallback；position_events source-error/missing-source 回 unavailable metadata。
-  - `core/market_theme_evidence.py` 將 runtime breadth fallback 改為 non-trading diagnostic。
-  - 新增 `tests/test_position_store.py`，並同步 generator / evidence / notifier 測試。
-- QA / Architect 驗證通過：
-  - positions missing-source / source-error / empty table fail closed。
-  - position_events source-error 不產生 fake 今日無交易；DB query 成功空資料仍是真實 0 event。
-  - DB evidence/cache missing 時 watchlist breadth 不 confirmed、不 weak/runtime，只顯示 absent/missing-source + 非交易診斷。
-  - forbidden diff 檢查確認無 DB schema、migration、Supabase write、watchlist、live/backfill diff。
-  - 主 repo 驗證：`162 passed, 13 warnings`；`git diff --check` 通過。
+- Owner 要求：DB 多表已有資料後，先讓 DB 進入策略記憶與證據權重，不要讓多表只停在入庫 / report / audit。
+- 本輪完成 Phase 1，不改 DB schema、不 live write、不 live Telegram、不正式 backfill、不改 watchlist、不重設核心 BUY / SELL / RR 門檻。
+- 已吸收候選 diff：
+  - 新增 `services/cross_day_context.py`，產生 cross-day context：前次狀態、前次行動、連續觀察、修復 / 失效、歷史證據權重、去重 guard、allowed / forbidden effects。
+  - `core/generator.py` VERSION 升為 `v20.4.0`，在 render 前注入 cross-day context。
+  - DB / local history 只允許影響排序、summary、準備層、歷史追溯、同級停利 / 減碼去重、今日買入 guard。
+  - DB history 不得單獨把不可買變可買，不得覆蓋硬風控 / 停損 / REDUCE_50 / STOP_100。
+  - 新增 `tests/test_cross_day_context.py`，同步 generator / market evidence / notifier 測試。
+- QA 首輪有效阻塞：
+  - 發現歷史減碼去重會覆蓋今日硬風控減碼，造成 summary 說硬風控、卡片說減碼後觀察。
+  - Tech 補 `cross_day_higher_priority_risk_action()` 與 REDUCE_50 fixture 後，QA 補 STOP_100 反證通過。
+- QA 最終通過：
+  - `89 passed, 13 warnings`
+  - `git diff --check` 通過
+  - forbidden diff 掃描無 schema / migration / watchlist / live Telegram / live Supabase write / backfill / SQL diff。
 - Post-cycle review：
-  - 根因分類：`high_risk_invariant` / DB 已有資料後 runtime fallback 不可再偽裝事實。
-  - QA 攔截有效：untracked new test 與 position_events fake 0 event 殘留都已收口。
-  - Runner gap：auto cycle QA parser false fail 重複；第二次 Tech runner 因 dirty worktree fail，已記入 `CLEANUP_PLAN.md`。
-  - 不新增 `AGENTS.md` 硬規則，既有 source-of-truth / fail-closed / DB live 禁令已足夠；本輪沉澱為 TASK/CHANGELOG/QA fixture 與 runner 待補。
+  - 根因分類：`repeated_pattern` + `high_risk_invariant`；歷史記憶只能去重同級行動，不得壓過更高級風控。
+  - QA 攔截有效：抓到測試全綠仍會造成 Owner 手機誤判的跨區塊語意衝突。
+  - Runner gap：Tech runner 在 worktree 以 x86_64 載入 arm64 `pydantic_core`，需統一 `arch -arm64` 或重建 matching venv；auto cycle QA parser / conditional pass handling 仍需補。
+  - 不新增 `AGENTS.md` 硬規則；既有「持倉行動一致性」「手機閱讀」「DB source-of-truth / fail-closed」規則已覆蓋，本輪沉澱為 fixture 與 runner 待補。
 
 ## Next Action
 
-- 已 push；執行 tech worktree cleanup 後等待 Owner 下一個需求。
-- 下一步可回到證據鏈 production 化；若要 market_index / sector_index、DB cache/table、external provider 或持久化 evidence，先通知 Owner。
+- 已 commit / push 本輪 `v20.4.0`；完成後執行 tech worktree cleanup。
+- 下一步若繼續 DB strategy consumption，先開 Phase 2：真實 schema mapping、`signal_runs / signal_items / signal_outcomes` source precedence、production read-only 驗證；若要建表或 backfill 需先通知 Owner。
 
 ## Status Values
 

@@ -1,138 +1,146 @@
-# CHANGELOG: data-authenticity-hardening-fail-closed
+# CHANGELOG:
 
   ## 任務尺寸與風險
 
-  - 任務尺寸：risk_patch
-  - 風險判斷：改到 production runtime 的 evidence / holdings / Telegram summary fail-closed 行為與可見版本字串，因此升 patch 到 v20.3.1。
+  - TASK 任務尺寸：risk_patch。
+  - Phase 1 候選 diff 風險：risk_patch，因為接入跨日 DB / local event context，會影響 Telegram / CLI 使用者可見排序、summary、持倉行動去重與歷史證據說明。
+  - 本輪 Tech 動作：process，只補完整交付說明；依 Architect 指令未修改產品代碼或測試，未 commit / push。
 
   ## 修改內容
 
-  - 移除持倉來源不可用時的 0 股 fallback；load_positions() 在缺 Supabase 設定、DB 讀取失敗、positions 0 rows 時改回 {} 並標示 missing-source / source-error / unavailable。
-  - position_events source-error / missing-source 不再回全 0 event summary；只有 DB query 成功且空資料才視為今日真實無事件。
-  - generate_report() 在持倉或今日交易事件來源不可用時直接 fail closed，輸出最小 Telegram summary：新倉無有效進場、持倉 unavailable、市場證據 unavailable，不再繼續掃行情產生交易建議。
-  - watchlist breadth runtime fallback 不再進入 sources、不再產生 weak/runtime、不再影響 confirmed / actionability；只保留為 watchlist_breadth_diagnostic 非交易診斷。
-  - formatter 對缺 DB evidence/cache 的市場/題材證據輸出 absent/missing-source，並顯示 watchlist breadth fallback 已停用於決策。
-  - core/generator.py 使用者可見版本由 v20.3.0 升到 v20.3.1。
-  - 新增/同步 fail-closed、formatter、版本 header 測試。
+  - 新增 Phase 1 cross-day context 建構邏輯：
+      - 產生 symbol、source_status、source_of_truth、previous_state、previous_action、previous_action_date、consecutive_observe_days、repair_status、failure_status、historical_evidence_weight、weight_reason、
+        dedupe_guard、allowed_effects、forbidden_effects。
+      - DB / local source 缺失時 fail closed，不補 fake previous state、fake consecutive days、fake evidence weight、fake today event。
+      - historical_evidence_weight 有界在 -2..+2。
+      - forbidden_effects 包含 cannot_flip_to_buy_alone、cannot_override_hard_stop、cannot_fake_execution、cannot_confirm_market_evidence。
+  - core/generator.py 接入 cross-day context：
+      - VERSION 升為 v20.4.0，formatter / notifier 測試期望同步。
+      - 允許 context 影響同分組排序、summary wording、prepare promotion、duplicate action suppression、risk note。
+      - 淘汰但近期修復 / evidence 偏正者可提升到可準備 / 追蹤呈現，但不會單獨變成可買或交易執行。
+      - 已停利 / 已減碼的同級重複建議會轉為停利後觀察 / 減碼後觀察。
+      - 今日買入後轉弱預設顯示新倉風控觀察，不無脈絡反向減碼；硬風控 / 硬停損仍可覆蓋。
+      - 個股卡與 summary 增加歷史追溯短句。
+  - QA blocker 修復：
+      - 本次交付說明已把 untracked 新檔納入候選範圍：services/cross_day_context.py、tests/test_cross_day_context.py。
+      - CHANGELOG 不再只描述窄修補，改為累計覆蓋 Phase 1 全部候選 diff。
+  - 測試覆蓋：
+      - 新增 cross-day context missing-source 與 ready-history fixture。
+      - 新增 generator 報文 fixture：連續修復只升準備不買、停利同級不重複、歷史減碼不壓過硬風控、今日買入後轉弱不無脈絡反向減碼。
+      - 同步 v20.4.0 header 期望。
+      - 同步 market theme evidence / notifier header 測試。
 
   ## 修改檔案
 
-  - core/generator.py
-  - core/market_theme_evidence.py
-  - services/position_store.py
-  - tests/test_generator_report.py
-  - tests/test_market_theme_evidence.py
-  - tests/test_notifier.py
-  - tests/test_position_store.py
+  - services/cross_day_context.py：新增 cross-day context 建構、source-of-truth 標示、fail-closed default、history/event/weight/dedupe guard 計算。
+  - core/generator.py：版本升為 v20.4.0；接入 context；更新排序、summary、持倉卡、未持倉卡、同級停利/減碼去重、新倉風控觀察 guard。
+  - tests/test_cross_day_context.py：新增 context contract / missing-source / ready-history 測試。
+  - tests/test_generator_report.py：新增 Phase 1 報文 fixture 並同步 v20.4.0 header。
+  - tests/test_market_theme_evidence.py：同步 v20.4.0 header，保留 missing-source market evidence fail-closed 驗證。
+  - tests/test_notifier.py：同步 v20.4.0 header，確認最後一則 summary header 不被 notifier 改寫。
 
   ## 最小改動策略
 
-  - 只處理 TASK.md 指定的 runtime fake/fallback 風險點：holdings fallback、position_events source-error 與 watchlist breadth evidence fallback。
-  - 未重構 strategy、watchlist、DB schema、Supabase function、stock API adapter 或 replay/backfill 工具。
-  - tests fixture 保留，只新增直接消費者回歸測試。
+  - 只新增 cross-day context helper 與 generator 直接消費點；未重寫 analysis engine、store layer、watchlist、DB schema 或 Telegram delivery。
+  - 不改核心 BUY / SELL / RR / 停損停利門檻。
+  - 不把 DB 歷史權重當成可買條件，只作排序、摘要、準備層提升、同級動作去重與詳情追溯。
+  - untracked 新檔是本候選 diff 的一部分，不是旁支雜檔。
+
+  ## Source-of-truth 與 Fail-closed
+
+  - positions：沿用既有 production holding source / position store contract；本候選 diff 未新增 positions fallback。source-error / missing-source 不得回全 watchlist 0 股或產生假持倉結論。
+  - position_events：position_events table 是 execution/history truth；core/generator.py 另把本輪已載入的 local today_position_events 傳入 context 作同日事件 guard。source-error / missing-source 不得回全 0 event
+    summary；只有可信 today events 或 DB rows 才可產生 same_day_executed / prior_* guard。
+  - daily_signal_snapshot：cross-day state candidate；缺失只代表無 snapshot 證據，不代表狀態不存在。
+  - strategy_feature_snapshots：previous classification / watch category candidate；不得用過期 feature 覆蓋當日硬門檻。
+  - strategy_outcome_metrics：historical weight candidate；只調整 evidence weight / sort priority / wording，不單獨改買賣門檻。
+  - strategy_classification_audit：目前只列為 Phase 1 source candidate；缺資料不得假設前次分類。
+  - signal_runs / signal_items / signal_outcomes：本候選 diff 未接入為 runtime truth；缺失不生成 fake evidence。
+  - local store path：只透過既有 today_position_events input 作同日 guard；標示為 local_position_events，不默默優先於 production DB truth。
+  - DB client 缺失：回 missing-source context。
+  - DB query error：無 ready evidence 時回 source-error，不輸出假歷史。
+  - 有 client 但無可信 rows：回 insufficient-data，權重 0、前次 unknown、連續天數 0。
 
   ## 契約影響
 
-  - Telegram header：v20.3.0 -> v20.3.1。
-  - services.position_store.load_positions()：來源不可用時不再回傳全 watchlist 0 股資料，改回 {} 並設 warning。
-  - services.position_store.load_today_position_events()：DB query 成功空資料仍回真實 0 event summary；missing-source / source-error 回 unavailable metadata 並設 warning。
-  - core.generator.generate_report()：持倉或今日交易事件來源 warning 存在時回傳 fail-closed message list，不產生正常交易/持倉/可買 summary。
-  - core.market_theme_evidence.build_market_theme_evidence()：DB evidence/cache 缺失且無真實 structured source 時為 absent；runtime watchlist breadth 僅在 watchlist_breadth_diagnostic，不列入 sources / confirmed。
-  - Telegram 市場證據文案：移除 市場證據：weak/runtime / 題材證據：weak/runtime，改為 absent/missing-source。
+  - 使用者可見版本 header：v20.4.0。
+  - 新增 public-ish formatter helper 行為：
+      - cross_day_context
+      - cross_day_ready
+      - cross_day_sort_adjustment
+      - cross_day_repair_label
+      - cross_day_detail_line
+      - cross_day_prepare_promotion
+      - cross_day_duplicate_action
+      - format_cross_day_tracking_summary
+  - message list / formatter output 會變更：
+      - summary 可新增「追蹤最強」cross-day 修復提示。
+      - 持倉卡與未持倉卡可新增「歷史：...」追溯行。
+      - 同級停利 / 減碼重複建議可改成觀察文案。
+      - 未持倉 funnel 可因 cross-day repair promotion 進入可準備，但不得變可買。
+  - payload / DB write / schema：未改。
+  - Telegram live delivery：未執行、未改 delivery path。
+
+  ## Allowed / Forbidden Effects
+
+  - allowed_effects：
+      - sort_priority
+      - summary_wording
+      - prepare_promotion
+      - duplicate_action_suppression
+      - risk_note
+  - forbidden_effects：
+      - cannot_flip_to_buy_alone
+      - cannot_override_hard_stop
+      - cannot_fake_execution
+      - cannot_confirm_market_evidence
+  - 實作限制：
+      - DB 歷史不可單獨造成不可買 -> 可買。
+      - 淘汰 / 可準備不可因歷史權重進入交易執行清單。
+      - 硬風控 / 硬停損優先於歷史同級去重。
+      - 缺來源時不輸出連續天數、已執行事件、持倉、價格或 confirmed evidence。
 
   ## 直接消費者同步
 
-  - Telegram message formatter / generator：formatTelegramMessages()、formatTelegramSummary()、generate_report() 測試已同步 v20.3.1 與 fail-closed summary；position_events source-error 不會顯示為 今日無交易。
-  - production strategy decision path：未改 strategy decision；缺持倉來源時 generator 在 strategy 掃描前停止。
-  - DB repository / Supabase adapter：position_store 缺來源不再 fake 0 股，position_events source-error 不再 fake 0 event；未改 schema 或 live write。
-  - evidence chain builder：market_theme_evidence 不再把 runtime breadth fallback 當 source-of-truth。
-  - CLI / dry-run report output：generate() 經 generate_report() 同步 fail-closed；既有行情全失敗測試補 mock 持倉來源以保留行情 unavailable 覆蓋。
-  - notifier：版本 header 測試同步到 v20.3.1。
-
-  ## Tech 證據表
-
-  ┌───────────────────────────────┬───────────────────────────────────┬─────────────────────────────┬───────────────────┬───────────────────────────────────────────┬───────────────────┬───────────────┬──────────────────┐
-  │ path                          │ function                          │ keyword                     │ rg evidence       │ import-or-call path                       │ classification    │ risk          │ action           │
-  ├───────────────────────────────┼───────────────────────────────────┼─────────────────────────────┼───────────────────┼───────────────────────────────────────────┼───────────────────┼───────────────┼──────────────────┤
-  │ services/position_store.py    │ load_positions                    │ fallback                    │ 原本              │ core/generator.py -> load_positions()     │ runtime_reachable │ 缺 DB/設定時  │ 移除 fallback，  │
-  │                               │                                   │                             │ _fallback_positio │                                           │                   │ 假裝全 0 股， │ 改 {} +          │
-  │                               │                                   │                             │ ns() / 使用 0 股  │                                           │                   │ 可能產生新倉/ │ warning；        │
-  │                               │                                   │                             │ fallback          │                                           │                   │ 持倉錯誤結論  │ generator fail   │
-  │                               │                                   │                             │                   │                                           │                   │               │ closed           │
-  │ services/position_store.py    │ load_today_position_events        │ empty event fallback        │ 原本 exception    │ core/generator.py -> load_today_position_ │ runtime_reachable │ DB error 被當 │ source-error 回  │
-  │                               │                                   │                             │ 回 _empty_event_  │ events()                                  │                   │ 今日 0 event  │ unavailable；DB  │
-  │                               │                                   │                             │ summary           │                                           │                   │               │ query 成功空資料 │
-  │                               │                                   │                             │                   │                                           │                   │               │ 才回真 0 event   │
-  │ core/generator.py             │ generate_report                   │ unavailable                 │ 新增持倉 warning  │ runtime Telegram / CLI generate path      │ runtime_reachable │ 持倉來源缺失  │ 持倉 missing/    │
-  │                               │                                   │                             │ 後停止            │                                           │                   │ 仍繼續出交易  │ source-error/    │
-  │                               │                                   │                             │                   │                                           │                   │ 建議          │ unavailable 時回 │
-  │                               │                                   │                             │                   │                                           │                   │               │ 最小不可行動     │
-  │                               │                                   │                             │                   │                                           │                   │               │ summary          │
-  │ core/market_theme_evidence.py │ build_market_theme_evidence       │ fallback, runtime_fallback  │ runtime_fallback  │ generator.market_theme_summary_evidence() │ runtime_reachable │ watchlist     │ 改為 non-trading │
-  │                               │                                   │                             │ 不再由 runtime    │                                           │                   │ breadth       │ diagnostic，不進 │
-  │                               │                                   │                             │ breadth 產生      │                                           │                   │ fallback 被當 │ sources，不      │
-  │                               │                                   │                             │                   │                                           │                   │ 市場證據      │ confirmed        │
-  │ core/market_theme_evidence.py │ format_market_theme_summary_lines │ weak/runtime                │ 舊 weak/runtime   │ Telegram summary                          │ runtime_reachable │ 缺 DB/cache   │ 改 absent/       │
-  │                               │                                   │                             │ 分支已移除        │                                           │                   │ 時文案像弱證  │ missing-source   │
-  │                               │                                   │                             │                   │                                           │                   │ 據成立        │                  │
-  │ core/generator.py             │ price fallback error text         │ fallback                    │ yahoo_error；     │ stock API real-source retry               │ runtime_reachable │ 可能誤判為假  │ 保留；這是 TWSE/ │
-  │                               │                                   │                             │ fallback          │                                           │                   │ 資料 fallback │ Yahoo 真實來源   │
-  │                               │                                   │                             │ twse_error；      │                                           │                   │               │ retry，不是 fake │
-  │                               │                                   │                             │ retry...          │                                           │                   │               │ data             │
-  │ scripts/dry_run_replay.py     │ synthetic_history, main           │ synthetic, dry_run          │ --source          │ manual dry-run script only                │ dry_run_only      │ synthetic     │ 保留；入口強制   │
-  │                               │                                   │                             │ synthetic,        │                                           │                   │ replay 若升   │ --dry-run，不寫  │
-  │                               │                                   │                             │ requires --dry-   │                                           │                   │ production 會 │ DB               │
-  │                               │                                   │                             │ run               │                                           │                   │ 污染結論      │                  │
-  │ scripts/backfill_signals.py   │ main                              │ synthetic, dry_run          │ source choices    │ guarded backfill script                   │ dry_run_only      │ synthetic     │ 保留；default 真 │
-  │                               │                                   │                             │ include           │                                           │                   │ backfill 寫   │ 實 TWSE，正式寫  │
-  │                               │                                   │                             │ synthetic;        │                                           │                   │ DB            │ 入需顯式 confirm │
-  │                               │                                   │                             │ default twse;     │                                           │                   │               │                  │
-  │                               │                                   │                             │ write needs       │                                           │                   │               │                  │
-  │                               │                                   │                             │ --confirm-write   │                                           │                   │               │                  │
-  │ services/strategy_evidence.py │ report builders                   │ sample, default, setdefault │ sample count /    │ evidence report                           │ false_positive    │ 無假資料來源  │ 保留             │
-  │                               │                                   │                             │ dict helpers      │                                           │                   │               │                  │
-  │ services/signal_store.py      │ record_daily_signals              │ default, setdefault         │ JSON serializer / │ DB signal write path                      │ false_positive    │ 無假資料來源  │ 保留             │
-  │                               │                                   │                             │ dict grouping     │                                           │                   │               │                  │
-  │ core/generator.py             │ backtest summary helpers          │ sample, local_execution     │ sample count /    │ formatter/backtest context                │ false_positive    │ 無假資料來源  │ 保留             │
-  │                               │                                   │                             │ callback labels   │                                           │                   │               │                  │
-  │ services/analysis.py          │ edge_fake_breakout                │ fake                        │ strategy pattern  │ strategy decision path                    │ false_positive    │ 名稱含 fake， │ 保留             │
-  │                               │                                   │                             │ name              │                                           │                   │ 但不是假資料  │                  │
-  │ core/condition_engine.py      │ condition labels                  │ fake_breakout               │ condition enum/   │ strategy condition output                 │ false_positive    │ 名稱含 fake， │ 保留             │
-  │                               │                                   │                             │ string            │                                           │                   │ 但不是假資料  │                  │
-  │ tests/*                       │ fixtures                          │ fixture, mock, sample       │ runtime scan `rg  │ import tests                              │ testdata          │ fixture" core │ no production    │
-  │                               │                                   │                             │ "from tests       │                                           │                   │ services      │ import/call path │
-  │                               │                                   │                             │                   │                                           │                   │ scripts       │                  │
-  │                               │                                   │                             │                   │                                           │                   │ supabase` 無  │                  │
-  │                               │                                   │                             │                   │                                           │                   │ 結果          │                  │
-  └───────────────────────────────┴───────────────────────────────────┴─────────────────────────────┴───────────────────┴───────────────────────────────────────────┴───────────────────┴───────────────┴──────────────────┘
-
-  註：functions 目錄在此 worktree 不存在；已掃 supabase/functions/telegram-execution/index.ts。
+  - core/generator.py 已同步消費 build_cross_day_contexts()，並把 context 寫入 results_map[name]["cross_day_context"]。
+  - Telegram Owner 報文已同步：summary、持倉卡、未持倉卡、行動去重與歷史追溯行。
+  - tests/test_generator_report.py 已同步直接 formatter 消費者與手機閱讀順序 fixture。
+  - tests/test_notifier.py 已同步 notifier 對最後一則 summary header 的版本期望。
+  - tests/test_market_theme_evidence.py 已同步 v20.4.0 header，並保留 market evidence missing-source fail-closed 路徑。
+  - services/analysis.py 未在本候選 diff 中直接修改；Phase 1 目前由 generator 在 render 前消費 context。
+  - services/position_store.py、services/signal_store.py、services/daily_snapshot_store.py、services/strategy_evidence.py 未在本候選 diff 中修改；未新增平行 write path。
 
   ## 未影響模組
 
-  - 未改策略分數、買賣條件、持倉狀態機。
-  - 未改 DB schema / migration。
-  - 未改 watchlist。
-  - 未執行 live Supabase write、正式 backfill、live Telegram delivery。
-  - 未改 stock API 真實來源 adapter。
-  - 未改 Supabase Edge Function。
+  - 無 DB schema / migration / table / column / index diff。
+  - 無 live Supabase write。
+  - 無 live Telegram delivery。
+  - 無正式 backfill。
+  - 無 watchlist diff。
+  - 無核心 BUY / SELL / RR / 過熱 / 漲停不追 / 停損停利門檻 diff。
+  - 無 callback Edge Function diff。
+  - 無 replay / production DB 連線驗證。
 
   ## 已跑自檢命令
 
-  - python -m pytest tests/test_market_theme_evidence.py tests/test_generator_report.py tests/test_position_store.py tests/test_notifier.py：失敗，系統 python 不存在。
-  - .venv/bin/python -m pytest ...：失敗，pydantic_core arm64 / x86_64 架構不匹配。
-  - arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_generator_report.py tests/test_position_store.py tests/test_notifier.py：88 passed, 13 warnings。
-  - arch -arm64 .venv/bin/python -m pytest：162 passed, 13 warnings。
-  - git diff --check：通過。
-  - rg -n "mock|dummy|sample|fixture|fallback|synthetic|hardcoded|default|fake|placeholder|TODO|testdata|demo|local|dry_run" services core scripts supabase -S：已用於上方證據表。
-  - rg -n "from tests|import tests|testdata|fixture" core services scripts supabase -S：無 runtime import/call tests fixture。
+  - arch -arm64 .venv/bin/python -m pytest tests/test_cross_day_context.py tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py
+      - 結果：89 passed, 13 warnings。
+  - git diff --check
+      - 結果：通過，無輸出。
+  - git status --short
+      - 結果：候選 diff 為 core/generator.py、tests/test_generator_report.py、tests/test_market_theme_evidence.py、tests/test_notifier.py，候選 untracked 新檔為 services/cross_day_context.py、tests/
+        test_cross_day_context.py。
 
   ## 殘留風險
 
-  - scripts/dry_run_replay.py 仍保留 synthetic dry-run replay；目前分類為 dry_run_only，若未來要禁止所有 synthetic even dry-run，需要 PM 另定義。
-  - 測試需用 arch -arm64 執行，直接 .venv/bin/python 在目前 runner 架構會遇到 native wheel mismatch。
+  - 未驗證 production DB 真實資料品質；目前只驗證缺來源、error、insufficient-data 與 fixture rows。
+  - strategy_classification_audit、signal_runs、signal_items、signal_outcomes 未成為實際 runtime truth；若後續要納入，需要另開任務定義欄位可信度與衝突優先級。
+  - services/analysis.py 未直接消費 context；目前使用者可見 Phase 1 效果集中在 generator render 前後。
+  - 缺來源時會犧牲歷史詳情追溯，以 fail closed 優先，符合本輪契約但可能降低資訊量。
+  - warnings 來自既有第三方套件 / Python 版本警告，未在本輪處理。
 
   ## 旁支待辦
 
-  - 若 Owner 要把 dry-run synthetic replay 也完全移除，需另開清理/流程任務。
-  - position_events source-error 已在本輪補為 unavailable contract；後續若要在正常非 fail-closed 報文顯示更細的 unavailable 區塊，可另開 UX 任務。
+  - 若 Owner 要把 cross-day context 往 analysis decision 層前移，需要 PM 另定義策略優先級、直接消費者與不變性驗收。
+  - 若要接入 signal_runs / signal_items / signal_outcomes / strategy_classification_audit，需要另定義 source precedence、欄位缺失行為與測試 fixture。
+  - 若要驗證 production DB 真實資料，需要另行批准非 live write 的讀取驗證範圍；本輪未做 live write、正式 backfill 或 Telegram delivery。

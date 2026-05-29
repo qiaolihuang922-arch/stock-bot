@@ -303,7 +303,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         )
 
         summary = messages[-1]
-        self.assertIn("【05/28 盤中｜v20.3.1】", summary)
+        self.assertIn("【05/28 盤中｜v20.4.0】", summary)
         self.assertIn("市場證據：absent/missing-source", summary)
         self.assertIn("非交易診斷：watchlist breadth fallback 已停用於決策", summary)
         self.assertIn("題材證據：absent/missing-source", summary)
