@@ -52,7 +52,7 @@ from services.strategy_evidence import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.2.5"
+VERSION = "v20.3.0"
 
 EXECUTION_LEVELS = {
     "TAKE_PROFIT_50": "TP50",
@@ -4231,6 +4231,7 @@ def market_theme_summary_evidence(results_map, market_summary):
     return build_market_theme_evidence(
         results_map=results_map,
         formatter_report_input=market_summary,
+        missing_db_evidence=True,
     )
 
 

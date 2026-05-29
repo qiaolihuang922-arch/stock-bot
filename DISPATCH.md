@@ -4,51 +4,53 @@
 
 ## Current Task
 
-- task_id: `postmarket-noise-index-wording-v20.2.5`
-- task_name: `Post-market Noise And Index Wording`
+- task_id: `runtime-market-breadth-evidence-fallback-v20.3.0`
+- task_name: `Runtime Market Breadth Evidence Fallback`
 - task_type: `normal_patch`
-- version_level: `patch`
+- version_level: `minor`
 - qa_level: `L2`
 - owner_status: `requested`
-- architect_status: `pushed`
+- architect_status: `qa_passed_absorbed_pending_push`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
 - qa_status: `qa_passed`
-- commit: `2c90bd0`
+- commit: `pending`
 
 ## Current Result
 
-- Owner 檢查 `v20.2.4` 盤後報文後，策略方向可接受，但指出仍需先處理手機噪音與語意衝突，再繼續證據鏈。
-- 本輪只修 Telegram 盤後 summary / funnel / index 文案：不改策略門檻、不改 `可準備` 分類、不改 evidence provider、不改 DB schema，不 live、不 backfill。
+- Owner 要求報文確認後繼續證據鏈；本輪做 runtime market breadth evidence fallback，不建表、不 live write、不 backfill。
+- 本輪只讓 production 無 evidence table/cache 時能用當次 runtime results_map 產生 weak/runtime 或 missing-source evidence；不改交易策略、不改 DB schema、不改 watchlist、不 live。
 - CAO 服務已確認：
   - API: `http://127.0.0.1:9889/`
   - UI: `http://127.0.0.1:5173/`
 - PM 已交付 `TASK.md`，定義：
-  - `今日交易紀錄 / 無新增` 與 `已執行（不重複下單）` 並存時易誤讀，應改為 `今日交易 / 新增交易建議：無`。
-  - `僅追蹤 0` 時不得輸出 `等冷卻 0、等回測 0、等RR修復 0、等量能 0`。
-  - `非執行追蹤合計 8（可準備 + 僅追蹤）` 在僅追蹤 0 時要改成更清楚的可準備語意。
-  - 詳情索引不得把可準備 8 混稱為 `未持倉追蹤 8`。
+  - 無 DB evidence table/cache 時，可用 runtime watchlist breadth 作為弱證據 fallback。
+  - 缺 market_index / sector_index 時不得 confirmed。
+  - evidence 不能改 BUY / SELL / RR / 過熱 / 漲停不追 / 可準備分類，也不能新增進場建議。
+  - Telegram 文案必須清楚標示內部觀察池偏強但缺大盤 / 族群指數 evidence，未確認。
 - Tech 已交付候選 diff：
-  - `core/generator.py` VERSION 升為 `v20.2.5`。
-  - `format_unheld_funnel()` 僅在有非零僅追蹤分類時輸出拆分行，且只列非零分類。
-  - `detail_index_text()` 分開列 `可準備 N`、`僅追蹤 N`、`淘汰 N`。
-  - 盤後 summary 今日交易區塊改為 `今日交易 / 新增交易建議：無`。
-  - 新增 05/29 盤後 fixture：可買 0、可準備 8、僅追蹤 0、淘汰 2、英業達今日已賣 187 股。
+  - `core/generator.py` VERSION 升為 `v20.3.0`。
+  - `core/market_theme_evidence.py` 可在缺 DB/cache 時用 runtime results_map 生成 watchlist breadth fallback evidence。
+  - 新增 `runtime_fallback`、`runtime_supportive`、`missing_source_reasons` 欄位。
+  - Telegram evidence 區塊新增 `市場證據：weak/runtime`、`題材證據：weak/runtime` 與 `absent/missing-source` 缺來源說明。
+  - `core/generator.py` 的 dict evidence 與非 dict market_summary 路徑都同步傳入 missing DB/cache 條件。
 - QA 最終驗證通過：
-  - 05/29 盤後類似 fixture 驗證 `今日交易 / 新增交易建議：無` 與 `已執行（不重複下單）` 可清楚區分。
-  - `僅追蹤 0` 不輸出零拆分，不出現 `等冷卻 0 / 等回測 0 / 等RR修復 0 / 等量能 0`。
-  - 漏斗與索引一致：`可買 0｜可準備 8（不可買）｜僅追蹤 0｜淘汰 2`，索引顯示 `可準備 8｜淘汰 2`。
-  - 無策略門檻、DB schema、watchlist、live Telegram、Supabase write、replay/backfill diff。
-  - 主 repo 驗證：`79 passed, 21 warnings`；策略 smoke `39 passed`；`git diff --check` 通過。
+  - 無 DB/cache + runtime supportive 顯示 weak/runtime。
+  - runtime 不足顯示 absent/missing-source 並列缺來源。
+  - 缺 market/sector index 不出現 confirmed。
+  - fallback 不改原始交易 decision，不產生買入 / 加碼 / 可買暗示。
+  - forbidden diff 檢查確認無 DB schema、migration、Supabase write、watchlist、live/backfill diff。
+  - 主 repo 驗證：`120 passed, 21 warnings`；`git diff --check` 通過。
 - Post-cycle review：
-  - 根因分類：`repeated_pattern` / 空狀態與聚合名稱造成手機誤讀；既有手機閱讀與 0-count 噪音規則已覆蓋。
-  - Runner gap：auto cycle 對 QA `通過` 產生 false fail，已記入 `CLEANUP_PLAN.md`，本輪手動吸收 QA 明確通過報告。
-  - 不新增 `AGENTS.md` 硬規則，改沉澱到 fixture / QA 反證與 runner 待補。
+  - 根因分類：`repeated_pattern` / production 無 evidence table 時缺 runtime fallback 與缺來源說明。
+  - 已沉澱成 fixture：runtime supportive but missing indexes、missing breadth、existing source 不誤標缺 DB/cache、decision 不變。
+  - Runner gap 重複：auto cycle 對 QA `通過` 再次 false fail，已提升為 `CLEANUP_PLAN.md` 待補。
+  - 不新增 `AGENTS.md` 硬規則，因既有 DB/live 禁令與 evidence 不放寬買點規則已覆蓋。
 
 ## Next Action
 
-- 已 push 並清理 tech worktree。
-- 證據鏈下一步規劃完成：建議 v20.3.0 runtime watchlist breadth fallback；不建表、不 live write、不 backfill。若要 DB table / cache / external provider，先通知 Owner。
+- commit / push 後清理 tech worktree。
+- 下一步若要 market_index / sector_index、DB cache/table、external provider 或持久化 evidence，先通知 Owner。
 
 ## Status Values
 

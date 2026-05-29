@@ -73,6 +73,13 @@
   - QA 驗證有效：用 05/29 盤後類似 fixture 檢查可準備 8、僅追蹤 0、淘汰 2、英業達已執行賣出與無新增建議並存。
   - Runner gap：auto cycle 對 QA 報告 `通過` 產生 false fail，需後續檢查 QA conclusion parser；本輪已手動吸收 QA 明確通過報告並主 repo 驗證。
   - 不新增 `AGENTS.md` 硬規則，既有空區塊 / 0-count / 手機閱讀規則已覆蓋；本輪沉澱為 fixture 與 runner 待補。
+- 本輪 `v20.3.0` Runtime Market Breadth Evidence Fallback：
+  - 根因分類：`repeated_pattern` / production 無 evidence table 時只顯示模糊 absent，使用者無法知道可用 runtime 觀察池證據與缺口。
+  - 已修正：無 DB/cache 時可用當次 results_map 生成 runtime watchlist breadth fallback，最高只輸出 weak/runtime 或 absent/missing-source。
+  - 邊界守住：缺 market_index / sector_index 不得 confirmed；不建表、不 migration、不 write、不 live、不 backfill、不改交易決策。
+  - QA 反證有效：existing structured evidence source 存在時不誤標缺 DB/cache；fallback 不改 results_map 原 decision；手機文案不含買入暗示。
+  - Runner gap 重複：auto cycle 再次對 QA `通過` false fail，需提高優先級檢查 QA conclusion parser。
+  - 下一步證據鏈若要 market_index / sector_index、DB cache/table、external provider 或持久化 evidence，必須先通知 Owner 並另開任務。
 - 下一次產品任務完成後，確認 Post-cycle Review Gate 是否有做到：
   - 根因分類。
   - QA 攔截是否沉澱成 guard。

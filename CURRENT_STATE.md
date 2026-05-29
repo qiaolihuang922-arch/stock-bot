@@ -7,7 +7,7 @@
 - 專案：台股策略報文機器人。
 - 交付形態：排程 / 腳本產生 Telegram 報文並發送給 Owner。
 - 股票清單唯一來源：`core/watchlist.py`，預設 12 檔。
-- 最新使用者可見 Telegram 版本：`v20.2.5`。
+- 最新使用者可見 Telegram 版本：`v20.3.0`。
 - 最新 pushed commit 以 `git log -1` 為準。
 - 固定 8 份 Markdown 不刪除，只改寫內容：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 
@@ -33,6 +33,13 @@
 
 ## Recent High-Signal Milestones
 
+- `v20.3.0` Runtime Market Breadth Evidence Fallback 已通過 QA：
+  - 在沒有 DB evidence table/cache 時，可用當次 `results_map` 生成 runtime watchlist breadth fallback evidence。
+  - runtime fallback 最高只顯示 `weak/runtime` 或 `absent/missing-source`，缺 `market_index` / `sector_index` 時不得 confirmed。
+  - Telegram evidence 文案顯示內部觀察池廣度偏強 / 題材偏支持，但明確標示缺大盤 / 族群指數 evidence，未確認。
+  - runtime data 不足時列出缺來源，不再只輸出模糊 absent。
+  - 未建表、未新增 migration、未寫 Supabase、未 live Telegram、未 backfill、未改 BUY / SELL / RR / 過熱 / 漲停不追 / 可準備分類。
+  - QA 驗證：`tests/test_market_theme_evidence.py tests/test_generator_report.py tests/test_notifier.py tests/test_signal_validator.py tests/test_analysis_engine.py`，`120 passed, 21 warnings`。
 - `v20.2.5` Telegram Post-market Noise And Index Wording 已通過 QA：
   - 盤後 summary 將 `今日交易紀錄 / 無新增` 改為 `今日交易 / 新增交易建議：無`，避免與 `已執行（不重複下單）` 並列時被誤讀為今日沒有交易。
   - `僅追蹤 0` 時不再輸出 `等冷卻 0、等回測 0、等RR修復 0、等量能 0` 的零計數拆分。
@@ -100,6 +107,7 @@
 - 空區塊、0 計數、無行動占位都是手機噪音；未定義必要性時不顯示。
 - 市場 / 題材 evidence 不得放寬個股買點；confirmed theme 也不能自動產生 BUY。
 - `evidence absent` 只代表內部結構化證據未啟用 / 不足 / missing，不代表外部市場不強。
+- Runtime watchlist breadth fallback 只能作為 weak/runtime 或 missing-source 說明；缺 market_index / sector_index 時不得 confirmed，不得改交易決策。
 
 ## Module Map
 
@@ -156,6 +164,6 @@
   - 英業達今日已停利後主決策仍顯示 `停利` 的高風險誤讀已由 `v20.2.2` 修正。
   - 英業達第二段已執行後仍重複建議第二段停利的高風險誤讀已由 `v20.2.3` 修正。
   - 本週台股 / AI / 電子偏強有公開資料支持，但零 BUY 不必然是錯；`v20.2.4` 已補「強勢市場但不可追」的準備層 / 手機文案，未放寬買點。
-- 證據鏈 v20.2.0 只建立 production contract 與 runtime source gate；若要自動取得 market_index / sector_index、建表、cache、external provider 或持久化 evidence，先通知 Owner。
+- 證據鏈 v20.3.0 已加入 runtime watchlist breadth fallback；若要自動取得 market_index / sector_index、建表、cache、external provider 或持久化 evidence，先通知 Owner。
 - 若 Owner 仍覺得查詢慢，另開 performance measurement 任務，量測 production 實際秒數。
 - 後續可改善 `load_strategy_evidence_summary()` 顯式排序與 `漏失` 文案，但需另開任務。

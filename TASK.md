@@ -1,156 +1,308 @@
-# TASK: v20.2.5 盤後 Telegram 手機噪音與語義衝突修正
+# TASK: Runtime Market Breadth Evidence Fallback
 
 ## 任務狀態
 
-- task_id：telegram_afterhours_noise_v20_2_5
-- 任務類型：normal_patch
-- 狀態：ready_for_tech
-- 版本契約：升版至 v20.2.5，Telegram header / formatter 版本字串 / 測試期望需同步。
-- QA 分級建議：L2-lite。以 Telegram formatter / summary / funnel / index 直接 fixture 驗證為主；不做 L3 full pytest、replay、backfill、DB payload 驗證。
-- 任務尺寸判斷：本輪不是策略修正，而是同一份盤後 Telegram 報文中多個手機可見文案區塊的語義與零計數噪音修正；涉及 summary / funnel / index 多個輸出區塊，因此定為 normal_patch，不得擴成策略重設或證據鏈工程。
+- task_id: v20.3.0-runtime-market-breadth-evidence-fallback
+- 任務類型: normal_patch
+- 狀態: ready_for_tech
+- 版本契約: 升版到 v20.3.0
+- QA 分級建議: L2
+- 任務尺寸判斷: normal_patch
+- 理由: 本輪改 Telegram 市場/題材 evidence 顯示與 evidence fallback contract，涉及使用者可見報文與直接消費者，但不得改交易策略、DB schema、watchlist universe 或 live path。
+- 非 tiny_patch: 不是單一文案修正，需處理 runtime evidence 來源、缺來源標記與 confirmed 禁止條件。
+- 非 risk_patch: 不得改 BUY/SELL/RR/過熱/漲停不追/可準備分類，也不得新增進場建議。
 
 ## Owner 問題
 
-Owner 已接受 v20.2.4 盤後整體策略結論：R3 進攻偏熱、可買 0、可準備 8 不追高。但手機閱讀時仍有殘留噪音與語義衝突：
+v20.2.0 已建立 market/theme evidence contract，但 production 尚未有 evidence table/cache 時，Telegram 市場/題材區塊仍顯示「策略證據未啟用 / absent」，導致 Owner 在手機上看不到任何可追溯的市場或題材背景。
 
-1. 同一報文同時出現 今日交易紀錄：無新增 與 已執行（不重複下單）英業達 今日已賣 187 股，容易誤讀為今天沒有交易。
-2. 僅追蹤 0 時仍輸出 等冷卻 0、等回測 0、等RR修復 0、等量能 0，是零計數噪音。
-3. 非執行追蹤合計 8（可準備 + 僅追蹤） 在 僅追蹤 0 時語義不清，容易把可準備誤讀成一般追蹤。
-4. 詳情索引 未持倉追蹤 8 在本輪 8 檔全部是可準備時語義混淆，應清楚區分 可準備 8 與 淘汰 2。
+Owner 要繼續證據鏈，但本輪必須不建表、不 live write、不 backfill；在缺 DB evidence table/cache 的情況下，先用現有 runtime watchlist breadth / 本次報告已計算的 watchlist signals 生成可驗證的 weak/runtime evidence，讓報
+文清楚表示「內部觀察池偏強，但缺大盤/族群指數，未確認」。
 
 ## 使用者可見結果
 
-Owner 在手機 Telegram 打開 05/29 盤後類似報文時，應先看到：
+Owner 在 Telegram 手機報文的市場/題材 evidence 區塊會看到：
 
-- 今日沒有新增交易建議，但若已有已執行交易，不能被 今日交易紀錄：無新增 誤導成今天沒有交易。
-- 未持倉漏斗不再顯示 僅追蹤 0 的拆分零計數行。
-- 可準備 8 被表達為準備/觀察但不列入交易執行，不再被混成一般 僅追蹤。
-- 詳情索引清楚顯示本輪未持倉主要結構，例如 可準備 8｜淘汰 2，不得把 8 檔可準備全稱為 未持倉追蹤 8。
+- 若 DB evidence table/cache 不存在，但 runtime watchlist breadth 足夠且偏支持:
+- 不再只顯示 absent 或「策略證據未啟用」。
+- 顯示 weak / runtime / missing-source 級別的市場或題材觀察證據。
+- 文案必須明確說明這只是內部觀察池廣度支持或偏強，缺大盤/族群指數，因此未確認。
+- 若 runtime data 也不足:
+- 仍可顯示 absent。
+- 但必須說明缺哪類來源，例如缺 watchlist breadth、缺 market_index、缺 sector_index 或缺 runtime signals。
+- 交易決策、分類與建議不變:
+- 不因 weak runtime evidence 新增可買、可準備、加碼或任何進場暗示。
+
+手機閱讀路徑:
+
+1. Owner 打開 Telegram 先看 summary / 決策區。
+2. 市場/題材 evidence 區塊只能補充背景強弱，不能看起來像進場推薦。
+3. 文案必須先講 evidence 等級與未確認原因，再講支持內容。
+4. 缺資料時要短句說明缺口，不輸出空標題或模糊的 absent。
 
 ## 非目標
 
-- 不改策略門檻。
-- 不改 可買 / 可準備 / 僅追蹤 / 淘汰 分類邏輯。
-- 不改 R3 進攻偏熱判斷。
-- 不改 evidence provider。
-- 不改 DB schema、DB payload、Supabase 寫入。
-- 不改 watchlist。
-- 不做 live Telegram delivery。
-- 不做 replay / backfill。
-- 不處理新的證據鏈、選股品質或策略排序問題。
+- 不建立 DB evidence table。
+- 不新增 migration。
+- 不寫 Supabase。
+- 不 live Telegram delivery。
+- 不 backfill。
+- 不改 market/theme evidence 的長期 DB contract。
+- 不改 BUY/SELL/RR/過熱/漲停不追/可準備分類邏輯。
+- 不新增進場建議、加碼建議或交易優先級。
+- 不重設策略、不重寫 evidence 架構、不做全量清理。
+- 不要求 L3 full pytest、replay/backfill dry-run 或 live payload 驗證。
 
 ## 影響模組
 
-- Telegram 盤後報文 summary 文案。
-- Telegram 未持倉漏斗文案。
-- Telegram 詳情索引文案。
-- 對應 formatter / snapshot / fixture 測試。
+Tech 應只檢查並修改與下列範圍直接相關的模組:
+
+- market/theme evidence fallback 建構邏輯。
+- Telegram formatter 中市場/題材 evidence 區塊。
+- 目前報告流程中已存在的 runtime watchlist breadth / watchlist signals 消費點。
+- 版本常量或 Telegram header 版本顯示。
+- 對應的局部 formatter / evidence contract 測試與 fixtures。
+
+不得擴大到:
+
+- DB schema / migrations。
+- Supabase write path。
+- watchlist universe 來源或篩選邏輯。
+- 策略 decision engine。
+- backfill / replay / live delivery entrypoint。
 
 ## 直接消費者
 
-- Owner 手機上的 Telegram 盤後報文。
-- Telegram message list / formatter output 的 snapshot 或文字契約測試。
-- 可能直接組裝 Telegram header / summary / funnel / index 的呼叫方。
+- Telegram 報文市場/題材 evidence 區塊。
+- Telegram summary 或 header 中顯示版本字串的直接 formatter。
+- market/theme evidence message list contract 的直接呼叫方。
+- QA 用來產生接近真實 Telegram 長報文的 formatter fixture。
 
 ## 輸出契約
 
-本輪只允許調整 Telegram 使用者可見文案，不允許調整策略資料來源或分類結果。
+### Evidence fallback contract
 
-1. 今日交易區塊契約：
-- 若沒有新增交易建議，應顯示 新增交易建議：無 或等價清楚文案。
-- 若同一報文存在已執行交易，不得輸出 今日交易紀錄：無新增 這類容易被理解為「今天沒有交易」的占位。
-- 已執行（不重複下單）英業達 今日已賣 187 股 這類已執行資訊可保留，但不得與新增建議狀態互相衝突。
-2. 未持倉漏斗契約：
-- 當 僅追蹤 = 0 時，不輸出僅追蹤拆分行。
-- 不得輸出 等冷卻 0、等回測 0、等RR修復 0、等量能 0 或等價零計數拆分噪音。
-- 可準備 8 應清楚表達為準備/追蹤但不列入交易執行，例如 可準備 8 檔，不列入交易執行 或 非執行準備/追蹤合計 8。
-- 若採用合計文案，不能讓手機讀者把 可準備 誤讀成 僅追蹤。
-3. 詳情索引契約：
-- 本輪 fixture 中不得顯示 未持倉追蹤 8 作為 8 檔可準備的總稱。
-- 應顯示 可準備 8｜淘汰 2 或等價清楚表達。
-- 索引、漏斗、summary 的分類名稱與數量需一致。
-4. 已存在且不得回退的契約：
-- v20.2.4 的整體策略結論不得回退：R3 進攻偏熱、可買 0、可準備 8、不追高。
-- 可買、可準備、僅追蹤、淘汰 必須維持分離，不得混在同一行造成誤讀。
-- 空區塊、零計數、無行動占位預設不顯示，除非 PM 任務明確要求。
-- 使用者可見版本不得低於 v20.2.5。
+當 DB evidence table/cache 不存在或不可用時:
+
+- 可使用本次 runtime 已計算的 watchlist breadth / watchlist signals 產生 fallback evidence。
+- fallback evidence 最高只能是:
+- weak
+- runtime
+- missing-source
+- 若缺 market_index 或 sector_index，不得輸出 confirmed。
+- fallback evidence 必須帶出缺來源原因，至少能區分:
+- 缺 DB evidence table/cache。
+- 缺 market_index。
+- 缺 sector_index。
+- 缺 runtime watchlist breadth / watchlist signals。
+- runtime breadth 支持時，文案語意必須是「偏支持 / 偏強但未確認」，不得是「確認轉強」「可買」「進場」。
+
+### Telegram 文案 contract
+
+可接受語意示例:
+
+市場證據：weak/runtime
+內部觀察池廣度偏強；缺大盤指數 evidence，未確認。
+
+題材證據：weak/runtime
+觀察池同題材訊號偏支持；缺族群指數 evidence，未確認。
+
+runtime data 不足時示例:
+
+市場證據：absent/missing-source
+缺 runtime watchlist breadth，且無 DB evidence table/cache；本輪不確認市場證據。
+
+題材證據：absent/missing-source
+缺 sector_index 與可用觀察池題材廣度；本輪不確認題材證據。
+
+禁止文案語意:
+
+市場確認轉強，可進場
+
+題材 confirmed
+
+觀察池偏強，新增可買
+
+### 版本契約
+
+- Telegram 使用者可見版本必須顯示 v20.3.0。
+- Tech 必須同步實際版本常量 / header / 測試期望。
+- 不得只在文件寫 v20.3.0，實際 Telegram header 仍停在舊版。
+
+## 已存在且不得回退的契約
+
+- v20.2.0 已建立的 market/theme evidence contract 不得移除或改成只剩文案。
+- 缺 DB evidence table/cache 時不得假裝已 confirmed。
+- evidence 不得改變交易決策。
+- Telegram 報文必須手機優先，summary / 市場題材 / 詳情的語意不得互相矛盾。
+- 無可買時不得使用像推薦的文案。
+- 可買、準備、僅追蹤、不可行動 必須分開。
+- 空區塊與 0-count no-op 文案不得為了占位輸出。
+- 不得回退既有版本契約；本輪應升到 v20.3.0。
+
+若 Tech 發現 v20.2.0 evidence contract 的實際欄位名稱、等級枚舉或直接消費者與本 TASK 描述不一致，必須 blocked 回報 Architect，不得自行重定義 contract。
 
 ## 驗收條件
 
-1. 使用 05/29 盤後類似 fixture：
-- 可買 = 0
-- 可準備 = 8
-- 僅追蹤 = 0
-- 淘汰 = 2
-- 存在已執行交易：英業達 今日已賣 187 股
-- 沒有新增交易建議
-2. 手機閱讀驗收：
-- 報文不得同時讓 Owner 看到 今日交易紀錄：無新增 與已執行交易而產生「今天沒交易」誤讀。
-- 報文可顯示 新增交易建議：無，並保留已執行交易紀錄。
-- 僅追蹤 0 時不得輸出任何僅追蹤拆分零計數行。
-- 可準備 8 不得被總稱為 未持倉追蹤 8。
-- 詳情索引需清楚顯示 可準備 8｜淘汰 2 或等價文案。
-- Header / formatter 版本字串需顯示 v20.2.5。
-3. 影響範圍驗收：
-- 無策略門檻 diff。
-- 無可準備分類邏輯 diff。
-- 無 evidence provider diff。
-- 無 DB / watchlist / live / backfill diff。
-- 測試只覆蓋 formatter / summary / funnel / index 直接輸出與必要直接消費者 smoke。
+1. 無 DB evidence table/cache，但 watchlist breadth supportive 且缺 market/sector index 時:
+- Telegram 市場/題材區塊顯示 weak/runtime evidence。
+- 文案清楚說明內部觀察池廣度支持或偏強。
+- 文案清楚說明缺大盤/族群指數，未確認。
+- 不出現 confirmed。
+2. runtime breadth / watchlist signals 不足時:
+- 仍可顯示 absent。
+- 必須標示 missing-source 或等價缺來源訊息。
+- 必須指出缺哪類來源。
+3. 交易決策不變:
+- BUY/SELL/RR/過熱/漲停不追/可準備分類不得因 fallback evidence 改變。
+- 不新增任何進場、加碼或可準備建議。
+4. 版本顯示:
+- Telegram header 或等價使用者可見版本顯示 v20.3.0。
+5. 無 forbidden diff:
+- 無 DB schema / migration diff。
+- 無 Supabase write path diff。
+- 無 watchlist universe 或 watchlist source diff。
+- 無 live Telegram delivery diff。
+- 無 replay/backfill 行為 diff。
+6. 手機閱讀:
+- 接近真實長報文中，Owner 能在市場/題材 evidence 區塊直接看出「runtime weak、缺來源、未確認」。
+- weak runtime evidence 不得在 summary 或執行清單中被包裝成買入理由。
 
 ## 範例或 fixture
 
-手機閱讀期望形狀示例：
+### Fixture A: no evidence table + supportive runtime breadth + missing indexes
 
-[盤後報文 v20.2.5]
+輸入形狀:
 
-今日交易
-新增交易建議：無
-已執行（不重複下單）：英業達 今日已賣 187 股
+db_evidence_table: missing
+evidence_cache: missing
+runtime_watchlist_breadth:
+available: true
+supportive: true
+signal_count: 8
+total_count: 12
+market_index: missing
+sector_index: missing
+pre_existing_decisions:
+buy: []
+prepare: ["2330"]
+tracking_only: ["2317", "2454"]
+not_actionable: ["9999"]
 
-未持倉漏斗
-可買 0
-可準備 8 檔，不列入交易執行
-淘汰 2
+期望輸出形狀:
 
-詳情索引
-可準備 8｜淘汰 2
+市場證據：weak/runtime
+內部觀察池廣度偏強；缺大盤指數 evidence，未確認。
 
-不得出現的形狀：
+題材證據：weak/runtime
+觀察池同題材訊號偏支持；缺族群指數 evidence，未確認。
 
-今日交易紀錄：無新增
-已執行（不重複下單）英業達 今日已賣 187 股
+期望不變:
 
-其中僅追蹤 0 檔拆分：等冷卻 0、等回測 0、等RR修復 0、等量能 0
+buy: []
+prepare: ["2330"]
+tracking_only: ["2317", "2454"]
+not_actionable: ["9999"]
+confirmed_present: false
 
-未持倉追蹤 8
+### Fixture B: no evidence table + missing runtime breadth
+
+輸入形狀:
+
+db_evidence_table: missing
+evidence_cache: missing
+runtime_watchlist_breadth:
+available: false
+market_index: missing
+sector_index: missing
+pre_existing_decisions:
+buy: []
+prepare: []
+tracking_only: ["2330"]
+not_actionable: ["9999"]
+
+期望輸出形狀:
+
+市場證據：absent/missing-source
+缺 runtime watchlist breadth，且無 DB evidence table/cache；本輪不確認市場證據。
+
+題材證據：absent/missing-source
+缺 sector_index 與可用觀察池題材廣度；本輪不確認題材證據。
+
+期望不變:
+
+buy: []
+prepare: []
+tracking_only: ["2330"]
+not_actionable: ["9999"]
+confirmed_present: false
 
 ## 明確禁止事項
 
-- 禁止改策略分數、分類門檻、R3 判斷、可準備規則。
-- 禁止改 DB schema、DB payload、Supabase write path。
+- 禁止建立 DB table。
+- 禁止新增 migration。
+- 禁止寫 Supabase。
 - 禁止 live Telegram delivery。
-- 禁止 replay / backfill。
-- 禁止改 watchlist。
-- 禁止把本輪擴成證據鏈補強、策略品質調整或全量報文重構。
-- 禁止輸出零計數拆分行作為占位。
-- 禁止回退 v20.2.4 已接受的整體策略結論。
-- 禁止版本字串仍停留在 v20.2.4 或更舊版本。
+- 禁止 backfill。
+- 禁止修改 watchlist universe 或 watchlist source。
+- 禁止修改 BUY/SELL/RR/過熱/漲停不追/可準備分類。
+- 禁止因 weak/runtime evidence 新增進場建議。
+- 禁止在缺 market_index 或 sector_index 時輸出 confirmed。
+- 禁止把 absent 寫成沒有原因的空泛文案。
+- 禁止為了本輪修正做全量重構、全 repo 清理或 L3 驗證擴張。
+- 禁止回退 v20.2.0 已建立的 market/theme evidence contract。
 
 ## 阻塞條件
 
-- 若現有 formatter 無法區分「新增交易建議」與「已執行交易紀錄」，Tech 必須 blocked，回報需要 Architect 補充目前資料欄位契約，不得自行改策略資料結構。
-- 若 fixture 無法穩定構造 可買0、可準備8、僅追蹤0、淘汰2、已執行英業達賣出、無新增建議，Tech 必須 blocked，要求 Architect 提供或確認 fixture 來源。
-- 若修正文案必須改動策略分類、DB payload 或 evidence provider 才能完成，必須 blocked，不得越界實作。
-- 若發現 v20.2.4 實際契約與 Owner 描述矛盾，必須 blocked，請 Architect 補充目前報文輸出樣本。
+Tech 必須 blocked，而不是自行決策，若遇到以下情況:
+
+- 找不到 v20.2.0 market/theme evidence contract 的實際欄位、等級或直接消費者。
+- runtime watchlist breadth / watchlist signals 在目前報告流程中不存在或無法安全取得。
+- 現有 formatter 無法區分 weak/runtime/missing-source/confirmed，且需要重定義 public contract。
+- 升版到 v20.3.0 會牽涉不明版本來源或多處 header 不一致。
+- 要達成需求必須建立 DB table、migration、Supabase write、backfill 或改 live delivery。
+- 發現 weak runtime evidence 目前會被策略 engine 消費並影響交易分類。
+
+## QA 分級建議
+
+- QA 等級: L2
+- 驗證範圍:
+- formatter / evidence contract 局部測試。
+- 直接消費者測試。
+- 策略不變性 smoke。
+- 接近真實 Telegram 長報文手機閱讀檢查。
+- forbidden diff 檢查。
+- 不做:
+- full pytest。
+- replay/backfill dry-run。
+- live Telegram。
+- live Supabase write。
+- production DB schema 驗證。
+
+QA 必須補 Tech 自檢以外的反證:
+
+- 用 Fixture A 驗證 weak runtime evidence 顯示且 confirmed 不出現。
+- 用 Fixture B 驗證 absent/missing-source 並指出缺來源。
+- 比對 fallback 前後交易分類完全不變。
+- 檢查 diff 中沒有 DB/schema/watchlist/live/backfill 相關修改。
+- 從 Owner 手機閱讀順序確認文案不會被誤讀為買入或確認訊號。
 
 ## 本輪停止條件
 
-完成以下即停止，不納入旁支問題：
+完成以下項目即停止，不納入旁支擴張:
 
-- 05/29 類似 fixture 通過上述手機閱讀驗收。
-- 版本顯示為 v20.2.5。
-- formatter / summary / funnel / index 直接測試通過。
-- 確認無策略、DB、watchlist、live、backfill 相關 diff。
+- Telegram 市場/題材區塊可在無 DB evidence table/cache 時顯示 weak/runtime fallback。
+- runtime data 不足時可顯示 absent/missing-source 並說明缺來源。
+- confirmed 在缺 market/sector index 時不出現。
+- 交易分類不變。
+- 使用者可見版本為 v20.3.0。
+- L2 驗證通過 forbidden diff 與手機閱讀檢查。
 
-旁支問題只記待辦、不納入本輪：證據鏈補強、可準備排序品質、R3 熱度判斷、更多未持倉分類重設、完整報文重構、全量 snapshot 清理。
+旁支只記待辦，不納入本輪:
+
+- 正式 evidence table 建表與 migration。
+- Supabase evidence write。
+- evidence backfill。
+- market_index / sector_index 外部資料接入。
+- 長期 market/theme evidence scoring 改版。
+- watchlist breadth 指標重設。

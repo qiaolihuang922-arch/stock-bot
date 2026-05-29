@@ -2,114 +2,107 @@
 
   ## 測試範圍
 
-  本輪 QA 風險預算判定：normal_patch / L2-lite。驗證限於 Telegram formatter、summary、未持倉漏斗、詳情索引、版本字串與直接消費者 smoke；未擴成 full pytest / replay / backfill / DB payload。
+  本輪判定：normal_patch / QA L2。未擴大到 full pytest、replay、backfill、live Telegram、live Supabase。
 
-  已檢查文件與 diff：
+  已驗證：
 
-  - TASK.md：v20.2.5 盤後 Telegram 手機噪音與語義衝突修正。
-  - CHANGELOG.md：描述範圍與 diff 一致。
-  - git diff：tracked diff 只含 CHANGELOG.md、core/generator.py、tests/test_generator_report.py、tests/test_notifier.py、tests/test_market_theme_evidence.py。
+  - TASK.md、CHANGELOG.md、git diff --stat/name-only 一致。
+  - 可吸收 diff 僅限：CHANGELOG.md、core/generator.py、core/market_theme_evidence.py、tests/test_generator_report.py、tests/test_market_theme_evidence.py、tests/test_notifier.py。
+  - forbidden diff：supabase、scripts、services、core/watchlist.py、config.py、requirements.txt、db/migrations 無 diff。
+  - worktree 殘留：測試過程只使用 .qa_tmp/，未修改 tracked file；.qa_tmp/config.py 屬測試暫存，不應納入合併。
 
-  已跑命令：
+  執行命令：
 
-  - arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py tests/test_notifier.py tests/test_market_theme_evidence.py
-      - 結果：79 passed, 21 warnings
+  - arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_generator_report.py tests/test_notifier.py tests/test_signal_validator.py tests/test_analysis_engine.py -q
+      - 結果：120 passed, 21 warnings
   - git diff --check
       - 結果：通過
-  - QA 自補手機閱讀順序 smoke：
-      - 05/29 盤後 fixture：可準備 8、僅追蹤 0、淘汰 2、英業達已執行賣出 187 股、無新增交易建議。
-      - 結果：通過。
+  - QA 自訂反證腳本：
+      - runtime fallback 缺 index 時不 confirmed。
+      - existing evidence source 存在時不誤標缺 DB/cache。
+      - fallback evidence 不改原始交易 decision。
+      - 手機 summary 順序與禁用文案檢查通過。
 
   ## 風險預算與停止條件
 
-  本輪最值得抓的風險：
+  最值得抓的風險：
 
-  1. 今日無新增建議與已執行交易並存時，Owner 誤讀為「今天沒有交易」。
-      - 驗證：檢查 summary 連續順序為 今日交易 / 新增交易建議：無 後接 已執行（不重複下單）。
-      - 結果：通過。
-  2. 僅追蹤 0 時仍輸出零計數拆分，造成手機噪音。
-      - 驗證：檢查不得出現 其中僅追蹤 0 檔拆分、等冷卻 0、等回測 0、等RR修復 0、等量能 0。
-      - 結果：通過。
-  3. 可準備 8 被混稱為未持倉追蹤 8，讓 Owner 誤判可準備與僅追蹤。
-      - 驗證：檢查漏斗與索引顯示 可準備 8 檔，不列入交易執行、可準備 8｜淘汰 2，且不出現 未持倉追蹤 8。
-      - 結果：通過。
+  1. weak/runtime fallback 被誤升成 confirmed 或買入暗示。
+  2. 缺 DB/cache 時文案仍模糊 absent，Owner 手機看不出缺來源。
+  3. fallback evidence 影響交易分類或版本 header 未同步。
 
-  停止條件已達成：05/29 類似 fixture 通過手機閱讀驗收、版本為 v20.2.5、formatter / summary / funnel / index 相關測試通過、diff 未碰策略 / DB / watchlist / live / backfill。
+  對應驗證：
+
+  - Fixture A/B 類型測試與 QA 自訂反證。
+  - 接近 Telegram 長報文手機閱讀順序檢查。
+  - 版本 header v20.3.0 檢查。
+  - forbidden diff 檢查。
+
+  停止條件已達成：
+
+  - 無 DB/cache + runtime supportive 顯示 weak/runtime。
+  - runtime 不足顯示 absent/missing-source 並列缺來源。
+  - 缺 market/sector index 不出現 confirmed。
+  - 交易分類不變。
+  - 使用者可見版本為 v20.3.0。
+  - 未擴張到 L3。
 
   ## 關聯風險掃描
 
-  core/generator.py diff 只改：
+  core/generator.py 只升 VERSION 並在 market_theme_summary_evidence() 傳入 missing_db_evidence=True。未看到策略 engine、DB schema、watchlist universe、live/backfill 路徑變更。
 
-  - VERSION = "v20.2.5"
-  - format_unheld_funnel
-  - detail_index_text
-  - formatTelegramSummary 今日交易文案
+  直接消費者已覆蓋：
 
-  未看到策略門檻、分類邏輯、evidence provider、DB schema / payload、Supabase write path、watchlist、replay / backfill 相關 diff。
+  - Telegram summary formatter。
+  - market/theme evidence provider。
+  - notifier 最後一則 header 保留。
+  - generator report 長報文 fixture。
 
-  直接消費者檢查：
-
-  - formatTelegramMessages 最後一則 summary 帶新版 header 並承接 formatter 改動。
-  - tests/test_notifier.py 已同步 notifier 保留最後一則 summary header 的版本契約。
-  - tests/test_market_theme_evidence.py 已同步相關 summary header 版本期望。
-
-  可吸收 diff：
-
-  - core/generator.py
-  - tests/test_generator_report.py
-  - tests/test_notifier.py
-  - tests/test_market_theme_evidence.py
-  - CHANGELOG.md 作為 Tech 交付摘要
-
-  worktree 殘留：
-
-  - git status --short 僅顯示上述 5 個 tracked 修改。
-  - .qa_tmp/config.py 存在於測試暫存目錄，未出現在 tracked status；不應作為本輪合併內容。
+  QA 補充反證：existing structured evidence source 存在時，provider 不會新增 runtime fallback，也不會輸出 缺 DB evidence table/cache。
 
   ## 跨區塊語意一致性
 
-  手機閱讀順序 smoke 驗證的 summary 順序：
+  手機 summary 檢查結果：
 
-  【05/29 盤後｜v20.2.5】 → 今日交易 / 新增交易建議：無 → 已執行（不重複下單） → 未持倉漏斗（非執行） → 可準備 8 檔，不列入交易執行 → 詳情索引：持倉 1｜可準備 8｜淘汰 2
-
-  跨區塊數量一致：
-
-  - 漏斗：可買 0｜可準備 8（不可買）｜僅追蹤 0｜淘汰 2
-  - 補充行：可準備 8 檔，不列入交易執行
-  - 索引：可準備 8｜淘汰 2
-
-  未發現 summary、漏斗、索引互相混稱 可準備 / 僅追蹤 / 淘汰 的問題。
+  - 今日結論 / 新倉：無有效進場 先出現。
+  - market/theme evidence 後出現，定位為背景證據。
+  - 市場證據：weak/runtime 與 題材證據：weak/runtime 均明確寫「缺 index evidence，未確認」。
+  - 未出現 confirmed、市場確認轉強、可進場、新增可買 等誤導語意。
 
   ## 使用者誤讀風險
 
-  本輪主要誤讀路徑已被修掉：
+  目前輸出能讓 Owner 區分：
 
-  - 不再用 今日交易紀錄：無新增 混淆已執行交易。
-  - 新增交易建議：無 與 已執行（不重複下單） 分段顯示，手機上可區分「沒有新建議」與「今天已有交易」。
-  - 僅追蹤為 0 時沒有拆分零計數行。
-  - 可準備 8 沒有被總稱為 未持倉追蹤 8。
+  - 這是內部觀察池 runtime breadth。
+  - 缺大盤/族群指數 evidence。
+  - 尚未 confirmed。
+  - 不構成買入、加碼或準備建議。
 
-  殘留觀察：detail_index_text 在沒有淘汰時仍會輸出 淘汰 0，但本輪驗收 fixture 是 淘汰 2，且 TASK 主問題聚焦在僅追蹤 0 拆分與可準備 8 混稱；此項不阻塞本輪，可列後續手機噪音收斂。
+  未發現會讓 Owner 誤判買、賣、加碼、停損、等待或追蹤優先級的本輪新增問題。
 
   ## 質疑與反證
 
-  主動質疑 1：Tech 是否只改文案，實際偷改策略分類？
+  主動質疑：
 
-  - 反證：git diff -- core/generator.py 只涉及 formatter 函式與 VERSION；未改 unheld_funnel_state、策略門檻、DB / live / watchlist 路徑。
-
-  主動質疑 2：測試是否只驗單一欄位存在，沒有驗手機連續閱讀？
-
-  - 反證：QA 額外跑不落地 smoke，檢查 summary 區塊先後順序與禁用文案；通過。
-
-  主動質疑 3：版本是否只改測試、未同步實際 header？
-
-  - 反證：core/generator.py 的 VERSION 已為 v20.2.5，相關 formatter / notifier / market evidence 測試同步通過。
+  - 若 market_theme_evidence 有現有 sources，Tech 的 fallback 是否仍會誤判缺 DB/cache？
+      - 反證：自訂 existing source 案例通過，runtime_fallback=False，未列 缺 DB evidence table/cache。
+  - weak runtime evidence 是否會改交易 decision？
+      - 反證：呼叫 formatter evidence 後，results_map 原 decision 前後一致。
+  - 手機上 weak/runtime 是否可能被讀成買入訊號？
+      - 反證：summary 中先出現 新倉：無有效進場，evidence 區塊只說未確認；禁用買入語意未出現。
 
   ## 未測項目
 
-  未跑 full pytest、replay、backfill、DB payload、live Telegram delivery、Supabase write。原因：TASK 明確指定 L2-lite，且本輪非策略、DB、live path 變更。
+  依 TASK 停止條件未測：
 
-  未驗證證據鏈補強、可準備排序品質、R3 熱度判斷、更多未持倉分類重設、完整報文重構；均屬 TASK 指定旁支待辦。
+  - full pytest。
+  - replay/backfill dry-run。
+  - live Telegram delivery。
+  - live Supabase write。
+  - production DB schema / evidence table 存在性。
+  - 正式 market_index / sector_index 外部資料接入。
+
+  這些是旁支待辦，不阻塞本輪 normal_patch。
 
   ## QA 結論
 
