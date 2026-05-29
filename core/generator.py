@@ -53,7 +53,7 @@ from services.cross_day_context import build_cross_day_contexts
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.1"
+VERSION = "v20.4.2"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -5310,9 +5310,8 @@ def generate_report():
             "原因：missing-source",
             "持倉",
             "unavailable：持倉或今日交易來源缺失，不產生交易建議",
-            "市場證據",
-            "unavailable：DB evidence table/cache 不可用",
-            "非交易診斷：watchlist breadth fallback 已停用於決策",
+            "證據：production 來源不足，不作確認。",
+            "詳情：runtime 觀察僅供診斷，非確認來源。",
         ])
         return [summary], None
 

@@ -20,7 +20,7 @@ def source(source_type, level="supportive", freshness="fresh", freshness_reason=
         "level": level,
         "supports_claims": overrides.pop("supports_claims", [f"{source_type} supportive"]),
         "limitations": overrides.pop("limitations", ["只佐證題材背景，不改變個股買點"]),
-        "source_family": overrides.pop("source_family", source_type),
+        "source_family": overrides.pop("source_family", "production_db"),
         **overrides,
     }
 
@@ -81,12 +81,13 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         )
 
     def test_same_source_type_does_not_confirm(self):
-        market_source = source("market_index", source_family="market_state")
+        market_source = source("market_index")
         evidence = build_market_theme_evidence(
             sources=[
                 market_source,
                 {
                     **market_source,
+                    "source_family": "owner_approved_persistent",
                     "supports_claims": ["sector strength"],
                     "limitations": ["same family"],
                 },
@@ -96,13 +97,17 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         self.assertFalse(evidence["confirmed"])
         self.assertEqual(evidence["theme_status"], "weak")
         self.assertEqual(evidence["source_family_count_for_confirmed"], 1)
-        self.assertEqual(evidence["source_families"], ["market_state"])
+        self.assertEqual(
+            evidence["source_families"],
+            ["production_db", "owner_approved_persistent"],
+        )
+        self.assertEqual(evidence["confirmed_source_types"], [])
 
     def test_watchlist_breadth_and_market_index_can_confirm(self):
         evidence = build_market_theme_evidence(
             sources=[
-                source("watchlist_breadth", source_family="watchlist_theme_breadth"),
-                source("market_index", source_family="market_state"),
+                source("watchlist_breadth"),
+                source("market_index"),
             ],
         )
 
@@ -114,7 +119,31 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             ["watchlist_breadth", "market_index"],
         )
         self.assertEqual(evidence["level"], "confirmed")
+        self.assertEqual(evidence["source_status"], "ready")
+        self.assertEqual(evidence["source_family"], "production_db")
+        self.assertEqual(evidence["freshness"], "fresh")
+        self.assertEqual(evidence["confidence"], "confirmed")
         self.assertIn("supports_claims", evidence)
+
+    def test_runtime_diagnostic_watchlist_breadth_cannot_confirm_even_with_market_index(self):
+        evidence = build_market_theme_evidence(
+            sources=[
+                source(
+                    "watchlist_breadth",
+                    source_family="runtime_diagnostic",
+                    source_name="watchlist_strategy_snapshot",
+                    runtime_diagnostic=True,
+                ),
+                source("market_index"),
+            ],
+        )
+
+        self.assertFalse(evidence["confirmed"])
+        self.assertNotEqual(evidence["source_status"], "ready")
+        self.assertIn(evidence["source_status"], {"insufficient-data", "missing-source"})
+        self.assertEqual(evidence["source_family"], "runtime_diagnostic")
+        self.assertEqual(evidence["confidence"], "weak")
+        self.assertEqual(evidence["confirmed_source_types"], [])
 
     def test_market_state_and_strategy_evidence_legacy_pair_no_longer_confirms_without_contract_fields(self):
         evidence = build_market_theme_evidence(
@@ -213,16 +242,18 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         self.assertIn("缺 DB evidence table/cache", evidence["missing_source_reasons"])
         self.assertIn("缺 market_index", evidence["missing_source_reasons"])
         self.assertIn("缺 sector_index", evidence["missing_source_reasons"])
+        self.assertEqual(evidence["source_status"], "missing-source")
+        self.assertEqual(evidence["source_family"], "runtime_diagnostic")
+        self.assertEqual(evidence["confidence"], "absent")
+        self.assertIn("缺 DB evidence table/cache", evidence["source_name"])
+        self.assertIn("不得 fake confirmed", evidence["forbidden_effects"])
 
         lines = format_market_theme_summary_lines(evidence)
         self.assertEqual(
             lines,
             [
-                "市場證據：absent/missing-source",
-                "缺 market_index 與 DB evidence table/cache；本輪不確認市場證據。",
-                "題材證據：absent/missing-source",
-                "缺 sector_index 與可用觀察池題材廣度；本輪不確認題材證據。",
-                "非交易診斷：watchlist breadth fallback 已停用於決策",
+                "證據：production 來源不足，不作確認。",
+                "詳情：runtime 觀察僅供診斷，非確認來源。",
             ],
         )
 
@@ -236,15 +267,15 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         self.assertEqual(evidence["level"], "absent")
         self.assertIn("缺 DB evidence table/cache", evidence["missing_source_reasons"])
         self.assertIn("缺 runtime watchlist breadth", evidence["missing_source_reasons"])
+        self.assertEqual(evidence["source_status"], "missing-source")
+        self.assertEqual(evidence["source_family"], "production_db")
 
         lines = format_market_theme_summary_lines(evidence)
         self.assertEqual(
             lines,
             [
-                "市場證據：absent/missing-source",
-                "缺 runtime watchlist breadth，且無 DB evidence table/cache；本輪不確認市場證據。",
-                "題材證據：absent/missing-source",
-                "缺 sector_index 與可用觀察池題材廣度；本輪不確認題材證據。",
+                "證據：production 來源不足，不作確認。",
+                "詳情：缺結構化 market/theme production source。",
             ],
         )
 
@@ -303,15 +334,17 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         )
 
         summary = messages[-1]
-        self.assertIn("【05/28 盤中｜v20.4.1】", summary)
-        self.assertIn("市場證據：absent/missing-source", summary)
-        self.assertIn("非交易診斷：watchlist breadth fallback 已停用於決策", summary)
-        self.assertIn("題材證據：absent/missing-source", summary)
+        self.assertIn("【05/28 盤中｜v20.4.2】", summary)
+        self.assertIn("證據：production 來源不足，不作確認。", summary)
+        self.assertIn("詳情：runtime 觀察僅供診斷，非確認來源。", summary)
         self.assertIn("🧭 主線：市場偏多但買點未成立。", summary)
         self.assertNotIn("confirmed", summary)
         self.assertNotIn("AI/電子供應鏈偏多", summary)
         self.assertNotIn("今日可買：台積電", summary)
-        self.assertLess(summary.index("🧭 新倉：無有效進場。"), summary.index("市場證據：absent/missing-source"))
+        self.assertLess(
+            summary.index("🧭 新倉：無有效進場。"),
+            summary.index("證據：production 來源不足，不作確認。"),
+        )
 
     def test_confirmed_theme_without_stock_entry_stays_track_only(self):
         payload = render_payload(
@@ -333,8 +366,8 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         evidence = build_market_theme_evidence(
             theme="AI/電子供應鏈",
             sources=[
-                source("watchlist_breadth", source_family="watchlist_theme_breadth"),
-                source("sector_index", source_family="market_state"),
+                source("watchlist_breadth"),
+                source("sector_index"),
             ],
         )
 

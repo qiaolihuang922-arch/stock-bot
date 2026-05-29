@@ -7,7 +7,7 @@
 - 專案：台股策略報文機器人。
 - 交付形態：排程 / 腳本產生 Telegram 報文並發送給 Owner。
 - 股票清單唯一來源：`core/watchlist.py`，預設 12 檔。
-- 最新使用者可見 Telegram 版本：`v20.4.1`。
+- 最新使用者可見 Telegram 版本：`v20.4.2`。
 - 最新 pushed commit 以 `git log -1` 為準。
 - 固定 8 份 Markdown 不刪除，只改寫內容：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 
@@ -33,6 +33,14 @@
 
 ## Recent High-Signal Milestones
 
+- `v20.4.2` Evidence Phase 2 Source-Family Gate And Wording Cleanup 已通過 QA：
+  - Telegram evidence summary 缺 production source 時收斂為短句：`證據：production 來源不足，不作確認。`，避免 absent/missing-source 長清單干擾手機主決策。
+  - `core/market_theme_evidence.py` confirmed / ready 收斂為 source-family gate：只有 `production_db` 或 `owner_approved_persistent`，且 required fields / freshness 滿足時才可 confirmed。
+  - `runtime_diagnostic`、runtime、local、cache、worktree、test fixture、report-derived source 不得 confirmed / ready；可留在 detail / limitations trace。
+  - QA 兩次攔截有效：先抓到 runtime_diagnostic 仍可 fake confirmed，再抓到 production confirmed 被 report-derived theme text 污染成 `source_family=runtime_diagnostic`。
+  - 現有 market/theme 資料仍不足以 confirmed；若要真正接入 confirmed evidence，需要另開任務定義 production table/view 欄位與 read-only loader，不在本輪建表或回填。
+  - 未新增 DB schema、field、table、migration、SQL、backfill、watchlist、live Supabase write 或 live Telegram。
+  - QA / Architect 驗證：`tests/test_market_theme_evidence.py tests/test_generator_report.py tests/test_notifier.py tests/test_strategy_evidence.py`，`100 passed, 13 warnings`；`git diff --check` 通過。
 - `v20.4.1` Cross-day Context Source Boundary Hardening 已通過 QA：
   - `services/cross_day_context.py` 不再把 `today_position_events` / local runtime 資料提升為跨日 `previous_action`、`previous_action_date`、`dedupe_guard` 或 `source_of_truth`。
   - 同 run 資訊只保留在 `same_run_guard`、`same_run_action`、`same_run_action_date`、`same_run_source`，不能作 GitHub fresh runner 的跨日記憶。
@@ -136,6 +144,7 @@
 - 市場 / 題材 evidence 不得放寬個股買點；confirmed theme 也不能自動產生 BUY。
 - `evidence absent` 只代表內部結構化證據未啟用 / 不足 / missing，不代表外部市場不強。
 - Runtime watchlist breadth fallback 只能作為非交易診斷或 missing-source 說明；不得稱市場證據、不得輸出 weak/runtime、不得 confirmed、不得改交易決策。
+- Market/theme evidence 的 `confirmed` / `ready` 必須同時滿足 production / Owner-approved persistent source family、required fields 與 freshness；report-derived / runtime diagnostic 只能作 trace，不得污染頂層 `source_family`。
 - positions / position_events 來源錯誤不可補假值：positions 不可回全 watchlist 0 股，position_events source-error 不可回全 0 event summary 或讓報文誤讀為今日無交易。
 
 ## Module Map

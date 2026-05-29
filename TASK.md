@@ -1,229 +1,214 @@
-# TASK: Cross-day Context Source Boundary Hardening
+# TASK: Evidence Phase 2 Production Read-only Source Mapping And Telegram Wording Cleanup
 
 ## 任務狀態
 
-- task_id: cross_day_context_source_boundary_hardening_20260529
-- 任務類型: risk_patch
-- 任務尺寸: risk_patch
+- task_id: evidence_phase2_source_mapping_wording_cleanup_20260529
+- 任務類型: normal_patch
+- 任務尺寸: normal_patch
 - 狀態: todo
-- 版本建議: patch；若 Tech 修改任何使用者可見 Telegram / CLI 報文、source warning、排序、summary、prepare、dedupe 或 header，升為 v20.4.1；若只補測試且證明程式已符合契約，沿用目前 v20.4.0 並在 CHANGELOG.md 說明不升版理
-由。
-- 版本契約: 不得回退 v20.4.0；本輪只硬化 source boundary，不新增 Phase 2 schema mapping。
+- 版本建議: patch
+- 版本契約: 本輪若修改 Telegram / CLI 使用者可見報文、evidence wording、source warning、header 或測試期望，升為 v20.4.2；不得回退 v20.4.1。
 - QA 分級建議: L2
-- QA 升級原因: 本輪涉及跨日策略記憶、歷史證據權重、連續觀察天數、前次行動/日期與 execution dedupe；必須驗證 GitHub fresh runner 無本地 runtime state 時仍可重建，且 missing-source/source-error/insufficient-data 會 fail
-closed。
-- 停止條件: 驗證並必要時修正 services/cross_day_context.py 與直接 generator/tests，使跨日記憶只來自 production DB 或 Owner 明確批准的持久 source；完成 fresh-run、DB missing、DB event、local-only negative 四類驗收後停
-止。旁支問題如 schema 不足、Phase 2 欄位 mapping、效能、backfill、watchlist、live delivery 只列阻塞或待辦，不納入本輪實作。
+- QA 升級原因: 本輪不改策略門檻，但會碰 production DB read-only evidence consumption、Telegram summary wording、source boundary 與 fresh runner 可重建性；需驗證不產生 fake confirmed evidence。
+- 任務停止條件: 完成 market/theme/strategy evidence 的既有 DB/persistent read-only source mapping、必要的最小 read-only consumption 或 wording cleanup、手機報文 fixture 驗證後停止。若任何所需 table/field/source 不存在
+或不可由 fresh runner 讀取，Tech/QA 必須 blocked 並列精確缺口，不得新增 schema 或用 runtime 補值。
+- 公開來源: 未使用；本任務依 Owner 指令與已清理專案摘要定義。
 
 ## Owner 問題
 
-正式流程是 git / GitHub runner 啟動後產生 Telegram 報文，runner 必須視為無狀態。任何只存在本機、worktree、暫存檔、runtime dict、cache 或 agent 對話中的狀態，對跨日策略記憶都無效。
+Owner 延續 v20.4.1 報文問題：production DB 已有資料，但 market/theme evidence 仍顯示 absent/missing-source，strategy evidence v20.0 table 未啟用，導致 Telegram evidence 區塊看起來像「沒有證據」或噪音過多。
 
-Owner 要求硬化 services/cross_day_context.py 的來源邊界：cross-day memory、historical evidence weight、consecutive observe days、previous action/date、execution dedupe 這些必須跨 fresh GitHub runner 存活的判斷，只能來
-自 production DB 或 Owner 明確批准的持久 source。runtime/local context 只能作同一次報文內 guard/display，不得被描述或用作跨日記憶。
+本輪要先定義 source mapping 與手機 wording contract，再允許 Tech 在既有 DB table/field 足夠時做 read-only consumption / wording cleanup。若 production DB 現有來源不足，必須阻塞並列出缺什麼，不能建表、遷移、回填或用
+runtime fake data 補成 confirmed。
 
 ## 使用者可見結果
 
-Owner 在 Telegram / CLI 報文中應看到：
+Owner 在手機 Telegram 報文中應看到：
 
-- 有 production DB 歷史資料時，v20.4.0 既有排序、summary、prepare、dedupe、硬風控優先行為維持有效。
-- fresh GitHub runner 沒有任何本地 runtime state 時，只要 DB 有可信資料，仍能重建前次狀態、前次行動/日期、連續觀察天數、歷史權重與同級 execution dedupe。
-- DB 缺表、缺欄位、查詢錯誤或資料不足時，不輸出假跨日記憶、假連續天數、假 previous action/date、假已執行事件；必須顯示或內部標記 missing-source / source-error / insufficient-data，並 fail closed。
-- runtime/local context 若存在，只能影響同一次 render 的 guard 或顯示，不得讓 summary / 詳情暗示「跨日記憶已確認」。
+- Summary 不再被 absent/missing-source、未啟用 table、長 source diagnostic 混雜成噪音。
+- 若 DB/persistent source 足夠，evidence wording 能簡短說明「已讀取 production source」與證據狀態，例如支持、混合、不足、過期。
+- 若 DB/persistent source 不足，報文只用短句指出「來源不足，不作確認」，不得讓 Owner 誤讀為市場/題材真的不存在。
+- Strategy evidence 若 existing DB table/field 足夠，可由 read-only source 啟用顯示；若不足，必須明確列缺口，不得 fallback 成 confirmed。
+- 報文仍維持 v20.4.1 source boundary：runtime/local 只能同 run 輔助，不得標成 production confirmed evidence。
 
 手機閱讀路徑：
 
-1. Summary 先看持倉是否有已執行 dedupe、硬風控是否優先。
-2. 未持倉 summary / 漏斗再看可準備、僅追蹤排序是否因可信 DB history 調整。
-3. 個股詳情最後看 previous state/action/date、連續觀察天數、歷史權重與 source 狀態。
-4. 若來源不足，手機報文不得讓 Owner 誤以為系統記得前一天狀態或今日已執行事件。
+1. 最後 summary 先回答今天能不能買、持倉先處理什麼、未持倉只是追蹤或不可行動。
+2. Evidence wording 只能補充決策可信度，不得搶在行動前面，也不得用長列表干擾主決策。
+3. 詳情或證據段再列 source 狀態；source 缺口要可追溯，但不在 summary 重複傾倒。
+4. Owner 不需要在手機上分辨 runtime/cache/DB 細節才能避免誤買；文案本身要清楚區分 confirmed、insufficient、missing-source。
 
 ## 非目標
 
-- 不新增 DB schema、migration、table、column、index。
-- 不新增 production write path。
-- 不做 live Supabase write、正式 backfill、live Telegram delivery。
+- 不新增 DB schema、table、field、index、migration、SQL。
+- 不做 production write path、live Supabase write、正式 backfill、live Telegram。
+- 不改 BUY / SELL / RR / overheat / trading thresholds。
 - 不改 watchlist。
-- 不改核心 BUY / SELL / RR / 過熱 / 漲停不追 / 停損停利門檻。
-- 不重設策略分類、持倉狀態機或 Phase 2 source precedence。
-- 不把 runtime/local fallback 包裝成 production memory。
-- 不做 full repo 清理、重構或效能優化。
+- 不新增外部 provider 或新聞/題材 ingestion。
+- 不把 DB history 單獨升級成買賣門檻。
+- 不做全量 evidence 架構重寫、全 repo 清理或 performance project。
+- 不把 runtime/local/watchlist breadth fallback 標成 confirmed market/theme/strategy evidence。
 
 ## 影響模組
 
-- services/cross_day_context.py: 本輪主檢查與必要修正目標。
-- core/generator.py: 直接注入 / 消費 cross-day context 的使用者可見報文入口；只允許最小同步。
-- 直接測試: tests/test_cross_day_context.py、與 generator / notifier / market evidence 中直接受 cross-day context 影響的測試。
-- 可能直接消費者: strategy result sorting、Telegram summary、prepare layer、holding action dedupe、detail trace。
+- core/market_theme_evidence.py: market/theme evidence source mapping、read-only source 狀態與 wording。
+- services/strategy_evidence.py: strategy evidence existing DB read-only mapping；若欄位不足則 blocked。
+- core/generator.py: Telegram summary/header/evidence wording 直接消費者；只允許最小同步。
+- 相關測試: tests/test_market_theme_evidence.py、tests/test_generator_report.py、tests/test_notifier.py，必要時補 strategy evidence 直接測試。
+- 不應影響: services/analysis.py 核心門檻、DB write stores、backfill/replay write path、watchlist、Telegram live delivery。
 
 ## 直接消費者
 
-- core/generator.py: 消費 cross-day context，輸出 Telegram header、summary、持倉卡、未持倉漏斗、個股詳情。
-- Telegram Owner: 最終消費者；依報文判斷是否買、是否持倉風控、是否只是追蹤。
-- QA: 驗證 fresh-run、DB missing、DB event、local-only negative 四類風險。
-- GitHub runner: 正式執行環境；不得依賴本機 runtime 或 worktree 暫存狀態。
+- Owner 手機 Telegram 報文。
+- core/generator.py evidence summary/header/detail formatter。
+- market/theme evidence provider。
+- strategy evidence provider / loader。
+- GitHub fresh runner；必須只靠 production DB 或 Owner-approved persistent source 重建 evidence 狀態。
+- QA；需驗證 no fake data、no schema/write/backfill/watchlist change、mobile reading order。
 
-## Source-of-truth 契約
+## 已存在且不得回退的契約
 
-允許作為跨日 source-of-truth 的來源：
-
-- production DB positions
-- production DB position_events
-- production DB daily_signal_snapshot
-- production DB signal_runs
-- production DB signal_items
-- production DB signal_outcomes
-- production DB strategy_feature_snapshots
-- production DB strategy_outcome_metrics
-- production DB strategy_classification_audit
-- Owner 明確批准且 GitHub runner 可讀取、可重建的持久 source
-
-不得作為跨日 source-of-truth 的來源：
-
-- 同 run runtime dict / in-memory object
-- local temp file / cache / worktree artifact
-- agent 對話摘要
-- test fixture default
-- dry-run/backfill 中間產物
-- 缺 production DB 時的 synthetic/default/fallback data
-
-runtime/local context 允許用途：
-
-- 同一次報文內防止重複顯示。
-- 同一次 render 的輔助顯示。
-- 測試 fixture 內明確標記為 non-persistent 的 guard。
-
-runtime/local context 禁止用途：
-
-- 計算跨日連續觀察天數。
-- 宣告 previous action/date。
-- 產生 historical evidence weight。
-- 驅動 fresh GitHub runner 的 execution dedupe。
-- 在報文中描述成「歷史 / 前次 / 連續 / 已執行」記憶。
+- 最新使用者可見版本不得低於 v20.4.1。
+- 正式 runner 無狀態；跨日或 confirmed evidence 必須來自 production DB 或 Owner 明確批准的持久 source。
+- Runtime/local/cache/worktree/agent context 不得作為 confirmed evidence、source-of-truth、跨日記憶或 fresh runner 判斷依據。
+- missing-source / source-error / insufficient-data 必須 fail closed，不得用 fallback 補成 confirmed。
+- Runtime watchlist breadth fallback 只能作非交易診斷或缺來源說明，不得稱市場證據、不得 confirmed。
+- 市場/題材/策略 evidence 不得放寬個股 BUY/SELL/RR/overheat/trading thresholds。
+- DB/cross-day history 不得單獨把不可買變可買，不得讓可準備進交易執行清單。
+- Telegram 手機閱讀行動優先；空區塊、0 計數、重複 source 噪音預設不顯示。
+- evidence absent 只能表示內部結構化來源未啟用/不足，不代表外部市場不強。
 
 ## 輸出契約
 
-cross_day_context 或等價結構必須維持下列語意：
+Tech 必須先產出並實作最小 source mapping，至少覆蓋三類 evidence：
 
-- source_status: ready / missing-source / source-error / insufficient-data
-- source_of_truth: 實際使用的 production DB table 或 Owner-approved persistent source
-- previous_state: 只能由可信持久來源重建；不足時 unknown
-- previous_action: 只能由可信持久來源重建；不足時 unknown / none
-- previous_action_date: 只能由可信持久來源重建；不得補今日或 runtime date
-- consecutive_observe_days: 只能由可信持久來源計算；不足時 unknown 或不顯示，不得假設
-- historical_evidence_weight: 只能由可信持久來源計算；不足時中性或 unknown
-- dedupe_guard: execution dedupe 必須來自 production DB / persistent source；同 run guard 必須標示為 same-run only
-- allowed_effects: 可影響排序、summary、prepare 呈現、同級 dedupe、detail trace
-- forbidden_effects: 必須包含不得單獨變可買、不得覆蓋硬風控、不得偽造 execution、不得用 local-only memory
+- market_evidence: 可用來源只能是 existing production DB/persistent market source；候選來源包含摘要中已存在的 market_daily_bars 或其他現有 read-only DB source。若缺 required fields，blocked。
+- theme_evidence: 可用來源只能是 existing production DB/persistent sector/theme/source；候選來源包含 daily_signal_snapshot、signal_runs、signal_items 或其他現有 read-only DB source。若無法可靠映射 theme/sector，
+blocked。
+- strategy_evidence: 可用來源只能是 existing strategy evidence DB/audit source；候選來源包含 strategy_feature_snapshots、strategy_outcome_metrics、strategy_classification_audit 或目前程式既有 strategy evidence table。
+若 v20.0 table/fields 不存在或未能由 runner 讀取，blocked。
 
-已存在且不得回退的契約：
+每類 evidence 結構需維持下列語意，不要求新增 DB 欄位：
 
-- v20.4.0 valid DB data 可影響 sorting / summary / prepare / dedupe。
-- DB / cross-day history 只能壓制同級重複行動；不得覆蓋硬風控、停損、REDUCE_50、STOP_100 或風控升級。
-- DB / cross-day history 不得單獨把不可買變可買，不得讓可準備進交易執行清單。
-- positions / position_events missing-source 或 source-error 不得回全 watchlist 0 股或全 0 event summary。
-- Runtime watchlist breadth fallback 不得變成 confirmed market evidence。
-- Telegram 手機閱讀必須行動優先，同一檔同一份報文只能有一個主行動。
+- source_status: ready / missing-source / source-error / insufficient-data / stale
+- source_family: production_db / owner_approved_persistent / runtime_diagnostic
+- source_name: 實際 table/view/provider 名稱；不足時列缺口
+- freshness: 可判斷時顯示 fresh/stale；不可判斷時不得 confirmed
+- confidence: confirmed / weak / mixed / absent 只能在 source boundary 合法時輸出
+- allowed_effects: wording、排序提示、detail trace；不得改核心交易門檻
+- forbidden_effects: 不得變 BUY、不得覆蓋風控、不得 fake confirmed、不得用 runtime 補 DB
+
+Telegram wording contract：
+
+- Summary 最多一行 evidence 總結；只寫對決策有幫助的狀態。
+- 來源不足時使用短句，例如 證據來源不足，不作確認；不要重複 absent/missing-source 長清單。
+- confirmed 只能在 production/persistent source、freshness、required fields 都滿足時出現。
+- runtime diagnostic 可在 detail 顯示，但必須標示 非確認來源 或等價語意，不得放進 confirmed summary。
+- 若沒有可追溯價值，不輸出空 evidence 區塊、0 計數或 no-op 文案。
 
 ## 驗收條件
 
-1. Tech 必須先檢查 services/cross_day_context.py 是否存在 local/runtime-only source 被用作跨日 memory；若有，最小 diff 修正。
-2. GitHub fresh-run acceptance: 測試必須模擬無 local runtime/cache/worktree state，僅給 production DB/persistent source fixture；previous state/action/date、consecutive observe days、historical weight、dedupe 仍可由 DB
-重建。
-3. DB missing acceptance: DB source 缺失、錯誤或欄位不足時，輸出 missing-source / source-error / insufficient-data，不得產生假 previous action/date、假連續天數、假 historical weight 或假 execution dedupe。
-4. DB event acceptance: production DB event 顯示同級停利/減碼已執行時，報文維持 v20.4.0 同級 dedupe；若當日硬風控更高級，硬風控優先。
-5. Local-only negative acceptance: 僅提供 runtime/local context、沒有 DB/persistent source 時，不得輸出跨日記憶，不得讓 sorting/summary/prepare/dedupe 表現成跨日 confirmed。
-6. 使用者可見 header: 若本輪改變任何報文輸出或 source warning，header / VERSION / 測試期望升到 v20.4.1；若不改輸出，明確保留 v20.4.0。
-7. Forbidden diff 掃描確認無 schema/migration、無 DB write path、無 live Supabase、無 backfill、無 watchlist、無 live Telegram。
-8. CHANGELOG.md 必須列出 source-of-truth 邊界、修改檔案、直接消費者同步、自檢命令與殘留風險。
-9. 若 production DB schema/fields 不足以完成任何必需判斷，Tech 必須 blocked，精確列出缺哪個 table/field/relationship；不得新增 schema 或用 fallback 補值。
-10. QA 必須檢查一段接近真實手機報文，確認 source 不足時不會誤導 Owner 以為有跨日記憶。
+1. Tech 必須列出 market/theme/strategy evidence 分別使用哪個 existing table/provider/field；若不足，blocked 並列精確缺少的 table/field/source。
+2. 不得新增或修改 schema/migration/SQL/table/field；不得新增 write/backfill/live Telegram path。
+3. 若 existing DB/persistent source 足夠，evidence read-only consumption 能讓 fresh runner 從 DB 重建 ready/confirmed/weak/mixed/stale/insufficient 狀態。
+4. 若 DB source 缺失、欄位不足、freshness 不可判斷或讀取錯誤，輸出 missing-source/source-error/insufficient-data/stale，不得 confirmed。
+5. Telegram summary 壓縮 evidence 噪音：不得在 summary 重複長 source diagnostic，不得讓 absent 被誤讀為外部市場不強。
+6. Strategy evidence v20.0 table 若 existing DB 足夠，應啟用 read-only 顯示；若不足，必須 blocked，不得用 runtime/test fixture 補成 enabled。
+7. Header / VERSION / snapshot 測試若報文 wording 有變，升到 v20.4.2 並同步測試；不得回退 v20.4.1。
+8. QA 必須檢查接近真實手機長報文的閱讀順序：先行動、再 evidence、最後 detail，不得出現 summary 噪音或 fake confirmed。
+9. QA 必須反證 fresh runner：清空 local/runtime/cache/worktree context 後，只有 DB/persistent source 可重建 confirmed evidence。
+10. QA 必須掃描 forbidden diff：無 schema/migration/SQL、無 DB write、無 backfill、無 watchlist、無 live Telegram、無策略門檻變更。
+11. 若發現旁支問題，例如 external provider 不足、歷史資料品質差、效能慢、schema 需新增欄位，只記為 blocked 缺口或後續待辦，不納入本輪擴張。
 
 ## 範例或 fixture
 
-### Fixture A: Fresh GitHub runner only DB data
+### Fixture A: DB source sufficient
 
 輸入形狀：
 
-local_runtime_state: empty
-db.position_events:
-symbol: 2356
-action: take_profit
-action_date: 2026-05-28
-level: same_level
-today_signal_action: take_profit
-hard_risk_action: none
+market_evidence.source_family = production_db
+market_evidence.source_name = market_daily_bars
+market_evidence.required_fields_present = true
+market_evidence.freshness = fresh
 
-期望輸出形狀：
+theme_evidence.source_family = production_db
+theme_evidence.source_name = signal_items 或 daily_signal_snapshot
+theme_evidence.required_fields_present = true
+theme_evidence.freshness = fresh
 
-持倉優先:
-2356｜停利後觀察｜前次停利 2026-05-28，同級不重複
+strategy_evidence.source_family = production_db
+strategy_evidence.source_name = strategy_classification_audit 或 strategy_feature_snapshots
+strategy_evidence.required_fields_present = true
+
+期望手機輸出形狀：
+
+結論：新倉無有效進場；持倉先看風控。
+證據：市場/題材為結構化來源支持；策略證據已讀取。
 
 不得輸出：
 
-2356｜本次再次同級停利
-source_of_truth: runtime/local
+market evidence absent / missing-source
+strategy evidence v20.0 table not enabled
 
-### Fixture B: DB missing, local runtime has tempting data
+### Fixture B: DB has partial source, freshness missing
 
 輸入形狀：
 
-db_status: missing-source
-local_runtime_context:
-previous_action: reduce
-previous_action_date: 2026-05-28
-consecutive_observe_days: 5
+market_evidence.source_family = production_db
+required_fields_present = true
+freshness = unknown
+theme_evidence.source_family = runtime_diagnostic
+strategy_evidence.source_status = missing-source
 
-期望輸出形狀：
+期望手機輸出形狀：
 
-source_status: missing-source
-previous_action: unknown
-consecutive_observe_days: unknown 或不顯示
-historical_evidence_weight: neutral/unknown
+結論：新倉無有效進場；不可因證據不足放寬。
+證據：來源不足，不作確認；詳情列缺 market freshness、theme persistent source、strategy source。
 
 不得輸出：
 
-連續觀察 5 天
-前次減碼 2026-05-28
-同級已執行不重複
+confirmed market/theme
+策略證據已啟用
+runtime 題材支持
 
-### Fixture C: DB event plus higher-priority hard risk
+### Fixture C: Runtime data looks supportive but DB source absent
 
 輸入形狀：
 
-db.position_events:
-symbol: 3017
-action: reduce
-action_date: 2026-05-28
-level: same_level
-today_signal_action: reduce
-hard_risk_action: STOP_100
+runtime_watchlist_breadth = supportive
+db_market_source = missing-source
+db_theme_source = missing-source
+db_strategy_source = missing-source
 
 期望輸出形狀：
 
-持倉優先:
-3017｜停損 / 硬風控優先｜歷史同級減碼不覆蓋今日停損
+證據：production 來源不足，不作確認。
+詳情：runtime 觀察僅供診斷，非確認來源。
 
 不得輸出：
 
-3017｜減碼後觀察
+市場證據 confirmed
+題材證據 confirmed
+DB 已確認支持
 
 ## 明確禁止事項
 
-- 禁止新增或修改 DB schema / migration / SQL。
-- 禁止新增 live Supabase write、正式 backfill、live Telegram delivery。
+- 禁止新增 schema/table/field/index/migration/SQL。
+- 禁止 live Supabase write、正式 backfill、live Telegram。
+- 禁止改 BUY/SELL/RR/overheat/trading thresholds。
 - 禁止改 watchlist。
-- 禁止用 runtime/local/cache/worktree 狀態作為跨日記憶。
-- 禁止用本地 fallback 補 production DB 缺失。
-- 禁止回退 v20.4.0 DB valid-data 行為。
-- 禁止讓歷史記憶覆蓋硬風控、停損、REDUCE_50、STOP_100。
-- 禁止把不可買單靠歷史權重變可買。
-- 禁止把本輪擴成 Phase 2 source precedence、schema mapping 或資料建置工程。
+- 禁止用 runtime/local/cache/worktree/test fixture 補成 production confirmed evidence。
+- 禁止把 missing-source/source-error/insufficient-data/stale 顯示成 confirmed。
+- 禁止把 wording cleanup 擴成 strategy redesign。
+- 禁止回退 v20.4.1 source boundary、data authenticity fail-closed、手機報文噪音規則。
+- 禁止用「DB 有資料」泛稱通過；必須列實際 table/field/source 與 freshness 判斷。
+- 禁止在 summary 傾倒長缺口列表；長缺口只能進 detail 或 CHANGELOG/QA_REPORT。
 
 ## 阻塞條件
 
-- 無法識別 production DB / persistent source 是否包含必要欄位。
-- 現有 DB schema 無法可靠提供 previous action/date、consecutive observe days、historical evidence weight 或 execution dedupe 所需資料。
-- fresh GitHub runner 無法讀取相同 source-of-truth。
-- 需要新增 schema、migration、write path、backfill、watchlist 或 live delivery 才能完成驗收。
-- TASK 與現有 v20.4.0 契約衝突，且無法用最小 diff 保留既有行為。
+- 找不到可由 GitHub fresh runner read-only 存取的 production DB/persistent source。
+- existing table 缺少判斷 confirmed 所需欄位，例如日期/freshness、symbol/market/theme key、evidence value、classification、run id 或 outcome link。
+- Strategy evidence v20.0 table/provider 在現有 DB 或程式路徑中不存在、未配置、或欄位不足。
+- 只能靠 runtime/local/cache/test fixture 才能產生 evidence。
+- 需要新增 schema/table/field、migration、backfill、write path、external provider 才能達成 Owner 目標。
+- TASK 與既有 v20.4.1 source boundary 契約衝突時，Tech/QA 必須 blocked，交回 Architect/Owner 決策。

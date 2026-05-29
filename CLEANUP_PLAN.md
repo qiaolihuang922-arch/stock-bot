@@ -103,6 +103,14 @@
   - 不新增 `AGENTS.md` 硬規則：既有 GitHub runner / state source 規則已覆蓋，本輪只補狀態契約與測試 fixture，避免文件膨脹。
   - Runner gap：auto cycle 初次 Tech runner failed，需後續改善 handoff 續跑；本輪用 `CLEAN_TECH_WORKTREE=0` 在既有 candidate diff 上返工，避免丟失候選。
   - Phase 2 待辦：production DB read-only schema mapping、source precedence、必要 table/field 擴充需先通知 Owner。
+- 本輪 `v20.4.2` Evidence Phase 2 Source-Family Gate And Wording Cleanup：
+  - 根因分類：`repeated_pattern` / evidence source boundary。只排除 `runtime_fallback` 不夠，必須用 source-family whitelist 控制 confirmed / ready。
+  - QA 阻塞有效：第一次抓到 `runtime_diagnostic` 可 fake confirmed；第二次抓到 production confirmed 被 report-derived theme text 污染頂層 source_family。
+  - 已修正：confirmed / ready 只接受 `production_db` 或 `owner_approved_persistent`，report-derived / runtime diagnostic 只能留在 detail trace。
+  - 手機報文噪音已收斂：缺 production source 時只顯示 `證據：production 來源不足，不作確認。`，避免 absent/missing-source 長列表干擾主決策。
+  - 不新增 `AGENTS.md` 硬規則：現有 source-of-truth、fail-closed、手機閱讀規則已覆蓋；本輪沉澱為 fixture 與 stable contract。
+  - Runner gap：auto cycle 對 QA `阻塞` 結論 parser 仍 false fail；Tech runner 自檢曾未用 `arch -arm64`，後續需把 arm64 pytest 入口固化到 runner。
+  - 後續待辦：若要 confirmed market/theme evidence，需 Owner 批准 production table/view 欄位 mapping；可能涉及 market_index、sector/theme key、watchlist_breadth、freshness、evidence value。
 - 下一次產品任務完成後，確認 Post-cycle Review Gate 是否有做到：
   - 根因分類。
   - QA 攔截是否沉澱成 guard。

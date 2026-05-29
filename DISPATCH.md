@@ -4,9 +4,9 @@
 
 ## Current Task
 
-- task_id: `cross_day_context_source_boundary_hardening_20260529`
-- task_name: `Cross-day Context Source Boundary Hardening`
-- task_type: `risk_patch`
+- task_id: `evidence_phase2_source_mapping_wording_cleanup_20260529`
+- task_name: `Evidence Phase 2 Source Mapping And Telegram Wording Cleanup`
+- task_type: `normal_patch`
 - version_level: `patch`
 - qa_level: `L2`
 - owner_status: `requested`
@@ -18,31 +18,32 @@
 
 ## Current Result
 
-- Owner 要求：正式 TG 報文由 git / runner 啟動，runner 無狀態；`cross_day_context` 不能把本地 / runtime / 同 run 資料當成跨日記憶。若需要擴字段或建表，必須先通知 Owner。
-- 本輪完成 source boundary hardening，不改 DB schema、不新增 table / field、不 live write、不 live Telegram、不正式 backfill、不改 watchlist、不重設核心 BUY / SELL / RR 門檻。
+- Owner 要求：針對最新 `v20.4.1` 報文，處理 market/theme evidence 仍顯示 absent/missing-source 與策略證據未啟用造成的手機噪音；若需要擴字段或建表，必須先通知 Owner。
+- 本輪完成 `v20.4.2` Evidence Phase 2 wording / source-family gate，不改 DB schema、不新增 table / field、不 live write、不 live Telegram、不正式 backfill、不改 watchlist、不重設核心 BUY / SELL / RR 門檻。
 - 已吸收候選 diff：
-  - `services/cross_day_context.py` 不再把 `today_position_events` / local runtime 資料提升為 `previous_action`、`previous_action_date`、`dedupe_guard` 或 `source_of_truth`。
-  - 同 run 資訊只保留在 `same_run_guard`、`same_run_action`、`same_run_action_date`、`same_run_source`，不得作跨日記憶。
-  - `core/generator.py` VERSION 升為 `v20.4.1`，`cross_day_ready()` 只有在 `source_status=ready` 且 `source_of_truth` 全部來自 persistent whitelist 時才生效。
-  - 若 `source_of_truth` 混入 `local_position_events` 或其他非持久來源，即使同時有 `position_events`，sorting / summary / detail / prepare / dedupe 全部 fail closed。
-  - 新增 DB event、DB missing、source-error、local-only、mixed-source negative 測試，並同步 v20.4.1 header 測試。
-- QA 首輪有效阻塞：
-  - 發現 Tech 初版用 `any()` 判斷 source whitelist，導致 `["position_events", "local_position_events"]` mixed source 仍可輸出假歷史、連續觀察與權重。
-  - Tech 改成所有來源都必須屬於 persistent whitelist 後，QA 額外反證 pure DB 生效、mixed local / missing source fail closed。
+  - `core/generator.py` VERSION 升為 `v20.4.2`，缺 production source 時 summary 收斂為短句 `證據：production 來源不足，不作確認。`
+  - `core/market_theme_evidence.py` 新增 / 收斂 source boundary 欄位與 source-family gate；confirmed / ready 只能由 `production_db` 或 `owner_approved_persistent` 來源成立。
+  - `runtime_diagnostic`、runtime、local、cache、worktree、test fixture、report-derived source 可作 detail / limitations trace，但不得 confirmed / ready，不得污染頂層 source_family。
+  - market/theme 現有資料不足以 confirmed：需要 production persistent market_index / sector_index / watchlist_breadth 類 source，且具備 freshness、required fields 與 evidence value。
+  - `services/strategy_evidence.py` 本輪未改；用既有 read-only tests 驗證未受影響。
+- QA 有效阻塞：
+  - 首輪抓到 `runtime_diagnostic + watchlist_breadth + market_index` 可被誤判 confirmed / ready。
+  - 二輪抓到 production source 已足夠時，report-derived theme text 會污染頂層 `source_family=runtime_diagnostic`。
+  - Tech 修正後，QA 反證六種非持久 source family 全部不能 confirmed / ready，production + report-derived 混合時頂層 source_family 保持 `production_db`。
 - QA 最終通過：
-  - `92 passed, 13 warnings`
+  - `100 passed, 13 warnings`
   - `git diff --check` 通過
-  - forbidden diff 掃描無 schema / migration / SQL / backfill / watchlist / live Supabase write / live Telegram 變更；只命中既有測試字串假陽性。
+  - forbidden diff 掃描無 schema / migration / SQL / backfill / watchlist / live Supabase write / live Telegram / 策略門檻變更。
 - Post-cycle review：
-  - 根因分類：`repeated_pattern` / source boundary；本地同 run guard 與跨日持久記憶在初版實作中仍有混桶風險。
-  - QA 攔截有效：不是只重跑測試，而是補 mixed-source 手機誤讀反證，避免 fake history 進 summary / detail。
-  - 不新增 `AGENTS.md` 硬規則：現有 `GitHub Runtime / State Source` 硬規則已覆蓋，本輪沉澱為 fixture、狀態契約與 cleanup 待辦，避免文件膨脹。
-  - Runner gap 仍存在：auto cycle 初段 Tech runner failed，需後續改善 auto handoff / dirty candidate 續跑；本輪已用 `CLEAN_TECH_WORKTREE=0` 安全返工。
+  - 根因分類：`repeated_pattern` / evidence source boundary；不能只排除單一 `runtime_fallback`，必須以 source_family whitelist 控制 confirmed / ready。
+  - QA 攔截有效：兩次抓到測試全綠以外的 source-family 污染路徑，避免 fake confirmed 進 Owner 手機 summary。
+  - 不新增 `AGENTS.md` 硬規則：現有 source-of-truth / fail-closed / 手機閱讀規則已覆蓋，本輪沉澱為 fixture 與狀態契約。
+  - Runner gap：auto cycle 對 QA `阻塞` parser 仍 false fail；Tech runner 第一次未用 `arch -arm64`，但 QA / 主 repo 驗證已用 arm64 命令通過。
 
 ## Next Action
 
 - 完成 commit / push 後執行 tech worktree cleanup。
-- 後續 Phase 2 再做真實 schema mapping、`signal_runs / signal_items / signal_outcomes` source precedence、production read-only 驗證；若需要新增 table / field、cache、backfill 或 live write，必須先通知 Owner。
+- 後續若 Owner 要 confirmed market/theme evidence，需另開任務定義 production table/view 欄位與 read-only loader；可能需要新增 / 確認 market_index、sector/theme key、watchlist_breadth、freshness、evidence value 等 source，必須先通知 Owner。
 
 ## Status Values
 

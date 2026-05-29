@@ -19,9 +19,28 @@ LEGACY_SOURCE_TYPE_MAP = {
     "watchlist_theme_breadth": "watchlist_breadth",
 }
 CONFIRMED_REQUIRED_SOURCE_TYPES = {WATCHLIST_SOURCE, *MARKET_SOURCE_TYPES}
+PERSISTENT_SOURCE_FAMILIES = {"production_db", "owner_approved_persistent"}
+NON_PERSISTENT_SOURCE_FAMILIES = {
+    "runtime",
+    "runtime_diagnostic",
+    "local",
+    "cache",
+    "worktree",
+    "test_fixture",
+    "test fixture",
+    REPORT_DERIVED_FAMILY,
+}
 SUPPORTIVE_LEVELS = {"supportive"}
 WEAK_LEVELS = {"weak"}
 MIXED_LEVELS = {"mixed", "neutral"}
+EVIDENCE_ALLOWED_EFFECTS = ["wording", "排序提示", "detail trace"]
+EVIDENCE_FORBIDDEN_EFFECTS = [
+    "不得改核心交易門檻",
+    "不得變 BUY",
+    "不得覆蓋風控",
+    "不得 fake confirmed",
+    "不得用 runtime 補 DB",
+]
 
 
 def _theme_from_text(text):
@@ -155,6 +174,130 @@ def _source_supports_confirmed(source):
     return _source_level(source) in SUPPORTIVE_LEVELS
 
 
+def _source_family_is_persistent(source):
+    return str(source.get("source_family") or "").lower() in PERSISTENT_SOURCE_FAMILIES
+
+
+def _source_family_is_non_persistent(source):
+    family = str(source.get("source_family") or "").lower()
+    return (
+        family in NON_PERSISTENT_SOURCE_FAMILIES
+        or family.startswith("runtime")
+        or family.startswith("local")
+        or family.startswith("cache")
+        or family.startswith("worktree")
+        or family.startswith("test")
+        or bool(source.get("runtime_diagnostic"))
+        or bool(source.get("runtime_fallback"))
+    )
+
+
+def _source_can_confirm(source):
+    return (
+        _source_family_is_persistent(source)
+        and not _source_family_is_non_persistent(source)
+        and source.get("source_type") in CONFIRMED_REQUIRED_SOURCE_TYPES.union(BACKGROUND_SOURCE_TYPES)
+        and not _missing_structured_fields(source)
+        and _source_is_fresh(source)
+    )
+
+
+def _source_boundary_family(raw_sources, has_watchlist_diagnostic=False, confirmed=False):
+    if confirmed:
+        confirmed_families = [
+            str(source.get("source_family") or "").lower()
+            for source in raw_sources
+            if isinstance(source, dict) and _source_can_confirm(source)
+        ]
+        if "production_db" in confirmed_families:
+            return "production_db"
+        if "owner_approved_persistent" in confirmed_families:
+            return "owner_approved_persistent"
+
+    if has_watchlist_diagnostic or any(
+        isinstance(source, dict)
+        and (
+            source.get("runtime_diagnostic")
+            or source.get("runtime_fallback")
+            or _source_family_is_non_persistent(source)
+        )
+        for source in raw_sources
+    ):
+        return "runtime_diagnostic"
+    if any(
+        isinstance(source, dict)
+        and str(source.get("source_family") or "").lower() == "owner_approved_persistent"
+        for source in raw_sources
+    ):
+        return "owner_approved_persistent"
+    if any(
+        isinstance(source, dict)
+        and source.get("source_type") != REPORT_DERIVED_FAMILY
+        for source in raw_sources
+    ):
+        return "production_db"
+    return "production_db"
+
+
+def _source_status_for_evidence(theme_status, confirmed, raw_sources, missing_source_reasons):
+    if confirmed:
+        return "ready"
+    if any(
+        isinstance(source, dict)
+        and (
+            _source_is_stale(source)
+            or str(source.get("freshness") or "").lower() == "unknown"
+        )
+        for source in raw_sources
+    ):
+        return "stale"
+    if missing_source_reasons:
+        return "missing-source"
+    if raw_sources:
+        return "insufficient-data"
+    if theme_status == "absent":
+        return "missing-source"
+    return "insufficient-data"
+
+
+def _confidence_for_evidence(theme_status):
+    return {
+        "confirmed": "confirmed",
+        "weak": "weak",
+        "mixed": "mixed",
+        "stale": "absent",
+        "absent": "absent",
+    }.get(theme_status, "absent")
+
+
+def _freshness_for_evidence(raw_sources, confirmed):
+    freshness_values = [
+        str(source.get("freshness") or "").lower()
+        for source in raw_sources
+        if isinstance(source, dict) and source.get("freshness")
+    ]
+    if not freshness_values:
+        return None
+    if confirmed and all(value in {"fresh", "same_day", "current"} for value in freshness_values):
+        return "fresh"
+    if any(value in {"stale", "unavailable", "missing", "unknown"} for value in freshness_values):
+        return "stale"
+    return None
+
+
+def _source_name_for_evidence(raw_sources, missing_source_reasons):
+    names = []
+    for source in raw_sources:
+        if not isinstance(source, dict) or source.get("source_type") == REPORT_DERIVED_FAMILY:
+            continue
+        name = source.get("source_name") or source.get("source_type") or source.get("source_family")
+        if name and name not in names:
+            names.append(str(name))
+    if names:
+        return names
+    return missing_source_reasons or ["market/theme production source missing"]
+
+
 def _build_watchlist_breadth_diagnostic(results_map, as_of=None):
     if not results_map:
         return None
@@ -262,7 +405,7 @@ def build_market_theme_evidence(
         if normalized:
             raw_sources.append(normalized)
 
-    valid_structured_by_family = {}
+    valid_structured_by_key = {}
     valid_structured_by_type = {}
     source_families = []
     source_types = []
@@ -285,17 +428,17 @@ def build_market_theme_evidence(
             limitations.append(limitation)
 
         if (
-            source_type != REPORT_DERIVED_FAMILY
-            and source_type in CONFIRMED_REQUIRED_SOURCE_TYPES.union(BACKGROUND_SOURCE_TYPES)
-            and not source.get("runtime_fallback")
-            and not missing
-            and _source_is_fresh(source)
-            and family not in valid_structured_by_family
+            _source_can_confirm(source)
+            and (family, source_type, source.get("source_name")) not in valid_structured_by_key
         ):
-            valid_structured_by_family[family] = source
+            valid_structured_by_key[(family, source_type, source.get("source_name"))] = source
             valid_structured_by_type.setdefault(source_type, source)
 
-    valid_families = list(valid_structured_by_family.keys())
+    valid_families = []
+    for source in valid_structured_by_key.values():
+        family = source.get("source_family")
+        if family not in valid_families:
+            valid_families.append(family)
     has_watchlist = (
         WATCHLIST_SOURCE in valid_structured_by_type
         and _source_supports_confirmed(valid_structured_by_type[WATCHLIST_SOURCE])
@@ -381,8 +524,26 @@ def build_market_theme_evidence(
     theme_direction = "supportive" if confirmed else ("mixed" if theme_status == "mixed" else None)
     actionability = "track_only" if theme_status in {"confirmed", "weak", "mixed", "stale"} else "absent"
 
+    source_status = _source_status_for_evidence(
+        theme_status,
+        confirmed,
+        raw_sources,
+        missing_source_reasons,
+    )
+
     return {
         "level": theme_status,
+        "source_status": source_status,
+        "source_family": _source_boundary_family(
+            raw_sources,
+            has_watchlist_diagnostic=bool(watchlist_breadth_diagnostic),
+            confirmed=confirmed,
+        ),
+        "source_name": _source_name_for_evidence(raw_sources, missing_source_reasons),
+        "freshness": _freshness_for_evidence(raw_sources, confirmed),
+        "confidence": _confidence_for_evidence(theme_status),
+        "allowed_effects": EVIDENCE_ALLOWED_EFFECTS,
+        "forbidden_effects": EVIDENCE_FORBIDDEN_EFFECTS,
         "as_of": next(
             (
                 source.get("as_of")
@@ -404,7 +565,7 @@ def build_market_theme_evidence(
         "sources": raw_sources,
         "confirmed_source_families": valid_families,
         "confirmed_source_types": confirmed_source_types,
-        "source_family_count_for_confirmed": len(valid_families),
+        "source_family_count_for_confirmed": len(valid_structured_by_type),
         "runtime_fallback": has_runtime_watchlist,
         "runtime_supportive": has_runtime_supportive_watchlist,
         "watchlist_breadth_diagnostic": watchlist_breadth_diagnostic,
@@ -460,25 +621,11 @@ def format_market_theme_summary_lines(evidence):
         has_watchlist_diagnostic = bool(
             evidence.get("watchlist_breadth_diagnostic")
         ) if isinstance(evidence, dict) else False
-        market_missing = "缺 runtime watchlist breadth，且無 DB evidence table/cache"
-        theme_missing = "缺 sector_index 與可用觀察池題材廣度"
-        if missing:
-            if "缺 market_index" in missing and "缺 DB evidence table/cache" in missing:
-                market_missing = "缺 market_index 與 DB evidence table/cache"
-            elif "缺 market_index" in missing:
-                market_missing = "缺 market_index"
-            if "缺 runtime watchlist breadth" in missing and "缺 DB evidence table/cache" in missing:
-                market_missing = "缺 runtime watchlist breadth，且無 DB evidence table/cache"
-            if "缺 sector_index" in missing and "缺 runtime watchlist breadth" in missing:
-                theme_missing = "缺 sector_index 與可用觀察池題材廣度"
-        lines = [
-            "市場證據：absent/missing-source",
-            f"{market_missing}；本輪不確認市場證據。",
-            "題材證據：absent/missing-source",
-            f"{theme_missing}；本輪不確認題材證據。",
-        ]
+        lines = ["證據：production 來源不足，不作確認。"]
         if has_watchlist_diagnostic:
-            lines.append("非交易診斷：watchlist breadth fallback 已停用於決策")
+            lines.append("詳情：runtime 觀察僅供診斷，非確認來源。")
+        elif missing:
+            lines.append("詳情：缺結構化 market/theme production source。")
         return lines
 
     theme_label = evidence.get("theme_label") or "未命名主題"
