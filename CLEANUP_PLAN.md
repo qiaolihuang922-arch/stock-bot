@@ -153,6 +153,13 @@
     - `strategy_outcome_metrics` 正式 writer 狀態 conditional，需釐清是否只靠 backfill。
   - 待補流程：建立 DB table usage ledger，欄位固定為 `table -> writer -> reader -> strategy/formatter consumer -> status -> next action`，每次新增 DB 表或 reader/writer 都要更新。
   - 不新增 `AGENTS.md` 硬規則：先用 `CURRENT_STATE.md` / `CLEANUP_PLAN.md` 維持進度圖；若再次出現「新表已建但 writer/consumer 不清」，再升級 PM 任務卡硬欄位。
+- 本輪 Evidence Chain Pre-Development Closure：
+  - 根因分類：`integration_fragmentation` + `read_only_chain_incomplete` + `runner_gap`。
+  - 已完成：非 live handoff builder / SQL renderer / fail-closed tests；DB usage matrix 與關係圖已寫入 `CHANGELOG.md`。
+  - QA 攔截有效：先抓到缺 `evidence_status` default confirmed 與 raw renderer bypass，再抓到 renderer empty/None rows 旁路；已全部修正並補測。
+  - Runner gap：Tech / QA sessions 多次在完成實質工作後卡在互動 prompt，導致 Architect 需要人工整理 `CHANGELOG.md` 與清理 CAO session；需另修 runner sentinel / session cleanup / prompt 結尾。
+  - 不新增 `AGENTS.md` 硬規則：既有 source-of-truth、live write 禁令、Post-cycle Review 與 DB usage ledger 待補已覆蓋；本輪沉澱為 runner 待補與 fixture。
+  - 後續待辦：production ingestion/backfill、RLS/read-only role、GitHub runner actual data smoke 仍需 Owner 明確批准或手動 SQL / smoke 步驟。
 - 下一次產品任務完成後，確認 Post-cycle Review Gate 是否有做到：
   - 根因分類。
   - QA 攔截是否沉澱成 guard。

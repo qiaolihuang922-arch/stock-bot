@@ -33,6 +33,18 @@
 
 ## Recent High-Signal Milestones
 
+- Evidence Chain Pre-Development Closure 已通過 QA：
+  - 目的：在繼續證據鏈前，先補 `public.market_theme_confirmed_evidence` 的 repo-side 非 live handoff 閉環，並把 DB usage 狀態說清楚。
+  - 新增 `services/market_theme_evidence_store.py` handoff helpers：`build_market_theme_evidence_handoff()` 與 `render_market_theme_evidence_handoff_sql()`。
+  - helper 只產生 manual SQL handoff，不做 live Supabase write、不 formal backfill、不改 RLS、不 live Telegram。
+  - `confirmed` 不由 helper 直接成立；builder 回傳 `confirmed=False`。只有 Owner 手動審核/執行 SQL 寫入 production table 後，GitHub fresh runner 才能透過 read-only loader 讀到 confirmed/supporting/fresh rows。
+  - fake/runtime/local/cache/worktree/test fixture/report-derived/synthetic/default/unknown source 全部 fail closed，不產生 SQL。
+  - QA 兩輪有效攔截：
+    - 缺 `evidence_status` 不得 default confirmed。
+    - 直接呼叫 SQL renderer 不得繞過 validator；empty / None rows 也不得產生 SQL 或例外。
+  - 新增測試：`tests/test_market_theme_evidence_handoff.py`。
+  - 驗證：`arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence_handoff.py tests/test_market_theme_evidence.py -q`，`25 passed, 17 warnings`。
+  - 仍未完成：production ingestion/backfill、RLS/read-only role、GitHub runner actual production data smoke、正式 production write。
 - Integration audit before evidence-chain resume 已完成，結論是 `conditional pass`：
   - 假資料清理：positions、position_events、market/theme evidence、cross-day context 的主要 fake fallback 已有 fail-closed guard；缺 source 不應補成 fake confirmed / fake holding / fake event。
   - 行情來源仍有 TWSE -> Yahoo fallback，屬真實外部行情備援，但仍是 conditional；兩源都失敗時應無有效數據，不得產生正常候選。
@@ -189,6 +201,7 @@
 - `evidence absent` 只代表內部結構化證據未啟用 / 不足 / missing，不代表外部市場不強。
 - Runtime watchlist breadth fallback 只能作為非交易診斷或 missing-source 說明；不得稱市場證據、不得輸出 weak/runtime、不得 confirmed、不得改交易決策。
 - Market/theme evidence 的 `confirmed` / `ready` 必須同時滿足 production / Owner-approved persistent source family、required fields 與 freshness；report-derived / runtime diagnostic 只能作 trace，不得污染頂層 `source_family`。
+- Market/theme evidence handoff helper 只能產生 manual SQL，且自身不得回傳 `confirmed=True`；runtime/local/cache/worktree/test/report-derived/synthetic/default source、缺 `evidence_status`、空 rows 或 `None` rows 都不得產生 SQL。
 - positions / position_events 來源錯誤不可補假值：positions 不可回全 watchlist 0 股，position_events source-error 不可回全 0 event summary 或讓報文誤讀為今日無交易。
 
 ## Module Map

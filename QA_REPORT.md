@@ -2,117 +2,75 @@
 
   ## 測試範圍
 
-  本輪判定為 process / audit，不是產品修補；QA 未擴成 full pytest、replay、backfill 或 live smoke。
-
-  已讀取與核對：
-
-  - TASK.md
-  - CHANGELOG.md
-  - git status --short
-  - git diff --stat
-  - git diff --name-only
-  - 指定鏈路的必要局部源碼：core/generator.py、core/market_theme_evidence.py、services/market_theme_evidence_store.py、services/position_store.py、services/cross_day_context.py、services/strategy_evidence.py、services/
-    daily_snapshot_store.py、services/signal_store.py、.github/workflows/stock-bot.yml、main.py
-
-  已執行驗證：
-
-  - arch -arm64 .venv/bin/python -m pytest tests/test_position_store.py tests/test_cross_day_context.py tests/test_market_theme_evidence.py tests/test_strategy_evidence.py
-  - 結果：41 passed, 17 warnings
-  - 補充 inline 反證：runtime-only market/theme evidence 不會 confirmed；support_level=strong 回 source-error；空 production rows 回 absent。
+  - 任務尺寸 / QA level：risk_patch、L2+；未擴成 full pytest / replay / backfill / production smoke。
+  - 讀取：TASK.md、CHANGELOG.md、git status、git diff、services/market_theme_evidence_store.py、tests/test_market_theme_evidence_handoff.py、相關 generator/provider 局部消費路徑。
+  - 可吸收 diff：
+      - services/market_theme_evidence_store.py
+      - tests/test_market_theme_evidence_handoff.py
+      - CHANGELOG.md
+  - worktree 殘留：tests/test_market_theme_evidence_handoff.py 目前是 untracked；合併時需明確納入，不能只合併 tracked diff。
 
   ## 風險預算與停止條件
 
   本輪最值得抓的風險：
 
-  1. PASS 被 Owner 誤讀成端到端已完成。
-     驗證：核對 market_theme_confirmed_evidence writer / ingestion / backfill / RLS / production smoke 是否仍缺。
-     結果：Tech 已標出 read-only-chain-incomplete，QA 確認不能視為可恢復開發完成態。
-  2. fake / runtime / report-derived fallback 被升格成 confirmed。
-     驗證：讀 core/market_theme_evidence.py source family guard，並用 inline 反證 runtime-only path。
-     結果：runtime-only 顯示「production 來源不足」，confirmed=False。
-  3. process audit diff 被誤當產品 diff 合併。
-     驗證：git diff --name-only 只有 CHANGELOG.md。
-     結果：可吸收 diff 僅是本輪交付文件；沒有產品代碼、測試、SQL、runner diff。
-
-  停止條件已達：已核對 Tech matrix 正向結論、補反證、確認無產品 diff、未執行 live write / Telegram / backfill。
+  1. fake/runtime/local/cache/worktree/report-derived/test fixture 旁路產生 confirmed 或 SQL。
+      - 驗證：Tech 測試 + QA smoke 直接呼叫 builder 與 renderer。
+      - 停止條件：invalid source confirmed=False、handoff_ready=False、rows=[]、sql=""。
+  2. 直接 renderer 繞過 builder validator。
+      - 驗證：render_market_theme_evidence_handoff_sql([])、None、runtime/local/report-derived rows。
+      - 停止條件：全部回空字串、不拋例外、不產生 SQL。
+  3. handoff artifact 被誤讀為 live write 或 fresh runner local state。
+      - 驗證：靜態掃描只見 loader .execute() read path，無 insert/upsert/update/delete；generator 仍只讀 production loader。
+      - 停止條件：無 live write API、無 Telegram/header diff、殘留 production backfill/RLS/smoke 明確標為 manual/follow-up。
 
   ## 關聯風險掃描
 
-  可吸收 diff：
-
-  - CHANGELOG.md 的 audit matrix 文件更新。
-
-  worktree 殘留 / 不可當產品合併內容：
-
-  - 未發現產品代碼 diff。
-  - git status --short 顯示交付文件變更；Architect 收口時已把 `CHANGELOG.md` 的「零 diff / git status」描述改為「產品代碼零 diff，交付文件有 diff」。這是交付敘述修正，不是產品行為風險。
-
-  主要鏈路反證結果：
-
-  - positions missing-source / source-error：load_positions() 回 {} 並設 warning；generate_report() 讀 warning 後提前輸出 fail-closed summary，未 fallback 成全 watchlist 0 股。
-  - position events missing-source / source-error：回 unavailable summary；只有 query 成功且空資料才是全 0 event summary。
-  - market/theme evidence：loader 要求 support_level in confirmed/supporting、evidence_status=confirmed、freshness=fresh；strong 被 inline 反證為 source-error。
-  - runtime/report-derived：runtime diagnostic 只顯示診斷，不 confirmed。
-  - cross-day context：source-error / insufficient-data 時清空 previous state/action/weight，不把 same-run local context 升格為跨日記憶。
-  - DB consumption：market_daily_bars 仍是 write-only；signal_runs/items/outcomes 目前偏 reference-only；strategy_outcome_metrics fresh runner writer 狀態仍 conditional。這些已被 Tech matrix 標為風險或旁支 next action。
+  - TASK.md / CHANGELOG.md / diff 一致：本輪實作確實只新增 non-live handoff builder、SQL renderer、測試；未改 strategy threshold、Telegram formatter、runner、watchlist、schema/RLS。
+  - 直接 renderer 無旁路：invalid rows 會套 _validate_handoff_row()；[] 與 None 回 ""。
+  - fake source 反證：QA smoke 覆蓋 runtime、runtime-cache、local、local-cache、cache、worktree、test、test-fixture、test_fixture、report_derived、report-derived、synthetic、fixture、default，均不產生 SQL。
+  - handoff no live write：新增 helper 只回傳 SQL 字串，live_write=False；未發現新增 Supabase write API。
+  - fresh runner：core/generator.py 仍呼叫 load_confirmed_market_theme_evidence()，無本地 handoff 狀態依賴；無 DB/env 時 fail closed 為 missing-source / source-error。
+  - DB matrix：CHANGELOG.md 已區分 consumed、reference-only、write-only/reference-only、manual-owner-step；沒有把 market_daily_bars、signal_runs/items/outcomes 說成 generator 直接策略來源。
 
   ## 跨區塊語意一致性
 
-  本輪不改 Telegram / summary / dashboard 輸出；core/generator.py 版本仍是 v20.4.3，符合 TASK 的「audit 不升版」。
-
-  以 Owner 手機閱讀順序檢查相關 fail-closed 文案：
-
-  - 缺持倉來源時，開頭即顯示 warning、新倉：無有效進場、持倉 unavailable、production 來源不足。
-  - market/theme runtime fallback 文案明確寫「runtime 觀察僅供診斷，非確認來源」。
-  - 未看到把不可買、僅診斷或缺資料包裝成可買建議的新增 diff。
+  - CHANGELOG.md 同時聲明 non-live handoff、manual SQL、no agent live write、production ingestion/backfill/RLS/smoke follow-up，與 diff 行為一致。
+  - 關係圖從 raw true source -> builder -> manual SQL -> production table -> loader -> provider -> generator -> Telegram evidence block，狀態標示沒有把 handoff SQL 誤標為已寫入 production。
+  - core/generator.py 版本仍為 v20.4.3；本輪未改 Telegram 使用者可見報文，版本契約可接受。
 
   ## 使用者誤讀風險
 
-  最大誤讀風險不是 Telegram，而是 Owner 讀 audit matrix 時把局部 PASS 當成 evidence chain 可繼續開發。
-
-  QA 判定：
-
-  - market_theme_confirmed_evidence 仍缺 writer / ingestion / backfill / RLS read-only role / production data smoke。
-  - Tech 已在殘留風險列出此缺口，但 CHANGELOG 前段「多個 fail-closed guard 已存在」可能被快速閱讀成整體可恢復。
-  - 因此本輪只能作為 audit 條件通過，不能作為恢復 evidence chain 開發的綠燈。
-
-  另有文件誤讀風險：
-
-  - 原始 TASK.md 內有兩份相近任務卡串接，且第 173 行出現 `產品代碼# TASK` 連在同一行；Architect 收口時已清理為單一任務卡。
+  - Owner 手機閱讀順序檢查：本輪未改 Telegram message list；既有缺 source 文案仍是「證據：production 來源不足，不作確認。」而不是 confirmed 或可買。
+  - confirmed 文案只應來自 production table fresh rows；handoff builder 自身固定 confirmed=False，不會讓 Owner 在未手動寫 DB 前看到 confirmed。
+  - 殘留風險已標明 production write/backfill/RLS/smoke 未完成，不應被解讀為已上線或已完成正式 ingestion。
 
   ## 質疑與反證
 
-  Tech 未覆蓋的補充反證：
+  - 質疑：Tech 測試只靠 builder 是否可能漏掉 renderer 直接呼叫？
+      - 反證：測試與 QA smoke 均直接呼叫 renderer；invalid/empty/None 不產生 SQL。
+  - 質疑：report-derived 變體是否可能繞過禁止清單？
+      - 反證：report_derived 與 report-derived 都被 QA smoke 驗證為無 SQL；後者即使不是明確 forbidden，也因不在 allowlist 被拒絕。
+  - 質疑：handoff SQL 是否讓 fresh runner 不經 production DB 就 confirmed？
+      - 反證：generator/provider 消費仍走 production loader；handoff helper 沒被 generator 呼叫，且 builder 回傳 confirmed=False。
 
-  - inline 建構 runtime-only provider，結果 confirmed=False、source_status=missing-source，summary 明確為 production 來源不足。
-  - inline 建構 support_level=strong production row，loader 回 source-error，未轉成 confirmed。
-  - inline 建構 production table 空 rows，loader 回 absent，未產生 confirmed。
+  測試命令：
 
-  對 Tech PASS 的質疑：
-
-  - PASS 只代表 audit-level 靜態鏈路與 mocked/local tests 成立，不代表 production DB 有資料、RLS 可讀、GitHub secrets 正確或 runner production smoke 通過。
-  - strategy_feature_snapshots PASS 可接受，因其 writer / reader / formatter context 均存在；但缺資料時不應被解讀為策略證據充足。
-  - GitHub fresh runner PASS 可接受於「runner 由 git checkout + secrets 建 config」；但不能證明 secrets 內容、RLS policy、production rows 實際可用。
+  - arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence_handoff.py tests/test_market_theme_evidence.py -q：25 passed，17 warnings。
+  - QA smoke：14 種 fake/local/runtime/report-derived source + renderer empty/None + no DB fresh-run fail closed，通過。
 
   ## 未測項目
 
-  未做，且不應在本輪擴大：
-
-  - full pytest
-  - replay / backfill dry-run
-  - live Supabase read/write smoke
-  - live Telegram delivery
-  - production RLS / read-only role 驗證
-  - production table row freshness / coverage 驗證
-  - writer / ingestion / backfill 實作驗收
+  - 未連 production DB。
+  - 未驗證 RLS/read-only role。
+  - 未做 formal backfill / replay。
+  - 未執行 live Supabase write。
+  - 未執行 live Telegram delivery。
+  - 未做 full pytest；符合本輪 L2+ 停止條件。
 
   ## QA 結論
 
-  conditional pass
+  通過。
 
-  理由：
-
-  - 產品代碼、測試、SQL、runner 無 diff；可吸收 diff 僅 CHANGELOG.md。
-  - Tech matrix 的核心 fail-closed / fake fallback 正向結論，在 audit 範圍內可由源碼、局部測試與 QA inline 反證支持。
-  - TASK.md 原有重複任務卡與格式串接瑕疵，Architect 收口時已清理為單一任務卡；CHANGELOG.md 對 git status / 零 diff 的敘述也已改為交付文件 diff 與產品零 diff 分開表述。
-  - 更重要的是，market_theme_confirmed_evidence 端到端仍未完成；本輪不能被吸收成「可繼續 evidence chain 開發」，只能吸收成「已完成 integration audit，後續需另開 writer / ingestion / RLS / production smoke 任務」。
+  本結論只代表本輪可吸收 diff 通過：non-live handoff builder、direct renderer fail-closed、fake source 不產生 confirmed/SQL、fresh runner 不依賴 local handoff。不得解讀為 production ingestion/backfill/RLS/smoke 已完成或
+  已上線。

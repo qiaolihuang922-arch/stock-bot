@@ -4,44 +4,41 @@
 
 ## Current Task
 
-- task_id: `evidence_chain_integration_audit_before_resume`
-- task_name: `Evidence Chain Integration Audit Before Resume`
-- task_type: `process`
+- task_id: `evidence_chain_predev_closure_20260529`
+- task_name: `Evidence Chain Pre-Development Closure`
+- task_type: `risk_patch`
 - version_level: `none`
-- qa_level: `process`
+- qa_level: `L2+`
 - owner_status: `requested`
-- architect_status: `audit_absorbed_pending_owner_decision`
+- architect_status: `qa_passed_pending_commit`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
-- qa_status: `conditional_pass`
+- qa_status: `qa_passed`
 - commit: `pending`
 
 ## Current Result
 
-- Owner 要求暫停證據鏈後續開發，先統一三件事：真資料 / DB 資料消費 / 新表端到端流程。
-- 本輪只做 integration audit，無產品代碼、測試、SQL、schema、runner 或策略 diff；只更新 `TASK.md`、`CHANGELOG.md`、`QA_REPORT.md` 與總控摘要。
-- Audit 結論：
-  - 假資料清理：positions、position_events、market/theme evidence、cross-day context 的主要 fake fallback 已有 fail-closed guard；行情來源仍有 TWSE -> Yahoo 真實外部 fallback，屬 conditional，不是 fake confirmed。
-  - DB 消費：多數核心 DB 有 writer/reader/consumer，但不是所有 DB 資料都已進策略；`market_daily_bars` 目前偏 write-only，`signal_runs/items/outcomes` 偏 reference-only，`strategy_outcome_metrics` writer 主要在 backfill。
-  - 新表串接：`public.market_theme_confirmed_evidence` schema + read-only loader + provider + Telegram 已串上；但 writer / ingestion / backfill / RLS read-only role / actual production data smoke 未完成，因此端到端未閉環。
-- QA conditional pass：
-  - Tech matrix 的 fail-closed / fake fallback 結論在 audit 範圍內可由源碼、局部測試與 QA inline 反證支持。
-  - 不能把本輪吸收成「可繼續 evidence chain 開發」綠燈；只能吸收成「integration audit 完成，下一步需補 writer / ingestion / RLS / production smoke」。
-- Architect 收口：
-  - 清理 `TASK.md` 重複任務卡。
-  - 修正 `CHANGELOG.md` 對 git status / 零 diff 的描述：產品代碼零 diff，交付文件有 diff。
+- Owner 要求在繼續證據鏈開發前，先把三件事收斂到同一進度：真資料 / DB 資料消費 / 新表端到端流程。
+- 本輪完成非 live repo-side 閉環補丁：
+  - `services/market_theme_evidence_store.py` 新增 `build_market_theme_evidence_handoff()` 與 `render_market_theme_evidence_handoff_sql()`。
+  - helper 只產生 manual SQL handoff；`live_write=False`，不執行 Supabase write、不 backfill、不改 RLS、不 live Telegram。
+  - 允許來源收斂為 `production_db`、`owner_approved_persistent`、`market_data`；runtime/local/cache/worktree/test/report-derived/synthetic/default/unknown source 全部 fail closed。
+  - handoff builder 自身 `confirmed=False`；只有 Owner 手動執行 SQL 寫入 production table 後，GitHub fresh runner 才能透過既有 read-only loader 讀到 confirmed/supporting/fresh rows。
+- 新增測試 `tests/test_market_theme_evidence_handoff.py`，覆蓋合法 manual SQL、fake source、missing status、raw renderer 旁路、empty/None rows。
+- QA 通過：
+  - `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence_handoff.py tests/test_market_theme_evidence.py -q`：25 passed, 17 warnings。
+  - QA 額外 smoke 覆蓋 14 種 fake/local/runtime/report-derived source、renderer empty/None、no DB fresh-run fail closed。
+  - 結論只代表本輪 non-live handoff diff 可吸收；不得解讀為 production ingestion/backfill/RLS/smoke 已完成。
 - Post-cycle review：
-  - 根因分類：`integration_fragmentation` + `read_only_chain_incomplete`。
-  - 當前片段化不是單一 bug，而是 table / writer / loader / formatter / strategy influence 邊界未用一張進度圖管理。
-  - Auto cycle 對 QA `conditional pass` 仍 false fail；已人工讀取 QA 原文並吸收條件，runner parser 待補。
-  - 不新增 `AGENTS.md` 硬規則；本輪先把缺口收斂到 `CLEANUP_PLAN.md`，下一步應開端到端 writer/RLS/smoke 任務。
+  - 根因分類：`integration_fragmentation` + `read_only_chain_incomplete` + `runner_gap`。
+  - QA 有效攔截兩輪：先抓出 missing `evidence_status` default confirmed 與 raw renderer bypass，再抓出 empty/None renderer 旁路；已修並補測。
+  - Tech/QA runner 多次卡在互動提示，需補 runner prompt/session cleanup；本輪用人工審查與 QA 報告收口。
+  - 不新增 `AGENTS.md` 硬規則；既有 DB/live write、source-of-truth、Post-cycle Review 已覆蓋，本輪只更新狀態與待補流程。
 
 ## Next Action
 
-- 等 Owner 決定是否開下一張任務：
-  1. `market_theme_confirmed_evidence` writer / ingestion / backfill 設計。
-  2. production read-only role / RLS / GitHub runner actual data smoke。
-  3. DB consumption cleanup：`market_daily_bars`、`signal_runs/items/outcomes`、`strategy_outcome_metrics` 的用途收斂。
+- Architect commit / push 本輪 diff，清理 CAO worktree。
+- 下一步才可繼續證據鏈：production ingestion/backfill/RLS/read-only role/GitHub runner actual data smoke 仍需 Owner 明確批准或手動 SQL / smoke 步驟。
 
 ## Status Values
 
