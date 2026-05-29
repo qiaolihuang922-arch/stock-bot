@@ -10,11 +10,11 @@
 - version_level: `none`
 - qa_level: `L2+`
 - owner_status: `requested`
-- architect_status: `qa_passed_pending_commit`
+- architect_status: `pushed`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
 - qa_status: `qa_passed`
-- commit: `pending`
+- commit: `9c6a643 pushed`
 
 ## Current Result
 
@@ -41,7 +41,7 @@
 
 ## Next Action
 
-- Architect commit / push 本輪 diff，清理 CAO worktree。
+- 本輪 diff 已 commit / push：`9c6a643 feat: add evidence ops artifacts`。
 - 若 Owner 要真正進 production：先審核 SQL template 需要執行的 section、替換 placeholder，提供 read-only env 後跑 smoke；正式 backfill / RLS / grant / live write 仍需單獨批准。
 
 ## Status Values
