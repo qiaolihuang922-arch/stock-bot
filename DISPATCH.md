@@ -4,57 +4,44 @@
 
 ## Current Task
 
-- task_id: `telegram-breakout-distance-always-visible-v20.2.1`
-- task_name: `Telegram Breakout Distance Always Visible`
-- task_type: `display_bugfix`
-- version_level: `patch`
-- qa_level: `L1`
+- task_id: `postprofit-and-strong-market-review-20260529`
+- task_name: `Post-profit State And Strong Market Preparation Review`
+- task_type: `research_to_product`
+- version_level: `patch_then_possible_minor`
+- qa_level: `research`
 - owner_status: `requested`
-- architect_status: `pushed`
-- pm_status: `task_ready`
-- tech_status: `changelog_ready`
-- qa_status: `qa_passed`
-- commit: `pushed`
+- architect_status: `research_accepted_waiting_owner_direction`
+- pm_status: `research_ready`
+- tech_status: `not_required`
+- qa_status: `research_ready`
+- commit: `pending`
 
 ## Current Result
 
-- Owner 要求小改動：不管距離突破點多少，只要有距離資料，Telegram / 報文卡片都要顯示突破距離。
-- 本輪範圍限定為 tiny_patch / L1：
-  - 只改持倉與未持倉卡片的盤面行顯示。
-  - 不改策略 decision、突破門檻、買賣 / 加減碼、DB、watchlist、live Telegram、replay/backfill。
-  - 使用者可見版本升為 `v20.2.1`。
+- Owner 暫停證據鏈，要求檢查 05/29 v20.2.1 報文：
+  - 英業達今日已停利賣出 112 股後，主決策仍顯示 `停利`。
+  - 本週台股 / AI / 電子大漲，但系統一檔都沒有推薦。
+- Architect 已走 research，不改產品代碼、不建表、不做 live、不 backfill。
 - CAO 服務已確認：
   - API: `http://127.0.0.1:9889/`
   - UI: `http://127.0.0.1:5173/`
-- PM 已交付 `TASK.md`，Architect 已檢查：
-  - `# TASK:` 標題存在。
-  - 已列手機閱讀路徑、直接消費者、輸出契約、版本契約與禁止事項。
-- Tech 已交付 `CHANGELOG.md` 與候選 diff：
-  - `core/generator.py` VERSION 升為 `v20.2.1`。
-  - 卡片距離讀取支援 `data.breakout_distance` 缺失時 fallback 到 `result.breakout_distance`。
-  - 持倉與未持倉卡片共用同一距離顯示規則。
-  - 測試同步 formatter、notifier direct consumer、market evidence header。
-- QA 最終驗證通過：
-  - 有距離資料時，`已突破 / 臨界突破 / 接近突破 / 遠離突破` 都保留括號距離。
-  - 缺資料時不輸出 `0%`、`None%`、空括號或假距離。
-  - message list / notifier payload shape 未破壞。
-  - 無策略、DB、watchlist、live Telegram、replay/backfill diff。
-- 主 repo 驗證：
-  - `arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py tests/test_notifier.py tests/test_market_theme_evidence.py`
-  - 結果：`72 passed, 21 warnings`
-  - `git diff --check` 通過。
-- Post-cycle review：
-  - 根因分類：正常 tiny_patch，外加一次 runner / worktree 交付摘要不一致被 QA 攔下。
-  - QA 有效攔截：版本 / CHANGELOG 與實際 diff 不一致時 blocked，修正後通過。
-  - 不新增硬規則；此屬 runner handoff 風險，已按既有 Post-cycle Review Gate 記錄到 `CLEANUP_PLAN.md`。
-- Owner 追問本輪耗時過長後，Architect 已補 runner guard：
-  - `run_tech_write.sh` 遇到 dirty tech worktree 時預設拒絕 reset。
-  - 修交付摘要需顯式 `CLEAN_TECH_WORKTREE=0`，刻意丟棄候選 diff 需顯式 `ALLOW_DISCARD_TECH_WORKTREE=1`。
-  - 目的：避免小修正因 worktree diff 被沖掉而重跑整輪。
+- Research 結論：
+  - 英業達已執行同級停利後仍以 `停利` 作主行動，是高風險報文 / 狀態機問題；疑似違反既有契約：今日已減碼 / 停利達同級建議時，預設轉為觀察，只有更高級風控或硬停損可覆蓋。
+  - 公開資料支持本週 AI / 電子 / 台股偏強，但零 BUY 不必然是策略錯；漲停不追、過熱冷卻、RR 不足有風控合理性。
+  - 真正產品缺口是：強勢市場下缺少 `市場強但個股買點未成立` 的準備層與手機文案，導致 Owner 只看到無推薦，感覺系統漏掉行情。
+- 建議下一步：
+  - 先做 `v20.2.2` patch：修已執行停利後主行動，避免同日同級連續停利誤讀。
+  - 再視 Owner 是否同意做 minor 產品層：強勢市場準備層；不直接放寬策略門檻。
+- 禁止事項：
+  - 不直接把市場大漲轉成 BUY。
+  - 不改 RR / 過熱 / 漲停不追門檻，除非 Owner 明確批准 major 策略研究。
+  - 不建表、不 live Supabase write、不 live Telegram、不 backfill。
 
 ## Next Action
 
-- 等待 Owner 下一個需求；若是產品 / 顯示 / 策略 bug，仍先分派 PM。
+- 等待 Owner 決定：
+  - 若要修，Architect 分派 PM 撰寫 `v20.2.2` TASK.md。
+  - 第一張 TASK 只處理「已執行停利後狀態」，不要同時改強勢市場準備層。
 
 ## Status Values
 

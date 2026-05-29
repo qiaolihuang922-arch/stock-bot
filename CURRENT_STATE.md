@@ -124,6 +124,9 @@
 
 ## Open Follow-Ups
 
+- 2026-05-29 報文研究結論：
+  - 英業達今日已停利後主決策仍顯示 `停利`，屬高風險報文 / 狀態機問題；下一步建議先做 `v20.2.2` patch，修「已執行同級停利後轉觀察」。
+  - 本週台股 / AI / 電子偏強有公開資料支持，但零 BUY 不必然是錯；需補「強勢市場但不可追」的準備層 / 手機文案，不得直接放寬買點。
 - 證據鏈 v20.2.0 只建立 production contract 與 runtime source gate；若要自動取得 market_index / sector_index、建表、cache、external provider 或持久化 evidence，先通知 Owner。
 - 若 Owner 仍覺得查詢慢，另開 performance measurement 任務，量測 production 實際秒數。
 - 後續可改善 `load_strategy_evidence_summary()` 顯式排序與 `漏失` 文案，但需另開任務。

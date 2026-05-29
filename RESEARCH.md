@@ -1,92 +1,88 @@
 # RESEARCH.md
 
-本文件保存最新研究任務的高信號摘要，不保留完整聊天紀錄、終端流水或長表格。
+本文件保存最新研究任務的高信號摘要，不保留完整聊天紀錄。
 
 ## Latest Research
 
-- task_id: `20260528_120657_23719_online_research_pair`
-- 日期：2026-05-28
-- 狀態：Architect 已吸收為市場 / 題材證據鏈方向。
-- 來源輸出：`/Users/liveroom/stock-bot-agent-context/outputs/20260528_120657_23719_online_research_pair.md`
+- task_id: `postprofit-and-strong-market-review-20260529`
+- 日期：2026-05-29
+- 狀態：research_accepted
+- 來源輸出：`.cao_agent_context/outputs/20260529_095339_21682_online_research_pair.md`
+- 範圍：只做研究與風險分析；不改代碼、不建表、不做 live Supabase、不做 live Telegram、不做 backfill。
 
 ## Question
 
-Owner 指出：`v20.0.12` 只是防止無證據硬寫市場主線的保護邏輯，不是真正市場 / 題材證據鏈。研究問題是如何為 Telegram 報文建立可追溯的市場主線 / 題材證據鏈，且不做 live Supabase write、正式 backfill、live Telegram，不改策略決策。
+Owner 暫停證據鏈，要求檢查 05/29 v20.2.1 報文兩個問題：
 
-## Evidence Sources
+1. 英業達今日已停利賣出 112 股後，主決策為何仍是 `停利`，是否缺少已執行後冷卻 / 減碼後觀察狀態，導致連續停利誤讀。
+2. 這一週台股 / AI / 電子股大漲，但系統一檔都沒有推薦，是否策略過度保守，或過熱 / RR / 漲停不追規則缺少強勢市場的準備層級。
 
-- 內部 watchlist：價格、量能、策略分類、買點是否成立、snapshot / strategy evidence。
-- 市場 / 類股：TAIEX、電子類、科技 / 半導體相關指數。
-- flow：法人買賣超、外資持股或產業持股比。
-- 官方 / 公司資料：TWSE、MOPS、MOEA、MOF、TSMC IR、NVIDIA IR 等。
-- 外部產業資料只能作背景，不得單獨推出今日可買或個股交易行動。
+## External Evidence
 
-## Product Findings
+- 2026-05-25 台股明顯由 AI / 電子權值帶動上攻，TAIEX 收 43,644.40、上漲 3.26%，公開報導點名 AI 概念與電子族群強勢。
+- 2026-05-27 台股續強，電子股與權值科技股帶動指數創高，公開資料顯示 AI / 電子主線仍在。
+- 2026-05-28 台股大幅回檔，代表本週雖強，但同時是高波動、追價風險高的市場。
+- 2026-05-29 盤中公開新聞顯示 AI / 電子再度強勢，華邦電、英業達、仁寶、技嘉等一度亮燈漲停；此為盤中資料，不能替代正式收盤或系統內部 watchlist evidence。
+- NVIDIA FY2027 Q1 財報顯示 Data Center 營收年增強勁，支持 AI infrastructure 需求偏強，但不能直接推導台股個股今日可買。
+- TWSE 一般股票有 10% 漲跌幅限制；因此漲停不追、過熱冷卻、RR 控制有制度與風控合理性。
 
-- 報文若要出現市場 / 題材判斷，必須證明三層：
-  - 市場層：大盤 / 電子 / 科技或半導體相關指數是否支持偏多。
-  - 題材層：watchlist 內相關標的是否多數維持強勢、量能、分類未惡化。
-  - 執行層：即使市場或題材偏多，個股買點、RR、回測、冷卻與風控是否成立。
-- 需要 evidence 才可出現的高風險詞句：
-  - `AI / 電子供應鏈仍偏多`
-  - `市場主線仍在`
-  - `題材仍可追蹤`
-  - `不代表看空產業`
-  - `市場偏多但買點未成立`
-  - `主線持倉保留`
-- 缺 evidence 時必須降級為：
-  - `市場證據不足，僅依策略分類追蹤`
-  - `題材未確認，等待價格與量能證據`
-  - `本輪技術條件未成立，未判斷產業多空`
-  - `新倉：無有效進場`
+## Findings
 
-## Evidence Levels
+### 1. 英業達已停利後仍顯示 `停利`
 
-- `confirmed`：至少兩類來源同向且未過期，例如 watchlist 題材 breadth + 市場 / 類股指數。
-- `weak`：只有單一來源、樣本太小或證據不完整，只能寫可追蹤。
-- `absent`：沒有足夠證據，不得寫主線偏多。
-- `stale`：資料超過 freshness 門檻，必須標示過期並降級。
-- `mixed`：官方 / 外部背景偏強但 watchlist breadth 或策略分類不支持，只能寫背景，不得 confirmed。
+研究結論：這是高風險報文 / 狀態機問題，優先級高。
 
-## Technical Direction
+- `CURRENT_STATE.md` 已有穩定契約：今日已減碼 / 停利達同級建議時，預設轉為觀察；只有更高級風控或硬停損可覆蓋。
+- 若英業達今日已賣出 112 股，且同級停利已完成，主行動仍顯示 `停利`，Owner 手機第一眼容易理解成「還要再賣一次」。
+- 合理輸出應區分：
+  - 原始訊號仍達停利區。
+  - 今日同級停利已執行。
+  - 剩餘部位進入觀察 / 停利後冷卻 / 減碼後觀察。
+  - 只有硬停損、策略失效、或第二段停利條件明確成立，才能再次輸出可執行賣出動作。
 
-- 第一階段採 dry-run / payload contract，不建表、不寫庫。
-- formatter 只能引用有 `source_type / source_name / as_of / level / freshness / limitations` 的 evidence。
-- `market_theme_evidence` 建議欄位：
-  - `as_of`
-  - `level`
-  - `theme`
-  - `market_direction`
-  - `execution_implication`
-  - `sources[]`
-  - `supports_claims[]`
-  - `limitations[]`
-  - `formatter_allowed_phrases[]`
-  - `formatter_forbidden_phrases[]`
-- 如果要做 production confirmed，需至少接入第二類 runtime source；若涉及 DB table、cache、scheduler、external provider，先通知 Owner。
-- evidence 不得接入策略 decision；只能影響報文文字與證據區塊。
+建議下一步：開 `v20.2.2` patch 任務，修正已執行停利後的主行動與 summary / 持倉卡一致性。
 
-## QA Risks
+### 2. 強勢市場一檔都不推薦
 
-- 無 evidence 時不得硬寫 AI / 電子供應鏈偏多。
-- stale evidence 不得當 confirmed。
-- 非 AI 場景不得誤貼 AI。
-- 產業背景強但 watchlist breadth 弱時，只能 weak / mixed。
-- market/theme confirmed 仍不得讓 `新倉` 顯示可買，除非原策略買點成立。
-- 手機第一屏必須先看到 evidence 等級與行動限制，不是先看到主線口號。
+研究結論：不能直接判定策略錯，但確實有產品缺口。
+
+- 公開資料支持 Owner 的觀察：這週 AI / 電子 / 伺服器供應鏈明顯偏強。
+- 但 `漲停不追`、`過熱冷卻`、`RR 不足` 在 10% 漲跌幅和高波動市場中有合理風控意義；因此「零 BUY」不必然是錯。
+- 真正缺口是報文只說 `無有效進場`，沒有清楚表達：
+  - 市場 / 題材很強。
+  - 個股買點未成立，不可追。
+  - 哪些是最接近的準備股。
+  - 明天要等什麼觸發。
+- 也就是需要「強勢市場準備層」，而不是直接放寬買點。
+
+建議下一步：先做報文 / 產品契約，不直接改策略門檻。若要調 RR、過熱、漲停不追規則，需另開 major 策略研究並由 Owner 明確批准。
+
+## Recommended Product Contract
+
+### Patch: 已執行停利後狀態
+
+- 同一股票同一交易日已執行同級停利後，不得再次把同級 `停利` 作為主行動。
+- 預設主行動改為：`停利後觀察`、`減碼後觀察` 或 `剩餘觀察`。
+- 若還要再次停利，必須顯示第二段條件、剩餘股數與觸發原因。
+- Summary、持倉卡、交易執行區、風控檢查區的同一檔行動必須一致。
+
+### Minor / Product Layer: 強勢市場準備層
+
+- 強勢市場但個股不可買時，summary 應說：`市場強，但新倉無有效進場，不追價`。
+- 可列 1-3 檔最接近的準備 / 追蹤標的，例如 `等回測`、`等冷卻`、`等RR修復`。
+- 不得把未達買點標的升成 BUY。
+- 淘汰、不可買、僅追蹤、準備必須分開，避免 Owner 誤讀。
+
+## Suggested Acceptance Tests
+
+- 英業達 fixture：今日已停利賣出 112 股、剩餘 300 股、沒有第二段停利或硬停損。期望 summary / 持倉卡 / 風控檢查不再輸出可被理解為再次停利的主行動。
+- 覆蓋案例：若同檔有第二段停利或硬風控，報文必須同行說明觸發條件與剩餘股數。
+- 強勢市場 fixture：AI / 電子市場強，watchlist 多檔漲停或 RR 不足。期望 `新倉：無有效進場`，但列出準備 / 追蹤層，不得顯示推薦買入。
+- 手機閱讀測試：第一屏要回答今天能不能買、持倉先處理什麼、強勢市場下哪些只可準備。
 
 ## Architect Conclusion
 
-- Owner 判斷正確：文案 guard 不是證據鏈。
-- 證據鏈應逐步推進：
-  - 已完成 dry-run helper 與 structured provider adapter。
-  - 下一步若要 production confirmed，需要新增 runtime source；如需建表 / cache / external provider，先通知 Owner。
-- 報文硬邊界：
-  - `AI / 電子供應鏈仍偏多` 必須有 AI 題材 watchlist 廣度 + 市場 / 類股 / 產業至少一類佐證。
-  - 無產業證據時，不寫 `不代表看空產業` 安撫句，只寫 `未判斷產業多空`。
-  - 市場 / 題材偏多不得推導成可買，必須同屏顯示買點是否成立。
-
-## Next Action
-
-- 若 Owner 要繼續證據鏈 production 化，先分派 PM 定義 source、freshness、cache / schema 邊界與驗收條件。
-- 暫不改 DB schema、策略 decision、live Telegram、live Supabase write、正式 backfill。
+- 先放下證據鏈是正確的；當前優先問題是持倉主行動一致性與強勢市場報文語意。
+- 英業達已停利仍顯示 `停利` 應進入產品 bugfix。
+- 強勢市場零推薦不應直接改成推薦；應先補準備層與手機文案契約。
+- 下一步若 Owner 同意，先開 PM 任務 `v20.2.2`，範圍限定為報文 / 狀態機，不放寬策略門檻。
