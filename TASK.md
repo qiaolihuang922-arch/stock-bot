@@ -1,266 +1,173 @@
-# TASK: Evidence Phase 5 Read-only Confirmed Evidence Loader
+# TASK: Integration Audit Before Evidence Chain Development Continues
 
 ## 任務狀態
 
-- task_id: evidence_phase_5_readonly_confirmed_evidence_loader
-- 任務類型：normal_patch
-- 狀態：ready_for_tech
-- 版本建議：patch，Telegram / CLI 使用者可見版本升至 v20.4.3
-- QA 分級建議：L2
-- 任務尺寸判斷：normal_patch
-- 理由：本輪不是單一文案 tiny patch；會新增 read-only DB consumption / loader，並接到 GitHub fresh runner 產生 Telegram 報文的 market/theme evidence source contract。
-- 不升為 risk_patch：本輪不改策略買賣門檻、不改 DB schema、不寫 production DB、不做 backfill、不 live Telegram。
+- task_id: evidence_chain_integration_audit_before_resume
+- 任務類型：process
+- 任務尺寸判斷：process
+- 狀態：ready_for_tech_audit
+- 版本建議：none，本輪不改使用者可見產品輸出，不升 Telegram 版本
+- QA 分級建議：process / audit，若 QA 需要跑局部測試，只能作為佐證，不得擴成產品修復
+- 本輪主問題：暫停證據鏈後續開發，先完成全流程 integration audit
 
 ## Owner 問題
 
-上一輪 PM/TASK 錯把 support_level 寫成 strong，與已驗過的 production schema 不符。Owner 要重跑 Evidence Phase 5：開發 read-only confirmed evidence loader，讓 GitHub / fresh runner 生成 TG 報文時，從 production table
-public.market_theme_confirmed_evidence 讀取 market/theme confirmed evidence 的唯一持久 source-of-truth。
+Owner 要在繼續證據鏈開發前，確認目前系統是否真的符合 production source-of-truth / fail-closed 契約，而不是靠 local、runtime、report-derived、fixture、假資料或未串接 DB 造成假 confirmed、假持倉、假事件或假 evidence。
 
-本輪必須修正契約：support_level 不得接受 strong。fresh confirmed row 只有在同時滿足：
+Owner 要確認三件事：
 
-- support_level in ('confirmed', 'supporting')
-- evidence_status = 'confirmed'
-- freshness = 'fresh'
-
-才可輸出 confirmed。
+1. 策略使用的假資料是否已清理；正式 Telegram / GitHub fresh runner 遇到缺 DB、缺價格、缺持倉、缺 events、缺 evidence 時是否 fail closed；任何需抓取資料是否明確來自真實 source，不得 local/runtime/report-derived fake
+confirmed。
+2. 既有 DB 資料是否都被策略使用，或至少明確標示為 reference-only / unused 並說明理由；需掃描 DB services、core/generator 消費點、strategy_evidence、position_store、cross_day_context、market_theme_evidence_store、
+daily_snapshot / signal store，列出 table -> writer -> reader -> strategy/formatter consumer -> current status。
+3. 新表 public.market_theme_confirmed_evidence 是否已端到端串接；目前已知 schema 已建、read-only loader 已接 generator，但 writer / ingestion / backfill / RLS / read-only role / actual production data smoke 可能缺，需
+列出 source raw data -> writer -> table -> loader -> provider -> Telegram -> strategy influence boundary。
 
 ## 使用者可見結果
 
-Owner 在手機打開 Telegram 報文時，market/theme evidence 區塊會依 production DB read-only loader 顯示：
+本輪不改 Telegram 報文、不改策略、不改 DB、不改 runner。Owner 可見結果是三份交付文件中的審計結論：
 
-- 有 fresh confirmed production row：可顯示 confirmed evidence 摘要。
-- DB env 缺失、查詢錯誤、無資料或資料不足：只能顯示 fail-closed 狀態，不得假裝 confirmed。
-- 不會出現或接受 support_level=strong 的證據狀態。
+- TASK.md：本任務卡。
+- CHANGELOG.md：Tech 的 integration audit evidence matrix。
+- QA_REPORT.md：QA 對 Tech 每個 PASS 的獨立反證結果與最終結論。
 
-手機閱讀路徑：
+Owner 讀完後應能判斷：
 
-1. Header 顯示 v20.4.3。
-2. 主決策 summary 仍先回答今日能不能買、持倉先處理什麼。
-3. Evidence 摘要只用短句補充 production confirmed evidence 是否成立。
-4. 若 evidence 不足，顯示限制句，不把缺資料誤寫成市場偏弱或 confirmed。
+- 是否可以繼續證據鏈下一階段開發。
+- 哪些鏈路已 PASS。
+- 哪些鏈路是 conditional / blocked。
+- 哪些資料表已被策略或 formatter 消費。
+- 哪些資料表目前只是 reference-only / unused。
+- market_theme_confirmed_evidence 端到端缺口在哪裡。
 
 ## 非目標
 
-- 不改 production DB schema。
-- 不改 RLS policy。
+- 不修 product bug。
+- 不新增、修改或刪除產品代碼。
+- 不新增、修改或刪除測試。
+- 不改 SQL、schema、migration、RLS、role、runner、策略門檻、watchlist、Telegram formatter。
 - 不做 live Supabase write。
 - 不做 backfill。
 - 不做 live Telegram delivery。
-- 不改策略核心買賣門檻。
-- 不新增 local/runtime/report-derived confirmed fallback。
-- 不接受、轉譯或兼容 support_level=strong。
-- 不重做 Evidence Phase 4 schema verification。
-- 不清理全 repo、不重構 unrelated evidence pipeline。
+- 不把 audit 發現的問題順手修掉。
+- 不把本輪擴成全量重構、策略重設或證據鏈新階段開發。
+- 不要求 QA 做 full pytest，除非 QA 明確指出某個 PASS 結論只能靠指定測試反證，且不得修改任何檔案。
 
 ## 影響模組
 
-- Read-only DB loader / data access：新增或擴充讀取 public.market_theme_confirmed_evidence 的 production loader。
-- Market/theme evidence provider：將 loader 結果接入現有 evidence source contract。
-- Telegram formatter / generator：使用 loader 結果輸出 evidence summary 與 fail-closed wording。
-- GitHub / fresh runner path：fresh run 必須能只靠 production DB 重建 confirmed evidence 判斷。
-- 測試：loader contract、provider consumer、Telegram evidence summary / snapshot 類測試。
+本輪只讀審計以下範圍，Tech / QA 不得越界修改：
+
+- core/generator.py
+- core/market_theme_evidence.py
+- services/market_theme_evidence_store.py
+- services/position_store.py
+- services/cross_day_context.py
+- services/strategy_evidence.py
+- services/daily_snapshot_store.py
+- services/signal_store.py
+- DB table / query constants referenced by the above modules
+- GitHub fresh runner / scheduled report generation path 的既有入口摘要
+- 既有 TASK.md / CHANGELOG.md / QA_REPORT.md 交付文件
 
 ## 直接消費者
 
-- core/market_theme_evidence.py 或等價 market/theme evidence provider。
-- core/generator.py 或等價 Telegram 報文產生器。
-- GitHub fresh runner / scheduled report generation path。
-- QA fixture / tests that validate evidence summary and fail-closed source contract.
+- Owner：用 audit 結論決定是否繼續證據鏈開發。
+- Architect：只依 CHANGELOG.md / QA_REPORT.md 收口，不依賴聊天紀錄。
+- 後續 Tech：只能依本輪 evidence matrix 的 gap / next action 開新任務，不得把本輪 audit 當成已修復。
+- 後續 QA：依本輪 QA 反證出的 blocked / conditional 項建立驗收邊界。
 
 ## 輸出契約
 
-### Source-of-truth
+### Tech 輸出契約：CHANGELOG.md
 
-- public.market_theme_confirmed_evidence 是本輪 market/theme confirmed evidence 的唯一持久 source-of-truth。
-- GitHub fresh runner 必須可從 production DB read-only query 重建相同 confirmed / fail-closed 判斷。
-- local file、runtime dict、report-derived text、cache、worktree fixture、agent 對話內容不得成為 confirmed source。
+CHANGELOG.md 必須從 # CHANGELOG: 開始，且只能寫審計結果，不得宣稱有產品修復。必須包含 evidence matrix，欄位固定為：
 
-### Production schema enum contract
+path/table | claim | evidence | current status | risk | next action
 
-已存在且不得回退的契約：
+每一列要求：
 
-- support_level 只允許：
-- confirmed
-- supporting
-- weak
-- invalidated
-- support_level=strong 不存在於 production schema contract，且不得出現在 TASK、code、test、fixture、validator、fallback mapping 或文件範例中作為可接受值。
-- Fresh confirmed row 判定只能是：
-- support_level in ('confirmed', 'supporting')
-- evidence_status = 'confirmed'
-- freshness = 'fresh'
+- path/table：具體檔案、函式、table、query、consumer 或 runner path。
+- claim：Tech 對該項的可核驗主張，例如 PASS fail-closed、BLOCKED fake fallback remains possible、REFERENCE_ONLY、UNUSED_NO_CONSUMER、READ_ONLY_ONLY。
+- evidence：必須是可重查證據，例如檔案路徑、函式名、query 條件、status mapping、call chain、測試名稱或缺口證據；不得只寫「看起來」。
+- current status：只能用明確狀態，建議值：
+- PASS
+- BLOCKED
+- CONDITIONAL
+- REFERENCE_ONLY
+- UNUSED_NO_CONSUMER
+- READ_ONLY_ONLY
+- UNKNOWN_NEEDS_ARCHITECT_OR_OWNER_INPUT
+- risk：若判斷錯，Owner 會看到或策略會受到什麼影響。
+- next action：後續若要修，應另開哪類任務；本輪不得實作。
 
-### Loader result contract
+### QA 輸出契約：QA_REPORT.md
 
-Loader / provider 對下游輸出必須能區分：
+QA_REPORT.md 必須從 # QA_REPORT: 開始。QA 必須獨立反證 Tech 的每個 PASS，尤其檢查：
 
-- confirmed：只在 fresh confirmed row 條件全部成立時輸出。
-- absent：production table 可讀但沒有可用 row。
-- missing-source：缺 DB env、缺 production source config，或 runner 無法建立 production source。
-- source-error：DB query error、permission error、timeout、schema mismatch、unexpected enum value。
-- insufficient-data：row 存在但缺 required fields，或 freshness / evidence_status / support_level 不足以 confirmed。
+- 是否仍有 fake fallback。
+- 是否有 DB table 無 writer / 無 reader / 無 strategy 或 formatter consumer。
+- market_theme_confirmed_evidence 是否只有 read 沒有 writer，導致流程端到端斷點。
+- GitHub fresh runner 清空 local/runtime/report-derived context 後，Tech 的 PASS 是否仍成立。
 
-Fail-closed 規則：
+QA 結論只能是：
 
-- 缺 DB env 不得 confirmed。
-- 查詢錯誤不得 confirmed。
-- 無資料不得 confirmed。
-- 資料不足不得 confirmed。
-- enum unexpected，包括 support_level=strong，不得 confirmed；應視為 source-error 或 insufficient-data，由 Tech 依現有 error model 收斂，但不可 silent fallback。
+- 通過
+- 阻塞
+- conditional pass
 
-## 版本契約
+### 必列 Audit Matrix 範圍
 
-- 本輪改變 GitHub fresh runner / Telegram 使用者可見 evidence source 行為，版本升至 v20.4.3。
-- Tech 必須同步 core/generator.py 的 VERSION 或等價 header 常量與相關測試期望。
-- QA 必須核對實際輸出 header 顯示 v20.4.3。
+Tech 至少要列出以下鏈路；若實際 table / function 名稱不同，以程式實際名稱為準，但不得省略說明：
+
+- public.market_theme_confirmed_evidence
+- services/market_theme_evidence_store.py
+- core/market_theme_evidence.py
+- core/generator.py
+- services/position_store.py
+- positions table / position events table 或等價來源
+- services/cross_day_context.py
+- cross-day context 讀取的 DB tables / event sources
+- services/strategy_evidence.py
+- strategy evidence / outcome / classification audit 相關 tables
+- services/daily_snapshot_store.py
+- daily snapshot / signal snapshot tables
+- services/signal_store.py
+- price / market data source 或 table，例如 daily price / market bars，若存在
+- GitHub fresh runner / scheduled report generation 如何取得 DB env、價格、持倉、events、evidence
+
+## 已存在且不得回退的契約
+
+以下契約來自目前專案摘要，Tech / QA 必須把它們當成 audit baseline，不得降級：
+
+- 正式 TG 報文由 git / runner 啟動生成，runner 必須視為無狀態。
+- 跨日策略記憶、歷史證據、已執行事件必須來自 production DB 或 Owner 指定持久來源。
+- Runtime / local context 只能作為同一次報文內輔助 guard 或顯示材料，不得作為下一次 GitHub runner 的跨日判斷依據。
+- DB / 真實來源不可用時，production runtime 不得用 fake/default/synthetic/fallback 補成可買、confirmed、持倉、今日交易、價格或 Telegram 結論。
+- positions 不可回全 watchlist 0 股。
+- position_events source-error 不可回全 0 event summary，避免誤讀為今日無交易。
+- Market/theme evidence 的 confirmed / ready 必須同時滿足 production / Owner-approved persistent source family、required fields 與 freshness。
+- report-derived / runtime diagnostic 只能作 trace，不得污染頂層 source_family 或 confirmed 判斷。
+- public.market_theme_confirmed_evidence 的 confirmed 條件固定為 support_level in ('confirmed','supporting')、evidence_status='confirmed'、freshness='fresh'。
+- support_level=strong 不得被接受或轉成 confirmed。
+- confirmed market/theme evidence 不得放寬 BUY / SELL / RR / 加減碼 / 過熱 / 漲停不追門檻。
+- 最新使用者可見 Telegram 版本是 v20.4.3；本輪 audit 不升版。
+
+若 Tech 發現上述契約與實際程式不一致，必須標記 BLOCKED 或 CONDITIONAL，不得自行改碼修正。
 
 ## 驗收條件
 
-1. Fresh confirmed production row 可 confirmed：
-- fixture row support_level=confirmed 或 supporting
-- evidence_status=confirmed
-- freshness=fresh
-- required fields 足夠
-- loader / provider 輸出 confirmed
-- Telegram evidence summary 顯示 production confirmed evidence，不使用 local/runtime fallback。
-2. Fail-closed cases 不得 confirmed：
-- 缺 DB env -> missing-source
-- query error -> source-error
-- no rows -> absent
-- row 缺 required fields -> insufficient-data
-- freshness != fresh -> 不得 confirmed
-- evidence_status != confirmed -> 不得 confirmed
-- support_level in ('weak', 'invalidated') -> 不得 confirmed
-3. strong 禁止契約：
-- code、tests、fixtures、validators、docs changed in this task 不得把 strong 當作 accepted support_level。
-- 若測試故意注入 support_level=strong，期望結果必須是 fail-closed，不得 normalized to confirmed / supporting。
-4. Fresh runner 可重建：
-- 在 clean / fresh run、無本地 cache、無 agent runtime context 時，只靠 production DB read-only source 得出相同 confirmed / fail-closed 結果。
-- Tech 必須在 CHANGELOG.md 說明本輪無新增本地持久狀態，任何 helper/cache 是否只限同一次 run。
-5. 直接消費者同步：
-- market/theme evidence provider 使用 loader contract。
-- Telegram formatter 使用 provider result，不直接讀 local fallback。
-- 使用者可見 fail-closed wording 短句、手機可讀，不輸出 debug enum dump。
-
-## 範例或 fixture
-
-### Fixture A: confirmed
-
-Input row shape:
-
-market_index=TAIEX
-sector_theme_key=semiconductor
-trade_date=2026-05-29
-as_of=2026-05-29T...
-freshness=fresh
-evidence_status=confirmed
-support_level=supporting
-evidence_value=...
-source_family=production_db
-lineage=...
-
-Expected loader/provider:
-
-status=confirmed
-source_of_truth=production_db
-support_level=supporting
-freshness=fresh
-evidence_status=confirmed
-
-Expected Telegram shape:
-
-版本：v20.4.3
-證據：production confirmed，市場/題材支持成立。
-
-### Fixture B: unsupported enum must fail closed
-
-Input row shape:
-
-freshness=fresh
-evidence_status=confirmed
-support_level=strong
-source_family=production_db
-
-Expected result:
-
-status=source-error 或 insufficient-data
-confirmed=false
-
-Expected Telegram shape:
-
-證據：production 來源不足，不作確認。
-
-### Fixture C: missing DB source
-
-Input:
-
-DB env missing 或 production connection unavailable
-
-Expected result:
-
-status=missing-source
-confirmed=false
-
-Expected Telegram shape:
-
-證據：production 來源不足，不作確認。
-
-## 明確禁止事項
-
-- 禁止 live Supabase write。
-- 禁止 backfill。
-- 禁止修改 RLS。
-- 禁止 live Telegram delivery。
-- 禁止新增或使用 local/runtime/report-derived fake confirmed fallback。
-- 禁止在任何契約中接受 support_level=strong。
-- 禁止把 weak、invalidated、stale row、non-confirmed status 包裝成 confirmed。
-- 禁止改策略 BUY / SELL / 加減碼門檻。
-- 禁止把缺資料解讀成市場不強；只能輸出 source absent / missing / error / insufficient。
-- 禁止順手重構 unrelated DB layer、watchlist、position state、backfill scripts。
-
-## 阻塞條件
-
-Tech 必須 blocked，而不是自行假設：
-
-- 找不到可接入的 production DB read-only config pattern。
-- 現有 schema summary 與 Owner 指定 enum 衝突。
-- 直接消費者無法在不改策略門檻的情況下接入 loader。
-- 無法區分 missing-source、source-error、absent、insufficient-data。
-- 需要 live DB write、RLS change、backfill 或 live Telegram 才能完成本輪驗收。
-- 任何上游文件仍要求或暗示 support_level=strong 是合法值。
-
-## 本輪停止條件
-
-本輪完成到以下範圍即停止：
-
-- Read-only loader contract 已實作。
-- Direct consumers 已同步。
-- Telegram evidence summary 可用 fixture 驗證 confirmed / fail-closed。
-- support_level=strong 不再被任何本輪 contract 接受。
-- L2 QA 完成 clean/fresh run 反證與直接消費者驗證。
-
-以下旁支只記待辦，不納入本輪：
-
-- writer / ingestion。
-- production backfill。
-- RLS policy。
-- schema migration update。
-- live Telegram delivery。
-- 策略門檻調整。
-- 外部新聞 / 題材 provider。
-- 全量 replay / full pytest，除非 QA 發現本輪 contract 風險必須升級並說明停止條件。
-
-## QA 分級建議
-
-- 建議：L2
-- 必驗：
-- loader unit / contract tests
-- provider consumer tests
-- Telegram evidence summary fixture / snapshot
-- clean/fresh run 反證：清空 local/runtime/cache context 後不得 fake confirmed
-- repo/test fixture 掃描：本輪契約不得接受 support_level=strong
-- 不要求：
-- live Supabase write
-- live Telegram
-- backfill dry-run
-- full pytest，除非 L2 發現 contract 擴散風險
+1. Tech 的 CHANGELOG.md 有完整 evidence matrix，且覆蓋 Owner 指定三大問題。
+2. 每個 PASS 都有具體 path / table / function / query / call chain 證據。
+3. Tech 明確列出 DB table -> writer -> reader -> strategy/formatter consumer -> current status。
+4. Tech 明確列出 market_theme_confirmed_evidence 的端到端鏈路：
+source raw data -> writer -> table -> loader -> provider -> Telegram -> strategy influence boundary。
+5. Tech 對缺 DB、缺價格、缺持倉、缺 events、缺 evidence 的 fail-closed 行為逐項下結論，不得合併成一句「都有處理」。
+6. Tech 對 fake/default/synthetic/fallback/local/runtime/report-derived confirmed 做關鍵字與 call chain 掃描，並列出是否仍可能影響策略或 formatter。
+7. QA 不只重讀 Tech 結論；必須對每個 PASS 做獨立反證。
+8. QA 必須特別反證：
+- fake fallback 是否仍存在。
+- DB table 是否無人消費。
+- market_theme_confirmed_evidence 是否只有 reader / loader，沒有 writer / ingestion / backfill / production data smoke。
+- fresh runner 無本地狀態時是否仍能成立。
+9. 若任何關鍵鏈路無法證明，結論必須是 阻塞 或 conditional pass，不得寫 通過。
+10. 本輪不得產生任何產品代碼、測試、SQL、schema、runner 或策略 diff。

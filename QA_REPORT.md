@@ -2,114 +2,117 @@
 
   ## 測試範圍
 
-  本輪判定為 normal_patch / L2。未擴大到 full pytest、replay、backfill、live Supabase、live Telegram。
+  本輪判定為 process / audit，不是產品修補；QA 未擴成 full pytest、replay、backfill 或 live smoke。
 
-  已驗證：
+  已讀取與核對：
 
-  - TASK.md / CHANGELOG.md / worktree diff 對齊。
-  - read-only loader contract。
-  - provider 直接消費者。
-  - Telegram header 與手機 summary。
-  - support_level=strong 只能作為負面測試，不能被接受。
-  - clean/fresh runner 反證：無 DB source 時不得 fake confirmed。
+  - TASK.md
+  - CHANGELOG.md
+  - git status --short
+  - git diff --stat
+  - git diff --name-only
+  - 指定鏈路的必要局部源碼：core/generator.py、core/market_theme_evidence.py、services/market_theme_evidence_store.py、services/position_store.py、services/cross_day_context.py、services/strategy_evidence.py、services/
+    daily_snapshot_store.py、services/signal_store.py、.github/workflows/stock-bot.yml、main.py
 
-  執行命令：
+  已執行驗證：
 
-  - PYTHONPATH=.qa_tmp:. arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_generator_report.py tests/test_notifier.py
-      - 結果：93 passed, 161 warnings
-  - git diff --check
-      - 結果：passed
-  - 額外 QA 反證：patch _build_client=None 後呼叫 generator.market_theme_summary_evidence(..., None)
-      - 結果：missing-source False production_db
-      - 手機摘要首句：證據：production 來源不足，不作確認。
+  - arch -arm64 .venv/bin/python -m pytest tests/test_position_store.py tests/test_cross_day_context.py tests/test_market_theme_evidence.py tests/test_strategy_evidence.py
+  - 結果：41 passed, 17 warnings
+  - 補充 inline 反證：runtime-only market/theme evidence 不會 confirmed；support_level=strong 回 source-error；空 production rows 回 absent。
 
   ## 風險預算與停止條件
 
   本輪最值得抓的風險：
 
-  1. DB source 缺失或錯誤時被 runtime / watchlist 補成 confirmed。
-      - 驗證：loader fail-closed tests + QA 額外 fresh-run 反證。
-      - 停止條件：missing-source/source-error/absent/insufficient-data 都不得 confirmed=true。
-  2. support_level=strong 被回收成合法 enum。
-      - 驗證：掃描本輪變更與負面測試。
-      - 停止條件：accepted enum 僅 confirmed/supporting/weak/invalidated，strong 只出現在 fail-closed 測試或說明。
-  3. 手機 Telegram 讓 Owner 把 evidence confirmed 誤讀成可買。
-      - 驗證：summary 閱讀順序與既有 fixture。
-      - 停止條件：先出現今日結論 / 新倉結論，再出現 evidence；confirmed evidence 必須帶 不代表可買 限制。
+  1. PASS 被 Owner 誤讀成端到端已完成。
+     驗證：核對 market_theme_confirmed_evidence writer / ingestion / backfill / RLS / production smoke 是否仍缺。
+     結果：Tech 已標出 read-only-chain-incomplete，QA 確認不能視為可恢復開發完成態。
+  2. fake / runtime / report-derived fallback 被升格成 confirmed。
+     驗證：讀 core/market_theme_evidence.py source family guard，並用 inline 反證 runtime-only path。
+     結果：runtime-only 顯示「production 來源不足」，confirmed=False。
+  3. process audit diff 被誤當產品 diff 合併。
+     驗證：git diff --name-only 只有 CHANGELOG.md。
+     結果：可吸收 diff 僅是本輪交付文件；沒有產品代碼、測試、SQL、runner diff。
+
+  停止條件已達：已核對 Tech matrix 正向結論、補反證、確認無產品 diff、未執行 live write / Telegram / backfill。
 
   ## 關聯風險掃描
 
   可吸收 diff：
 
-  - core/generator.py
-  - core/market_theme_evidence.py
-  - tests/test_generator_report.py
-  - tests/test_market_theme_evidence.py
-  - CHANGELOG.md
-  - services/market_theme_evidence_store.py
+  - CHANGELOG.md 的 audit matrix 文件更新。
 
-  注意：services/market_theme_evidence_store.py 目前是 untracked，不在 git diff --name-status 內，但 core/generator.py 已 import 它。Architect 合併時必須把此 untracked 新檔一併吸收；若只套 tracked diff，會造成 import
-  failure。
+  worktree 殘留 / 不可當產品合併內容：
 
-  worktree 殘留 / 不建議吸收：
+  - 未發現產品代碼 diff。
+  - git status --short 顯示交付文件變更；Architect 收口時已把 `CHANGELOG.md` 的「零 diff / git status」描述改為「產品代碼零 diff，交付文件有 diff」。這是交付敘述修正，不是產品行為風險。
 
-  - .qa_tmp/config.py 是本地測試 shim，不在 git status，不能當產品 diff。
-  - CURRENT_STATE.md 仍舊版屬 Architect 收口文件，不是本輪 Tech diff。
+  主要鏈路反證結果：
 
-  清理 / 瘦身 / refactor 任務證據表：不適用，本輪不是清理任務。
+  - positions missing-source / source-error：load_positions() 回 {} 並設 warning；generate_report() 讀 warning 後提前輸出 fail-closed summary，未 fallback 成全 watchlist 0 股。
+  - position events missing-source / source-error：回 unavailable summary；只有 query 成功且空資料才是全 0 event summary。
+  - market/theme evidence：loader 要求 support_level in confirmed/supporting、evidence_status=confirmed、freshness=fresh；strong 被 inline 反證為 source-error。
+  - runtime/report-derived：runtime diagnostic 只顯示診斷，不 confirmed。
+  - cross-day context：source-error / insufficient-data 時清空 previous state/action/weight，不把 same-run local context 升格為跨日記憶。
+  - DB consumption：market_daily_bars 仍是 write-only；signal_runs/items/outcomes 目前偏 reference-only；strategy_outcome_metrics fresh runner writer 狀態仍 conditional。這些已被 Tech matrix 標為風險或旁支 next action。
 
   ## 跨區塊語意一致性
 
-  版本契約一致：
+  本輪不改 Telegram / summary / dashboard 輸出；core/generator.py 版本仍是 v20.4.3，符合 TASK 的「audit 不升版」。
 
-  - core/generator.py VERSION 已是 v20.4.3。
-  - Telegram snapshot 測試已同步 v20.4.3。
+  以 Owner 手機閱讀順序檢查相關 fail-closed 文案：
 
-  Source contract 一致：
-
-  - loader accepted support levels 不含 strong。
-  - confirmed 條件限定 support_level in confirmed/supporting、evidence_status=confirmed、freshness=fresh。
-  - provider 保留 fail-closed status，不把 DB 缺失壓成 confirmed。
-
-  手機閱讀順序：
-
-  - 既有 fixture 驗證 🧭 新倉：無有效進場。 早於 evidence summary。
-  - confirmed wording 後仍有 限制：題材可追蹤，不代表可買。
-  - fail-closed wording 是短句：證據：production 來源不足，不作確認。
+  - 缺持倉來源時，開頭即顯示 warning、新倉：無有效進場、持倉 unavailable、production 來源不足。
+  - market/theme runtime fallback 文案明確寫「runtime 觀察僅供診斷，非確認來源」。
+  - 未看到把不可買、僅診斷或缺資料包裝成可買建議的新增 diff。
 
   ## 使用者誤讀風險
 
-  目前未看到會讓 Owner 誤判買入的輸出。confirmed evidence 只說市場/題材支持成立，並保留不可買限制；缺資料也沒有被寫成市場偏弱或 confirmed。
+  最大誤讀風險不是 Telegram，而是 Owner 讀 audit matrix 時把局部 PASS 當成 evidence chain 可繼續開發。
 
-  殘留風險：若 production role / RLS 不可讀，正式 runner 會 fail closed 為來源不足，這符合本輪契約，但 Owner 可能需要後續驗 production read-only 權限，不屬本輪 live 驗證範圍。
+  QA 判定：
+
+  - market_theme_confirmed_evidence 仍缺 writer / ingestion / backfill / RLS read-only role / production data smoke。
+  - Tech 已在殘留風險列出此缺口，但 CHANGELOG 前段「多個 fail-closed guard 已存在」可能被快速閱讀成整體可恢復。
+  - 因此本輪只能作為 audit 條件通過，不能作為恢復 evidence chain 開發的綠燈。
+
+  另有文件誤讀風險：
+
+  - 原始 TASK.md 內有兩份相近任務卡串接，且第 173 行出現 `產品代碼# TASK` 連在同一行；Architect 收口時已清理為單一任務卡。
 
   ## 質疑與反證
 
-  主動質疑 1：無本地 cache / 無 DB source 時，generator 是否仍會用 results_map 或 runtime 診斷 fake confirmed？
+  Tech 未覆蓋的補充反證：
 
-  - 反證：QA 額外直接呼叫 market_theme_summary_evidence，patch DB client missing。
-  - 結果：missing-source、confirmed=False、手機摘要不作確認。
+  - inline 建構 runtime-only provider，結果 confirmed=False、source_status=missing-source，summary 明確為 production 來源不足。
+  - inline 建構 support_level=strong production row，loader 回 source-error，未轉成 confirmed。
+  - inline 建構 production table 空 rows，loader 回 absent，未產生 confirmed。
 
-  主動質疑 2：strong 是否被 accepted enum 或 mapping 接回 confirmed？
+  對 Tech PASS 的質疑：
 
-  - 反證：掃描本輪 loader / provider / tests / changelog。
-  - 結果：loader accepted enum 不含 strong；唯一 support_level="strong" 是負面測試，預期 source-error。
-
-  主動質疑 3：Tech 宣稱新增 loader，但 git diff 是否完整包含？
-
-  - 反證：git diff --name-status 不含新 service，git ls-files --others --exclude-standard 顯示 services/market_theme_evidence_store.py。
-  - 結果：行為可接受，但合併條件必須明確納入 untracked 新檔。
+  - PASS 只代表 audit-level 靜態鏈路與 mocked/local tests 成立，不代表 production DB 有資料、RLS 可讀、GitHub secrets 正確或 runner production smoke 通過。
+  - strategy_feature_snapshots PASS 可接受，因其 writer / reader / formatter context 均存在；但缺資料時不應被解讀為策略證據充足。
+  - GitHub fresh runner PASS 可接受於「runner 由 git checkout + secrets 建 config」；但不能證明 secrets 內容、RLS policy、production rows 實際可用。
 
   ## 未測項目
 
-  - 未連 production DB。
-  - 未驗 production read-only role / RLS / 實際資料內容。
-  - 未做 live Supabase write、backfill、replay、live Telegram。
-  - 未跑 full pytest，符合 normal_patch / L2 停止條件。
+  未做，且不應在本輪擴大：
+
+  - full pytest
+  - replay / backfill dry-run
+  - live Supabase read/write smoke
+  - live Telegram delivery
+  - production RLS / read-only role 驗證
+  - production table row freshness / coverage 驗證
+  - writer / ingestion / backfill 實作驗收
 
   ## QA 結論
 
   conditional pass
 
-  條件：Architect 吸收 diff 時必須包含 untracked 的 services/market_theme_evidence_store.py，不能只套 git diff --name-status 顯示的 tracked files。若該檔未被納入，本輪應視為阻塞，因 core/generator.py 會 import 不存在的
-  module。
+  理由：
+
+  - 產品代碼、測試、SQL、runner 無 diff；可吸收 diff 僅 CHANGELOG.md。
+  - Tech matrix 的核心 fail-closed / fake fallback 正向結論，在 audit 範圍內可由源碼、局部測試與 QA inline 反證支持。
+  - TASK.md 原有重複任務卡與格式串接瑕疵，Architect 收口時已清理為單一任務卡；CHANGELOG.md 對 git status / 零 diff 的敘述也已改為交付文件 diff 與產品零 diff 分開表述。
+  - 更重要的是，market_theme_confirmed_evidence 端到端仍未完成；本輪不能被吸收成「可繼續 evidence chain 開發」，只能吸收成「已完成 integration audit，後續需另開 writer / ingestion / RLS / production smoke 任務」。

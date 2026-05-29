@@ -143,6 +143,16 @@
   - Runner gap 重複：auto cycle 仍把 QA `conditional pass` 判為 failed；後續需修 parser，只讀 `## QA 結論` 下第一個有效結論詞與條件段。
   - PM guard 待補：PM 生成 fixture 時必須引用最近 schema verification result / SQL artifact enum，不得自行發明 DB enum；若任務涉及已建表欄位，PM 需把 enum 原文列入 task contract。
   - 不新增 `AGENTS.md` 硬規則：既有 source-of-truth / fail-closed / schema contract 規則已覆蓋，本輪先補 runner / PM guard 待辦，避免硬規則膨脹。
+- 本輪 evidence-chain integration audit：
+  - 根因分類：`integration_fragmentation` / 片段化進度。schema、loader、formatter、DB writer、RLS、production smoke 與 strategy influence 邊界沒有放在同一張進度圖，導致 Owner 感覺「有表但不知道用在哪」。
+  - Audit 結論：可吸收為 conditional pass，但不是恢復開發綠燈；下一步必須先補端到端缺口。
+  - 明確缺口：
+    - `public.market_theme_confirmed_evidence` 缺 writer / ingestion / backfill / production data smoke / RLS read-only role。
+    - `market_daily_bars` 偏 write-only，需決定是否進入 strategy / evidence reader。
+    - `signal_runs/items/outcomes` 偏 reference-only，需決定是否作 cross-day / strategy reader source。
+    - `strategy_outcome_metrics` 正式 writer 狀態 conditional，需釐清是否只靠 backfill。
+  - 待補流程：建立 DB table usage ledger，欄位固定為 `table -> writer -> reader -> strategy/formatter consumer -> status -> next action`，每次新增 DB 表或 reader/writer 都要更新。
+  - 不新增 `AGENTS.md` 硬規則：先用 `CURRENT_STATE.md` / `CLEANUP_PLAN.md` 維持進度圖；若再次出現「新表已建但 writer/consumer 不清」，再升級 PM 任務卡硬欄位。
 - 下一次產品任務完成後，確認 Post-cycle Review Gate 是否有做到：
   - 根因分類。
   - QA 攔截是否沉澱成 guard。

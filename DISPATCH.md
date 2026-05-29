@@ -4,44 +4,44 @@
 
 ## Current Task
 
-- task_id: `evidence_phase_5_readonly_confirmed_evidence_loader`
-- task_name: `Evidence Phase 5 Read-only Confirmed Evidence Loader`
-- task_type: `normal_patch`
-- version_level: `patch`
-- qa_level: `L2`
+- task_id: `evidence_chain_integration_audit_before_resume`
+- task_name: `Evidence Chain Integration Audit Before Resume`
+- task_type: `process`
+- version_level: `none`
+- qa_level: `process`
 - owner_status: `requested`
-- architect_status: `pushed`
+- architect_status: `audit_absorbed_pending_owner_decision`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
 - qa_status: `conditional_pass`
-- commit: `fb8aa2d`
+- commit: `pending`
 
 ## Current Result
 
-- Owner 要求繼續證據鏈；Phase 4 production table schema 已由 Owner 回傳 verification result，hard schema PASS。
-- Phase 5 已完成候選開發並吸收：
-  - 新增 `services/market_theme_evidence_store.py` read-only loader，讀取 `public.market_theme_confirmed_evidence`。
-  - confirmed 條件固定為 `support_level in ('confirmed','supporting')`、`evidence_status='confirmed'`、`freshness='fresh'`。
-  - `support_level=strong` 只作負面案例，回 `source-error` / fail closed，不得 accepted。
-  - `core/generator.py` 接入 loader；GitHub / fresh runner 缺 DB env、query error、no rows、資料不足時輸出 fail-closed，不用 local/runtime/report-derived fake confirmed。
-  - Telegram 使用者可見版本升至 `v20.4.3`。
-- QA conditional pass 條件已由 Architect 吸收時滿足：untracked 新檔 `services/market_theme_evidence_store.py` 已一併納入主 repo，不只套 tracked diff。
-- 主 repo 驗證：
-  - `PYTHONPATH=.qa_tmp:. arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_generator_report.py tests/test_notifier.py`
-  - 結果：`93 passed, 161 warnings`；warnings 為依賴 deprecation / Python 版本警告，非本輪 contract failure。
-  - `git diff --check` 通過。
-- 未完成 / 未批准：production read-only role / RLS 實際可讀驗證、writer、backfill、live Telegram、策略門檻調整。
+- Owner 要求暫停證據鏈後續開發，先統一三件事：真資料 / DB 資料消費 / 新表端到端流程。
+- 本輪只做 integration audit，無產品代碼、測試、SQL、schema、runner 或策略 diff；只更新 `TASK.md`、`CHANGELOG.md`、`QA_REPORT.md` 與總控摘要。
+- Audit 結論：
+  - 假資料清理：positions、position_events、market/theme evidence、cross-day context 的主要 fake fallback 已有 fail-closed guard；行情來源仍有 TWSE -> Yahoo 真實外部 fallback，屬 conditional，不是 fake confirmed。
+  - DB 消費：多數核心 DB 有 writer/reader/consumer，但不是所有 DB 資料都已進策略；`market_daily_bars` 目前偏 write-only，`signal_runs/items/outcomes` 偏 reference-only，`strategy_outcome_metrics` writer 主要在 backfill。
+  - 新表串接：`public.market_theme_confirmed_evidence` schema + read-only loader + provider + Telegram 已串上；但 writer / ingestion / backfill / RLS read-only role / actual production data smoke 未完成，因此端到端未閉環。
+- QA conditional pass：
+  - Tech matrix 的 fail-closed / fake fallback 結論在 audit 範圍內可由源碼、局部測試與 QA inline 反證支持。
+  - 不能把本輪吸收成「可繼續 evidence chain 開發」綠燈；只能吸收成「integration audit 完成，下一步需補 writer / ingestion / RLS / production smoke」。
+- Architect 收口：
+  - 清理 `TASK.md` 重複任務卡。
+  - 修正 `CHANGELOG.md` 對 git status / 零 diff 的描述：產品代碼零 diff，交付文件有 diff。
 - Post-cycle review：
-  - 根因分類：`pm_schema_contract_drift` + `runner_gap`。
-  - 首輪 PM 把 `support_level=strong` 寫成合法 fixture，與剛驗過的 production constraint 不符；QA 有效阻塞，第二輪已修正為負面案例。
+  - 根因分類：`integration_fragmentation` + `read_only_chain_incomplete`。
+  - 當前片段化不是單一 bug，而是 table / writer / loader / formatter / strategy influence 邊界未用一張進度圖管理。
   - Auto cycle 對 QA `conditional pass` 仍 false fail；已人工讀取 QA 原文並吸收條件，runner parser 待補。
-  - 不新增 `AGENTS.md` 硬規則；既有 source-of-truth / fail-closed / schema contract 規則已覆蓋，本輪寫入 `CLEANUP_PLAN.md` 待補 runner / PM guard。
+  - 不新增 `AGENTS.md` 硬規則；本輪先把缺口收斂到 `CLEANUP_PLAN.md`，下一步應開端到端 writer/RLS/smoke 任務。
 
 ## Next Action
 
-- Phase 5 loader 已 commit / push：`fb8aa2d`.
-- push 後清理 agent worktrees。
-- 下一步可做 production read-only role / RLS / actual data smoke；若需要建 role/policy 或 writer/backfill，需 Owner 單獨批准。
+- 等 Owner 決定是否開下一張任務：
+  1. `market_theme_confirmed_evidence` writer / ingestion / backfill 設計。
+  2. production read-only role / RLS / GitHub runner actual data smoke。
+  3. DB consumption cleanup：`market_daily_bars`、`signal_runs/items/outcomes`、`strategy_outcome_metrics` 的用途收斂。
 
 ## Status Values
 

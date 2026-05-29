@@ -33,6 +33,12 @@
 
 ## Recent High-Signal Milestones
 
+- Integration audit before evidence-chain resume 已完成，結論是 `conditional pass`：
+  - 假資料清理：positions、position_events、market/theme evidence、cross-day context 的主要 fake fallback 已有 fail-closed guard；缺 source 不應補成 fake confirmed / fake holding / fake event。
+  - 行情來源仍有 TWSE -> Yahoo fallback，屬真實外部行情備援，但仍是 conditional；兩源都失敗時應無有效數據，不得產生正常候選。
+  - DB 消費不是全部閉環：`market_daily_bars` 偏 write-only；`signal_runs/items/outcomes` 偏 reference-only；`strategy_outcome_metrics` reader 存在但正式 writer 主要在 backfill。
+  - `public.market_theme_confirmed_evidence` 已完成 schema + read-only loader + provider + Telegram 接入，但缺 writer / ingestion / backfill / RLS read-only role / actual production data smoke，不能視為端到端完成。
+  - 本 audit 沒有產品代碼 / 測試 / SQL / runner diff；只更新 `TASK.md`、`CHANGELOG.md`、`QA_REPORT.md` 與總控文件。
 - `v20.4.3` Evidence Phase 5 Read-only Confirmed Evidence Loader 已通過 QA conditional pass，且 Architect 已滿足吸收條件：
   - 新增 `services/market_theme_evidence_store.py`，只讀 `public.market_theme_confirmed_evidence`；不寫 DB、不 backfill、不改 RLS、不 live Telegram。
   - Confirmed 條件固定為 `support_level in ('confirmed','supporting')`、`evidence_status='confirmed'`、`freshness='fresh'`；`support_level=strong` 只能作負面案例，fail closed，不得 accepted。
