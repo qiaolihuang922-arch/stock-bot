@@ -133,6 +133,7 @@
   - 根因分類：`no_safe_db_connection`。Owner 已建表，但本地 / runner 無安全只讀 connection env，不能直接 introspect production。
   - 已交付：只讀 metadata verification SQL，讓 Owner 在 Supabase 執行後回傳 result sets。
   - QA conditional pass 有效：指出 allowed-values summary rows 只確認必要值存在，無法排除額外允許值；需看 raw check constraints。
+  - Owner 回傳結果後已完成 schema contract 判定：table / columns / hard constraints / indexes 全 PASS，且 raw constraints 未見額外允許值。
   - 不新增 `AGENTS.md` 硬規則：已有 secret / live write 禁令；本輪只是無連線時的 handoff artifact。
   - 待補流程：後續若要由 agent 直接驗 production schema，需先建立明確 read-only connection / role 與不輸出 secrets 的 runner 機制。
 - 下一次產品任務完成後，確認 Post-cycle Review Gate 是否有做到：

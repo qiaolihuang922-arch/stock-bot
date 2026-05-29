@@ -39,6 +39,8 @@
   - SQL 只讀 `information_schema` / `pg_catalog`，檢查 table exists、columns、unexpected columns、check constraints、freshness / support_level / evidence_status、indexes、latest confirmed partial index、comments。
   - QA conditional pass：此 artifact 只代表可手動驗證，不代表 production schema 已通過；allowed-values summary rows 不能排除額外允許值，必須人工比對 raw check constraints。
   - Architect 額外用 `.qa_tmp/` 臨時 `pglast` parser 驗證 verification SQL parse OK，16 statements。
+  - Owner 回傳 production verification 結果：table exists PASS；17 個 contract 欄位全部 PASS；`freshness`、`support_level`、`evidence_status` raw check constraints 全部符合且未見額外值；7 個 expected indexes 全部 PASS，包含 latest confirmed partial index。
+  - 結論：production schema contract 已通過，可作下一輪 read-only loader 的 source-of-truth table；尚未完成 writer、backfill、RLS、loader 或 Telegram confirmed evidence。
 - SQL artifact syntax/copy safety tiny patch 已完成：
   - Owner 執行 Evidence Phase 4 SQL 時遇到 Supabase `ERROR 42601 syntax error at end of input`。
   - 修正範圍只限 `db/sql/evidence_phase_4_market_theme_confirmed_evidence.sql` 與 `docs/handoff/evidence_phase_4_market_theme_confirmed_evidence.md`；未改 schema intent、產品代碼、策略、Telegram、runner、DB write path。

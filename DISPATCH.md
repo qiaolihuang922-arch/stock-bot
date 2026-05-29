@@ -10,15 +10,15 @@
 - version_level: `patch`
 - qa_level: `L1`
 - owner_status: `requested`
-- architect_status: `conditional_pending_owner_results`
+- architect_status: `schema_verified_pending_push`
 - pm_status: `task_ready`
 - tech_status: `handoff_sql_ready`
-- qa_status: `conditional_pass`
+- qa_status: `qa_passed`
 - commit: `pending`
 
 ## Current Result
 
-- Owner 回報：production table 已建立，要求檢查。
+- Owner 回報：production table 已建立，要求檢查；Owner 已回傳單表 verification SQL 結果。
 - 本輪只做 read-only schema verification；不寫 production DB、不 backfill、不 live Telegram、不改產品代碼 / 策略 / watchlist。
 - 當前執行環境沒有可用 `SUPABASE_*` / `DATABASE_*` connection env，不能直接連線檢查線上表，也不能輸出或讀取 secrets。
 - Tech 依停止條件新增只讀 metadata verification SQL：
@@ -33,15 +33,21 @@
 - Architect 額外驗證：
   - 使用 `.qa_tmp/` 臨時 `pglast` parser 解析 verification SQL：parse OK，16 statements。
   - 在 verification SQL header 補明 raw check constraints 是 allowed values 的 source of truth，不得只看 summary rows 宣告 pass。
+- Owner 回傳 production result sets，Architect 判定 hard schema PASS：
+  - table exists：PASS。
+  - columns：17 個 contract 欄位全部 PASS，包含 type、nullable、default；未回報 unexpected columns。
+  - constraints：`freshness`、`support_level`、`evidence_status` allowed values 全部 PASS，observed raw check constraints 未見額外允許值。
+  - indexes：7 個 expected indexes 全部 PASS，包含 `idx_market_theme_evidence_latest_confirmed` partial index。
+  - 本結論只代表 schema contract 已通過；尚未代表資料內容、writer/backfill、RLS、loader 或 Telegram confirmed evidence 已完成。
 - Post-cycle review：
   - 根因分類：`no_safe_db_connection` + `manual_verification_required`。
   - 不新增 `AGENTS.md` 硬規則；既有 no secret / no live write 規則已覆蓋，本輪沉澱為 handoff SQL。
 
 ## Next Action
 
-- commit / push verification SQL artifact。
-- Owner 在 Supabase SQL editor 執行 `docs/handoff/evidence_phase_4_market_theme_confirmed_evidence_readonly_verification.sql`，回傳全部 result sets。
-- Architect 根據回傳結果判定 table schema pass / blocked；若 pass，下一輪才開 read-only loader 任務。
+- commit / push schema verified 狀態。
+- 下一輪可開 read-only loader 任務，把 GitHub fresh runner 接到 `public.market_theme_confirmed_evidence`。
+- 仍未批准 / 未完成：writer、backfill、RLS policy、live Telegram、策略門檻變更。
 
 ## Status Values
 
