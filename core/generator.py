@@ -53,7 +53,19 @@ from services.cross_day_context import build_cross_day_contexts
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.0"
+VERSION = "v20.4.1"
+
+PERSISTENT_CROSS_DAY_SOURCES = {
+    "positions",
+    "position_events",
+    "daily_signal_snapshot",
+    "signal_runs",
+    "signal_items",
+    "signal_outcomes",
+    "strategy_feature_snapshots",
+    "strategy_outcome_metrics",
+    "strategy_classification_audit",
+}
 
 EXECUTION_LEVELS = {
     "TAKE_PROFIT_50": "TP50",
@@ -2714,13 +2726,21 @@ def cross_day_context(data):
 
 def cross_day_ready(data):
 
-    return cross_day_context(data).get("source_status") == "ready"
+    context = cross_day_context(data)
+    sources = context.get("source_of_truth") or []
+    if isinstance(sources, str):
+        sources = [sources]
+    return (
+        context.get("source_status") == "ready"
+        and bool(sources)
+        and all(source in PERSISTENT_CROSS_DAY_SOURCES for source in sources)
+    )
 
 
 def cross_day_sort_adjustment(data):
 
     context = cross_day_context(data)
-    if context.get("source_status") != "ready":
+    if not cross_day_ready(data):
         return 0
 
     weight = context.get("historical_evidence_weight") or 0
@@ -2747,7 +2767,7 @@ def cross_day_sort_adjustment(data):
 def cross_day_repair_label(data):
 
     context = cross_day_context(data)
-    if context.get("source_status") != "ready":
+    if not cross_day_ready(data):
         return None
 
     days = context.get("consecutive_observe_days") or 0
@@ -2768,7 +2788,7 @@ def cross_day_repair_label(data):
 def cross_day_detail_line(data):
 
     context = cross_day_context(data)
-    if context.get("source_status") != "ready":
+    if not cross_day_ready(data):
         return None
 
     parts = []
@@ -2792,7 +2812,7 @@ def cross_day_detail_line(data):
 def cross_day_prepare_promotion(data):
 
     context = cross_day_context(data)
-    if context.get("source_status") != "ready":
+    if not cross_day_ready(data):
         return False
 
     result = data.get("result") or {}
@@ -2833,7 +2853,7 @@ def cross_day_higher_priority_risk_action(decision):
 def cross_day_duplicate_action(data, decision=None):
 
     context = cross_day_context(data)
-    if context.get("source_status") != "ready":
+    if not cross_day_ready(data):
         return None
 
     decision = decision or data.get("holding_decision") or {}
@@ -4488,8 +4508,7 @@ def format_cross_day_tracking_summary(watch_items, limit=3):
 
     items = []
     for index, (name, data) in enumerate(watch_items):
-        context = cross_day_context(data)
-        if context.get("source_status") != "ready":
+        if not cross_day_ready(data):
             continue
         if unheld_funnel_state(name, data, market_mode=None) == "可買":
             continue

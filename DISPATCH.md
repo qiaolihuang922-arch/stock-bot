@@ -4,46 +4,45 @@
 
 ## Current Task
 
-- task_id: `db_strategy_consumption_phase1_cross_day_state_evidence_weight_20260529`
-- task_name: `DB Strategy Consumption Phase 1 - Cross-day State And Evidence Weight`
+- task_id: `cross_day_context_source_boundary_hardening_20260529`
+- task_name: `Cross-day Context Source Boundary Hardening`
 - task_type: `risk_patch`
-- version_level: `minor`
-- qa_level: `L3-lite`
+- version_level: `patch`
+- qa_level: `L2`
 - owner_status: `requested`
-- architect_status: `pushed`
+- architect_status: `validated_pending_push`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
 - qa_status: `qa_passed`
-- commit: `see git log -1`
+- commit: `pending`
 
 ## Current Result
 
-- Owner 要求：DB 多表已有資料後，先讓 DB 進入策略記憶與證據權重，不要讓多表只停在入庫 / report / audit。
-- 本輪完成 Phase 1，不改 DB schema、不 live write、不 live Telegram、不正式 backfill、不改 watchlist、不重設核心 BUY / SELL / RR 門檻。
+- Owner 要求：正式 TG 報文由 git / runner 啟動，runner 無狀態；`cross_day_context` 不能把本地 / runtime / 同 run 資料當成跨日記憶。若需要擴字段或建表，必須先通知 Owner。
+- 本輪完成 source boundary hardening，不改 DB schema、不新增 table / field、不 live write、不 live Telegram、不正式 backfill、不改 watchlist、不重設核心 BUY / SELL / RR 門檻。
 - 已吸收候選 diff：
-  - 新增 `services/cross_day_context.py`，產生 cross-day context：前次狀態、前次行動、連續觀察、修復 / 失效、歷史證據權重、去重 guard、allowed / forbidden effects。
-  - `core/generator.py` VERSION 升為 `v20.4.0`，在 render 前注入 cross-day context。
-  - DB / local history 只允許影響排序、summary、準備層、歷史追溯、同級停利 / 減碼去重、今日買入 guard。
-  - DB history 不得單獨把不可買變可買，不得覆蓋硬風控 / 停損 / REDUCE_50 / STOP_100。
-  - 新增 `tests/test_cross_day_context.py`，同步 generator / market evidence / notifier 測試。
+  - `services/cross_day_context.py` 不再把 `today_position_events` / local runtime 資料提升為 `previous_action`、`previous_action_date`、`dedupe_guard` 或 `source_of_truth`。
+  - 同 run 資訊只保留在 `same_run_guard`、`same_run_action`、`same_run_action_date`、`same_run_source`，不得作跨日記憶。
+  - `core/generator.py` VERSION 升為 `v20.4.1`，`cross_day_ready()` 只有在 `source_status=ready` 且 `source_of_truth` 全部來自 persistent whitelist 時才生效。
+  - 若 `source_of_truth` 混入 `local_position_events` 或其他非持久來源，即使同時有 `position_events`，sorting / summary / detail / prepare / dedupe 全部 fail closed。
+  - 新增 DB event、DB missing、source-error、local-only、mixed-source negative 測試，並同步 v20.4.1 header 測試。
 - QA 首輪有效阻塞：
-  - 發現歷史減碼去重會覆蓋今日硬風控減碼，造成 summary 說硬風控、卡片說減碼後觀察。
-  - Tech 補 `cross_day_higher_priority_risk_action()` 與 REDUCE_50 fixture 後，QA 補 STOP_100 反證通過。
+  - 發現 Tech 初版用 `any()` 判斷 source whitelist，導致 `["position_events", "local_position_events"]` mixed source 仍可輸出假歷史、連續觀察與權重。
+  - Tech 改成所有來源都必須屬於 persistent whitelist 後，QA 額外反證 pure DB 生效、mixed local / missing source fail closed。
 - QA 最終通過：
-  - `89 passed, 13 warnings`
+  - `92 passed, 13 warnings`
   - `git diff --check` 通過
-  - forbidden diff 掃描無 schema / migration / watchlist / live Telegram / live Supabase write / backfill / SQL diff。
+  - forbidden diff 掃描無 schema / migration / SQL / backfill / watchlist / live Supabase write / live Telegram 變更；只命中既有測試字串假陽性。
 - Post-cycle review：
-  - 根因分類：`repeated_pattern` + `high_risk_invariant`；歷史記憶只能去重同級行動，不得壓過更高級風控。
-  - QA 攔截有效：抓到測試全綠仍會造成 Owner 手機誤判的跨區塊語意衝突。
-  - Owner 追加指出正式流程是 git / runner 啟動產生 TG 報文，本地臨時狀態不能當跨日記憶；已補 `AGENTS.md` 硬規則。
-  - Runner gap：Tech runner 在 worktree 以 x86_64 載入 arm64 `pydantic_core`，需統一 `arch -arm64` 或重建 matching venv；auto cycle QA parser / conditional pass handling 仍需補。
-  - 下一張產品任務需檢查 `services/cross_day_context.py` 的 local/runtime context 是否只作同 run guard，跨日判斷必須可由 DB fresh run 重建。
+  - 根因分類：`repeated_pattern` / source boundary；本地同 run guard 與跨日持久記憶在初版實作中仍有混桶風險。
+  - QA 攔截有效：不是只重跑測試，而是補 mixed-source 手機誤讀反證，避免 fake history 進 summary / detail。
+  - 不新增 `AGENTS.md` 硬規則：現有 `GitHub Runtime / State Source` 硬規則已覆蓋，本輪沉澱為 fixture、狀態契約與 cleanup 待辦，避免文件膨脹。
+  - Runner gap 仍存在：auto cycle 初段 Tech runner failed，需後續改善 auto handoff / dirty candidate 續跑；本輪已用 `CLEAN_TECH_WORKTREE=0` 安全返工。
 
 ## Next Action
 
-- 已 commit / push 本輪 `v20.4.0`；完成後執行 tech worktree cleanup。
-- 下一步先開一張 risk_patch 檢查 `cross_day_context` source boundary：DB / persistent source 才能做跨日記憶，local/runtime 只能同 run guard。若通過，再進 Phase 2 真實 schema mapping、`signal_runs / signal_items / signal_outcomes` source precedence、production read-only 驗證；若要建表或 backfill 需先通知 Owner。
+- 完成 commit / push 後執行 tech worktree cleanup。
+- 後續 Phase 2 再做真實 schema mapping、`signal_runs / signal_items / signal_outcomes` source precedence、production read-only 驗證；若需要新增 table / field、cache、backfill 或 live write，必須先通知 Owner。
 
 ## Status Values
 

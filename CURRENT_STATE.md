@@ -7,7 +7,7 @@
 - 專案：台股策略報文機器人。
 - 交付形態：排程 / 腳本產生 Telegram 報文並發送給 Owner。
 - 股票清單唯一來源：`core/watchlist.py`，預設 12 檔。
-- 最新使用者可見 Telegram 版本：`v20.4.0`。
+- 最新使用者可見 Telegram 版本：`v20.4.1`。
 - 最新 pushed commit 以 `git log -1` 為準。
 - 固定 8 份 Markdown 不刪除，只改寫內容：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 
@@ -33,6 +33,13 @@
 
 ## Recent High-Signal Milestones
 
+- `v20.4.1` Cross-day Context Source Boundary Hardening 已通過 QA：
+  - `services/cross_day_context.py` 不再把 `today_position_events` / local runtime 資料提升為跨日 `previous_action`、`previous_action_date`、`dedupe_guard` 或 `source_of_truth`。
+  - 同 run 資訊只保留在 `same_run_guard`、`same_run_action`、`same_run_action_date`、`same_run_source`，不能作 GitHub fresh runner 的跨日記憶。
+  - `core/generator.py` 的 `cross_day_ready()` 收斂為：`source_status=ready`、`source_of_truth` 非空，且所有來源都必須是 persistent DB whitelist；只要混入 `local_position_events` 或非持久來源，即 fail closed。
+  - QA 首輪攔下 mixed-source 風險：`["position_events", "local_position_events"]` 會用假歷史影響 summary / detail / sorting / prepare；修正後 pure DB 生效，mixed local / missing source 全部 fail closed。
+  - 未新增 DB schema、field、table、migration、SQL、backfill、watchlist、live Supabase write 或 live Telegram。
+  - QA / Architect 驗證：`tests/test_cross_day_context.py tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py`，`92 passed, 13 warnings`；`git diff --check` 通過。
 - `v20.4.0` DB Strategy Consumption Phase 1 已通過 QA：
   - 新增 `services/cross_day_context.py`，讓既有 DB / local runtime history 進入策略記憶與證據權重。
   - Phase 1 context 包含前次狀態、前次行動、連續觀察天數、修復 / 失效、歷史證據權重、去重 guard、allowed / forbidden effects。
@@ -122,6 +129,7 @@
 - DB / cross-day history 可提升排序、追蹤優先級或可準備呈現，但不得單獨把不可買改成可買或放入交易執行清單。
 - 正式 TG 報文由 git / runner 啟動生成，runner 必須視為無狀態；跨日策略記憶、歷史證據、已執行事件必須來自 production DB 或 Owner 指定持久來源。
 - Runtime / local context 只能作為同一次報文內的輔助 guard 或顯示材料；不得當作下一次 GitHub runner 的跨日判斷依據。
+- `source_of_truth` 若混入任何 local / runtime / same-run 來源，即使同時有 DB source，generator 也必須 fail closed，不得使用該 context 影響排序、summary、detail、prepare 或 dedupe。
 - 同日第二段 / 額外停利必須尊重 execution 資料：completed 轉觀察、partial 只顯示剩餘、unexecuted 才顯示完整第二段建議。
 - 持倉卡、summary、風控檢查的今日已賣、剩餘、建議股數必須使用一致來源；不得同卡出現 `今日 無` 與 `今日已賣 N 股`。
 - 空區塊、0 計數、無行動占位都是手機噪音；未定義必要性時不顯示。

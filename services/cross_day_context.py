@@ -28,6 +28,18 @@ ACTION_ALIASES = {
     "停損": "stop_loss",
 }
 
+PERSISTENT_SOURCE_TABLES = {
+    "positions",
+    "position_events",
+    "daily_signal_snapshot",
+    "signal_runs",
+    "signal_items",
+    "signal_outcomes",
+    "strategy_feature_snapshots",
+    "strategy_outcome_metrics",
+    "strategy_classification_audit",
+}
+
 
 def empty_cross_day_context(symbol, status="missing-source", sources=None):
     return {
@@ -43,6 +55,10 @@ def empty_cross_day_context(symbol, status="missing-source", sources=None):
         "historical_evidence_weight": 0,
         "weight_reason": [],
         "dedupe_guard": "unknown" if status != "ready" else "none",
+        "same_run_guard": None,
+        "same_run_action": None,
+        "same_run_action_date": None,
+        "same_run_source": None,
         "allowed_effects": [
             "sort_priority",
             "summary_wording",
@@ -55,6 +71,7 @@ def empty_cross_day_context(symbol, status="missing-source", sources=None):
             "cannot_override_hard_stop",
             "cannot_fake_execution",
             "cannot_confirm_market_evidence",
+            "cannot_use_same_run_as_cross_day_memory",
         ],
     }
 
@@ -112,6 +129,8 @@ def _state_from_feature(row):
 
 
 def _state_from_snapshot(row):
+    if not row:
+        return "unknown"
     action = row.get("action")
     if row.get("position_state") == "holding":
         return "holding"
@@ -239,7 +258,6 @@ def build_cross_day_contexts(results_map, client=None, today_position_events=Non
     if client is None:
         return contexts
 
-    sources = []
     errors = []
     rows_by_table = {}
     for table, fields in [
@@ -250,7 +268,6 @@ def build_cross_day_contexts(results_map, client=None, today_position_events=Non
     ]:
         try:
             rows_by_table[table] = _fetch_rows(client, table, fields, limit)
-            sources.append(table)
         except Exception as exc:
             rows_by_table[table] = []
             errors.append(f"{table}: {exc}")
@@ -258,7 +275,6 @@ def build_cross_day_contexts(results_map, client=None, today_position_events=Non
     try:
         event_rows = _fetch_event_rows(client, limit)
         rows_by_table["position_events"] = event_rows
-        sources.append("position_events")
     except Exception as exc:
         rows_by_table["position_events"] = []
         errors.append(f"position_events: {exc}")
@@ -266,7 +282,6 @@ def build_cross_day_contexts(results_map, client=None, today_position_events=Non
     today = _today_string(now)
     for name, data in results_map.items():
         symbol = stock_code_for_name(name, data)
-        context_sources = list(sources)
         feature_rows = [
             row for row in rows_by_table.get("strategy_feature_snapshots", [])
             if str(row.get("stock_id")) == symbol and str(row.get("trade_date")) != today
@@ -302,12 +317,6 @@ def build_cross_day_contexts(results_map, client=None, today_position_events=Non
             observe_days = 1
         previous_action, previous_action_date, dedupe_guard = _latest_event_action(event_rows, today=today)
         today_guard, today_action = _today_event_guard((today_position_events or {}).get(name, {}))
-        if today_guard:
-            dedupe_guard = today_guard
-            previous_action = today_action
-            previous_action_date = today
-            if "local_position_events" not in context_sources:
-                context_sources.append("local_position_events")
         weight, reasons = _evidence_weight(outcome_rows)
         if repair_status in ["repaired", "improving"] and weight < 1:
             weight += 1
@@ -316,9 +325,33 @@ def build_cross_day_contexts(results_map, client=None, today_position_events=Non
             weight -= 1
             reasons.append("前次狀態轉弱")
 
-        status = "ready" if any([latest_feature, latest_snapshot, outcome_rows, event_rows, today_guard]) else "insufficient-data"
-        if errors and status != "ready":
+        context_sources = []
+        if latest_feature:
+            context_sources.append("strategy_feature_snapshots")
+        if latest_snapshot:
+            context_sources.append("daily_signal_snapshot")
+        if outcome_rows:
+            context_sources.append("strategy_outcome_metrics")
+        if event_rows:
+            context_sources.append("position_events")
+        context_sources = [
+            source for source in context_sources
+            if source in PERSISTENT_SOURCE_TABLES
+        ]
+
+        status = "ready" if context_sources else "insufficient-data"
+        if errors:
             status = "source-error"
+        if status != "ready":
+            previous_state = "unknown"
+            previous_action = "unknown"
+            previous_action_date = None
+            observe_days = 0
+            repair_status = "unknown"
+            failure_status = "unknown"
+            weight = 0
+            reasons = []
+            dedupe_guard = "unknown"
         contexts[name] = {
             **empty_cross_day_context(symbol, status=status, sources=context_sources),
             "source_status": status,
@@ -332,6 +365,10 @@ def build_cross_day_contexts(results_map, client=None, today_position_events=Non
             "historical_evidence_weight": max(-2, min(2, weight)),
             "weight_reason": reasons[:3],
             "dedupe_guard": dedupe_guard,
+            "same_run_guard": today_guard,
+            "same_run_action": today_action,
+            "same_run_action_date": today if today_guard else None,
+            "same_run_source": "today_position_events" if today_guard else None,
         }
 
     return contexts

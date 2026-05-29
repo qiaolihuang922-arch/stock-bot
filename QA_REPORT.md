@@ -2,114 +2,107 @@
 
   ## 測試範圍
 
-  本輪 QA 範圍依 Architect 指令收斂為「交付文件一致性复核」，不重做上一輪已 conditional pass 的完整行為 QA。
+  本輪判定為 risk_patch / L2，驗證範圍對齊 TASK：只驗 cross-day source boundary、generator 直接消費者、header 與手機報文誤讀風險；未擴大到 full pytest / replay / backfill / production DB live read。
 
   已檢查：
 
-  - TASK.md
-  - CHANGELOG.md
-  - git status --short
-  - git diff --name-status
-  - untracked 檔案清單
+  - TASK.md、CHANGELOG.md、git diff --stat、相關 diff。
+  - core/generator.py
   - services/cross_day_context.py
   - tests/test_cross_day_context.py
-  - core/generator.py 中版本與 cross-day 接入點
-  - 版本同步相關測試 diff
+  - tests/test_generator_report.py
+  - tests/test_market_theme_evidence.py
 
-  執行命令：
+  有效驗證命令：
 
-  TMPDIR=.qa_tmp PYTHONPATH=.qa_tmp:. arch -arm64 .venv/bin/python -m pytest tests/test_cross_day_context.py tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py
-
-  結果：89 passed, 13 warnings
-
-  另執行：
-
-  git diff --check
-
-  結果：通過，無輸出。
+  - pytest tests/test_cross_day_context.py tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py：92 passed。
+  - 定點 blocker tests：5 passed。
+  - 額外 QA 反證腳本：pure DB 啟用；mixed local / missing source 對 sort、prepare、dedupe、detail 全部 fail closed。
+  - git diff --check：通過。
+  - forbidden diff 掃描：未見 schema / migration / SQL / backfill / watchlist / live Supabase write / live Telegram delivery 變更；掃描只命中測試 payload update() 與 formatter 呼叫假陽性。
 
   ## 風險預算與停止條件
 
-  本輪最值得抓的風險：
+  本輪最值得抓的 3 個風險：
 
-  1. CHANGELOG.md 是否仍漏列 Phase 1 候選 diff，尤其 untracked services/cross_day_context.py 與 tests/test_cross_day_context.py。
-      - 驗證：比對 git status --short、git diff --name-status、git ls-files --others --exclude-standard 與 CHANGELOG.md 修改檔案章節。
-      - 結果：已列入，blocker 已修。
-  2. 是否有新的產品代碼變化超出 Architect 指令。
-      - 驗證：測試前後 git status --short 一致；候選 diff 仍為 CHANGELOG.md、core/generator.py、三個既有測試檔、兩個 untracked 新檔。
-      - 結果：未發現測試或本輪复核造成新的 tracked 產品代碼變化。
-  3. 使用者可見版本與直接消費者是否仍不一致。
-      - 驗證：core/generator.py 的 VERSION = "v20.4.0"；tests/test_generator_report.py、tests/test_market_theme_evidence.py、tests/test_notifier.py 均同步 v20.4.0 header。
-      - 結果：一致。
+  1. mixed source 假裝 ready：["position_events", "local_position_events"] 不能影響 sorting / summary / detail / prepare / dedupe。
+      - 驗證：新增 mixed-source generator test、QA 額外腳本。
+      - 結果：fail closed。
+  2. DB missing / source-error 被 local today event 補成跨日記憶。
+      - 驗證：test_local_today_events_do_not_become_cross_day_memory、test_source_error_fails_closed_even_with_partial_rows_and_local_events。
+      - 結果：previous_action/date、連續天數、weight、dedupe 都歸零或 unknown；same-run guard 只留在 same_run_*。
+  3. v20.4.0 高級風控優先被歷史 dedupe 回退。
+      - 驗證：test_v20_4_cross_day_reduce_history_does_not_suppress_hard_risk_reduce。
+      - 結果：REDUCE_50 硬風控仍輸出，不被歷史 reduce dedupe 壓掉。
 
-  停止條件：只驗證文件一致性、候選 diff 覆蓋與指定測試；不擴成 full pytest、production DB 讀取、replay/backfill、live Telegram 或 live Supabase write。
+  停止條件已達成：fresh DB event、DB missing/source-error、local-only negative、mixed-source blocker、header v20.4.1、禁止項掃描均完成。
 
   ## 關聯風險掃描
 
-  git status --short 顯示候選 diff：
+  TASK.md、CHANGELOG.md、diff 一致：CHANGELOG 宣稱只修 source boundary 與版本同步，diff 實際也集中在 cross_day_ready()、build_cross_day_contexts() 與相關測試。
 
-  - 可吸收 diff：
-      - CHANGELOG.md
-      - core/generator.py
-      - tests/test_generator_report.py
-      - tests/test_market_theme_evidence.py
-      - tests/test_notifier.py
-      - services/cross_day_context.py untracked，但屬本次 Phase 1 候選 diff
-      - tests/test_cross_day_context.py untracked，但屬本次 Phase 1 候選 diff
-  - worktree 殘留 / 不應整包合併：
-      - .qa_tmp/config.py 為測試暫存目錄內容，不是候選產品 diff，不應納入合併。
+  可吸收 diff：
 
-  CHANGELOG.md 已明確列出上述 6 個候選程式 / 測試檔，並補充 untracked 新檔是候選 diff 一部分，不再是未說明殘留。
+  - core/generator.py
+  - services/cross_day_context.py
+  - tests/test_cross_day_context.py
+  - tests/test_generator_report.py
+  - tests/test_market_theme_evidence.py
+  - CHANGELOG.md 作為 Tech 交付文件
 
-  未發現 DB schema / migration、watchlist、live delivery、正式 backfill 或 live write diff。
+  worktree 殘留：
+
+  - git status 僅上述 6 個 tracked modified，未見 unrelated untracked / extra diff；不建議「整包合併」超出這些候選 diff。
+
+  未發現需要擴 table / field / schema。現有實作只讀既有白名單 source 與既有 select 欄位；若後續要新增 Owner-approved persistent source，需另開任務同步白名單。
 
   ## 跨區塊語意一致性
 
-  TASK.md 要求 Phase 1 版本為 v20.4.0，並要求 cross-day context 影響排序、summary、去重與歷史追溯，但不得單獨翻成可買。
+  generator 的 cross-day 直接消費者已收斂到 cross_day_ready()：
 
-  CHANGELOG.md 目前與此一致：
+  - sort adjustment
+  - repair label
+  - detail history line
+  - prepare promotion
+  - duplicate action
+  - tracking summary
 
-  - header 版本：v20.4.0
-  - source-of-truth / fail-closed 行為已補齊
-  - allowed / forbidden effects 已列出
-  - 直接消費者同步已列出 core/generator.py、Telegram Owner 報文、generator 測試、notifier header 測試
-  - 明確說明 services/analysis.py 未直接修改，Phase 1 效果集中在 generator render 前後
+  QA 額外反證結果：
+
+  - pure DB position_events：ready=True，sort/prepare/dedupe/detail 生效。
+  - mixed position_events + local_position_events：ready=False，sort=0、prepare=False、dedupe=None、detail=None。
+  - missing source：同樣 fail closed。
+
+  手機輸出抽查：
+
+  - header 顯示 【05/29 盤中｜v20.4.1】。
+  - mixed local source 不出現 追蹤最強 假歷史、不出現 連續觀察 5 天、前次 eliminated、權重 +2、歷史：。
 
   ## 使用者誤讀風險
 
-  按 Owner 手機閱讀順序抽查：
+  Owner 手機閱讀順序檢查：
 
-  - summary fixture 覆蓋 追蹤最強，並明確顯示 不可買，待觸發。
-  - 未持倉漏斗 fixture 覆蓋 可買 0｜可準備 1（不可買），避免把 cross-day 修復誤讀為可買。
-  - 持倉 fixture 覆蓋 停利後觀察、新倉風控觀察，避免同一檔在 summary / card 中同時出現加碼、減碼或重複停利。
-  - notifier 測試確認最後一則 summary header 不被改寫，手機最先看到的版本字串仍是 v20.4.0。
-
-  本輪未重新判定所有長報文 UX；上一輪行為 QA 已 conditional pass，本次只確認 blocker 修復後文件與候選 diff 一致。
+  1. Summary 先看到 v20.4.1 header 與今日結論。
+  2. mixed/local-only 情境下，summary 沒有把 local runtime 資訊包裝成「追蹤最強」或「連續觀察」。
+  3. detail 沒有顯示假 previous state/action/date 或假權重。
+  4. DB event same-level dedupe 仍可讓 Owner 看到「歷史停利已完成，同級不重複」。
+  5. 高級風控仍優先，不會讓 Owner 因歷史 reduce 誤以為今日硬風控不用做。
 
   ## 質疑與反證
 
-  主動質疑 1：untracked 新檔是否仍被漏掉。
-  反證：git ls-files --others --exclude-standard 只列出 services/cross_day_context.py、tests/test_cross_day_context.py；CHANGELOG.md 修改檔案章節已逐一列出兩者。
+  主動質疑：如果 source_status=ready 但 source list 混入 local，舊邏輯可能 any() 通過，導致報文排序與 summary 假記憶。反證顯示新邏輯要求所有 source 都在 persistent whitelist，mixed source 已 fail closed。
 
-  主動質疑 2：CHANGELOG.md 是否只補文件，但候選 diff 仍有未說明產品改動。
-  反證：git status --short 與 CHANGELOG.md 的修改檔案清單一致；core/generator.py diff 關鍵點為 VERSION、build_cross_day_contexts()、formatter helper 與 summary / card 接入，均已在契約影響與直接消費者同步中描述。
+  主動質疑：same-run today events 是否仍偷改 previous_action/date 或 dedupe。反證顯示 today events 被保留在 same_run_*，不再進 source_of_truth，不足源時 cross-day 欄位歸 unknown。
 
-  主動質疑 3：版本同步是否只改 generator，漏 notifier 或 market evidence header。
-  反證：tests/test_market_theme_evidence.py 與 tests/test_notifier.py diff 均只同步 v20.4.0 header；指定測試全綠。
+  主動質疑：歷史 dedupe 是否壓掉 v20.4.0 高級風控。反證顯示 REDUCE_50 硬風控仍輸出，沒有回退。
 
   ## 未測項目
 
-  - 未跑 full pytest。
-  - 未做 production DB 真實讀取。
-  - 未做 replay/backfill dry-run。
-  - 未做 live Supabase write。
-  - 未做 live Telegram delivery。
-  - 未重新驗證上一輪已 conditional pass 的完整策略行為矩陣。
-  - 未將 untracked 檔案加入 git index；QA 只讀，不修改 worktree。
+  - 未跑 full pytest，符合 L2 / risk_patch 停止條件。
+  - 未做 replay/backfill dry-run，TASK 明列非目標。
+  - 未讀 production DB、未做 live Supabase write、未做 live Telegram delivery。
+  - 未驗 Phase 2 source precedence / schema mapping，屬旁支待辦。
 
   ## QA 結論
 
-  通過
-
-  理由：本輪 blocker「CHANGELOG.md 未完整覆蓋 Phase 1 全量候選 diff，尤其 untracked 新檔」已修復；TASK.md、CHANGELOG.md、目前候選 diff 一致；指定測試通過；未發現新的產品代碼變化或未說明候選檔。合併時應只吸收上述候選
-  diff，不應整包吸收 .qa_tmp/ 測試暫存內容。
+  通過。

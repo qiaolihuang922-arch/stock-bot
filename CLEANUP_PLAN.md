@@ -96,6 +96,13 @@
   - Runner gap：auto cycle 仍需改善 QA 結論 parser 與 conditional pass 後續收口，避免有效 QA 報告被標成 runner failed。
   - Owner 追問後補硬規則：正式 TG 報文由 git / runner 啟動，runner 無狀態；跨日策略記憶與執行去重必須來自 DB / 持久 source-of-truth，local/runtime 只能作同 run 輔助，不得作下次判斷依據。
   - 待補產品任務：檢查 `services/cross_day_context.py` 的 `local_position_events` 是否只作同 run guard，並確認所有跨日判斷都可由 DB fresh run 重建。
+- 本輪 `v20.4.1` Cross-day Context Source Boundary Hardening：
+  - 根因分類：`repeated_pattern` / source boundary。`v20.4.0` 已有 DB 記憶能力，但初版仍可能讓 local/runtime same-run 資料混入跨日 context。
+  - QA 阻塞有效：首輪直接測試全綠，但 QA 補 mixed-source 反證抓到 `any()` 白名單判斷會讓 `position_events + local_position_events` 仍輸出假歷史。
+  - 已修正：`cross_day_ready()` 要求所有來源都是 persistent whitelist；`today_position_events` 僅保留 `same_run_*` metadata，不寫入 previous action/date 或 dedupe。
+  - 不新增 `AGENTS.md` 硬規則：既有 GitHub runner / state source 規則已覆蓋，本輪只補狀態契約與測試 fixture，避免文件膨脹。
+  - Runner gap：auto cycle 初次 Tech runner failed，需後續改善 handoff 續跑；本輪用 `CLEAN_TECH_WORKTREE=0` 在既有 candidate diff 上返工，避免丟失候選。
+  - Phase 2 待辦：production DB read-only schema mapping、source precedence、必要 table/field 擴充需先通知 Owner。
 - 下一次產品任務完成後，確認 Post-cycle Review Gate 是否有做到：
   - 根因分類。
   - QA 攔截是否沉澱成 guard。

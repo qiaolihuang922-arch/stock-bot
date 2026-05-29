@@ -82,12 +82,74 @@ class CrossDayContextTest(unittest.TestCase):
 
         context = contexts["旺宏"]
         self.assertEqual(context["source_status"], "ready")
+        self.assertNotIn("local_position_events", context["source_of_truth"])
         self.assertEqual(context["previous_state"], "eliminated")
         self.assertEqual(context["repair_status"], "improving")
         self.assertEqual(context["dedupe_guard"], "same_day_executed")
         self.assertEqual(context["previous_action"], "buy")
+        self.assertIsNone(context["same_run_guard"])
         self.assertGreaterEqual(context["historical_evidence_weight"], 1)
         self.assertIn("cannot_flip_to_buy_alone", context["forbidden_effects"])
+        self.assertIn("cannot_use_same_run_as_cross_day_memory", context["forbidden_effects"])
+
+    def test_local_today_events_do_not_become_cross_day_memory(self):
+        client = Client({})
+
+        contexts = build_cross_day_contexts(
+            {"旺宏": payload()},
+            client=client,
+            today_position_events={
+                "旺宏": {
+                    "bought_shares": 0,
+                    "sold_shares": 40,
+                    "labels": ["減碼"],
+                }
+            },
+            now=datetime(2026, 5, 29),
+        )
+
+        context = contexts["旺宏"]
+        self.assertEqual(context["source_status"], "insufficient-data")
+        self.assertEqual(context["source_of_truth"], [])
+        self.assertEqual(context["previous_action"], "unknown")
+        self.assertIsNone(context["previous_action_date"])
+        self.assertEqual(context["consecutive_observe_days"], 0)
+        self.assertEqual(context["historical_evidence_weight"], 0)
+        self.assertEqual(context["dedupe_guard"], "unknown")
+        self.assertEqual(context["same_run_guard"], "same_day_executed")
+        self.assertEqual(context["same_run_action"], "reduce")
+        self.assertEqual(context["same_run_source"], "today_position_events")
+
+    def test_source_error_fails_closed_even_with_partial_rows_and_local_events(self):
+        client = Client({
+            "strategy_feature_snapshots": [
+                {"stock_id": "2337", "trade_date": "2026-05-28", "watch_category": "等量能", "reject_family": None},
+            ],
+            "position_events": RuntimeError("events unavailable"),
+        })
+
+        contexts = build_cross_day_contexts(
+            {"旺宏": payload()},
+            client=client,
+            today_position_events={
+                "旺宏": {
+                    "bought_shares": 100,
+                    "sold_shares": 0,
+                    "labels": ["買入"],
+                }
+            },
+            now=datetime(2026, 5, 29),
+        )
+
+        context = contexts["旺宏"]
+        self.assertEqual(context["source_status"], "source-error")
+        self.assertEqual(context["previous_state"], "unknown")
+        self.assertEqual(context["previous_action"], "unknown")
+        self.assertIsNone(context["previous_action_date"])
+        self.assertEqual(context["consecutive_observe_days"], 0)
+        self.assertEqual(context["historical_evidence_weight"], 0)
+        self.assertEqual(context["dedupe_guard"], "unknown")
+        self.assertEqual(context["same_run_guard"], "same_day_executed")
 
 
 if __name__ == "__main__":
