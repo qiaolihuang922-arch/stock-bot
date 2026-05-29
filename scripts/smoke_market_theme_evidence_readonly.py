@@ -41,6 +41,7 @@ def _render(smoke):
             smoke["title"],
             f"mode: {smoke['mode']}",
             f"write: {smoke['write']}",
+            f"schema_decision: {smoke['schema_decision']}",
             f"env: {smoke['env']}",
             f"table_read: {smoke['table_read']}",
             f"rows: {smoke['rows']}",

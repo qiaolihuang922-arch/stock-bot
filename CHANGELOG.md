@@ -1,99 +1,97 @@
-# CHANGELOG: Evidence Chain Production Ops Repo-side Artifacts
+# CHANGELOG: Evidence Chain Production Closure Gap Assessment
 
-  ## 任務尺寸與風險
+## 任務尺寸與風險
 
-  - 任務尺寸：risk_patch
-  - 風險判斷：涉及 production ingestion/backfill/RLS/read-only smoke artifact，但本輪只交付 repo 內 non-live artifact；未執行 live write、正式 backfill、production RLS/grant 變更或 Telegram delivery。
+- 任務尺寸：risk_patch。
+- 判斷原因：本輪確認 production closure 下一步是否需要擴字段 / 擴表，並修正 QA 攔下的 read-only loader source-of-truth guard；若不修，非 production source row 可能被誤判為 Telegram confirmed。
+- 最小改動策略：保留既有 candidate diff，不重置 worktree；只補 no-schema-change assessment、read-only smoke schema_decision、loader source_family allowlist/denylist guard 與局部測試。
 
-  ## 修改內容
+## 修改內容
 
-  - 新增 ingestion payload dry-run validation helper 與 CLI。
-  - 新增 read-only smoke helper 與 CLI；CLI 只接受 SUPABASE_READONLY_KEY，不 fallback service-role key。
-  - 新增 Owner manual SQL template，分離 read-only role/grant、RLS policy、backfill/upsert template、read-only verification queries。
-  - 新增 handoff docs，標明 repo artifact 與 Owner manual boundary。
-  - 補局部測試，覆蓋 fake source 不產生 SQL、validation output、read-only smoke matrix。
+- 新增 production closure gap assessment artifact：
+  - `schema_decision: no-schema-change`
+  - current table contract
+  - required for read-only smoke
+  - required for manual backfill
+  - production closure matrix
+  - next manual steps / not done
+- read-only smoke output 補 `schema_decision: no-schema-change`。
+- read-only loader confirmed 判定收緊：
+  - 只接受 `production_db`、`owner_approved_persistent`、`market_data`。
+  - 拒絕 `local`、`runtime`、`cache`、`worktree`、`report-derived` / `report_derived`、`synthetic`、`default`、`test`、`fixture` 等 source family。
+  - 即使 forbidden source row 同時是 `fresh + confirmed + supporting/confirmed`，也必須 fail closed。
+- 補測試覆蓋 forbidden source fail closed、allowed persistent source confirmed、smoke CLI schema decision。
 
-  ## 修改檔案
+## 修改檔案
 
-  - services/market_theme_evidence_store.py
-  - scripts/validate_market_theme_evidence_ingestion.py
-  - scripts/smoke_market_theme_evidence_readonly.py
-  - db/sql/evidence_chain_market_theme_ops_manual_template.sql
-  - docs/handoff/evidence_chain_market_theme_ops_artifacts.md
-  - tests/test_market_theme_evidence_handoff.py
+- `docs/handoff/evidence_chain_production_closure_gap_assessment.md`
+- `docs/handoff/evidence_chain_market_theme_ops_artifacts.md`
+- `services/market_theme_evidence_store.py`
+- `scripts/smoke_market_theme_evidence_readonly.py`
+- `tests/test_market_theme_evidence_handoff.py`
 
-  ## 最小改動策略
+## Schema Decision
 
-  - 沿用既有 build_market_theme_evidence_handoff() validator，不另開 ingestion 判斷分支。
-  - 只新增 non-live scripts/docs/sql artifact 與局部 helper。
-  - 未碰 core/generator.py、Telegram formatter、策略門檻、watchlist、DB live writer、正式 runner/backfill。
+schema_decision: no-schema-change
 
-  ## 契約影響
+理由：
 
-  - 新增 helper：
-      - validate_market_theme_evidence_ingestion_payload(payloads, include_sql=False)
-      - build_market_theme_evidence_readonly_smoke(load_result)
-  - 新增 CLI output contract：
-      - validation：valid、may_render_manual_sql、live_write=false、sql_rendered；invalid payload 不輸出 manual_sql。
-      - smoke：mode=read-only、write=disabled、status=ok|fail-closed、telegram_confirmed=true|false。
-  - 既有 load_confirmed_market_theme_evidence()、Telegram message list、payload、formatter header、VERSION 未改。
-  - 版本同步：TASK 指定本輪不升版；未改 Telegram 使用者可見報文與 VERSION。
+- 現有 schema 已包含 loader、manual backfill、read-only smoke 所需欄位。
+- loader confirmed contract 已對齊既有欄位：`support_level in ('confirmed','supporting')`、`evidence_status='confirmed'`、`freshness='fresh'`。
+- JSONB 欄位 `evidence_value`、`watchlist_breadth`、`lineage`、`metadata` 足以承接 evidence / lineage payload。
+- read-only smoke 只需要 SELECT 既有表與既有欄位。
+- manual backfill/upsert 已可用既有 unique key：`trade_date, market_index, sector_theme_key, source_family, source_name, as_of`。
+- 本輪缺口不是 schema，而是 loader 必須拒絕 production table 中標記為 local/runtime/test 的不可信 rows；已用 source_family guard 修正。
 
-  ## 直接消費者同步
+## Production Closure Matrix
 
-  - Owner：新增 docs 與 manual SQL template，標明需 Owner approval。
-  - QA：新增測試覆蓋 validation / smoke matrix / fake source fail-closed。
-  - GitHub fresh runner：提供 read-only smoke CLI artifact；缺 SUPABASE_READONLY_KEY 時 fail closed。
-  - core/generator.py / Telegram：未同步修改，因本輪未改既有 loader contract 或報文輸出。
+| area | repo-side status | remaining gap |
+| --- | --- | --- |
+| schema | no-schema-change | Owner 仍需保持 production table 與 verified schema 一致 |
+| ingestion validation | dry-run exists and fake/local/runtime/test sources fail closed | 尚未啟用 live ingestion provider |
+| manual backfill | manual SQL template / validation-to-SQL path exists | Owner 需另行批准 source、placeholder、執行 |
+| read-only smoke | uses `SUPABASE_READONLY_KEY` only and prints schema decision | 需 Owner 提供 read-only env 與 production rows |
+| loader source guard | approved persistent source family only | production data 仍需 Owner 保證來源與 lineage 正確 |
+| RLS / grant | manual template has optional sections and read-only verification | production role/policy names 仍是 Owner 決策 |
+| Telegram confirmed consumption | loader only confirms approved persistent source rows and fails closed otherwise | production rows 未通過前 Telegram 不得 confirmed |
 
-  ## Repo-side vs Owner Manual Boundary
+## 契約影響
 
-  ┌──────────────────────┬───────────────┬────────────────────────────────────────┬────────────────────────┬────────┐
-  │ item                 │ repo artifact │ live side effect                       │ Owner approval needed  │ status │
-  ├──────────────────────┼───────────────┼────────────────────────────────────────┼────────────────────────┼────────┤
-  │ ingestion validation │ script/helper │ none                                   │ no                     │ ready  │
-  │ manual SQL template  │ SQL file      │ none unless Owner executes             │ yes                    │ ready  │
-  │ read-only smoke      │ script/helper │ read-only only with Owner-provided env │ yes for production env │ ready  │
-  │ RLS verification     │ SQL Step D    │ read-only queries                      │ yes                    │ ready  │
-  └──────────────────────┴───────────────┴────────────────────────────────────────┴────────────────────────┴────────┘
+- `build_market_theme_evidence_readonly_smoke(...)` 回傳結構包含 `schema_decision: "no-schema-change"`。
+- `scripts/smoke_market_theme_evidence_readonly.py` CLI 輸出包含 `schema_decision: no-schema-change`。
+- `load_confirmed_market_theme_evidence()` 回傳結構不變，但 confirmed 條件收緊：非 approved persistent `source_family` 會 `insufficient-data` 且 `confirmed=false`。
+- DB schema 未改。
+- Telegram payload、message list、formatter header、VERSION 未改。
+- 策略 decision、BUY/SELL/RR/加減碼/停損停利門檻未改。
 
-  ## Fresh GitHub Runner Smoke Matrix
+## 版本同步
 
-  ┌───────────────────────────────────────┬───────────────────────────────────────┐
-  │ condition                             │ expected                              │
-  ├───────────────────────────────────────┼───────────────────────────────────────┤
-  │ missing env                           │ fail-closed, telegram_confirmed=false │
-  │ permission denied                     │ fail-closed, telegram_confirmed=false │
-  │ 0 rows                                │ fail-closed, telegram_confirmed=false │
-  │ stale rows                            │ fail-closed, telegram_confirmed=false │
-  │ unsupported support_level             │ fail-closed, telegram_confirmed=false │
-  │ valid fresh confirmed/supporting rows │ ok, telegram_confirmed=true           │
-  └───────────────────────────────────────┴───────────────────────────────────────┘
+- 本輪不升版。
+- 未修改 Telegram 使用者可見報文。
+- 未修改 `core/generator.py` `VERSION`。
 
-  ## 未影響模組
+## 直接消費者同步
 
-  - 策略 decision / BUY / SELL / RR / 加減碼 / 停損停利：未改。
-  - Telegram live delivery / formatter / VERSION：未改。
-  - Supabase live write / production DB / RLS / grant / role：未執行、未自動化。
-  - Watchlist、replay、formal backfill、runner secrets：未改。
+- `scripts/smoke_market_theme_evidence_readonly.py` 已同步顯示 schema_decision。
+- `build_market_theme_evidence_readonly_smoke()` 只有合法 confirmed row 才會 `telegram_confirmed=true`；forbidden source row fail closed。
+- `tests/test_market_theme_evidence_handoff.py` 已同步 helper return contract、CLI output contract、loader source-family guard。
+- Owner handoff docs 已新增 no-schema-change assessment 與 next manual steps。
+- `core/generator.py` / Telegram 無需同步，因本輪未改 formatter 或 message list。
 
-  ## 已跑自檢命令
+## 自檢命令
 
-  - arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence_handoff.py tests/test_market_theme_evidence.py -q：28 passed, 17 warnings。
-  - arch -arm64 .venv/bin/python scripts/smoke_market_theme_evidence_readonly.py --trade-date 2026-05-29：exit 2，預期 fail-closed；缺 read-only env，未建 DB client。
-  - validation CLI positive `--input` JSON file：exit 0，may_render_manual_sql=true，未要求輸出 SQL。
-  - validation CLI fake source `--input` JSON file：exit 2，may_render_manual_sql=false，無 manual_sql。
-  - git diff --check：passed。
-  - PYTHONPYCACHEPREFIX=/private/tmp/stock_bot_pycache arch -arm64 .venv/bin/python -m py_compile scripts/validate_market_theme_evidence_ingestion.py scripts/smoke_market_theme_evidence_readonly.py：passed。
+- `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence_handoff.py tests/test_market_theme_evidence.py -q`：31 passed, 17 warnings。
+- `arch -arm64 .venv/bin/python scripts/smoke_market_theme_evidence_readonly.py`：exit 2，預期 fail-closed；輸出包含 `schema_decision: no-schema-change` 與 `telegram_confirmed: false`。
+- `git diff --stat` / candidate diff review：只包含本輪 docs / smoke / helper / tests。
 
-  ## 殘留風險
+## 殘留風險
 
-  - 未驗證 production RLS/grant 實際結果；需 Owner 手動執行 SQL 後回傳結果。
-  - 未做正式 backfill 或 live ingestion；本輪只能表示 artifact ready for Owner manual execution。
-  - Smoke 需要 Owner 提供 SUPABASE_URL 與 SUPABASE_READONLY_KEY 才能讀 production。
+- 未驗證 production read-only env；需 Owner 提供 `SUPABASE_URL` 與 `SUPABASE_READONLY_KEY`。
+- 未執行 production SQL、RLS/grant、manual backfill 或 live write。
+- no-schema-change 只表示現有 schema 足以支援下一步 manual backfill/read-only smoke，不表示 production closure 已完成。
+- production data 的真實性仍需 Owner approved source / lineage；loader 只能拒絕明顯 forbidden source family。
 
-  ## 旁支待辦
+## Blocked / Follow-up
 
-  - Owner 手動決定 read-only role name、policy name、approved source name。
-  - Owner 手動批准並執行必要 SQL section。
-  - QA 仍需反證無 fake confirmed、無 local state 當 production、無 live write、fresh runner fail-closed。
+- 若 Owner 要進 production：先執行或回傳 read-only verification 結果，再提供 approved payload / read-only env。
+- 若 production verification 發現欄位、constraint、index 與已驗 schema 不一致，才需要另開 schema-change SQL 任務。

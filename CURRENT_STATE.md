@@ -33,6 +33,15 @@
 
 ## Recent High-Signal Milestones
 
+- Evidence Chain Production Closure Gap Assessment 已通過 QA，待 commit / push：
+  - Owner 問題：繼續 evidence chain production 化；若需要擴字段 / 擴表就給 SQL。
+  - 結論：本輪 `schema_decision: no-schema-change`。現有 `public.market_theme_confirmed_evidence` schema 足以支援 read-only smoke 與 manual backfill 下一步；暫不需要新增表或欄位。
+  - 新增 `docs/handoff/evidence_chain_production_closure_gap_assessment.md`，記錄 current table contract、read-only smoke requirements、manual backfill requirements、production closure matrix、next manual steps。
+  - read-only smoke output 新增 `schema_decision: no-schema-change`。
+  - QA 首輪有效阻塞：production table row 若 `source_family=local` 但其他欄位是 fresh/confirmed/supporting，舊 loader 會 confirmed 並讓 smoke `telegram_confirmed=true`。
+  - 已修正：`services/market_theme_evidence_store.py` read-only loader 只接受 approved persistent source family：`production_db`、`owner_approved_persistent`、`market_data`；local/runtime/cache/worktree/report-derived/synthetic/default/test/fixture rows 全部 fail closed。
+  - 驗證：`tests/test_market_theme_evidence_handoff.py tests/test_market_theme_evidence.py`，`31 passed, 17 warnings`；smoke 缺 env exit 2 且 `telegram_confirmed=false`；`git diff --check` 通過。
+  - 非阻塞風險：若 production 查回 rows 同時含 forbidden row 與 allowed row，loader 會保守 fail closed，而不是跳過壞 row 找後面的好 row；回填時需避免 production 表混入 local/test rows。
 - Evidence Chain Production Ops Artifacts 已通過 QA，待 commit / push：
   - 目的：在真正 production ingestion / backfill / RLS / read-only runner smoke 前，先提供可審核、可 dry-run、無 live side effect 的 repo-side 操作物。
   - 新增 `scripts/validate_market_theme_evidence_ingestion.py`：驗證 Owner-approved payload；合法 persistent source 可選擇輸出 manual SQL，fake/local/runtime/cache/worktree/report-derived/synthetic/default/test source fail closed。
@@ -212,6 +221,7 @@
 - Runtime watchlist breadth fallback 只能作為非交易診斷或 missing-source 說明；不得稱市場證據、不得輸出 weak/runtime、不得 confirmed、不得改交易決策。
 - Market/theme evidence 的 `confirmed` / `ready` 必須同時滿足 production / Owner-approved persistent source family、required fields 與 freshness；report-derived / runtime diagnostic 只能作 trace，不得污染頂層 `source_family`。
 - Market/theme evidence handoff helper 只能產生 manual SQL，且自身不得回傳 `confirmed=True`；runtime/local/cache/worktree/test/report-derived/synthetic/default source、缺 `evidence_status`、空 rows 或 `None` rows 都不得產生 SQL。
+- Market/theme confirmed evidence loader 只能接受 approved persistent `source_family`：`production_db`、`owner_approved_persistent`、`market_data`。即使資料來自 production table，只要 row 自身標記為 local/runtime/cache/worktree/report-derived/synthetic/default/test/fixture，也必須 fail closed，不得洗成 confirmed。
 - Evidence ops artifacts 只能是 dry-run / manual template / read-only smoke；不得被描述為 production ingestion 已 live。SQL template 需替換 placeholder 並選段執行，不可整份盲跑。
 - positions / position_events 來源錯誤不可補假值：positions 不可回全 watchlist 0 股，position_events source-error 不可回全 0 event summary 或讓報文誤讀為今日無交易。
 

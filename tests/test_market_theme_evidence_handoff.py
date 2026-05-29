@@ -8,6 +8,7 @@ from pathlib import Path
 from services.market_theme_evidence_store import (
     build_market_theme_evidence_handoff,
     build_market_theme_evidence_readonly_smoke,
+    load_confirmed_market_theme_evidence,
     validate_market_theme_evidence_ingestion_payload,
 )
 
@@ -31,6 +32,31 @@ def handoff_payload(**overrides):
     }
     payload.update(overrides)
     return payload
+
+
+class EvidenceTable:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def select(self, fields):
+        return self
+
+    def order(self, key, desc=False):
+        return self
+
+    def limit(self, limit):
+        return self
+
+    def execute(self):
+        return type("Result", (), {"data": self.rows})()
+
+
+class EvidenceClient:
+    def __init__(self, rows):
+        self.table_obj = EvidenceTable(rows)
+
+    def table(self, name):
+        return self.table_obj
 
 
 class MarketThemeEvidenceHandoffTest(unittest.TestCase):
@@ -158,6 +184,26 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
         self.assertFalse(output["live_write"])
         self.assertNotIn("manual_sql", output)
 
+    def test_readonly_smoke_cli_prints_schema_decision_and_fails_closed_without_env(self):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "scripts/smoke_market_theme_evidence_readonly.py",
+            ],
+            cwd=Path(__file__).resolve().parents[1],
+            text=True,
+            capture_output=True,
+            check=False,
+            env={},
+        )
+
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn("mode: read-only", completed.stdout)
+        self.assertIn("write: disabled", completed.stdout)
+        self.assertIn("schema_decision: no-schema-change", completed.stdout)
+        self.assertIn("status: fail-closed", completed.stdout)
+        self.assertIn("telegram_confirmed: false", completed.stdout)
+
     def test_readonly_smoke_matrix_fails_closed_except_valid_confirmed_rows(self):
         cases = [
             (
@@ -209,10 +255,51 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
                 smoke = build_market_theme_evidence_readonly_smoke(load_result)
                 self.assertEqual(smoke["mode"], "read-only")
                 self.assertEqual(smoke["write"], "disabled")
+                self.assertEqual(smoke["schema_decision"], "no-schema-change")
                 self.assertEqual(smoke["env"], env)
                 self.assertEqual(smoke["table_read"], table_read)
                 self.assertEqual(smoke["status"], status)
                 self.assertEqual(smoke["telegram_confirmed"], telegram_confirmed)
+
+    def test_readonly_loader_rejects_local_or_runtime_source_family_even_when_confirmed(self):
+        for source_family in [
+            "local",
+            "local_only_state",
+            "runtime",
+            "runtime_diagnostic",
+            "cache",
+            "worktree",
+            "report-derived",
+            "synthetic",
+            "default",
+            "test_fixture",
+            "fixture",
+        ]:
+            with self.subTest(source_family=source_family):
+                loaded = load_confirmed_market_theme_evidence(
+                    client=EvidenceClient([handoff_payload(source_family=source_family)])
+                )
+                smoke = build_market_theme_evidence_readonly_smoke(loaded)
+
+                self.assertEqual(loaded["status"], "insufficient-data")
+                self.assertFalse(loaded["confirmed"])
+                self.assertEqual(smoke["status"], "fail-closed")
+                self.assertFalse(smoke["telegram_confirmed"])
+
+    def test_readonly_loader_accepts_allowed_persistent_source_family(self):
+        for source_family in [
+            "production_db",
+            "owner_approved_persistent",
+            "market_data",
+        ]:
+            with self.subTest(source_family=source_family):
+                loaded = load_confirmed_market_theme_evidence(
+                    client=EvidenceClient([handoff_payload(source_family=source_family)])
+                )
+
+                self.assertEqual(loaded["status"], "confirmed")
+                self.assertTrue(loaded["confirmed"])
+                self.assertEqual(loaded["source_of_truth"], "production_db")
 
 
 if __name__ == "__main__":

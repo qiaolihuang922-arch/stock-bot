@@ -21,6 +21,7 @@ HANDOFF_FORBIDDEN_SOURCE_FAMILIES = {
     "local",
     "cache",
     "worktree",
+    "report-derived",
     "test_fixture",
     "test fixture",
     "report_derived",
@@ -103,7 +104,7 @@ def _missing_fields(row):
 
 
 def _source_family_forbidden(source_family):
-    family = str(source_family or "").lower()
+    family = str(source_family or "").strip().lower()
     return (
         family in HANDOFF_FORBIDDEN_SOURCE_FAMILIES
         or family.startswith("runtime")
@@ -111,6 +112,14 @@ def _source_family_forbidden(source_family):
         or family.startswith("cache")
         or family.startswith("worktree")
         or family.startswith("test")
+    )
+
+
+def _source_family_allowed_for_confirmed_loader(source_family):
+    family = str(source_family or "").strip().lower()
+    return (
+        family in HANDOFF_ALLOWED_SOURCE_FAMILIES
+        and not _source_family_forbidden(family)
     )
 
 
@@ -311,6 +320,7 @@ def build_market_theme_evidence_readonly_smoke(load_result):
         "title": "market_theme_confirmed_evidence smoke",
         "mode": "read-only",
         "write": "disabled",
+        "schema_decision": "no-schema-change",
         "env": env_status,
         "table_read": table_read,
         "rows": len(rows),
@@ -368,6 +378,7 @@ def _confirmed_row(row):
         str(row.get("support_level") or "").lower() in CONFIRMED_SUPPORT_LEVELS
         and str(row.get("evidence_status") or "").lower() == "confirmed"
         and str(row.get("freshness") or "").lower() == "fresh"
+        and _source_family_allowed_for_confirmed_loader(row.get("source_family"))
     )
 
 
@@ -398,6 +409,11 @@ def _validate_rows(rows):
         support_level = str(row.get("support_level") or "").lower()
         if support_level not in ALLOWED_SUPPORT_LEVELS:
             return _empty_result("source-error", "unexpected support_level")
+        if not _source_family_allowed_for_confirmed_loader(row.get("source_family")):
+            return _empty_result(
+                "insufficient-data",
+                "source_family is not an approved persistent source",
+            )
 
     confirmed_rows = [
         row for row in rows

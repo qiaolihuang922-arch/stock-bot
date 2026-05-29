@@ -12,6 +12,7 @@ It is not evidence that production ingestion is live.
 | manual SQL template | `db/sql/evidence_chain_market_theme_ops_manual_template.sql` | none unless Owner manually executes approved sections | yes | ready |
 | read-only smoke | `scripts/smoke_market_theme_evidence_readonly.py` | read-only DB query only | yes, when using production env | ready |
 | RLS verification SQL | Step D in the SQL template | read-only catalog/table queries | yes, when running in production | ready |
+| production closure gap assessment | `docs/handoff/evidence_chain_production_closure_gap_assessment.md` | none | no, for repo-side review | ready |
 
 ## Ingestion Payload Dry-run
 
@@ -70,6 +71,7 @@ Expected fail-closed shape when no confirmed production rows are available:
 market_theme_confirmed_evidence smoke
 mode: read-only
 write: disabled
+schema_decision: no-schema-change
 env: present
 table_read: ok
 rows: 0

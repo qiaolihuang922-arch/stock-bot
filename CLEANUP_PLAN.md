@@ -46,6 +46,13 @@
 
 ## Pending / Watchlist
 
+- 本輪 Evidence Chain Production Closure Gap Assessment：
+  - 根因分類：`source_boundary_gap` + `production_ops_boundary` + `runner_session_handoff_gap`。
+  - 結論：不需要擴表 / 擴字段；現有 schema 足以支援下一步 read-only smoke 與 manual backfill。
+  - QA 首輪阻塞有效：抓到 production table 中 `source_family=local` row 可能被 loader 洗成 confirmed；已補 loader source-family allowlist/denylist guard 與測試。
+  - QA 追加風險：混合 forbidden + allowed rows 時 loader 會保守 fail closed，可能壓掉合法 evidence；這不會 fake confirmed，不阻塞本輪，但 future production backfill 要避免混入 local/test rows。
+  - Runner gap 重複：Tech / QA 實質完成後卡在互動提示，需要手動整理 CHANGELOG / QA_REPORT；後續需修 session sentinel / CAO_DONE capture。
+  - 不新增 `AGENTS.md` 硬規則：既有 source-of-truth、fake confirmed、live write 禁令已覆蓋；本輪沉澱為產品 guard、fixture 與 runner 待補。
 - 本輪 Evidence Chain Production Ops Artifacts：
   - 根因分類：`production_ops_boundary` + `manual_sql_operator_risk` + `runner_parser_false_fail`。
   - 已完成：ingestion payload dry-run validator、read-only smoke CLI、manual SQL template、handoff docs；全部 repo-side non-live。
