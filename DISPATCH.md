@@ -10,11 +10,11 @@
 - version_level: `patch`
 - qa_level: `L2`
 - owner_status: `requested`
-- architect_status: `qa_passed_absorbed_pending_push`
+- architect_status: `pushed`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
 - qa_status: `qa_passed`
-- commit: `pending`
+- commit: `2c90bd0`
 
 ## Current Result
 
@@ -47,8 +47,8 @@
 
 ## Next Action
 
-- commit / push 後清理 tech worktree。
-- 報文確認後再開證據鏈下一步；若涉及 DB table / cache / external provider，先通知 Owner。
+- 已 push 並清理 tech worktree。
+- 證據鏈下一步規劃完成：建議 v20.3.0 runtime watchlist breadth fallback；不建表、不 live write、不 backfill。若要 DB table / cache / external provider，先通知 Owner。
 
 ## Status Values
 
