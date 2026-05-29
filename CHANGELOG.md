@@ -1,61 +1,92 @@
-# CHANGELOG: v20.2.3 二次 QA 阻塞修正
+# CHANGELOG: v20.2.4 QA 阻塞修正 - 強勢準備 summary overflow 不混桶
 
   ## 任務尺寸與風險
 
-  - risk_patch：涉及持倉賣出行動、今日已賣股數與 Telegram 手機誤讀風險；本輪只補 QA 二次阻塞點，不擴大策略或資料模型。
+  - 任務尺寸：normal_patch
+  - 判斷：本輪只修 Telegram summary 的強勢準備 overflow 顯示與補測試；不改策略 threshold、DB、watchlist、live/backfill，因此不是 risk_patch。
+  - 本輪是 QA 阻塞修正：保留既有 v20.2.4 候選 diff，只做最小增量修正。
 
   ## 修改內容
 
-  - 修正持倉卡第二行 今日 ... 的資料來源：第二段停利 completed / partial 時，改用同一個 second_take_profit_execution_state() 判斷出的 DB / local execution / position event 今日已賣股數。
-  - completed 案例持倉卡現在顯示 今日 賣 75股，不再和同卡 今日已賣 75 股｜第二段已執行 矛盾。
-  - partial 案例持倉卡現在顯示 今日 賣 20股，不再出現 今日 無。
-  - 保留既有候選 diff 的 completed 去重、partial 剩餘建議、unexecuted 第二段停利、本次建議與 v20.2.3 header。
+  - 修正 強勢準備 summary overflow：
+      - 隱藏項若全部同一狀態，仍可輸出 另 N 檔同狀態見詳情。
+      - 隱藏項若跨多種狀態，改輸出分類數量，例如 另 3 檔：過熱降溫 1、突破回測 2，見詳情。
+  - 補 6 檔跨狀態可準備 fixture：
+      - 驗證 summary 最多列 3 檔明細。
+      - 驗證 overflow 不使用誤導的 同狀態。
+      - 驗證可買仍為 0。
+      - 驗證漏斗與未持倉詳情一致。
 
   ## 修改檔案
 
   - core/generator.py
+      - 本輪增量：修正 format_strong_prepare_summary() overflow 文案。
+      - 既有候選 diff 保留：v20.2.4 版本、強勢準備層、可準備 funnel、summary / 漏斗 / 詳情同步。
   - tests/test_generator_report.py
+      - 本輪增量：新增 test_v20_2_4_r3_hot_prepare_overflow_counts_hidden_statuses。
+      - 既有候選 diff 保留：v20.2.4 R3 強勢偏熱 formatter fixture。
+  - core/market_theme_evidence.py
+      - 既有候選 diff 保留，未在本輪 QA 阻塞修正中改動。
   - tests/test_market_theme_evidence.py
+      - 既有候選 diff 保留，未在本輪 QA 阻塞修正中改動。
   - tests/test_notifier.py
-  - CHANGELOG.md（由 runner 寫入本交付內容）
+      - 既有候選 diff 保留，未在本輪 QA 阻塞修正中改動。
 
   ## 最小改動策略
 
-  - 只新增 holding_today_trade_text()，讓持倉卡今日交易欄在第二段停利 completed / partial 時復用既有 execution state helper。
-  - 非第二段停利 completed / partial 情境仍沿用原本 position_events 的 event_summary_text()，避免改到其他持倉卡輸出。
+  - 只改 format_strong_prepare_summary() 的 overflow 行為。
+  - 不重排 summary 區塊。
+  - 不修改強勢準備 bucket 判斷。
+  - 不修改 BUY / WAIT / FAIL 決策。
+  - 不碰 DB、watchlist、live Telegram、backfill。
 
   ## 契約影響
 
-  - 使用者可見 Telegram 持倉卡文字修正：第二段停利 completed / partial 的今日交易欄會顯示 execution 已賣股數。
-  - 未改函式回傳結構、message list 結構、Telegram payload shape、DB schema、報文分組順序或 public helper contract。
-  - formatter header 維持 v20.2.3。
+  - Telegram summary 顯示契約有最小修正：
+      - 強勢準備 overflow 不再把跨狀態隱藏標的寫成 同狀態。
+      - 同狀態 只在隱藏項實際同一狀態時輸出。
+  - 未改函式回傳結構。
+  - 未改 Telegram payload shape。
+  - 未改 message list 順序。
+  - 未改策略 decision 或 threshold。
+  - 版本維持 v20.2.4。
 
   ## 直接消費者同步
 
-  - formatTelegramPositionCard() 已同步使用 holding_today_trade_text()。
-  - tests/test_generator_report.py 已補 completed / partial 持倉卡斷言，覆蓋 今日 賣 75股、今日 賣 20股 與不得出現 今日 無。
-  - Summary、持倉風控檢查與 execution checklist 沿用既有 v20.2.3 execution state 邏輯，無需額外同步呼叫方。
+  - Owner 手機 Telegram summary：已同步 overflow 文案。
+  - Telegram formatter output：已補 6 檔跨狀態 fixture。
+  - 未持倉漏斗：測試確認 可買 0｜可準備 6（不可買）｜僅追蹤 1｜淘汰 1。
+  - 未持倉詳情卡：測試確認 6 檔仍分別顯示 可準備｜漲停鎖價 / 過熱降溫 / 突破回測。
+  - Notifier / market evidence 相關既有 v20.2.4 測試已一起重跑。
 
   ## 未影響模組
 
-  - 未改策略閾值、RR、過熱、漲停不追、watchlist。
-  - 未改 DB schema、Supabase write path、Telegram live delivery、replay/backfill。
-  - 未改未持倉分類、市場題材 evidence 判斷或交易狀態機。
+  - 策略 threshold：未改。
+  - RR / 過熱 / 冷卻 / 回測 / 量能 / 突破門檻：未改。
+  - DB schema / Supabase write：未改、未執行 live write。
+  - Watchlist：未改。
+  - Live Telegram delivery：未執行。
+  - Replay / backfill：未執行。
+  - 持倉停利 / 停損 / execution dedupe：未改。
 
   ## 已跑自檢命令
 
-  - .venv/bin/python -m pytest tests/test_generator_report.py -k "v20_2_3 or v20_2_2_same_day_executed_take_profit or intraday_v20_0_10_execution_contract"：收集失敗，原因是 worktree .venv symlink 到主 repo .venv，其中
-    pydantic_core 為 arm64，但本 shell 為 x86_64。
-  - 使用同一 pytest 進程 stub supabase.create_client 後跑目標回歸：5 passed。
-  - 使用同一 stub 跑 touched tests：tests/test_generator_report.py tests/test_notifier.py tests/test_market_theme_evidence.py，76 passed。
-  - git diff --check：通過。
+  - python -m pytest tests/test_generator_report.py -k "v20_2_4_r3_hot"
+      - 結果：collection error；原因是預設 x86_64 Python 載入 .venv 中 arm64 pydantic_core 架構不相容。
+  - /usr/bin/arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py -k "v20_2_4_r3_hot"
+      - 結果：2 passed, 59 deselected。
+  - /usr/bin/arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py -k "v20_2_4" tests/test_market_theme_evidence.py tests/test_notifier.py -k "v20_2_4 or market_theme or notifier"
+      - 結果：19 passed, 59 deselected。
+  - git diff --check
+      - 結果：通過。
 
   ## 殘留風險
 
-  - execution stage 仍依現有欄位保守判斷賣出紀錄，若 DB / local execution 未來需要精準區分第二段、額外停利、其他賣出，仍需補正式 execution stage 欄位；本輪未改 schema。
-  - 原生 pytest import 仍受本機 .venv 架構不相容影響；本輪自檢用 stub 避開不需觸發的 Supabase import，未做外部 DB/API 操作。
+  - 自檢需用 arch -arm64 .venv/bin/python；預設 Python 仍會因 runner / venv 架構不一致無法 collection。
+  - 未跑 full pytest，符合本輪 normal_patch / QA 阻塞修正的最小驗證範圍。
+  - 未執行 live Telegram、Supabase write、正式 backfill。
 
   ## 旁支待辦
 
-  - 後續若要完全消除測試 stub，需要 runner 準備與目前 shell 架構一致的 worktree venv。
-  - 若產品要精準區分第二段停利與其他同日賣出，另開任務定義 execution stage / migration / backfill。
+  - 若未來要重新設計整份未持倉準備 / 僅追蹤排序，應另開 normal_patch 或 minor 任務。
+  - runner 可另補：在 worktree .venv 指向 arm64 主 repo venv 時，自動用 arch -arm64 跑測試，避免預設 x86_64 Python collection error。

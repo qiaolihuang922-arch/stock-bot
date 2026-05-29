@@ -2,114 +2,81 @@
 
   ## 測試範圍
 
-  任務尺寸：risk_patch，QA level：L2。未擴成 full pytest / replay / backfill。
+  本輪判定為 normal_patch / L2，驗證範圍控制在 Telegram formatter、notifier consumer、market/theme evidence 文案與策略 smoke；未擴成 full pytest / replay / backfill。
 
-  讀取與核對：
+  可吸收候選 diff：
 
-  - TASK.md
-  - CHANGELOG.md
-  - git status --short
-  - git diff --stat
-  - git diff -- core/generator.py tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py CHANGELOG.md
-
-  可吸收 diff：
-
-  - CHANGELOG.md
   - core/generator.py
+  - core/market_theme_evidence.py
   - tests/test_generator_report.py
   - tests/test_market_theme_evidence.py
   - tests/test_notifier.py
+  - CHANGELOG.md
 
-  worktree 殘留：
+  worktree 殘留：git status --short 只顯示上述 6 個 tracked modified files，未見額外 untracked 測試產物；不建議整包合併超出上述 diff。
 
-  - 未發現超出上述清單的 tracked diff。
-  - CHANGELOG.md 已列自身，上一輪「CHANGELOG 未列自身」阻塞點已解除。
+  已執行：
 
-  執行命令：
-
+  - /usr/bin/arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py -k "v20_2_4_r3_hot"：2 passed
+  - /usr/bin/arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py -k "v20_2_4" tests/test_market_theme_evidence.py tests/test_notifier.py -k "v20_2_4 or market_theme or notifier"：19 passed
+  - /usr/bin/arch -arm64 .venv/bin/python -m pytest tests/test_signal_validator.py tests/test_analysis_engine.py -q：39 passed
   - git diff --check：通過
-  - arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py -k "v20_2_3 or intraday_v20_0_10_execution_contract" tests/test_notifier.py tests/test_market_theme_evidence.py：4 passed
-  - arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py tests/test_notifier.py tests/test_market_theme_evidence.py：76 passed
-  - arch -arm64 .venv/bin/python -m pytest tests/test_analysis_engine.py -k "same_day_profit_taken or overheat or stop or take_profit"：8 passed
+  - QA 另補 direct fixture：混合隱藏狀態輸出 另 3 檔：過熱降溫 1、突破回測 2，見詳情，未輸出誤導的 同狀態。
 
   ## 風險預算與停止條件
 
-  本輪最值得抓的 3 個風險：
+  本輪最值得抓的風險：
 
-  1. completed DB execution 仍讓 Owner 誤以為今日要再賣一次。
-     驗證：英業達 db_execution shares_delta=-75，原建議 56，檢查 summary / 持倉卡 / 風控檢查。
-     結果：顯示 今日 賣 75股、第二段停利後觀察、今日已賣 75 股｜剩餘 225 股｜第二段已執行；未出現 今日 無、無本次建議 56、本次建議 56 股。
-  2. partial local execution 仍顯示完整原建議 56 股。
-     驗證：local_executions shares=20，原建議 56。
-     結果：顯示 今日 賣 20股、第二段停利剩餘建議 36 股｜今日已賣 20 股｜原建議 56 股｜剩餘持倉 280 股；未出現 今日 無 或 本次建議 56 股 作為完整待執行建議。
-  3. unexecuted 被誤去重，導致真正第二段停利消失。
-     驗證：無 DB / local execution。
-     結果：仍顯示 第二段停利｜本次建議 56 股｜剩餘 300 股，符合 TASK 未執行案例。
+  1. 強勢準備超過 3 檔時，hidden overflow 把跨狀態誤寫成 同狀態。
+      - 驗證：既有測試 + QA direct mixed fixture。
+      - 結果：跨狀態 hidden 已按分類數量輸出；同狀態 hidden 才保留 同狀態。
+  2. evidence absent 被 Owner 手機誤讀成否定外部市場強勢。
+      - 驗證：summary 實際輸出不含 市場 / 題材證據：absent、市場沒有證據、題材不存在，改為內部結構化證據未啟用。
+      - 結果：通過。
+  3. 準備層被誤讀成可買。
+      - 驗證：summary / 漏斗 / 詳情卡檢查 可買 0，準備卡使用 不可追高、不可買、待觸發。
+      - 結果：通過。
 
-  停止條件：
-
-  - 三個 fixture 已覆蓋 completed / partial / unexecuted。
-  - header 已核對為 v20.2.3。
-  - touched tests 與策略 smoke 通過。
-  - diff 未觸及 DB schema、watchlist、live/backfill 入口或策略門檻檔案。
+  停止條件已達：header v20.2.4、R3 強勢準備層、不可買語意、summary/funnel/detail 計數、notifier consumer、策略 smoke、diff 邊界均完成。
 
   ## 關聯風險掃描
 
-  - core/generator.py 版本常量由 v20.2.2 升為 v20.2.3，相關 formatter / notifier 測試已同步。
-  - diff 未包含 DB schema、migration、Supabase write path、watchlist、backfill script。
-  - strategy smoke 測試通過；未看到 RR、過熱、漲停不追、停損停利策略門檻被改。
-  - CHANGELOG.md 與 diff 一致：已列出自身、core/generator.py 與三個測試檔。
+  git diff --name-only 未出現 DB schema、watchlist、live Telegram、Supabase write、replay/backfill、持倉停利 dedupe 相關檔案。
+
+  core/generator.py 的改動集中在 formatter 顯示分類與 message 組裝；strong_prepare_bucket() / unheld_funnel_state(..., market_mode="進攻偏熱") 只改未持倉顯示分層，未改 BUY decision / action threshold。策略 smoke tests/
+  test_signal_validator.py + tests/test_analysis_engine.py 39 passed，未見策略判斷回退。
 
   ## 跨區塊語意一致性
 
-  Owner 手機閱讀順序反證：
+  已核對 Owner 手機閱讀順序的實際 summary：
 
-  completed：
+  - Header 顯示 v20.2.4。
+  - 今日結論仍是 交易執行：無新增下單 / 無有效進場，沒有把準備層包裝成買入。
+  - 強勢準備區最多列 3 檔明細，overflow 按 hidden 分類數量輸出。
+  - 漏斗顯示 可買 0｜可準備 N（不可買）｜僅追蹤 N｜淘汰 N。
+  - 詳情卡可追溯到 可準備｜漲停鎖價 / 過熱降溫 / 突破回測，買點行明確是不可追高、不可買或待觸發。
 
-  - header：【05/29 盤中｜v20.2.3】
-  - 持倉卡：【英業達 2356】📌 第二段停利後觀察，今日 賣 75股
-  - 決策：今日已賣 75 股｜剩餘 225 股｜第二段已執行
-  - summary 今日執行：英業達｜已執行｜今日已賣 75 股｜剩餘 225 股｜第二段已執行
-  - 風控檢查：英業達｜第二段停利後觀察｜今日已賣 75 股｜剩餘 225 股｜第二段已執行
-  - 未出現互相矛盾的完整待賣 56 股。
-
-  partial：
-
-  - 持倉卡：第二段停利剩餘建議，今日 賣 20股
-  - summary / 風控檢查同樣顯示剩餘建議 36 股、今日已賣 20 股、原建議 56 股。
-  - 沒有把 56 股重新包裝成「本次建議 56 股」。
-
-  unexecuted：
-
-  - 持倉卡、summary、風控檢查都保留 第二段停利｜本次建議 56 股｜剩餘 300 股。
-  - 今日 無 只出現在未執行持倉卡，未污染 completed / partial。
+  注意：詳情索引仍使用聚合詞 未持倉追蹤，但同一 summary 內的漏斗明確拆出 可準備 + 僅追蹤，本輪不視為阻塞。
 
   ## 使用者誤讀風險
 
-  未發現會讓 Owner 在 completed 案例重複賣出的文案。completed 第一眼看到的是「已執行 / 後觀察」，不是可執行第二段停利。
+  未發現會讓 Owner 誤判買入、追高或加碼的輸出。準備層標題是 強勢準備，卡片買點不是 可買，並包含 不可追高 / 不可買 / 待觸發。
 
-  partial 仍有 原建議 56 股，但上下文同列 剩餘建議 36 股｜今日已賣 20 股，語意可接受；不會被讀成完整再賣 56 股。
-
-  unexecuted 保留完整建議，符合 TASK，不視為噪音或誤導。
+  evidence absent 文案已限定為內部資料狀態：內部結構化證據未啟用、不代表外部市場不強，沒有否定外部盤面強勢。
 
   ## 質疑與反證
 
-  主動質疑 1：Tech 是否只修持倉卡，漏掉 summary / 風控檢查。
-  反證：獨立 fixture 實際輸出顯示 completed / partial 的 summary 與風控檢查均同步同一 action 與股數。
+  主動反證：
 
-  主動質疑 2：DB execution 與 local execution 來源不同，是否只覆蓋其中一種。
-  反證：completed 用 db_execution，partial 用 local_executions，兩者皆通過手機順序檢查。
-
-  主動質疑 3：修 completed / partial 後，未執行第二段是否被錯誤吞掉。
-  反證：unexecuted 仍顯示 第二段停利 / 本次建議 56 股 / 剩餘 300 股。
+  - 若 hidden items 全部同一狀態，輸出 另 N 檔同狀態見詳情 是合理且不違反本輪要求。
+  - 若 hidden items 跨 過熱降溫 / 突破回測，QA direct fixture 驗證會輸出分類數量，不再混桶。
+  - 可準備股票仍不進 pending_trade_items，執行區沒有出現新增下單項。
+  - notifier 測試確認最後一則 formatter summary header 維持 v20.2.4。
+  - 策略 smoke 通過，且 diff 未碰策略 threshold / DB / watchlist / live/backfill / 持倉停利 dedupe。
 
   ## 未測項目
 
-  - 未跑 full pytest，因本輪 L2 不要求且會超出停止條件。
-  - 未跑 replay / backfill dry-run。
-  - 未做 live Telegram delivery。
-  - 未做 live Supabase write。
-  - 未驗證正式 DB execution stage 歷史資料精準分類；CHANGELOG.md 已將 execution stage 限制列為殘留風險。
+  未跑 full pytest、正式 replay/backfill、live Telegram delivery、live Supabase write；符合本輪 normal_patch / L2 與 Architect 指令。未驗真實外部新聞或題材 provider，因 TASK 明確非目標。
 
   ## QA 結論
 

@@ -412,8 +412,8 @@ def build_market_theme_evidence_provider(
 def format_market_theme_summary_lines(evidence):
     if not evidence or evidence.get("theme_status") == "absent":
         return [
-            "市場 / 題材證據：absent",
-            "限制：市場證據不足，僅依策略分類追蹤",
+            "市場 / 題材：內部結構化證據未啟用",
+            "限制：仍依量價 / 風控判斷，不代表外部市場不強",
         ]
 
     theme_label = evidence.get("theme_label") or "未命名主題"
@@ -426,7 +426,7 @@ def format_market_theme_summary_lines(evidence):
     elif level == "mixed":
         lines.append("限制：來源不同向，只能背景追蹤")
     else:
-        lines.append("限制：市場證據不足，僅依策略分類追蹤")
+        lines.append("限制：內部題材證據未達確認，仍依量價 / 風控判斷")
 
     source_labels = []
     for source in evidence.get("sources") or evidence.get("source_family_details") or []:

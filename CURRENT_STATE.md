@@ -7,7 +7,7 @@
 - 專案：台股策略報文機器人。
 - 交付形態：排程 / 腳本產生 Telegram 報文並發送給 Owner。
 - 股票清單唯一來源：`core/watchlist.py`，預設 12 檔。
-- 最新使用者可見 Telegram 版本：`v20.2.3`。
+- 最新使用者可見 Telegram 版本：`v20.2.4`。
 - 最新 pushed commit 以 `git log -1` 為準。
 - 固定 8 份 Markdown 不刪除，只改寫內容：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 
@@ -33,6 +33,12 @@
 
 ## Recent High-Signal Milestones
 
+- `v20.2.4` R3 Hot Market Evidence Wording And Prepare Layer 已通過 QA：
+  - `evidence absent` 改為描述內部結構化市場 / 題材證據未啟用或不足，不再像是否定外部市場強勢。
+  - R3 進攻偏熱時，未持倉強勢但不可追標的新增 `強勢準備` / `可準備` 層：漲停鎖價、過熱降溫、突破回測都明確標示不可買 / 不追高 / 待觸發。
+  - 可買門檻未放寬，準備層不進交易執行清單。
+  - QA 首輪攔下 summary overflow 混桶；修正後 hidden items 同狀態才寫 `同狀態`，跨狀態改顯示分類數量，例如 `過熱降溫 1、突破回測 2`。
+  - QA 驗證：`tests/test_generator_report.py -k v20_2_4_r3_hot`，`tests/test_generator_report.py -k v20_2_4 tests/test_market_theme_evidence.py tests/test_notifier.py`，策略 smoke `tests/test_signal_validator.py tests/test_analysis_engine.py`。
 - `v20.2.3` Second Take-profit Execution Dedupe 已通過 QA：
   - 報文優先使用既有 DB execution / local execution，再 fallback 到 `position_events` 判斷今日已賣。
   - 第二段停利 completed：顯示 `第二段停利後觀察`、今日已賣、剩餘股數、第二段已執行，不再顯示完整可執行建議。
@@ -78,6 +84,8 @@
 - 使用者可見報文變更需同步 `core/generator.py` 的 `VERSION` 或等價 header 常量，除非 PM 明確定義不升版理由。
 - 持倉與未持倉卡片只要有突破距離資料，盤面行必須顯示括號距離；缺資料不得輸出假距離。
 - 未持倉漏斗母集合固定為：`可買 / 可準備 / 僅追蹤 / 淘汰`；`僅追蹤` 再拆 `等冷卻 / 等回測 / 等RR修復 / 等量能`。
+- R3 強勢偏熱時，`可準備` 是不可買的準備層；必須清楚標示不可追高、不可買或待觸發，不得進交易執行清單。
+- 強勢準備 summary 超過 3 檔時，不得把不同狀態混成 `另 N 檔同狀態`；跨狀態需顯示分類數量或等價不誤導文案。
 - 同一檔持倉同一份報文只能有一個主行動；持倉風控優先於高分、最強、待觸發加碼。
 - 今日買入後預設是 `新倉風控觀察`；若要賣 / 減碼 / 停損，必須說明明確觸發條件。
 - 今日已減碼 / 停利達同級建議時，預設轉為觀察；只有更高級風控或硬停損可覆蓋。
@@ -85,6 +93,7 @@
 - 持倉卡、summary、風控檢查的今日已賣、剩餘、建議股數必須使用一致來源；不得同卡出現 `今日 無` 與 `今日已賣 N 股`。
 - 空區塊、0 計數、無行動占位都是手機噪音；未定義必要性時不顯示。
 - 市場 / 題材 evidence 不得放寬個股買點；confirmed theme 也不能自動產生 BUY。
+- `evidence absent` 只代表內部結構化證據未啟用 / 不足 / missing，不代表外部市場不強。
 
 ## Module Map
 
@@ -140,7 +149,7 @@
 - 2026-05-29 報文研究結論：
   - 英業達今日已停利後主決策仍顯示 `停利` 的高風險誤讀已由 `v20.2.2` 修正。
   - 英業達第二段已執行後仍重複建議第二段停利的高風險誤讀已由 `v20.2.3` 修正。
-  - 本週台股 / AI / 電子偏強有公開資料支持，但零 BUY 不必然是錯；需補「強勢市場但不可追」的準備層 / 手機文案，不得直接放寬買點。
+  - 本週台股 / AI / 電子偏強有公開資料支持，但零 BUY 不必然是錯；`v20.2.4` 已補「強勢市場但不可追」的準備層 / 手機文案，未放寬買點。
 - 證據鏈 v20.2.0 只建立 production contract 與 runtime source gate；若要自動取得 market_index / sector_index、建表、cache、external provider 或持久化 evidence，先通知 Owner。
 - 若 Owner 仍覺得查詢慢，另開 performance measurement 任務，量測 production 實際秒數。
 - 後續可改善 `load_strategy_evidence_summary()` 顯式排序與 `漏失` 文案，但需另開任務。

@@ -4,9 +4,9 @@
 
 ## Current Task
 
-- task_id: `second-take-profit-execution-dedupe-v20.2.3`
-- task_name: `Second Take-profit Execution Dedupe`
-- task_type: `risk_patch`
+- task_id: `r3-hot-evidence-prepare-layer-v20.2.4`
+- task_name: `R3 Hot Market Evidence Wording And Prepare Layer`
+- task_type: `normal_patch`
 - version_level: `patch`
 - qa_level: `L2`
 - owner_status: `requested`
@@ -18,38 +18,36 @@
 
 ## Current Result
 
-- Owner 指出已依第二次停利建議賣出 75 股後，`v20.2.2` 仍顯示 `第二段停利 / 本次建議 56 股`，要求嚴格避免同日第二段重複賣出建議。
-- 本輪只處理第二段 / 額外停利 execution 去重與手機報文一致性；不改 RR / 過熱 / 漲停不追門檻，不改市場證據鏈，不改 DB schema，不 live、不 backfill。
+- Owner 指出 `v20.2.3` 在外部盤面明顯強勢、R3 進攻偏熱、漲停 / 過熱股很多時，`市場 / 題材證據 absent` 與 `無有效進場` 容易被誤讀成系統否定市場強勢，並要求確認「沒有證據時策略是否正確」。
+- 本輪只修 Telegram 手機報文語意與強勢準備層：不放寬 BUY / 可買門檻，不改 RR / 過熱 / 漲停不追 / 回測 / 量能 threshold，不改 DB schema，不 live、不 backfill。
 - CAO 服務已確認：
   - API: `http://127.0.0.1:9889/`
   - UI: `http://127.0.0.1:5173/`
 - PM 已交付 `TASK.md`，定義：
-  - 優先使用既有 DB execution / local execution，再 fallback 到 `position_events`，不得只靠 formatter 文案猜。
-  - 第二段已完整或超額執行後，主行動改為 `第二段停利後觀察 / 停利完成觀察`，不得再輸出完整可執行建議。
-  - 部分執行只顯示剩餘建議股數；未執行時仍可顯示 `第二段停利 / 本次建議 N 股`。
-  - summary、持倉卡、持倉風控檢查的今日已賣、剩餘、建議股數不得互相矛盾。
+  - `evidence absent` 只能表示內部結構化市場 / 題材資料未啟用或不足，不得寫成外部市場沒有證據。
+  - R3 進攻偏熱且未持倉有漲停鎖價、過熱強勢、接近 / 已突破但不可追標的時，summary 新增 `強勢準備` 層。
+  - 準備層必須標示不可追高、不可買或待觸發；不可混成可買。
+  - 漏斗維持 `可買 / 可準備 / 僅追蹤 / 淘汰`，summary、漏斗、詳情數量與分類一致。
 - Tech 已交付候選 diff：
-  - `core/generator.py` VERSION 升為 `v20.2.3`。
-  - 新增 execution 狀態 helper，依序讀取 DB / local execution / position_events 今日已賣股數。
-  - completed：`第二段停利後觀察｜今日已賣 N 股｜剩餘 N 股｜第二段已執行`。
-  - partial：`第二段停利剩餘建議 X 股｜今日已賣 Y 股｜原建議 Z 股`。
-  - unexecuted：保留 `第二段停利｜本次建議 N 股｜剩餘 N 股`。
-  - 持倉卡 `今日 ...` 欄同步使用同一 execution state，避免 `今日 無` 與 `今日已賣` 同卡矛盾。
+  - `core/generator.py` VERSION 升為 `v20.2.4`。
+  - `core/market_theme_evidence.py` 把 absent 文案改成 `內部結構化證據未啟用`，限制句改為仍依量價 / 風控判斷，不代表外部市場不強。
+  - `core/generator.py` 新增 R3 `強勢準備` 顯示層與 `可準備` funnel：漲停鎖價、過熱降溫、突破回測都保持不可買 / 不追高 / 待觸發。
+  - summary overflow 修正：隱藏項同狀態才可寫 `同狀態`；跨狀態改成 `另 N 檔：過熱降溫 1、突破回測 2，見詳情`。
 - QA 最終驗證通過：
-  - completed DB execution 已賣 75 股後不再出現完整 `第二段停利 / 本次建議 56`。
-  - partial local execution 只顯示剩餘建議 36 股。
-  - unexecuted 仍顯示 `第二段停利 / 本次建議 56 / 剩餘`。
-  - 持倉卡、summary、風控檢查不再有 `今日 無` 與 `今日已賣 N 股` 矛盾。
-  - 無策略門檻、DB、watchlist、live Telegram、backfill diff。
-  - 主 repo 驗證：`76 passed, 21 warnings`；策略 smoke `8 passed`；`git diff --check` 通過。
+  - 第一次 QA 有效阻塞：強勢準備超過 3 檔且 hidden items 跨狀態時，原 summary 會誤寫 `另 3 檔同狀態見詳情`。
+  - Tech 修正後，QA direct fixture 確認跨狀態 overflow 會按分類數量輸出，不再混桶。
+  - `evidence absent` 文案不再否定外部市場強勢。
+  - 可買仍為 0，準備層不進交易執行清單，卡片明確顯示不可追高 / 不可買 / 待觸發。
+  - 無策略門檻、DB schema、watchlist、live Telegram、Supabase write、replay/backfill、持倉停利 dedupe diff。
+  - 主 repo 驗證：`19 passed, 13 warnings`；策略 smoke `39 passed`；`git diff --check` 通過。
 - Post-cycle review：
-  - QA 有效攔下三個問題：未執行第二段被過度去重、持倉卡 `今日 無` 與 execution 文案矛盾、`CHANGELOG.md` 自述與 diff 不一致。
-  - 根因分類：`repeated_pattern` / 手機跨區塊一致性不足；已沉澱到本輪 `TASK.md` / `QA_REPORT.md`，並更新 `CURRENT_STATE.md` / `CLEANUP_PLAN.md`，不新增硬規則避免文件膨脹。
+  - 根因分類：`repeated_pattern` / 手機 summary 壓縮與跨狀態分組漏測；既有手機閱讀、分類一致性與 QA 主動反證規則已覆蓋。
+  - 本輪不新增 `AGENTS.md` 硬規則，避免把已覆蓋的執行漏測硬塞成文件膨脹；改沉澱到 `TASK.md` fixture、`QA_REPORT.md` 反證與 `CLEANUP_PLAN.md` 待觀察。
 
 ## Next Action
 
 - commit / push 後清理 tech worktree。
-- 若要精準區分第一段、第二段、額外停利、風控賣出，另開 execution stage / DB 設計任務；不得在 formatter 裡無限猜。
+- 後續若要讓 market/theme evidence 真的引用外部市場 / 產業資料，需要另開 provider / DB / cache 任務並先通知 Owner。
 
 ## Status Values
 

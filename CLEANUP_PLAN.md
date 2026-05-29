@@ -61,6 +61,12 @@
   - 已用任務卡與測試沉澱：completed / partial / unexecuted 三段 fixture，以及持倉卡 / summary / 風控檢查同源驗證。
   - 暫不新增 `AGENTS.md` 硬規則，因既有手機閱讀、持倉一致性、QA 主動反證規則已覆蓋；本輪屬於執行不到位，後續用 QA fixture / runner review 追蹤。
   - 待補流程：若類似問題再發生，將「execution state 必須單一來源供應卡片 / summary / checklist」升級為高風險 invariant。
+- 本輪 `v20.2.4` R3 強勢偏熱 evidence absent / 準備層：
+  - 根因分類：`repeated_pattern` / 手機 summary 壓縮與跨狀態分組漏測。
+  - QA 阻塞有效：強勢準備超過 3 檔時，原 overflow 文案把跨狀態 hidden items 寫成 `同狀態`，會誤導 Owner 手機閱讀。
+  - 已修正並補 fixture：跨狀態 hidden items 顯示分類數量；可買仍 0，準備層不進交易執行清單。
+  - 暫不新增 `AGENTS.md` 硬規則，因既有「手機閱讀」「分類一致性」「不同狀態不得混成另 N 檔」規則已覆蓋；本輪屬於 Tech 初版測試漏掉 overflow 負面案例。
+  - 待觀察：若未持倉 `可準備 / 僅追蹤` 或 summary overflow 再次回退，將把「summary overflow 必須依狀態分類計數」升級為任務卡固定驗收項。
 - 下一次產品任務完成後，確認 Post-cycle Review Gate 是否有做到：
   - 根因分類。
   - QA 攔截是否沉澱成 guard。
