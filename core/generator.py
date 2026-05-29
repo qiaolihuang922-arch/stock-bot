@@ -52,7 +52,7 @@ from services.strategy_evidence import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.2.4"
+VERSION = "v20.2.5"
 
 EXECUTION_LEVELS = {
     "TAKE_PROFIT_50": "TP50",
@@ -4142,31 +4142,41 @@ def format_unheld_funnel(watch_items, market_mode=None):
     funnel = build_unheld_funnel(watch_items, market_mode=market_mode)
     tracking_count = unheld_tracking_count(funnel)
     tracking_only_count = unheld_tracking_only_count(funnel)
-
-    return "\n".join([
+    prepare_count = len(funnel["可準備"])
+    split_parts = [
+        f"{label} {len(funnel[label])}"
+        for label in ["等冷卻", "等回測", "等RR修復", "等量能"]
+        if funnel[label]
+    ]
+    lines = [
         f"未持倉總數 {sum(len(items) for items in funnel.values())} 檔",
         (
             f"可買 {len(funnel['可買'])}"
-            f"｜可準備 {len(funnel['可準備'])}（不可買）"
+            f"｜可準備 {prepare_count}（不可買）"
             f"｜僅追蹤 {tracking_only_count}"
             f"｜淘汰 {len(funnel['淘汰'])}"
         ),
-        (
-            f"其中僅追蹤 {tracking_only_count} 檔拆分："
-            f"等冷卻 {len(funnel['等冷卻'])}、"
-            f"等回測 {len(funnel['等回測'])}、"
-            f"等RR修復 {len(funnel['等RR修復'])}、"
-            f"等量能 {len(funnel['等量能'])}"
-        ),
-        f"非執行追蹤合計 {tracking_count} 檔（可準備 + 僅追蹤）",
-    ])
+    ]
+
+    if split_parts:
+        lines.append(f"其中僅追蹤 {tracking_only_count} 檔拆分：" + "、".join(split_parts))
+
+    if prepare_count and tracking_only_count:
+        lines.append(f"非執行準備/追蹤合計 {tracking_count} 檔（可準備 {prepare_count}｜僅追蹤 {tracking_only_count}）")
+    elif prepare_count:
+        lines.append(f"可準備 {prepare_count} 檔，不列入交易執行")
+    elif tracking_only_count:
+        lines.append(f"僅追蹤 {tracking_only_count} 檔，不列入交易執行")
+
+    return "\n".join(lines)
 
 
 def detail_index_text(holding_items, watch_items, report_phase=None, market_mode=None):
 
     funnel = build_unheld_funnel(watch_items, market_mode=market_mode)
     execution_count = len(pending_trade_items(holding_items, watch_items, market_mode=market_mode))
-    tracking_count = unheld_tracking_count(funnel)
+    prepare_count = len(funnel["可準備"])
+    tracking_only_count = unheld_tracking_only_count(funnel)
     rejected = funnel["淘汰"]
     execution_label = "明日計畫" if report_phase not in (None, "盤中") else "交易執行"
     parts = [f"📎 詳情索引：持倉 {len(holding_items)}"]
@@ -4174,10 +4184,11 @@ def detail_index_text(holding_items, watch_items, report_phase=None, market_mode
     if report_phase in (None, "盤中") or execution_count:
         parts.append(f"{execution_label} {execution_count}")
 
-    parts.extend([
-        f"未持倉追蹤 {tracking_count}",
-        f"淘汰 {len(rejected)}",
-    ])
+    if prepare_count:
+        parts.append(f"可準備 {prepare_count}")
+    if tracking_only_count:
+        parts.append(f"僅追蹤 {tracking_only_count}")
+    parts.append(f"淘汰 {len(rejected)}")
 
     return "｜".join(parts)
 
@@ -4343,8 +4354,8 @@ def formatTelegramSummary(results_map, best, score, market_summary, now, positio
         lines.extend(["", "✅ 今日盤中交易執行"])
         lines.extend(format_execution_checklist(holding_items, watch_items, report_phase=report_phase, market_mode=market_mode))
     else:
-        lines.extend(["", "今日交易紀錄"])
-        lines.append("無新增")
+        lines.extend(["", "今日交易"])
+        lines.append("新增交易建議：無")
 
     executed_lines = format_executed_checklist(holding_items, watch_items)
     if executed_lines:

@@ -4,50 +4,51 @@
 
 ## Current Task
 
-- task_id: `r3-hot-evidence-prepare-layer-v20.2.4`
-- task_name: `R3 Hot Market Evidence Wording And Prepare Layer`
+- task_id: `postmarket-noise-index-wording-v20.2.5`
+- task_name: `Post-market Noise And Index Wording`
 - task_type: `normal_patch`
 - version_level: `patch`
 - qa_level: `L2`
 - owner_status: `requested`
-- architect_status: `pushed`
+- architect_status: `qa_passed_absorbed_pending_push`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
 - qa_status: `qa_passed`
-- commit: `835e6ef`
+- commit: `pending`
 
 ## Current Result
 
-- Owner 指出 `v20.2.3` 在外部盤面明顯強勢、R3 進攻偏熱、漲停 / 過熱股很多時，`市場 / 題材證據 absent` 與 `無有效進場` 容易被誤讀成系統否定市場強勢，並要求確認「沒有證據時策略是否正確」。
-- 本輪只修 Telegram 手機報文語意與強勢準備層：不放寬 BUY / 可買門檻，不改 RR / 過熱 / 漲停不追 / 回測 / 量能 threshold，不改 DB schema，不 live、不 backfill。
+- Owner 檢查 `v20.2.4` 盤後報文後，策略方向可接受，但指出仍需先處理手機噪音與語意衝突，再繼續證據鏈。
+- 本輪只修 Telegram 盤後 summary / funnel / index 文案：不改策略門檻、不改 `可準備` 分類、不改 evidence provider、不改 DB schema，不 live、不 backfill。
 - CAO 服務已確認：
   - API: `http://127.0.0.1:9889/`
   - UI: `http://127.0.0.1:5173/`
 - PM 已交付 `TASK.md`，定義：
-  - `evidence absent` 只能表示內部結構化市場 / 題材資料未啟用或不足，不得寫成外部市場沒有證據。
-  - R3 進攻偏熱且未持倉有漲停鎖價、過熱強勢、接近 / 已突破但不可追標的時，summary 新增 `強勢準備` 層。
-  - 準備層必須標示不可追高、不可買或待觸發；不可混成可買。
-  - 漏斗維持 `可買 / 可準備 / 僅追蹤 / 淘汰`，summary、漏斗、詳情數量與分類一致。
+  - `今日交易紀錄 / 無新增` 與 `已執行（不重複下單）` 並存時易誤讀，應改為 `今日交易 / 新增交易建議：無`。
+  - `僅追蹤 0` 時不得輸出 `等冷卻 0、等回測 0、等RR修復 0、等量能 0`。
+  - `非執行追蹤合計 8（可準備 + 僅追蹤）` 在僅追蹤 0 時要改成更清楚的可準備語意。
+  - 詳情索引不得把可準備 8 混稱為 `未持倉追蹤 8`。
 - Tech 已交付候選 diff：
-  - `core/generator.py` VERSION 升為 `v20.2.4`。
-  - `core/market_theme_evidence.py` 把 absent 文案改成 `內部結構化證據未啟用`，限制句改為仍依量價 / 風控判斷，不代表外部市場不強。
-  - `core/generator.py` 新增 R3 `強勢準備` 顯示層與 `可準備` funnel：漲停鎖價、過熱降溫、突破回測都保持不可買 / 不追高 / 待觸發。
-  - summary overflow 修正：隱藏項同狀態才可寫 `同狀態`；跨狀態改成 `另 N 檔：過熱降溫 1、突破回測 2，見詳情`。
+  - `core/generator.py` VERSION 升為 `v20.2.5`。
+  - `format_unheld_funnel()` 僅在有非零僅追蹤分類時輸出拆分行，且只列非零分類。
+  - `detail_index_text()` 分開列 `可準備 N`、`僅追蹤 N`、`淘汰 N`。
+  - 盤後 summary 今日交易區塊改為 `今日交易 / 新增交易建議：無`。
+  - 新增 05/29 盤後 fixture：可買 0、可準備 8、僅追蹤 0、淘汰 2、英業達今日已賣 187 股。
 - QA 最終驗證通過：
-  - 第一次 QA 有效阻塞：強勢準備超過 3 檔且 hidden items 跨狀態時，原 summary 會誤寫 `另 3 檔同狀態見詳情`。
-  - Tech 修正後，QA direct fixture 確認跨狀態 overflow 會按分類數量輸出，不再混桶。
-  - `evidence absent` 文案不再否定外部市場強勢。
-  - 可買仍為 0，準備層不進交易執行清單，卡片明確顯示不可追高 / 不可買 / 待觸發。
-  - 無策略門檻、DB schema、watchlist、live Telegram、Supabase write、replay/backfill、持倉停利 dedupe diff。
-  - 主 repo 驗證：`19 passed, 13 warnings`；策略 smoke `39 passed`；`git diff --check` 通過。
+  - 05/29 盤後類似 fixture 驗證 `今日交易 / 新增交易建議：無` 與 `已執行（不重複下單）` 可清楚區分。
+  - `僅追蹤 0` 不輸出零拆分，不出現 `等冷卻 0 / 等回測 0 / 等RR修復 0 / 等量能 0`。
+  - 漏斗與索引一致：`可買 0｜可準備 8（不可買）｜僅追蹤 0｜淘汰 2`，索引顯示 `可準備 8｜淘汰 2`。
+  - 無策略門檻、DB schema、watchlist、live Telegram、Supabase write、replay/backfill diff。
+  - 主 repo 驗證：`79 passed, 21 warnings`；策略 smoke `39 passed`；`git diff --check` 通過。
 - Post-cycle review：
-  - 根因分類：`repeated_pattern` / 手機 summary 壓縮與跨狀態分組漏測；既有手機閱讀、分類一致性與 QA 主動反證規則已覆蓋。
-  - 本輪不新增 `AGENTS.md` 硬規則，避免把已覆蓋的執行漏測硬塞成文件膨脹；改沉澱到 `TASK.md` fixture、`QA_REPORT.md` 反證與 `CLEANUP_PLAN.md` 待觀察。
+  - 根因分類：`repeated_pattern` / 空狀態與聚合名稱造成手機誤讀；既有手機閱讀與 0-count 噪音規則已覆蓋。
+  - Runner gap：auto cycle 對 QA `通過` 產生 false fail，已記入 `CLEANUP_PLAN.md`，本輪手動吸收 QA 明確通過報告。
+  - 不新增 `AGENTS.md` 硬規則，改沉澱到 fixture / QA 反證與 runner 待補。
 
 ## Next Action
 
-- 已 push；執行 tech worktree cleanup 後等待 Owner 下一個需求。
-- 後續若要讓 market/theme evidence 真的引用外部市場 / 產業資料，需要另開 provider / DB / cache 任務並先通知 Owner。
+- commit / push 後清理 tech worktree。
+- 報文確認後再開證據鏈下一步；若涉及 DB table / cache / external provider，先通知 Owner。
 
 ## Status Values
 

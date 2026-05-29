@@ -7,7 +7,7 @@
 - 專案：台股策略報文機器人。
 - 交付形態：排程 / 腳本產生 Telegram 報文並發送給 Owner。
 - 股票清單唯一來源：`core/watchlist.py`，預設 12 檔。
-- 最新使用者可見 Telegram 版本：`v20.2.4`。
+- 最新使用者可見 Telegram 版本：`v20.2.5`。
 - 最新 pushed commit 以 `git log -1` 為準。
 - 固定 8 份 Markdown 不刪除，只改寫內容：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 
@@ -33,6 +33,11 @@
 
 ## Recent High-Signal Milestones
 
+- `v20.2.5` Telegram Post-market Noise And Index Wording 已通過 QA：
+  - 盤後 summary 將 `今日交易紀錄 / 無新增` 改為 `今日交易 / 新增交易建議：無`，避免與 `已執行（不重複下單）` 並列時被誤讀為今日沒有交易。
+  - `僅追蹤 0` 時不再輸出 `等冷卻 0、等回測 0、等RR修復 0、等量能 0` 的零計數拆分。
+  - 未持倉詳情索引把 `可準備` 與 `僅追蹤` 分開列，不再用 `未持倉追蹤 8` 混稱可準備 8。
+  - QA 驗證：`tests/test_generator_report.py tests/test_notifier.py tests/test_market_theme_evidence.py`，`79 passed, 21 warnings`；策略 smoke `39 passed`。
 - `v20.2.4` R3 Hot Market Evidence Wording And Prepare Layer 已通過 QA：
   - `evidence absent` 改為描述內部結構化市場 / 題材證據未啟用或不足，不再像是否定外部市場強勢。
   - R3 進攻偏熱時，未持倉強勢但不可追標的新增 `強勢準備` / `可準備` 層：漲停鎖價、過熱降溫、突破回測都明確標示不可買 / 不追高 / 待觸發。
@@ -84,6 +89,7 @@
 - 使用者可見報文變更需同步 `core/generator.py` 的 `VERSION` 或等價 header 常量，除非 PM 明確定義不升版理由。
 - 持倉與未持倉卡片只要有突破距離資料，盤面行必須顯示括號距離；缺資料不得輸出假距離。
 - 未持倉漏斗母集合固定為：`可買 / 可準備 / 僅追蹤 / 淘汰`；`僅追蹤` 再拆 `等冷卻 / 等回測 / 等RR修復 / 等量能`。
+- `僅追蹤 0` 時不得輸出零計數拆分；summary / index 也不得把 `可準備` 全部混稱為 `未持倉追蹤`。
 - R3 強勢偏熱時，`可準備` 是不可買的準備層；必須清楚標示不可追高、不可買或待觸發，不得進交易執行清單。
 - 強勢準備 summary 超過 3 檔時，不得把不同狀態混成 `另 N 檔同狀態`；跨狀態需顯示分類數量或等價不誤導文案。
 - 同一檔持倉同一份報文只能有一個主行動；持倉風控優先於高分、最強、待觸發加碼。

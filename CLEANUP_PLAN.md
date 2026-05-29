@@ -67,6 +67,12 @@
   - 已修正並補 fixture：跨狀態 hidden items 顯示分類數量；可買仍 0，準備層不進交易執行清單。
   - 暫不新增 `AGENTS.md` 硬規則，因既有「手機閱讀」「分類一致性」「不同狀態不得混成另 N 檔」規則已覆蓋；本輪屬於 Tech 初版測試漏掉 overflow 負面案例。
   - 待觀察：若未持倉 `可準備 / 僅追蹤` 或 summary overflow 再次回退，將把「summary overflow 必須依狀態分類計數」升級為任務卡固定驗收項。
+- 本輪 `v20.2.5` 盤後報文手機噪音收斂：
+  - 根因分類：`repeated_pattern` / 報文空狀態與聚合名稱不夠手機友善。
+  - 已修正：`無新增` 改成 `新增交易建議：無`；`僅追蹤 0` 不輸出零拆分；索引拆成 `可準備 / 僅追蹤 / 淘汰`。
+  - QA 驗證有效：用 05/29 盤後類似 fixture 檢查可準備 8、僅追蹤 0、淘汰 2、英業達已執行賣出與無新增建議並存。
+  - Runner gap：auto cycle 對 QA 報告 `通過` 產生 false fail，需後續檢查 QA conclusion parser；本輪已手動吸收 QA 明確通過報告並主 repo 驗證。
+  - 不新增 `AGENTS.md` 硬規則，既有空區塊 / 0-count / 手機閱讀規則已覆蓋；本輪沉澱為 fixture 與 runner 待補。
 - 下一次產品任務完成後，確認 Post-cycle Review Gate 是否有做到：
   - 根因分類。
   - QA 攔截是否沉澱成 guard。

@@ -240,7 +240,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         )
 
         summary = messages[-1]
-        self.assertIn("【05/28 盤中｜v20.2.4】", summary)
+        self.assertIn("【05/28 盤中｜v20.2.5】", summary)
         self.assertIn("市場 / 題材證據：weak", summary)
         self.assertIn("限制：內部題材證據未達確認，仍依量價 / 風控判斷", summary)
         self.assertIn("🧭 主線：市場偏多但買點未成立。", summary)
