@@ -1,218 +1,171 @@
-# TASK: Evidence Phase 4 production DB schema SQL for confirmed market/theme evidence
+# TASK: 修正 Supabase SQL artifact 結尾語法錯誤
 
 ## 任務狀態
 
-- task_id: evidence-phase-4-confirmed-market-theme-schema-sql
-- 任務類型: normal_patch
+- task_id: urgent_tiny_patch_sql_evidence_phase_4_syntax
+- 任務類型: tiny_patch
 - 狀態: ready_for_tech
-- 版本建議: 本輪不升版，因為只新增 repo-local SQL artifact，不改 Telegram / CLI / 策略 / runner 行為。
-- QA 分級建議: L1 static SQL review + artifact contract review；不得升級到 live DB 驗證。
-- 本輪停止條件: Tech 產出一個可手動執行的 Postgres/Supabase-compatible SQL 檔案，QA 靜態確認語法、安全邊界、契約欄位與 read-only reconstruction 支援後即完成。任何 backfill、production DB 執行、策略消費邏輯、Telegram 顯
-示、watchlist 門檻調整只記待辦，不納入本輪。
+- 版本建議: 本輪不升版；不影響 Telegram / CLI / 產品報文版本字串
+- QA 分級建議: L1
+- 任務尺寸判斷: tiny_patch
+- 單一主 bug: db/sql/evidence_phase_4_market_theme_confirmed_evidence.sql 在 Supabase 執行時出現 ERROR 42601 syntax error at end of input
+- 單一輸出契約: 該 SQL artifact 必須可作為一個完整 Supabase/Postgres SQL block 複製並解析
+- 不擴大到 schema 重設、策略調整、全量 SQL 清理、production 驗證或 L3 測試
 
 ## Owner 問題
 
-Owner 已批准用 SQL 建立 production DB tables/fields，用於持久保存「已確認的 market/theme evidence」，讓 GitHub fresh runner 未來可從 production DB 讀取並重建跨日證據判斷，而不是依賴本機暫存、worktree、runtime dict、
-agent 對話或非持久 context。
+Owner 需要一份更安全、完整、可複製到 Supabase SQL editor 執行的 SQL artifact，避免因結尾缺失、分號不足、parser-ambiguous construct 或 copy block 不完整導致 syntax error at end of input。
 
-本輪只要交付一段可由 Owner 手動執行的 SQL，不做 live execution。
+本輪也需讓交接文件清楚說明可能原因與正確複製 / 執行方式，避免再次只貼到部分 SQL 或誤以為要 live backfill。
 
 ## 使用者可見結果
 
-- Repo 內新增一個 SQL artifact，路徑由 Tech 依現有慣例選擇，優先 db/sql/...，若無慣例可放 docs/...。
-- Architect / Owner 可看到：
-- SQL 檔案路徑。
-- 一個完整、可複製執行的 SQL block。
-- 明確 execution notes：手動在 Supabase/Postgres SQL editor 執行；本輪不得由 agent 執行。
-- 本輪不改 Telegram 報文、CLI output、交易建議、watchlist 結果或任何 runtime product behavior。
+- Owner 打開 db/sql/evidence_phase_4_market_theme_confirmed_evidence.sql 時，看到的是一個完整 SQL block：
+- 每個 statement 明確以 ; 結尾
+- 避免不必要的 parser-ambiguous constructs
+- 無缺失的 END / $$ / ) / ;
+- 可整段複製到 Supabase SQL editor
+- Owner 打開 docs/handoff 相關文件時，能看到：
+- 本 SQL 的用途
+- 建議整段複製執行
+- 不要連 production 做驗證
+- 不做 backfill
+- 可能錯因摘要
 
 ## 非目標
 
-- 不連線 production DB。
-- 不 live execute SQL。
-- 不做 live Supabase write。
-- 不做 backfill。
-- 不新增 / 修改 strategy decision、trading threshold、watchlist threshold、Telegram formatter、runner read logic。
-- 不導入完整 evidence consumption pipeline。
-- 不要求 QA 在 production 或 staging DB 實際建表。
-- 不重構既有 DB schema、migration 系統或資料讀取層。
+- 不改產品 Python / app code
+- 不改策略、報文、Telegram formatter、watchlist、排程入口
+- 不新增或執行 production backfill
+- 不連線 production Supabase
+- 不做 live write 驗證
+- 不新增 grants、secrets、token 或 production credential 依賴
+- 不做全量 SQL 目錄清理
+- 不重設 schema intent
+- 不把本輪擴成 DB migration framework 重構
 
 ## 影響模組
 
-- 直接影響:
-- repo-local SQL artifact for production schema setup。
-- DB schema documentation / execution notes。
+- 直接檔案:
+- db/sql/evidence_phase_4_market_theme_confirmed_evidence.sql
+- docs/handoff 中直接提到此 SQL artifact 的交接文件
+- 直接消費者:
+- Owner / operator 手動複製 SQL 到 Supabase SQL editor
+- Tech / QA 的本地非 production SQL syntax 檢查流程
+- Architect 後續交接摘要
 - 不應影響:
-- Telegram formatter。
-- strategy / scoring / watchlist selection。
-- GitHub Actions runtime behavior。
-- production DB data。
-- replay / backfill / cron / live delivery。
+- Telegram 報文
+- strategy decision
+- DB runtime read/write path
+- production runner
+- backfill / replay
 
 ## 直接消費者
 
-- Owner: 手動檢查並執行 SQL。
-- Architect: 收口時確認 SQL path、execution notes 與 no-live-write 邊界。
-- Future Tech task: 後續實作 runner read-only reconstruction 時，以本 schema 作為 production source-of-truth。
-- Future QA task: 驗證 GitHub fresh runner 是否只讀 production DB 並 fail closed。
-- Production DB admin / Supabase SQL editor operator: 手動執行 SQL 的直接操作者。
+- Owner: 需要可複製的一整段 SQL artifact 與安全執行注意事項
+- Supabase SQL editor / Postgres parser: 需要完整、明確終止的 SQL statement
+- QA: 需要能用 static scan 與本地非 production parser 驗證語法完整性
 
 ## 輸出契約
 
-Tech 必須新增一個 repo-local SQL 檔案，包含 idempotent Postgres/Supabase-compatible DDL。SQL 必須支援保存 confirmed market/theme evidence，至少涵蓋以下資料契約。
-
-必要欄位或等價欄位:
-
-- market_index: 市場指數或市場範圍識別，例如 TWSE, TPEx, NASDAQ, SPY。
-- sector_theme_key: sector / theme 的穩定 key，例如 semiconductor, ai_server, shipping。
-- watchlist_breadth: watchlist breadth evidence，可為 numeric / jsonb / structured 欄位，但須能追溯當日 breadth 狀態。
-- as_of: evidence 生成或觀測時間，需含 timezone-aware timestamp。
-- trade_date: 交易日期，供跨日重建與查詢。
-- freshness: freshness 狀態或 freshness metadata，需能區分 fresh / stale / missing-source / source-error / insufficient-data，具體型別由 Tech 選擇但需有 comment。
-- evidence_value: evidence 原始值或標準化值，可用 numeric / jsonb / text 組合，但須保留可重建判斷的值。
-- support_level: confirmed support level，例如 confirmed, supporting, weak, invalidated，實際 enum/check 可由 Tech 定義。
-- lineage: lineage metadata，需能記錄此 evidence 如何產生，例如 upstream table/source key/run id/rule version，可用 jsonb。
-- source_family: source family，例如 market_data, watchlist, theme_classifier, manual_review。
-- source_name: 具體來源名稱，例如 provider、job name、calculation name。
-- 建議欄位:
-- created_at
-- updated_at
-- evidence_status 或可等價表示 confirmed / rejected / superseded 的欄位。
-- notes 或 metadata jsonb，若有助於 future compatibility。
-
-Idempotency contract:
-
-- SQL 必須可重複執行，不因 table / index / policy 已存在而失敗。
-- 使用 create table if not exists、create index if not exists 或等價安全寫法。
-- 若使用 enum / policy / trigger，需避免重跑失敗，或以清楚 comment 說明手動處理方式。
-
-Index contract:
-
-- 至少提供支援 future read-only reconstruction 的索引:
-- trade_date
-- (market_index, trade_date)
-- (sector_theme_key, trade_date)
-- (source_family, source_name, trade_date)
-- 可查最新 evidence 的 as_of 或 (trade_date, as_of) 索引。
-- 若使用 unique constraint / upsert key，需 comment 說明唯一性語意，例如同一 trade_date + market_index + sector_theme_key + source_family + source_name 是否允許多筆版本。
-
-RLS / permissions guidance:
-
-- 若 Tech 能以安全、無副作用、通用 Supabase DDL 表達最小 guidance，可加入 comment 或非啟用式範例。
-- 不得假設 production role 名稱。
-- 不得在 SQL 中 grant 過寬權限。
-- 若不確定現有 Supabase role/policy，應以 SQL comment 說明「RLS / grants 需由 Owner 按 production role 手動決定」，不要啟用危險 policy。
-
-Execution notes contract:
-
-- SQL 檔案或 CHANGELOG.md 必須列出 exact execution notes:
-- 檔案路徑。
-- 手動執行位置: Supabase SQL editor / Postgres console。
-- 本輪 agent 未執行 SQL。
-- 執行前建議 Owner 在 DB console review。
-- 若有 RLS/grant comment，需說明哪些是 guidance、哪些是 executable DDL。
+- db/sql/evidence_phase_4_market_theme_confirmed_evidence.sql 必須維持原本 schema intent，只修正語法完整性與可複製執行安全性。
+- SQL artifact 必須是單一完整 copy block：
+- statement 明確分號結尾
+- 若使用 function / DO block / dollar quote，必須有成對 delimiter 且最後有 ;
+- 若可避免，移除或簡化容易造成 Supabase editor parser 歧義的 construct
+- 不包含 destructive DML / DDL，例如 DROP TABLE, TRUNCATE, 無保護的 DELETE / UPDATE
+- 不包含 grants、secrets、credential、production-specific token
+- docs/handoff 只補本 artifact 的交接說明：
+- 如何整段複製
+- 不要局部複製
+- 不要連 production 驗證
+- 不做 backfill
+- 可能原因：SQL block 結尾缺少必要 terminator、dollar quote / BEGIN END / parenthesis 未閉合、或複製時漏掉尾段
 
 ## 已存在且不得回退的契約
 
-- Production source-of-truth 契約: 跨日狀態、歷史分類、連續觀察天數、歷史證據權重、已執行事件等正式判斷不得依賴 local/runtime/context；future runner 必須以 production DB 或 Owner 指定持久來源為準。
-- Fail-closed 契約: production DB / 持久來源缺資料、讀取失敗、欄位不足或可信度不足時，future consumption 必須走 missing-source / source-error / insufficient-data / fail closed，不得用 runtime fallback 補成 confirmed
-history。
-- 本輪 no-live-write 契約: 不 live execute SQL、不寫 production DB、不 backfill、不 live Telegram delivery。
-- 策略不變契約: 本輪不改 strategy decision、threshold、watchlist selection、持倉狀態機或報文分類。
-- GitHub fresh runner 契約: schema 必須讓未來 fresh runner 可只讀 production DB 重建 confirmed market/theme evidence；不得要求本機檔案、agent 對話或 worktree cache 才能判斷。
+- 固定 8 份 Markdown 不得刪除。
+- 本輪不改產品代碼、不改策略、不改 Telegram / CLI 使用者可見版本。
+- 不允許 live Supabase write、正式 backfill、live Telegram delivery。
+- SQL artifact 的 schema intent 必須保留；只能做語法完整性、可複製性與安全註記修正。
+- 若 Tech 發現原 SQL 實際意圖不明、需要新增/刪除欄位、改 table ownership 或改 migration strategy 才能修，必須 blocked 回報，不得自行改 schema intent。
 
 ## 驗收條件
 
-1. SQL artifact 存在於 repo-local path，且 Tech 在 CHANGELOG.md 明確列出 path。
-2. SQL 為單一可手動執行 block，Postgres/Supabase-compatible，且具備 idempotent DDL。
-3. SQL schema 明確包含或等價支援:
-- market_index
-- sector_theme_key
-- watchlist_breadth
-- as_of
-- trade_date
-- freshness
-- evidence_value
-- support_level
-- lineage
-- source_family
-- source_name
-4. SQL 有 comments 說明欄位用途，尤其是 freshness、lineage、support_level、source fields。
-5. SQL 包含 reconstruction 查詢需要的 indexes，至少覆蓋 trade_date、market/date、theme/date、source/date、latest/as_of 查詢。
-6. SQL 不包含 production connection string、secret、token、service role key 或任何 live execution command。
-7. SQL 不包含 destructive migration，例如無條件 drop table、truncate、大量 update/delete production data。
-8. Tech 不修改產品行為檔案；若因格式或文件慣例需更新文檔，必須限於 SQL execution notes。
-9. CHANGELOG.md 必須說明本輪沒有 production DB write、沒有 backfill、沒有 Telegram live、沒有策略/threshold/watchlist 改動。
-10. QA 必須做 static safety validation，不得 live execute SQL；需明確檢查 GitHub fresh runner 未來可透過 production DB read-only reconstruction 取得必要欄位。
-11. QA 結論若發現 SQL 無法支援 freshness / lineage / source traceability 或 idempotency，必須 blocked。
+1. SQL artifact 靜態完整性通過：
+- 檔案最後一個有效 statement 明確以 ; 結尾
+- 沒有未閉合的 $$ / quote / parenthesis / BEGIN ... END
+- 每個 SQL statement 有明確 terminator
+- 沒有 destructive/write DML、grants、secrets 或 production credential
+2. 本地非 production parser 驗證：
+- Tech 應先嘗試使用可用本地 parser，例如 psql 或已存在的 local non-production Postgres container
+- 若本地 parser 可用，需證明該 SQL 至少能被 parser 接受或指出任何剩餘 non-production parse error
+- 若 psql / local container 不可用，不得連 production；改為簡化 SQL 並在 CHANGELOG.md 說明未跑 parser 的原因與已做 static scan
+3. docs/handoff 有本 artifact 的安全複製 / 執行 notes，且沒有要求 production 驗證或 backfill。
+4. QA 至少做：
+- static scan
+- 若本地非 production parser 可用，執行 syntax validation
+- 確認未連 production、未執行 backfill、未加入 destructive DML / grants / secrets
 
 ## 範例或 fixture
 
-SQL shape 示例，Tech 可調整命名與型別，但不得低於此資訊量:
+SQL artifact 期望形狀：
 
--- Evidence Phase 4: confirmed market/theme evidence source-of-truth.
--- Manual execution only. Do not run from agents in this task.
+-- Purpose: create/adjust evidence phase 4 market theme confirmed evidence schema.
+-- Copy and execute this entire file as one block in Supabase SQL editor.
+-- Do not run production backfill from this artifact.
 
-create table if not exists public.market_theme_confirmed_evidence (
-id bigserial primary key,
-trade_date date not null,
-as_of timestamptz not null,
-market_index text not null,
-sector_theme_key text not null,
-source_family text not null,
-source_name text not null,
-freshness text not null,
-evidence_value jsonb not null default '{}'::jsonb,
-watchlist_breadth jsonb not null default '{}'::jsonb,
-support_level text not null,
-lineage jsonb not null default '{}'::jsonb,
-metadata jsonb not null default '{}'::jsonb,
-created_at timestamptz not null default now(),
-updated_at timestamptz not null default now()
+create table if not exists example_table (
+id uuid primary key,
+created_at timestamptz not null default now()
 );
 
-create index if not exists idx_market_theme_evidence_trade_date
-on public.market_theme_confirmed_evidence (trade_date);
+create index if not exists example_table_created_at_idx
+on example_table (created_at);
 
-create index if not exists idx_market_theme_evidence_market_trade_date
-on public.market_theme_confirmed_evidence (market_index, trade_date);
+docs/handoff 期望說明形狀：
 
-create index if not exists idx_market_theme_evidence_theme_trade_date
-on public.market_theme_confirmed_evidence (sector_theme_key, trade_date);
+### evidence_phase_4_market_theme_confirmed_evidence.sql
 
-Future read-only reconstruction query shape:
+Copy the entire SQL file into Supabase SQL editor and execute it as one block.
+Do not copy only the middle section; missing the final semicolon or closing delimiter can produce `ERROR 42601 syntax error at end of input`.
 
-select *
-from public.market_theme_confirmed_evidence
-where trade_date = :trade_date
-and freshness in ('fresh', 'confirmed')
-order by market_index, sector_theme_key, as_of desc;
-
-Execution notes shape expected from Tech:
-
-SQL path: db/sql/<filename>.sql
-How to execute: Owner manually opens Supabase SQL editor, reviews the full SQL, then runs the block once. It is designed to be idempotent for repeat execution.
-Not executed in this task: production SQL execution, backfill, live DB write, Telegram live delivery.
+Validation for this patch is local/non-production only. Do not connect to production, do not run backfill, and do not add grants or secrets.
 
 ## 明確禁止事項
 
-- 禁止 agent 執行 SQL。
-- 禁止連線 production DB。
-- 禁止讀取或輸出 secrets、.env、service role key、connection string。
-- 禁止 live Supabase write。
-- 禁止 production backfill。
-- 禁止 Telegram live delivery。
-- 禁止修改 watchlist/trading threshold。
-- 禁止修改 strategy decision 或持倉狀態機。
-- 禁止用 runtime/local cache 當作 confirmed evidence source-of-truth。
-- 禁止為了本 schema 順手改 runner consumption logic。
-- 禁止新增過寬 grants 或假設 production roles。
-- 禁止 destructive DDL/DML，除非純 comment guidance 且不在 executable path。
+- 禁止連 production Supabase 驗證
+- 禁止 live write / live migration execution
+- 禁止正式 backfill
+- 禁止改產品代碼
+- 禁止改 strategy / Telegram / scheduler / watchlist
+- 禁止新增 destructive DML / grants / secrets
+- 禁止擴大修其他 SQL artifact，除非該檔是 docs/handoff 直接引用本 artifact 必須同步的文件
+- 禁止把缺本地 parser 當成通過理由；只能說明限制並加強 static scan / SQL simplification
+- 禁止用「看起來應該可以」代替 evidence
 
 ## 阻塞條件
 
-- Tech 找不到 repo 既有 SQL/docs artifact 慣例且無法判斷放置位置時，需 blocked 要求 Architect 指定 path。
-- 若現有專案已有正式 migration 框架，但 Tech 無法確認新增 artifact 是否應進 migration path，需 blocked，不得放錯造成 production auto-apply。
-- 若 Owner / Architect 要求本輪 live execute SQL、backfill 或驗證 production DB 實際建表，需 blocked，因為本輪明確只產 repo-local SQL artifact。
-- 若無法以 SQL 表達 lineage / freshness / source traceability，需 blocked，不得交付只含普通行情欄位的 schema。
-- 若 RLS / permissions 需要 production role 細節才能安全定義，Tech 不得臆測，應改用 comment guidance；若 Owner 要求 executable policy，需 blocked 要求補 role/policy 規格。
+- 原 SQL 內容無法判斷 schema intent，修正需要 Owner/Architect 決定是否新增、刪除或改欄位。
+- 本 artifact 其實依賴 production-only state 或不可公開的 credential 才能解析。
+- Tech 發現修復必須改產品 DB read/write contract、runtime code 或 migration strategy。
+- docs/handoff 位置或直接引用文件不明，且無法從摘要定位。
+- local parser 顯示語法仍失敗，但失敗原因不是單純 terminator / block closure，需重新確認 schema intent。
+
+## 本輪停止條件
+
+完成以下即可停止，不繼續擴大：
+
+- db/sql/evidence_phase_4_market_theme_confirmed_evidence.sql 已修成完整、明確終止、可複製的一個 SQL block。
+- docs/handoff 已補最小安全執行說明與可能錯因。
+- Tech 已做 static scan，並在本地非 production parser 可用時做 syntax validation。
+- QA 已獨立 static scan，並在本地非 production parser 可用時驗證 syntax。
+- 確認沒有 production 連線、沒有 backfill、沒有產品代碼變更。
+
+旁支問題只記待辦，不納入本輪：
+
+- 其他 SQL artifact 風格不一致
+- 是否需要正式 migration framework
+- 是否需要 production DB schema drift audit
+- 是否需要全量 Supabase SQL lint
+- 是否需要補完整 DB migration rollback 策略

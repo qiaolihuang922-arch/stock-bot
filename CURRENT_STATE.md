@@ -33,6 +33,13 @@
 
 ## Recent High-Signal Milestones
 
+- SQL artifact syntax/copy safety tiny patch 已完成：
+  - Owner 執行 Evidence Phase 4 SQL 時遇到 Supabase `ERROR 42601 syntax error at end of input`。
+  - 修正範圍只限 `db/sql/evidence_phase_4_market_theme_confirmed_evidence.sql` 與 `docs/handoff/evidence_phase_4_market_theme_confirmed_evidence.md`；未改 schema intent、產品代碼、策略、Telegram、runner、DB write path。
+  - SQL header 補明必須整段複製，尾端新增只讀 validation marker statement，避免漏貼尾段或分號時不易察覺。
+  - QA conditional pass：靜態完整性與危險詞掃描通過，但 QA 本機無 `psql` / Docker / Podman，未做 production/parser validation。
+  - Architect 額外用 `.qa_tmp/` 臨時 `pglast` 做本地非 production parser 驗證：修正版 SQL parse OK，`statements=27`。
+  - 初判：原錯誤高機率來自 Supabase editor 只執行不完整片段或貼上時漏掉尾段 / 分號；若再次失敗，需 Owner 回傳 line / column。
 - Evidence Phase 4 Production DB Schema SQL For Confirmed Market/Theme Evidence 已通過 QA：
   - 新增手動 SQL artifact：`db/sql/evidence_phase_4_market_theme_confirmed_evidence.sql`。
   - SQL 建立 `public.market_theme_confirmed_evidence`，用於未來 GitHub fresh runner 從 production DB read-only reconstruction confirmed market/theme evidence。

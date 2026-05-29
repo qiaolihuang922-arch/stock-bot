@@ -123,6 +123,12 @@
   - QA 攔截點有效：特別檢查 Owner/DB admin 誤讀風險、destructive/live/secret patterns、fresh runner read-only reconstruction 欄位、artifact 放置不會被自動 migration 套用。
   - 不新增 `AGENTS.md` 硬規則：既有 DB/live write 禁令與 GitHub runner source-of-truth 規則已覆蓋。
   - 後續待辦：Owner 手動執行 SQL 後，另開 read-only loader 任務；RLS / permissions、writer / backfill、live delivery 需各自單獨批准。
+- 本輪 SQL artifact end-of-input tiny patch：
+  - 根因分類：`qa_static_gap` + `operator_copy_risk`。前輪 QA 只做 static scan，未做 parser 級驗證；SQL artifact 也未足夠提示整段複製。
+  - 已修正：SQL header 補整段複製說明，尾端加只讀 validation marker；新增 `docs/handoff/evidence_phase_4_market_theme_confirmed_evidence.md`。
+  - QA conditional pass 合理：QA 無本地 parser 且不可連 production；Architect 額外用臨時 `.qa_tmp/` `pglast` parser 驗證修正版 SQL parse OK。
+  - 不新增 `AGENTS.md` 硬規則：屬於 SQL artifact QA 方法補強，先記入流程待辦；若 SQL artifact 再次因 parser 未驗出錯，升級為任務卡固定驗收。
+  - 待補流程：後續 SQL artifact 任務優先使用 local parser / non-production DB parser；不可用時必須在 final 明確說「未做 parser 驗證」，不得只說靜態通過。
 - 下一次產品任務完成後，確認 Post-cycle Review Gate 是否有做到：
   - 根因分類。
   - QA 攔截是否沉澱成 guard。

@@ -4,47 +4,46 @@
 
 ## Current Task
 
-- task_id: `evidence-phase-4-confirmed-market-theme-schema-sql`
-- task_name: `Evidence Phase 4 Production DB Schema SQL For Confirmed Market/Theme Evidence`
-- task_type: `normal_patch`
+- task_id: `urgent_tiny_patch_sql_evidence_phase_4_syntax`
+- task_name: `Fix Supabase SQL Artifact End-Of-Input Error`
+- task_type: `tiny_patch`
 - version_level: `patch`
 - qa_level: `L1`
 - owner_status: `requested`
 - architect_status: `validated_pending_push`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
-- qa_status: `qa_passed`
+- qa_status: `conditional_pass`
 - commit: `pending`
 
 ## Current Result
 
-- Owner 要求：若要建表 / 擴字段，整理成一段 SQL 由 Owner 手動執行；雖然 Owner 表示線上權限已放開，本輪仍不由 agent live 執行 SQL。
-- PM 已定義 schema SQL contract：新增 repo-local SQL artifact，支援 future GitHub fresh runner 從 production DB read-only reconstruction confirmed market/theme evidence；不改 Telegram、策略、runner、watchlist 或 DB write path。
-- Tech 已新增手動 SQL artifact：
-  - `db/sql/evidence_phase_4_market_theme_confirmed_evidence.sql`
-  - 建表：`public.market_theme_confirmed_evidence`
-  - 必要欄位：`market_index`、`sector_theme_key`、`watchlist_breadth`、`as_of`、`trade_date`、`freshness`、`evidence_value`、`support_level`、`lineage`、`source_family`、`source_name`。
-  - 索引：`trade_date`、`market_index/trade_date`、`sector_theme_key/trade_date`、`source_family/source_name/trade_date`、`trade_date/as_of desc`、latest confirmed partial index。
-  - SQL header 已寫明 manual execution only、Owner review、未執行 SQL / backfill / production write / live Telegram。
-  - RLS / permissions 只保留 comment guidance；未假設 production role，未寫 broad grant。
-- QA 靜態驗證通過：
-  - SQL artifact 欄位、freshness fail-closed states、lineage/source traceability、索引與 future query shape 足以支援後續 read-only reconstruction。
-  - 未命中 destructive / live / secret patterns：無 `drop table`、`truncate`、`delete from`、`insert into`、`grant`、`service_role`、`password`、`secret`、`token`、`connection string`、`supabase db`、`psql`、`curl`、`wget`。
-  - `git diff --check` 通過。
-  - 未連 production / staging DB，未 live execute SQL，符合本輪停止條件。
-- 重要執行風險：
-  - SQL 對 clean create 與同 schema repeat execution 是幂等的。
-  - 若 production 已有同名但欄位不完整的 table，Owner 需先在 DB console review schema 差異後手動處理，不可無腦執行。
+- Owner 回報：手動執行 `db/sql/evidence_phase_4_market_theme_confirmed_evidence.sql` 時 Supabase 顯示 `ERROR 42601 syntax error at end of input`。
+- PM 已收斂為 tiny patch：只修 SQL artifact 的可複製完整性與 handoff notes，不改 schema intent、不改產品代碼、不連 production、不 backfill。
+- Tech 已完成最小修正：
+  - SQL header 補明「整段複製執行」，不可只複製中段；漏掉尾端 statement terminator 可能造成 `42601 end of input`。
+  - SQL 尾端新增只讀 validation marker：`select 'evidence_phase_4_market_theme_confirmed_evidence.sql complete' as sql_artifact_validation_marker;`
+  - 新增 handoff 文件：`docs/handoff/evidence_phase_4_market_theme_confirmed_evidence.md`，說明用途、整段複製方式、不可 production 驗證 / backfill / 加 credentials。
+  - 未改 table、欄位、constraint、index、schema intent。
+- QA conditional pass：
+  - 可吸收範圍限於 `CHANGELOG.md`、SQL artifact、handoff 文件；不得整包吸收 untracked `docs/`。
+  - 靜態完整性通過：最後有效字元為 `;`，括號平衡，無 dollar quote 未閉合。
+  - 危險詞掃描無 destructive DML、grant、secret、token、connection string。
+  - QA 本身未做真正 Postgres parser validation，因無 `psql` / Docker / Podman；仍禁止連 production。
+- Architect 額外驗證：
+  - 使用臨時 `.qa_tmp/` 安裝 `pglast` 做本地非 production PostgreSQL parser 驗證。
+  - 舊 SQL 與修正版 SQL 均可 parse；修正版 `pglast_parse_ok statements=27`。
+  - 因此本次 `end of input` 高機率是 Supabase editor 只執行到不完整片段、貼上時漏掉尾段 / 分號，或 selection 沒包含完整 SQL block。
 - Post-cycle review：
-  - 根因分類：`schema_contract_needed`。本輪不是產品行為修改，而是把 Phase 3 缺口沉澱成手動 SQL artifact。
-  - QA 有效補上 Owner/DB admin 誤讀風險與 no-live-write 邊界。
-  - 不新增 `AGENTS.md` 硬規則：既有 live write / DB / GitHub runner source-of-truth 規則已覆蓋；本輪只更新狀態與待辦。
+  - 根因分類：`qa_static_gap` + `operator_copy_risk`。前輪 QA 只有靜態掃描，未做 parser 驗證，也沒有足夠強調整段複製。
+  - 已補 artifacts：SQL 尾端 marker、handoff 文件、Architect parser 驗證。
+  - 待補流程：後續 SQL artifact 任務需優先嘗試 local parser；若 parser 不可用，需明確標記只做 static review，不得說成可在 Supabase 實際通過。
 
 ## Next Action
 
-- commit / push 本輪 SQL artifact 與交付文件。
-- Owner 可手動在 Supabase SQL editor / Postgres console review 並執行 `db/sql/evidence_phase_4_market_theme_confirmed_evidence.sql`。
-- SQL 執行後，下一輪可開 read-only loader 任務，把 GitHub fresh runner 接到該 production table；正式 writer / backfill / RLS policy / live delivery 仍需另行批准。
+- commit / push tiny patch。
+- Owner 重新打開 `db/sql/evidence_phase_4_market_theme_confirmed_evidence.sql`，整份全選複製到 Supabase SQL editor 執行，不要只選中間建表段。
+- 若仍失敗，請回傳 Supabase 顯示的錯誤位置 / line / column；下一輪只修該 SQL syntax，不擴大到 loader / backfill。
 
 ## Status Values
 

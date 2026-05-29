@@ -1,5 +1,8 @@
 -- Evidence Phase 4: confirmed market/theme evidence source-of-truth.
 -- Manual execution only. Do not run this SQL from agents in this task.
+-- Copy and execute this entire file as one block in Supabase SQL editor.
+-- Do not copy only the middle section; missing the final statement terminator
+-- can produce ERROR 42601 syntax error at end of input.
 --
 -- Execution notes:
 -- 1. Owner manually opens the Supabase SQL editor or a Postgres console.
@@ -7,6 +10,7 @@
 -- 3. This block is designed to be idempotent for repeated manual execution.
 -- 4. This task did not execute this SQL, backfill data, write production DB data,
 --    or deliver live Telegram messages.
+-- 5. Validation for syntax-fix tasks is local/non-production only.
 --
 -- RLS / permissions guidance:
 -- This file intentionally does not enable policies or broad permissions because
@@ -138,3 +142,5 @@ where evidence_status = 'confirmed'
 --   and evidence_status = 'confirmed'
 --   and freshness = 'fresh'
 -- order by market_index, sector_theme_key, as_of desc;
+
+select 'evidence_phase_4_market_theme_confirmed_evidence.sql complete' as sql_artifact_validation_marker;
