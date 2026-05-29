@@ -52,7 +52,7 @@ from services.strategy_evidence import (
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.3.0"
+VERSION = "v20.3.1"
 
 EXECUTION_LEVELS = {
     "TAKE_PROFIT_50": "TP50",
@@ -5051,6 +5051,22 @@ def generate_report():
     )
 
     msg += "====================\n\n"
+
+    position_warning = get_position_store_warning()
+    if position_warning:
+        summary = "\n".join([
+            f"【{now.strftime('%m/%d')} {report_phase}｜{VERSION}】",
+            f"⚠ {position_warning}，持倉 / 今日交易狀態不可信",
+            "今日結論",
+            "新倉：無有效進場",
+            "原因：missing-source",
+            "持倉",
+            "unavailable：持倉或今日交易來源缺失，不產生交易建議",
+            "市場證據",
+            "unavailable：DB evidence table/cache 不可用",
+            "非交易診斷：watchlist breadth fallback 已停用於決策",
+        ])
+        return [summary], None
 
     results_map = {}
     decisions = []

@@ -1,308 +1,318 @@
-# TASK: Runtime Market Breadth Evidence Fallback
+# TASK: data-authenticity-hardening-fail-closed
 
 ## 任務狀態
 
-- task_id: v20.3.0-runtime-market-breadth-evidence-fallback
-- 任務類型: normal_patch
+- task_id: risk_patch_data_authenticity_fail_closed
+- 任務類型: risk_patch
 - 狀態: ready_for_tech
-- 版本契約: 升版到 v20.3.0
-- QA 分級建議: L2
-- 任務尺寸判斷: normal_patch
-- 理由: 本輪改 Telegram 市場/題材 evidence 顯示與 evidence fallback contract，涉及使用者可見報文與直接消費者，但不得改交易策略、DB schema、watchlist universe 或 live path。
-- 非 tiny_patch: 不是單一文案修正，需處理 runtime evidence 來源、缺來源標記與 confirmed 禁止條件。
-- 非 risk_patch: 不得改 BUY/SELL/RR/過熱/漲停不追/可準備分類，也不得新增進場建議。
+- 版本建議: patch
+- 若目前使用者可見版本為 v20.3.0，本輪建議升為 v20.3.1。
+- 若 Tech 實際改到 Telegram / CLI header、formatter summary、message list contract 或使用者可見 unavailable 文案，必須同步顯示版本字串與測試期望。
+- 若 Tech 證明只改內部 fail-closed guard、沒有任何使用者可見 header 或報文文案變更，可在 CHANGELOG.md 明確說明不升版理由。
+- QA 分級建議: L3-lite
+- 可做完整 repo 證據化掃描與相關測試。
+- 禁止 live Supabase write、正式 backfill、live Telegram delivery。
+- full pytest 可跑；replay/backfill 只能 dry-run，且不得寫正式 DB 或發送正式 Telegram。
 
 ## Owner 問題
 
-v20.2.0 已建立 market/theme evidence contract，但 production 尚未有 evidence table/cache 時，Telegram 市場/題材區塊仍顯示「策略證據未啟用 / absent」，導致 Owner 在手機上看不到任何可追溯的市場或題材背景。
+Owner 明確要求：目前 DB 已有資料，所有 production runtime 中會影響策略、報文、證據鏈、行情、持倉、回測、DB payload 或 Telegram 結論的路徑，都必須拒絕假資料。任何 fake/mock/dummy/sample/synthetic/default/hardcoded
+fallback 不得再被 runtime 用來生成可買、confirmed、市場證據、持倉、價格、交易或回測結論。
 
-Owner 要繼續證據鏈，但本輪必須不建表、不 live write、不 backfill；在缺 DB evidence table/cache 的情況下，先用現有 runtime watchlist breadth / 本次報告已計算的 watchlist signals 生成可驗證的 weak/runtime evidence，讓報
-文清楚表示「內部觀察池偏強，但缺大盤/族群指數，未確認」。
+本輪不是調整策略邏輯，而是建立並落實 source-of-truth 與 fail-closed 契約：真實資料不存在或不可用時，系統必須輸出 missing-source / unavailable 類狀態，不得補假值讓流程看起來正常。
+
+補充殘留契約：`position_events` DB 讀取失敗或來源缺失時，也不得回傳全 0 event summary 偽裝成今日無交易；只有 DB query 成功且 `res.data == []` 才能代表今日真實無事件。
 
 ## 使用者可見結果
 
-Owner 在 Telegram 手機報文的市場/題材 evidence 區塊會看到：
+Owner 在 Telegram / CLI / dry-run report 看到的變化：
 
-- 若 DB evidence table/cache 不存在，但 runtime watchlist breadth 足夠且偏支持:
-- 不再只顯示 absent 或「策略證據未啟用」。
-- 顯示 weak / runtime / missing-source 級別的市場或題材觀察證據。
-- 文案必須明確說明這只是內部觀察池廣度支持或偏強，缺大盤/族群指數，因此未確認。
-- 若 runtime data 也不足:
-- 仍可顯示 absent。
-- 但必須說明缺哪類來源，例如缺 watchlist breadth、缺 market_index、缺 sector_index 或缺 runtime signals。
-- 交易決策、分類與建議不變:
-- 不因 weak runtime evidence 新增可買、可準備、加碼或任何進場暗示。
-
-手機閱讀路徑:
-
-1. Owner 打開 Telegram 先看 summary / 決策區。
-2. 市場/題材 evidence 區塊只能補充背景強弱，不能看起來像進場推薦。
-3. 文案必須先講 evidence 等級與未確認原因，再講支持內容。
-4. 缺資料時要短句說明缺口，不輸出空標題或模糊的 absent。
+- 若 DB、真實行情、真實 artifact 或 evidence source 不可用，報文不得產生「可買」、「confirmed」、「市場證據成立」、「持倉成立」、「價格有效」等結論。
+- 缺來源時必須清楚顯示不可行動狀態，例如：
+- 資料來源缺失：evidence unavailable
+- 新倉：無有效進場，原因：missing-source
+- 市場證據：unavailable，不納入決策
+- 今日交易事件來源錯誤時，報文不得顯示或推導為 今日無交易 / 今日 無 / 0 event；必須 fail closed 或顯示 source-error / unavailable。
+- 手機閱讀路徑：
+1. Owner 打開 Telegram 先看到 summary。
+2. summary 必須先回答今天是否能買。
+3. 若資料缺失，第一屏不得出現像推薦的股票名單或 confirmed 語氣。
+4. 詳情段落可列出缺失來源，但不得用 fallback 數字補成可交易訊號。
 
 ## 非目標
 
-- 不建立 DB evidence table。
-- 不新增 migration。
-- 不寫 Supabase。
-- 不 live Telegram delivery。
-- 不 backfill。
-- 不改 market/theme evidence 的長期 DB contract。
-- 不改 BUY/SELL/RR/過熱/漲停不追/可準備分類邏輯。
-- 不新增進場建議、加碼建議或交易優先級。
-- 不重設策略、不重寫 evidence 架構、不做全量清理。
-- 不要求 L3 full pytest、replay/backfill dry-run 或 live payload 驗證。
+- 不改策略選股意圖、分數規則、買賣條件、持倉狀態機。
+- 不新增 DB schema；若修復必須 schema change，Tech 必須 blocked 回報 Architect/Owner。
+- 不改 watchlist 名單。
+- 不做正式 backfill。
+- 不做 live Supabase write。
+- 不做 live Telegram delivery。
+- 不清理 tests fixture 本身；tests fixture 可保留，但 runtime 不得 import/call。
+- 不把 dev/demo/dry-run-only 工具重寫成 production feature。
+- 不處理與假資料無關的舊 TODO、一般重構、格式美化或測試瘦身。
 
 ## 影響模組
 
-Tech 應只檢查並修改與下列範圍直接相關的模組:
+Tech 必須至少掃描並分類以下範圍：
 
-- market/theme evidence fallback 建構邏輯。
-- Telegram formatter 中市場/題材 evidence 區塊。
-- 目前報告流程中已存在的 runtime watchlist breadth / watchlist signals 消費點。
-- 版本常量或 Telegram header 版本顯示。
-- 對應的局部 formatter / evidence contract 測試與 fixtures。
+- services
+- core
+- scripts
+- supabase
+- functions
+- runtime entrypoints
+- Telegram / CLI report generation path
+- strategy / evidence / watchlist breadth / market data / holdings / backtest / DB read-write adapter path
 
-不得擴大到:
-
-- DB schema / migrations。
-- Supabase write path。
-- watchlist universe 來源或篩選邏輯。
-- 策略 decision engine。
-- backfill / replay / live delivery entrypoint。
+排除 tests 作為修復目標，但必須確認 tests fixture 不被 runtime import 或 call。
 
 ## 直接消費者
 
-- Telegram 報文市場/題材 evidence 區塊。
-- Telegram summary 或 header 中顯示版本字串的直接 formatter。
-- market/theme evidence message list contract 的直接呼叫方。
-- QA 用來產生接近真實 Telegram 長報文的 formatter fixture。
+本輪直接消費者至少包含：
+
+- production strategy decision path
+- Telegram message formatter / generator
+- CLI / dry-run report output
+- DB repository / Supabase adapter
+- market data loader / stock API adapter
+- holdings loader
+- evidence chain builder
+- backtest / replay dry-run reader
+- watchlist breadth / evidence cache consumer
+- any runtime scheduler or script that can produce strategy, evidence, market, holdings, DB, backtest, or Telegram conclusions
+
+## Source-of-Truth 契約
+
+Production runtime 的唯一可信來源：
+
+- DB 已有資料的路徑：以 DB 為 source of truth。
+- 行情：以真實行情 API / 真實行情 artifact 為 source of truth。
+- 持倉：以真實持倉來源 / DB holdings / Owner 已定義 artifact 為 source of truth。
+- evidence：以 DB evidence table/cache 或真實 evidence artifact 為 source of truth。
+- 回測：以真實 historical data / DB / 已生成 artifact 為 source of truth。
+- Telegram / CLI 結論：只能由上述真實來源推導。
+
+禁止 runtime source：
+
+- fake
+- mock
+- dummy
+- sample
+- synthetic
+- default fallback
+- hardcoded fallback
+- placeholder
+- demo data
+- local testdata
+- tests fixture
+- dry-run mock value promoted as production data
 
 ## 輸出契約
 
-### Evidence fallback contract
+Production runtime 缺資料時必須 fail closed：
 
-當 DB evidence table/cache 不存在或不可用時:
-
-- 可使用本次 runtime 已計算的 watchlist breadth / watchlist signals 產生 fallback evidence。
-- fallback evidence 最高只能是:
-- weak
-- runtime
+- 不產生買入、加碼、confirmed、有效市場證據、有效價格、有效持倉、有效交易或回測成功結論。
+- 對使用者可見輸出使用明確狀態：
 - missing-source
-- 若缺 market_index 或 sector_index，不得輸出 confirmed。
-- fallback evidence 必須帶出缺來源原因，至少能區分:
-- 缺 DB evidence table/cache。
-- 缺 market_index。
-- 缺 sector_index。
-- 缺 runtime watchlist breadth / watchlist signals。
-- runtime breadth 支持時，文案語意必須是「偏支持 / 偏強但未確認」，不得是「確認轉強」「可買」「進場」。
+- unavailable
+- source-error
+- not-actionable
+- 缺資料狀態不得被歸類為：
+- 可買
+- 準備
+- confirmed
+- 市場證據成立
+- 持倉有效
+- Telegram summary 必須行動優先：
+- 今天能不能買：缺資料時寫 新倉：無有效進場
+- 持倉先處理什麼：缺持倉或今日交易事件來源時寫 持倉：unavailable，不產生交易建議
+- 未持倉哪些只是追蹤：缺 evidence 時不得列為可買，只能列 不可行動
+- 哪些不可行動：列缺失來源摘要
 
-### Telegram 文案 contract
+`position_events` 契約：
 
-可接受語意示例:
+- query success + empty rows：可視為今日真實無事件。
+- query success + event rows：使用真實事件統計。
+- source-error / missing-source：必須標示 unavailable / source-error，並阻止下游把事件解讀成 0 buy / 0 sell / 今日無交易。
 
-市場證據：weak/runtime
-內部觀察池廣度偏強；缺大盤指數 evidence，未確認。
+## v20.3.0 Watchlist Breadth Fallback 契約
 
-題材證據：weak/runtime
-觀察池同題材訊號偏支持；缺族群指數 evidence，未確認。
+Tech 必須重新審視 runtime watchlist breadth fallback：
 
-runtime data 不足時示例:
-
-市場證據：absent/missing-source
-缺 runtime watchlist breadth，且無 DB evidence table/cache；本輪不確認市場證據。
-
-題材證據：absent/missing-source
-缺 sector_index 與可用觀察池題材廣度；本輪不確認題材證據。
-
-禁止文案語意:
-
-市場確認轉強，可進場
-
-題材 confirmed
-
-觀察池偏強，新增可買
-
-### 版本契約
-
-- Telegram 使用者可見版本必須顯示 v20.3.0。
-- Tech 必須同步實際版本常量 / header / 測試期望。
-- 不得只在文件寫 v20.3.0，實際 Telegram header 仍停在舊版。
+- 若 DB evidence table/cache 已存在，或 Owner 要求 DB 優先，runtime 不得用 breadth fallback 替代 DB evidence。
+- fallback 最多只能作為明確標注的非交易診斷。
+- fallback 不得稱為市場證據。
+- fallback 不得產生 confirmed。
+- fallback 不得影響 strategy decision、Telegram 可買結論、持倉建議或 DB payload。
+- 若現有契約與此衝突，Tech 必須修正為 fail-closed；若需要產品決策，blocked 回報。
 
 ## 已存在且不得回退的契約
 
-- v20.2.0 已建立的 market/theme evidence contract 不得移除或改成只剩文案。
-- 缺 DB evidence table/cache 時不得假裝已 confirmed。
-- evidence 不得改變交易決策。
-- Telegram 報文必須手機優先，summary / 市場題材 / 詳情的語意不得互相矛盾。
-- 無可買時不得使用像推薦的文案。
-- 可買、準備、僅追蹤、不可行動 必須分開。
-- 空區塊與 0-count no-op 文案不得為了占位輸出。
-- 不得回退既有版本契約；本輪應升到 v20.3.0。
+- 固定流程文件不可刪除。
+- tests fixture 可存在於 tests 範圍，但不得被 runtime import/call。
+- 禁止 live Supabase write、正式 backfill、live Telegram delivery，除非 Owner 另行明確批准。
+- 不得回退目前已存在的 Telegram 手機閱讀規則：summary 行動優先、可買/追蹤/不可行動分離、缺資料不得寫成推薦。
+- 不得回退目前版本下限；若目前版本高於 v20.3.0，以現有版本為基準升 patch，不得降回 v20.3.0。
+- 不得把 dry_run、demo、local 的假資料路徑提升為 production fallback。
 
-若 Tech 發現 v20.2.0 evidence contract 的實際欄位名稱、等級枚舉或直接消費者與本 TASK 描述不一致，必須 blocked 回報 Architect，不得自行重定義 contract。
+若 Tech 發現 repo 內另有已存在的 runtime contract，本 TASK 未列但會被本輪影響，必須在 CHANGELOG.md 列出並避免回退；無法判斷時 blocked。
+
+## Tech 證據表要求
+
+Tech 必須提交完整證據表，至少包含欄位：
+
+- path
+- function
+- keyword
+- rg evidence
+- import-or-call path
+- classification
+- risk
+- action
+
+classification 只能使用：
+
+- test_fixture
+- dev_only
+- dry_run_only
+- runtime_reachable
+- false_positive
+
+必掃 keyword：
+
+- mock
+- dummy
+- sample
+- fixture
+- fallback
+- synthetic
+- hardcoded
+- default
+- fake
+- placeholder
+- TODO
+- testdata
+- demo
+- local
+- dry_run
+
+Tech 對每個 runtime_reachable 必須採取行動：
+
+- 移除 production 假資料使用；或
+- 改為真實 source-of-truth；或
+- 改為 fail-closed unavailable；或
+- 若只能保留，必須降級為明確標注的 non-trading diagnostic，且不可影響策略/報文/DB 決策。
 
 ## 驗收條件
 
-1. 無 DB evidence table/cache，但 watchlist breadth supportive 且缺 market/sector index 時:
-- Telegram 市場/題材區塊顯示 weak/runtime evidence。
-- 文案清楚說明內部觀察池廣度支持或偏強。
-- 文案清楚說明缺大盤/族群指數，未確認。
-- 不出現 confirmed。
-2. runtime breadth / watchlist signals 不足時:
-- 仍可顯示 absent。
-- 必須標示 missing-source 或等價缺來源訊息。
-- 必須指出缺哪類來源。
-3. 交易決策不變:
-- BUY/SELL/RR/過熱/漲停不追/可準備分類不得因 fallback evidence 改變。
-- 不新增任何進場、加碼或可準備建議。
-4. 版本顯示:
-- Telegram header 或等價使用者可見版本顯示 v20.3.0。
-5. 無 forbidden diff:
-- 無 DB schema / migration diff。
-- 無 Supabase write path diff。
-- 無 watchlist universe 或 watchlist source diff。
-- 無 live Telegram delivery diff。
-- 無 replay/backfill 行為 diff。
-6. 手機閱讀:
-- 接近真實長報文中，Owner 能在市場/題材 evidence 區塊直接看出「runtime weak、缺來源、未確認」。
-- weak runtime evidence 不得在 summary 或執行清單中被包裝成買入理由。
+1. Repo 證據化掃描完成，CHANGELOG.md 有完整證據表，覆蓋指定目錄、entrypoints 與 keywords。
+2. 所有 runtime reachable fake/mock/dummy/sample/synthetic/default/hardcoded fallback 都被分類並處理。
+3. tests fixture 可保留，但 Tech 必須提供 runtime import/call path 反證，證明 tests fixture 不被 production runtime 使用。
+4. DB 已有資料的路徑以 DB/真實行情/真實 artifact 為唯一來源。
+5. DB empty、DB unavailable、stock API unavailable、evidence table missing/cache missing 時，production runtime fail closed。
+6. position_events source-error / missing-source 不產生 fake 今日無交易；DB query 成功但空資料仍可作為真實 0 event。
+7. 缺資料時 Telegram / CLI / dry-run report 不產生假可買、confirmed、持倉、價格、交易或回測成功結論。
+8. v20.3.0 watchlist breadth fallback 不得替代 DB evidence，不得稱市場證據，不得 confirmed，不得影響決策。
+9. 沒有新增 schema、沒有改 watchlist、沒有 live write/backfill/Telegram delivery。
+10. 若改到 Telegram / CLI header 或使用者可見報文，版本字串與測試期望同步。
+11. 若 Tech 發現必須 schema change、缺 Owner source-of-truth 定義、或無法判斷某 runtime fallback 是否 production 使用，必須 blocked，不得自行決策。
 
 ## 範例或 fixture
 
-### Fixture A: no evidence table + supportive runtime breadth + missing indexes
+### Telegram 手機 summary 期望形狀：DB evidence missing
 
-輸入形狀:
+Stock Bot v20.3.1
 
-db_evidence_table: missing
-evidence_cache: missing
-runtime_watchlist_breadth:
-available: true
-supportive: true
-signal_count: 8
-total_count: 12
-market_index: missing
-sector_index: missing
-pre_existing_decisions:
-buy: []
-prepare: ["2330"]
-tracking_only: ["2317", "2454"]
-not_actionable: ["9999"]
+今日結論
+新倉：無有效進場
+原因：evidence unavailable，未使用 fallback
 
-期望輸出形狀:
+持倉
+unavailable：持倉來源缺失，不產生交易建議
 
-市場證據：weak/runtime
-內部觀察池廣度偏強；缺大盤指數 evidence，未確認。
+市場證據
+unavailable：DB evidence table/cache 不可用
+非交易診斷：watchlist breadth fallback 已停用於決策
 
-題材證據：weak/runtime
-觀察池同題材訊號偏支持；缺族群指數 evidence，未確認。
+### CLI / dry-run 期望形狀：stock API unavailable
 
-期望不變:
+status: unavailable
+source: stock_api
+actionable: false
+decision: no_trade
+reason: missing-source
+confirmed: false
+price_source: unavailable
 
-buy: []
-prepare: ["2330"]
-tracking_only: ["2317", "2454"]
-not_actionable: ["9999"]
-confirmed_present: false
+### 禁止形狀
 
-### Fixture B: no evidence table + missing runtime breadth
+市場證據 confirmed：使用 fallback breadth
+今日可買：ABC
+價格：100.0 default
+持倉：sample position
 
-輸入形狀:
-
-db_evidence_table: missing
-evidence_cache: missing
-runtime_watchlist_breadth:
-available: false
-market_index: missing
-sector_index: missing
-pre_existing_decisions:
-buy: []
-prepare: []
-tracking_only: ["2330"]
-not_actionable: ["9999"]
-
-期望輸出形狀:
-
-市場證據：absent/missing-source
-缺 runtime watchlist breadth，且無 DB evidence table/cache；本輪不確認市場證據。
-
-題材證據：absent/missing-source
-缺 sector_index 與可用觀察池題材廣度；本輪不確認題材證據。
-
-期望不變:
-
-buy: []
-prepare: []
-tracking_only: ["2330"]
-not_actionable: ["9999"]
-confirmed_present: false
+上述輸出即使測試通過，也必須視為驗收失敗。
 
 ## 明確禁止事項
 
-- 禁止建立 DB table。
-- 禁止新增 migration。
-- 禁止寫 Supabase。
+- 禁止 production runtime 使用 fake/mock/dummy/sample/synthetic/default/hardcoded/placeholder/demo/local/testdata 資料生成策略、持倉、交易、證據、回測、行情、DB payload 或 Telegram 結論。
+- 禁止 tests fixture 被 runtime import/call。
+- 禁止 DB 已有資料路徑改用 fallback 取代 DB。
+- 禁止缺資料時補假價格、假持倉、假 evidence、假回測、假 confirmed。
+- 禁止 live Supabase write。
+- 禁止正式 backfill。
 - 禁止 live Telegram delivery。
-- 禁止 backfill。
-- 禁止修改 watchlist universe 或 watchlist source。
-- 禁止修改 BUY/SELL/RR/過熱/漲停不追/可準備分類。
-- 禁止因 weak/runtime evidence 新增進場建議。
-- 禁止在缺 market_index 或 sector_index 時輸出 confirmed。
-- 禁止把 absent 寫成沒有原因的空泛文案。
-- 禁止為了本輪修正做全量重構、全 repo 清理或 L3 驗證擴張。
-- 禁止回退 v20.2.0 已建立的 market/theme evidence contract。
+- 禁止改 watchlist。
+- 禁止新增 DB schema；若必須新增，blocked。
+- 禁止把 non-trading diagnostic 包裝成市場證據。
+- 禁止用「保守預設值」或 default 讓交易判斷繼續執行。
+- 禁止把本輪擴張成策略重設、報文大改版、資料管線重構或全專案清理。
 
 ## 阻塞條件
 
-Tech 必須 blocked，而不是自行決策，若遇到以下情況:
+Tech 必須 blocked 的情況：
 
-- 找不到 v20.2.0 market/theme evidence contract 的實際欄位、等級或直接消費者。
-- runtime watchlist breadth / watchlist signals 在目前報告流程中不存在或無法安全取得。
-- 現有 formatter 無法區分 weak/runtime/missing-source/confirmed，且需要重定義 public contract。
-- 升版到 v20.3.0 會牽涉不明版本來源或多處 header 不一致。
-- 要達成需求必須建立 DB table、migration、Supabase write、backfill 或改 live delivery。
-- 發現 weak runtime evidence 目前會被策略 engine 消費並影響交易分類。
+- 無法確認目前 production runtime entrypoint。
+- 無法確認 DB/evidence/holdings/market data 的 source-of-truth。
+- 修復必須新增或修改 DB schema。
+- 修復必須改 watchlist。
+- 某 runtime fallback 是否可交易使用無法由 import/call path 判斷。
+- 缺測試環境導致無法驗證 fail-closed。
+- 發現 live write/backfill/Telegram delivery 才能驗證，本輪不得執行，需回報 Architect/Owner。
+- 發現現有版本常量或 header 與本 TASK 版本契約矛盾，且無法安全同步。
 
 ## QA 分級建議
 
-- QA 等級: L2
-- 驗證範圍:
-- formatter / evidence contract 局部測試。
-- 直接消費者測試。
-- 策略不變性 smoke。
-- 接近真實 Telegram 長報文手機閱讀檢查。
-- forbidden diff 檢查。
-- 不做:
-- full pytest。
-- replay/backfill dry-run。
-- live Telegram。
-- live Supabase write。
-- production DB schema 驗證。
+L3-lite
 
-QA 必須補 Tech 自檢以外的反證:
+QA 必須驗證：
 
-- 用 Fixture A 驗證 weak runtime evidence 顯示且 confirmed 不出現。
-- 用 Fixture B 驗證 absent/missing-source 並指出缺來源。
-- 比對 fallback 前後交易分類完全不變。
-- 檢查 diff 中沒有 DB/schema/watchlist/live/backfill 相關修改。
-- 從 Owner 手機閱讀順序確認文案不會被誤讀為買入或確認訊號。
+- 重跑或抽查 Tech 證據表中的 runtime reachable 項目。
+- 補至少一個 Tech 未覆蓋的 runtime fail-closed 負面案例。
+- 驗證 DB empty、DB unavailable、stock API unavailable、evidence table/cache missing 時，不產生假可買、confirmed、持倉、價格或交易建議。
+- 驗證 tests fixture 不被 runtime import/call。
+- 驗證 watchlist breadth fallback 只能作 non-trading diagnostic，且不得影響決策。
+- 驗證 no forbidden diff：無 schema、無 watchlist、無 live write/backfill/Telegram delivery。
+- 若 Telegram / CLI 有變更，從 Owner 手機閱讀順序檢查 summary 第一屏是否清楚 fail closed，且版本 header 是否同步。
+- 可跑 full pytest；不得做 live/backfill 寫入。
 
 ## 本輪停止條件
 
-完成以下項目即停止，不納入旁支擴張:
+本輪完成定義：
 
-- Telegram 市場/題材區塊可在無 DB evidence table/cache 時顯示 weak/runtime fallback。
-- runtime data 不足時可顯示 absent/missing-source 並說明缺來源。
-- confirmed 在缺 market/sector index 時不出現。
-- 交易分類不變。
-- 使用者可見版本為 v20.3.0。
-- L2 驗證通過 forbidden diff 與手機閱讀檢查。
+- 指定目錄與 runtime entrypoints 已完成 keyword 掃描。
+- 所有命中的候選項都有證據表分類。
+- 所有 runtime_reachable 假資料路徑已修復為真實 source-of-truth、fail-closed，或明確 non-trading diagnostic。
+- 指定缺資料情境均驗證不會產生可交易結論。
+- CHANGELOG.md 與 QA_REPORT.md 均能對應本 TASK 的 source-of-truth、fail-closed、no forbidden diff 契約。
 
-旁支只記待辦，不納入本輪:
+不納入本輪，只記待辦：
 
-- 正式 evidence table 建表與 migration。
-- Supabase evidence write。
-- evidence backfill。
-- market_index / sector_index 外部資料接入。
-- 長期 market/theme evidence scoring 改版。
-- watchlist breadth 指標重設。
+- 與假資料無關的 TODO。
+- 純測試 fixture 命名清理。
+- 大型資料管線重構。
+- 新 schema 設計。
+- watchlist 策略改版。
+- Telegram 版面全面改版。
+- historical artifact 長期治理。
+- 非 runtime 可達的 demo/dev tool 清理，除非它會被 production import/call。

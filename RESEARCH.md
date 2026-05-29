@@ -4,85 +4,42 @@
 
 ## Latest Research
 
-- task_id: `postprofit-and-strong-market-review-20260529`
+- task_id: `20260529_145601_6802_online_research_pair`
 - 日期：2026-05-29
-- 狀態：research_accepted
-- 來源輸出：`.cao_agent_context/outputs/20260529_095339_21682_online_research_pair.md`
-- 範圍：只做研究與風險分析；不改代碼、不建表、不做 live Supabase、不做 live Telegram、不做 backfill。
+- 狀態：已吸收並轉為 `v20.3.1` data-authenticity fail-closed 任務。
+- 來源輸出：`.cao_agent_context/outputs/20260529_145601_6802_online_research_pair.md`
 
 ## Question
 
-Owner 暫停證據鏈，要求檢查 05/29 v20.2.1 報文兩個問題：
-
-1. 英業達今日已停利賣出 112 股後，主決策為何仍是 `停利`，是否缺少已執行後冷卻 / 減碼後觀察狀態，導致連續停利誤讀。
-2. 這一週台股 / AI / 電子股大漲，但系統一檔都沒有推薦，是否策略過度保守，或過熱 / RR / 漲停不追規則缺少強勢市場的準備層級。
-
-## External Evidence
-
-- 2026-05-25 台股明顯由 AI / 電子權值帶動上攻，TAIEX 收 43,644.40、上漲 3.26%，公開報導點名 AI 概念與電子族群強勢。
-- 2026-05-27 台股續強，電子股與權值科技股帶動指數創高，公開資料顯示 AI / 電子主線仍在。
-- 2026-05-28 台股大幅回檔，代表本週雖強，但同時是高波動、追價風險高的市場。
-- 2026-05-29 盤中公開新聞顯示 AI / 電子再度強勢，華邦電、英業達、仁寶、技嘉等一度亮燈漲停；此為盤中資料，不能替代正式收盤或系統內部 watchlist evidence。
-- NVIDIA FY2027 Q1 財報顯示 Data Center 營收年增強勁，支持 AI infrastructure 需求偏強，但不能直接推導台股個股今日可買。
-- TWSE 一般股票有 10% 漲跌幅限制；因此漲停不追、過熱冷卻、RR 控制有制度與風控合理性。
+Owner 要求檢查目前策略 / 報文 / 證據鏈 / 行情 / 持倉 / 回測 / DB 相關 runtime 是否仍在拿假資料。DB 已有資料後，production runtime 必須拒絕 fake/mock/dummy/sample/synthetic/default/hardcoded fallback；缺真實來源時 fail closed。
 
 ## Findings
 
-### 1. 英業達已停利後仍顯示 `停利`
+- Online research agent 無法讀完整 repo，因此不能獨立完成逐 path / function / rg / import-chain 證據表。
+- 需求成立，必須進 PM -> Tech -> QA，而不是用口頭結論宣告乾淨。
+- 高風險候選：
+  - `services/position_store.py` 持倉來源 fallback。
+  - `services/position_store.py` 今日 `position_events` 來源錯誤被當成 0 event。
+  - `core/market_theme_evidence.py` runtime watchlist breadth fallback 被誤讀為市場 / 題材證據。
+  - dry-run / backfill synthetic fixture 必須留在 dry-run gate，不可進 production runtime。
+- 允許保留：
+  - tests fixture。
+  - 明確 dry-run 且禁止 live write 的 synthetic replay。
+  - 真實來源重試，例如 TWSE / Yahoo real-source retry，不算 fake data。
 
-研究結論：這是高風險報文 / 狀態機問題，優先級高。
+## Outcome
 
-- `CURRENT_STATE.md` 已有穩定契約：今日已減碼 / 停利達同級建議時，預設轉為觀察；只有更高級風控或硬停損可覆蓋。
-- 若英業達今日已賣出 112 股，且同級停利已完成，主行動仍顯示 `停利`，Owner 手機第一眼容易理解成「還要再賣一次」。
-- 合理輸出應區分：
-  - 原始訊號仍達停利區。
-  - 今日同級停利已執行。
-  - 剩餘部位進入觀察 / 停利後冷卻 / 減碼後觀察。
-  - 只有硬停損、策略失效、或第二段停利條件明確成立，才能再次輸出可執行賣出動作。
+- 已開發並驗證 `v20.3.1`：
+  - positions 缺來源不再回 0 股 fallback。
+  - position_events source-error / missing-source 不再回全 0 event summary。
+  - runtime watchlist breadth fallback 降為非交易診斷，不稱市場證據、不 weak/runtime、不 confirmed。
+  - 缺來源時 Telegram / CLI report 先 fail closed，不產生可買 / 持倉 / 今日交易 / evidence confirmed 結論。
+- 驗證：
+  - `tests/test_market_theme_evidence.py tests/test_generator_report.py tests/test_position_store.py tests/test_notifier.py`：`88 passed, 13 warnings`。
+  - full pytest：`162 passed, 13 warnings`。
+  - `git diff --check` 通過。
 
-建議下一步：開 `v20.2.2` patch 任務，修正已執行停利後的主行動與 summary / 持倉卡一致性。
+## Next
 
-### 2. 強勢市場一檔都不推薦
-
-研究結論：不能直接判定策略錯，但確實有產品缺口。
-
-- 公開資料支持 Owner 的觀察：這週 AI / 電子 / 伺服器供應鏈明顯偏強。
-- 但 `漲停不追`、`過熱冷卻`、`RR 不足` 在 10% 漲跌幅和高波動市場中有合理風控意義；因此「零 BUY」不必然是錯。
-- 真正缺口是報文只說 `無有效進場`，沒有清楚表達：
-  - 市場 / 題材很強。
-  - 個股買點未成立，不可追。
-  - 哪些是最接近的準備股。
-  - 明天要等什麼觸發。
-- 也就是需要「強勢市場準備層」，而不是直接放寬買點。
-
-建議下一步：先做報文 / 產品契約，不直接改策略門檻。若要調 RR、過熱、漲停不追規則，需另開 major 策略研究並由 Owner 明確批准。
-
-## Recommended Product Contract
-
-### Patch: 已執行停利後狀態
-
-- 同一股票同一交易日已執行同級停利後，不得再次把同級 `停利` 作為主行動。
-- 預設主行動改為：`停利後觀察`、`減碼後觀察` 或 `剩餘觀察`。
-- 若還要再次停利，必須顯示第二段條件、剩餘股數與觸發原因。
-- Summary、持倉卡、交易執行區、風控檢查區的同一檔行動必須一致。
-
-### Minor / Product Layer: 強勢市場準備層
-
-- 強勢市場但個股不可買時，summary 應說：`市場強，但新倉無有效進場，不追價`。
-- 可列 1-3 檔最接近的準備 / 追蹤標的，例如 `等回測`、`等冷卻`、`等RR修復`。
-- 不得把未達買點標的升成 BUY。
-- 淘汰、不可買、僅追蹤、準備必須分開，避免 Owner 誤讀。
-
-## Suggested Acceptance Tests
-
-- 英業達 fixture：今日已停利賣出 112 股、剩餘 300 股、沒有第二段停利或硬停損。期望 summary / 持倉卡 / 風控檢查不再輸出可被理解為再次停利的主行動。
-- 覆蓋案例：若同檔有第二段停利或硬風控，報文必須同行說明觸發條件與剩餘股數。
-- 強勢市場 fixture：AI / 電子市場強，watchlist 多檔漲停或 RR 不足。期望 `新倉：無有效進場`，但列出準備 / 追蹤層，不得顯示推薦買入。
-- 手機閱讀測試：第一屏要回答今天能不能買、持倉先處理什麼、強勢市場下哪些只可準備。
-
-## Architect Conclusion
-
-- 先放下證據鏈是正確的；當前優先問題是持倉主行動一致性與強勢市場報文語意。
-- 英業達已停利仍顯示 `停利` 應進入產品 bugfix。
-- 強勢市場零推薦不應直接改成推薦；應先補準備層與手機文案契約。
-- 下一步若 Owner 同意，先開 PM 任務 `v20.2.2`，範圍限定為報文 / 狀態機，不放寬策略門檻。
+- 若要進一步 production 化證據鏈，需要 Owner 先確認是否建 DB table / cache、接 market_index / sector_index、接 external provider 或持久化 evidence。
+- 若要禁止 dry-run synthetic replay 本身，也需另開任務；目前只禁止它進 production runtime 或 live write。

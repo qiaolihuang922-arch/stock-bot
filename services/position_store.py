@@ -17,18 +17,6 @@ CODE_TO_NAME = {
 }
 
 
-def _fallback_positions():
-    return {
-        name: {
-            "shares": 0,
-            "avg_price": 0,
-            "realized_profit_taken_ratio": 0,
-            "realized_profit_taken_date": None
-        }
-        for name in STOCKS
-    }
-
-
 def _client():
     supabase_url = (
         os.environ.get("SUPABASE_URL")
@@ -51,32 +39,41 @@ def get_position_store_warning():
     return LAST_POSITION_STORE_WARNING
 
 
+def _unavailable_event_summary(warning):
+    return {
+        "_source_status": "unavailable",
+        "available": False,
+        "today_events_known": False,
+        "warning": warning
+    }
+
+
 def load_positions():
     global LAST_POSITION_STORE_WARNING
     client = _client()
 
     if not client:
-        LAST_POSITION_STORE_WARNING = "缺少 Supabase 設定，使用 0 股 fallback"
-        return _fallback_positions()
+        LAST_POSITION_STORE_WARNING = "持倉來源缺失：missing-source"
+        return {}
 
     try:
         res = client.table("positions") \
             .select("stock_code,stock_name,shares,avg_price,realized_profit_taken_ratio,last_realized_profit_date,status") \
             .execute()
     except Exception as exc:
-        LAST_POSITION_STORE_WARNING = f"持倉DB讀取失敗：{exc}"
-        print(f"⚠ {LAST_POSITION_STORE_WARNING}，使用本地fallback")
-        return _fallback_positions()
+        LAST_POSITION_STORE_WARNING = f"持倉DB讀取失敗：source-error ({exc})"
+        print(f"⚠ {LAST_POSITION_STORE_WARNING}")
+        return {}
 
     if not res.data:
         LAST_POSITION_STORE_WARNING = (
-            "持倉DB查詢回傳0行，請檢查 SUPABASE_SERVICE_ROLE_KEY / RLS / project"
+            "持倉DB查詢回傳0行：unavailable"
         )
         print(f"⚠ {LAST_POSITION_STORE_WARNING}")
-        return _fallback_positions()
+        return {}
 
     LAST_POSITION_STORE_WARNING = None
-    positions = _fallback_positions()
+    positions = {}
 
     for row in res.data or []:
         code = row.get("stock_code")
@@ -98,6 +95,9 @@ def load_positions():
 def _empty_event_summary():
     return {
         name: {
+            "source_status": "ok",
+            "available": True,
+            "today_events_known": True,
             "bought_shares": 0,
             "sold_shares": 0,
             "net_shares": 0,
@@ -114,7 +114,8 @@ def load_today_position_events():
     client = _client()
 
     if not client:
-        return _empty_event_summary()
+        LAST_POSITION_STORE_WARNING = "今日交易事件來源缺失：missing-source"
+        return _unavailable_event_summary(LAST_POSITION_STORE_WARNING)
 
     event_date = datetime.now(tz).date().isoformat()
 
@@ -125,9 +126,11 @@ def load_today_position_events():
             .order("created_at") \
             .execute()
     except Exception as exc:
-        print(f"⚠ 今日持倉事件讀取失敗，略過執行統計：{exc}")
-        return _empty_event_summary()
+        LAST_POSITION_STORE_WARNING = f"今日交易事件讀取失敗：source-error ({exc})"
+        print(f"⚠ {LAST_POSITION_STORE_WARNING}")
+        return _unavailable_event_summary(LAST_POSITION_STORE_WARNING)
 
+    LAST_POSITION_STORE_WARNING = None
     summary = _empty_event_summary()
     first_before = {}
 

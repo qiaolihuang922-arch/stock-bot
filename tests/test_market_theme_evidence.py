@@ -186,7 +186,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         self.assertFalse(evidence["confirmed"])
         self.assertEqual(evidence["level"], "absent")
 
-    def test_runtime_watchlist_fallback_stays_weak_when_indexes_are_missing(self):
+    def test_runtime_watchlist_fallback_is_non_trading_diagnostic_when_db_evidence_missing(self):
         evidence = build_market_theme_evidence_provider(
             results_map={
                 "台積電": {
@@ -203,9 +203,13 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         )
 
         self.assertFalse(evidence["confirmed"])
-        self.assertEqual(evidence["level"], "weak")
-        self.assertTrue(evidence["runtime_fallback"])
-        self.assertTrue(evidence["runtime_supportive"])
+        self.assertEqual(evidence["level"], "absent")
+        self.assertFalse(evidence["runtime_fallback"])
+        self.assertFalse(evidence["runtime_supportive"])
+        self.assertEqual(
+            evidence["watchlist_breadth_diagnostic"]["level"],
+            "supportive",
+        )
         self.assertIn("缺 DB evidence table/cache", evidence["missing_source_reasons"])
         self.assertIn("缺 market_index", evidence["missing_source_reasons"])
         self.assertIn("缺 sector_index", evidence["missing_source_reasons"])
@@ -214,10 +218,11 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         self.assertEqual(
             lines,
             [
-                "市場證據：weak/runtime",
-                "內部觀察池廣度偏強；缺大盤指數 evidence，未確認。",
-                "題材證據：weak/runtime",
-                "觀察池同題材訊號偏支持；缺族群指數 evidence，未確認。",
+                "市場證據：absent/missing-source",
+                "缺 market_index 與 DB evidence table/cache；本輪不確認市場證據。",
+                "題材證據：absent/missing-source",
+                "缺 sector_index 與可用觀察池題材廣度；本輪不確認題材證據。",
+                "非交易診斷：watchlist breadth fallback 已停用於決策",
             ],
         )
 
@@ -298,16 +303,15 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         )
 
         summary = messages[-1]
-        self.assertIn("【05/28 盤中｜v20.3.0】", summary)
-        self.assertIn("市場證據：weak/runtime", summary)
-        self.assertIn("內部觀察池廣度偏強；缺大盤指數 evidence，未確認。", summary)
-        self.assertIn("題材證據：weak/runtime", summary)
-        self.assertIn("觀察池同題材訊號偏支持；缺族群指數 evidence，未確認。", summary)
+        self.assertIn("【05/28 盤中｜v20.3.1】", summary)
+        self.assertIn("市場證據：absent/missing-source", summary)
+        self.assertIn("非交易診斷：watchlist breadth fallback 已停用於決策", summary)
+        self.assertIn("題材證據：absent/missing-source", summary)
         self.assertIn("🧭 主線：市場偏多但買點未成立。", summary)
         self.assertNotIn("confirmed", summary)
         self.assertNotIn("AI/電子供應鏈偏多", summary)
         self.assertNotIn("今日可買：台積電", summary)
-        self.assertLess(summary.index("🧭 新倉：無有效進場。"), summary.index("市場證據：weak/runtime"))
+        self.assertLess(summary.index("🧭 新倉：無有效進場。"), summary.index("市場證據：absent/missing-source"))
 
     def test_confirmed_theme_without_stock_entry_stays_track_only(self):
         payload = render_payload(

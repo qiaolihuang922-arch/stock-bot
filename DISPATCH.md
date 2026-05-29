@@ -4,53 +4,50 @@
 
 ## Current Task
 
-- task_id: `runtime-market-breadth-evidence-fallback-v20.3.0`
-- task_name: `Runtime Market Breadth Evidence Fallback`
-- task_type: `normal_patch`
-- version_level: `minor`
-- qa_level: `L2`
+- task_id: `data-authenticity-hardening-fail-closed-v20.3.1`
+- task_name: `Data Authenticity Fail Closed`
+- task_type: `risk_patch`
+- version_level: `patch`
+- qa_level: `L3-lite`
 - owner_status: `requested`
-- architect_status: `pushed`
+- architect_status: `committed`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
 - qa_status: `qa_passed`
-- commit: `a627c12`
+- commit: `see git log -1`
 
 ## Current Result
 
-- Owner 要求報文確認後繼續證據鏈；本輪做 runtime market breadth evidence fallback，不建表、不 live write、不 backfill。
-- 本輪只讓 production 無 evidence table/cache 時能用當次 runtime results_map 產生 weak/runtime 或 missing-source evidence；不改交易策略、不改 DB schema、不改 watchlist、不 live。
+- Owner 要求：DB 已有資料後，策略 / 報文 / 證據鏈 / 行情 / 持倉 / 回測 / DB runtime 拒絕一切假資料；缺真實來源時 fail closed，不補 fake/default/synthetic。
+- 本輪修復三個 runtime 可達高風險點，不改策略、不改 DB schema、不改 watchlist、不 live write/backfill/Telegram：
+  - positions 缺設定 / DB error / 0 rows 不再回全 watchlist 0 股 fallback，改 `{}` + warning。
+  - position_events missing-source / source-error 不再回全 0 event summary；只有 DB query 成功且空資料才代表真實無事件。
+  - watchlist breadth runtime fallback 不再稱市場證據、不再 weak/runtime、不進 sources、不 confirmed；只保留非交易診斷。
 - CAO 服務已確認：
   - API: `http://127.0.0.1:9889/`
   - UI: `http://127.0.0.1:5173/`
-- PM 已交付 `TASK.md`，定義：
-  - 無 DB evidence table/cache 時，可用 runtime watchlist breadth 作為弱證據 fallback。
-  - 缺 market_index / sector_index 時不得 confirmed。
-  - evidence 不能改 BUY / SELL / RR / 過熱 / 漲停不追 / 可準備分類，也不能新增進場建議。
-  - Telegram 文案必須清楚標示內部觀察池偏強但缺大盤 / 族群指數 evidence，未確認。
-- Tech 已交付候選 diff：
-  - `core/generator.py` VERSION 升為 `v20.3.0`。
-  - `core/market_theme_evidence.py` 可在缺 DB/cache 時用 runtime results_map 生成 watchlist breadth fallback evidence。
-  - 新增 `runtime_fallback`、`runtime_supportive`、`missing_source_reasons` 欄位。
-  - Telegram evidence 區塊新增 `市場證據：weak/runtime`、`題材證據：weak/runtime` 與 `absent/missing-source` 缺來源說明。
-  - `core/generator.py` 的 dict evidence 與非 dict market_summary 路徑都同步傳入 missing DB/cache 條件。
-- QA 最終驗證通過：
-  - 無 DB/cache + runtime supportive 顯示 weak/runtime。
-  - runtime 不足顯示 absent/missing-source 並列缺來源。
-  - 缺 market/sector index 不出現 confirmed。
-  - fallback 不改原始交易 decision，不產生買入 / 加碼 / 可買暗示。
+- PM 已交付 `TASK.md`，定義 source-of-truth / fail-closed 契約與 position_events 殘留契約。
+- Tech / Architect 吸收 diff：
+  - `core/generator.py` VERSION 升為 `v20.3.1`；持倉或今日交易事件來源 warning 存在時，直接輸出最小不可行動 summary。
+  - `services/position_store.py` 移除 0 股 fallback；position_events source-error/missing-source 回 unavailable metadata。
+  - `core/market_theme_evidence.py` 將 runtime breadth fallback 改為 non-trading diagnostic。
+  - 新增 `tests/test_position_store.py`，並同步 generator / evidence / notifier 測試。
+- QA / Architect 驗證通過：
+  - positions missing-source / source-error / empty table fail closed。
+  - position_events source-error 不產生 fake 今日無交易；DB query 成功空資料仍是真實 0 event。
+  - DB evidence/cache missing 時 watchlist breadth 不 confirmed、不 weak/runtime，只顯示 absent/missing-source + 非交易診斷。
   - forbidden diff 檢查確認無 DB schema、migration、Supabase write、watchlist、live/backfill diff。
-  - 主 repo 驗證：`120 passed, 21 warnings`；`git diff --check` 通過。
+  - 主 repo 驗證：`162 passed, 13 warnings`；`git diff --check` 通過。
 - Post-cycle review：
-  - 根因分類：`repeated_pattern` / production 無 evidence table 時缺 runtime fallback 與缺來源說明。
-  - 已沉澱成 fixture：runtime supportive but missing indexes、missing breadth、existing source 不誤標缺 DB/cache、decision 不變。
-  - Runner gap 重複：auto cycle 對 QA `通過` 再次 false fail，已提升為 `CLEANUP_PLAN.md` 待補。
-  - 不新增 `AGENTS.md` 硬規則，因既有 DB/live 禁令與 evidence 不放寬買點規則已覆蓋。
+  - 根因分類：`high_risk_invariant` / DB 已有資料後 runtime fallback 不可再偽裝事實。
+  - QA 攔截有效：untracked new test 與 position_events fake 0 event 殘留都已收口。
+  - Runner gap：auto cycle QA parser false fail 重複；第二次 Tech runner 因 dirty worktree fail，已記入 `CLEANUP_PLAN.md`。
+  - 不新增 `AGENTS.md` 硬規則，既有 source-of-truth / fail-closed / DB live 禁令已足夠；本輪沉澱為 TASK/CHANGELOG/QA fixture 與 runner 待補。
 
 ## Next Action
 
-- 已 push；執行 tech worktree cleanup 後等待 Owner 下一個需求。
-- 下一步若要 market_index / sector_index、DB cache/table、external provider 或持久化 evidence，先通知 Owner。
+- 待 push；成功後執行 tech worktree cleanup。
+- 下一步可回到證據鏈 production 化；若要 market_index / sector_index、DB cache/table、external provider 或持久化 evidence，先通知 Owner。
 
 ## Status Values
 

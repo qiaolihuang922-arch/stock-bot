@@ -80,6 +80,13 @@
   - QA 反證有效：existing structured evidence source 存在時不誤標缺 DB/cache；fallback 不改 results_map 原 decision；手機文案不含買入暗示。
   - Runner gap 重複：auto cycle 再次對 QA `通過` false fail，需提高優先級檢查 QA conclusion parser。
   - 下一步證據鏈若要 market_index / sector_index、DB cache/table、external provider 或持久化 evidence，必須先通知 Owner 並另開任務。
+- 本輪 `v20.3.1` Data Authenticity Fail-closed：
+  - 根因分類：`high_risk_invariant` / DB 已有資料後，runtime fallback 不可再偽裝為事實來源。
+  - 已修正：positions 缺來源不回 0 股 fallback；position_events source-error 不回全 0 event；runtime breadth fallback 降為非交易診斷。
+  - QA 攔截有效：指出 `tests/test_position_store.py` 是 intended untracked test，Architect 已明確納入；Architect post-review 另抓到 position_events fake 0 event 殘留並補測。
+  - Runner gap：第二次 auto 補殘留時，Tech runner 因 dirty tech worktree fail；後續需讓 auto cycle 在既有候選 diff 未吸收前禁止啟動新 Tech，或支援以當前主 repo dirty candidate 建安全續跑。
+  - Runner gap 重複：QA conclusion parser 對 `通過` / `conditional pass` 周邊文字仍會 false fail，需修 parser 只讀 `## QA 結論` 後第一個有效結論詞。
+  - 暫不新增 `AGENTS.md` 硬規則，因既有 source-of-truth、fail-closed、DB/live 禁令已覆蓋；本輪沉澱為 fixture 與 runner 待補。
 - 下一次產品任務完成後，確認 Post-cycle Review Gate 是否有做到：
   - 根因分類。
   - QA 攔截是否沉澱成 guard。

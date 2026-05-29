@@ -155,7 +155,7 @@ def _source_supports_confirmed(source):
     return _source_level(source) in SUPPORTIVE_LEVELS
 
 
-def _build_watchlist_breadth_source(results_map, as_of=None):
+def _build_watchlist_breadth_diagnostic(results_map, as_of=None):
     if not results_map:
         return None
 
@@ -190,9 +190,9 @@ def _build_watchlist_breadth_source(results_map, as_of=None):
         "freshness": "fresh",
         "freshness_reason": "same_trade_date",
         "level": level,
-        "runtime_fallback": True,
+        "runtime_diagnostic": True,
         "supports_claims": [f"watchlist supportive {supportive}/{tracked}"],
-        "limitations": ["只佐證題材背景，不改變個股買點"],
+        "limitations": ["非交易診斷，不可計入市場證據或 confirmed"],
     }
 
 
@@ -240,13 +240,11 @@ def build_market_theme_evidence(
         })
         report_theme = report_theme or formatter_theme
 
-    generated_watchlist_source = (
-        _build_watchlist_breadth_source(results_map, as_of=as_of)
+    watchlist_breadth_diagnostic = (
+        _build_watchlist_breadth_diagnostic(results_map, as_of=as_of)
         if missing_db_evidence
         else None
     )
-    if generated_watchlist_source:
-        raw_sources.append(generated_watchlist_source)
 
     structured_candidates = [
         (market_state, "market_state"),
@@ -350,7 +348,7 @@ def build_market_theme_evidence(
     missing_source_reasons = []
     if missing_db_evidence:
         missing_source_reasons.append("缺 DB evidence table/cache")
-    if not has_runtime_watchlist:
+    if not has_runtime_watchlist and not watchlist_breadth_diagnostic:
         missing_source_reasons.append("缺 runtime watchlist breadth")
     if not has_any_market_index:
         missing_source_reasons.append("缺 market_index")
@@ -369,6 +367,8 @@ def build_market_theme_evidence(
     )
     if confirmed:
         theme_status = "confirmed"
+    elif missing_db_evidence and not valid_structured_by_type:
+        theme_status = "absent"
     elif stale_required:
         theme_status = "stale"
     elif supportive_count and conflicting_count:
@@ -407,6 +407,7 @@ def build_market_theme_evidence(
         "source_family_count_for_confirmed": len(valid_families),
         "runtime_fallback": has_runtime_watchlist,
         "runtime_supportive": has_runtime_supportive_watchlist,
+        "watchlist_breadth_diagnostic": watchlist_breadth_diagnostic,
         "missing_source_reasons": missing_source_reasons,
         "supports_claims": [
             claim
@@ -456,6 +457,9 @@ def build_market_theme_evidence_provider(
 def format_market_theme_summary_lines(evidence):
     if not evidence or evidence.get("theme_status") == "absent":
         missing = evidence.get("missing_source_reasons") if isinstance(evidence, dict) else []
+        has_watchlist_diagnostic = bool(
+            evidence.get("watchlist_breadth_diagnostic")
+        ) if isinstance(evidence, dict) else False
         market_missing = "缺 runtime watchlist breadth，且無 DB evidence table/cache"
         theme_missing = "缺 sector_index 與可用觀察池題材廣度"
         if missing:
@@ -467,28 +471,18 @@ def format_market_theme_summary_lines(evidence):
                 market_missing = "缺 runtime watchlist breadth，且無 DB evidence table/cache"
             if "缺 sector_index" in missing and "缺 runtime watchlist breadth" in missing:
                 theme_missing = "缺 sector_index 與可用觀察池題材廣度"
-        return [
+        lines = [
             "市場證據：absent/missing-source",
             f"{market_missing}；本輪不確認市場證據。",
             "題材證據：absent/missing-source",
             f"{theme_missing}；本輪不確認題材證據。",
         ]
+        if has_watchlist_diagnostic:
+            lines.append("非交易診斷：watchlist breadth fallback 已停用於決策")
+        return lines
 
     theme_label = evidence.get("theme_label") or "未命名主題"
     level = evidence.get("level") or evidence.get("theme_status")
-    missing = evidence.get("missing_source_reasons") or []
-    if (
-        evidence.get("runtime_supportive")
-        and not evidence.get("confirmed")
-        and ("缺 market_index" in missing or "缺 sector_index" in missing)
-    ):
-        return [
-            "市場證據：weak/runtime",
-            "內部觀察池廣度偏強；缺大盤指數 evidence，未確認。",
-            "題材證據：weak/runtime",
-            "觀察池同題材訊號偏支持；缺族群指數 evidence，未確認。",
-        ]
-
     lines = [f"市場 / 題材證據：{level}"]
     if evidence.get("confirmed"):
         lines.append("限制：題材可追蹤，不代表可買")
