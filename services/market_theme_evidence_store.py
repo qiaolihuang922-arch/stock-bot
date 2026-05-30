@@ -3,6 +3,27 @@ import os
 
 
 TABLE_NAME = "market_theme_confirmed_evidence"
+TARGET_TABLE = f"public.{TABLE_NAME}"
+UPSERT_CONFLICT_TARGET = (
+    "trade_date,market_index,sector_theme_key,source_family,source_name,as_of"
+)
+WRITE_ENV_NAMES = ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY")
+WRITE_COLUMNS = (
+    "trade_date",
+    "as_of",
+    "market_index",
+    "sector_theme_key",
+    "source_family",
+    "source_name",
+    "freshness",
+    "evidence_value",
+    "watchlist_breadth",
+    "support_level",
+    "evidence_status",
+    "lineage",
+    "metadata",
+    "notes",
+)
 SELECT_FIELDS = (
     "market_index,sector_theme_key,trade_date,as_of,freshness,"
     "evidence_status,support_level,evidence_value,watchlist_breadth,"
@@ -89,7 +110,7 @@ def _empty_handoff(status, reason):
         "handoff_ready": False,
         "reason": reason,
         "live_write": False,
-        "target_table": f"public.{TABLE_NAME}",
+        "target_table": TARGET_TABLE,
         "rows": [],
         "sql": "",
     }
@@ -141,6 +162,108 @@ def _normalize_handoff_row(payload):
         "notes": payload.get("notes"),
     }
     return row
+
+
+def _safe_text(value):
+    return "" if value is None else str(value)
+
+
+def _default_as_of(trade_date):
+    return f"{trade_date}T00:00:00+08:00" if trade_date else ""
+
+
+def _approval_payload_source_families(payload):
+    families = []
+    if isinstance(payload, dict) and payload.get("source_family"):
+        families.append(payload.get("source_family"))
+    for row in payload.get("rows", []) if isinstance(payload, dict) else []:
+        if isinstance(row, dict) and row.get("source_family"):
+            families.append(row.get("source_family"))
+    return families
+
+
+def _approval_source_guard_reason(payload):
+    families = _approval_payload_source_families(payload)
+    if not families:
+        return "missing source_family"
+    for family in families:
+        normalized = _safe_text(family).strip().lower()
+        if _source_family_forbidden(normalized):
+            return "forbidden source_family"
+        if normalized not in HANDOFF_ALLOWED_SOURCE_FAMILIES:
+            return "source_family is not an approved persistent source"
+    return None
+
+
+def normalize_market_theme_approved_payload(payload):
+    """Map an Owner-approved payload into existing table-contract rows."""
+    if isinstance(payload, list):
+        return payload, None
+    if not isinstance(payload, dict):
+        return [], "payload must be an object"
+    if isinstance(payload.get("payloads"), list):
+        return payload["payloads"], None
+
+    guard_reason = _approval_source_guard_reason(payload)
+    if guard_reason:
+        return [], guard_reason
+
+    rows = payload.get("rows")
+    if not isinstance(rows, list) or not rows:
+        return [], "rows must be a non-empty array"
+
+    trade_date = payload.get("trade_date")
+    source_family = _safe_text(payload.get("source_family")).strip().lower()
+    source_name = payload.get("source_name") or "owner_approved_market_theme_review"
+    freshness = _safe_text(payload.get("freshness")).strip().lower()
+    evidence_status = _safe_text(payload.get("evidence_status")).strip().lower()
+
+    normalized = []
+    for index, row in enumerate(rows, start=1):
+        if not isinstance(row, dict):
+            return [], f"rows[{index}] must be an object"
+        row_source_family = _safe_text(row.get("source_family") or source_family).strip().lower()
+        row_source_name = row.get("source_name") or source_name
+        theme = row.get("theme") or row.get("sector_theme_key") or payload.get("sector_theme_key")
+        evidence_url = row.get("evidence_url")
+        reason = row.get("reason")
+        symbol = row.get("symbol")
+        normalized.append(
+            {
+                "market_index": payload.get("market_index") or row.get("market_index") or "TAIEX",
+                "sector_theme_key": theme,
+                "trade_date": trade_date,
+                "as_of": payload.get("as_of") or row.get("as_of") or _default_as_of(trade_date),
+                "freshness": freshness,
+                "evidence_status": evidence_status,
+                "support_level": _safe_text(row.get("support_level")).strip().lower(),
+                "evidence_value": row.get("evidence_value")
+                or {
+                    "symbol": symbol,
+                    "theme": theme,
+                    "evidence_url": evidence_url,
+                    "reason": reason,
+                },
+                "watchlist_breadth": row.get("watchlist_breadth") or payload.get("watchlist_breadth") or {},
+                "source_family": row_source_family,
+                "source_name": row_source_name,
+                "lineage": row.get("lineage")
+                or payload.get("lineage")
+                or {
+                    "source": row_source_name,
+                    "approval_package": True,
+                    "row_index": index,
+                },
+                "metadata": row.get("metadata")
+                or payload.get("metadata")
+                or {
+                    "manual_approval_required": True,
+                    "write_interface": "scripts/write_market_theme_confirmed_evidence.py",
+                },
+                "notes": row.get("notes") or reason or "Owner-approved persistent evidence package row",
+            }
+        )
+    return normalized, None
 
 
 def _validate_handoff_row(row):
@@ -257,7 +380,7 @@ def build_market_theme_evidence_handoff(payloads):
         "handoff_ready": True,
         "reason": "manual SQL handoff generated; no live write performed",
         "live_write": False,
-        "target_table": f"public.{TABLE_NAME}",
+        "target_table": TARGET_TABLE,
         "rows": rows,
         "sql": render_market_theme_evidence_handoff_sql(rows),
     }
@@ -280,6 +403,72 @@ def validate_market_theme_evidence_ingestion_payload(payloads, include_sql=False
     if valid and include_sql:
         result["manual_sql"] = handoff["sql"]
     return result
+
+
+def build_market_theme_confirmed_evidence_write_plan(payload):
+    rows, normalize_reason = normalize_market_theme_approved_payload(payload)
+    validation = validate_market_theme_evidence_ingestion_payload(rows)
+    if normalize_reason:
+        validation = {
+            "valid": False,
+            "status": "insufficient-data",
+            "reason": normalize_reason,
+            "may_render_manual_sql": False,
+            "live_write": False,
+            "target_table": TARGET_TABLE,
+            "row_count": 0,
+            "rows": [],
+            "sql_rendered": False,
+        }
+
+    passed = bool(validation["valid"])
+    upsert_rows = [
+        {column: row.get(column) for column in WRITE_COLUMNS}
+        for row in validation.get("rows", [])
+    ] if passed else []
+    return {
+        "target_table": TARGET_TABLE,
+        "table": TABLE_NAME,
+        "upsert_conflict_target": UPSERT_CONFLICT_TARGET,
+        "payload_validation": {
+            "status": "passed" if passed else "failed",
+            "reason": "" if passed else validation.get("reason", "payload validation failed"),
+        },
+        "rows_to_upsert": len(upsert_rows),
+        "upsert_rows": upsert_rows,
+    }
+
+
+def validate_market_theme_write_env(env=None):
+    source = env if env is not None else os.environ
+    missing = [name for name in WRITE_ENV_NAMES if not source.get(name)]
+    return {
+        "status": "passed" if not missing else "failed",
+        "required": list(WRITE_ENV_NAMES),
+        "missing": missing,
+    }
+
+
+def build_market_theme_write_client(env=None):
+    env_status = validate_market_theme_write_env(env)
+    if env_status["status"] != "passed":
+        return None
+    source = env if env is not None else os.environ
+    from supabase import create_client
+
+    return create_client(source["SUPABASE_URL"], source["SUPABASE_SERVICE_ROLE_KEY"])
+
+
+def upsert_market_theme_confirmed_evidence(rows, client):
+    if not rows:
+        raise ValueError("rows are required")
+    if client is None:
+        raise ValueError("client is required")
+    return (
+        client.table(TABLE_NAME)
+        .upsert(rows, on_conflict=UPSERT_CONFLICT_TARGET)
+        .execute()
+    )
 
 
 def build_market_theme_evidence_readonly_smoke(load_result):

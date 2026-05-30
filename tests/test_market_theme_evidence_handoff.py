@@ -12,6 +12,7 @@ from services.market_theme_evidence_store import (
     validate_market_theme_evidence_ingestion_payload,
 )
 from scripts.generate_evidence_approval_package import build_approval_package
+from scripts.write_market_theme_confirmed_evidence import main as write_evidence_main
 
 
 def handoff_payload(**overrides):
@@ -81,6 +82,33 @@ class EvidenceClient:
         return self.table_obj
 
 
+class WriteTable:
+    def __init__(self, client, name):
+        self.client = client
+        self.name = name
+
+    def upsert(self, rows, on_conflict=None):
+        self.client.calls.append(
+            {
+                "table": self.name,
+                "rows": rows,
+                "on_conflict": on_conflict,
+            }
+        )
+        return self
+
+    def execute(self):
+        return type("Result", (), {"data": self.client.calls[-1]["rows"]})()
+
+
+class WriteClient:
+    def __init__(self):
+        self.calls = []
+
+    def table(self, name):
+        return WriteTable(self, name)
+
+
 class MarketThemeEvidenceHandoffTest(unittest.TestCase):
     def test_owner_template_and_samples_document_source_boundaries(self):
         root = Path(__file__).resolve().parents[1]
@@ -100,13 +128,15 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
         self.assertIn("runtime", template["_forbidden_source_family"])
         self.assertIn("fixture", template["_forbidden_source_family"])
         self.assertIn("not production confirmed", template["_production_status"])
-        self.assertIn("does not execute SQL", template["_script_boundary"])
+        self.assertIn("defaults to dry-run", template["_script_boundary"])
+        self.assertIn("explicit --execute", template["_script_boundary"])
 
         self.assertEqual(sample["source_family"], "owner_approved_persistent")
         self.assertEqual(sample["evidence_status"], "confirmed")
         self.assertEqual(sample["freshness"], "fresh")
         self.assertEqual(sample["rows"][0]["support_level"], "supporting")
         self.assertIn("sample-only", sample["_production_status"])
+        self.assertIn("defaults to dry-run", sample["_script_boundary"])
 
         self.assertEqual(forbidden["source_family"], "runtime")
         self.assertEqual(forbidden["rows"], [])
@@ -411,6 +441,130 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
         self.assertIn("review-only", text)
         self.assertIn("does not execute SQL", text)
         self.assertIn("source_family=runtime", text)
+
+    def test_write_cli_allowed_sample_dry_run_outputs_upsert_preview_without_write(self):
+        root = Path(__file__).resolve().parents[1]
+        sample_path = root / "docs/examples/market_theme_owner_approved_payload.sample.json"
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "scripts/write_market_theme_confirmed_evidence.py",
+                "--payload",
+                str(sample_path),
+            ],
+            cwd=root,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(completed.returncode, 0)
+        output = json.loads(completed.stdout)
+        self.assertEqual(output["mode"], "dry-run")
+        self.assertEqual(output["target_table"], "public.market_theme_confirmed_evidence")
+        self.assertEqual(output["write_execution"], "disabled")
+        self.assertEqual(output["payload_validation"]["status"], "passed")
+        self.assertEqual(output["rows_to_upsert"], 1)
+        self.assertEqual(
+            output["upsert_conflict_target"],
+            "trade_date,market_index,sector_theme_key,source_family,source_name,as_of",
+        )
+        self.assertEqual(output["upsert_preview"][0]["source_family"], "owner_approved_persistent")
+        self.assertIsNone(output["execute_payload"])
+
+    def test_write_cli_forbidden_source_fails_closed_without_execute_payload(self):
+        root = Path(__file__).resolve().parents[1]
+        forbidden_path = root / "docs/examples/market_theme_forbidden_runtime_payload.sample.json"
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "scripts/write_market_theme_confirmed_evidence.py",
+                "--payload",
+                str(forbidden_path),
+            ],
+            cwd=root,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(completed.returncode, 2)
+        output = json.loads(completed.stdout)
+        self.assertEqual(output["mode"], "dry-run")
+        self.assertEqual(output["write_execution"], "disabled")
+        self.assertEqual(output["payload_validation"]["status"], "failed")
+        self.assertEqual(output["payload_validation"]["reason"], "forbidden source_family")
+        self.assertEqual(output["rows_to_upsert"], 0)
+        self.assertEqual(output["upsert_preview"], [])
+        self.assertIsNone(output["execute_payload"])
+
+    def test_write_cli_execute_fails_closed_when_write_env_missing(self):
+        root = Path(__file__).resolve().parents[1]
+        sample_path = root / "docs/examples/market_theme_owner_approved_payload.sample.json"
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "scripts/write_market_theme_confirmed_evidence.py",
+                "--payload",
+                str(sample_path),
+                "--execute",
+            ],
+            cwd=root,
+            text=True,
+            capture_output=True,
+            check=False,
+            env={},
+        )
+
+        self.assertEqual(completed.returncode, 2)
+        output = json.loads(completed.stdout)
+        self.assertEqual(output["mode"], "execute")
+        self.assertEqual(output["write_execution"], "blocked")
+        self.assertEqual(output["payload_validation"]["status"], "passed")
+        self.assertEqual(output["env_validation"]["status"], "failed")
+        self.assertEqual(
+            output["env_validation"]["missing"],
+            ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"],
+        )
+        self.assertEqual(output["rows_written"], 0)
+
+    def test_write_cli_execute_uses_fake_client_upsert_payload(self):
+        root = Path(__file__).resolve().parents[1]
+        sample_path = root / "docs/examples/market_theme_owner_approved_payload.sample.json"
+        client = WriteClient()
+
+        with tempfile.TemporaryFile(mode="w+", encoding="utf-8") as stdout:
+            old_stdout = sys.stdout
+            try:
+                sys.stdout = stdout
+                returncode = write_evidence_main(
+                    ["--payload", str(sample_path), "--execute"],
+                    client=client,
+                    env={
+                        "SUPABASE_URL": "https://example.supabase.co",
+                        "SUPABASE_SERVICE_ROLE_KEY": "fake-key-for-unit-test",
+                    },
+                )
+            finally:
+                sys.stdout = old_stdout
+            stdout.seek(0)
+            output = json.loads(stdout.read())
+
+        self.assertEqual(returncode, 0)
+        self.assertEqual(output["write_execution"], "executed")
+        self.assertEqual(output["rows_written"], 1)
+        self.assertEqual(len(client.calls), 1)
+        self.assertEqual(client.calls[0]["table"], "market_theme_confirmed_evidence")
+        self.assertEqual(
+            client.calls[0]["on_conflict"],
+            "trade_date,market_index,sector_theme_key,source_family,source_name,as_of",
+        )
+        row = client.calls[0]["rows"][0]
+        self.assertEqual(row["source_family"], "owner_approved_persistent")
+        self.assertEqual(row["source_name"], "owner_approved_market_theme_review_sample")
+        self.assertIn("evidence_value", row)
+        self.assertNotIn("id", row)
+        self.assertNotIn("created_at", row)
 
     def test_readonly_smoke_cli_prints_schema_decision_and_fails_closed_without_env(self):
         completed = subprocess.run(

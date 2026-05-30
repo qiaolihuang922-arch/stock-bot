@@ -33,6 +33,15 @@
 
 ## Recent High-Signal Milestones
 
+- Market Theme Confirmed Evidence Repo-side Write CLI 已通過 QA conditional pass，條件已由 Architect 吸收滿足，待 commit / push：
+  - Owner 最新規則：非 schema 的 evidence rows 新增 / 回寫 / backfill 不再找 Owner 手動跑 SQL，應走既有接口 / repo script / approved service API。
+  - 新增 `scripts/write_market_theme_confirmed_evidence.py`：預設 dry-run / validate，不寫 DB；`--execute` 才走 Supabase upsert。
+  - `--execute` 需 payload validation passed、source family allowed、`SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` 存在；缺 env、forbidden source、missing source、mixed source 全部 fail closed。
+  - `services/market_theme_evidence_store.py` 新增 write plan、write env validation、client builder、upsert helper；未改 read-only loader confirmed 判斷。
+  - Upsert target 固定為 `public.market_theme_confirmed_evidence`，conflict target 固定為 `trade_date,market_index,sector_theme_key,source_family,source_name,as_of`，write payload 只包含既有 table contract 欄位。
+  - QA conditional pass 條件：untracked `scripts/write_market_theme_confirmed_evidence.py` 必須納入 repo；Architect 已納入。
+  - 驗證：`tests/test_market_theme_evidence_handoff.py tests/test_market_theme_evidence.py`，`43 passed, 17 warnings`；allowed dry-run exit 0 / rows_to_upsert=1；forbidden runtime exit 2；`--execute` 缺 env exit 2 / rows_written=0；`py_compile` 與 `git diff --check` 通過。
+  - 本輪沒有 production live write、formal backfill、DB schema / table / column 變更、RLS / grant / policy / role、live Telegram、策略 decision 或 Telegram `VERSION` 變更。
 - Market Theme Approved Payload Template And Dry-run Sample 已通過 QA conditional pass，條件已由 Architect 吸收滿足，待 commit / push：
   - Owner 要求開始 evidence chain 下一步：建立第一份 market/theme approved payload 模板與可執行 dry-run 樣本。
   - 新增 `docs/examples/market_theme_owner_approved_payload.template.json`：Owner-facing 填寫模板，列出 required fields、allowed / forbidden source family、manual approval required、not executed by generator。

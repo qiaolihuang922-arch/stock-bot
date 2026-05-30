@@ -46,6 +46,13 @@
 
 ## Pending / Watchlist
 
+- 本輪 Market Theme Confirmed Evidence Repo-side Write CLI：
+  - 根因分類：`write_interface_gap` + `approval_boundary_overbroad` + `runner_parser_false_fail`。
+  - 已完成：repo-side write CLI，預設 dry-run；`--execute` 需 allowed payload 與 Supabase write env，走 upsert helper，不產普通 DML 給 Owner。
+  - QA 有效攔截：`scripts/write_market_theme_confirmed_evidence.py` 是 untracked 但必要 deliverable；若只吸收 tracked diff，CLI contract 與測試都不成立。Architect 已納入。
+  - 邊界保持：未改 schema / table / column / RLS / grant / policy / role；未 production live write；缺 env、forbidden/missing/mixed source fail closed。
+  - Runner gap 重複：auto cycle 對 QA `conditional pass` 仍誤判 failed；需修 QA conclusion parser 只讀 `## QA 結論` 後第一個有效結論詞，並正確處理 conditional pass。
+  - 不新增 `AGENTS.md` 硬規則：Owner 最新資料寫入邊界已在上一輪補入；本輪沉澱為 write CLI、tests、handoff docs 與 runner 待補。
 - Owner 最新資料寫入邊界：
   - 根因分類：`approval_boundary_overbroad`。先前流程把非 schema 的資料新增 / 回寫 / backfill 也視為需要 Owner 手動批准，造成下一步容易被人工 SQL 卡住。
   - 已更新硬規則：只有新增表、擴字段、schema / RLS / grant / policy / role 變更需要先找 Owner。

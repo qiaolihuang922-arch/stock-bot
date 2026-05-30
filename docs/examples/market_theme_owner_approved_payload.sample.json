@@ -1,7 +1,7 @@
 {
   "_artifact_type": "dry-run sample payload",
   "_production_status": "sample-only; not production confirmed; not inserted; not GitHub runner source-of-truth",
-  "_script_boundary": "dry-run may generate review-only SQL; script does not execute SQL",
+  "_script_boundary": "approval package generator creates review-only artifacts; write CLI defaults to dry-run and writes only with explicit --execute plus Supabase write env",
   "trade_date": "2026-05-29",
   "source_family": "owner_approved_persistent",
   "source_name": "owner_approved_market_theme_review_sample",

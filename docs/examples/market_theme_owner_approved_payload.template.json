@@ -1,7 +1,7 @@
 {
   "_artifact_type": "owner-facing market/theme evidence payload template",
   "_production_status": "template-only; not production confirmed; not inserted; not GitHub runner source-of-truth",
-  "_script_boundary": "scripts/generate_evidence_approval_package.py creates review artifacts only and does not execute SQL",
+  "_script_boundary": "scripts/generate_evidence_approval_package.py creates review artifacts only; scripts/write_market_theme_confirmed_evidence.py defaults to dry-run and writes only with explicit --execute plus Supabase write env",
   "_required_fields": [
     "trade_date",
     "source_family",
@@ -35,7 +35,7 @@
   "_manual_approval_required": [
     "Owner replaces placeholder values with approved persistent evidence",
     "Owner reviews generated JSON, Markdown, and review-only SQL",
-    "Owner separately approves any SQL execution outside the generator",
+    "Operator uses repo-side write CLI or approved service API for non-schema evidence row writes",
     "Owner runs read-only verification after any manual SQL execution"
   ],
   "_not_executed_by_generator": [

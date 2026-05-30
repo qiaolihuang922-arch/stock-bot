@@ -4,46 +4,46 @@
 
 ## Current Task
 
-- task_id: `evidence_chain_approval_payload_template_20260530`
-- task_name: `Market Theme Approved Payload Template And Dry-run Sample`
+- task_id: `evidence_chain_write_interface_20260530`
+- task_name: `Market Theme Confirmed Evidence Repo-side Write CLI`
 - task_type: `risk_patch`
 - version_level: `none`
 - qa_level: `L2+`
 - owner_status: `requested`
-- architect_status: `pushed`
+- architect_status: `qa_conditional_pass_absorbed_pending_commit`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
 - qa_status: `conditional_pass`
-- commit: `80ae97d pushed`
+- commit: `pending`
 
 ## Current Result
 
-- Owner 要求開始下一步：建立第一份 market/theme approved payload 模板與可執行 dry-run 樣本，讓 Owner 能用 approval package generator 產生可審核 package。
-- 本輪完成 approved payload template / sample workflow：
-  - 新增 `docs/examples/market_theme_owner_approved_payload.template.json`：Owner-facing 填寫模板，列出 required fields、allowed / forbidden source family、manual approval boundary。
-  - 新增 `docs/examples/market_theme_owner_approved_payload.sample.json`：allowed `owner_approved_persistent` dry-run sample，可產 package JSON / Markdown / review-only SQL。
-  - 新增 `docs/examples/market_theme_forbidden_runtime_payload.sample.json`：negative runtime sample，必須 fail closed，不產 deterministic SQL。
-  - 更新 handoff docs，固定 sample dry-run 指令、forbidden dry-run 指令、輸出檔案與 no-live-write / review-only / not production confirmed 邊界。
-  - 補測試覆蓋 template/sample/docs 契約、allowed sample CLI、forbidden sample CLI、sample-as-production 誤讀防線。
-- 本輪沒有 live Supabase write、沒有正式 backfill、沒有 production RLS / grant 變更、沒有 live Telegram、沒有改策略 decision 或使用者可見 Telegram version。
+- Owner 最新規則：只有新增表 / 擴字段 / schema / RLS / grant / policy / role 變更才找 Owner；非 schema 的 evidence rows 新增 / 回寫 / backfill 應走既有接口 / repo script / approved service API，不再交普通 DML 給 Owner 手動跑。
+- 本輪完成 repo-side write CLI：
+  - 新增 `scripts/write_market_theme_confirmed_evidence.py`。
+  - 預設 dry-run / validate，不寫 DB；輸出 target table、validation status、row count、conflict target、sanitized preview。
+  - `--execute` 只有在 payload validation passed、source family allowed、`SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` 存在時才進入 upsert。
+  - 缺 env、forbidden source、missing source、mixed allowed+forbidden source 全部 fail closed。
+  - 更新 `services/market_theme_evidence_store.py`，新增 write plan、write env validation、client builder、upsert helper；未改 read-only loader confirmed 判斷。
+  - 更新 handoff docs 與 examples，說明非 schema evidence rows 走 repo script / approved API；schema/RLS/grant/table/column 才找 Owner。
+- 本輪沒有 production live write、沒有正式 backfill、沒有 DB schema / table / column 變更、沒有 RLS / grant / policy / role 變更、沒有 live Telegram、沒有改策略 decision 或 Telegram version。
 - QA conditional pass，條件已由 Architect 吸收滿足：
-  - QA 條件：三份 `docs/examples/*market_theme*` untracked deliverables 必須納入 repo；Architect 已納入。
-  - `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence_handoff.py tests/test_market_theme_evidence.py -q`：39 passed, 17 warnings。
-  - allowed sample dry-run exit 0，產出 `approval_package.json`、`approval_package.md`、`market_theme_confirmed_evidence_2026-05-29.sql`。
-  - forbidden runtime sample dry-run exit 2，`payload_validation.status=failed`、`deterministic_sql=None`，無 SQL file。
-  - `git diff --check` 通過；docs/examples / handoff docs / tests 無 secret / connection string pattern。
+  - QA 條件：untracked `scripts/write_market_theme_confirmed_evidence.py` 必須納入 repo；Architect 已納入。
+  - `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence_handoff.py tests/test_market_theme_evidence.py -q`：43 passed, 17 warnings。
+  - allowed sample dry-run exit 0，`write_execution=disabled`，`rows_to_upsert=1`。
+  - forbidden runtime sample dry-run exit 2，`payload_validation.status=failed`。
+  - `--execute` 缺 env exit 2，`write_execution=blocked`，列出 missing env names，`rows_written=0`。
+  - `py_compile`、`git diff --check` 通過。
 - Runner 狀態：CAO auto cycle 對 QA `conditional pass` 再次誤判 failed；Architect 按 QA 報告與主 repo 驗證手動吸收，未整包搬 worktree。
 - Post-cycle review：
-  - 根因分類：`owner_payload_contract_gap` + `sample_as_production_misread_risk` + `runner_parser_false_fail`。
-  - QA 有效攔截 untracked deliverables 風險；Architect 吸收時已納入三份 examples。
-  - 不新增 `AGENTS.md` 硬規則；既有 source-of-truth、fake confirmed、live write 禁令已覆蓋。本輪沉澱為 template/sample/docs/tests 與 runner 待補。
+  - 根因分類：`write_interface_gap` + `approval_boundary_overbroad` + `runner_parser_false_fail`。
+  - QA 有效攔截 untracked CLI 風險；Architect 吸收時已納入 write script。
+  - 不新增 `AGENTS.md` 硬規則；Owner 最新資料寫入邊界已在上一輪寫入。本輪沉澱為 write CLI、tests、handoff docs 與 runner 待補。
 
 ## Next Action
 
-- 本輪 diff 已 commit / push：`80ae97d docs: add evidence payload samples`。
-- Architect 清理 CAO worktree。
-- Owner 最新流程邊界：只有新增表、擴字段、schema / RLS / grant / policy / role 變更需要先找 Owner。非 schema 的資料新增 / 回寫 / backfill 直接走既有接口 / repo script / approved service API，不再要求 Owner 手動 SQL 或逐次批准。
-- 下一步若要真正進 production：用 template 替換真實 approved persistent evidence reference；若只是寫入 evidence rows，Tech 應走既有接口 / repo script 並由 QA 驗證 dry-run、寫入範圍與 read-only smoke。只有 schema/RLS/grant/table/column 或 live Telegram 才再找 Owner。
+- Architect 進行 commit / push，然後清理 CAO worktree。
+- 下一步若要真正寫入 production：準備真實 approved persistent payload，先跑 write CLI dry-run；若 env / permissions 具備，可用 `--execute` 走接口 upsert，再跑 read-only smoke。只有 schema/RLS/grant/table/column 或 live Telegram 才再找 Owner。
 
 ## Status Values
 

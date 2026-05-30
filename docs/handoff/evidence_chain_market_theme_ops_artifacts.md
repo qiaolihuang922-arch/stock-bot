@@ -9,6 +9,7 @@ It is not evidence that production ingestion is live.
 | item | repo artifact | live side effect | Owner approval needed | status |
 | --- | --- | --- | --- | --- |
 | ingestion payload validation | `scripts/validate_market_theme_evidence_ingestion.py` | none | no, for dry-run validation | ready |
+| repo-side evidence write CLI | `scripts/write_market_theme_confirmed_evidence.py` | none by default; write only with explicit `--execute` and write env | no for dry-run; operator approval for execute | ready |
 | approval package generator | `scripts/generate_evidence_approval_package.py` | none | yes, before any SQL execution outside the script | ready |
 | manual SQL template | `db/sql/evidence_chain_market_theme_ops_manual_template.sql` | none unless Owner manually executes approved sections | yes | ready |
 | read-only smoke | `scripts/smoke_market_theme_evidence_readonly.py` | read-only DB query only | yes, when using production env | ready |
@@ -32,6 +33,49 @@ Validation failures return `valid=false`, `may_render_manual_sql=false`,
 
 Runtime, local, cache, worktree, report-derived, synthetic, default, test, or
 fixture-derived sources must fail closed and must not produce confirmed rows.
+
+## Repo-side Evidence Write CLI
+
+Default dry-run / validate command:
+
+```bash
+python scripts/write_market_theme_confirmed_evidence.py \
+  --payload docs/examples/market_theme_owner_approved_payload.sample.json
+```
+
+The dry-run does not write Supabase. It prints
+`target_table=public.market_theme_confirmed_evidence`, validation status, row
+count, the conflict target
+`trade_date,market_index,sector_theme_key,source_family,source_name,as_of`, and
+a sanitized upsert preview. It does not print secrets and marks
+`write_execution=disabled`.
+
+Execute requires an explicit flag and write env:
+
+```bash
+export SUPABASE_URL="owner-provided-project-url"
+export SUPABASE_SERVICE_ROLE_KEY="owner-provided-write-key"
+python scripts/write_market_theme_confirmed_evidence.py \
+  --payload approved_payload.json \
+  --execute
+```
+
+`--execute` only proceeds after payload validation passes, source family is in
+the persistent allowlist, and both `SUPABASE_URL` and
+`SUPABASE_SERVICE_ROLE_KEY` are present. Missing env fails closed with
+`write_execution=blocked` and lists the missing env names only, not values.
+Forbidden, missing, or mixed source families fail closed and do not create an
+execute payload.
+
+Non-schema evidence row writes should use this repo script or an approved
+service API; they no longer require Owner to manually run ordinary DML. New
+tables, added columns, schema changes, RLS, grants, policies, or role changes
+still require Owner review before execution.
+
+The write CLI does not perform live Telegram delivery, does not change strategy
+decisions, and does not change the application `VERSION`. A successful dry-run
+or fake-client test is not evidence that production rows were written or that a
+GitHub fresh runner consumed the rows.
 
 ## Approval Package Generator
 
