@@ -200,6 +200,27 @@ def validate_signal_payloads(signal_rows, expected_stock_ids=None, expected_trad
     return validate_snapshots(snapshots, expected_stock_ids, expected_trade_dates)
 
 
+def available_coverage(signal_rows):
+    return {
+        "stock_ids": sorted({row["stock_id"] for row in signal_rows if row.get("stock_id")}),
+        "trade_dates": sorted({row["trade_date"] for row in signal_rows if row.get("trade_date")}),
+    }
+
+
+def partial_coverage_warnings(signal_rows, requested_stock_ids, requested_trade_dates):
+    coverage = available_coverage(signal_rows)
+    available_stocks = set(coverage["stock_ids"])
+    available_dates = set(coverage["trade_dates"])
+    missing_stocks = sorted(set(requested_stock_ids or []) - available_stocks)
+    missing_dates = sorted(set(requested_trade_dates or []) - available_dates)
+    warnings = []
+    if missing_stocks:
+        warnings.append(f"missing source stock snapshots: {','.join(missing_stocks)}")
+    if missing_dates:
+        warnings.append(f"missing source trade dates: {','.join(missing_dates)}")
+    return warnings, coverage
+
+
 def get_supabase_client():
     from supabase import create_client
     from config import SUPABASE_KEY, SUPABASE_URL
@@ -261,7 +282,7 @@ def upsert_rows(price_rows, signal_rows, evidence_rows=None):
             ).execute()
 
 
-def print_summary(price_rows, signal_rows, validation_errors, evidence_rows=None):
+def print_summary(price_rows, signal_rows, validation_errors, evidence_rows=None, coverage_warnings=None):
     tradeable = sum(1 for row in signal_rows if row.get("is_tradeable"))
     best = sum(1 for row in signal_rows if row.get("is_best_candidate"))
     evidence_rows = evidence_rows or ([], [], [], [])
@@ -284,6 +305,11 @@ def print_summary(price_rows, signal_rows, validation_errors, evidence_rows=None
     else:
         print("VALIDATION OK")
 
+    if coverage_warnings:
+        print("PARTIAL COVERAGE WARNINGS")
+        for warning in coverage_warnings:
+            print(f"- {warning}")
+
 
 def main():
     parser = argparse.ArgumentParser(description="v19 guarded backfill for daily price and signal snapshots")
@@ -296,6 +322,11 @@ def main():
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--write", action="store_true")
     parser.add_argument("--confirm-write", action="store_true")
+    parser.add_argument(
+        "--allow-partial",
+        action="store_true",
+        help="Write only real rows available from the selected source and warn about missing stocks/dates.",
+    )
     args = parser.parse_args()
 
     if args.write and not args.confirm_write:
@@ -314,13 +345,27 @@ def main():
         args.version,
         args.source
     )
-    validation_errors = validate_signal_payloads(
+    requested_trade_dates = [day.isoformat() for day in trading_days(start_date, end_date)]
+    coverage_warnings, coverage = partial_coverage_warnings(
         signal_rows,
         stock_ids,
-        [day.isoformat() for day in trading_days(start_date, end_date)]
+        requested_trade_dates,
+    )
+    expected_stock_ids = coverage["stock_ids"] if args.allow_partial else stock_ids
+    expected_trade_dates = coverage["trade_dates"] if args.allow_partial else requested_trade_dates
+    validation_errors = validate_signal_payloads(
+        signal_rows,
+        expected_stock_ids,
+        expected_trade_dates,
     )
     evidence_rows = build_evidence_rows(price_rows, signal_rows)
-    print_summary(price_rows, signal_rows, validation_errors, evidence_rows)
+    print_summary(
+        price_rows,
+        signal_rows,
+        validation_errors,
+        evidence_rows,
+        coverage_warnings if args.allow_partial else None,
+    )
 
     if validation_errors:
         raise SystemExit(1)

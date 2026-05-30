@@ -126,6 +126,7 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
         self.assertIn('--start-date "$BACKFILL_START_DATE"', workflow_text)
         self.assertIn('--end-date "$BACKFILL_END_DATE"', workflow_text)
         self.assertIn('--version "$BACKFILL_VERSION"', workflow_text)
+        self.assertIn("--allow-partial", workflow_text)
         self.assertIn("--write", workflow_text)
         self.assertIn("--confirm-write", workflow_text)
         self.assertIn('Run bot skipped for run_mode=$RUN_MODE', workflow_text)

@@ -2,8 +2,10 @@ import unittest
 from datetime import date, timedelta
 
 from scripts.backfill_signals import (
+    available_coverage,
     build_evidence_rows,
     build_rows_from_ohlcv,
+    partial_coverage_warnings,
     validate_signal_payloads
 )
 
@@ -84,6 +86,46 @@ class BackfillSignalsTest(unittest.TestCase):
         ])
 
         self.assertTrue(errors)
+
+    def test_partial_coverage_can_validate_real_available_rows_only(self):
+        rows = [
+            {
+                "stock_id": "3231",
+                "trade_date": "2026-05-04",
+                "version": "v20.4.5",
+                "close": 100,
+                "volume_ratio": 1,
+                "pattern": "BREAKOUT",
+                "market_state": "A",
+                "structure_state": "STRONG",
+                "position_state": "BREAKOUT",
+                "rr": 1.5,
+                "score": 4,
+                "heat_level": 1,
+                "action": "WAIT",
+                "reasons": [],
+                "is_tradeable": False,
+                "is_best_candidate": False,
+            }
+        ]
+
+        warnings, coverage = partial_coverage_warnings(
+            rows,
+            ["3231", "3035"],
+            ["2026-05-01", "2026-05-04"],
+        )
+
+        self.assertEqual(coverage, available_coverage(rows))
+        self.assertIn("missing source stock snapshots: 3035", warnings)
+        self.assertIn("missing source trade dates: 2026-05-01", warnings)
+        self.assertEqual(
+            validate_signal_payloads(
+                rows,
+                coverage["stock_ids"],
+                coverage["trade_dates"],
+            ),
+            [],
+        )
 
 
 if __name__ == "__main__":

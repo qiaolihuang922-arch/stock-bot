@@ -2539,7 +2539,22 @@ class GeneratorReportTest(unittest.TestCase):
             "market_grade": "A",
         })
 
-        with patch.object(generator, "get_market_phase", return_value="盤中"):
+        missing_production_evidence = {
+            "status": "missing-source",
+            "confirmed": False,
+            "source_of_truth": "production_db",
+            "source_family": "production_db",
+            "source_status": "missing-source",
+            "reason": "test isolated production source missing",
+            "sources": [],
+            "rows": [],
+        }
+
+        with patch.object(generator, "get_market_phase", return_value="盤中"), patch.object(
+            generator,
+            "load_confirmed_market_theme_evidence",
+            return_value=missing_production_evidence,
+        ):
             messages = generator.formatTelegramMessages(
                 {
                     "台積電": holding_payload,

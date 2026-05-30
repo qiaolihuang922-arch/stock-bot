@@ -141,6 +141,7 @@ jobs:
             --end-date "$BACKFILL_END_DATE" \
             --version "$BACKFILL_VERSION" \
             --source twse \
+            --allow-partial \
             --write \
             --confirm-write
 

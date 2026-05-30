@@ -28,7 +28,8 @@
 - 本輪新增 GitHub workflow backfill 入口：
   - `workflow_dispatch.run_mode`: `bot`、`backfill_may`、`backfill_and_bot`。
   - `start_date` / `end_date` / `backfill_version` 可由 workflow input 指定，預設 `2026-05-01` 到 `2026-05-29`、`v20.4.5`。
-  - `backfill_may` 會從 GitHub runner 執行 `scripts/backfill_signals.py --source twse --write --confirm-write`，回寫 `daily_price`、`daily_signal_snapshot`、`market_daily_bars`、`strategy_feature_snapshots`、`strategy_outcome_metrics`、`strategy_classification_audit`。
+  - `backfill_may` 會從 GitHub runner 執行 `scripts/backfill_signals.py --source twse --allow-partial --write --confirm-write`，回寫 `daily_price`、`daily_signal_snapshot`、`market_daily_bars`、`strategy_feature_snapshots`、`strategy_outcome_metrics`、`strategy_classification_audit`。
+  - `--allow-partial` 只寫 source 實際可取得的真實 rows，並輸出缺資料 warnings；不得為了通過 validation 補假 3035 或假 05/01 snapshot。
   - `backfill_and_bot` 會先回填，再跑正式 bot。
   - 非 schema 寫入不需要 Owner 手動 SQL；正式結果以 GitHub runner 為準。
 - 邊界：`scripts/backfill_market_theme_sources.py` 目前的 TWSE OpenAPI source 是 latest source，不是整月 historical source；它會補最新 official market/theme evidence。history trend 只消費 production 已有 confirmed rows，不會偽造五月 market/theme history。
@@ -36,7 +37,7 @@
 - 本輪沒有 production live write、formal backfill、DB schema / table / column 變更、RLS / grant / policy / role 變更、live Telegram、策略 decision、watchlist 或交易門檻變更。
 - Architect 驗證：
   - `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py tests/test_market_theme_source_backfill.py tests/test_workflow_runtime_config.py tests/test_generator_report.py tests/test_notifier.py -q`：140 passed，157 warnings。
-  - `arch -arm64 .venv/bin/python -m pytest tests/test_workflow_runtime_config.py tests/test_backfill_signals.py tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py -q`：66 passed，13 warnings。
+  - `arch -arm64 .venv/bin/python -m pytest tests/test_workflow_runtime_config.py tests/test_backfill_signals.py tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py tests/test_market_theme_source_backfill.py tests/test_generator_report.py tests/test_notifier.py -q`：144 passed，153 warnings。
   - `git diff --check`：通過。
 - Post-cycle review：
   - 根因分類：`history_evidence_consumption_gap` + `git_runner_backfill_entrypoint_gap`。
