@@ -14,7 +14,7 @@
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
 - qa_status: `qa_passed`
-- commit: `pending`
+- commit: `pushed`
 
 ## Current Result
 
@@ -43,10 +43,10 @@
   - 首輪阻塞有效：forbidden `daily_signal_snapshot` payload 可被接受。
   - Tech 返工後 QA conditional pass；修正 `CHANGELOG.md` 後 QA 通過。
   - 主 repo 驗證：`arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_source_backfill.py tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py tests/test_workflow_runtime_config.py -q`：75 passed，13 warnings；`git diff --check` 通過。
+- 已提交並推送：`98aa97f feat: harden market theme history backfill`。
 
 ## Next Action
 
-- Commit / push 本輪變更。
 - 後續若要補完整五月 market/theme history，需要真實 historical source；目前 TWSE OpenAPI 只能提供 latest source，不得用 latest membership 或 daily_signal_snapshot 推回五月。
 
 ## Status Values
