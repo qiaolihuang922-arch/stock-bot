@@ -33,6 +33,13 @@
 
 ## Recent High-Signal Milestones
 
+- Write CLI Supabase Config Fallback 已通過 QA，待 commit / push：
+  - Owner 指出 `SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY` 不該誤報缺失，因本專案 `config.py` 已有 `SUPABASE_URL` / `SERVICE_ROLE_KEY`。
+  - `services/market_theme_evidence_store.py` write credential resolution 改為 env 優先，env 缺失時 fallback repo `config.py`；service key 兼容 `SERVICE_ROLE_KEY` 與 `SUPABASE_SERVICE_ROLE_KEY`。
+  - `scripts/write_market_theme_confirmed_evidence.py` 的 execute JSON 只輸出 sanitized `url_source` / `key_source` / `missing`，不輸出 URL 或 key value。
+  - payload validation 失敗時 env validation 顯示 skipped，不暗示 credential 已可寫。
+  - 驗證：`tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py`，`46 passed, 17 warnings`；`git diff --check` 與 `py_compile` 通過；QA 額外反證 secret redaction 與 env/config mixed source 通過。
+  - 本輪沒有 production live write、formal backfill、DB schema / table / column 變更、RLS / grant / policy / role、live Telegram、策略 decision 或 Telegram `VERSION` 變更。
 - Market Theme Confirmed Evidence Repo-side Write CLI 已通過 QA conditional pass，條件已由 Architect 吸收滿足，待 commit / push：
   - Owner 最新規則：非 schema 的 evidence rows 新增 / 回寫 / backfill 不再找 Owner 手動跑 SQL，應走既有接口 / repo script / approved service API。
   - 新增 `scripts/write_market_theme_confirmed_evidence.py`：預設 dry-run / validate，不寫 DB；`--execute` 才走 Supabase upsert。

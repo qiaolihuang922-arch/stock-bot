@@ -46,6 +46,12 @@
 
 ## Pending / Watchlist
 
+- 本輪 Write CLI Supabase Config Fallback：
+  - 根因分類：`credential_source_contract_gap` + `runner_parser_false_fail`。
+  - 問題：write CLI 初版只認 env `SUPABASE_SERVICE_ROLE_KEY`，漏了既有 `config.py` 的 `SERVICE_ROLE_KEY`，導致本機已有配置仍誤報缺 env。
+  - 已完成：env 優先，fallback `config.py`；兼容 `SERVICE_ROLE_KEY` 與 `SUPABASE_SERVICE_ROLE_KEY`；CLI output 僅顯示 sanitized source，不輸出 secret。
+  - QA 覆蓋：config fallback、env precedence、全缺 fail closed、payload invalid 時 env validation skipped、stdout 不含 URL/key sentinel。
+  - 不新增 `AGENTS.md` 硬規則：屬於 write CLI 局部契約漏同步；已用 helper/tests 沉澱。
 - 本輪 Market Theme Confirmed Evidence Repo-side Write CLI：
   - 根因分類：`write_interface_gap` + `approval_boundary_overbroad` + `runner_parser_false_fail`。
   - 已完成：repo-side write CLI，預設 dry-run；`--execute` 需 allowed payload 與 Supabase write env，走 upsert helper，不產普通 DML 給 Owner。

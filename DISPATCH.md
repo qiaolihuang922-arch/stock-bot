@@ -4,47 +4,42 @@
 
 ## Current Task
 
-- task_id: `evidence_chain_write_interface_20260530`
-- task_name: `Market Theme Confirmed Evidence Repo-side Write CLI`
-- task_type: `risk_patch`
+- task_id: `evidence_write_cli_config_fallback_20260530`
+- task_name: `Write CLI Supabase Config Fallback`
+- task_type: `normal_patch`
 - version_level: `none`
-- qa_level: `L2+`
+- qa_level: `L1`
 - owner_status: `requested`
-- architect_status: `pushed`
+- architect_status: `qa_passed_pending_commit`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
-- qa_status: `conditional_pass`
-- commit: `c0491ae pushed`
+- qa_status: `qa_passed`
+- commit: `pending`
 
 ## Current Result
 
-- Owner 最新規則：只有新增表 / 擴字段 / schema / RLS / grant / policy / role 變更才找 Owner；非 schema 的 evidence rows 新增 / 回寫 / backfill 應走既有接口 / repo script / approved service API，不再交普通 DML 給 Owner 手動跑。
-- 本輪完成 repo-side write CLI：
-  - 新增 `scripts/write_market_theme_confirmed_evidence.py`。
-  - 預設 dry-run / validate，不寫 DB；輸出 target table、validation status、row count、conflict target、sanitized preview。
-  - `--execute` 只有在 payload validation passed、source family allowed、`SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` 存在時才進入 upsert。
-  - 缺 env、forbidden source、missing source、mixed allowed+forbidden source 全部 fail closed。
-  - 更新 `services/market_theme_evidence_store.py`，新增 write plan、write env validation、client builder、upsert helper；未改 read-only loader confirmed 判斷。
-  - 更新 handoff docs 與 examples，說明非 schema evidence rows 走 repo script / approved API；schema/RLS/grant/table/column 才找 Owner。
+- Owner 指出 `SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY` 不應誤報缺失，因為本專案 `config.py` 已有 `SUPABASE_URL` / `SERVICE_ROLE_KEY`。
+- 本輪修正 write CLI credential resolution：
+  - env 優先：`SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`。
+  - env 缺失時 fallback repo `config.py`：`SUPABASE_URL`、`SERVICE_ROLE_KEY`，並兼容 `SUPABASE_SERVICE_ROLE_KEY` alias。
+  - validation output 只顯示 `url_source` / `key_source` / `missing`，不輸出 URL 或 key value。
+  - payload validation 失敗時 env validation 顯示 skipped，避免讓 Owner 誤以為 credentials 已可寫。
 - 本輪沒有 production live write、沒有正式 backfill、沒有 DB schema / table / column 變更、沒有 RLS / grant / policy / role 變更、沒有 live Telegram、沒有改策略 decision 或 Telegram version。
-- QA conditional pass，條件已由 Architect 吸收滿足：
-  - QA 條件：untracked `scripts/write_market_theme_confirmed_evidence.py` 必須納入 repo；Architect 已納入。
-  - `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence_handoff.py tests/test_market_theme_evidence.py -q`：43 passed, 17 warnings。
-  - allowed sample dry-run exit 0，`write_execution=disabled`，`rows_to_upsert=1`。
-  - forbidden runtime sample dry-run exit 2，`payload_validation.status=failed`。
-  - `--execute` 缺 env exit 2，`write_execution=blocked`，列出 missing env names，`rows_written=0`。
-  - `py_compile`、`git diff --check` 通過。
-- Runner 狀態：CAO auto cycle 對 QA `conditional pass` 再次誤判 failed；Architect 按 QA 報告與主 repo 驗證手動吸收，未整包搬 worktree。
+- QA 通過：
+  - `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py -q`：46 passed, 17 warnings。
+  - `git diff --check` 通過。
+  - `py_compile` 通過。
+  - QA 額外反證：payload invalid + fake config secrets 時 output 不含 URL/key；env URL + config key 混合來源只輸出 sanitized source。
+- Runner 狀態：CAO auto cycle 再次把 QA 明確 `通過` 誤判 failed；Architect 按 QA 報告與主 repo 驗證手動吸收，未整包搬 worktree。
 - Post-cycle review：
-  - 根因分類：`write_interface_gap` + `approval_boundary_overbroad` + `runner_parser_false_fail`。
-  - QA 有效攔截 untracked CLI 風險；Architect 吸收時已納入 write script。
-  - 不新增 `AGENTS.md` 硬規則；Owner 最新資料寫入邊界已在上一輪寫入。本輪沉澱為 write CLI、tests、handoff docs 與 runner 待補。
+  - 根因分類：`credential_source_contract_gap` + `runner_parser_false_fail`。
+  - QA 有效覆蓋 config fallback、env precedence、fail-closed、secret redaction。
+  - 不新增 `AGENTS.md` 硬規則；這是 write CLI 的局部契約漏同步，已用 helper/tests 沉澱。
 
 ## Next Action
 
-- 本輪 diff 已 commit / push：`c0491ae feat: add evidence write cli`。
-- Architect 清理 CAO worktree。
-- 下一步若要真正寫入 production：準備真實 approved persistent payload，先跑 write CLI dry-run；若 env / permissions 具備，可用 `--execute` 走接口 upsert，再跑 read-only smoke。只有 schema/RLS/grant/table/column 或 live Telegram 才再找 Owner。
+- Architect 進行 commit / push，然後清理 CAO worktree。
+- 下一步若要真正寫入 production：準備真實 approved persistent payload，先跑 write CLI dry-run；本機 / runner 可從 env 或 `config.py` 取得 Supabase URL / service role key 時，`--execute` 可走接口 upsert，再跑 read-only smoke。只有 schema/RLS/grant/table/column 或 live Telegram 才再找 Owner。
 
 ## Status Values
 

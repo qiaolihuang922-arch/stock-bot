@@ -18,6 +18,18 @@ from services.market_theme_evidence_store import (
 )
 
 
+def _validate_write_env(env, config_module):
+    if config_module is None:
+        return validate_market_theme_write_env(env)
+    return validate_market_theme_write_env(env, config_module)
+
+
+def _build_write_client(env, config_module):
+    if config_module is None:
+        return build_market_theme_write_client(env)
+    return build_market_theme_write_client(env, config_module)
+
+
 def _load_payload(path):
     raw = sys.stdin.read() if path == "-" else Path(path).read_text(encoding="utf-8")
     return json.loads(raw)
@@ -68,13 +80,13 @@ def _blocked_execute_output(plan, env_validation):
     }
 
 
-def _executed_output(plan):
+def _executed_output(plan, env_validation):
     return {
         "mode": "execute",
         "target_table": plan["target_table"],
         "write_execution": "executed",
         "payload_validation": plan["payload_validation"],
-        "env_validation": {"status": "passed", "required": ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"], "missing": []},
+        "env_validation": env_validation,
         "upsert_conflict_target": plan["upsert_conflict_target"],
         "rows_to_upsert": plan["rows_to_upsert"],
         "rows_written": plan["rows_to_upsert"],
@@ -82,7 +94,7 @@ def _executed_output(plan):
     }
 
 
-def main(argv=None, client=None, env=None):
+def main(argv=None, client=None, env=None, config_module=None):
     parser = argparse.ArgumentParser(
         description=(
             "Dry-run or explicitly execute public.market_theme_confirmed_evidence "
@@ -111,15 +123,15 @@ def main(argv=None, client=None, env=None):
         print(json.dumps(output, ensure_ascii=False, indent=2, sort_keys=True))
         return 2
 
-    env_validation = validate_market_theme_write_env(env)
+    env_validation = _validate_write_env(env, config_module)
     if env_validation["status"] != "passed":
         output = _blocked_execute_output(plan, env_validation)
         print(json.dumps(output, ensure_ascii=False, indent=2, sort_keys=True))
         return 2
 
-    write_client = client or build_market_theme_write_client(env)
+    write_client = client or _build_write_client(env, config_module)
     upsert_market_theme_confirmed_evidence(plan["upsert_rows"], write_client)
-    output = _executed_output(plan)
+    output = _executed_output(plan, env_validation)
     print(json.dumps(output, ensure_ascii=False, indent=2, sort_keys=True))
     return 0
 

@@ -2,10 +2,13 @@ import json
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from services.market_theme_evidence_store import (
+    build_market_theme_write_client,
     build_market_theme_evidence_handoff,
     build_market_theme_evidence_readonly_smoke,
     load_confirmed_market_theme_evidence,
@@ -501,32 +504,125 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
     def test_write_cli_execute_fails_closed_when_write_env_missing(self):
         root = Path(__file__).resolve().parents[1]
         sample_path = root / "docs/examples/market_theme_owner_approved_payload.sample.json"
-        completed = subprocess.run(
-            [
-                sys.executable,
-                "scripts/write_market_theme_confirmed_evidence.py",
-                "--payload",
-                str(sample_path),
-                "--execute",
-            ],
-            cwd=root,
-            text=True,
-            capture_output=True,
-            check=False,
-            env={},
-        )
 
-        self.assertEqual(completed.returncode, 2)
-        output = json.loads(completed.stdout)
+        with tempfile.TemporaryFile(mode="w+", encoding="utf-8") as stdout:
+            old_stdout = sys.stdout
+            try:
+                sys.stdout = stdout
+                returncode = write_evidence_main(
+                    ["--payload", str(sample_path), "--execute"],
+                    env={},
+                    config_module=SimpleNamespace(),
+                )
+            finally:
+                sys.stdout = old_stdout
+            stdout.seek(0)
+            stdout_text = stdout.read()
+            output = json.loads(stdout_text)
+
+        self.assertEqual(returncode, 2)
         self.assertEqual(output["mode"], "execute")
         self.assertEqual(output["write_execution"], "blocked")
         self.assertEqual(output["payload_validation"]["status"], "passed")
         self.assertEqual(output["env_validation"]["status"], "failed")
         self.assertEqual(
             output["env_validation"]["missing"],
-            ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"],
+            ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY|SERVICE_ROLE_KEY"],
         )
+        self.assertEqual(output["env_validation"]["url_source"], "")
+        self.assertEqual(output["env_validation"]["key_source"], "")
         self.assertEqual(output["rows_written"], 0)
+        self.assertNotIn("https://", stdout_text)
+        self.assertNotIn("fake-key", stdout_text)
+
+    def test_write_cli_execute_falls_back_to_service_role_key_config_without_leaking_secret(self):
+        root = Path(__file__).resolve().parents[1]
+        sample_path = root / "docs/examples/market_theme_owner_approved_payload.sample.json"
+        client = WriteClient()
+        config_module = SimpleNamespace(
+            SUPABASE_URL="https://config.supabase.co",
+            SERVICE_ROLE_KEY="config-service-secret",
+        )
+
+        with tempfile.TemporaryFile(mode="w+", encoding="utf-8") as stdout:
+            old_stdout = sys.stdout
+            try:
+                sys.stdout = stdout
+                returncode = write_evidence_main(
+                    ["--payload", str(sample_path), "--execute"],
+                    client=client,
+                    env={},
+                    config_module=config_module,
+                )
+            finally:
+                sys.stdout = old_stdout
+            stdout.seek(0)
+            stdout_text = stdout.read()
+            output = json.loads(stdout_text)
+
+        self.assertEqual(returncode, 0)
+        self.assertEqual(output["write_execution"], "executed")
+        self.assertEqual(output["env_validation"]["url_source"], "config.SUPABASE_URL")
+        self.assertEqual(output["env_validation"]["key_source"], "config.SERVICE_ROLE_KEY")
+        self.assertEqual(output["rows_written"], 1)
+        self.assertEqual(len(client.calls), 1)
+        self.assertNotIn("https://config.supabase.co", stdout_text)
+        self.assertNotIn("config-service-secret", stdout_text)
+
+    def test_write_cli_execute_falls_back_to_supabase_service_role_key_config_alias(self):
+        root = Path(__file__).resolve().parents[1]
+        sample_path = root / "docs/examples/market_theme_owner_approved_payload.sample.json"
+        client = WriteClient()
+        config_module = SimpleNamespace(
+            SUPABASE_URL="https://alias.supabase.co",
+            SUPABASE_SERVICE_ROLE_KEY="config-alias-secret",
+        )
+
+        with tempfile.TemporaryFile(mode="w+", encoding="utf-8") as stdout:
+            old_stdout = sys.stdout
+            try:
+                sys.stdout = stdout
+                returncode = write_evidence_main(
+                    ["--payload", str(sample_path), "--execute"],
+                    client=client,
+                    env={},
+                    config_module=config_module,
+                )
+            finally:
+                sys.stdout = old_stdout
+            stdout.seek(0)
+            stdout_text = stdout.read()
+            output = json.loads(stdout_text)
+
+        self.assertEqual(returncode, 0)
+        self.assertEqual(output["env_validation"]["url_source"], "config.SUPABASE_URL")
+        self.assertEqual(output["env_validation"]["key_source"], "config.SUPABASE_SERVICE_ROLE_KEY")
+        self.assertEqual(len(client.calls), 1)
+        self.assertNotIn("https://alias.supabase.co", stdout_text)
+        self.assertNotIn("config-alias-secret", stdout_text)
+
+    def test_write_client_uses_env_values_before_config_values(self):
+        created = []
+
+        def fake_create_client(url, key):
+            created.append((url, key))
+            return object()
+
+        fake_supabase = SimpleNamespace(create_client=fake_create_client)
+        with patch.dict(sys.modules, {"supabase": fake_supabase}):
+            client = build_market_theme_write_client(
+                env={
+                    "SUPABASE_URL": "env-url-sentinel",
+                    "SUPABASE_SERVICE_ROLE_KEY": "env-key-sentinel",
+                },
+                config_module=SimpleNamespace(
+                    SUPABASE_URL="config-url-sentinel",
+                    SERVICE_ROLE_KEY="config-key-sentinel",
+                ),
+            )
+
+        self.assertIsNotNone(client)
+        self.assertEqual(created, [("env-url-sentinel", "env-key-sentinel")])
 
     def test_write_cli_execute_uses_fake_client_upsert_payload(self):
         root = Path(__file__).resolve().parents[1]
@@ -552,6 +648,8 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
 
         self.assertEqual(returncode, 0)
         self.assertEqual(output["write_execution"], "executed")
+        self.assertEqual(output["env_validation"]["url_source"], "env")
+        self.assertEqual(output["env_validation"]["key_source"], "env")
         self.assertEqual(output["rows_written"], 1)
         self.assertEqual(len(client.calls), 1)
         self.assertEqual(client.calls[0]["table"], "market_theme_confirmed_evidence")

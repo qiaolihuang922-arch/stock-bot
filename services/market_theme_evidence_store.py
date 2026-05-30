@@ -8,6 +8,8 @@ UPSERT_CONFLICT_TARGET = (
     "trade_date,market_index,sector_theme_key,source_family,source_name,as_of"
 )
 WRITE_ENV_NAMES = ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY")
+WRITE_SERVICE_KEY_CONFIG_ALIASES = ("SERVICE_ROLE_KEY", "SUPABASE_SERVICE_ROLE_KEY")
+_CONFIG_MODULE_UNSET = object()
 WRITE_COLUMNS = (
     "trade_date",
     "as_of",
@@ -72,6 +74,58 @@ def _config_value(name):
     except Exception:
         return ""
     return getattr(config, name, "") or ""
+
+
+def _load_config_module():
+    try:
+        import config
+    except Exception:
+        return None
+    return config
+
+
+def _config_module_value(config_module, name):
+    if config_module is None:
+        return ""
+    return getattr(config_module, name, "") or ""
+
+
+def resolve_market_theme_write_credentials(env=None, config_module=_CONFIG_MODULE_UNSET):
+    source = env if env is not None else os.environ
+    config_source = _load_config_module() if config_module is _CONFIG_MODULE_UNSET else config_module
+
+    supabase_url = source.get("SUPABASE_URL")
+    url_source = "env" if supabase_url else ""
+    if not supabase_url:
+        supabase_url = _config_module_value(config_source, "SUPABASE_URL")
+        url_source = "config.SUPABASE_URL" if supabase_url else ""
+
+    service_key = source.get("SUPABASE_SERVICE_ROLE_KEY")
+    key_source = "env" if service_key else ""
+    if not service_key:
+        for alias in WRITE_SERVICE_KEY_CONFIG_ALIASES:
+            service_key = _config_module_value(config_source, alias)
+            if service_key:
+                key_source = f"config.{alias}"
+                break
+
+    missing = []
+    if not supabase_url:
+        missing.append("SUPABASE_URL")
+    if not service_key:
+        missing.append("SUPABASE_SERVICE_ROLE_KEY|SERVICE_ROLE_KEY")
+
+    return {
+        "status": "passed" if not missing else "failed",
+        "required": ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY|SERVICE_ROLE_KEY"],
+        "missing": missing,
+        "url_source": url_source,
+        "key_source": key_source,
+        "credentials": {
+            "SUPABASE_URL": supabase_url,
+            "SUPABASE_SERVICE_ROLE_KEY": service_key,
+        },
+    }
 
 
 def _build_client():
@@ -439,24 +493,30 @@ def build_market_theme_confirmed_evidence_write_plan(payload):
     }
 
 
-def validate_market_theme_write_env(env=None):
-    source = env if env is not None else os.environ
-    missing = [name for name in WRITE_ENV_NAMES if not source.get(name)]
+def _sanitize_write_credential_resolution(resolution):
     return {
-        "status": "passed" if not missing else "failed",
-        "required": list(WRITE_ENV_NAMES),
-        "missing": missing,
+        "status": resolution["status"],
+        "required": resolution["required"],
+        "missing": resolution["missing"],
+        "url_source": resolution["url_source"],
+        "key_source": resolution["key_source"],
     }
 
 
-def build_market_theme_write_client(env=None):
-    env_status = validate_market_theme_write_env(env)
-    if env_status["status"] != "passed":
+def validate_market_theme_write_env(env=None, config_module=_CONFIG_MODULE_UNSET):
+    return _sanitize_write_credential_resolution(
+        resolve_market_theme_write_credentials(env, config_module)
+    )
+
+
+def build_market_theme_write_client(env=None, config_module=_CONFIG_MODULE_UNSET):
+    resolution = resolve_market_theme_write_credentials(env, config_module)
+    if resolution["status"] != "passed":
         return None
-    source = env if env is not None else os.environ
     from supabase import create_client
 
-    return create_client(source["SUPABASE_URL"], source["SUPABASE_SERVICE_ROLE_KEY"])
+    credentials = resolution["credentials"]
+    return create_client(credentials["SUPABASE_URL"], credentials["SUPABASE_SERVICE_ROLE_KEY"])
 
 
 def upsert_market_theme_confirmed_evidence(rows, client):
