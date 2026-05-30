@@ -34,6 +34,7 @@ class EvidenceTable:
         self.error = error
         self.calls = calls if calls is not None else []
         self.filters = []
+        self.orders = []
 
     def select(self, fields):
         self.calls.append(("select", fields))
@@ -51,6 +52,7 @@ class EvidenceTable:
 
     def order(self, key, desc=False):
         self.calls.append(("order", key, desc))
+        self.orders.append((key, desc))
         return self
 
     def limit(self, limit):
@@ -72,6 +74,8 @@ class EvidenceTable:
                     row for row in rows
                     if str(row.get(key)) <= str(value)
                 ]
+        for key, desc in reversed(self.orders):
+            rows = sorted(rows, key=lambda row: str(row.get(key) or ""), reverse=desc)
         return type("Result", (), {"data": rows})()
 
 
@@ -117,7 +121,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             trade_date="2026-05-29",
         )
 
-        self.assertEqual(client.tables, ["market_theme_confirmed_evidence"])
+        self.assertGreaterEqual(client.tables.count("market_theme_confirmed_evidence"), 1)
         self.assertIn(("eq", "trade_date", "2026-05-29"), client.table_obj.calls)
         self.assertEqual(loaded["status"], "confirmed")
         self.assertTrue(loaded["confirmed"])
@@ -134,6 +138,25 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             evidence["confirmed_source_types"],
             ["watchlist_breadth", "sector_index"],
         )
+
+    def test_confirmed_summary_shows_historical_trend(self):
+        loaded = {
+            **load_confirmed_market_theme_evidence(
+                client=EvidenceClient([
+                    confirmed_row(trade_date="2026-05-29"),
+                    confirmed_row(trade_date="2026-05-28"),
+                    confirmed_row(trade_date="2026-05-27"),
+                ]),
+                trade_date="2026-05-29",
+            )
+        }
+
+        lines = format_market_theme_summary_lines(
+            build_market_theme_evidence_provider(market_theme_evidence=loaded)
+        )
+
+        self.assertIn("證據：production confirmed，市場/題材支持成立。", lines)
+        self.assertIn("趨勢：連續支持｜近3個證據日｜連續3日支持", lines)
 
     def test_loader_allows_previous_trade_date_for_holiday_report_date(self):
         client = EvidenceClient([confirmed_row(trade_date="2026-05-29")])
@@ -163,6 +186,28 @@ class MarketThemeEvidenceTest(unittest.TestCase):
 
         self.assertEqual(loaded["status"], "insufficient-data")
         self.assertFalse(loaded["confirmed"])
+
+    def test_loader_builds_historical_evidence_trend(self):
+        client = EvidenceClient([
+            confirmed_row(trade_date="2026-05-27", sector_theme_key="electronics"),
+            confirmed_row(trade_date="2026-05-29", sector_theme_key="semiconductor"),
+            confirmed_row(trade_date="2026-05-28", sector_theme_key="computer"),
+        ])
+
+        loaded = load_confirmed_market_theme_evidence(
+            client=client,
+            trade_date="2026-05-29",
+        )
+
+        trend = loaded["evidence_trend"]
+        self.assertEqual(loaded["trade_date"], "2026-05-29")
+        self.assertEqual(trend["status"], "confirmed_trend")
+        self.assertEqual(trend["observed_days"], 3)
+        self.assertEqual(trend["support_streak_days"], 3)
+        self.assertEqual(
+            [day["trade_date"] for day in trend["days"]],
+            ["2026-05-29", "2026-05-28", "2026-05-27"],
+        )
 
     def test_loader_fails_closed_when_source_missing_or_empty_or_error(self):
         with patch.object(market_theme_evidence_store, "_build_client", return_value=None):
@@ -534,7 +579,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             )
 
         summary = messages[-1]
-        self.assertIn("【05/28 盤中｜v20.4.4】", summary)
+        self.assertIn("【05/28 盤中｜v20.4.5】", summary)
         self.assertIn("證據：production 來源不足，不作確認。", summary)
         self.assertIn("詳情：runtime 觀察僅供診斷，非確認來源。", summary)
         self.assertIn("🧭 主線：市場偏多但買點未成立。", summary)

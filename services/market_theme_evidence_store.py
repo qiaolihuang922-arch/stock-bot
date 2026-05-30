@@ -92,6 +92,7 @@ AUDIT_DIAGNOSTIC_TABLE_REASONS = {
     "signal_items": "report item rows; diagnostic only, not market/theme source",
 }
 MAX_PREVIOUS_TRADE_DATE_GAP_DAYS = 4
+EVIDENCE_TREND_LOOKBACK_ROWS = 20
 
 
 def _config_value(name):
@@ -995,7 +996,84 @@ def _row_allowed_for_requested_date(row, requested_trade_date=None):
     return 0 <= gap_days <= MAX_PREVIOUS_TRADE_DATE_GAP_DAYS
 
 
-def _result_from_confirmed_row(row, requested_trade_date=None):
+def _trend_from_rows(rows, requested_trade_date=None):
+    eligible_rows = [
+        row for row in rows
+        if (
+            isinstance(row, dict)
+            and not _missing_fields(row)
+            and _confirmed_row(row)
+            and _row_allowed_for_requested_date(
+                row,
+                requested_trade_date=requested_trade_date,
+            )
+        )
+    ]
+    by_date = {}
+    for row in eligible_rows:
+        trade_date = str(row.get("trade_date") or "")
+        if not trade_date:
+            continue
+        bucket = by_date.setdefault(
+            trade_date,
+            {
+                "trade_date": trade_date,
+                "supporting_rows": 0,
+                "themes": set(),
+                "market_indexes": set(),
+                "source_names": set(),
+            },
+        )
+        bucket["supporting_rows"] += 1
+        if row.get("sector_theme_key"):
+            bucket["themes"].add(str(row.get("sector_theme_key")))
+        if row.get("market_index"):
+            bucket["market_indexes"].add(str(row.get("market_index")))
+        if row.get("source_name"):
+            bucket["source_names"].add(str(row.get("source_name")))
+
+    days = [
+        {
+            **bucket,
+            "themes": sorted(bucket["themes"]),
+            "market_indexes": sorted(bucket["market_indexes"]),
+            "source_names": sorted(bucket["source_names"]),
+        }
+        for _date, bucket in sorted(by_date.items(), reverse=True)
+    ]
+    observed_days = len(days)
+    supporting_days = sum(1 for day in days if day["supporting_rows"] > 0)
+    recent_days = days[:3]
+    recent_supporting_days = sum(1 for day in recent_days if day["supporting_rows"] > 0)
+    support_streak_days = 0
+    for day in days:
+        if day["supporting_rows"] <= 0:
+            break
+        support_streak_days += 1
+
+    if observed_days >= 3 and recent_supporting_days >= 3:
+        status = "confirmed_trend"
+    elif observed_days >= 2 and recent_supporting_days >= 2:
+        status = "supporting_trend"
+    elif observed_days >= 1:
+        status = "single_day"
+    else:
+        status = "insufficient-history"
+
+    return {
+        "status": status,
+        "lookback_rows": len(rows),
+        "observed_days": observed_days,
+        "supporting_days": supporting_days,
+        "recent_supporting_days": recent_supporting_days,
+        "support_streak_days": support_streak_days,
+        "days": days,
+        "allowed_effects": ["wording", "排序提示", "detail trace"],
+        "forbidden_effects": ["不得放寬買點", "不得覆蓋風控", "不得單獨變 BUY"],
+    }
+
+
+def _result_from_confirmed_row(row, requested_trade_date=None, trend_rows=None):
     sources = _provider_sources_from_row(row, requested_trade_date=requested_trade_date)
     return {
         "status": "confirmed",
@@ -1013,10 +1091,14 @@ def _result_from_confirmed_row(row, requested_trade_date=None):
         "as_of": row.get("as_of"),
         "sources": sources,
         "rows": [row],
+        "evidence_trend": _trend_from_rows(
+            trend_rows or [row],
+            requested_trade_date=requested_trade_date,
+        ),
     }
 
 
-def _validate_rows(rows, requested_trade_date=None):
+def _validate_rows(rows, requested_trade_date=None, trend_rows=None):
     for row in rows:
         if not isinstance(row, dict):
             return _empty_result("source-error", "row is not an object")
@@ -1045,6 +1127,7 @@ def _validate_rows(rows, requested_trade_date=None):
         return _result_from_confirmed_row(
             confirmed_rows[0],
             requested_trade_date=requested_trade_date,
+            trend_rows=trend_rows or rows,
         )
 
     if any(_missing_fields(row) for row in rows):
@@ -1085,9 +1168,26 @@ def load_confirmed_market_theme_evidence(client=None, trade_date=None, limit=20)
                 .data
                 or []
             )
+        trend_rows = rows
+        if trade_date:
+            trend_rows = (
+                client.table(TABLE_NAME)
+                .select(SELECT_FIELDS)
+                .lte("trade_date", trade_date)
+                .order("trade_date", desc=True)
+                .order("as_of", desc=True)
+                .limit(max(limit, EVIDENCE_TREND_LOOKBACK_ROWS))
+                .execute()
+                .data
+                or []
+            )
     except Exception as exc:
         return _empty_result("source-error", str(exc))
 
     if not rows:
         return _empty_result("absent", "production table returned no rows")
-    return _validate_rows(rows, requested_trade_date=trade_date)
+    return _validate_rows(
+        rows,
+        requested_trade_date=trade_date,
+        trend_rows=trend_rows,
+    )

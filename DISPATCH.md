@@ -4,8 +4,8 @@
 
 ## Current Task
 
-- task_id: `holiday-market-theme-evidence-loader`
-- task_name: `Holiday Market Theme Evidence Loader Fallback`
+- task_id: `market-theme-evidence-history-trend`
+- task_name: `Market Theme Evidence History Trend Consumption`
 - task_type: `normal_patch`
 - version_level: `patch`
 - qa_level: `L2`
@@ -18,21 +18,22 @@
 
 ## Current Result
 
-- Owner 貼出 `05/30 假日｜v20.4.3` 報文仍顯示 `production 來源不足`。根因是報文日期為假日 `2026-05-30`，但 GitHub workflow 可回填的 official TWSE evidence trade_date 是前一交易日 `2026-05-29`；原 loader 只做 exact `trade_date` 查詢，假日會 miss。
-- 本輪修正 `market_theme_confirmed_evidence` read path：
-  - 先 exact 查詢 requested `trade_date`。
-  - exact 無 rows 時，fallback 查詢 `trade_date <= requested_trade_date` 的最新 confirmed/fresh production evidence。
-  - 只允許短假日/周末間隔，超過 `MAX_PREVIOUS_TRADE_DATE_GAP_DAYS=4` 繼續 fail closed，避免很舊 evidence 被誤用。
-  - Provider sources 標記 `freshness_reason=previous_trade_date_allowed`，並保留 `requested_trade_date` 供追溯。
-- 同步使用者可見 Telegram header 版本：`v20.4.4`。
+- Owner 要先做「market/theme evidence 歷史趨勢消費」，讓舊資料不只是保存，而是被策略證據層使用。
+- 本輪擴充 `market_theme_confirmed_evidence` read path：
+  - loader 仍先找 requested date / 上一交易日最新 confirmed row。
+  - 額外讀取 `trade_date <= requested_trade_date` 的最近 evidence rows，產出 `evidence_trend`。
+  - `evidence_trend` 包含 observed_days、recent_supporting_days、support_streak_days、days、allowed_effects、forbidden_effects。
+  - 趨勢只允許 wording / 排序提示 / detail trace；不得放寬買點、不得覆蓋風控、不得單獨變 BUY。
+  - Telegram evidence summary 在 confirmed 時新增短行：`趨勢：...`，讓 Owner 看出不是只看單日證據。
+- 同步使用者可見 Telegram header 版本：`v20.4.5`。
 - 本輪沒有 production live write、formal backfill、DB schema / table / column 變更、RLS / grant / policy / role 變更、live Telegram、策略 decision、watchlist 或交易門檻變更。
 - Architect 驗證：
-  - `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py tests/test_market_theme_source_backfill.py tests/test_workflow_runtime_config.py tests/test_generator_report.py tests/test_notifier.py -q`：138 passed，157 warnings。
+  - `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py tests/test_market_theme_source_backfill.py tests/test_workflow_runtime_config.py tests/test_generator_report.py tests/test_notifier.py -q`：140 passed，157 warnings。
   - `git diff --check`：通過。
 - Post-cycle review：
-  - 根因分類：`holiday_trade_date_lookup_gap`。
+  - 根因分類：`history_evidence_consumption_gap`。
   - 既有 GitHub runtime / source-of-truth 規則已覆蓋，不新增 `AGENTS.md` 硬規則。
-  - 補測假日可讀上一交易日、過舊 trade_date 仍 fail closed、版本 header 同步。
+  - 補測歷史趨勢、summary 趨勢文案、write CLI read-after-write smoke 兼容歷史查詢、版本 header 同步。
 
 ## Next Action
 

@@ -38,7 +38,7 @@ def handoff_payload(**overrides):
         "watchlist_breadth": {"supportive": 7, "tracked": 12},
         "source_family": "market_data",
         "source_name": "owner_reviewed_market_theme_handoff",
-        "lineage": {"source": "manual_owner_handoff", "rule_version": "v20.4.4"},
+        "lineage": {"source": "manual_owner_handoff", "rule_version": "v20.4.5"},
         "metadata": {"reviewed_by": "owner"},
         "notes": "manual non-live handoff",
     }
@@ -74,7 +74,20 @@ class EvidenceTable:
     def select(self, fields):
         return self
 
+    def eq(self, key, value):
+        self.rows = [row for row in self.rows if row.get(key) == value]
+        return self
+
+    def lte(self, key, value):
+        self.rows = [row for row in self.rows if str(row.get(key) or "") <= str(value)]
+        return self
+
     def order(self, key, desc=False):
+        self.rows = sorted(
+            self.rows,
+            key=lambda row: str(row.get(key) or ""),
+            reverse=desc,
+        )
         return self
 
     def limit(self, limit):
@@ -116,6 +129,13 @@ class WriteTable:
 
     def eq(self, key, value):
         self.client.rows = [row for row in self.client.rows if row.get(key) == value]
+        return self
+
+    def lte(self, key, value):
+        self.client.rows = [
+            row for row in self.client.rows
+            if str(row.get(key) or "") <= str(value)
+        ]
         return self
 
     def order(self, key, desc=False):

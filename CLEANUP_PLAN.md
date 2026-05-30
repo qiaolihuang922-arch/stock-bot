@@ -46,11 +46,11 @@
 
 ## Pending / Watchlist
 
-- 本輪 `v20.4.4` Holiday Market Theme Evidence Loader Fallback：
-  - 根因分類：`holiday_trade_date_lookup_gap`。GitHub workflow 回填 official TWSE evidence 使用上一交易日，但假日报文用假日日期 exact lookup，導致已可由 runner 回填的 evidence 在報文讀取時 miss。
-  - 已完成：exact miss 後 fallback 到不晚於 requested date 的最新 confirmed/fresh production row；短假日 / 周末允許，過舊 row fail closed；補 `requested_trade_date` 與 `previous_trade_date_allowed` trace。
+- 本輪 `v20.4.5` Market Theme Evidence History Trend Consumption：
+  - 根因分類：`history_evidence_consumption_gap`。market/theme evidence 已每日保存，但先前策略證據層主要看最新有效 row，沒有把歷史趨勢摘要成可消費訊號。
+  - 已完成：loader 額外讀取最近 confirmed/fresh evidence rows，建立 `evidence_trend`；provider/summary 顯示趨勢短行；trend 明確限制為 wording / 排序提示 / detail trace。
   - 邊界保持：不新增 DB schema、不 live write、不 backfill、不改策略 decision / watchlist / Telegram live delivery。
-  - 不新增 `AGENTS.md` 硬規則：既有 GitHub runner source-of-truth 與 fail-closed 規則已覆蓋；本輪沉澱為 loader contract 與測試。
+  - 不新增 `AGENTS.md` 硬規則：既有 GitHub runner source-of-truth、fail-closed、持倉行動一致性規則已覆蓋；本輪沉澱為 loader/provider contract 與測試。
 - 本輪 Production Evidence Source Audit And Approved Payload Gate：
   - 根因分類：`production_source_semantics_gap` + `runner_parser_false_fail`。
   - 已完成：read-only production source audit JSON；row count / source availability / approved payload preview gate；個股策略 snapshot 不會直接升級為 market/theme confirmed evidence。

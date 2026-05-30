@@ -641,7 +641,7 @@ def build_market_theme_evidence_provider(
         structured_sources.setdefault("as_of", market_theme_evidence.get("as_of"))
         missing_db_evidence = not existing_sources
 
-    return build_market_theme_evidence(
+    evidence = build_market_theme_evidence(
         results_map=results_map,
         watchlist_groups=watchlist_groups,
         formatter_report_input=formatter_report_input,
@@ -650,6 +650,9 @@ def build_market_theme_evidence_provider(
         missing_db_evidence=missing_db_evidence,
         **structured_sources,
     )
+    if isinstance(market_theme_evidence, dict) and market_theme_evidence.get("evidence_trend"):
+        evidence["evidence_trend"] = market_theme_evidence.get("evidence_trend")
+    return evidence
 
 
 def format_market_theme_summary_lines(evidence):
@@ -690,5 +693,18 @@ def format_market_theme_summary_lines(evidence):
 
     if source_labels:
         lines.append(f"來源：{'; '.join(source_labels[:3])}")
+
+    trend = evidence.get("evidence_trend") or {}
+    if evidence.get("confirmed") and trend.get("observed_days"):
+        status_text = {
+            "confirmed_trend": "連續支持",
+            "supporting_trend": "偏多延續",
+            "single_day": "單日確認",
+        }.get(trend.get("status"), "歷史不足")
+        lines.append(
+            "趨勢："
+            f"{status_text}｜近{trend.get('observed_days')}個證據日｜"
+            f"連續{trend.get('support_streak_days', 0)}日支持"
+        )
 
     return lines

@@ -7,7 +7,7 @@
 - 專案：台股策略報文機器人。
 - 交付形態：排程 / 腳本產生 Telegram 報文並發送給 Owner。
 - 股票清單唯一來源：`core/watchlist.py`，預設 12 檔。
-- 最新使用者可見 Telegram 版本：`v20.4.4`。
+- 最新使用者可見 Telegram 版本：`v20.4.5`。
 - 最新 pushed commit 以 `git log -1` 為準。
 - 固定 8 份 Markdown 不刪除，只改寫內容：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 
@@ -33,13 +33,14 @@
 
 ## Recent High-Signal Milestones
 
-- `v20.4.4` Holiday Market Theme Evidence Loader Fallback 已完成本地驗證，待 commit / push：
-  - Owner 貼出的 `05/30 假日` 報文仍顯示 production evidence insufficient；根因是 loader exact 查 `2026-05-30`，但 official TWSE backfill 寫入的是上一交易日 `2026-05-29`。
-  - `services/market_theme_evidence_store.py` 現在 exact miss 時會查 `trade_date <= requested_trade_date` 的最新 confirmed/fresh production evidence。
-  - 只允許短假日 / 周末間隔，超過 `MAX_PREVIOUS_TRADE_DATE_GAP_DAYS=4` 仍 fail closed，避免舊 evidence 被誤確認。
-  - Provider source 會標示 `freshness_reason=previous_trade_date_allowed`，結果保留 `requested_trade_date` 供追溯。
-  - 使用者可見 Telegram header 版本同步為 `v20.4.4`。
-  - 驗證：`tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py tests/test_market_theme_source_backfill.py tests/test_workflow_runtime_config.py tests/test_generator_report.py tests/test_notifier.py`，`138 passed, 157 warnings`；`git diff --check` 通過。
+- `v20.4.5` Market Theme Evidence History Trend Consumption 已完成本地驗證，待 commit / push：
+  - Owner 要把 market/theme evidence 的歷史資料用起來，不再只看最新一筆。
+  - `services/market_theme_evidence_store.py` 仍先讀 requested date / 上一交易日最新 confirmed row，並額外讀最近 `trade_date <= requested_trade_date` evidence rows 建立 `evidence_trend`。
+  - `evidence_trend` 目前包含 observed_days、recent_supporting_days、support_streak_days、days、allowed_effects、forbidden_effects。
+  - `core/market_theme_evidence.py` 會把 trend 帶進 provider；confirmed summary 會輸出短行 `趨勢：連續支持｜近N個證據日｜連續N日支持`。
+  - Trend 只作 wording / 排序提示 / detail trace；不得放寬買點、不得覆蓋風控、不得單獨變 BUY。
+  - 使用者可見 Telegram header 版本同步為 `v20.4.5`。
+  - 驗證：`tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py tests/test_market_theme_source_backfill.py tests/test_workflow_runtime_config.py tests/test_generator_report.py tests/test_notifier.py`，`140 passed, 157 warnings`；`git diff --check` 通過。
   - 邊界：未 production live write、未 backfill、未 schema / RLS / grant / policy / role 變更、未改策略 decision 或交易門檻。
 - Production Evidence Source Audit And Approved Payload Gate 已通過 QA conditional pass，條件已由 Architect 用真實 production read-only audit 補足，待 commit / push：
   - 新增 `scripts/smoke_market_theme_evidence_readonly.py --production-source-audit-json`，只讀 production source availability，不寫 DB、不 backfill、不發 Telegram。
@@ -145,7 +146,7 @@
   - DB 消費不是全部閉環：`market_daily_bars` 偏 write-only；`signal_runs/items/outcomes` 偏 reference-only；`strategy_outcome_metrics` reader 存在但正式 writer 主要在 backfill。
   - `public.market_theme_confirmed_evidence` 已完成 schema + read-only loader + provider + Telegram 接入，但缺 writer / ingestion / backfill / RLS read-only role / actual production data smoke，不能視為端到端完成。
   - 本 audit 沒有產品代碼 / 測試 / SQL / runner diff；只更新 `TASK.md`、`CHANGELOG.md`、`QA_REPORT.md` 與總控文件。
-- `v20.4.4` Evidence Phase 5 Read-only Confirmed Evidence Loader 已通過 QA conditional pass，且 Architect 已滿足吸收條件：
+- `v20.4.5` Evidence Phase 5 Read-only Confirmed Evidence Loader 已通過 QA conditional pass，且 Architect 已滿足吸收條件：
   - 新增 `services/market_theme_evidence_store.py`，只讀 `public.market_theme_confirmed_evidence`；不寫 DB、不 backfill、不改 RLS、不 live Telegram。
   - Confirmed 條件固定為 `support_level in ('confirmed','supporting')`、`evidence_status='confirmed'`、`freshness='fresh'`；`support_level=strong` 只能作負面案例，fail closed，不得 accepted。
   - `core/generator.py` 接入 loader；GitHub / fresh runner 缺 DB env、DB error、0 rows、資料不足時只能 `missing-source / source-error / absent / insufficient-data`，不得使用 local/runtime/report-derived fake confirmed。
@@ -161,7 +162,7 @@
   - QA conditional pass：此 artifact 只代表可手動驗證，不代表 production schema 已通過；allowed-values summary rows 不能排除額外允許值，必須人工比對 raw check constraints。
   - Architect 額外用 `.qa_tmp/` 臨時 `pglast` parser 驗證 verification SQL parse OK，16 statements。
   - Owner 回傳 production verification 結果：table exists PASS；17 個 contract 欄位全部 PASS；`freshness`、`support_level`、`evidence_status` raw check constraints 全部符合且未見額外值；7 個 expected indexes 全部 PASS，包含 latest confirmed partial index。
-  - 結論：production schema contract 已通過，已由 `v20.4.4` 接入 read-only loader；尚未完成 writer、backfill、RLS / read-only role 驗證或實際 production data smoke。
+  - 結論：production schema contract 已通過，已由 `v20.4.5` 接入 read-only loader；尚未完成 writer、backfill、RLS / read-only role 驗證或實際 production data smoke。
 - SQL artifact syntax/copy safety tiny patch 已完成：
   - Owner 執行 Evidence Phase 4 SQL 時遇到 Supabase `ERROR 42601 syntax error at end of input`。
   - 修正範圍只限 `db/sql/evidence_phase_4_market_theme_confirmed_evidence.sql` 與 `docs/handoff/evidence_phase_4_market_theme_confirmed_evidence.md`；未改 schema intent、產品代碼、策略、Telegram、runner、DB write path。
