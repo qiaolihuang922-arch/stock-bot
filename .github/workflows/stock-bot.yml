@@ -81,6 +81,20 @@ jobs:
               raise SystemExit(f"Missing runtime config: {', '.join(required)}")
           PY
 
+      - name: Backfill official market/theme evidence (retry 3 times)
+        run: |
+          success=0
+          for i in 1 2 3
+          do
+            if python scripts/backfill_market_theme_sources.py --write --confirm-write; then
+              success=1
+              break
+            fi
+            echo "Market/theme evidence backfill retry $i failed..."
+            sleep 5
+          done
+          test "$success" -eq 1
+
       - name: Run bot (retry 3 times)
         run: |
           success=0

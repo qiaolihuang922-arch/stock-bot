@@ -15,7 +15,10 @@ def _create_runtime_config_script():
     lines = WORKFLOW.read_text(encoding="utf-8").splitlines()
     step = lines.index("      - name: Create runtime config")
     start = lines.index("        run: |", step) + 1
-    end = lines.index("      - name: Run bot (retry 3 times)")
+    end = next(
+        index for index in range(start, len(lines))
+        if lines[index].startswith("      - name:")
+    )
     return "\n".join(line[10:] if line.startswith("          ") else line for line in lines[start:end])
 
 
