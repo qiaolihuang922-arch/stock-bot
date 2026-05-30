@@ -9,6 +9,7 @@ It is not evidence that production ingestion is live.
 | item | repo artifact | live side effect | Owner approval needed | status |
 | --- | --- | --- | --- | --- |
 | ingestion payload validation | `scripts/validate_market_theme_evidence_ingestion.py` | none | no, for dry-run validation | ready |
+| approval package generator | `scripts/generate_evidence_approval_package.py` | none | yes, before any SQL execution outside the script | ready |
 | manual SQL template | `db/sql/evidence_chain_market_theme_ops_manual_template.sql` | none unless Owner manually executes approved sections | yes | ready |
 | read-only smoke | `scripts/smoke_market_theme_evidence_readonly.py` | read-only DB query only | yes, when using production env | ready |
 | RLS verification SQL | Step D in the SQL template | read-only catalog/table queries | yes, when running in production | ready |
@@ -31,6 +32,30 @@ Validation failures return `valid=false`, `may_render_manual_sql=false`,
 
 Runtime, local, cache, worktree, report-derived, synthetic, default, test, or
 fixture-derived sources must fail closed and must not produce confirmed rows.
+
+## Approval Package Generator
+
+Example:
+
+```bash
+python scripts/generate_evidence_approval_package.py \
+  --payload approved_payload.json \
+  --output-dir artifacts/evidence_approval/2026-05-30
+```
+
+The generator writes review artifacts only:
+
+- `approval_package.json`
+- `approval_package.md`
+- `market_theme_confirmed_evidence_<trade_date>.sql` only when validation passes
+
+The package always marks `schema_decision=no-schema-change`,
+`mode=non-live-approval-package`, and `write_execution=disabled`. The SQL
+header states that Owner manual approval is required, the agent did not execute
+the SQL, and the package is not evidence of production deployment.
+
+Forbidden source families, missing `source_family`, and mixed allowed/forbidden
+payloads fail closed and do not render SQL.
 
 ## Manual SQL
 

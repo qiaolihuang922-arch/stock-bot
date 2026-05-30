@@ -46,6 +46,13 @@
 
 ## Pending / Watchlist
 
+- 本輪 Evidence Chain Approval Package Generator：
+  - 根因分類：`manual_sql_operator_risk` + `approval_flow_gap` + `runner_parser_false_fail`。
+  - 已完成：repo-side non-live approval package generator；allowed persistent payload 可產 package JSON / Markdown / review-only deterministic SQL；forbidden / missing / mixed source fail closed 且不產 SQL。
+  - QA 有效覆蓋：package 不被誤讀為 production deployed；fake / runtime / fixture-derived source 不產 SQL；secret-like payload 清空 SQL；generator 無 Supabase client、DB execute、live write 或 Telegram delivery pattern。
+  - 邊界保持：不擴表 / 擴字段、不 live write、不 formal backfill、不改 RLS / grant、不改策略或 Telegram version。
+  - Runner gap 重複：auto cycle 實質 QA `通過` 仍被 parser 判 failed；需修 QA conclusion parser 只讀 `## QA 結論` 後第一個有效結論詞。
+  - 不新增 `AGENTS.md` 硬規則：既有 source-of-truth、fake confirmed、live write 禁令與 Post-cycle Review 已覆蓋；本輪沉澱為 generator contract、tests、handoff docs 與 runner 待補。
 - 本輪 Evidence Chain Production Closure Gap Assessment：
   - 根因分類：`source_boundary_gap` + `production_ops_boundary` + `runner_session_handoff_gap`。
   - 結論：不需要擴表 / 擴字段；現有 schema 足以支援下一步 read-only smoke 與 manual backfill。

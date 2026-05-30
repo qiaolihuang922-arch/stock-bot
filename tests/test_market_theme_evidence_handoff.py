@@ -11,6 +11,7 @@ from services.market_theme_evidence_store import (
     load_confirmed_market_theme_evidence,
     validate_market_theme_evidence_ingestion_payload,
 )
+from scripts.generate_evidence_approval_package import build_approval_package
 
 
 def handoff_payload(**overrides):
@@ -29,6 +30,27 @@ def handoff_payload(**overrides):
         "lineage": {"source": "manual_owner_handoff", "rule_version": "v20.4.3"},
         "metadata": {"reviewed_by": "owner"},
         "notes": "manual non-live handoff",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def approval_payload(**overrides):
+    payload = {
+        "trade_date": "2026-05-29",
+        "source_family": "owner_approved_persistent",
+        "source_name": "owner_approved_market_theme_review",
+        "evidence_status": "confirmed",
+        "freshness": "fresh",
+        "rows": [
+            {
+                "symbol": "2330",
+                "theme": "AI supply chain",
+                "support_level": "supporting",
+                "evidence_url": "manual-owner-approved-reference",
+                "reason": "Owner approved persistent evidence",
+            }
+        ],
     }
     payload.update(overrides)
     return payload
@@ -183,6 +205,107 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
         self.assertFalse(output["may_render_manual_sql"])
         self.assertFalse(output["live_write"])
         self.assertNotIn("manual_sql", output)
+
+    def test_approval_package_generator_builds_allowed_non_live_package(self):
+        package = build_approval_package(approval_payload())
+
+        self.assertEqual(package["schema_decision"], "no-schema-change")
+        self.assertEqual(package["mode"], "non-live-approval-package")
+        self.assertEqual(package["write_execution"], "disabled")
+        self.assertEqual(package["payload_validation"]["status"], "passed")
+        self.assertEqual(
+            package["deterministic_sql_path"],
+            "market_theme_confirmed_evidence_2026-05-29.sql",
+        )
+        self.assertIn("Owner manual approval required", package["deterministic_sql"])
+        self.assertIn("Agent did not execute this SQL", package["deterministic_sql"])
+        self.assertIn("not evidence of production deployment", package["deterministic_sql"])
+        self.assertIn("insert into public.market_theme_confirmed_evidence", package["deterministic_sql"])
+        self.assertIn(
+            "python scripts/smoke_market_theme_evidence_readonly.py --trade-date 2026-05-29",
+            package["read_only_smoke_command"],
+        )
+        self.assertIn("live Supabase write", package["not_executed"])
+
+    def test_approval_package_generator_fails_closed_for_forbidden_source_without_sql(self):
+        for source_family in [
+            "local",
+            "runtime",
+            "cache",
+            "worktree",
+            "report-derived",
+            "synthetic",
+            "default",
+            "test",
+            "fixture",
+        ]:
+            with self.subTest(source_family=source_family):
+                package = build_approval_package(approval_payload(source_family=source_family))
+
+                self.assertEqual(package["payload_validation"]["status"], "failed")
+                self.assertEqual(package["payload_validation"]["reason"], "forbidden source_family")
+                self.assertIsNone(package["deterministic_sql"])
+                self.assertEqual(package["write_execution"], "disabled")
+
+    def test_approval_package_generator_fails_closed_for_mixed_allowed_and_forbidden_source(self):
+        payload = approval_payload(
+            rows=[
+                {
+                    "symbol": "2330",
+                    "theme": "AI supply chain",
+                    "support_level": "supporting",
+                    "evidence_url": "manual-owner-approved-reference",
+                    "reason": "Owner approved persistent evidence",
+                    "source_family": "runtime",
+                }
+            ]
+        )
+
+        package = build_approval_package(payload)
+
+        self.assertEqual(package["payload_validation"]["status"], "failed")
+        self.assertEqual(package["payload_validation"]["reason"], "forbidden source_family")
+        self.assertIsNone(package["deterministic_sql"])
+
+    def test_approval_package_sql_is_deterministic_for_same_payload(self):
+        first = build_approval_package(approval_payload())
+        second = build_approval_package(approval_payload())
+
+        self.assertEqual(first["deterministic_sql"], second["deterministic_sql"])
+        self.assertEqual(first["deterministic_sql_path"], second["deterministic_sql_path"])
+
+    def test_approval_package_cli_writes_review_artifacts_only_for_allowed_payload(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            payload_path = Path(tmpdir) / "approved_payload.json"
+            output_dir = Path(tmpdir) / "package"
+            payload_path.write_text(
+                json.dumps(approval_payload()),
+                encoding="utf-8",
+            )
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "scripts/generate_evidence_approval_package.py",
+                    "--payload",
+                    str(payload_path),
+                    "--output-dir",
+                    str(output_dir),
+                ],
+                cwd=Path(__file__).resolve().parents[1],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(completed.returncode, 0)
+            output = json.loads(completed.stdout)
+            self.assertEqual(output["payload_validation"]["status"], "passed")
+            self.assertTrue((output_dir / "approval_package.json").exists())
+            self.assertTrue((output_dir / "approval_package.md").exists())
+            sql_path = output_dir / "market_theme_confirmed_evidence_2026-05-29.sql"
+            self.assertTrue(sql_path.exists())
+            self.assertIn("Agent did not execute this SQL", sql_path.read_text(encoding="utf-8"))
 
     def test_readonly_smoke_cli_prints_schema_decision_and_fails_closed_without_env(self):
         completed = subprocess.run(

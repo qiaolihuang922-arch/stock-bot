@@ -2,92 +2,107 @@
 
   ## 測試範圍
 
-  任務：evidence_chain_production_closure_gap_20260529，risk_patch / QA L2+。本輪最小驗證範圍聚焦 production source-of-truth contract、no-schema-change evidence、read-only smoke fail-closed、以及無 live side effect；未擴
-  成 full pytest、replay、backfill 或 live DB 驗證。
+  本輪任務尺寸：risk_patch，QA level：L2+。驗證聚焦 repo-side non-live approval package，不擴大到 full pytest、正式 backfill、live DB、live Telegram。
 
-  已驗證命令：
+  已檢查：
 
-  - arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence_handoff.py tests/test_market_theme_evidence.py -q：31 passed，17 warnings。
-  - arch -arm64 .venv/bin/python scripts/smoke_market_theme_evidence_readonly.py：exit 2，符合缺 read-only env 時 fail-closed；輸出含 schema_decision: no-schema-change、telegram_confirmed: false。
-  - git diff --check：passed。
-  - QA 追加 one-off 反證：直接呼叫 load_confirmed_market_theme_evidence() 驗證 forbidden / allowed source_family。
+  - TASK.md
+  - CHANGELOG.md
+  - git status --short
+  - tracked diff：CHANGELOG.md、docs/handoff/evidence_chain_market_theme_ops_artifacts.md、tests/test_market_theme_evidence_handoff.py
+  - untracked but required task artifact：scripts/generate_evidence_approval_package.py
+  - 直接依賴：services/market_theme_evidence_store.py
 
-  可吸收 diff 必須包含：
+  已跑命令：
 
-  - tracked：CHANGELOG.md
-  - tracked：docs/handoff/evidence_chain_market_theme_ops_artifacts.md
-  - tracked：scripts/smoke_market_theme_evidence_readonly.py
-  - tracked：services/market_theme_evidence_store.py
-  - tracked：tests/test_market_theme_evidence_handoff.py
-  - untracked 但本輪交付必要：docs/handoff/evidence_chain_production_closure_gap_assessment.md
-
-  不得只用 git diff / git diff --stat 吸收，否則會漏掉 untracked assessment doc。
+  - pytest tests/test_market_theme_evidence_handoff.py tests/test_market_theme_evidence.py -q：36 passed, 17 warnings
+  - git diff --check -- docs/handoff/evidence_chain_market_theme_ops_artifacts.md tests/test_market_theme_evidence_handoff.py CHANGELOG.md：通過
+  - 靜態掃描 generator：未發現 create_client、insert/upsert/rpc/execute、Telegram 發送或外部請求入口
+  - QA 補充負面檢查：fixture-derived fail closed、secret-like postgres:// payload 不產生 SQL、allowed package 明確標示 manual approval / not executed：通過
 
   ## 風險預算與停止條件
 
   本輪最值得抓的風險：
 
-  1. forbidden source_family=local/runtime/cache/worktree/report-derived/synthetic/default/test/fixture 被 loader 誤判 confirmed。
-      - 驗證：pytest 覆蓋 + QA 追加 report_derived、test 等變體 one-off。
-      - 結果：均 insufficient-data / confirmed=False / telegram_confirmed=False。
-  2. allowed production_db、owner_approved_persistent、market_data 被過度封死。
-      - 驗證：QA 追加直接 consumer probe。
-      - 結果：單一合法 row 均 status=confirmed / confirmed=True。
-  3. no-schema-change / manual boundary 被文件誤讀成 production 已上線或已 backfill。
-      - 驗證：讀 assessment、ops handoff、SQL template、diff side-effect scan。
-      - 結果：文件明確寫 repo-side only、Owner manual only、未 live write / backfill / RLS / Telegram。
+  1. approval package 被誤讀成已寫入 production。
+      - 驗證：檢查 package / SQL header / docs / not_executed wording。
+      - 結果：SQL header 含 Owner manual approval required、Agent did not execute this SQL、not evidence of production deployment；package 列出 live write / backfill / RLS / Telegram 未執行。
+  2. forbidden / fake / runtime source 仍產生 deterministic SQL。
+      - 驗證：Tech 測試覆蓋 forbidden、mixed source；QA 額外補 fixture-derived。
+      - 結果：fail closed，deterministic_sql is None。
+  3. generator 產生 live side effect。
+      - 驗證：讀 generator，掃描 Supabase client、DB write、Telegram、外部請求、SQL execute pattern。
+      - 結果：未發現 live write / live delivery pattern；只讀 JSON、build package、可選寫本地 artifacts。
 
-  停止條件：完成上述 contract 測試、diff side-effect scan、schema evidence spot-check 後停止；不做 live Supabase、正式 backfill、RLS 實測、Telegram delivery、full pytest。
+  停止條件已達成：package contract、source guard、SQL determinism、no-live-write pattern、read-only smoke fail-closed 相關局部測試均已覆蓋；未擴大到 TASK 禁止的 live 驗證。
 
   ## 關聯風險掃描
 
-  TASK.md、CHANGELOG.md 與 diff 大體一致：Tech 交付 no-schema-change assessment、smoke schema_decision、loader source-family guard、局部測試。schema evidence 可由既有 SQL schema、manual template、loader SELECT_FIELDS /
-  confirmed condition 交叉核對。
+  TASK.md、CHANGELOG.md 與 worktree diff 大致一致。需注意 scripts/generate_evidence_approval_package.py 是 untracked，git diff --stat 不會顯示；但它是本輪核心 artifact，屬於可吸收 diff 的必要部分。
 
-  QA 追加發現一個非阻塞行為：若查回 rows 同時含 forbidden row 與 allowed row，目前 _validate_rows() 會因任一 forbidden row 直接 insufficient-data，即使後面有 allowed confirmed row。這是保守 fail-closed，不會 fake
-  confirmed；但未來 production 若混入舊 local/test rows，可能造成合法 evidence 被壓掉。列為後續風險，不阻塞本輪「不得 fake confirmed」主目標。
+  可吸收範圍：
 
-  未看到本輪 diff 修改 core/generator.py、Telegram formatter、VERSION、strategy thresholds、SQL migration/backfill 執行入口或 notifier。
+  - scripts/generate_evidence_approval_package.py
+  - docs/handoff/evidence_chain_market_theme_ops_artifacts.md
+  - tests/test_market_theme_evidence_handoff.py
+  - CHANGELOG.md
+
+  worktree 殘留：
+
+  - .qa_tmp/config.py 為測試暫存/環境產物，不屬於可吸收產品 diff。
+  - 不建議整包合併 worktree，只吸收上述任務相關檔案。
+
+  清理 / 瘦身 / refactor 證據表要求：本輪不是清理任務，不適用。
 
   ## 跨區塊語意一致性
 
-  CHANGELOG、assessment doc、smoke output、SQL template 的語意一致：
+  Package、docs、CHANGELOG 對本輪邊界一致：
 
-  - schema_decision: no-schema-change
-  - no live Supabase write
-  - no formal backfill
-  - no production RLS/grant change
-  - no live Telegram delivery
-  - production closure 尚未完成
-  - Owner 仍需提供 read-only env / rows / manual approval
+  - schema_decision=no-schema-change
+  - mode=non-live-approval-package
+  - write_execution=disabled
+  - 不做 live Supabase write
+  - 不做 formal backfill
+  - 不改 RLS / grant / policy / role
+  - 不改 Telegram formatter / VERSION
+  - package 不代表 production deployment
 
-  core/generator.py 的 VERSION 仍是 v20.4.3，本輪未改 Telegram 使用者可見版本契約。
+  read-only smoke fail-closed 沒被本輪改動回退；局部測試仍覆蓋缺 env / 無 rows / 不合格 rows 不會讓 telegram_confirmed=true。
 
   ## 使用者誤讀風險
 
-  Owner 手機 Telegram 路徑本輪不變；缺 production confirmed rows 或 forbidden source rows 時 smoke / loader 都不會輸出 telegram_confirmed=true。因此不會因 repo artifact 存在而讓 Telegram 變成「題材 confirmed」或「新倉可
-  買」。
+  Owner 可見 artifact 的手機 Telegram 報文本輪不變；本輪主要使用者可見面是 approval package / docs / SQL。
 
-  文件 wording 未暗示 SQL 已執行、RLS 已完成、backfill 已上線；assessment 的「Not Done」段落足夠清楚。
+  誤讀路徑檢查：
+
+  - SQL header 明確說 agent 沒執行。
+  - package manual_approval_required 明確列出 Owner review、另行批准 SQL、執行後 read-only verification。
+  - not_executed 明確列出 live write、formal backfill、RLS/grant/policy/role changes、Telegram delivery。
+  - docs 說明 package 只是 review artifacts，不是 production ingestion live evidence。
+
+  未發現會讓 Owner 誤判「已入庫」「已上線」「Telegram 已 confirmed」的文案。
 
   ## 質疑與反證
 
-  反證一：forbidden source row 即使同時是 fresh + confirmed + supporting，load_confirmed_market_theme_evidence() 仍 fail closed。QA one-off 覆蓋 local、runtime、cache、worktree、report-derived、report_derived、
-  synthetic、default、test、test_fixture、fixture。
+  QA 補充 Tech 未覆蓋的反證：
 
-  反證二：allowed persistent source row 可 confirmed。QA one-off 覆蓋 production_db、owner_approved_persistent、market_data，皆 confirmed。
+  - fixture-derived 不是 Tech 測試清單中的精確值，但仍因非 approved persistent source fail closed，不產生 SQL。
+  - payload 內含 postgres:// secret-like marker 時，即使 source allowed，也會讓 validation failed 並清空 SQL。
+  - 靜態掃描 generator 沒有 Supabase client、DB execute、insert/upsert/rpc、Telegram delivery 或外部 request pattern。
 
-  反證三：read-only smoke 缺 env 時不 fallback live write，不使用 Telegram；實測 exit 2 且 telegram_confirmed: false。
+  對直接消費者：
+
+  - Owner / manual operator：package 與 SQL header 足以看出需要人工批准。
+  - QA / Architect：JSON package 欄位可驗證，CLI 有 exit code 區分 passed / failed。
+  - GitHub fresh runner / Telegram：未改 consumption；package 本身不會讓 confirmed 成立。
 
   ## 未測項目
 
-  未測 live Supabase read-only env、production rows、RLS/grant 實際結果、正式 backfill、live Telegram delivery；這些都被 TASK 明確排除，需 Owner 單獨批准。
-
-  未跑 full pytest / replay / backfill dry-run；依 L2+ 與本輪停止條件不擴大。
+  - 未做 production DB live verification，符合 TASK 禁止事項。
+  - 未執行 production SQL、formal backfill、RLS/grant/policy/role 變更。
+  - 未做 live Telegram delivery 或完整 Telegram 長報文驗證，因本輪未改 Telegram 報文。
+  - 未跑 full pytest，符合本輪 L2+ 停止條件與 TASK 禁止擴大範圍。
 
   ## QA 結論
 
   通過
-
-  條件說明：Architect 吸收時必須把 untracked docs/handoff/evidence_chain_production_closure_gap_assessment.md 一併納入可吸收 diff；不能只合併 tracked git diff。混合 forbidden+allowed rows 的保守 fail-closed 行為建議列後
-  續風險，但不阻塞本輪驗收。

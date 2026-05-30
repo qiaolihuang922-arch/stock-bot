@@ -33,7 +33,16 @@
 
 ## Recent High-Signal Milestones
 
-- Evidence Chain Production Closure Gap Assessment 已通過 QA，待 commit / push：
+- Evidence Chain Approval Package Generator 已通過 QA，待 commit / push：
+  - Owner 問題：既然 `market_theme_confirmed_evidence` 不需要擴表 / 擴字段，就不該只丟人工 SQL；需要把 manual SQL 變成可審核、可重跑、不可誤讀為已執行的 approval package。
+  - 新增 `scripts/generate_evidence_approval_package.py`：輸入 Owner-approved payload，輸出 review-only `approval_package.json`、`approval_package.md`，以及 validation passed 且 source allowed 時的 deterministic SQL。
+  - package 固定輸出 `schema_decision=no-schema-change`、`mode=non-live-approval-package`、`write_execution=disabled`。
+  - SQL header 固定標示 Owner manual approval required、Agent did not execute this SQL、This package is not evidence of production deployment。
+  - source guard：`production_db`、`owner_approved_persistent`、`market_data` 可產 review SQL；local/runtime/cache/worktree/report-derived/synthetic/default/test/fixture、缺 source、mixed allowed+forbidden source 全部 fail closed 且不產 SQL。
+  - 本輪沒有 live Supabase write、沒有正式 backfill、沒有 production RLS / grant 變更、沒有 live Telegram、沒有改策略 decision 或 Telegram `VERSION`。
+  - 驗證：`tests/test_market_theme_evidence_handoff.py tests/test_market_theme_evidence.py`，`36 passed, 17 warnings`；forbidden runtime payload exit 2 且 `deterministic_sql=None`；allowed payload exit 0 且產 JSON/MD/SQL；`py_compile` 與 `git diff --check` 通過。
+  - Runner gap：CAO auto 對 QA `通過` false fail，但 QA 報告與主 repo 驗證可吸收；需後續修 QA conclusion parser。
+- Evidence Chain Production Closure Gap Assessment 已推送：
   - Owner 問題：繼續 evidence chain production 化；若需要擴字段 / 擴表就給 SQL。
   - 結論：本輪 `schema_decision: no-schema-change`。現有 `public.market_theme_confirmed_evidence` schema 足以支援 read-only smoke 與 manual backfill 下一步；暫不需要新增表或欄位。
   - 新增 `docs/handoff/evidence_chain_production_closure_gap_assessment.md`，記錄 current table contract、read-only smoke requirements、manual backfill requirements、production closure matrix、next manual steps。

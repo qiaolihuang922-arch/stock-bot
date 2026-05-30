@@ -4,43 +4,44 @@
 
 ## Current Task
 
-- task_id: `evidence_chain_production_closure_gap_20260529`
-- task_name: `Evidence Chain Production Closure Gap Assessment`
+- task_id: `evidence_chain_approval_package_20260530`
+- task_name: `Evidence Chain Approval Package Generator`
 - task_type: `risk_patch`
 - version_level: `none`
 - qa_level: `L2+`
 - owner_status: `requested`
-- architect_status: `pushed`
+- architect_status: `qa_passed_pending_commit`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
 - qa_status: `qa_passed`
-- commit: `e33064d pushed`
+- commit: `pending`
 
 ## Current Result
 
-- Owner 要求繼續證據鏈，若需要擴字段 / 擴表就給 SQL。PM / Tech / QA 已判定：本輪不需要擴表或擴字段，現有 `public.market_theme_confirmed_evidence` schema 足以支援 read-only smoke 與 manual backfill 下一步。
-- 本輪完成 production closure gap assessment：
-  - 新增 `docs/handoff/evidence_chain_production_closure_gap_assessment.md`，結論為 `schema_decision: no-schema-change`。
-  - read-only smoke output 新增 `schema_decision: no-schema-change`。
-  - `services/market_theme_evidence_store.py` read-only loader 補 source-family guard：只接受 `production_db`、`owner_approved_persistent`、`market_data`；local/runtime/cache/worktree/report-derived/synthetic/default/test/fixture rows 即使 fresh/confirmed/supporting 也 fail closed。
-  - 補測試覆蓋 forbidden source rows 不得 confirmed、allowed persistent rows 仍可 confirmed、smoke CLI 缺 env fail closed 且輸出 schema decision。
+- Owner 要求繼續證據鏈，並追問「為什麼要人工 SQL」。本輪把人工 SQL 往前收斂成 repo-side controlled approval package / write plan；仍不做 live write。
+- 本輪完成 non-live approval package generator：
+  - 新增 `scripts/generate_evidence_approval_package.py`。
+  - 輸入 Owner-approved payload 後，可輸出 `approval_package.json`、`approval_package.md`，以及 validation passed 且 source allowed 時的 deterministic review-only SQL。
+  - package 固定標示 `schema_decision=no-schema-change`、`mode=non-live-approval-package`、`write_execution=disabled`。
+  - SQL header 明確標示 Owner manual approval required、Agent did not execute this SQL、This package is not evidence of production deployment。
+  - forbidden / missing / mixed source family fail closed，不產生 SQL。
 - 本輪沒有 live Supabase write、沒有正式 backfill、沒有 production RLS / grant 變更、沒有 live Telegram、沒有改策略 decision 或使用者可見 Telegram version。
 - QA 通過：
-  - `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence_handoff.py tests/test_market_theme_evidence.py -q`：31 passed, 17 warnings。
-  - read-only smoke 缺 env 時 exit 2，輸出 `schema_decision: no-schema-change` 與 `telegram_confirmed: false`。
-  - QA 首輪阻塞有效：抓到 loader 會把 `source_family=local` 的 production row 洗成 confirmed；Tech 返工後 QA 重跑通過。
-  - QA 額外反證：forbidden source rows 全部 fail closed；allowed persistent source rows 仍 confirmed。
-  - `git diff --check` 通過。
-- Runner 狀態：Tech / QA 多次完成實質輸出後卡在會話提示；Architect 按 QA 報告與主 repo 驗證手動吸收，未整包搬 worktree。
+  - `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence_handoff.py tests/test_market_theme_evidence.py -q`：36 passed, 17 warnings。
+  - forbidden runtime payload exit 2，`deterministic_sql=None`。
+  - allowed owner-approved persistent payload exit 0，寫出 package JSON / Markdown / SQL。
+  - `py_compile`、`git diff --check` 通過。
+  - QA 額外反證：fixture-derived source fail closed、secret-like `postgres://` payload 不產生 SQL、generator 無 Supabase client / insert / upsert / rpc / execute / Telegram delivery pattern。
+- Runner 狀態：CAO auto cycle 再次把 QA 明確 `通過` 誤判為 failed；Architect 按 QA 報告與主 repo 驗證手動吸收，未整包搬 worktree。
 - Post-cycle review：
-  - 根因分類：`source_boundary_gap` + `production_ops_boundary` + `runner_session_handoff_gap`。
-  - QA 有效攔截 fake confirmed 風險；本輪沉澱為 loader guard 與 tests。
-  - 不新增 `AGENTS.md` 硬規則；既有 source-of-truth / fake confirmed / live write 規則已覆蓋。本輪只更新狀態與 runner 待補。
+  - 根因分類：`manual_sql_operator_risk` + `approval_flow_gap` + `runner_parser_false_fail`。
+  - QA 有效覆蓋誤讀、fake source 與 live side-effect 風險。
+  - 不新增 `AGENTS.md` 硬規則；既有 source-of-truth、fake confirmed、live write 禁令已覆蓋。本輪沉澱為 generator contract、tests、handoff docs 與 runner 待補。
 
 ## Next Action
 
-- 本輪 diff 已 commit / push：`e33064d fix: guard evidence source family`。
-- 下一步若 Owner 要真正進 production：不需要先擴表；先準備 approved payload / read-only env，跑 validation + manual SQL review + read-only smoke。正式 backfill / RLS / grant / live write 仍需單獨批准。
+- Architect 進行 commit / push，然後清理 CAO worktree。
+- 下一步若 Owner 要真正進 production：先提供 / 確認 approved payload，使用 approval package 審核 SQL；正式 SQL execution、backfill、RLS / grant、live write、live Telegram 仍需單獨批准。
 
 ## Status Values
 
