@@ -2,93 +2,95 @@
 
   ## 測試範圍
 
-  本輪任務尺寸為 tiny_patch，QA level 為 L1。驗證範圍收斂在 scripts/smoke_market_theme_evidence_readonly.py 的 credential fallback、直接測試、直接消費者與 secret-output 風險；未擴成 full pytest / replay / backfill。
+  本輪任務尺寸為 normal_patch、QA level 為 L2。我沒有擴成 full pytest / replay / backfill；驗證集中在 read-only audit JSON contract、fail-closed gate、直接消費者與 Owner 可見 dry-run 輸出誤讀風險。
 
-  可吸收 diff：
+  已檢查：
 
+  - TASK.md
+  - CHANGELOG.md
+  - git status
+  - git diff --stat
+  - services/market_theme_evidence_store.py
   - scripts/smoke_market_theme_evidence_readonly.py
   - tests/test_market_theme_evidence_handoff.py
-  - CHANGELOG.md
 
-  worktree 殘留：
+  已跑命令：
 
-  - git status --short --untracked-files=all 僅顯示上述 3 個 tracked 修改；未發現需合併的旁支殘留。QA 測試暫存使用 .qa_tmp/，未改 tracked file。
-
-  已執行：
-
-  - arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence_handoff.py -q：31 passed
-  - PYTHONPYCACHEPREFIX=.qa_tmp/pycache arch -arm64 .venv/bin/python -m py_compile scripts/smoke_market_theme_evidence_readonly.py tests/test_market_theme_evidence_handoff.py：通過
-  - git diff --check：通過
-  - QA 補充負面反證：只有 SUPABASE_SERVICE_ROLE_KEY 時 resolver fail closed、不建立 client、不 fallback 到高權限 key：通過
-  - QA 補充 secret derivative render 反證：fail-closed render 不含 secret / hash / fingerprint / length：通過
-
-  備註：第一次 py_compile 未設 PYTHONPYCACHEPREFIX 時被 sandbox 擋在使用者 Cache 寫入，改用 .qa_tmp/pycache 後通過；不屬於程式失敗。
+  - arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence_handoff.py -q -> 34 passed
+  - arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py -q -> 21 passed
+  - git diff --check -> passed
+  - scripts/smoke_market_theme_evidence_readonly.py --trade-date 2026-05-29 --production-source-audit-json -> exit code 2，輸出 blocked JSON，未洩漏 secret/hash/fingerprint
+  - 追加直接消費者 smoke：mock production source rows 可產生 approved_payload_preview，且 fake client 未觸發 insert/update/upsert/delete
 
   ## 風險預算與停止條件
 
-  本輪最值得抓的 3 個風險：
+  最值得抓的 3 個風險：
 
-  1. credential resolution 順序錯，仍誤報缺 env/config。
-      - 驗證：讀 diff、跑直接測試，確認 URL 與 key fallback 順序符合 TASK。
-      - 停止條件：直接測試通過且 _build_readonly_client() 使用 resolver。
-  2. 缺憑證時沒有 fail closed，或仍建立 client / 讀 DB。
-      - 驗證：直接測試與 QA 補充 fake client negative，確認 missing credentials 不呼叫 client factory。
-      - 停止條件：fake client calls 為空，status failed。
-  3. secret 或高權限 key 被輸出 / 被納入 fallback。
-      - 驗證：檢查 diff 無 SUPABASE_SERVICE_ROLE_KEY fallback；補測 service-role only case；檢查 fail-closed render 不含 secret 派生資訊。
-      - 停止條件：service-role only 無 client、render 無 secret/hash/fingerprint/length。
+  1. 把個股 snapshot / signal item row count 誤升級成 market/theme confirmed evidence。
+      - 驗證：測試與 diff 顯示需具備 market_index / sector_theme_key / watchlist_breadth / evidence_value / support_level / lineage 並通過 validator 才能 preview。
+      - 結果：local contract 通過。
+  2. dry-run audit 變成 live write 或產出可誤執行 payload。
+      - 驗證：JSON 固定 write_execution=disabled、live_write=false；追加 fake client 阻擋 write method。
+      - 結果：未見 write path 被呼叫。
+  3. Owner 讀 dry-run output 時誤以為 production source row count 已被完整確認。
+      - 驗證：實跑 CLI。
+      - 結果：本環境 production read 失敗；輸出 blocked，但 signal_runs source-error 時 signal_items 顯示 rows: 0，可能讓 Owner 誤讀成 signal_items 已查且為 0。
 
-  停止於 L1 局部契約驗證；其他 smoke script、CI secret 命名與 live Supabase read 不納入本輪。
+  停止條件：不做 live production write、不做 backfill、不做 full repo 測試；production row count 只能在允許 read-only Supabase network 的 runner 完成。
 
   ## 關聯風險掃描
 
-  TASK.md、CHANGELOG.md、git diff 一致：本輪只改 read-only smoke credential fallback 與直接測試，未見策略、Telegram、DB schema、RLS、grant、policy、backfill、live delivery path 變更。
+  TASK.md、主要 code diff、測試方向大致一致：新增 read-only audit helper、CLI flag、局部 tests，不改策略、Telegram、DB schema 或 write CLI。
 
-  直接消費者掃描：
+  需注意兩個不一致/殘留：
 
-  - scripts/smoke_market_theme_evidence_readonly.py main() 仍透過 _build_readonly_client() 建 client，已接到新 resolver。
-  - scripts/generate_evidence_approval_package.py 只引用 CLI command 字串，呼叫方式未變。
-  - 測試新增 fake config / fake client 驗證，不讀真實 .env 或真實 secret。
-
-  未發現清理 / 瘦身 / refactor 任務，因此不適用 path / claim / evidence / risk / action 證據表阻塞條件。
+  - CHANGELOG.md 說「未直接編輯 CHANGELOG.md」，但 git status / git diff --stat 顯示 CHANGELOG.md 已修改。這是交付文件描述不精準，不影響產品 code contract，但 Architect 吸收時不能把整包 diff 當成產品可合併 diff。
+  - 可吸收產品 diff 應限於：
+      - services/market_theme_evidence_store.py
+      - scripts/smoke_market_theme_evidence_readonly.py
+      - tests/test_market_theme_evidence_handoff.py
+  - worktree 殘留/交付文件 diff：
+      - CHANGELOG.md 僅作 handoff 摘要，不應被當成產品實作範圍。
 
   ## 跨區塊語意一致性
 
-  本輪不改 Telegram / summary / dashboard / formatter header / message list，無手機報文版面變更。
+  本輪不是 Telegram / UI 任務，無手機報文版本或 formatter header 需驗證。
 
-  CLI smoke fail-closed 語意一致：
+  Owner 可見 JSON 的閱讀順序檢查：
 
-  - TASK 要求缺 URL 或 key 時 fail closed。
-  - diff 中 main 使用 missing required Supabase read credentials。
-  - render 仍顯示 mode: read-only、write: disabled、status: fail-closed、telegram_confirmed: false。
-  - 不會把缺憑證誤讀成已確認 production evidence。
+  - 開頭能看到 mode=read-only-production-audit
+  - 能看到 write_execution=disabled、live_write=false
+  - 能看到 can_generate_approved_payload=false 與 status=blocked
+  - blocked 時 approved_payload_preview=null
+  - missing_source_semantics 有列出需要 Owner/PM 補的 source semantics
+
+  語意風險：當上游 production read 失敗時，source_tables 裡部分表有 status=source-error，但 signal_items 在無 run_ids 時被填成 ok/rows=0。這會削弱「來源表 row count」的可追溯語意。
 
   ## 使用者誤讀風險
 
-  Owner / developer 執行 smoke 時，缺憑證輸出只提示缺必要 read credential，不會顯示 key 值、hash、截斷值或長度。這降低了把 secret 貼到 log / 聊天 / issue 的風險。
+  主要誤讀風險不是買賣建議，而是 Owner 可能把 signal_items rows=0 解讀為 production 已查無資料。實際上，當 signal_runs 讀取失敗或沒有可用 run id 時，程式沒有直接查 signal_items，而是用空結果代替。
 
-  成功 fallback 時，CLI 使用方式不變；主要風險是使用者不知道實際 key 來源，但 TASK 沒要求輸出 credential source，且輸出 source 可能增加 secret 誤讀或 debug 擴張風險。本輪接受不顯示 key source。
+  此風險不會造成 approved payload 被產出，因為整體仍 blocked；但會影響 Owner 對 production source availability 的判斷。
 
   ## 質疑與反證
 
-  主動質疑 1：Tech 測試有覆蓋 readonly/env/config key，但是否漏掉「service-role 高權限 key 被誤用」？
+  Tech 已覆蓋 snapshot rows 不可升級、explicit contract columns 才 preview、缺 credentials fail closed。QA 追加反證：
 
-  - 反證：QA 補測只有 SUPABASE_SERVICE_ROLE_KEY / config service role key 時 resolver 回 failed、credentials 為空、client factory 未被呼叫。通過。
-
-  主動質疑 2：缺憑證輸出是否可能包含 secret 派生資訊？
-
-  - 反證：QA 補測 render 不含 hash、fingerprint、length，直接測試也檢查 secret 字串不出現在 output。通過。
-
-  主動質疑 3：這個 patch 是否回退 read-only contract？
-
-  - 反證：diff 未新增 write/backfill/live Telegram；service role 未納入 read-only smoke fallback；write: disabled render contract 保留。可接受。
+  - 直接消費者：mock safe mapping row 產生 preview，preview 欄位可被 validator 接受，且未觸發 write method。
+  - 負面/誤讀案例：實跑 CLI 在 production read 失敗時 blocked 且 redacted，但 signal_items row count 可能被誤讀為已查。
+  - 契約風險：TASK.md 要求至少回報指定 production tables 是否有 2026-05-29 資料；目前 sandbox 無法完成真實 production row count，因此不能給完全通過。
 
   ## 未測項目
 
-  - 未用真實 Supabase credential 跑 live read-only smoke；本輪 TASK 明確允許 fake client 驗證 resolver contract，且避免讀取或輸出真實 secret。
-  - 未跑 full pytest、replay、backfill dry-run；tiny_patch / L1 不需要。
-  - 未驗證其他 smoke scripts 是否也有 env/config fallback 問題；TASK 停止條件要求列為後續風險，不納入本輪。
+  - 未驗證真實 production DB row count，因 CLI 在目前 sandbox 讀 production 發生 source-error。
+  - 未做 live write、upsert、insert、update、delete。
+  - 未做 backfill / replay。
+  - 未做 full pytest。
+  - 未驗證 Supabase read-only runner 實際 credential 權限是否符合 production。
 
   ## QA 結論
 
-  通過
+  conditional pass
+
+  本地 code contract、fail-closed、dry-run only、局部直接消費者驗證通過；但 production row count 驗收未能在目前環境完成，且 signal_runs 失敗時 signal_items rows=0 有 Owner 誤讀風險。建議 Architect 僅吸收產品 code/test
+  diff，不要整包合併 handoff 文件；正式完成前需在可連 production read-only 的 runner 重跑 audit CLI，並修正或接受 signal_items skipped/rows=0 的語意風險。

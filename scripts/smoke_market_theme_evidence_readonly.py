@@ -10,6 +10,7 @@ Non-live artifact only:
 """
 
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
@@ -19,6 +20,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from services.market_theme_evidence_store import (
+    build_market_theme_evidence_production_source_audit,
     build_market_theme_evidence_readonly_smoke,
     load_confirmed_market_theme_evidence,
 )
@@ -119,10 +121,38 @@ def main(argv=None):
     )
     parser.add_argument("--trade-date", help="Optional YYYY-MM-DD trade_date filter.")
     parser.add_argument("--limit", type=int, default=20, help="Read limit for the smoke query.")
+    parser.add_argument(
+        "--production-source-audit-json",
+        action="store_true",
+        help="Output read-only production source audit JSON for approved payload gating.",
+    )
     args = parser.parse_args(argv)
 
     client = _build_readonly_client()
     if client is None:
+        if args.production_source_audit_json:
+            audit = {
+                "mode": "read-only-production-audit",
+                "write_execution": "disabled",
+                "live_write": False,
+                "source_family": "production_db",
+                "trade_date": args.trade_date,
+                "source_tables": [],
+                "can_generate_approved_payload": False,
+                "status": "blocked",
+                "missing_source_semantics": [
+                    "production DB read credentials",
+                    "market_index",
+                    "sector_theme_key",
+                    "watchlist_breadth definition",
+                    "evidence_value meaning",
+                    "support_level rule",
+                    "lineage from production DB columns",
+                ],
+                "approved_payload_preview": None,
+            }
+            print(json.dumps(audit, ensure_ascii=False, indent=2, sort_keys=True))
+            return 2
         load_result = {
             "status": "missing-source",
             "confirmed": False,
@@ -130,6 +160,14 @@ def main(argv=None):
             "rows": [],
         }
     else:
+        if args.production_source_audit_json:
+            audit = build_market_theme_evidence_production_source_audit(
+                client=client,
+                trade_date=args.trade_date,
+                limit=args.limit,
+            )
+            print(json.dumps(audit, ensure_ascii=False, indent=2, sort_keys=True))
+            return 0 if audit["can_generate_approved_payload"] else 2
         load_result = load_confirmed_market_theme_evidence(
             client=client,
             trade_date=args.trade_date,

@@ -4,11 +4,11 @@
 
 ## Current Task
 
-- task_id: `fix-evidence-readonly-smoke-credential-fallback`
-- task_name: `Evidence Read-only Smoke Credential Fallback`
-- task_type: `tiny_patch`
+- task_id: `production-evidence-approved-payload-audit`
+- task_name: `Production Evidence Source Audit And Approved Payload Gate`
+- task_type: `normal_patch`
 - version_level: `none`
-- qa_level: `L1`
+- qa_level: `L2`
 - owner_status: `requested`
 - architect_status: `ready_to_commit`
 - pm_status: `task_ready`
@@ -18,31 +18,31 @@
 
 ## Current Result
 
-- Owner 要繼續 production evidence 閉環。Architect 先跑 read-only smoke，發現 script 只認 env `SUPABASE_READONLY_KEY`，本機 `config.py` 已有 `SUPABASE_URL / SUPABASE_KEY` 時會誤報 `production DB env/config missing`。手動注入 config key 後可讀 production，結果是表可讀但 rows=0。
-- 本輪修正 `scripts/smoke_market_theme_evidence_readonly.py` credential fallback：
-  - URL：env `SUPABASE_URL` -> `config.SUPABASE_URL`。
-  - key：env `SUPABASE_READONLY_KEY` -> env `SUPABASE_KEY` -> `config.SUPABASE_READONLY_KEY` -> `config.SUPABASE_KEY`。
-  - 缺 URL 或 key 時 fail closed，不建立 client、不讀 DB。
-  - 不把 `SUPABASE_SERVICE_ROLE_KEY` 或其他高權限 secret 納入 read-only fallback。
-  - 不輸出 secret value、hash、截斷值、fingerprint 或長度。
+- Owner 要繼續 production evidence 閉環。read-only smoke 現已可讀 production，但 `market_theme_confirmed_evidence` rows=0；本輪新增 read-only production source audit / approved payload gate，先判斷現有 production DB 資料是否可安全生成 approved payload preview。
+- 本輪新增 `scripts/smoke_market_theme_evidence_readonly.py --production-source-audit-json`：
+  - 固定 `write_execution=disabled`、`live_write=false`。
+  - 讀取 `market_theme_confirmed_evidence`、`daily_signal_snapshot`、`signal_runs`、`signal_items` 的 source availability / row count。
+  - 只有 production row 明確具備 `market_index`、`sector_theme_key`、`watchlist_breadth`、`evidence_value`、`support_level`、`lineage` 等既有 contract 欄位，才可輸出 `approved_payload_preview`。
+  - 若只有個股策略 snapshot / signal item row count，必須 `can_generate_approved_payload=false`、`status=blocked`。
 - 本輪沒有 production live write、formal backfill、DB schema / table / column 變更、RLS / grant / policy / role 變更、live Telegram、策略 decision、Telegram formatter 或 Telegram `VERSION` 變更。
-- QA 結論：`通過`。
-  - `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence_handoff.py -q`：31 passed。
+- QA 結論：`conditional pass`，Architect 已用真實 production read-only audit 滿足主要條件。
+  - `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence_handoff.py -q`：34 passed。
+  - `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py -q`：21 passed。
   - `git diff --check`：通過。
-  - QA 額外反證：只有 service-role key 時 resolver fail closed，不建立 client；fail-closed render 不含 secret 派生資訊。
 - Architect 主 repo 驗證：
-  - `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence_handoff.py -q`：31 passed。
+  - `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence_handoff.py tests/test_market_theme_evidence.py -q`：55 passed，17 warnings。
   - `git diff --check`：通過。
-  - 直接執行 `scripts/smoke_market_theme_evidence_readonly.py` 已能讀 production：`env=present`、`table_read=ok`、`rows=0`、`status=fail-closed`、`note=no production confirmed evidence available`。
+  - 真實 production read-only audit：`market_theme_confirmed_evidence rows=0`、`daily_signal_snapshot rows=48`、`signal_runs rows=1`、`signal_items rows=12`、`can_generate_approved_payload=false`、`status=blocked`。
+  - 缺少 semantics：`market_index`、`sector_theme_key`、`watchlist_breadth definition`、`evidence_value meaning`、`support_level rule`、`lineage from production DB columns`。
 - Post-cycle review：
-  - 根因分類：`credential_fallback_gap` + `runner_parser_false_fail`。
-  - QA 有效覆蓋缺憑證 fail closed、config fallback、secret redaction、高權限 service-role 不被 read-only smoke 使用。
+  - 根因分類：`production_source_semantics_gap` + `runner_parser_false_fail`。
+  - QA 有效覆蓋 dry-run only、fail-closed gate、直接消費者、Owner 誤讀風險。
   - 不新增 `AGENTS.md` 硬規則；既有 source-of-truth、資料寫入邊界、live write 禁令與 Post-cycle Review 已覆蓋。本輪沉澱為 helper/test 與 runner 待補。
 
 ## Next Action
 
 - Architect commit / push，清理 CAO worktree。
-- 下一步進入真正缺口：`market_theme_confirmed_evidence` production 表目前 rows=0。需定義 approved persistent payload 來源；現有 `daily_signal_snapshot` / `signal_runs/items` 可提供內部 watchlist breadth，但是否足以成為 confirmed market/theme evidence 需要 PM 定義 mapping，不能由 Architect 直接硬寫。
+- 下一步需要 Owner 決策：是否允許把 `daily_signal_snapshot` / `signal_runs/items` 的 production DB row count 與策略欄位定義為 market/theme supporting evidence source；若允許，需明確給出 market_index、sector_theme_key、watchlist_breadth、evidence_value、support_level、lineage 的 mapping 規則。若不允許，需要提供外部市場/族群指數或另一張 production source 表。
 
 ## Status Values
 

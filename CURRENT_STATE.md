@@ -33,6 +33,14 @@
 
 ## Recent High-Signal Milestones
 
+- Production Evidence Source Audit And Approved Payload Gate 已通過 QA conditional pass，條件已由 Architect 用真實 production read-only audit 補足，待 commit / push：
+  - 新增 `scripts/smoke_market_theme_evidence_readonly.py --production-source-audit-json`，只讀 production source availability，不寫 DB、不 backfill、不發 Telegram。
+  - Audit 固定輸出 `write_execution=disabled`、`live_write=false`，並檢查 `market_theme_confirmed_evidence`、`daily_signal_snapshot`、`signal_runs`、`signal_items` row count。
+  - 只有 production row 明確具備既有 market/theme evidence contract 欄位，且通過 validator，才輸出 `approved_payload_preview`；個股策略 snapshot / signal item row count 不得直接升級為 confirmed/supporting evidence。
+  - Architect 真實 production read-only audit 結果：`market_theme_confirmed_evidence rows=0`、`daily_signal_snapshot rows=48`、`signal_runs rows=1`、`signal_items rows=12`，但 `can_generate_approved_payload=false`、`status=blocked`。
+  - 缺少 source semantics：`market_index`、`sector_theme_key`、`watchlist_breadth definition`、`evidence_value meaning`、`support_level rule`、`lineage from production DB columns`。
+  - 驗證：`arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence_handoff.py tests/test_market_theme_evidence.py -q`，`55 passed, 17 warnings`；`git diff --check` 通過。
+  - 下一步需要 Owner / PM 決定：是否允許把 `daily_signal_snapshot` / `signal_runs/items` 的 production DB 欄位定義成 market/theme supporting evidence；若不允許，需外部市場/族群指數或另一張 production source table。
 - Evidence Read-only Smoke Credential Fallback 已通過 QA，待 commit / push：
   - Architect 跑 production read-only smoke 時發現：原 script 只認 env `SUPABASE_READONLY_KEY`，本機 `config.py` 已有 `SUPABASE_URL / SUPABASE_KEY` 時仍誤報 missing；手動注入 config key 後可讀 production，且 `market_theme_confirmed_evidence` 目前 rows=0。
   - `scripts/smoke_market_theme_evidence_readonly.py` 新增安全 credential fallback：URL 走 env `SUPABASE_URL` -> `config.SUPABASE_URL`；read key 走 env `SUPABASE_READONLY_KEY` -> env `SUPABASE_KEY` -> `config.SUPABASE_READONLY_KEY` -> `config.SUPABASE_KEY`。

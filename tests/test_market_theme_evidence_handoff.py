@@ -10,6 +10,7 @@ from unittest.mock import patch
 from services.market_theme_evidence_store import (
     build_market_theme_write_client,
     build_market_theme_evidence_handoff,
+    build_market_theme_evidence_production_source_audit,
     build_market_theme_evidence_readonly_smoke,
     load_confirmed_market_theme_evidence,
     validate_market_theme_evidence_ingestion_payload,
@@ -17,6 +18,7 @@ from services.market_theme_evidence_store import (
 from scripts.generate_evidence_approval_package import build_approval_package
 from scripts.smoke_market_theme_evidence_readonly import (
     _build_readonly_client,
+    main as readonly_smoke_main,
     _render as render_readonly_smoke,
     resolve_readonly_smoke_credentials,
 )
@@ -141,6 +143,48 @@ class WriteClient:
 
     def table(self, name):
         return WriteTable(self, name)
+
+
+class AuditTable:
+    def __init__(self, rows):
+        self._rows = list(rows)
+        self._selected = "*"
+
+    def select(self, fields, count=None):
+        self._selected = fields
+        return self
+
+    def eq(self, key, value):
+        self._rows = [
+            row for row in self._rows
+            if row.get(key) == value
+        ]
+        return self
+
+    def in_(self, key, values):
+        allowed = set(values or [])
+        self._rows = [
+            row for row in self._rows
+            if row.get(key) in allowed
+        ]
+        return self
+
+    def limit(self, limit):
+        self._rows = self._rows[:limit]
+        return self
+
+    def execute(self):
+        return type("Result", (), {"data": self._rows, "count": len(self._rows)})()
+
+
+class AuditClient:
+    def __init__(self, tables):
+        self.tables = tables
+        self.calls = []
+
+    def table(self, name):
+        self.calls.append(name)
+        return AuditTable(self.tables.get(name, []))
 
 
 class WriteThenReadErrorTable(WriteTable):
@@ -900,6 +944,159 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
         self.assertNotIn("hash", output.lower())
         self.assertNotIn("fingerprint", output.lower())
         self.assertNotIn("length", output.lower())
+
+    def test_production_source_audit_blocks_strategy_snapshot_rows_without_market_theme_semantics(self):
+        client = AuditClient(
+            {
+                "market_theme_confirmed_evidence": [],
+                "daily_signal_snapshot": [
+                    {
+                        "stock_id": "2330",
+                        "trade_date": "2026-05-29",
+                        "action": "BUY",
+                        "score": 92,
+                    },
+                    {
+                        "stock_id": "2317",
+                        "trade_date": "2026-05-29",
+                        "action": "NO_TRADE",
+                        "score": 61,
+                    },
+                ],
+                "signal_runs": [
+                    {
+                        "id": "run-1",
+                        "run_date": "2026-05-29",
+                        "run_phase": "daily_close",
+                    }
+                ],
+                "signal_items": [
+                    {
+                        "run_id": "run-1",
+                        "stock_code": "2330",
+                        "decision": "BUY",
+                    }
+                ],
+            }
+        )
+
+        audit = build_market_theme_evidence_production_source_audit(
+            client,
+            trade_date="2026-05-29",
+        )
+
+        self.assertEqual(audit["mode"], "read-only-production-audit")
+        self.assertEqual(audit["write_execution"], "disabled")
+        self.assertFalse(audit["live_write"])
+        self.assertEqual(audit["source_family"], "production_db")
+        self.assertFalse(audit["can_generate_approved_payload"])
+        self.assertEqual(audit["status"], "blocked")
+        self.assertIsNone(audit["approved_payload_preview"])
+        self.assertIn("market_index", audit["missing_source_semantics"])
+        self.assertEqual(
+            [(item["table"], item["rows"]) for item in audit["source_tables"]],
+            [
+                ("market_theme_confirmed_evidence", 0),
+                ("daily_signal_snapshot", 2),
+                ("signal_runs", 1),
+                ("signal_items", 1),
+            ],
+        )
+        for table in audit["source_tables"]:
+            self.assertFalse(table["usable_for_market_theme_evidence"])
+
+    def test_production_source_audit_outputs_preview_only_for_explicit_contract_columns(self):
+        client = AuditClient(
+            {
+                "market_theme_confirmed_evidence": [],
+                "daily_signal_snapshot": [
+                    {
+                        "trade_date": "2026-05-29",
+                        "as_of": "2026-05-29T13:30:00+08:00",
+                        "market_index": "TAIEX",
+                        "sector_theme_key": "semiconductor",
+                        "watchlist_breadth": {"supporting": 8, "tracked": 12},
+                        "freshness": "fresh",
+                        "evidence_value": {"market": "supportive"},
+                        "support_level": "supporting",
+                        "lineage": {
+                            "tables": ["daily_signal_snapshot"],
+                            "trade_date": "2026-05-29",
+                        },
+                        "source_family": "production_db",
+                        "source_name": "daily_signal_snapshot",
+                        "evidence_status": "confirmed",
+                    }
+                ],
+                "signal_runs": [],
+                "signal_items": [],
+            }
+        )
+
+        audit = build_market_theme_evidence_production_source_audit(
+            client,
+            trade_date="2026-05-29",
+        )
+
+        self.assertTrue(audit["can_generate_approved_payload"])
+        self.assertEqual(audit["status"], "dry-run-preview")
+        self.assertEqual(audit["missing_source_semantics"], [])
+        self.assertEqual(audit["approved_payload_preview"][0]["market_index"], "TAIEX")
+        snapshot_table = next(
+            table for table in audit["source_tables"]
+            if table["table"] == "daily_signal_snapshot"
+        )
+        self.assertTrue(snapshot_table["usable_for_market_theme_evidence"])
+        self.assertEqual(
+            set(audit["approved_payload_preview"][0]),
+            {
+                "trade_date",
+                "as_of",
+                "market_index",
+                "sector_theme_key",
+                "watchlist_breadth",
+                "freshness",
+                "evidence_value",
+                "support_level",
+                "lineage",
+                "source_family",
+                "source_name",
+                "evidence_status",
+            },
+        )
+
+    def test_production_source_audit_cli_missing_credentials_returns_blocked_json_without_secret_derivatives(self):
+        with tempfile.TemporaryFile(mode="w+", encoding="utf-8") as stdout:
+            old_stdout = sys.stdout
+            try:
+                sys.stdout = stdout
+                with patch(
+                    "scripts.smoke_market_theme_evidence_readonly._build_readonly_client",
+                    return_value=None,
+                ):
+                    returncode = readonly_smoke_main(
+                        [
+                            "--trade-date",
+                            "2026-05-29",
+                            "--production-source-audit-json",
+                        ]
+                    )
+            finally:
+                sys.stdout = old_stdout
+            stdout.seek(0)
+            stdout_text = stdout.read()
+            output = json.loads(stdout_text)
+
+        self.assertEqual(returncode, 2)
+        self.assertEqual(output["mode"], "read-only-production-audit")
+        self.assertEqual(output["write_execution"], "disabled")
+        self.assertFalse(output["live_write"])
+        self.assertFalse(output["can_generate_approved_payload"])
+        self.assertEqual(output["status"], "blocked")
+        self.assertIsNone(output["approved_payload_preview"])
+        self.assertNotIn("SUPABASE_KEY", stdout_text)
+        self.assertNotIn("hash", stdout_text.lower())
+        self.assertNotIn("fingerprint", stdout_text.lower())
 
     def test_readonly_smoke_matrix_fails_closed_except_valid_confirmed_rows(self):
         cases = [

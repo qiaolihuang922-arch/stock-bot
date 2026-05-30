@@ -66,6 +66,21 @@ REQUIRED_ROW_FIELDS = {
     "source_name",
     "lineage",
 }
+AUDIT_MODE = "read-only-production-audit"
+AUDIT_MISSING_SOURCE_SEMANTICS = [
+    "market_index",
+    "sector_theme_key",
+    "watchlist_breadth definition",
+    "evidence_value meaning",
+    "support_level rule",
+    "lineage from production DB columns",
+]
+AUDIT_SOURCE_TABLE_REASONS = {
+    "market_theme_confirmed_evidence": "target confirmed evidence table; rows are read-only status only",
+    "daily_signal_snapshot": "missing explicit market_index / sector_theme_key / breadth semantics",
+    "signal_runs": "run metadata is not market/theme evidence semantics",
+    "signal_items": "watchlist item rows are strategy snapshots, not approved market/theme evidence",
+}
 
 
 def _config_value(name):
@@ -349,6 +364,202 @@ def _validate_handoff_row(row):
     if not isinstance(row.get("metadata"), dict):
         return "metadata must be an object"
     return None
+
+
+def _query_execute(query):
+    return query.execute()
+
+
+def _select_count_rows(client, table, fields="*", filters=None, limit=1000):
+    filters = filters or []
+    try:
+        try:
+            query = client.table(table).select(fields, count="exact")
+        except TypeError:
+            query = client.table(table).select(fields)
+        for method_name, args in filters:
+            method = getattr(query, method_name)
+            query = method(*args)
+        if limit:
+            query = query.limit(limit)
+        result = _query_execute(query)
+        rows = result.data or []
+        count = getattr(result, "count", None)
+        return {
+            "status": "ok",
+            "rows": rows,
+            "row_count": count if count is not None else len(rows),
+            "reason": "",
+        }
+    except Exception as exc:
+        return {
+            "status": "source-error",
+            "rows": [],
+            "row_count": 0,
+            "reason": str(exc),
+        }
+
+
+def _audit_source_table_entry(table, count_result, **extra):
+    entry = {
+        "table": table,
+        "rows": count_result.get("row_count", 0),
+        "usable_for_market_theme_evidence": False,
+        "reason": AUDIT_SOURCE_TABLE_REASONS.get(
+            table,
+            "missing explicit market/theme evidence semantics",
+        ),
+    }
+    if count_result.get("status") != "ok":
+        entry["status"] = "source-error"
+        entry["reason"] = "read failed; details redacted"
+    entry.update({key: value for key, value in extra.items() if value not in (None, "")})
+    return entry
+
+
+def _candidate_preview_row(row, trade_date, source_name):
+    if not isinstance(row, dict):
+        return None
+    candidate = {
+        "trade_date": row.get("trade_date") or trade_date,
+        "as_of": row.get("as_of") or row.get("created_at") or _default_as_of(trade_date),
+        "market_index": row.get("market_index"),
+        "sector_theme_key": row.get("sector_theme_key"),
+        "watchlist_breadth": row.get("watchlist_breadth"),
+        "freshness": row.get("freshness") or "fresh",
+        "evidence_value": row.get("evidence_value"),
+        "support_level": row.get("support_level"),
+        "lineage": row.get("lineage"),
+        "source_family": row.get("source_family") or "production_db",
+        "source_name": row.get("source_name") or source_name,
+        "evidence_status": row.get("evidence_status") or "confirmed",
+    }
+    if _validate_handoff_row({**candidate, "metadata": row.get("metadata") or {}}):
+        return None
+    return candidate
+
+
+def _approved_payload_preview_from_source_rows(trade_date, rows_by_table):
+    candidates = []
+    for table in ("daily_signal_snapshot", "signal_items"):
+        for row in rows_by_table.get(table, []):
+            candidate = _candidate_preview_row(row, trade_date, table)
+            if candidate:
+                candidates.append(candidate)
+    if not candidates:
+        return None
+    validation = validate_market_theme_evidence_ingestion_payload(candidates)
+    if not validation.get("valid"):
+        return None
+    return [
+        {field: row.get(field) for field in (
+            "trade_date",
+            "as_of",
+            "market_index",
+            "sector_theme_key",
+            "watchlist_breadth",
+            "freshness",
+            "evidence_value",
+            "support_level",
+            "lineage",
+            "source_family",
+            "source_name",
+            "evidence_status",
+        )}
+        for row in validation.get("rows", [])
+    ]
+
+
+def build_market_theme_evidence_production_source_audit(client, trade_date, limit=1000):
+    """Build a read-only approved-payload gate from production DB source rows."""
+    source_tables = []
+    rows_by_table = {}
+
+    confirmed_result = _select_count_rows(
+        client,
+        TABLE_NAME,
+        SELECT_FIELDS,
+        filters=[("eq", ("trade_date", trade_date))] if trade_date else [],
+        limit=limit,
+    )
+    rows_by_table["market_theme_confirmed_evidence"] = confirmed_result["rows"]
+    source_tables.append(
+        _audit_source_table_entry("market_theme_confirmed_evidence", confirmed_result)
+    )
+
+    snapshot_result = _select_count_rows(
+        client,
+        "daily_signal_snapshot",
+        "*",
+        filters=[("eq", ("trade_date", trade_date))] if trade_date else [],
+        limit=limit,
+    )
+    rows_by_table["daily_signal_snapshot"] = snapshot_result["rows"]
+    source_tables.append(_audit_source_table_entry("daily_signal_snapshot", snapshot_result))
+
+    signal_runs_result = _select_count_rows(
+        client,
+        "signal_runs",
+        "id,run_date,run_phase",
+        filters=[
+            ("eq", ("run_date", trade_date)),
+            ("eq", ("run_phase", "daily_close")),
+        ] if trade_date else [("eq", ("run_phase", "daily_close"))],
+        limit=limit,
+    )
+    rows_by_table["signal_runs"] = signal_runs_result["rows"]
+    source_tables.append(
+        _audit_source_table_entry(
+            "signal_runs",
+            signal_runs_result,
+            run_type="daily_close",
+        )
+    )
+
+    run_ids = [
+        row.get("id")
+        for row in signal_runs_result.get("rows", [])
+        if isinstance(row, dict) and row.get("id")
+    ]
+    signal_item_filters = [("in_", ("run_id", run_ids))] if run_ids else []
+    signal_items_result = (
+        _select_count_rows(
+            client,
+            "signal_items",
+            "*",
+            filters=signal_item_filters,
+            limit=limit,
+        )
+        if run_ids
+        else {"status": "ok", "rows": [], "row_count": 0, "reason": ""}
+    )
+    rows_by_table["signal_items"] = signal_items_result["rows"]
+    source_tables.append(_audit_source_table_entry("signal_items", signal_items_result))
+
+    preview = _approved_payload_preview_from_source_rows(trade_date, rows_by_table)
+    can_generate = bool(preview)
+    if can_generate:
+        source_names = {
+            row.get("source_name")
+            for row in preview
+            if isinstance(row, dict) and row.get("source_name")
+        }
+        for entry in source_tables:
+            if entry["table"] in source_names:
+                entry["usable_for_market_theme_evidence"] = True
+                entry["reason"] = "explicit market/theme evidence contract columns validated"
+    return {
+        "mode": AUDIT_MODE,
+        "write_execution": "disabled",
+        "live_write": False,
+        "source_family": "production_db",
+        "trade_date": trade_date,
+        "source_tables": source_tables,
+        "can_generate_approved_payload": can_generate,
+        "status": "dry-run-preview" if can_generate else "blocked",
+        "missing_source_semantics": [] if can_generate else AUDIT_MISSING_SOURCE_SEMANTICS,
+        "approved_payload_preview": preview,
+    }
 
 
 def _sql_literal(value):

@@ -46,6 +46,15 @@
 
 ## Pending / Watchlist
 
+- 本輪 Production Evidence Source Audit And Approved Payload Gate：
+  - 根因分類：`production_source_semantics_gap` + `runner_parser_false_fail`。
+  - 已完成：read-only production source audit JSON；row count / source availability / approved payload preview gate；個股策略 snapshot 不會直接升級為 market/theme confirmed evidence。
+  - QA conditional pass 有效：本地 contract 通過，但 QA sandbox 無法完成真實 production row count；Architect 已用主 repo config fallback 跑真實 production read-only audit，確認 rows 可讀且 output blocked。
+  - 目前真實結果：`market_theme_confirmed_evidence=0`、`daily_signal_snapshot=48`、`signal_runs=1`、`signal_items=12`，但缺 source semantics，不能生成 approved payload。
+  - 需要 Owner/PM 決策：是否把 `daily_signal_snapshot` / `signal_runs/items` 視為 market/theme supporting evidence source；若是，需定義 market_index、sector_theme_key、breadth 分子/分母、evidence_value、support_level、lineage。若否，需要外部市場/族群 index 或新 production source。
+  - 邊界保持：未改 schema / RLS / grant / policy / role；未 live write；未 backfill；未 Telegram；未策略 decision。
+  - Runner gap 重複：auto wrapper 對 `conditional pass` 仍 false fail；需修 QA conclusion parser。
+  - 不新增 `AGENTS.md` 硬規則：既有 source-of-truth、資料寫入邊界與 Post-cycle Review 已覆蓋。
 - 本輪 Evidence Read-only Smoke Credential Fallback：
   - 根因分類：`credential_fallback_gap` + `runner_parser_false_fail`。
   - 已完成：read-only smoke 支援 env/config read key fallback；缺憑證 fail closed；service-role key 不進 read-only fallback；secret 不輸出派生資訊。
