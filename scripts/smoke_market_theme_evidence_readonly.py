@@ -161,10 +161,27 @@ def main(argv=None):
         action="store_true",
         help="Output official generator/report path production trend consumption check JSON.",
     )
+    parser.add_argument(
+        "--full-integrity-check-json",
+        action="store_true",
+        help="Output May data strategy/report full integrity check JSON without DB writes or Telegram delivery.",
+    )
     args = parser.parse_args(argv)
 
     client = _build_readonly_client()
     if client is None:
+        if args.full_integrity_check_json:
+            from core.generator import build_may_data_strategy_report_full_integrity_check, generate_report
+
+            report = build_may_data_strategy_report_full_integrity_check(
+                client=None,
+                trade_date=args.trade_date,
+                limit=args.limit,
+                report_generator=lambda: generate_report(dry_run=True),
+                source_check=_missing_source_consumption_report(args.trade_date),
+            )
+            print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
+            return 0 if not report["blocked_reasons"] else 2
         if args.production_trend_consumption_check_json:
             report = _missing_source_consumption_report(args.trade_date)
             print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
@@ -203,6 +220,17 @@ def main(argv=None):
             "rows": [],
         }
     else:
+        if args.full_integrity_check_json:
+            from core.generator import build_may_data_strategy_report_full_integrity_check, generate_report
+
+            report = build_may_data_strategy_report_full_integrity_check(
+                client=client,
+                trade_date=args.trade_date,
+                limit=args.limit,
+                report_generator=lambda: generate_report(dry_run=True),
+            )
+            print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
+            return 0 if not report["blocked_reasons"] else 2
         if args.production_trend_consumption_check_json:
             from core.generator import build_market_theme_production_trend_consumption_check
 

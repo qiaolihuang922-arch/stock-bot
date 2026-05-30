@@ -46,6 +46,14 @@
 
 ## Pending / Watchlist
 
+- 本輪 May Data Strategy Report Full Integrity Check：
+  - 根因分類：`full_integrity_gate_gap` + `json_cli_contract_gap` + `qa_sandbox_gap`。
+  - 已完成：PM 定義四條完整驗收矩陣；Tech 補 full-integrity dry-run diagnostic；QA 檢查 source integrity、fresh runner dry-run、策略/顯示一致性與報文跨區塊一致性。
+  - QA 首輪有效阻塞：CLI JSON stdout 被 generate_report warning 污染，runner/Architect 無法直接 `json.loads(stdout)`；Tech 已修為 stdout 純 JSON，warning 進 diagnostics / blocked_reasons。
+  - Architect 主 repo 驗證有效攔截：sandbox QA 通過後，主 repo 測試發現 read client missing 仍可能 fallback 成 source passed；第二次返工後 missing/source-error fail closed。
+  - 邊界保持：未 live Telegram、未 DB write/backfill、未 schema/RLS/grant/policy/role、未改策略 decision 或 Telegram 使用者可見 header。
+  - 流程教訓：QA sandbox 通過不等於主 repo 吸收可直接 commit；Architect 吸收後必須跑主 repo 相關測試與實際 CLI smoke。此已是既有 Architect merge gate，不新增 `AGENTS.md` 硬規則；本輪記為執行到位案例。
+  - 待補 runner：可考慮將 JSON CLI contract 加入 QA runner helper，要求 `--*-json` 模式 stdout 必須可直接 `json.loads`。
 - 本輪 Market Theme Production Trend Consumption Check：
   - 根因分類：`source_consumption_proof_gap` + `runner_parser_false_fail`。上一輪已證明 useful rows 寫入 production table，但仍需證明正式 generator/report path 在 fresh runner 條件下真的消費 production evidence trend。
   - 已完成：formal generator consumption check、read-only smoke JSON、production smoke、測試與 QA 反證。

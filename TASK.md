@@ -1,236 +1,269 @@
-# TASK: market/theme production evidence trend fresh-run consumption check
+# TASK: May Data Strategy Report Full Integrity Check
 
 ## 任務狀態
 
-- task_id: market-theme-production-trend-consumption-check
-- 任務類型: normal_patch
-- 任務尺寸判斷: normal_patch
+- task_id: may-data-strategy-report-full-integrity-check
+- 任務類型: risk_patch
+- 任務尺寸判斷: risk_patch
 - 狀態: ready_for_tech
 - 版本建議: patch
-- 版本契約: 本輪不改 Telegram / report 使用者可見文案與 header，沿用目前 VERSION / Telegram header。若 Tech 發現必須修改 Telegram 報文、report 顯示、message list contract 或 header 才能完成驗收，必須 blocked 回 PM，不
-得自行擴 scope。
-- QA 分級建議: L2
-- QA 升級原因: 本輪不做 production write / backfill / schema change，但要驗證正式 generator/report path、production DB source-of-truth 與 GitHub fresh runner 可重建性，需包含 local context cleared 反證。
+- 版本契約:
+- 本輪主要是 integrity check / dry-run / smoke verification，預設不改使用者可見 Telegram/report 文案與 header，沿用目前 Telegram header v20.4.6。
+- 若 Tech 發現必須修改策略 decision、summary、card、checklist、funnel、formatter header 或 message list contract 才能修復衝突，必須停止並回報 PM/Architect 另開修復任務；不得在本輪順手改使用者可見契約。
+- QA 分級建議: L3
+- QA 升級原因: 本輪驗證 production DB source-of-truth、GitHub/fresh runner dry-run、策略與顯示一致性、手機長報文跨區塊一致性，必須包含 fresh-run/local-context-cleared 反證與 production read-only smoke。
 
 ## Owner 問題
 
-上一輪已完成 market_theme_confirmed_evidence latest official rows 寫入與 read-after-write，並確認策略消費檢查可得到 uses_market_theme_confirmed_evidence_history=true。
+五月資料已完成寫入後，Owner 需要確認正式系統不是只在本機、runtime、fake fixture、daily_signal_snapshot 或舊 script report 裡「看起來能跑」，而是：
 
-但目前仍有三個缺口不能混在一起處理：
+- 策略 decision 確實能從 production DB / 五月資料取得必要 market/theme evidence。
+- git / fresh runner 在 dry-run 條件下能產生 Telegram/report 報文。
+- 策略 decision 與顯示層 summary / card / checklist / funnel 沒有互相矛盾。
+- 報文本身跨區塊的數量、分類、行動、版本、已執行 / 待執行沒有衝突。
 
-- 完整五月 market/theme history 仍缺真實 historical source。
-- sector_theme_members 目前只有 latest source，不能假裝五月 history。
-- market_theme_index_daily_bars 目前 skipped / not-consumed，不能因為表存在就視為有效策略來源。
-
-本輪最小可交付只回答一個主問題：
-
-正式 Telegram/report 生成路徑在 GitHub fresh runner / local context cleared 條件下，是否實際從 production market_theme_confirmed_evidence 讀取 trend，並能重建 evidence trend；還是只靠 local runtime、worktree cache、上
-一輪 script report、或 daily_signal_snapshot 的間接結果。
+本輪價值是建立完整 integrity check 矩陣與最小驗證閉環；不是重設策略、補歷史資料、改 schema、live Telegram 或新增假資料。
 
 ## 使用者可見結果
 
-Owner / Architect 會看到 Tech 的 CHANGELOG.md 與 QA 的 QA_REPORT.md 明確回答：
+Owner / Architect 會從 CHANGELOG.md 與 QA_REPORT.md 看到一份明確結論：
 
-- 正式 generator/report path 是否讀取 production market_theme_confirmed_evidence trend。
-- fresh runner / local context cleared 後是否仍可重建同樣 trend 判斷。
-- 若不能成立，是缺 DB env、缺 production rows、缺 workflow env、consumer 沒接上、還是只在 backfill script report 裡成立。
-- 本輪是否完全未做 DB schema、非 schema write、live Telegram、五月歷史偽造。
+- production DB / 五月資料是否被正式策略與報文路徑消費。
+- fresh runner / local context cleared 後是否仍能 dry-run 產生報文。
+- 報文是否存在跨區塊 decision、分類、數量、行動或版本衝突。
+- 若 blocked，明確指出阻塞類型：缺 production read env、缺 production rows、DB schema / permission 不足、runner path 無法重建、報文契約衝突、或需要另開修復任務。
 
-本輪不要求 Owner 手機 Telegram 看到新文案。手機閱讀路徑只做「既有報文不被改壞」檢查：若 existing report 已有 evidence trend 行，QA 應確認它仍不是買賣建議、不是可買誤導、且 header 版本未因本輪被偷偷改動。
+本輪不發 live Telegram；手機閱讀檢查使用 dry-run / sample report / fixture output。
 
 ## 非目標
 
-- 不補完整五月 market/theme historical source。
-- 不新增 historical provider。
-- 不新增或修改 backfill workflow。
-- 不改 Telegram/report 顯示文案、排序、header、message list contract。
 - 不 live Telegram。
 - 不改 DB schema、table、column、RLS、grant、policy、role。
-- 不做任何 production data write，除非 Architect 另開任務且走既有 repo script/interface、dry-run、validation、read-after-write。
-- 不把 daily_price / daily_signal_snapshot 回寫或 row count 當成本輪成果。
-- 不把 sector_theme_members latest-only 資料回填成五月 history。
-- 不把 market_theme_index_daily_bars 寫入或消費狀態改成完成，除非有明確直接 consumer 證據；本輪預設只記 not-consumed。
-- 不改策略買賣門檻、持倉狀態機、watchlist。
+- 不新增假資料、synthetic rows、fixture rows 到 production。
+- 不直接手寫 production DML。
+- 不新增五月 market/theme historical source。
+- 不回填或重寫五月資料。
+- 不把 daily_signal_snapshot、local cache、runtime dict、worktree 暫存、舊報文文字或 backfill script output 冒充 market/theme evidence source-of-truth。
+- 不改策略買賣門檻、RR、停損停利、持倉狀態機、watchlist。
+- 不重構 formatter、runner、DB layer。
+- 不修所有旁支 bug；若發現不阻塞本輪 integrity conclusion 的問題，只列 follow-up。
 
 ## 影響模組
 
 - 直接模組:
-- 正式 Telegram/report generator 入口或其 smoke / fixture。
-- services/market_theme_evidence_store.py 或等價 production read-only consumer。
-- market/theme evidence provider / handoff path。
-- GitHub runner / workflow env consumption 的只讀檢查或模擬 fresh-run 測試。
-- 對應 tests / fixtures / diagnostics。
+- production DB read-only smoke / source audit。
+- GitHub runner 或等價 fresh-run dry-run entrypoint。
+- 正式 Telegram/report generation path。
+- strategy decision 與 market/theme evidence consumption path。
+- summary / card / checklist / funnel formatter contract。
+- 相關 smoke tests、fixtures、diagnostic JSON output。
 - 直接消費者:
-- Owner / Architect：讀本輪驗證結果判斷 evidence chain 下一步是否能進入 historical source 任務。
-- Telegram/report generator：正式報文生成 path。
-- market/theme evidence trend provider：讀 production market_theme_confirmed_evidence historical rows。
-- QA：反證 fresh runner 不依賴 local/runtime context。
+- Owner：判斷五月資料寫入後正式報文是否可信。
+- Architect：依 CHANGELOG.md / QA_REPORT.md 收口是否可進下一輪。
+- QA：依本任務矩陣做 fresh-run、production read-only、手機長報文反證。
+- Telegram/report reader：只消費 dry-run/sample output，不接收 live message。
 
 ## 輸出契約
 
-本輪單一主輸出契約是「fresh-run consumption verification report」，可存在於 Tech 交付摘要、測試輸出、或 repo 既有 diagnostic script 的 JSON / dict 輸出中；不得要求 Owner 手動讀 DB。
+本輪需要 Tech 交付一個 integrity verification summary，可由既有 diagnostic script、測試輸出或 CHANGELOG.md 摘要呈現；不得要求 Owner 手動讀 DB 才能判斷。
 
-必要欄位形狀：
+必要 JSON / dict 形狀：
 
 {
-"mode": "market-theme-production-trend-consumption-check",
+"mode": "may-data-strategy-report-full-integrity-check",
 "schema_change": false,
 "data_write": false,
 "live_telegram": false,
-"source_of_truth": "production.market_theme_confirmed_evidence",
+"telegram_header_version": "v20.4.6",
+"source_integrity": {
+"production_db_readonly": "passed|failed|blocked",
+"may_data_available": "passed|failed|blocked",
+"market_theme_source_of_truth": "production.market_theme_confirmed_evidence|blocked",
+"uses_fake_or_local_as_market_theme_evidence": false,
+"uses_daily_signal_snapshot_as_market_theme_evidence": false
+},
+"fresh_runner_dry_run": {
 "local_context_cleared": true,
-"fresh_runner_rebuild": "passed|failed|blocked",
-"generator_consumption": {
-"entrypoint": "official_telegram_or_report_generation_path",
-"uses_market_theme_confirmed_evidence_history": true,
-"uses_only_daily_signal_snapshot": false,
-"uses_runtime_or_local_cache_as_history": false,
-"observed_days": 0,
-"recent_supporting_days": 0,
-"support_streak_days": 0
+"report_generated": "passed|failed|blocked",
+"live_telegram_disabled": true
 },
-"table_status": {
-"market_theme_confirmed_evidence": "consumed|missing-source|source-error|insufficient-data",
-"sector_theme_members": "latest-only-blocked|not-used",
-"market_theme_index_daily_bars": "not-consumed|not-used"
+"decision_display_consistency": {
+"strategy_vs_summary": "passed|failed|blocked",
+"strategy_vs_cards": "passed|failed|blocked",
+"strategy_vs_checklist": "passed|failed|blocked",
+"strategy_vs_funnel": "passed|failed|blocked"
 },
-"blocked_reasons": []
+"report_cross_section_consistency": {
+"counts": "passed|failed|blocked",
+"categories": "passed|failed|blocked",
+"actions": "passed|failed|blocked",
+"executed_vs_pending": "passed|failed|blocked",
+"version": "passed|failed|blocked"
+},
+"blocked_reasons": [],
+"followups": []
 }
 
 已存在且不得回退的契約：
 
-- market_theme_confirmed_evidence 才是本輪 trend consumption 的 production source-of-truth。
-- uses_market_theme_confirmed_evidence_history=true 不能只在 backfill script report 中成立；必須在正式 generator/report path 或其等價 smoke 中成立。
-- GitHub runner / fresh run 必須可由 production DB / mocked persistent DB rows 重建；local runtime、worktree cache、agent 對話、script report、Telegram text 不得當跨日記憶。
-- daily_price / daily_signal_snapshot 不得被包裝成本輪 market/theme trend source。
-- sector_theme_members latest-only 必須保持 blocked / skipped，不得回填五月。
-- market_theme_index_daily_bars skipped / not-consumed 狀態不得被無證據改成 consumed。
-- confirmed / ready evidence 只能來自 production DB 或 Owner-approved persistent source family。
-- evidence trend 只可作 wording / 排序提示 / detail trace；不得放寬買點、覆蓋風控、或單獨把不可買變 BUY。
-- 非 schema data write 只能走既有 repo script/interface，且必須 dry-run、validation、read-after-write；本輪預設不寫。
+- 最新使用者可見 Telegram 版本為 v20.4.6。
+- market_theme_confirmed_evidence 是 market/theme trend consumption 的 production source-of-truth。
+- daily_price / daily_signal_snapshot 不得被包裝成 market/theme evidence。
+- local/runtime/cache/worktree/chat/report-derived payload 不得作為跨日記憶或 production evidence。
+- fresh runner 必須可由 production DB 或 Owner-approved persistent source 重建判斷。
+- 缺 DB env、缺 rows、權限不足、資料不足時必須 fail closed：missing-source / source-error / insufficient-data / blocked。
 - live Telegram 不在本輪。
+- DB schema / RLS / grant / policy / role 變更必須停下找 Owner。
+- 非 schema 資料檢查與 dry-run 不找 Owner。
 
 ## 驗收條件
 
-1. 正式 consumer 檢查
+1. Source integrity
 
-- Tech 必須定位並驗證正式 Telegram/report generation path 是否調用 production market_theme_confirmed_evidence trend consumer。
-- 驗證不能只跑上一輪 backfill script 的 strategy_consumption_check。
-- 結果必須明確列 uses_market_theme_confirmed_evidence_history、uses_only_daily_signal_snapshot、observed_days、recent_supporting_days、support_streak_days。
+- Tech 必須提供 production read-only smoke 或等價驗證，確認策略與 production DB / 五月資料有實際關聯。
+- 驗證必須明確排除 fake、local、runtime、worktree cache、report-derived payload。
+- 驗證必須明確排除把 daily_signal_snapshot 冒充 market/theme evidence。
+- 若 production DB 讀取失敗或資料不足，結果必須 blocked / fail closed，不得補 fallback。
 
-2. Fresh runner / local context cleared 反證
+2. Fresh runner dry-run
 
-- QA 必須至少驗證一個 fresh-run 等價案例：清空 local runtime/context/cache 後，使用 production DB 或 mocked persistent DB rows 仍可重建 trend。
-- 若關閉本地對話、清空 worktree runtime、或模擬 GitHub fresh runner 後無法重建，QA 必須 blocked。
-- 若只能依賴 env 缺失時的 fail-closed 狀態，必須明確標為 missing-source / source-error / insufficient-data，不得宣告 consumed。
+- Tech 必須提供 git/fresh runner 等價 dry-run 入口或 smoke，證明清空 local context 後仍能產生 Telegram/report sample。
+- dry-run 必須禁用 live Telegram。
+- 若正式 runner 依賴本機對話、runtime dict、未提交檔案或 worktree 暫存才能成功，QA 必須 blocked。
 
-3. Source 邊界
+3. Decision vs display
 
-- 測試或 fixture 必須證明 daily_signal_snapshot 存在時也不能被當成 market/theme trend source。
-- sector_theme_members latest-only 仍應 blocked / skipped。
-- market_theme_index_daily_bars 若沒有直接 consumer，仍應 not-consumed / skipped。
+- 必須檢查 strategy decision 與 summary、card、checklist、funnel 的主行動一致。
+- 同一檔不可在不同區塊同時出現可買 / 不可買、加碼 / 減碼、已執行 / 待執行等相反語意。
+- 若發現衝突，本輪可記錄為 failed / blocked；不得順手改使用者可見報文契約。
 
-4. 使用者可見報文不變
+4. Report cross-section consistency
 
-- 本輪不改 Telegram/report 文案與 header。
-- 若驗證過程產生 sample Telegram/report，QA 只需檢查既有 evidence trend 行不造成「可買」誤讀，且 header 版本未被本輪改動。
-- 若 Tech 需要修改報文顯示才能讓 consumption 可見，必須 blocked 回 PM。
+- 必須檢查 dry-run 長報文中的跨區塊數量、分類、行動、版本、已執行 / 待執行一致。
+- 手機閱讀順序必須以 Owner 打開 Telegram 後先看到的 summary / 決策區開始檢查，再追到 cards / checklist / funnel / details。
+- 空區塊、0-count、同義重複行動、不同分類混成同一行，均需列入手機噪音與誤讀風險檢查。
 
-5. 停止條件
+5. QA 必做反證
 
-- 完成一條正式 generator/report path consumption 驗證。
-- 完成一條 fresh runner / local context cleared 反證。
-- 證明本輪沒有 schema change、data write、live Telegram、五月歷史偽造。
-- 若發現缺 historical provider、缺 workflow env、或 report 顯示不足，只列入 blocked / follow-up，不納入本輪實作。
+- fresh-run / local-context-cleared 反證。
+- production read-only smoke。
+- 手機長報文一致性檢查。
+- 至少一個負面案例：production source 不足或 forbidden source 出現時，系統必須 fail closed，而不是產生 confirmed evidence 或正常買賣結論。
 
 ## 範例或 fixture
 
-成功範例：
+手機閱讀路徑：
+
+1. 先看 Telegram header：版本應為 v20.4.6，且 dry-run 不 live send。
+2. 先看最後 summary / 今日結論：是否清楚區分可買、僅追蹤、不可行動。
+3. 再看持倉與未持倉 cards：主行動是否與 summary 一致。
+4. 再看 checklist / funnel：數量、分類、待執行與已執行是否能對回 cards。
+5. 最後看 details：只追溯原因，不得反轉前面主行動。
+
+成功範例形狀：
+
+Header: 台股策略報告 v20.4.6 dry-run
+
+今日結論
+- 新倉：無有效進場
+- 持倉：先風控，不加碼
+- 僅追蹤：2 檔見詳情
+- 不可行動：量能不足 3、等冷卻 1
+
+持倉卡
+- 2330：主行動=續抱觀察；不加碼；原因=風控優先
+
+未持倉卡
+- 2317：僅追蹤；不可買；原因=等冷卻
+
+Funnel
+- 可買 0
+- 僅追蹤 2
+- 不可行動 4
+
+Blocked 範例形狀：
+
+Header: 台股策略報告 v20.4.6 dry-run
+
+今日結論
+- 新倉：2317 可買
+
+未持倉卡
+- 2317：不可買；原因=等冷卻
+
+Funnel
+- 可買 1
+- 等冷卻 1
+
+Blocked reason:
+- summary says BUY but card says cooldown/not-buyable for the same symbol
+
+Integrity JSON 成功範例：
 
 {
-"mode": "market-theme-production-trend-consumption-check",
+"mode": "may-data-strategy-report-full-integrity-check",
 "schema_change": false,
 "data_write": false,
 "live_telegram": false,
-"source_of_truth": "production.market_theme_confirmed_evidence",
+"telegram_header_version": "v20.4.6",
+"source_integrity": {
+"production_db_readonly": "passed",
+"may_data_available": "passed",
+"market_theme_source_of_truth": "production.market_theme_confirmed_evidence",
+"uses_fake_or_local_as_market_theme_evidence": false,
+"uses_daily_signal_snapshot_as_market_theme_evidence": false
+},
+"fresh_runner_dry_run": {
 "local_context_cleared": true,
-"fresh_runner_rebuild": "passed",
-"generator_consumption": {
-"entrypoint": "official_report_generation",
-"uses_market_theme_confirmed_evidence_history": true,
-"uses_only_daily_signal_snapshot": false,
-"uses_runtime_or_local_cache_as_history": false,
-"observed_days": 1,
-"recent_supporting_days": 1,
-"support_streak_days": 1
+"report_generated": "passed",
+"live_telegram_disabled": true
 },
-"table_status": {
-"market_theme_confirmed_evidence": "consumed",
-"sector_theme_members": "latest-only-blocked",
-"market_theme_index_daily_bars": "not-consumed"
+"decision_display_consistency": {
+"strategy_vs_summary": "passed",
+"strategy_vs_cards": "passed",
+"strategy_vs_checklist": "passed",
+"strategy_vs_funnel": "passed"
 },
-"blocked_reasons": []
+"report_cross_section_consistency": {
+"counts": "passed",
+"categories": "passed",
+"actions": "passed",
+"executed_vs_pending": "passed",
+"version": "passed"
+},
+"blocked_reasons": [],
+"followups": []
 }
-
-Blocked 範例：
-
-{
-"mode": "market-theme-production-trend-consumption-check",
-"schema_change": false,
-"data_write": false,
-"live_telegram": false,
-"source_of_truth": "production.market_theme_confirmed_evidence",
-"local_context_cleared": true,
-"fresh_runner_rebuild": "blocked",
-"generator_consumption": {
-"entrypoint": "official_report_generation",
-"uses_market_theme_confirmed_evidence_history": false,
-"uses_only_daily_signal_snapshot": true,
-"uses_runtime_or_local_cache_as_history": true,
-"observed_days": 0,
-"recent_supporting_days": 0,
-"support_streak_days": 0
-},
-"table_status": {
-"market_theme_confirmed_evidence": "not-consumed",
-"sector_theme_members": "latest-only-blocked",
-"market_theme_index_daily_bars": "not-consumed"
-},
-"blocked_reasons": [
-"official generator path does not consume production evidence trend",
-"fresh runner rebuild depends on local/runtime context"
-]
-}
-
-手機閱讀示例輸出形狀（僅用於確認未改壞既有報文，不要求新增）：
-
-證據：production 趨勢已讀取，僅作背景追溯，不改買賣。
-趨勢：近1個證據日｜連續1日支持
 
 ## 明確禁止事項
 
-- Tech 不得偽造五月歷史。
-- Tech 不得把 latest sector_theme_members 回填成五月 membership。
-- Tech 不得把 daily_price / daily_signal_snapshot 回寫或 row count 當成本輪成果。
-- Tech 不得 live Telegram。
-- Tech 不得改 DB schema / RLS / grant / policy / role。
-- Tech 不得直接手寫 production DML。
-- Tech 不得把 local/runtime/cache/worktree/chat/report-derived payload 當 production history。
-- Tech 不得為了通過驗收改策略買賣門檻。
-- Tech 不得修改 Telegram/report 顯示 contract；若必須改，回 PM。
-- QA 不得只重跑 Tech 命令；必須補 fresh runner / local context cleared 反證。
-- QA 不得在缺 DB env、缺 rows、或 source-error 時宣告 consumption passed。
+- 禁止 live Telegram。
+- 禁止 DB schema / table / column / RLS / grant / policy / role 變更。
+- 禁止 production write / backfill / data mutation。
+- 禁止新增 fake / synthetic / fixture rows 到 production。
+- 禁止直接手寫 production DML。
+- 禁止把 local/runtime/cache/worktree/chat/report-derived payload 當 production source。
+- 禁止把 daily_signal_snapshot 冒充 market/theme evidence。
+- 禁止為了通過驗收放寬買點、RR、風控、停損停利或持倉規則。
+- 禁止在本輪修改 Telegram 使用者可見契約；發現需修復時 blocked 並列 follow-up。
+- 禁止擴成全量重構、全量清理、策略重設或歷史資料補齊任務。
 
 ## 阻塞條件
 
-- 無法辨識正式 Telegram/report generation entrypoint。
-- 缺 production DB read env，且無法用 mocked persistent DB rows 做 fresh-run 等價驗證。
-- 正式 generator/report path 沒有消費 market_theme_confirmed_evidence trend。
-- Fresh runner / local context cleared 後只能靠 runtime/local context 重建 trend。
-- 需要新增 historical provider、workflow、或報文顯示改動才可完成驗收。
-- 發現 production rows 不足，只能產生 missing-source / insufficient-data，不能證明 consumed。
-- 任何驗證需要 live Telegram、DB schema change、或 production write。
+- 需要 DB schema / table / column / RLS / grant / policy / role 變更。
+- production read-only env / permission 不足，且無法用 approved persistent mocked DB rows 做等價 fresh-run 反證。
+- 五月資料缺失到無法判斷 strategy/report integrity。
+- 正式 runner dry-run 無法在 live Telegram disabled 條件下產生 sample report。
+- report 必須修改使用者可見契約才能消除衝突。
+- 發現策略 decision 與 summary/card/checklist/funnel 有相反行動。
+- 發現報文跨區塊數量、分類、行動、版本、已執行 / 待執行無法對齊。
+- TASK / CHANGELOG / QA_REPORT 任一交付無法列出證據與反證。
 
-## 公開來源
+## 本輪停止條件
 
-- 本輪未使用公開網路資料；任務定義依據為 Owner 指示與目前專案摘要文件。
+- 已完成 production read-only source integrity check。
+- 已完成 fresh-run / local-context-cleared dry-run report generation check。
+- 已完成 strategy decision vs summary/card/checklist/funnel 一致性檢查。
+- 已完成手機長報文跨區塊 counts/categories/actions/version/executed-vs-pending 一致性檢查。
+- 已證明本輪無 schema change、無 production write、無 live Telegram、無假資料。
+- 旁支問題只列入 followups，不納入本輪修復，除非它直接阻塞上述 integrity conclusion。

@@ -1,78 +1,73 @@
-# CHANGELOG: market/theme production evidence trend fresh-run consumption check
+# CHANGELOG:
 
-  ## 任務尺寸與風險
+  ## 任務尺寸與風險判斷
 
-  - 任務尺寸: normal_patch
-  - 風險判斷: 不改策略、不改 Telegram/report 文案、不改 header、不寫 DB；風險集中在正式 generator/report path 的只讀 consumption verification contract。
+  - 任務尺寸：risk_patch（沿用 TASK.md 對 production source-of-truth / fail-closed integrity check 的分級）。
+  - 本次實作範圍：只修主 repo 吸收候選後的單一 blocker，屬於 risk_patch 內的最小 blocker patch；未擴大到策略、報文文案、DB schema、live delivery 或完整 integrity 矩陣重作。
 
   ## 修改內容
 
-  - 在 core/generator.py 新增 build_market_theme_production_trend_consumption_check()，輸出 TASK 指定的 fresh-run consumption verification report。
-  - market_theme_summary_evidence() 增加可選 evidence_loader 注入，用於 mocked persistent DB rows 的 fresh-run 等價驗證；既有呼叫方式不變。
-  - 在 scripts/smoke_market_theme_evidence_readonly.py 新增 --production-trend-consumption-check-json，輸出只讀 JSON report；缺 read credentials 時 fail closed 為 missing-source，不嘗試二次建真實 DB client。
-  - 補測試確認正式 generator path 消費 market_theme_confirmed_evidence trend，且 daily_signal_snapshot 即使存在也不被查詢或包裝成 trend source。
+  - 修正 --full-integrity-check-json 在 _build_readonly_client() 明確回傳 None 時仍可能透過內層 config / fallback 讓 source integrity 變成 passed 的問題。
+  - CLI read client 缺失時，full integrity JSON 現在會注入 missing-source source check，讓：
+      - production_db_readonly = blocked
+      - may_data_available = blocked
+      - market_theme_source_of_truth = blocked
+  - 保留 dry-run report generator stdout capture：stdout 第一層仍只輸出 JSON，generator warning 只進 diagnostics / blocked_reasons。
+  - 補強 regression test，鎖住三個 source integrity 欄位不得 fallback 成 passed。
 
   ## 修改檔案
 
   - core/generator.py
+      - build_may_data_strategy_report_full_integrity_check() 新增可選 source_check 參數，用於 CLI 已知 missing-source 時避免內層重新建 production client。
   - scripts/smoke_market_theme_evidence_readonly.py
+      - _build_readonly_client() 回傳 None 且執行 --full-integrity-check-json 時，傳入 _missing_source_consumption_report() 作為 fail-closed source check。
   - tests/test_market_theme_evidence.py
+      - 補上 missing read client + noisy report generator 情境下 may_data_available 與 market_theme_source_of_truth 也必須 blocked 的斷言。
 
   ## 最小改動策略
 
-  - 只沿用既有 load_confirmed_market_theme_evidence()、market_theme_summary_evidence()、provider 與 read-only smoke script。
-  - 沒有新增 provider、workflow、historical source、DB schema、production write path 或 Telegram 顯示文案。
-  - 沒有修改 VERSION，符合 TASK 的「本輪不改使用者可見 header / report 文案」契約。
+  - 只處理 Architect 指定的 blocker path。
+  - 不重構 formatter / runner / DB layer。
+  - 不改策略門檻、持倉狀態機、Telegram 使用者可見報文或版本 header。
+  - 不修旁支 warning，不擴大測試矩陣。
 
   ## 契約影響
 
-  - 新增只讀 diagnostic JSON contract:
-      - mode=market-theme-production-trend-consumption-check
-      - schema_change=false
-      - data_write=false
-      - live_telegram=false
-      - source_of_truth=production.market_theme_confirmed_evidence
-      - generator_consumption.uses_market_theme_confirmed_evidence_history
-      - generator_consumption.uses_only_daily_signal_snapshot=false
-      - generator_consumption.uses_runtime_or_local_cache_as_history=false
-      - table_status.sector_theme_members=latest-only-blocked
-      - table_status.market_theme_index_daily_bars=not-consumed
-  - market_theme_summary_evidence() public helper 只新增 backward-compatible optional parameter；既有呼叫方不需改。
-  - 未改 Telegram message list、payload、報文分組、排序、header、買賣策略 decision、DB 寫入 contract。
+  - JSON 欄位形狀未改。
+  - --full-integrity-check-json 契約收緊：當 CLI read client 明確 missing/source-error 時，source integrity 不得因本機 config 或 fallback 轉 passed。
+  - build_may_data_strategy_report_full_integrity_check() 增加 optional source_check 注入參數；既有呼叫方不傳時行為維持原本路徑。
+  - 不改 Telegram message list、payload shape、報文分組、使用者可見文案或 header version。
 
   ## 直接消費者同步
 
-  - Telegram/report generator: consumption check 走 core.generator.market_theme_summary_evidence 等價正式報文 evidence path。
-  - Read-only smoke CLI: 新增 --production-trend-consumption-check-json 供 Architect/QA 讀 JSON 結果。
-  - QA: 測試 fixture 提供 fresh-run mocked persistent DB rows，並反證 daily_signal_snapshot 不被當 market/theme trend source。
-  - 既有 ai_supply_chain_mainline_supported()、formatTelegramSummary()、formatTelegramMessages() 呼叫不變，無需同步輸出文案。
+  - 已同步直接 CLI consumer：scripts/smoke_market_theme_evidence_readonly.py --full-integrity-check-json。
+  - 已同步直接測試 consumer：tests/test_market_theme_evidence.py。
+  - 其他既有 direct caller 可不變更，因 source_check 是 optional additive parameter。
 
   ## 未影響模組
 
-  - 未改策略買賣門檻、持倉狀態機、watchlist。
-  - 未改 Telegram live delivery。
-  - 未改 DB schema / table / column / RLS / grant / policy / role。
-  - 未做 production data write、backfill、live Supabase write。
-  - 未偽造五月歷史，未把 sector_theme_members latest-only 回填為五月 history。
-  - 未把 market_theme_index_daily_bars 標成 consumed。
+  - 未 live Telegram。
+  - 未 DB write。
+  - 未 schema / RLS / grant / policy / role change。
+  - 未 backfill / replay。
+  - 未改 watchlist。
+  - 未改策略買賣門檻、RR、停損停利、持倉狀態機。
+  - 未改 Telegram 使用者可見報文與 v20.4.6 header。
 
   ## 已跑自檢命令
 
-  - .venv/bin/python -m pytest tests/test_market_theme_evidence.py -q
-      - 結果: blocked by local architecture mismatch，pydantic_core arm64 wheel 被 x86_64 Python 載入失敗。
-  - arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_generator_report.py -q
-      - 結果: 98 passed, 153 warnings
-  - git diff --check
-      - 結果: passed
+  - arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py::MarketThemeEvidenceTest::test_readonly_smoke_cli_full_integrity_json_captures_report_stdout_warning -q
+      - 結果：1 passed。
+  - arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_generator_report.py tests/test_notifier.py -q
+      - 結果：105 passed。
 
   ## 殘留風險
 
-  - 本輪使用 mocked persistent DB rows 驗證 fresh-run 等價路徑；未呼叫真實 production DB API，避免 Tech 階段 live 外部副作用。
-  - 真實 GitHub runner 是否具備 read credentials、production rows 是否足夠，仍需 QA/Architect 在允許的 read-only 環境確認。
-  - sector_theme_members 仍是 latest-only blocked；完整五月 historical source 仍未補。
+  - 自檢使用 mocked read client / report generator 驗證 fail-closed path；未執行 live production DB read。
+  - 測試輸出仍有既有 dependency deprecation warnings，與本 blocker 無關。
+  - 本輪不宣告 QA 通過，僅代表 Tech 交付前自檢通過。
 
   ## 旁支待辦
 
-  - 後續若要證明完整五月 trend，需要另開 historical source 任務。
-  - 後續若要消費 market_theme_index_daily_bars，需先由 PM 定義直接 consumer 與驗收條件。
-  - 若 production runner 缺 read env 或 rows 不足，應維持 missing-source / insufficient-data，不得降級使用 local/runtime/cache。
+  - worktree 內 CHANGELOG.md 在本輪開始前已是 modified；本輪依 Architect 指令未直接編輯，最終 CHANGELOG 由本回答提供給 runner 寫入。
+  - dependency deprecation warnings 可另開環境維護任務處理；不屬於本 blocker。

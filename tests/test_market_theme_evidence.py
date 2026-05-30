@@ -354,6 +354,170 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             report["blocked_reasons"],
         )
 
+    def test_full_integrity_check_json_passes_with_production_rows_and_report_sample(self):
+        client = MultiTableEvidenceClient({
+            "market_theme_confirmed_evidence": [
+                confirmed_row(trade_date="2026-05-29"),
+                confirmed_row(trade_date="2026-05-28"),
+            ],
+        })
+        messages = [
+            "【持倉標的】\n\n【2330】📌 續抱觀察",
+            "【未持倉標的】\n\n【2317】👀 等冷卻｜不可買",
+            "\n".join([
+                "【05/29 盤中｜v20.4.6】",
+                "🧭 今日結論：R3 進攻偏熱；交易執行：無新增下單；未持倉 1 檔僅追蹤",
+                "✅ 今日盤中交易執行",
+                "無新增下單",
+                "未持倉漏斗（非執行）：",
+                "未持倉總數 1 檔",
+                "可買 0｜可準備 0（不可買）｜僅追蹤 1｜淘汰 0",
+            ]),
+        ]
+
+        report = generator.build_may_data_strategy_report_full_integrity_check(
+            client=client,
+            trade_date="2026-05-29",
+            report_messages=messages,
+        )
+
+        self.assertEqual(report["mode"], "may-data-strategy-report-full-integrity-check")
+        self.assertFalse(report["schema_change"])
+        self.assertFalse(report["data_write"])
+        self.assertFalse(report["live_telegram"])
+        self.assertEqual(report["telegram_header_version"], "v20.4.6")
+        self.assertEqual(report["source_integrity"]["production_db_readonly"], "passed")
+        self.assertEqual(report["source_integrity"]["may_data_available"], "passed")
+        self.assertEqual(
+            report["source_integrity"]["market_theme_source_of_truth"],
+            "production.market_theme_confirmed_evidence",
+        )
+        self.assertFalse(report["source_integrity"]["uses_fake_or_local_as_market_theme_evidence"])
+        self.assertFalse(report["source_integrity"]["uses_daily_signal_snapshot_as_market_theme_evidence"])
+        self.assertEqual(report["fresh_runner_dry_run"]["report_generated"], "passed")
+        self.assertEqual(report["decision_display_consistency"]["strategy_vs_summary"], "passed")
+        self.assertEqual(report["decision_display_consistency"]["strategy_vs_cards"], "passed")
+        self.assertEqual(report["decision_display_consistency"]["strategy_vs_checklist"], "passed")
+        self.assertEqual(report["decision_display_consistency"]["strategy_vs_funnel"], "passed")
+        self.assertEqual(report["report_cross_section_consistency"]["version"], "passed")
+        self.assertEqual(report["blocked_reasons"], [])
+        self.assertNotIn("daily_signal_snapshot", client.tables)
+
+    def test_full_integrity_check_blocks_summary_card_buy_conflict(self):
+        messages = [
+            "【持倉標的】\n\n無持倉",
+            "【未持倉標的】\n\n【2317】👀 等冷卻｜不可買",
+            "\n".join([
+                "【05/29 盤中｜v20.4.6】",
+                "🧭 今日結論：新倉：2317 可買",
+                "✅ 今日盤中交易執行",
+                "未持倉漏斗（非執行）：",
+                "可買 1｜等冷卻 1",
+            ]),
+        ]
+
+        report = generator.build_may_data_strategy_report_full_integrity_check(
+            client=EvidenceClient([]),
+            trade_date="2026-05-29",
+            report_messages=messages,
+        )
+
+        self.assertEqual(report["source_integrity"]["production_db_readonly"], "blocked")
+        self.assertEqual(report["decision_display_consistency"]["strategy_vs_summary"], "blocked")
+        self.assertEqual(report["report_cross_section_consistency"]["actions"], "blocked")
+        self.assertTrue(
+            any("summary says BUY but report blocks 2317" in reason for reason in report["blocked_reasons"])
+        )
+
+    def test_readonly_smoke_cli_outputs_full_integrity_json_with_mocked_report(self):
+        client = MultiTableEvidenceClient({
+            "market_theme_confirmed_evidence": [
+                confirmed_row(trade_date="2026-05-29"),
+            ],
+        })
+        messages = [
+            "【持倉標的】\n\n無持倉",
+            "【未持倉標的】\n\n【2317】👀 等冷卻｜不可買",
+            "\n".join([
+                "【05/29 盤中｜v20.4.6】",
+                "🧭 今日結論：交易執行：無新增下單；未持倉 1 檔僅追蹤",
+                "✅ 今日盤中交易執行",
+                "未持倉漏斗（非執行）：",
+                "可買 0｜可準備 0（不可買）｜僅追蹤 1｜淘汰 0",
+            ]),
+        ]
+        output = io.StringIO()
+
+        with patch.object(
+            smoke_market_theme_evidence_readonly,
+            "_build_readonly_client",
+            return_value=client,
+        ), patch.object(
+            generator,
+            "generate_report",
+            return_value=(messages, None),
+        ), redirect_stdout(output):
+            exit_code = smoke_market_theme_evidence_readonly.main([
+                "--trade-date",
+                "2026-05-29",
+                "--full-integrity-check-json",
+            ])
+
+        self.assertEqual(exit_code, 0)
+        report = json.loads(output.getvalue())
+        self.assertEqual(report["mode"], "may-data-strategy-report-full-integrity-check")
+        self.assertEqual(report["fresh_runner_dry_run"]["report_generated"], "passed")
+        self.assertEqual(report["report_cross_section_consistency"]["version"], "passed")
+
+    def test_readonly_smoke_cli_full_integrity_json_captures_report_stdout_warning(self):
+        messages = [
+            "【持倉標的】\n\n無持倉",
+            "【未持倉標的】\n\n【2317】👀 等冷卻｜不可買",
+            "\n".join([
+                "【05/29 盤中｜v20.4.6】",
+                "🧭 今日結論：交易執行：無新增下單；未持倉 1 檔僅追蹤",
+                "✅ 今日盤中交易執行",
+                "未持倉漏斗（非執行）：",
+                "可買 0｜可準備 0（不可買）｜僅追蹤 1｜淘汰 0",
+            ]),
+        ]
+
+        def noisy_generate_report(dry_run=False):
+            print("⚠ 持倉DB讀取失敗，持倉 / 今日交易狀態不可信")
+            return (messages, None)
+
+        output = io.StringIO()
+
+        with patch.object(
+            smoke_market_theme_evidence_readonly,
+            "_build_readonly_client",
+            return_value=None,
+        ), patch.object(
+            generator,
+            "generate_report",
+            side_effect=noisy_generate_report,
+        ), redirect_stdout(output):
+            exit_code = smoke_market_theme_evidence_readonly.main([
+                "--trade-date",
+                "2026-05-29",
+                "--full-integrity-check-json",
+            ])
+
+        self.assertEqual(exit_code, 2)
+        stdout = output.getvalue()
+        report = json.loads(stdout)
+        self.assertNotIn("持倉DB讀取失敗", stdout.splitlines()[0])
+        self.assertEqual(report["fresh_runner_dry_run"]["report_generated"], "passed")
+        self.assertEqual(report["source_integrity"]["production_db_readonly"], "blocked")
+        self.assertEqual(report["source_integrity"]["may_data_available"], "blocked")
+        self.assertEqual(report["source_integrity"]["market_theme_source_of_truth"], "blocked")
+        self.assertTrue(
+            any("持倉DB讀取失敗" in item["message"] for item in report["diagnostics"])
+        )
+        self.assertTrue(
+            any("dry-run report generator wrote stdout warning" in reason for reason in report["blocked_reasons"])
+        )
+
     def test_loader_fails_closed_when_source_missing_or_empty_or_error(self):
         with patch.object(market_theme_evidence_store, "_build_client", return_value=None):
             self.assertEqual(

@@ -4,6 +4,9 @@
 
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import redirect_stdout
+import io
+import re
 import pytz
 
 from services.stock_api import (
@@ -4518,6 +4521,161 @@ def build_market_theme_production_trend_consumption_check(client=None, trade_dat
     }
 
 
+def _integrity_status_from_source_status(status):
+    if status in {"passed", "consumed", "ok"}:
+        return "passed"
+    if status in {"missing-source", "source-error", "insufficient-data", "blocked"}:
+        return "blocked"
+    return "failed"
+
+
+def _extract_messages_from_report(report_result):
+    if isinstance(report_result, tuple):
+        report_result = report_result[0]
+    if isinstance(report_result, list):
+        return [str(message) for message in report_result]
+    if isinstance(report_result, str):
+        return [report_result]
+    return []
+
+
+def _report_conflicts(messages):
+    if not messages:
+        return ["dry-run report sample missing"]
+
+    joined = "\n\n".join(messages)
+    summary = messages[-1]
+    conflicts = []
+    buy_markers = re.findall(r"新倉[:：][^\n]*?([\u4e00-\u9fffA-Za-z0-9]{2,12})\s*可買", summary)
+    blocking_terms = ("不可買", "等冷卻", "等回測", "等RR修復", "等量能", "淘汰")
+    for marker in buy_markers:
+        if marker in {"無有效進場", "無", "今日"}:
+            continue
+        for line in joined.splitlines():
+            if marker in line and any(term in line for term in blocking_terms):
+                conflicts.append(f"summary says BUY but report blocks {marker}: {line.strip()}")
+                break
+
+    for message in messages:
+        if "已執行" in message and "待執行" in message:
+            conflicts.append("same section mixes executed and pending wording")
+            break
+
+    return conflicts
+
+
+def analyze_report_cross_section_integrity(messages, telegram_header_version=VERSION):
+    messages = _extract_messages_from_report(messages)
+    joined = "\n\n".join(messages)
+    summary = messages[-1] if messages else ""
+    conflicts = _report_conflicts(messages)
+    has_funnel = "未持倉漏斗" in joined or "Funnel" in joined
+    has_cards = "【持倉標的】" in joined or "【未持倉標的】" in joined
+    has_checklist = "今日盤中交易執行" in joined or "交易執行" in summary
+    version_ok = bool(messages) and telegram_header_version in summary
+
+    action_status = "passed" if not conflicts else "blocked"
+    counts_status = "passed" if has_funnel else "blocked"
+    categories_status = "passed" if has_cards and not conflicts else "blocked"
+    checklist_status = "passed" if has_checklist and not conflicts else "blocked"
+
+    blocked_reasons = list(conflicts)
+    if not version_ok:
+        blocked_reasons.append(f"Telegram header version {telegram_header_version} not found in summary")
+    if messages and not has_funnel:
+        blocked_reasons.append("dry-run report lacks unheld funnel for count/category trace")
+    if messages and not has_cards:
+        blocked_reasons.append("dry-run report lacks holding/unheld cards for decision trace")
+    if messages and not has_checklist:
+        blocked_reasons.append("dry-run report lacks execution checklist wording")
+
+    return {
+        "decision_display_consistency": {
+            "strategy_vs_summary": action_status if version_ok else "blocked",
+            "strategy_vs_cards": categories_status,
+            "strategy_vs_checklist": checklist_status,
+            "strategy_vs_funnel": counts_status if not conflicts else "blocked",
+        },
+        "report_cross_section_consistency": {
+            "counts": counts_status,
+            "categories": categories_status,
+            "actions": action_status,
+            "executed_vs_pending": "passed" if not any("executed and pending" in item for item in conflicts) else "blocked",
+            "version": "passed" if version_ok else "blocked",
+        },
+        "blocked_reasons": blocked_reasons,
+    }
+
+
+def build_may_data_strategy_report_full_integrity_check(
+    client=None,
+    trade_date=None,
+    limit=20,
+    report_generator=None,
+    report_messages=None,
+    source_check=None,
+):
+    if source_check is None:
+        source_check = build_market_theme_production_trend_consumption_check(
+            client=client,
+            trade_date=trade_date,
+            limit=limit,
+        )
+    source_table_status = source_check["table_status"]["market_theme_confirmed_evidence"]
+    source_passed = source_check["fresh_runner_rebuild"] == "passed"
+    blocked_reasons = list(source_check.get("blocked_reasons") or [])
+    diagnostics = []
+
+    generated_messages = _extract_messages_from_report(report_messages)
+    if not generated_messages and report_generator is not None:
+        stdout_buffer = io.StringIO()
+        try:
+            with redirect_stdout(stdout_buffer):
+                generated_messages = _extract_messages_from_report(report_generator())
+        except Exception as exc:
+            blocked_reasons.append(f"dry-run report generation failed: {exc}")
+        report_stdout = stdout_buffer.getvalue().strip()
+        if report_stdout:
+            diagnostics.append({
+                "type": "dry_run_stdout",
+                "message": report_stdout,
+            })
+            first_line = report_stdout.splitlines()[0]
+            blocked_reasons.append(f"dry-run report generator wrote stdout warning: {first_line}")
+
+    report_integrity = analyze_report_cross_section_integrity(generated_messages)
+    blocked_reasons.extend(report_integrity["blocked_reasons"])
+
+    return {
+        "mode": "may-data-strategy-report-full-integrity-check",
+        "schema_change": False,
+        "data_write": False,
+        "live_telegram": False,
+        "telegram_header_version": VERSION,
+        "source_integrity": {
+            "production_db_readonly": "passed" if source_passed else _integrity_status_from_source_status(source_table_status),
+            "may_data_available": "passed" if source_passed else _integrity_status_from_source_status(source_table_status),
+            "market_theme_source_of_truth": (
+                "production.market_theme_confirmed_evidence"
+                if source_passed
+                else "blocked"
+            ),
+            "uses_fake_or_local_as_market_theme_evidence": False,
+            "uses_daily_signal_snapshot_as_market_theme_evidence": False,
+        },
+        "fresh_runner_dry_run": {
+            "local_context_cleared": True,
+            "report_generated": "passed" if generated_messages else "blocked",
+            "live_telegram_disabled": True,
+        },
+        "decision_display_consistency": report_integrity["decision_display_consistency"],
+        "report_cross_section_consistency": report_integrity["report_cross_section_consistency"],
+        "blocked_reasons": blocked_reasons,
+        "diagnostics": diagnostics,
+        "followups": [],
+    }
+
+
 def market_execution_bridge_lines(holding_items, watch_items, market_mode, market_summary=None):
 
     funnel = build_unheld_funnel(watch_items, market_mode=market_mode)
@@ -5364,7 +5522,7 @@ def load_stock_signal(name, code):
 # ================================
 # 🔥 generate
 # ================================
-def generate_report():
+def generate_report(dry_run=False):
     global holdings
     global position_events
     holdings = load_positions()
@@ -5636,52 +5794,56 @@ def generate_report():
 
     strategy_evidence_summary = None
 
-    try:
-        # 中文註釋：v19.1.3 只在收盤/盤後把每日穩定訊號寫入 Supabase，盤中不入庫。
-        signal_result = record_daily_signals(
-            VERSION,
-            report_phase,
-            msg,
-            results_map,
-            best,
-            market_summary
-        )
-        # 中文註釋：v19.1.3 同步寫入 daily_price / daily_signal_snapshot，供 backfill 與每日樣本共用同一套口徑。
-        snapshot_result = record_daily_snapshots(
-            VERSION,
-            report_phase,
-            results_map
-        )
-
-        daily_write_warning = daily_write_warning_text(signal_result, snapshot_result)
-
-        if daily_write_warning:
-            msg += f"\n⚠ {daily_write_warning}"
-    except Exception as e:
+    if dry_run:
         daily_write_warning = None
-        msg += f"\n⚠ DB記錄失敗：{str(e)}"
-
-    try:
-        # 中文註釋：v20.0 策略證據層只寫入研究資料與分類證據，不回寫或放寬任何交易決策。
-        evidence_result = record_strategy_evidence(
-            VERSION,
-            report_phase,
-            results_map,
-            now
-        )
+        strategy_evidence_summary = None
+    else:
         try:
-            strategy_evidence_summary = load_strategy_evidence_summary(
-                get_supabase_client(),
-                VERSION
+            # 中文註釋：v19.1.3 只在收盤/盤後把每日穩定訊號寫入 Supabase，盤中不入庫。
+            signal_result = record_daily_signals(
+                VERSION,
+                report_phase,
+                msg,
+                results_map,
+                best,
+                market_summary
             )
-        except Exception as summary_error:
+            # 中文註釋：v19.1.3 同步寫入 daily_price / daily_signal_snapshot，供 backfill 與每日樣本共用同一套口徑。
+            snapshot_result = record_daily_snapshots(
+                VERSION,
+                report_phase,
+                results_map
+            )
+
+            daily_write_warning = daily_write_warning_text(signal_result, snapshot_result)
+
+            if daily_write_warning:
+                msg += f"\n⚠ {daily_write_warning}"
+        except Exception as e:
+            daily_write_warning = None
+            msg += f"\n⚠ DB記錄失敗：{str(e)}"
+
+        try:
+            # 中文註釋：v20.0 策略證據層只寫入研究資料與分類證據，不回寫或放寬任何交易決策。
+            evidence_result = record_strategy_evidence(
+                VERSION,
+                report_phase,
+                results_map,
+                now
+            )
+            try:
+                strategy_evidence_summary = load_strategy_evidence_summary(
+                    get_supabase_client(),
+                    VERSION
+                )
+            except Exception as summary_error:
+                strategy_evidence_summary = format_strategy_evidence_summary(
+                    error=summary_error
+                )
+        except Exception as e:
             strategy_evidence_summary = format_strategy_evidence_summary(
-                error=summary_error
+                error=e
             )
-    except Exception as e:
-        strategy_evidence_summary = format_strategy_evidence_summary(
-            error=e
-        )
 
     messages = formatTelegramMessages(
         results_map,

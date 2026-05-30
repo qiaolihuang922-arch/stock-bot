@@ -4,52 +4,49 @@
 
 ## Current Task
 
-- task_id: `market-theme-production-trend-consumption-check`
-- task_name: `Market Theme Production Trend Consumption Check`
-- task_type: `normal_patch`
+- task_id: `may-data-strategy-report-full-integrity-check`
+- task_name: `May Data Strategy Report Full Integrity Check`
+- task_type: `risk_patch`
 - version_level: `patch`
-- qa_level: `L2`
+- qa_level: `L3`
 - owner_status: `requested`
 - architect_status: `completed`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
 - qa_status: `qa_passed`
-- commit: `pushed`
+- commit: `pending`
 
 ## Current Result
 
-- Owner 要求繼續 evidence chain；上一輪已把 useful source 寫入 `market_theme_confirmed_evidence`，本輪最小目標是證明正式 generator/report 路徑在 fresh runner 條件下真的消費 production evidence trend。
+- Owner 要求：五月資料全部寫好後做完整檢查，確認四件事：
+  - 策略與資料有關聯，不能有假資料。
+  - git / runner 執行後能正常輸出報文。
+  - 策略與顯示沒有衝突。
+  - 報文本身沒有跨區塊衝突。
 - 已按 PM -> Tech -> QA 完成：
-  - `core/generator.py` 新增 `build_market_theme_production_trend_consumption_check()`。
-  - `market_theme_summary_evidence()` 支援 injectable `evidence_loader`，讓測試可模擬 production persistent source；既有正式呼叫不改。
-  - `scripts/smoke_market_theme_evidence_readonly.py` 新增 `--production-trend-consumption-check-json`。
-  - `tests/test_market_theme_evidence.py` 補 formal generator path 反證：正式 report 消費 `market_theme_confirmed_evidence` trend，不把 `daily_signal_snapshot` / runtime / local cache 當 market/theme history。
-- 主 repo production read-only smoke 已通過：
-  - command: `arch -arm64 .venv/bin/python scripts/smoke_market_theme_evidence_readonly.py --trade-date 2026-05-29 --production-trend-consumption-check-json`
-  - `fresh_runner_rebuild=passed`
-  - `source_of_truth=production.market_theme_confirmed_evidence`
-  - `uses_market_theme_confirmed_evidence_history=true`
-  - `uses_only_daily_signal_snapshot=false`
-  - `uses_runtime_or_local_cache_as_history=false`
-  - `market_theme_confirmed_evidence=consumed`
-  - `market_theme_index_daily_bars=not-consumed`
-  - `sector_theme_members=latest-only-blocked`
-- QA：
-  - QA 報告結論為 `通過`。
-  - QA sandbox 無 production DB 權限時，read-only smoke exit 2 並 fail closed，沒有誤報 consumed。
-  - Architect 在主 repo 補真實 production read-only smoke，滿足 QA 邊界。
-  - 主 repo 驗證：`arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_generator_report.py tests/test_market_theme_evidence_handoff.py -q`：132 passed，153 warnings；`git diff --check` 通過。
-- 本輪未做：
-  - 未寫 DB、未 backfill、未 live Telegram。
+  - 新增 `build_may_data_strategy_report_full_integrity_check()`，輸出完整 integrity JSON。
+  - `generate_report(dry_run=True)` 可產生報文 sample 並跳過 `record_daily_signals`、`record_daily_snapshots`、`record_strategy_evidence`，避免檢查流程寫 DB。
+  - `scripts/smoke_market_theme_evidence_readonly.py --full-integrity-check-json` 提供 git/fresh-run dry-run diagnostic。
+  - Integrity JSON 檢查 source integrity、fresh runner dry-run、decision/display consistency、report cross-section consistency。
+- QA 首輪有效阻塞：
+  - `--full-integrity-check-json` 在 source-error 情境 stdout 先輸出 warning，導致 `json.loads(stdout)` 失敗。
+  - Tech 返工後 QA 通過 stdout 純 JSON 反證。
+- Architect 主 repo 吸收後又抓到一個 sandbox 漏測：
+  - `_build_readonly_client=None` 時 source integrity 仍可能被內層 config/fallback 洗成 `passed`。
+  - 已退回 Tech 第二次返工；QA 驗證 missing/source-error 時 `production_db_readonly`、`may_data_available`、`market_theme_source_of_truth` 全部 `blocked`。
+- 主 repo 驗證已通過：
+  - `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_generator_report.py tests/test_notifier.py -q`：105 passed，153 warnings。
+  - `git diff --check` 通過。
+  - `arch -arm64 .venv/bin/python scripts/smoke_market_theme_evidence_readonly.py --trade-date 2026-05-29 --full-integrity-check-json`：exit code 0，stdout 第一字元 `{`，`json_parse=0`，`schema_change=false`、`data_write=false`、`live_telegram=false`、`source_db=passed`、`report_generated=passed`。
+- 邊界：
+  - 未 live Telegram。
+  - 未做 DB write / backfill。
   - 未改 DB schema / table / column / RLS / grant / policy / role。
-  - 未改 Telegram 使用者可見版本或交易決策門檻。
-- Runner gap：
-  - CAO auto wrapper 再次把 QA parser 標成 failed，但 QA_REPORT 內結論明確為 `通過`；Architect 已用主 repo 驗證與 production smoke 吸收。後續需修 QA conclusion parser。
-- 已提交並推送：`70bf549 feat: verify market theme production trend consumption`。
+  - 未改使用者可見 Telegram header，仍為 `v20.4.6`。
 
 ## Next Action
 
-- 下一步 evidence chain 可進入 production evidence 顯示 / 趨勢使用收斂；若要完整五月 market/theme history，仍需要真實 historical source，不得用 latest membership 或 daily_signal_snapshot 推回五月。
+- 提交並推送本輪 full integrity check；推送後清理 Tech worktree。
 
 ## Status Values
 
