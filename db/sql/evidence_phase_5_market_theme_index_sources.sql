@@ -30,8 +30,7 @@ create table if not exists public.market_theme_index_daily_bars (
     index_method text not null default 'external_index'
         check (index_method in (
             'external_index',
-            'provider_sector_index',
-            'owner_defined_basket'
+            'provider_sector_index'
         )),
     open numeric,
     high numeric,

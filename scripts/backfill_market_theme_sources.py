@@ -1,16 +1,10 @@
 #!/usr/bin/env python3
-"""Backfill market/theme source rows from persistent production DB data.
-
-This script intentionally derives evidence only from production DB tables and
-repo-owned theme membership rules. It does not use runtime chat state, local
-cache, synthetic fixtures, or Telegram text.
-"""
+"""Backfill market/theme evidence from official TWSE OpenAPI sources."""
 
 import argparse
 import json
 import os
 import sys
-from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -18,54 +12,107 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import requests
+
 from core.watchlist import STOCKS
 from services.market_theme_evidence_store import upsert_market_theme_confirmed_evidence
 
 
-RULE_VERSION = "market_theme_source_v1"
-MARKET_INDEX = "WATCHLIST_TW"
-SOURCE_NAME = "daily_price_equal_weight_theme_backfill"
+RULE_VERSION = "twse_official_market_theme_v1"
+MARKET_INDEX = "TAIEX"
+SOURCE_FAMILY = "market_data"
+SOURCE_NAME = "twse_openapi_mi_index"
+MEMBER_SOURCE_NAME = "twse_openapi_t187ap03_L"
+BREADTH_SOURCE_NAME = "twse_openapi_twtazu_od"
+HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-THEME_MEMBERS = {
-    "ai_server": ["3231", "2356", "2376", "2301"],
-    "memory": ["2344", "2408", "2337"],
-    "semiconductor": ["2303", "3035"],
-    "pc_display": ["2324", "3481"],
-    "cooling_components": ["2421"],
+TWSE_MI_INDEX_URL = "https://openapi.twse.com.tw/v1/exchangeReport/MI_INDEX"
+TWSE_BREADTH_URL = "https://openapi.twse.com.tw/v1/opendata/twtazu_od"
+TWSE_COMPANY_PROFILE_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap03_L"
+
+OFFICIAL_INDEX_MAP = {
+    "發行量加權股價指數": {
+        "index_scope": "market",
+        "sector_theme_key": None,
+        "index_name": "發行量加權股價指數",
+    },
+    "電子工業類指數": {
+        "index_scope": "sector_theme",
+        "sector_theme_key": "twse_electronics",
+        "index_name": "電子工業類指數",
+    },
+    "半導體類指數": {
+        "index_scope": "sector_theme",
+        "sector_theme_key": "twse_semiconductor",
+        "index_name": "半導體類指數",
+    },
+    "電腦及週邊設備類指數": {
+        "index_scope": "sector_theme",
+        "sector_theme_key": "twse_computer_peripheral",
+        "index_name": "電腦及週邊設備類指數",
+    },
+    "光電類指數": {
+        "index_scope": "sector_theme",
+        "sector_theme_key": "twse_optoelectronics",
+        "index_name": "光電類指數",
+    },
+    "電子零組件類指數": {
+        "index_scope": "sector_theme",
+        "sector_theme_key": "twse_electronic_components",
+        "index_name": "電子零組件類指數",
+    },
+    "通信網路類指數": {
+        "index_scope": "sector_theme",
+        "sector_theme_key": "twse_communications",
+        "index_name": "通信網路類指數",
+    },
+    "電子通路類指數": {
+        "index_scope": "sector_theme",
+        "sector_theme_key": "twse_electronic_distribution",
+        "index_name": "電子通路類指數",
+    },
+    "資訊服務類指數": {
+        "index_scope": "sector_theme",
+        "sector_theme_key": "twse_information_services",
+        "index_name": "資訊服務類指數",
+    },
+    "其他電子類指數": {
+        "index_scope": "sector_theme",
+        "sector_theme_key": "twse_other_electronics",
+        "index_name": "其他電子類指數",
+    },
 }
 
-THEME_NAMES = {
-    "ai_server": "AI Server / Electronics Supply Chain",
-    "memory": "Memory",
-    "semiconductor": "Semiconductor",
-    "pc_display": "PC / Display",
-    "cooling_components": "Cooling Components",
+INDUSTRY_CODE_TO_THEME = {
+    "24": "twse_semiconductor",
+    "25": "twse_computer_peripheral",
+    "26": "twse_optoelectronics",
+    "27": "twse_communications",
+    "28": "twse_electronic_components",
+    "29": "twse_electronic_distribution",
+    "30": "twse_information_services",
+    "31": "twse_other_electronics",
 }
 
-CODE_TO_NAME = {code: name for name, code in STOCKS.items()}
+
+def _twse_date_to_iso(value):
+    text = str(value or "").strip()
+    if len(text) != 7:
+        return ""
+    try:
+        return f"{int(text[:3]) + 1911:04d}-{int(text[3:5]):02d}-{int(text[5:]):02d}"
+    except ValueError:
+        return ""
 
 
 def _num(value):
+    text = str(value or "").replace(",", "").strip()
+    if text in ("", "-", "--"):
+        return None
     try:
-        if value in (None, ""):
-            return None
-        return float(value)
-    except (TypeError, ValueError):
+        return float(text)
+    except ValueError:
         return None
-
-
-def _avg(values):
-    values = [value for value in values if value is not None]
-    if not values:
-        return None
-    return round(sum(values) / len(values), 4)
-
-
-def _sum(values):
-    values = [value for value in values if value is not None]
-    if not values:
-        return None
-    return round(sum(values), 4)
 
 
 def _now_iso():
@@ -93,286 +140,255 @@ def get_supabase_client():
     return create_client(url, key)
 
 
-def theme_member_rows(as_of=None):
+def fetch_json(url):
+    response = requests.get(url, headers=HEADERS, timeout=20)
+    response.raise_for_status()
+    return response.json()
+
+
+def fetch_twse_index_rows():
+    return fetch_json(TWSE_MI_INDEX_URL)
+
+
+def fetch_twse_breadth_rows():
+    return fetch_json(TWSE_BREADTH_URL)
+
+
+def fetch_twse_company_profiles():
+    return fetch_json(TWSE_COMPANY_PROFILE_URL)
+
+
+def build_index_rows(raw_rows, trade_date=None, as_of=None):
     as_of = as_of or _now_iso()
     rows = []
-    for theme_key, stock_codes in THEME_MEMBERS.items():
-        for stock_code in stock_codes:
-            rows.append(
-                {
-                    "sector_theme_key": theme_key,
-                    "stock_code": stock_code,
-                    "stock_name": CODE_TO_NAME.get(stock_code),
-                    "market_index": MARKET_INDEX,
-                    "weight": 1,
-                    "is_active": True,
-                    "valid_from": "2026-01-01",
-                    "valid_to": None,
-                    "source_family": "owner_approved_persistent",
-                    "source_name": "repo_theme_members_v1",
-                    "metadata": {
-                        "rule_version": RULE_VERSION,
-                        "as_of": as_of,
-                        "source": "core.watchlist + repo theme membership map",
-                    },
-                }
-            )
+    for raw in raw_rows or []:
+        index_name = str(raw.get("指數") or "").strip()
+        spec = OFFICIAL_INDEX_MAP.get(index_name)
+        if not spec:
+            continue
+        row_trade_date = _twse_date_to_iso(raw.get("日期"))
+        if trade_date and row_trade_date != trade_date:
+            continue
+        change_pct = _num(raw.get("漲跌百分比"))
+        close = _num(raw.get("收盤指數"))
+        if not row_trade_date or close is None:
+            continue
+        rows.append(
+            {
+                "trade_date": row_trade_date,
+                "as_of": as_of,
+                "index_scope": spec["index_scope"],
+                "market_index": MARKET_INDEX,
+                "sector_theme_key": spec["sector_theme_key"],
+                "index_name": spec["index_name"],
+                "source_family": SOURCE_FAMILY,
+                "source_name": SOURCE_NAME,
+                "index_method": "external_index",
+                "open": None,
+                "high": None,
+                "low": None,
+                "close": close,
+                "change_pct": change_pct,
+                "volume": None,
+                "turnover": None,
+                "member_count": None,
+                "metadata": {
+                    "rule_version": RULE_VERSION,
+                    "twse_index_name": index_name,
+                    "twse_change_sign": raw.get("漲跌"),
+                    "twse_change_points": _num(raw.get("漲跌點數")),
+                    "source_url": TWSE_MI_INDEX_URL,
+                },
+            }
+        )
     return rows
 
 
-def _price_key(row):
-    return str(row.get("stock_id")), str(row.get("trade_date"))
-
-
-def group_price_rows(price_rows):
-    by_stock = defaultdict(list)
-    for row in price_rows:
-        stock_id = str(row.get("stock_id") or "")
-        if not stock_id:
+def build_market_breadth(raw_rows, trade_date=None):
+    for raw in raw_rows or []:
+        if raw.get("類型") != "股票":
             continue
-        by_stock[stock_id].append(row)
-    for rows in by_stock.values():
-        rows.sort(key=lambda item: str(item.get("trade_date") or ""))
-    return by_stock
+        row_trade_date = _twse_date_to_iso(raw.get("出表日期"))
+        if trade_date and row_trade_date != trade_date:
+            continue
+        up = int(_num(raw.get("上漲")) or 0)
+        down = int(_num(raw.get("下跌")) or 0)
+        flat = int(_num(raw.get("持平")) or 0)
+        limit_up = int(_num(raw.get("漲停")) or 0)
+        limit_down = int(_num(raw.get("跌停")) or 0)
+        denominator = up + down + flat
+        return {
+            "trade_date": row_trade_date,
+            "denominator": denominator,
+            "up_count": up,
+            "down_count": down,
+            "flat_count": flat,
+            "limit_up_count": limit_up,
+            "limit_down_count": limit_down,
+            "up_ratio": round(up / denominator, 4) if denominator else 0,
+            "source_name": BREADTH_SOURCE_NAME,
+            "source_url": TWSE_BREADTH_URL,
+        }
+    return {}
 
 
-def _latest_and_previous(by_stock, trade_date):
-    current = {}
-    previous = {}
-    for stock_id, rows in by_stock.items():
-        before = [row for row in rows if str(row.get("trade_date") or "") < trade_date]
-        today = [row for row in rows if str(row.get("trade_date") or "") == trade_date]
-        if today:
-            current[stock_id] = today[-1]
-        if before:
-            previous[stock_id] = before[-1]
-    return current, previous
+def build_member_rows(raw_rows, watchlist_codes=None, as_of=None):
+    as_of = as_of or _now_iso()
+    watchlist_codes = {str(code) for code in (watchlist_codes or STOCKS.values())}
+    rows = []
+    for raw in raw_rows or []:
+        stock_code = str(raw.get("公司代號") or "").strip()
+        industry_code = str(raw.get("產業別") or "").strip()
+        theme_key = INDUSTRY_CODE_TO_THEME.get(industry_code)
+        if stock_code not in watchlist_codes or not theme_key:
+            continue
+        rows.append(
+            {
+                "sector_theme_key": theme_key,
+                "stock_code": stock_code,
+                "stock_name": raw.get("公司簡稱") or raw.get("公司名稱"),
+                "market_index": MARKET_INDEX,
+                "weight": None,
+                "is_active": True,
+                "valid_from": "2026-01-01",
+                "valid_to": None,
+                "source_family": SOURCE_FAMILY,
+                "source_name": MEMBER_SOURCE_NAME,
+                "metadata": {
+                    "rule_version": RULE_VERSION,
+                    "industry_code": industry_code,
+                    "source_url": TWSE_COMPANY_PROFILE_URL,
+                    "as_of": as_of,
+                },
+            }
+        )
+    return rows
 
 
-def _member_return(stock_id, current, previous):
-    current_close = _num((current.get(stock_id) or {}).get("close"))
-    previous_close = _num((previous.get(stock_id) or {}).get("close"))
-    if current_close is None or previous_close in (None, 0):
-        return None
-    return (current_close / previous_close - 1) * 100
+def _market_change(index_rows):
+    for row in index_rows:
+        if row.get("index_scope") == "market":
+            return row.get("change_pct")
+    return None
 
 
-def _build_index_row(trade_date, as_of, index_scope, theme_key, stock_codes, current, previous):
-    member_rows = [current[code] for code in stock_codes if code in current]
-    returns = [_member_return(code, current, previous) for code in stock_codes]
-    returns = [value for value in returns if value is not None]
-    if not member_rows:
-        return None
-    return {
-        "trade_date": trade_date,
-        "as_of": as_of,
-        "index_scope": index_scope,
-        "market_index": MARKET_INDEX,
-        "sector_theme_key": theme_key,
-        "index_name": THEME_NAMES.get(theme_key) if theme_key else "Watchlist Taiwan",
-        "source_family": "production_db",
-        "source_name": SOURCE_NAME,
-        "index_method": "owner_defined_basket",
-        "open": _avg([_num(row.get("open")) for row in member_rows]),
-        "high": _avg([_num(row.get("high")) for row in member_rows]),
-        "low": _avg([_num(row.get("low")) for row in member_rows]),
-        "close": _avg([_num(row.get("close")) for row in member_rows]),
-        "change_pct": _avg(returns),
-        "volume": _sum([_num(row.get("volume")) for row in member_rows]),
-        "turnover": None,
-        "member_count": len(member_rows),
-        "metadata": {
-            "rule_version": RULE_VERSION,
-            "member_codes": stock_codes,
-            "members_with_price": len(member_rows),
-            "members_with_return": len(returns),
-            "source_tables": ["daily_price", "sector_theme_members"],
-        },
-    }
-
-
-def _support_level(theme_return, market_return, breadth):
-    if theme_return is None or breadth["denominator"] <= 0:
+def _support_level(theme_change, market_change, breadth):
+    up_ratio = breadth.get("up_ratio", 0)
+    if theme_change is None:
         return "weak"
-    if theme_return >= 3 and breadth["up_ratio"] >= 0.6:
+    if theme_change >= 3 and up_ratio >= 0.55:
         return "confirmed"
-    if market_return is not None and theme_return >= market_return + 1 and breadth["up_ratio"] >= 0.5:
+    if market_change is not None and theme_change >= market_change and up_ratio >= 0.5:
         return "supporting"
-    if theme_return > 0 and breadth["up_ratio"] >= 0.5:
+    if theme_change > 0 and up_ratio >= 0.5:
         return "supporting"
-    if theme_return <= -3 or breadth["up_ratio"] < 0.35:
+    if theme_change <= -2 or up_ratio < 0.35:
         return "invalidated"
     return "weak"
 
 
-def _breadth(stock_codes, current, previous):
-    returns = {
-        code: _member_return(code, current, previous)
-        for code in stock_codes
-        if code in current
-    }
-    usable = {code: value for code, value in returns.items() if value is not None}
-    denominator = len(usable)
-    up_count = sum(1 for value in usable.values() if value > 0)
-    strong_count = sum(1 for value in usable.values() if value >= 3)
-    down_count = sum(1 for value in usable.values() if value < 0)
-    return {
-        "denominator": denominator,
-        "up_count": up_count,
-        "down_count": down_count,
-        "strong_count": strong_count,
-        "up_ratio": round(up_count / denominator, 4) if denominator else 0,
-        "member_returns": {code: round(value, 4) for code, value in usable.items()},
-    }
-
-
-def build_source_payloads(price_rows, trade_date, as_of=None):
+def build_confirmed_rows(index_rows, breadth, as_of=None):
     as_of = as_of or _now_iso()
-    by_stock = group_price_rows(price_rows)
-    current, previous = _latest_and_previous(by_stock, trade_date)
-    all_codes = sorted({code for codes in THEME_MEMBERS.values() for code in codes})
-    market_row = _build_index_row(
-        trade_date,
-        as_of,
-        "market",
-        None,
-        all_codes,
-        current,
-        previous,
-    )
-    if market_row is None:
-        return {
-            "status": "blocked",
-            "reason": "no current daily_price rows for watchlist",
-            "member_rows": theme_member_rows(as_of),
-            "index_rows": [],
-            "confirmed_rows": [],
-        }
-
-    # Only persist sector_theme rows for now. Broad market is used as the
-    # same-run benchmark but not upserted because nullable sector_theme_key
-    # broad-market rows need a separate DB conflict contract.
-    index_rows = []
-    confirmed_rows = []
-    market_return = market_row.get("change_pct")
-    for theme_key, stock_codes in THEME_MEMBERS.items():
-        theme_row = _build_index_row(
-            trade_date,
-            as_of,
-            "sector_theme",
-            theme_key,
-            stock_codes,
-            current,
-            previous,
-        )
-        if theme_row is None:
+    market_change = _market_change(index_rows)
+    confirmed = []
+    for row in index_rows:
+        if row.get("index_scope") != "sector_theme":
             continue
-        index_rows.append(theme_row)
-        breadth = _breadth(stock_codes, current, previous)
-        support_level = _support_level(theme_row.get("change_pct"), market_return, breadth)
-        freshness = "fresh" if breadth["denominator"] else "insufficient-data"
-        confirmed_rows.append(
+        theme_change = row.get("change_pct")
+        support_level = _support_level(theme_change, market_change, breadth)
+        confirmed.append(
             {
-                "trade_date": trade_date,
+                "trade_date": row["trade_date"],
                 "as_of": as_of,
                 "market_index": MARKET_INDEX,
-                "sector_theme_key": theme_key,
-                "source_family": "production_db",
+                "sector_theme_key": row["sector_theme_key"],
+                "source_family": SOURCE_FAMILY,
                 "source_name": SOURCE_NAME,
-                "freshness": freshness,
+                "freshness": "fresh" if breadth else "insufficient-data",
                 "evidence_value": {
-                    "theme_change_pct": theme_row.get("change_pct"),
-                    "market_change_pct": market_return,
+                    "theme_change_pct": theme_change,
+                    "market_change_pct": market_change,
                     "relative_change_pct": (
-                        round(theme_row.get("change_pct") - market_return, 4)
-                        if theme_row.get("change_pct") is not None and market_return is not None
+                        round(theme_change - market_change, 4)
+                        if theme_change is not None and market_change is not None
                         else None
                     ),
-                    "index_method": "owner_defined_basket",
-                    "theme_name": THEME_NAMES.get(theme_key),
+                    "index_method": "external_index",
+                    "twse_index_name": row["metadata"]["twse_index_name"],
                     "rule_version": RULE_VERSION,
                 },
-                "watchlist_breadth": breadth,
+                "watchlist_breadth": breadth or {},
                 "support_level": support_level,
                 "evidence_status": "confirmed",
                 "lineage": {
                     "rule_version": RULE_VERSION,
                     "source_tables": [
-                        "daily_price",
-                        "sector_theme_members",
                         "market_theme_index_daily_bars",
                     ],
-                    "market_index_source_name": SOURCE_NAME,
-                    "stock_codes": stock_codes,
+                    "source_urls": [
+                        TWSE_MI_INDEX_URL,
+                        TWSE_BREADTH_URL,
+                    ],
+                    "twse_index_name": row["metadata"]["twse_index_name"],
+                    "breadth_source": breadth.get("source_name") if breadth else None,
                 },
                 "metadata": {
                     "generated_by": "scripts/backfill_market_theme_sources.py",
-                    "source_quality": "production_db_derived",
-                    "external_market_index": False,
+                    "source_quality": "official_twse_openapi",
+                    "external_market_index": True,
+                    "sector_member_source": MEMBER_SOURCE_NAME,
                 },
-                "notes": "Derived from persistent daily_price rows and repo-approved theme membership.",
+                "notes": "Official TWSE index evidence; breadth is official TWSE market-wide stock breadth.",
             }
         )
+    return confirmed
+
+
+def build_source_payloads(index_raw, breadth_raw, profiles_raw, trade_date=None, as_of=None):
+    as_of = as_of or _now_iso()
+    index_rows = build_index_rows(index_raw, trade_date=trade_date, as_of=as_of)
+    if not index_rows:
+        return {
+            "status": "blocked",
+            "reason": "no official TWSE MI_INDEX rows matched",
+            "member_rows": build_member_rows(profiles_raw, as_of=as_of),
+            "index_rows": [],
+            "confirmed_rows": [],
+        }
+    actual_trade_date = trade_date or index_rows[0]["trade_date"]
+    breadth = build_market_breadth(breadth_raw, trade_date=actual_trade_date)
     return {
         "status": "ready",
         "reason": "ready",
-        "member_rows": theme_member_rows(as_of),
+        "member_rows": build_member_rows(profiles_raw, as_of=as_of),
         "index_rows": index_rows,
-        "confirmed_rows": confirmed_rows,
+        "confirmed_rows": build_confirmed_rows(index_rows, breadth, as_of=as_of),
     }
 
 
-def fetch_price_rows(client, trade_date, lookback_limit=3600):
-    return (
-        client.table("daily_price")
-        .select("stock_id,trade_date,open,high,low,close,volume,source")
-        .lte("trade_date", trade_date)
-        .order("trade_date", desc=True)
-        .limit(lookback_limit)
-        .execute()
-        .data
-        or []
-    )
+def _delete_source_rows(client, table, source_name, trade_date=None):
+    query = client.table(table).delete().eq("source_name", source_name)
+    if trade_date and table != "sector_theme_members":
+        query = query.eq("trade_date", trade_date)
+    query.execute()
 
 
-def latest_trade_date(client):
-    rows = (
-        client.table("daily_price")
-        .select("trade_date")
-        .order("trade_date", desc=True)
-        .limit(1)
-        .execute()
-        .data
-        or []
-    )
-    return str(rows[0].get("trade_date")) if rows else ""
+def upsert_source_payloads(client, payloads, trade_date=None):
+    _delete_source_rows(client, "sector_theme_members", MEMBER_SOURCE_NAME)
+    _delete_source_rows(client, "market_theme_index_daily_bars", SOURCE_NAME, trade_date)
+    _delete_source_rows(client, "market_theme_confirmed_evidence", SOURCE_NAME, trade_date)
 
-
-def upsert_source_payloads(client, payloads):
     if payloads["member_rows"]:
-        client.table("sector_theme_members").upsert(
-            payloads["member_rows"],
-            on_conflict="sector_theme_key,stock_code,valid_from,source_family,source_name",
-        ).execute()
+        client.table("sector_theme_members").insert(payloads["member_rows"]).execute()
     if payloads["index_rows"]:
-        trade_dates = sorted({row["trade_date"] for row in payloads["index_rows"]})
-        for trade_date in trade_dates:
-            (
-                client.table("market_theme_index_daily_bars")
-                .delete()
-                .eq("trade_date", trade_date)
-                .eq("source_family", "production_db")
-                .eq("source_name", SOURCE_NAME)
-                .execute()
-            )
         client.table("market_theme_index_daily_bars").insert(payloads["index_rows"]).execute()
     if payloads["confirmed_rows"]:
         upsert_market_theme_confirmed_evidence(payloads["confirmed_rows"], client)
 
 
 def print_summary(trade_date, payloads):
-    print("MARKET THEME SOURCE BACKFILL")
-    print(f"trade_date: {trade_date}")
+    print("TWSE MARKET THEME SOURCE BACKFILL")
+    print(f"trade_date: {trade_date or 'latest-from-source'}")
     print(f"status: {payloads['status']}")
     print(f"reason: {payloads['reason']}")
     print(f"sector_theme_members rows: {len(payloads['member_rows'])}")
@@ -384,7 +400,8 @@ def print_summary(trade_date, payloads):
             "support_level": row["support_level"],
             "freshness": row["freshness"],
             "theme_change_pct": row["evidence_value"]["theme_change_pct"],
-            "breadth": row["watchlist_breadth"]["up_ratio"],
+            "market_change_pct": row["evidence_value"]["market_change_pct"],
+            "breadth": row["watchlist_breadth"].get("up_ratio"),
         }
         for row in payloads["confirmed_rows"]
     ]
@@ -393,9 +410,9 @@ def print_summary(trade_date, payloads):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        description="Backfill unified market/theme source tables and confirmed evidence from production DB daily_price."
+        description="Backfill market/theme source tables and confirmed evidence from official TWSE OpenAPI."
     )
-    parser.add_argument("--trade-date", help="YYYY-MM-DD. Defaults to latest daily_price trade_date.")
+    parser.add_argument("--trade-date", help="YYYY-MM-DD. Defaults to the latest date returned by TWSE.")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--write", action="store_true")
     parser.add_argument("--confirm-write", action="store_true")
@@ -406,19 +423,25 @@ def main(argv=None):
     if not args.write and not args.dry_run:
         raise SystemExit("Use --dry-run for preview, or --write --confirm-write for DB upsert")
 
-    client = get_supabase_client()
-    trade_date = args.trade_date or latest_trade_date(client)
-    if not trade_date:
-        raise SystemExit("No trade_date supplied and daily_price has no rows")
-
-    price_rows = fetch_price_rows(client, trade_date)
-    payloads = build_source_payloads(price_rows, trade_date)
-    print_summary(trade_date, payloads)
+    index_raw = fetch_twse_index_rows()
+    breadth_raw = fetch_twse_breadth_rows()
+    profiles_raw = fetch_twse_company_profiles()
+    payloads = build_source_payloads(
+        index_raw,
+        breadth_raw,
+        profiles_raw,
+        trade_date=args.trade_date,
+    )
+    print_summary(args.trade_date, payloads)
 
     if payloads["status"] != "ready":
         raise SystemExit(1)
     if args.write:
-        upsert_source_payloads(client, payloads)
+        client = get_supabase_client()
+        trade_date = args.trade_date or (
+            payloads["index_rows"][0]["trade_date"] if payloads["index_rows"] else None
+        )
+        upsert_source_payloads(client, payloads, trade_date=trade_date)
         print("WRITE OK")
     else:
         print("DRY RUN ONLY: no database writes")

@@ -461,15 +461,25 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             "theme": "AI/電子供應鏈",
         })
 
-        messages = generator.formatTelegramMessages(
-            {"台積電": payload},
-            "FULL DETAIL",
-            None,
-            None,
-            "AI/電子供應鏈仍偏多",
-            datetime(2026, 5, 28),
-            report_phase="盤中",
-        )
+        with patch.object(
+            generator,
+            "load_confirmed_market_theme_evidence",
+            return_value={
+                "status": "missing-source",
+                "confirmed": False,
+                "reason": "test isolated from production DB",
+                "rows": [],
+            },
+        ):
+            messages = generator.formatTelegramMessages(
+                {"台積電": payload},
+                "FULL DETAIL",
+                None,
+                None,
+                "AI/電子供應鏈仍偏多",
+                datetime(2026, 5, 28),
+                report_phase="盤中",
+            )
 
         summary = messages[-1]
         self.assertIn("【05/28 盤中｜v20.4.3】", summary)
