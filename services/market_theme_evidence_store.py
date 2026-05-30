@@ -4,6 +4,13 @@ import os
 
 TABLE_NAME = "market_theme_confirmed_evidence"
 TARGET_TABLE = f"public.{TABLE_NAME}"
+INDEX_SOURCE_TABLE = "market_theme_index_daily_bars"
+MEMBER_SOURCE_TABLE = "sector_theme_members"
+DEPRECATED_SOURCE_TABLES = (
+    "market_index_daily_bars",
+    "sector_theme_daily_bars",
+    "market_theme_breadth_daily",
+)
 UPSERT_CONFLICT_TARGET = (
     "trade_date,market_index,sector_theme_key,source_family,source_name,as_of"
 )
@@ -68,18 +75,20 @@ REQUIRED_ROW_FIELDS = {
 }
 AUDIT_MODE = "read-only-production-audit"
 AUDIT_MISSING_SOURCE_SEMANTICS = [
-    "market_index",
-    "sector_theme_key",
-    "watchlist_breadth definition",
-    "evidence_value meaning",
-    "support_level rule",
-    "lineage from production DB columns",
+    "market_theme_index_daily_bars source rows",
+    "sector_theme_members mapping rows",
+    "confirmed evidence generation rule",
+    "market/theme lineage from production DB columns",
 ]
 AUDIT_SOURCE_TABLE_REASONS = {
     "market_theme_confirmed_evidence": "target confirmed evidence table; rows are read-only status only",
-    "daily_signal_snapshot": "missing explicit market_index / sector_theme_key / breadth semantics",
-    "signal_runs": "run metadata is not market/theme evidence semantics",
-    "signal_items": "watchlist item rows are strategy snapshots, not approved market/theme evidence",
+    "market_theme_index_daily_bars": "unified market/sector-theme index source table",
+    "sector_theme_members": "persistent theme membership mapping source",
+}
+AUDIT_DIAGNOSTIC_TABLE_REASONS = {
+    "daily_signal_snapshot": "stock-level strategy snapshot; diagnostic only, not market/theme source",
+    "signal_runs": "report run metadata; diagnostic only, not market/theme source",
+    "signal_items": "report item rows; diagnostic only, not market/theme source",
 }
 
 
@@ -417,6 +426,16 @@ def _audit_source_table_entry(table, count_result, **extra):
     return entry
 
 
+def _audit_diagnostic_table_entry(table, count_result, **extra):
+    entry = _audit_source_table_entry(table, count_result, **extra)
+    entry["diagnostic_only"] = True
+    entry["reason"] = AUDIT_DIAGNOSTIC_TABLE_REASONS.get(
+        table,
+        "diagnostic only; not an approved market/theme source",
+    )
+    return entry
+
+
 def _candidate_preview_row(row, trade_date, source_name):
     if not isinstance(row, dict):
         return None
@@ -439,13 +458,12 @@ def _candidate_preview_row(row, trade_date, source_name):
     return candidate
 
 
-def _approved_payload_preview_from_source_rows(trade_date, rows_by_table):
+def _approved_payload_preview_from_confirmed_rows(trade_date, rows_by_table):
     candidates = []
-    for table in ("daily_signal_snapshot", "signal_items"):
-        for row in rows_by_table.get(table, []):
-            candidate = _candidate_preview_row(row, trade_date, table)
-            if candidate:
-                candidates.append(candidate)
+    for row in rows_by_table.get(TABLE_NAME, []):
+        candidate = _candidate_preview_row(row, trade_date, TABLE_NAME)
+        if candidate:
+            candidates.append(candidate)
     if not candidates:
         return None
     validation = validate_market_theme_evidence_ingestion_payload(candidates)
@@ -473,6 +491,7 @@ def _approved_payload_preview_from_source_rows(trade_date, rows_by_table):
 def build_market_theme_evidence_production_source_audit(client, trade_date, limit=1000):
     """Build a read-only approved-payload gate from production DB source rows."""
     source_tables = []
+    diagnostic_tables = []
     rows_by_table = {}
 
     confirmed_result = _select_count_rows(
@@ -487,6 +506,29 @@ def build_market_theme_evidence_production_source_audit(client, trade_date, limi
         _audit_source_table_entry("market_theme_confirmed_evidence", confirmed_result)
     )
 
+    index_source_result = _select_count_rows(
+        client,
+        INDEX_SOURCE_TABLE,
+        (
+            "trade_date,as_of,index_scope,market_index,sector_theme_key,"
+            "source_family,source_name,close,change_pct,metadata"
+        ),
+        filters=[("eq", ("trade_date", trade_date))] if trade_date else [],
+        limit=limit,
+    )
+    rows_by_table[INDEX_SOURCE_TABLE] = index_source_result["rows"]
+    source_tables.append(_audit_source_table_entry(INDEX_SOURCE_TABLE, index_source_result))
+
+    member_source_result = _select_count_rows(
+        client,
+        MEMBER_SOURCE_TABLE,
+        "sector_theme_key,stock_code,stock_name,market_index,is_active,valid_from,valid_to,source_family,source_name",
+        filters=[("eq", ("is_active", True))],
+        limit=limit,
+    )
+    rows_by_table[MEMBER_SOURCE_TABLE] = member_source_result["rows"]
+    source_tables.append(_audit_source_table_entry(MEMBER_SOURCE_TABLE, member_source_result))
+
     snapshot_result = _select_count_rows(
         client,
         "daily_signal_snapshot",
@@ -495,7 +537,7 @@ def build_market_theme_evidence_production_source_audit(client, trade_date, limi
         limit=limit,
     )
     rows_by_table["daily_signal_snapshot"] = snapshot_result["rows"]
-    source_tables.append(_audit_source_table_entry("daily_signal_snapshot", snapshot_result))
+    diagnostic_tables.append(_audit_diagnostic_table_entry("daily_signal_snapshot", snapshot_result))
 
     signal_runs_result = _select_count_rows(
         client,
@@ -508,8 +550,8 @@ def build_market_theme_evidence_production_source_audit(client, trade_date, limi
         limit=limit,
     )
     rows_by_table["signal_runs"] = signal_runs_result["rows"]
-    source_tables.append(
-        _audit_source_table_entry(
+    diagnostic_tables.append(
+        _audit_diagnostic_table_entry(
             "signal_runs",
             signal_runs_result,
             run_type="daily_close",
@@ -534,20 +576,15 @@ def build_market_theme_evidence_production_source_audit(client, trade_date, limi
         else {"status": "ok", "rows": [], "row_count": 0, "reason": ""}
     )
     rows_by_table["signal_items"] = signal_items_result["rows"]
-    source_tables.append(_audit_source_table_entry("signal_items", signal_items_result))
+    diagnostic_tables.append(_audit_diagnostic_table_entry("signal_items", signal_items_result))
 
-    preview = _approved_payload_preview_from_source_rows(trade_date, rows_by_table)
+    preview = _approved_payload_preview_from_confirmed_rows(trade_date, rows_by_table)
     can_generate = bool(preview)
     if can_generate:
-        source_names = {
-            row.get("source_name")
-            for row in preview
-            if isinstance(row, dict) and row.get("source_name")
-        }
         for entry in source_tables:
-            if entry["table"] in source_names:
+            if entry["table"] == "market_theme_confirmed_evidence":
                 entry["usable_for_market_theme_evidence"] = True
-                entry["reason"] = "explicit market/theme evidence contract columns validated"
+                entry["reason"] = "confirmed market/theme evidence contract columns validated"
     return {
         "mode": AUDIT_MODE,
         "write_execution": "disabled",
@@ -555,6 +592,8 @@ def build_market_theme_evidence_production_source_audit(client, trade_date, limi
         "source_family": "production_db",
         "trade_date": trade_date,
         "source_tables": source_tables,
+        "diagnostic_tables": diagnostic_tables,
+        "deprecated_tables": list(DEPRECATED_SOURCE_TABLES),
         "can_generate_approved_payload": can_generate,
         "status": "dry-run-preview" if can_generate else "blocked",
         "missing_source_semantics": [] if can_generate else AUDIT_MISSING_SOURCE_SEMANTICS,

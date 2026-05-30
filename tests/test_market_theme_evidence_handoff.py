@@ -992,24 +992,41 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
         self.assertFalse(audit["can_generate_approved_payload"])
         self.assertEqual(audit["status"], "blocked")
         self.assertIsNone(audit["approved_payload_preview"])
-        self.assertIn("market_index", audit["missing_source_semantics"])
+        self.assertIn(
+            "market_theme_index_daily_bars source rows",
+            audit["missing_source_semantics"],
+        )
         self.assertEqual(
             [(item["table"], item["rows"]) for item in audit["source_tables"]],
             [
                 ("market_theme_confirmed_evidence", 0),
-                ("daily_signal_snapshot", 2),
-                ("signal_runs", 1),
-                ("signal_items", 1),
+                ("market_theme_index_daily_bars", 0),
+                ("sector_theme_members", 0),
+            ],
+        )
+        self.assertEqual(
+            [(item["table"], item["rows"], item["diagnostic_only"]) for item in audit["diagnostic_tables"]],
+            [
+                ("daily_signal_snapshot", 2, True),
+                ("signal_runs", 1, True),
+                ("signal_items", 1, True),
+            ],
+        )
+        self.assertEqual(
+            audit["deprecated_tables"],
+            [
+                "market_index_daily_bars",
+                "sector_theme_daily_bars",
+                "market_theme_breadth_daily",
             ],
         )
         for table in audit["source_tables"]:
             self.assertFalse(table["usable_for_market_theme_evidence"])
 
-    def test_production_source_audit_outputs_preview_only_for_explicit_contract_columns(self):
+    def test_production_source_audit_outputs_preview_only_for_confirmed_evidence_rows(self):
         client = AuditClient(
             {
-                "market_theme_confirmed_evidence": [],
-                "daily_signal_snapshot": [
+                "market_theme_confirmed_evidence": [
                     {
                         "trade_date": "2026-05-29",
                         "as_of": "2026-05-29T13:30:00+08:00",
@@ -1028,6 +1045,28 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
                         "evidence_status": "confirmed",
                     }
                 ],
+                "market_theme_index_daily_bars": [
+                    {
+                        "trade_date": "2026-05-29",
+                        "as_of": "2026-05-29T13:30:00+08:00",
+                        "index_scope": "sector_theme",
+                        "market_index": "TAIEX",
+                        "sector_theme_key": "semiconductor",
+                        "close": 123.4,
+                        "source_family": "market_data",
+                        "source_name": "provider",
+                    }
+                ],
+                "sector_theme_members": [
+                    {
+                        "sector_theme_key": "semiconductor",
+                        "stock_code": "2330",
+                        "is_active": True,
+                        "source_family": "owner_approved_persistent",
+                        "source_name": "owner_theme_map",
+                    }
+                ],
+                "daily_signal_snapshot": [],
                 "signal_runs": [],
                 "signal_items": [],
             }
@@ -1042,11 +1081,11 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
         self.assertEqual(audit["status"], "dry-run-preview")
         self.assertEqual(audit["missing_source_semantics"], [])
         self.assertEqual(audit["approved_payload_preview"][0]["market_index"], "TAIEX")
-        snapshot_table = next(
+        confirmed_table = next(
             table for table in audit["source_tables"]
-            if table["table"] == "daily_signal_snapshot"
+            if table["table"] == "market_theme_confirmed_evidence"
         )
-        self.assertTrue(snapshot_table["usable_for_market_theme_evidence"])
+        self.assertTrue(confirmed_table["usable_for_market_theme_evidence"])
         self.assertEqual(
             set(audit["approved_payload_preview"][0]),
             {
