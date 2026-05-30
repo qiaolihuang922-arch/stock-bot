@@ -1,328 +1,45 @@
 # CLEANUP_PLAN.md
 
-本文件由 Architect 維護，用來記錄清理、收斂與避免重複工作的計畫。未經 Owner 或明確任務確認，不直接執行大範圍產品清理。
+本文件由 Architect 維護，用來記錄清理、收斂與待補流程。它保存「案例與待辦」，不保存跨任務硬規則。
 
-## Cleanup Principles
+## Principles
 
-- 固定 8 份 Markdown 不刪除，只改寫內容。
-- 不主動重構核心代碼，不清理未知來源未提交變更。
-- 流程文件可以由 Architect 直接壓縮；產品代碼、測試、runtime 文件清理需 PM / Tech / QA 接力。
-- 清理不能用「可能有用」作保留理由；保留、刪除、待確認都要有 evidence。
-- 不確定項只記入待確認，不直接刪。
-- commit / push 後必須壓縮工作流 Markdown，避免它們變成聊天流水。
-
-## Rule Hygiene
-
-- 不把每次事故直接塞進 `AGENTS.md`。
-- Post-cycle review 先分類：
-  - `one_off`：單次任務上下文問題，只寫入 `CURRENT_STATE.md` 或本文件短摘要。
-  - `repeated_pattern`：同類問題重複發生，合併到既有規則。
-  - `high_risk_invariant`：會造成越權、錯單、live 副作用、版本回退、手機誤讀，可升為硬規則。
-  - `runner_gap`：交由 runner / agent prompt 補丁，不用文案規則硬撐。
+- 固定 8 份 Markdown 不刪，只壓縮內容。
+- `AGENTS.md` 只放跨任務原則；事故、版本流水、一次性提醒不長期放入硬規則。
+- 新規則先分類再處理：
+  - `one_off`：只寫短摘要。
+  - `repeated_pattern`：合併既有規則或任務卡契約。
+  - `high_risk_invariant`：會造成越權、錯單、live 副作用、版本回退、手機誤讀或資料寫入風險，才升級為硬規則。
+  - `runner_gap`：補 runner / agent prompt / worktree gate，不靠文案硬撐。
   - `doc_bloat`：壓縮或刪除過期流水。
-- 新規則必須優先改寫 / 合併既有段落；只有沒有現成位置時才新增小節。
-- 若新增規則讓文件更長，必須同時刪除或壓縮已被取代的舊描述。
+- 清理類結論必須有 evidence；不能用「可能有用」作保留理由。
 
 ## Completed Compression
 
-- `CURRENT_STATE.md` 已由版本流水改為：
-  - 專案快照。
-  - 當前流程狀態。
-  - CAO 可用性。
-  - 最近高信號里程碑。
-  - 穩定產品契約。
-  - 模組圖、邊界、待辦。
-- `CLEANUP_PLAN.md` 已由長流水改為：
-  - 清理原則。
-  - 規則治理。
-  - 已完成壓縮。
-  - 待確認項。
-- `RESEARCH.md` 保留市場 / 題材證據鏈研究結論，刪除終端過程與長表格流水。
-- `DISPATCH.md` 切換為本輪流程審計與壓縮任務，不再保存上一輪產品任務完整過程。
-- CAO runner prompt 已補任務尺寸 / 最小改動 / 風險預算 / 停止條件，避免 PM、Tech、QA 把小任務擴成大任務。
-- CAO 本機部署資產已收斂到 repo：
-  - runner 腳本、profile 模板、profile 安裝、bootstrap、部署說明都在 `tools/cao_agent/`。
-  - 可下載依賴只記錄來源與安裝指令，不把外部 runtime 塞進 repo。
+- `AGENTS.md` 已從事故堆疊改為角色邊界、交付門檻、DB / runner source-of-truth、報文規則與 post-cycle review 原則。
+- `CURRENT_STATE.md` 已改為短上下文，只保留目前產品 / 流程 / blocker / data status。
+- CAO agent profiles 已收斂為角色卡、安全邊界與輸出契約，刪除重複口令與舊安全階段描述。
+- CAO runner 文件只保留部署、入口、路徑與安全邊界。
 
-## Pending / Watchlist
+## Active Watchlist
 
-- 本輪 Owner 指出 market/theme 五月資料完成誤報：
-  - 根因分類：`delivery_evidence_alignment_gap` + `doc_bloat_risk`。Architect 把 script / integrity check 通過錯當成 Owner 要的 production market/theme 五月資料完成，且 post-cycle review 沒有先核對「目標口徑」與「證據口徑」是否一致。
-  - 直接問題：`market_theme_confirmed_evidence`、`market_theme_index_daily_bars`、`sector_theme_members` 截圖只證明部分 latest-source rows，且同一 business key 因不同 `as_of` 重複寫入多批；不能稱為五月完整歷史。
-  - 流程修正：不把事故細節塞進 `AGENTS.md`。硬規則只保留抽象的 Delivery Evidence Alignment Gate；本次案例與待補項留在本文件追蹤。
-  - 目前 correction flow 狀態：QA 阻塞。新 correction audit path 已建立，但 production read-only audit 目前 source-error，且 report contract 曾有 blocked 卻寫 read_only_audit_complete 的誤讀風險。不得宣告三表 audit complete。
-  - 待補：修 correction report 的 blocked wording，取得可用 production read-only audit，再決定 dedupe / cleanup / write-prevention / schema or unique index 是否需要 Owner SQL。
-- 本輪 May Data Strategy Report Full Integrity Check：
-  - 根因分類：`full_integrity_gate_gap` + `json_cli_contract_gap` + `qa_sandbox_gap`。
-  - 已完成：PM 定義四條完整驗收矩陣；Tech 補 full-integrity dry-run diagnostic；QA 檢查 source integrity、fresh runner dry-run、策略/顯示一致性與報文跨區塊一致性。
-  - QA 首輪有效阻塞：CLI JSON stdout 被 generate_report warning 污染，runner/Architect 無法直接 `json.loads(stdout)`；Tech 已修為 stdout 純 JSON，warning 進 diagnostics / blocked_reasons。
-  - Architect 主 repo 驗證有效攔截：sandbox QA 通過後，主 repo 測試發現 read client missing 仍可能 fallback 成 source passed；第二次返工後 missing/source-error fail closed。
-  - 邊界保持：未 live Telegram、未 DB write/backfill、未 schema/RLS/grant/policy/role、未改策略 decision 或 Telegram 使用者可見 header。
-  - 流程教訓：QA sandbox 通過不等於主 repo 吸收可直接 commit；Architect 吸收後必須跑主 repo 相關測試與實際 CLI smoke。此已是既有 Architect merge gate，不新增 `AGENTS.md` 硬規則；本輪記為執行到位案例。
-  - 待補 runner：可考慮將 JSON CLI contract 加入 QA runner helper，要求 `--*-json` 模式 stdout 必須可直接 `json.loads`。
-- 本輪 Market Theme Production Trend Consumption Check：
-  - 根因分類：`source_consumption_proof_gap` + `runner_parser_false_fail`。上一輪已證明 useful rows 寫入 production table，但仍需證明正式 generator/report path 在 fresh runner 條件下真的消費 production evidence trend。
-  - 已完成：formal generator consumption check、read-only smoke JSON、production smoke、測試與 QA 反證。
-  - 實際結果：`market_theme_confirmed_evidence` 已被正式路徑消費；`daily_signal_snapshot` / runtime / local cache 不會被當成 market/theme history；`sector_theme_members` 仍是 latest-only blocked；`market_theme_index_daily_bars` 仍 not-consumed。
-  - 邊界保持：未 DB write、未 backfill、未 schema / RLS / grant / policy / role、未 live Telegram、未改策略 decision。
-  - Runner gap 重複：CAO auto wrapper 再次把 QA `通過` 報告標成 QA parser failed；需修 QA conclusion parser，只讀 `## QA 結論` 或最終結論段的第一個有效詞，避免有效 QA 被誤判。
-  - 不新增 `AGENTS.md` 硬規則：既有 GitHub runner source-of-truth、fail-closed、DB consumption 規則已覆蓋；本輪沉澱為 smoke / tests / runner 待補。
-- 本輪 Market Theme May History Backfill Gap：
-  - 根因分類：`wrong_backfill_target` + `source_consumption_gap`。前一輪把五月 `daily_price` / `daily_signal_snapshot` 回寫得太像成果，但 Owner 真正需要的是能被 market/theme evidence trend 消費的資料。
-  - 已完成：PM 明確三張表的 source / consumer contract；Tech 將 backfill script 改成 JSON report 與嚴格 validation/write gate；QA 首輪攔下 forbidden `daily_signal_snapshot` payload 污染 confirmed evidence，返工後通過。
-  - 實際寫入：只 upsert `market_theme_confirmed_evidence` 9 rows；read-after-write passed，strategy consumption check 已確認用到 confirmed evidence history。
-  - 防污染：`sector_theme_members` latest-only blocked；`market_theme_index_daily_bars` 沒直接 DB consumer 時 skipped/not-consumed；`daily_price` / `daily_signal_snapshot` 不再作本輪成果。
-  - 邊界：目前只能補 latest official market/theme evidence，不能憑空補完整五月 daily market/theme history；若要完整五月，需真實 historical source 或 Owner-approved provider。
-- 本輪 Architect Dispatch Boundary Audit：
-  - 根因分類：`high_risk_invariant` + `runner_prompt_gap`。流程文件原本允許 Owner 明確授權 Architect 直接實作，但沒有定義「明確」格式，導致泛用操作口令被誤讀成 bypass。
-  - 已完成硬規則收斂：`AGENTS.md` 明確規定「開始 / 繼續 / 處理 / 修復 / 檢查 / 清理 / 推進 / 直接來」只代表啟動流程，不代表可代 PM / Tech / QA。
-  - 已完成 agent prompt 補丁：PM / Tech / QA / security profile 與 `run_architect_task.sh`、`run_auto_dev_cycle.sh` 都補上 bypass guard。
-  - 邊界：本輪只做流程與 agent 文件補強；已改過的產品代碼不再追加處理，只做測試 / diff 檢查。
-- 本輪 `v20.4.5` Market Theme Evidence History Trend Consumption：
-  - 根因分類：`history_evidence_consumption_gap`。market/theme evidence 已每日保存，但先前策略證據層主要看最新有效 row，沒有把歷史趨勢摘要成可消費訊號。
-  - 已完成：loader 額外讀取最近 confirmed/fresh evidence rows，建立 `evidence_trend`；provider/summary 顯示趨勢短行；trend 明確限制為 wording / 排序提示 / detail trace。
-  - 邊界保持：不新增 DB schema、不 live write、不 backfill、不改策略 decision / watchlist / Telegram live delivery。
-  - 不新增 `AGENTS.md` 硬規則：既有 GitHub runner source-of-truth、fail-closed、持倉行動一致性規則已覆蓋；本輪沉澱為 loader/provider contract 與測試。
-- 本輪 Git Runner May Backfill Entrypoint：
-  - 根因分類：`git_runner_backfill_entrypoint_gap`。Owner 要五月資料回寫後再跑流程檢查；本地寫入不是正式結果，所以需由 GitHub workflow 觸發。
-  - 已完成：workflow_dispatch 新增 `run_mode=backfill_may/backfill_and_bot` 與日期 / 版本 inputs；GitHub runner 可回寫五月 `daily_price`、`daily_signal_snapshot`。
-  - 已補表收斂 guard：舊 `market_daily_bars` / strategy evidence draft tables 不在目前 production schema，runner 不再寫入；衍生 rows 只作 log 診斷。
-  - 已補 runner 真實資料 guard：`backfill_may` 使用 `--allow-partial`，只寫 TWSE source 實際可取得 rows；缺股票 / 缺日期以 warning 呈現，不用假資料補齊 validation。
-  - 邊界保持：非 schema 寫入走 repo script / GitHub runner；不要求 Owner 跑 DML SQL；未新增 DB schema / RLS / grant / policy / role。
-  - 已跑：GitHub run `26680575871` 成功，並已做 read-only DB count 檢查。
-  - Post-cycle review：第一次 runner 失敗暴露舊表引用，已補 `market_daily_bars` / strategy draft tables 不再寫入 production；第二次 runner 成功。此為 `schema_consolidation_followup`，不用新增硬規則，已用 writer 測試防回退。
-  - 污染清理：DB 無 duplicate key；舊版本 `daily_signal_snapshot` rows 暫不刪除，因屬版本化歷史。產品讀取已加 current-version filter，防止舊版本污染正式判斷。
-  - Code garbage 已清理：停止讀寫已刪除 draft tables；strategy summary 改由 `daily_signal_snapshot` + `daily_price` 派生，cross-day context 改用 current-version `daily_signal_snapshot`。
-  - 風險：market/theme official source 目前只能補 latest OpenAPI 交易日，不能憑空補五月整月；trend 只消費 production 既有 confirmed rows。
-- 本輪 Production Evidence Source Audit And Approved Payload Gate：
-  - 根因分類：`production_source_semantics_gap` + `runner_parser_false_fail`。
-  - 已完成：read-only production source audit JSON；row count / source availability / approved payload preview gate；個股策略 snapshot 不會直接升級為 market/theme confirmed evidence。
-  - QA conditional pass 有效：本地 contract 通過，但 QA sandbox 無法完成真實 production row count；Architect 已用主 repo config fallback 跑真實 production read-only audit，確認 rows 可讀且 output blocked。
-  - 目前真實結果：`market_theme_confirmed_evidence=0`、`daily_signal_snapshot=48`、`signal_runs=1`、`signal_items=12`，但缺 source semantics，不能生成 approved payload。
-  - 需要 Owner/PM 決策：是否把 `daily_signal_snapshot` / `signal_runs/items` 視為 market/theme supporting evidence source；若是，需定義 market_index、sector_theme_key、breadth 分子/分母、evidence_value、support_level、lineage。若否，需要外部市場/族群 index 或新 production source。
-  - 邊界保持：未改 schema / RLS / grant / policy / role；未 live write；未 backfill；未 Telegram；未策略 decision。
-  - Runner gap 重複：auto wrapper 對 `conditional pass` 仍 false fail；需修 QA conclusion parser。
-  - 不新增 `AGENTS.md` 硬規則：既有 source-of-truth、資料寫入邊界與 Post-cycle Review 已覆蓋。
-- 本輪 Evidence Read-only Smoke Credential Fallback：
-  - 根因分類：`credential_fallback_gap` + `runner_parser_false_fail`。
-  - 已完成：read-only smoke 支援 env/config read key fallback；缺憑證 fail closed；service-role key 不進 read-only fallback；secret 不輸出派生資訊。
-  - QA 有效覆蓋：config fallback、缺憑證不建立 client、service-role only fail closed、render 不含 secret/hash/fingerprint/length。
-  - 邊界保持：未改 DB schema / RLS / grant / policy / role；未 live write；未 backfill；未 Telegram；未策略 decision。
-  - 仍需後續：production 表目前 rows=0；下一輪應由 PM 定義 `daily_signal_snapshot` / `signal_runs/items` 是否可映射為 approved persistent market/theme evidence，不可由 Architect 直接硬寫 payload。
-  - Runner gap 重複：auto wrapper 對 QA `通過` 仍 false fail；需修 QA conclusion parser。
-  - 不新增 `AGENTS.md` 硬規則：既有 credential / source-of-truth / live write 邊界已覆蓋；本輪沉澱為 helper/test 與 runner 待補。
-- 本輪 Evidence Chain Write CLI Read-after-write And Source Fail-closed Handoff：
-  - 根因分類：`evidence_chain_contract_hardening` + `handoff_summary_drift` + `runner_parser_false_fail`。
-  - 已完成：write CLI dry-run / execute output 補 source metadata、validation、write_mode、secret_redaction；execute 成功 upsert 後做 read-after-write smoke；read-only smoke 補 source_family / strategy_consumer / fallback disabled contract。
-  - QA 有效攔截：前輪抓到 read-after-write exception 可能洩漏 secret、runtime/unknown/mixed rows 可能被直接消費者誤收、以及 `CHANGELOG.md` 把產品候選 diff 與交付文件 diff 混在一起。最終 QA 已通過。
-  - 邊界保持：未改 DB schema / table / column / RLS / grant / policy / role；未 production live write；未 formal backfill；未 live Telegram；未改策略 decision 或 Telegram `VERSION`。
-  - 後續風險：若未來真的跑 production `--execute`，upsert 成功但 read-after-write 失敗時目前會 fail closed 並顯示 written rows 為 0；正式 live write 任務需重新檢查「DB 已有副作用但 CLI 回傳 fail」的操作者文案與 rollback / 重跑方式。
-  - Runner gap 重複：CAO / Tech 交付摘要仍容易出現 handoff drift；QA conclusion parser / conditional pass handling 仍需另修。
-  - 不新增 `AGENTS.md` 硬規則：既有 source-of-truth、資料寫入邊界、live write 禁令與 Post-cycle Review 已覆蓋；本輪用測試與 CLI contract 沉澱。
-- 本輪 GitHub Workflow Supabase Service-role Runtime Config Wiring：
-  - 根因分類：`github_runner_secret_mapping_gap` + `runner_parser_false_fail`。
-  - 問題：write CLI 已支援 env / config fallback，但 GitHub workflow fresh runner 只生成 `SUPABASE_URL / SUPABASE_KEY`，未生成 service-role aliases；這會讓正式 runner 明明有 secret，仍像缺 write credential。
-  - 已完成：workflow 注入 `SUPABASE_SERVICE_ROLE_KEY`，runtime config.py 同時生成 `SUPABASE_SERVICE_ROLE_KEY` 與 `SERVICE_ROLE_KEY`；保留 `SUPABASE_KEY` read path；legacy `STOCK_CONFIG` path 只追加 alias，不覆蓋舊 config。
-  - QA 有效攔截：`tests/test_workflow_runtime_config.py` 是 untracked 但必要 deliverable；`CHANGELOG.md` 有自述矛盾。Architect 已納入測試並修正 handoff 文件。
-  - 邊界保持：未改 schema / table / column / RLS / grant / policy / role；未 production live write；未 live Telegram；workflow log 只輸出 present / missing，不輸出 secret。
-  - Runner gap 重複：auto cycle 對 QA `conditional pass` 再次誤判 failed；需修 QA conclusion parser，並確保 conditional pass 的條件可以被 Architect 明確標記為 satisfied。
-  - 不新增 `AGENTS.md` 硬規則：既有 GitHub Runtime / State Source、資料寫入邊界與 Post-cycle Review 已覆蓋；本輪沉澱為 workflow test 與 runner 待補。
-- 本輪 Write CLI Supabase Config Fallback：
-  - 根因分類：`credential_source_contract_gap` + `runner_parser_false_fail`。
-  - 問題：write CLI 初版只認 env `SUPABASE_SERVICE_ROLE_KEY`，漏了既有 `config.py` 的 `SERVICE_ROLE_KEY`；Owner 也已確認 GitHub Secrets 有 Supabase URL / service role key，正式 runner 不應被當成缺憑證。
-  - 已完成：env 優先，fallback `config.py`；兼容 `SERVICE_ROLE_KEY` 與 `SUPABASE_SERVICE_ROLE_KEY`；CLI output 僅顯示 sanitized source，不輸出 secret。
-  - 待補流程：若未來 GitHub runner 寫入仍報缺 env，先查 workflow env mapping / secret name wiring，不再回頭要求 Owner 手動跑普通 SQL。
-  - QA 覆蓋：config fallback、env precedence、全缺 fail closed、payload invalid 時 env validation skipped、stdout 不含 URL/key sentinel。
-  - 不新增 `AGENTS.md` 硬規則：屬於 write CLI 局部契約漏同步；已用 helper/tests 沉澱。
-- 本輪 Market Theme Confirmed Evidence Repo-side Write CLI：
-  - 根因分類：`write_interface_gap` + `approval_boundary_overbroad` + `runner_parser_false_fail`。
-  - 已完成：repo-side write CLI，預設 dry-run；`--execute` 需 allowed payload 與 Supabase write env，走 upsert helper，不產普通 DML 給 Owner。
-  - QA 有效攔截：`scripts/write_market_theme_confirmed_evidence.py` 是 untracked 但必要 deliverable；若只吸收 tracked diff，CLI contract 與測試都不成立。Architect 已納入。
-  - 邊界保持：未改 schema / table / column / RLS / grant / policy / role；未 production live write；缺 env、forbidden/missing/mixed source fail closed。
-  - Runner gap 重複：auto cycle 對 QA `conditional pass` 仍誤判 failed；需修 QA conclusion parser 只讀 `## QA 結論` 後第一個有效結論詞，並正確處理 conditional pass。
-  - 不新增 `AGENTS.md` 硬規則：Owner 最新資料寫入邊界已在上一輪補入；本輪沉澱為 write CLI、tests、handoff docs 與 runner 待補。
-- Owner 最新資料寫入邊界：
-  - 根因分類：`approval_boundary_overbroad`。先前流程把非 schema 的資料新增 / 回寫 / backfill 也視為需要 Owner 手動批准，造成下一步容易被人工 SQL 卡住。
-  - 已更新硬規則：只有新增表、擴字段、schema / RLS / grant / policy / role 變更需要先找 Owner。
-  - 非 schema 的資料新增 / 回寫 / backfill 應走既有接口 / repo script / approved service API；不得把普通 DML 包裝成 Owner 手動 SQL。
-  - 待補產品流程：下一輪 evidence production write 任務應優先檢查 / 補齊 write interface，而不是再產 manual SQL 給 Owner。
-- 本輪 Market Theme Approved Payload Template And Dry-run Sample：
-  - 根因分類：`owner_payload_contract_gap` + `sample_as_production_misread_risk` + `runner_parser_false_fail`。
-  - 已完成：Owner-facing payload template、allowed dry-run sample、forbidden runtime negative sample、handoff docs 與局部 tests。
-  - QA 有效攔截：三份 `docs/examples/*market_theme*` 是 untracked 但必要 deliverables；若只吸收 tracked diff，乾淨 checkout 會缺 template/sample 且測試失敗。Architect 已按條件納入。
-  - 邊界保持：sample/template 明確不是 production confirmed、不是 DB rows、不是 GitHub fresh runner source-of-truth；不 live write、不 backfill、不改 RLS/grant、不改 Telegram/策略。
-  - Runner gap 重複：auto cycle 對 QA `conditional pass` 仍誤判 failed；需修 QA conclusion parser 只讀 `## QA 結論` 後第一個有效結論詞，並正確處理 conditional pass。
-  - 不新增 `AGENTS.md` 硬規則：既有 source-of-truth、fake confirmed、live write 禁令已覆蓋；本輪沉澱為 template/sample/docs/tests 與 runner 待補。
-- 本輪 Evidence Chain Approval Package Generator：
-  - 根因分類：`manual_sql_operator_risk` + `approval_flow_gap` + `runner_parser_false_fail`。
-  - 已完成：repo-side non-live approval package generator；allowed persistent payload 可產 package JSON / Markdown / review-only deterministic SQL；forbidden / missing / mixed source fail closed 且不產 SQL。
-  - QA 有效覆蓋：package 不被誤讀為 production deployed；fake / runtime / fixture-derived source 不產 SQL；secret-like payload 清空 SQL；generator 無 Supabase client、DB execute、live write 或 Telegram delivery pattern。
-  - 邊界保持：不擴表 / 擴字段、不 live write、不 formal backfill、不改 RLS / grant、不改策略或 Telegram version。
-  - Runner gap 重複：auto cycle 實質 QA `通過` 仍被 parser 判 failed；需修 QA conclusion parser 只讀 `## QA 結論` 後第一個有效結論詞。
-  - 不新增 `AGENTS.md` 硬規則：既有 source-of-truth、fake confirmed、live write 禁令與 Post-cycle Review 已覆蓋；本輪沉澱為 generator contract、tests、handoff docs 與 runner 待補。
-- 本輪 Evidence Chain Production Closure Gap Assessment：
-  - 根因分類：`source_boundary_gap` + `production_ops_boundary` + `runner_session_handoff_gap`。
-  - 結論：不需要擴表 / 擴字段；現有 schema 足以支援下一步 read-only smoke 與 manual backfill。
-  - QA 首輪阻塞有效：抓到 production table 中 `source_family=local` row 可能被 loader 洗成 confirmed；已補 loader source-family allowlist/denylist guard 與測試。
-  - QA 追加風險：混合 forbidden + allowed rows 時 loader 會保守 fail closed，可能壓掉合法 evidence；這不會 fake confirmed，不阻塞本輪，但 future production backfill 要避免混入 local/test rows。
-  - Runner gap 重複：Tech / QA 實質完成後卡在互動提示，需要手動整理 CHANGELOG / QA_REPORT；後續需修 session sentinel / CAO_DONE capture。
-  - 不新增 `AGENTS.md` 硬規則：既有 source-of-truth、fake confirmed、live write 禁令已覆蓋；本輪沉澱為產品 guard、fixture 與 runner 待補。
-- 本輪 Evidence Chain Production Ops Artifacts：
-  - 根因分類：`production_ops_boundary` + `manual_sql_operator_risk` + `runner_parser_false_fail`。
-  - 已完成：ingestion payload dry-run validator、read-only smoke CLI、manual SQL template、handoff docs；全部 repo-side non-live。
-  - QA 有效覆蓋：fake source 不產生 SQL、read-only smoke 不 fallback service-role key、缺 env fail closed、SQL/docs 無自動 live write / RLS / grant / backfill。
-  - Architect 額外補強：SQL template 與 docs 明確標示不是 one-click SQL，Step D 也需替換 `:TRADE_DATE`。
-  - Runner gap：auto cycle 實質 QA `通過` 仍被 parser 判 failed；需修 QA conclusion parser 只讀 `## QA 結論` 後第一個有效結論詞。
-  - 不新增 `AGENTS.md` 硬規則：既有 DB/live write、GitHub runner source-of-truth、Post-cycle Review 已覆蓋；本輪沉澱為 docs/SQL guard 與 runner 待補。
-- Tech runner gap 已補：`run_tech_write.sh` 改為讓 Tech 在 final answer 輸出 `# CHANGELOG:`，由 runner 寫入 worktree `CHANGELOG.md`，避免 agent 卡在直接編輯交付文件。
-- 本輪 `v20.2.1` tiny patch 中，QA 曾攔下 `CHANGELOG.md` / tracked diff / VERSION 不一致：
-  - 根因分類：`runner_gap` / handoff drift，不是產品規則缺失。
-  - 已用 QA 重跑與主 repo 驗證收口。
-  - 已補 runner guard：`run_tech_write.sh` 遇到 dirty tech worktree 時預設拒絕 reset，避免修交付摘要時丟掉候選產品 diff；若要修 handoff 文件，需用 `CLEAN_TECH_WORKTREE=0`，若要刻意丟棄需顯式 `ALLOW_DISCARD_TECH_WORKTREE=1`。
-- 本輪 `v20.2.2` 首次 auto 被 runner guard 誤攔：
-  - 根因分類：`runner_gap`，guard 把正常 `TASK.md` handoff 當成 candidate diff。
-  - 已補腳本：dirty worktree guard 只攔手稿 / 產品 / 測試候選 diff，不攔固定 handoff files。
-  - QA 另攔下第二段停利文案不明與 CHANGELOG 不一致，已修正並通過。
-- 本輪 `v20.2.3` 第二段停利去重：
-  - 根因分類：`repeated_pattern` / 手機跨區塊一致性不足，不是單純文案 bug。
-  - QA 三次攔截有效：未執行第二段被過度去重、持倉卡 `今日 無` 與 execution 文案同卡矛盾、`CHANGELOG.md` 自述與 diff 不一致。
-  - 已用任務卡與測試沉澱：completed / partial / unexecuted 三段 fixture，以及持倉卡 / summary / 風控檢查同源驗證。
-  - 暫不新增 `AGENTS.md` 硬規則，因既有手機閱讀、持倉一致性、QA 主動反證規則已覆蓋；本輪屬於執行不到位，後續用 QA fixture / runner review 追蹤。
-  - 待補流程：若類似問題再發生，將「execution state 必須單一來源供應卡片 / summary / checklist」升級為高風險 invariant。
-- 本輪 `v20.2.4` R3 強勢偏熱 evidence absent / 準備層：
-  - 根因分類：`repeated_pattern` / 手機 summary 壓縮與跨狀態分組漏測。
-  - QA 阻塞有效：強勢準備超過 3 檔時，原 overflow 文案把跨狀態 hidden items 寫成 `同狀態`，會誤導 Owner 手機閱讀。
-  - 已修正並補 fixture：跨狀態 hidden items 顯示分類數量；可買仍 0，準備層不進交易執行清單。
-  - 暫不新增 `AGENTS.md` 硬規則，因既有「手機閱讀」「分類一致性」「不同狀態不得混成另 N 檔」規則已覆蓋；本輪屬於 Tech 初版測試漏掉 overflow 負面案例。
-  - 待觀察：若未持倉 `可準備 / 僅追蹤` 或 summary overflow 再次回退，將把「summary overflow 必須依狀態分類計數」升級為任務卡固定驗收項。
-- 本輪 `v20.2.5` 盤後報文手機噪音收斂：
-  - 根因分類：`repeated_pattern` / 報文空狀態與聚合名稱不夠手機友善。
-  - 已修正：`無新增` 改成 `新增交易建議：無`；`僅追蹤 0` 不輸出零拆分；索引拆成 `可準備 / 僅追蹤 / 淘汰`。
-  - QA 驗證有效：用 05/29 盤後類似 fixture 檢查可準備 8、僅追蹤 0、淘汰 2、英業達已執行賣出與無新增建議並存。
-  - Runner gap：auto cycle 對 QA 報告 `通過` 產生 false fail，需後續檢查 QA conclusion parser；本輪已手動吸收 QA 明確通過報告並主 repo 驗證。
-  - 不新增 `AGENTS.md` 硬規則，既有空區塊 / 0-count / 手機閱讀規則已覆蓋；本輪沉澱為 fixture 與 runner 待補。
-- 本輪 `v20.3.0` Runtime Market Breadth Evidence Fallback：
-  - 根因分類：`repeated_pattern` / production 無 evidence table 時只顯示模糊 absent，使用者無法知道可用 runtime 觀察池證據與缺口。
-  - 已修正：無 DB/cache 時可用當次 results_map 生成 runtime watchlist breadth fallback，最高只輸出 weak/runtime 或 absent/missing-source。
-  - 邊界守住：缺 market_index / sector_index 不得 confirmed；不建表、不 migration、不 write、不 live、不 backfill、不改交易決策。
-  - QA 反證有效：existing structured evidence source 存在時不誤標缺 DB/cache；fallback 不改 results_map 原 decision；手機文案不含買入暗示。
-  - Runner gap 重複：auto cycle 再次對 QA `通過` false fail，需提高優先級檢查 QA conclusion parser。
-  - 下一步證據鏈若要 market_index / sector_index、DB cache/table、external provider 或持久化 evidence，必須先通知 Owner 並另開任務。
-- 本輪 `v20.3.1` Data Authenticity Fail-closed：
-  - 根因分類：`high_risk_invariant` / DB 已有資料後，runtime fallback 不可再偽裝為事實來源。
-  - 已修正：positions 缺來源不回 0 股 fallback；position_events source-error 不回全 0 event；runtime breadth fallback 降為非交易診斷。
-  - QA 攔截有效：指出 `tests/test_position_store.py` 是 intended untracked test，Architect 已明確納入；Architect post-review 另抓到 position_events fake 0 event 殘留並補測。
-  - Runner gap：第二次 auto 補殘留時，Tech runner 因 dirty tech worktree fail；後續需讓 auto cycle 在既有候選 diff 未吸收前禁止啟動新 Tech，或支援以當前主 repo dirty candidate 建安全續跑。
-  - Runner gap 重複：QA conclusion parser 對 `通過` / `conditional pass` 周邊文字仍會 false fail，需修 parser 只讀 `## QA 結論` 後第一個有效結論詞。
-  - 暫不新增 `AGENTS.md` 硬規則，因既有 source-of-truth、fail-closed、DB/live 禁令已覆蓋；本輪沉澱為 fixture 與 runner 待補。
-- 本輪 `v20.4.0` DB Strategy Consumption Phase 1：
-  - 根因分類：`repeated_pattern` + `high_risk_invariant` / DB history 可用後，歷史記憶若不分優先級，會把同級去重錯用到硬風控。
-  - QA 阻塞有效：首輪測試全綠仍被 QA 用「歷史已減碼 + 今日硬風控減碼」反證抓出 summary / 卡片主行動矛盾。
-  - 已修正並補 fixture：`REDUCE_50` / 硬風控不被 prior reduce 去重覆蓋；QA 額外 probe `STOP_100` / prior take-profit 通過。
-  - 交付文件一致性問題已補：`CHANGELOG.md` 必須列入 untracked 新檔 `services/cross_day_context.py`、`tests/test_cross_day_context.py`，Architect 吸收時不得只看 `git diff --stat`。
-  - Runner gap：Tech worktree `.venv` 以 x86_64 執行時載入 arm64 `pydantic_core` 會 collection fail；後續 runner 應固定使用 `arch -arm64` 或建立架構一致 venv。
-  - Runner gap：auto cycle 仍需改善 QA 結論 parser 與 conditional pass 後續收口，避免有效 QA 報告被標成 runner failed。
-  - Owner 追問後補硬規則：正式 TG 報文由 git / runner 啟動，runner 無狀態；跨日策略記憶與執行去重必須來自 DB / 持久 source-of-truth，local/runtime 只能作同 run 輔助，不得作下次判斷依據。
-  - 待補產品任務：檢查 `services/cross_day_context.py` 的 `local_position_events` 是否只作同 run guard，並確認所有跨日判斷都可由 DB fresh run 重建。
-- 本輪 `v20.4.1` Cross-day Context Source Boundary Hardening：
-  - 根因分類：`repeated_pattern` / source boundary。`v20.4.0` 已有 DB 記憶能力，但初版仍可能讓 local/runtime same-run 資料混入跨日 context。
-  - QA 阻塞有效：首輪直接測試全綠，但 QA 補 mixed-source 反證抓到 `any()` 白名單判斷會讓 `position_events + local_position_events` 仍輸出假歷史。
-  - 已修正：`cross_day_ready()` 要求所有來源都是 persistent whitelist；`today_position_events` 僅保留 `same_run_*` metadata，不寫入 previous action/date 或 dedupe。
-  - 不新增 `AGENTS.md` 硬規則：既有 GitHub runner / state source 規則已覆蓋，本輪只補狀態契約與測試 fixture，避免文件膨脹。
-  - Runner gap：auto cycle 初次 Tech runner failed，需後續改善 handoff 續跑；本輪用 `CLEAN_TECH_WORKTREE=0` 在既有 candidate diff 上返工，避免丟失候選。
-  - Phase 2 待辦：production DB read-only schema mapping、source precedence、必要 table/field 擴充需先通知 Owner。
-- 本輪 `v20.4.2` Evidence Phase 2 Source-Family Gate And Wording Cleanup：
-  - 根因分類：`repeated_pattern` / evidence source boundary。只排除 `runtime_fallback` 不夠，必須用 source-family whitelist 控制 confirmed / ready。
-  - QA 阻塞有效：第一次抓到 `runtime_diagnostic` 可 fake confirmed；第二次抓到 production confirmed 被 report-derived theme text 污染頂層 source_family。
-  - 已修正：confirmed / ready 只接受 `production_db` 或 `owner_approved_persistent`，report-derived / runtime diagnostic 只能留在 detail trace。
-  - 手機報文噪音已收斂：缺 production source 時只顯示 `證據：production 來源不足，不作確認。`，避免 absent/missing-source 長列表干擾主決策。
-  - 不新增 `AGENTS.md` 硬規則：現有 source-of-truth、fail-closed、手機閱讀規則已覆蓋；本輪沉澱為 fixture 與 stable contract。
-  - Runner gap：auto cycle 對 QA `阻塞` 結論 parser 仍 false fail；Tech runner 自檢曾未用 `arch -arm64`，後續需把 arm64 pytest 入口固化到 runner。
-  - 後續待辦：若要 confirmed market/theme evidence，需 Owner 批准 production table/view 欄位 mapping；可能涉及 market_index、sector/theme key、watchlist_breadth、freshness、evidence value。
-- 本輪 Evidence Phase 3 Production Confirmed Source Mapping：
-  - 根因分類：`blocked_by_missing_production_source_contract`。不是程式錯誤，而是現有 repo 可證明 DB / persistent source contract 不足。
-  - 已守住流程：Tech 未硬寫 loader、未建 schema、未 live write、未把 runtime/report-derived/payload dict 升為 confirmed。
-  - 已清理交付：Tech 原始寬表格壓縮成 `CHANGELOG.md` 高信號 source mapping，避免固定文件膨脹與手機難讀。
-  - 不新增 `AGENTS.md` 硬規則：既有 GitHub runner / state source / fail-closed 規則已覆蓋；本輪只是依規則 blocked。
-  - 後續待辦：若 Owner 提供既有 table/view/helper 名稱與欄位，開 read-only loader 任務；若沒有，需 Owner 批准 schema/provider 任務，且正式 write/backfill/live delivery 另行批准。
-- 本輪 Evidence Phase 4 Production DB Schema SQL：
-  - 根因分類：`schema_contract_needed`。Phase 3 缺口需要先有 production source-of-truth table，再談 read-only loader。
-  - 已守住流程：產出 repo-local 手動 SQL artifact；agent 未 live execute SQL、未 backfill、未改策略 / runner / Telegram。
-  - QA 攔截點有效：特別檢查 Owner/DB admin 誤讀風險、destructive/live/secret patterns、fresh runner read-only reconstruction 欄位、artifact 放置不會被自動 migration 套用。
-  - 不新增 `AGENTS.md` 硬規則：既有 DB/live write 禁令與 GitHub runner source-of-truth 規則已覆蓋。
-  - 後續待辦：Owner 手動執行 SQL 後，另開 read-only loader 任務；RLS / permissions、writer / backfill、live delivery 需各自單獨批准。
-- 本輪 SQL artifact end-of-input tiny patch：
-  - 根因分類：`qa_static_gap` + `operator_copy_risk`。前輪 QA 只做 static scan，未做 parser 級驗證；SQL artifact 也未足夠提示整段複製。
-  - 已修正：SQL header 補整段複製說明，尾端加只讀 validation marker；新增 `docs/handoff/evidence_phase_4_market_theme_confirmed_evidence.md`。
-  - QA conditional pass 合理：QA 無本地 parser 且不可連 production；Architect 額外用臨時 `.qa_tmp/` `pglast` parser 驗證修正版 SQL parse OK。
-  - 不新增 `AGENTS.md` 硬規則：屬於 SQL artifact QA 方法補強，先記入流程待辦；若 SQL artifact 再次因 parser 未驗出錯，升級為任務卡固定驗收。
-  - 待補流程：後續 SQL artifact 任務優先使用 local parser / non-production DB parser；不可用時必須在 final 明確說「未做 parser 驗證」，不得只說靜態通過。
-- 本輪 production table schema verification：
-  - 根因分類：`no_safe_db_connection`。Owner 已建表，但本地 / runner 無安全只讀 connection env，不能直接 introspect production。
-  - 已交付：只讀 metadata verification SQL，讓 Owner 在 Supabase 執行後回傳 result sets。
-  - QA conditional pass 有效：指出 allowed-values summary rows 只確認必要值存在，無法排除額外允許值；需看 raw check constraints。
-  - Owner 回傳結果後已完成 schema contract 判定：table / columns / hard constraints / indexes 全 PASS，且 raw constraints 未見額外允許值。
-  - 不新增 `AGENTS.md` 硬規則：已有 secret / live write 禁令；本輪只是無連線時的 handoff artifact。
-  - 待補流程：後續若要由 agent 直接驗 production schema，需先建立明確 read-only connection / role 與不輸出 secrets 的 runner 機制。
-- 本輪 `v20.4.3` Evidence Phase 5 read-only loader：
-  - 根因分類：`pm_schema_contract_drift` + `runner_gap`。首輪 PM 把已驗過的 `support_level` enum 寫錯成 `strong` 可 confirmed；QA 有效阻塞，重跑後改成負面案例。
-  - 已修正：loader 只接受 `confirmed/supporting/weak/invalidated` enum；confirmed 僅 `confirmed/supporting + evidence_status=confirmed + freshness=fresh`；`strong` fail closed。
-  - QA conditional pass 條件有效：untracked 新檔 `services/market_theme_evidence_store.py` 必須一起吸收；Architect 已納入主 repo。
-  - Runner gap 重複：auto cycle 仍把 QA `conditional pass` 判為 failed；後續需修 parser，只讀 `## QA 結論` 下第一個有效結論詞與條件段。
-  - PM guard 待補：PM 生成 fixture 時必須引用最近 schema verification result / SQL artifact enum，不得自行發明 DB enum；若任務涉及已建表欄位，PM 需把 enum 原文列入 task contract。
-  - 不新增 `AGENTS.md` 硬規則：既有 source-of-truth / fail-closed / schema contract 規則已覆蓋，本輪先補 runner / PM guard 待辦，避免硬規則膨脹。
-- 本輪 evidence-chain integration audit：
-  - 根因分類：`integration_fragmentation` / 片段化進度。schema、loader、formatter、DB writer、RLS、production smoke 與 strategy influence 邊界沒有放在同一張進度圖，導致 Owner 感覺「有表但不知道用在哪」。
-  - Audit 結論：可吸收為 conditional pass，但不是恢復開發綠燈；下一步必須先補端到端缺口。
-  - 明確缺口：
-    - `public.market_theme_confirmed_evidence` 缺 writer / ingestion / backfill / production data smoke / RLS read-only role。
-    - `signal_runs/items/outcomes` 偏 reference-only，需決定是否作 cross-day / strategy reader source。
-    - strategy summary 目前由 `daily_signal_snapshot` + `daily_price` 派生；若未來要正式 outcome table，需另開 schema / writer / reader 任務。
-  - 待補流程：建立 DB table usage ledger，欄位固定為 `table -> writer -> reader -> strategy/formatter consumer -> status -> next action`，每次新增 DB 表或 reader/writer 都要更新。
-  - 不新增 `AGENTS.md` 硬規則：先用 `CURRENT_STATE.md` / `CLEANUP_PLAN.md` 維持進度圖；若再次出現「新表已建但 writer/consumer 不清」，再升級 PM 任務卡硬欄位。
-- 本輪 Evidence Chain Pre-Development Closure：
-  - 根因分類：`integration_fragmentation` + `read_only_chain_incomplete` + `runner_gap`。
-  - 已完成：非 live handoff builder / SQL renderer / fail-closed tests；DB usage matrix 與關係圖已寫入 `CHANGELOG.md`。
-  - QA 攔截有效：先抓到缺 `evidence_status` default confirmed 與 raw renderer bypass，再抓到 renderer empty/None rows 旁路；已全部修正並補測。
-  - Runner gap：Tech / QA sessions 多次在完成實質工作後卡在互動 prompt，導致 Architect 需要人工整理 `CHANGELOG.md` 與清理 CAO session；需另修 runner sentinel / session cleanup / prompt 結尾。
-  - 不新增 `AGENTS.md` 硬規則：既有 source-of-truth、live write 禁令、Post-cycle Review 與 DB usage ledger 待補已覆蓋；本輪沉澱為 runner 待補與 fixture。
-  - 後續待辦：production ingestion/backfill、RLS/read-only role、GitHub runner actual data smoke 仍需 Owner 明確批准或手動 SQL / smoke 步驟。
-- 下一次產品任務完成後，確認 Post-cycle Review Gate 是否有做到：
-  - 根因分類。
-  - QA 攔截是否沉澱成 guard。
-  - 是否避免把 one-off 事故塞進 `AGENTS.md`。
-  - 是否壓縮 `DISPATCH.md` / `CURRENT_STATE.md` / `CLEANUP_PLAN.md`。
-- 下一次 CAO auto 任務後，確認：
-  - PM 是否真的先判斷任務尺寸，且 tiny patch 沒膨脹。
-  - Tech 是否真的維持最小 diff，且未過擬合測試或回退既有契約。
-  - QA 是否真的使用風險預算與停止條件，且未無理由擴大驗證。
-  - Tech worktree 是否乾淨起跑。
-  - QA `.qa_tmp/` 是否足夠且未改 tracked files。
-  - handoff hash gate 是否有效。
-  - `CHANGELOG.md` / `QA_REPORT.md` 是否無 transcript 污染。
-- 證據鏈 production 化若需要 DB table / cache / external provider，先通知 Owner，再進 PM 任務，不在本文件直接決策。
-- 若要做真正 code cleanup，需另開清理任務並要求 Tech 提供 `path / claim / evidence / risk / action` 表，QA 逐項反證。
-- 中文 CAO UI 是大型外部 checkout；若 Owner 要求重部署時完全保留中文化，需要另開任務抽最小中文 patch 或建立獨立 fork，不直接整包塞進主 repo。
+- `correction-market-theme-prod-coverage-2026-05`
+  - 根因：`delivery_evidence_alignment_gap` + `doc_bloat_risk`。
+  - 問題：script / integrity check 通過被誤宣告為 production market/theme 五月資料完成；Owner 截圖只證明部分 latest-source rows，且可能有不同 `as_of` 批次。
+  - 正確下一步：修 correction report 的 blocked wording / next_action，取得可重跑 production read-only audit，再判斷 dedupe / cleanup / schema guard / backfill。
+  - 禁止：audit 未完成前不得宣告三表完成，不得把 latest-only source 稱為五月歷史。
+- CAO QA conclusion parser
+  - 根因：`runner_gap`。
+  - 問題：auto wrapper 曾把有效 `通過` / `conditional pass` 誤判 failed。
+  - 下一步：parser 只讀 `## QA 結論` 或最終結論段第一個有效詞，並讓 conditional pass 條件可由 Architect 明確標記 satisfied。
+- Worktree / agent context hygiene
+  - 根因：`runner_gap` + `doc_bloat`。
+  - 問題：runtime output、過期 `.cao_agent_context` 與舊 worktree 易造成誤讀。
+  - 下一步：流程結束後清理 generated context / outputs，或在新任務啟動時重新生成乾淨 context。
 
-## Fixed Keep List
+## Cleanup Boundaries
 
-- `AGENTS.md`
-- `DISPATCH.md`
-- `RESEARCH.md`
-- `CURRENT_STATE.md`
-- `CLEANUP_PLAN.md`
-- `TASK.md`
-- `CHANGELOG.md`
-- `QA_REPORT.md`
-
-## Cleanup Levels
-
-- `L0`：文件壓縮，只更新總控摘要文件，不碰產品代碼。
-- `L1`：局部文案 / 測試說明 / 命名收斂。
-- `L2`：formatter、策略、資料來源或 DB 邊界相關清理，需 PM 任務與 QA 驗證。
-- `L3`：跨模組、replay/backfill/DB 相關清理，需 Owner 明確批准。
-
-## Next Action
-
-- 本輪完成後 commit / push，並執行 CAO worktree cleanup。
-- 後續等待 Owner 下一個需求；若是產品 / 顯示 / 策略 bug，先分派 PM。
+- 不刪固定 8 份 Markdown。
+- 不刪未知來源未提交變更。
+- 不清理 production DB rows；資料 cleanup 必須先有 read-only audit、dry-run、rollback 或 Owner-approved schema / SQL。
+- 不把 blocked / conditional 任務的候選 product diff 當已完成成果吸收。

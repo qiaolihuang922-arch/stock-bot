@@ -1,417 +1,64 @@
 # CURRENT_STATE.md
 
-本文件由 Architect 維護，作為專案短上下文。新會話應先讀 `AGENTS.md`、`DISPATCH.md`，再按任務讀本文件與必要摘要。
+本文件由 Architect 維護，保存新會話需要的短上下文。新會話先讀 `AGENTS.md`、`DISPATCH.md`，再讀本文件。
 
 ## Project Snapshot
 
 - 專案：台股策略報文機器人。
-- 交付形態：排程 / 腳本產生 Telegram 報文並發送給 Owner。
-- 股票清單唯一來源：`core/watchlist.py`，預設 12 檔。
-- 最新使用者可見 Telegram 版本：`v20.4.6`。
+- 正式交付：git / runner 產生 Telegram 報文。
+- 股票清單來源：`core/watchlist.py`。
+- 使用者可見 Telegram 版本以 `core/generator.py` 的 `VERSION` 為準。
 - 最新 pushed commit 以 `git log -1` 為準。
-- 固定 8 份 Markdown 不刪除，只改寫內容：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
+- 固定 8 份 Markdown 不刪：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 
-## Current Process State
+## Process State
 
-- Architect 是唯一總控入口；Owner 日常只對 Architect 下任務。
-- 新對話或上下文壓縮後，Architect 第一個動作必須讀 `AGENTS.md` 與 `DISPATCH.md`，確認自己不是 PM / Tech / QA。
-- 產品 bug / 顯示 bug / 策略 bug / feature request 預設先分派 PM，不直接定位代碼、不手寫 `TASK.md`、不改產品代碼。
-- Owner 的「開始 / 繼續 / 處理 / 修復 / 檢查 / 清理 / 推進 / 直接來」只代表啟動流程，不代表 Architect 可直接代 PM / Tech / QA；越過角色必須是當前任務明確、限範圍授權。
-- 純流程 / 規則 / 文件壓縮可由 Architect 直接改總控文件，但不得順手建立產品任務卡或修產品代碼。
-- 每輪完成、阻塞、QA conditional / blocked、runner 失敗、commit / push 後都要跑 Post-cycle Review Gate。
-- 規則治理原則：先分類根因，再決定是否升級為硬規則；一次性事故只進狀態或清理計畫，不直接塞進 `AGENTS.md`。
+- Architect 是唯一總控入口；產品 / 顯示 / 策略 / feature 任務預設 PM -> Tech -> QA。
+- Owner 的「開始 / 繼續 / 修復 / 檢查 / 清理 / 直接來」只啟動流程，不是越權授權。
+- Architect 可直接處理流程文件、規則壓縮、狀態收斂；不得順手改產品代碼。
+- Post-cycle review 必須做抽象治理：規則留原則，事故留摘要，避免 `AGENTS.md` 膨脹。
+- 完成結論必須和 Owner 目標同口徑；局部工具通過不得升格為整體完成。
 
-## CAO Availability
+## CAO Runtime
 
 - CAO API：`http://127.0.0.1:9889/`
-- CAO 中文前端：`http://127.0.0.1:5173/`
-- 中文前端預設目錄：`$HOME/.local/share/cao-web-zh/web`，可用 `CAO_WEB_DIR` 覆蓋。
-- 服務確認 / 啟動腳本：`tools/cao_agent/ensure_cao_services.sh`
-- 本機部署文件：`tools/cao_agent/DEPLOYMENT.md`
-- 本機 bootstrap：`tools/cao_agent/bootstrap_local.sh`
-- CAO stock agent profile 模板：`tools/cao_agent/profiles/stock_*.md.template`
-- Architect 只要分配、啟動或回覆 CAO 前端地址，必須先確認 `9889` API 與 `5173` 前端正在 listen；未啟動則先跑服務確認腳本。
+- CAO UI：`http://127.0.0.1:5173/`
+- 確認 / 啟動：`tools/cao_agent/ensure_cao_services.sh`
+- 部署：`tools/cao_agent/DEPLOYMENT.md`
+- Agent profile 模板：`tools/cao_agent/profiles/stock_*.md.template`
+- 分配或回覆前端地址前，先確認 API 與 UI 正在 listen；未啟動就先啟動。
 
-## Recent High-Signal Milestones
-
-- May Data Strategy Report Full Integrity Check 已通過 QA 並推送：
-  - 目的：五月資料寫入後，完整檢查策略是否消費 production 資料、git/fresh-run dry-run 是否能產報文、策略與顯示是否衝突、報文跨區塊是否衝突。
-  - 新增 `build_may_data_strategy_report_full_integrity_check()` 與 `scripts/smoke_market_theme_evidence_readonly.py --full-integrity-check-json`。
-  - `generate_report(dry_run=True)` 會產生既有報文 shape，但跳過 `record_daily_signals`、`record_daily_snapshots`、`record_strategy_evidence`，避免 integrity check 寫 DB。
-  - Integrity JSON 覆蓋：source_integrity、fresh_runner_dry_run、decision_display_consistency、report_cross_section_consistency。
-  - QA 首輪阻塞有效：source-error 情境 stdout 被 warning 污染，導致 JSON 不能直接解析；已修成 stdout 永遠只輸出 JSON，warning 放入 diagnostics / blocked_reasons。
-  - Architect 主 repo 驗證又攔下一個 sandbox 漏測：read client missing 時不許被內層 config/fallback 洗成 production passed；第二次返工後 missing/source-error 三個 source integrity 欄位均 blocked。
-  - 主 repo 真實 smoke：`--full-integrity-check-json` exit code 0，stdout 第一字元 `{`，JSON parse OK，`schema_change=false`、`data_write=false`、`live_telegram=false`、`source_db=passed`、`report_generated=passed`。
-  - 驗證：`tests/test_market_theme_evidence.py tests/test_generator_report.py tests/test_notifier.py`，`105 passed, 153 warnings`；`git diff --check` 通過。
-  - 已提交並推送：`cbe2a37 feat: add may data report integrity check`。
-  - 邊界：未 live Telegram、未 DB write/backfill、未 schema/RLS/grant/policy/role 變更、未改 Telegram 使用者可見 header，仍為 `v20.4.6`。
-- Market Theme Production Trend Consumption Check 已通過 QA 並推送：
-  - 目的：上一輪已將 useful source 寫入 `market_theme_confirmed_evidence`；本輪證明正式 `core/generator.py` report path 在 fresh runner 條件下會消費 production evidence trend。
-  - 新增 `build_market_theme_production_trend_consumption_check()`，並讓 `market_theme_summary_evidence()` 支援測試注入 production-like loader；正式呼叫相容。
-  - read-only smoke 新增 `--production-trend-consumption-check-json`，可直接檢查 source-of-truth、fresh runner rebuild、history consumption 與 forbidden fallback。
-  - production read-only smoke 結果：`fresh_runner_rebuild=passed`、`source_of_truth=production.market_theme_confirmed_evidence`、`uses_market_theme_confirmed_evidence_history=true`、`uses_only_daily_signal_snapshot=false`、`uses_runtime_or_local_cache_as_history=false`。
-  - table status：`market_theme_confirmed_evidence=consumed`、`market_theme_index_daily_bars=not-consumed`、`sector_theme_members=latest-only-blocked`。
-  - 驗證：`tests/test_market_theme_evidence.py tests/test_generator_report.py tests/test_market_theme_evidence_handoff.py`，`132 passed, 153 warnings`；`git diff --check` 通過。
-  - 已提交並推送：`70bf549 feat: verify market theme production trend consumption`。
-  - 邊界：未 DB write、未 backfill、未 schema / RLS / grant / policy / role 變更、未 live Telegram、未改 Telegram 版本或交易 decision。
-- Market Theme May History Backfill Gap 已通過 QA 並完成一次正式非 schema data write：
-  - Owner 指出真正需要回寫 / 消費的應是 `market_theme_confirmed_evidence`、`market_theme_index_daily_bars`、`sector_theme_members`，不是已存在五月資料的 `daily_price` / `daily_signal_snapshot`。
-  - PM 定義後，Tech 將 `scripts/backfill_market_theme_sources.py` 收斂為 market/theme history backfill JSON report。
-  - 本輪不再把 `daily_price` / `daily_signal_snapshot` 當回寫成果，report 固定標記 `daily_price_signal_snapshot_rewrite=forbidden_as_primary_result`。
-  - `sector_theme_members` 只有 latest membership 時 blocked；`market_theme_index_daily_bars` 目前不是直接 DB consumer 時 skipped/not-consumed。
-  - `market_theme_confirmed_evidence` 是唯一正式寫入表；write path 只 upsert validated confirmed evidence，且驗 required fields、allowed source family、forbidden source family、lineage.source_tables。
-  - 已正式執行 `scripts/backfill_market_theme_sources.py --write --confirm-write`：upsert `market_theme_confirmed_evidence` 9 rows，coverage `2026-05-29`，read-after-write passed。
-  - Strategy consumption check：`uses_market_theme_confirmed_evidence_history=true`、`uses_only_daily_signal_snapshot=false`、observed_days=1、recent_supporting_days=1、support_streak_days=1。
-  - DB duplicate check：三張 market/theme 表按各自 business key duplicate_extra_rows=0。
-  - QA 首輪有效阻塞 forbidden `daily_signal_snapshot` payload 污染 confirmed evidence；Tech 返工後 QA 通過。
-  - 驗證：`tests/test_market_theme_source_backfill.py tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py tests/test_workflow_runtime_config.py`，`75 passed, 13 warnings`；`git diff --check` 通過。
-  - 邊界：未改 DB schema / RLS / grant / policy / role；未 live Telegram；未改策略買賣門檻；未做完整五月 market/theme historical source 補齊，因目前 TWSE OpenAPI source 只能證明 latest 日期。
-- `v20.4.5` Market Theme Evidence History Trend Consumption 已完成本地驗證，待 commit / push：
-  - Owner 要把 market/theme evidence 的歷史資料用起來，不再只看最新一筆。
-  - `services/market_theme_evidence_store.py` 仍先讀 requested date / 上一交易日最新 confirmed row，並額外讀最近 `trade_date <= requested_trade_date` evidence rows 建立 `evidence_trend`。
-  - `evidence_trend` 目前包含 observed_days、recent_supporting_days、support_streak_days、days、allowed_effects、forbidden_effects。
-  - `core/market_theme_evidence.py` 會把 trend 帶進 provider；confirmed summary 會輸出短行 `趨勢：連續支持｜近N個證據日｜連續N日支持`。
-  - Trend 只作 wording / 排序提示 / detail trace；不得放寬買點、不得覆蓋風控、不得單獨變 BUY。
-  - 使用者可見 Telegram header 目前已同步為 `v20.4.6`。
-  - 驗證：`tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py tests/test_market_theme_source_backfill.py tests/test_workflow_runtime_config.py tests/test_generator_report.py tests/test_notifier.py`，`140 passed, 157 warnings`；`git diff --check` 通過。
-  - 邊界：未 production live write、未 backfill、未 schema / RLS / grant / policy / role 變更、未改策略 decision 或交易門檻。
-- Git Runner May Backfill Entrypoint 已推送並由 GitHub runner 成功執行：
-  - `.github/workflows/stock-bot.yml` 新增 `workflow_dispatch` inputs：`run_mode`、`start_date`、`end_date`、`backfill_version`。
-  - `run_mode=backfill_may` 會由 GitHub runner 執行 `scripts/backfill_signals.py --source twse --allow-partial --write --confirm-write`，預設回填 `2026-05-01` 到 `2026-05-29`、`v20.4.5`。
-  - 回填範圍：`daily_price`、`daily_signal_snapshot`。
-  - 舊 `market_daily_bars` / `strategy_feature_snapshots` / `strategy_outcome_metrics` / `strategy_classification_audit` 不在目前 production schema；五月 backfill 只計算衍生 rows 作 runner log 診斷，不寫入已刪除或語義不符的表。
-  - `--allow-partial` 是真實資料保護：若 TWSE source 缺某檔或某交易日，只寫實際取得 rows 並輸出 partial coverage warnings，不補 synthetic rows。
-  - `run_mode=backfill_and_bot` 會先回填五月資料再跑正式 bot；`run_mode=bot` 維持原本行為。
-  - GitHub run `26680575871` 成功；`run_mode=backfill_may` 只做回寫並跳過 bot，不 live Telegram。
-  - Runner log：official market/theme 寫入 `sector_theme_members=12`、`market_theme_index_daily_bars=10`、`market_theme_confirmed_evidence=9`；五月 signal backfill `daily_price=220`、`daily_signal_snapshot=220`、`VALIDATION OK`、`WRITE OK`。
-  - Read-only DB check：May `daily_price=240`，May `daily_signal_snapshot v20.4.5=240`；差異來自前一輪 failed runner 已先成功 upsert 部分真實 rows，最終 DB 為 12 檔 x 20 交易日。
-  - Partial warnings：`2026-05-01` source 缺交易資料；本輪不補假 rows。
-  - 污染檢查：May `daily_price` / `daily_signal_snapshot` / `market_theme_confirmed_evidence` / `market_theme_index_daily_bars` / `sector_theme_members` 皆無 duplicate key。
-  - Code cleanup：`strategy_evidence` 改為只讀目前 production schema 的 `daily_signal_snapshot` + `daily_price`；`record_strategy_evidence` 不再寫已刪除 draft tables。
-  - Code cleanup：`cross_day_context` 只讀 current-version `daily_signal_snapshot` 與 `position_events`；非目前 `VERSION` 的舊 snapshot rows 不再影響跨日狀態。
-  - 注意：`market_theme` official source backfill 目前只補最新 TWSE OpenAPI 交易日；history trend 只消費 production 已有 confirmed rows，不造五月 market/theme 假歷史。
-  - 驗證：`tests/test_workflow_runtime_config.py tests/test_backfill_signals.py tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py tests/test_market_theme_source_backfill.py tests/test_generator_report.py tests/test_notifier.py`，`144 passed, 153 warnings`。
-  - 邊界：未新增 schema / table / column / RLS / grant / policy / role；非 schema 寫入交由 GitHub runner，符合 git source-of-truth。
-- Production Evidence Source Audit And Approved Payload Gate 已通過 QA conditional pass，條件已由 Architect 用真實 production read-only audit 補足，待 commit / push：
-  - 新增 `scripts/smoke_market_theme_evidence_readonly.py --production-source-audit-json`，只讀 production source availability，不寫 DB、不 backfill、不發 Telegram。
-  - Audit 固定輸出 `write_execution=disabled`、`live_write=false`，並檢查 `market_theme_confirmed_evidence`、`daily_signal_snapshot`、`signal_runs`、`signal_items` row count。
-  - 只有 production row 明確具備既有 market/theme evidence contract 欄位，且通過 validator，才輸出 `approved_payload_preview`；個股策略 snapshot / signal item row count 不得直接升級為 confirmed/supporting evidence。
-  - Architect 真實 production read-only audit 結果：`market_theme_confirmed_evidence rows=0`、`daily_signal_snapshot rows=48`、`signal_runs rows=1`、`signal_items rows=12`，但 `can_generate_approved_payload=false`、`status=blocked`。
-  - 缺少 source semantics：`market_index`、`sector_theme_key`、`watchlist_breadth definition`、`evidence_value meaning`、`support_level rule`、`lineage from production DB columns`。
-  - 驗證：`arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence_handoff.py tests/test_market_theme_evidence.py -q`，`55 passed, 17 warnings`；`git diff --check` 通過。
-  - 下一步需要 Owner / PM 決定：是否允許把 `daily_signal_snapshot` / `signal_runs/items` 的 production DB 欄位定義成 market/theme supporting evidence；若不允許，需外部市場/族群指數或另一張 production source table。
-- Evidence Read-only Smoke Credential Fallback 已通過 QA，待 commit / push：
-  - Architect 跑 production read-only smoke 時發現：原 script 只認 env `SUPABASE_READONLY_KEY`，本機 `config.py` 已有 `SUPABASE_URL / SUPABASE_KEY` 時仍誤報 missing；手動注入 config key 後可讀 production，且 `market_theme_confirmed_evidence` 目前 rows=0。
-  - `scripts/smoke_market_theme_evidence_readonly.py` 新增安全 credential fallback：URL 走 env `SUPABASE_URL` -> `config.SUPABASE_URL`；read key 走 env `SUPABASE_READONLY_KEY` -> env `SUPABASE_KEY` -> `config.SUPABASE_READONLY_KEY` -> `config.SUPABASE_KEY`。
-  - 缺 URL/key 時 fail closed，不建立 client、不讀 DB；不把 `SUPABASE_SERVICE_ROLE_KEY` 或其他高權限 key 納入 read-only fallback。
-  - CLI 不輸出 secret value、hash、截斷值、fingerprint 或長度。
-  - 驗證：`arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence_handoff.py -q`，`31 passed`；`git diff --check` 通過；直接 smoke 已能讀 production 並回 `env=present/table_read=ok/rows=0/status=fail-closed`。
-  - 未改 DB schema、RLS、grant、policy、production live write、backfill、Telegram 或策略 decision。
-- Evidence Chain Write CLI Read-after-write And Source Fail-closed Handoff 已推送：
-  - Owner 最新邊界：只有新增表、擴字段、schema / RLS / grant / policy / role 變更需要找 Owner；非 schema 的 evidence data 寫入 / 回寫應走 repo script / service API。
-  - 本輪延續既有 `public.market_theme_confirmed_evidence` contract，未新增 DB schema、table、column、RLS、grant、policy、role。
-  - `scripts/write_market_theme_confirmed_evidence.py` dry-run output 增加 source/source_name/source_type、candidate_rows、validation、write_mode、secret_redaction。
-  - `--execute` path upsert 後必須做 read-after-write smoke；讀回 confirmed evidence 才成功，讀回失敗則 fail closed，exception output 只保留 redacted note。
-  - `services/market_theme_evidence_store.py` read-only smoke 增加 source_family、target、confirmed_evidence_rows、sample/runtime fallback、strategy_consumer、source_family_allowed。
-  - runtime / unknown / mixed / forbidden source rows 即使看似 confirmed，也必須 `insufficient-data`、`telegram_confirmed=false`、`strategy_consumer=fail-closed`；allowed production / persistent row 可 pass。
-  - QA 通過：`arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py -q`，`49 passed, 17 warnings`；`git diff --check` 通過；approved dry-run exit 0；forbidden runtime dry-run exit 2；direct-consumer smoke 覆蓋 runtime / unknown / mixed fail closed 與 production row pass。
-  - 未改 Telegram 報文、策略 decision、watchlist、formal backfill、production live write 或 live Telegram。
-- GitHub Workflow Supabase Service-role Runtime Config Wiring 已推送：
-  - Architect 額外檢查發現：`.github/workflows/stock-bot.yml` 的 `Create runtime config` 只把 `SUPABASE_URL / SUPABASE_KEY` 寫入 fresh runner `config.py`，沒有 service-role alias；這會讓 GitHub runner 的 evidence write path 找不到 `SUPABASE_SERVICE_ROLE_KEY` / `SERVICE_ROLE_KEY`。
-  - workflow split-secret path 新增 `SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}`。
-  - runtime `config.py` 保留 `SUPABASE_KEY` 給既有讀路徑，新增 `SUPABASE_SERVICE_ROLE_KEY` 與 `SERVICE_ROLE_KEY = SUPABASE_SERVICE_ROLE_KEY` 給 write CLI fallback。
-  - legacy `STOCK_CONFIG` path 不破壞；若新 service-role secret 存在，只追加 aliases，不覆蓋既有 read key。
-  - validation log 只顯示 present / missing，不輸出 URL、read key、service-role key、截斷值或 hash。
-  - QA 條件：untracked `tests/test_workflow_runtime_config.py` 必須納入 repo，且 `CHANGELOG.md` 自述矛盾需修正；Architect 已滿足。
-  - 主 repo 驗證：`.venv/bin/python -m pytest tests/test_workflow_runtime_config.py tests/test_market_theme_evidence_handoff.py -q`，`29 passed`；`git diff --check` 通過。
-  - 本輪沒有 production live write、formal backfill、DB schema / table / column 變更、RLS / grant / policy / role、live Telegram、策略 decision 或 Telegram `VERSION` 變更。
-- Write CLI Supabase Config Fallback 已通過 QA，待 commit / push：
-  - Owner 指出 `SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY` 不該誤報缺失，因本專案 `config.py` 已有 `SUPABASE_URL` / `SERVICE_ROLE_KEY`，且 GitHub Secrets 也已配置 Supabase URL / service role key。
-  - `services/market_theme_evidence_store.py` write credential resolution 改為 env 優先，env 缺失時 fallback repo `config.py`；service key 兼容 `SERVICE_ROLE_KEY` 與 `SUPABASE_SERVICE_ROLE_KEY`。
-  - `scripts/write_market_theme_confirmed_evidence.py` 的 execute JSON 只輸出 sanitized `url_source` / `key_source` / `missing`，不輸出 URL 或 key value。
-  - payload validation 失敗時 env validation 顯示 skipped，不暗示 credential 已可寫。
-  - 驗證：`tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py`，`46 passed, 17 warnings`；`git diff --check` 與 `py_compile` 通過；QA 額外反證 secret redaction 與 env/config mixed source 通過。
-  - 本輪沒有 production live write、formal backfill、DB schema / table / column 變更、RLS / grant / policy / role、live Telegram、策略 decision 或 Telegram `VERSION` 變更。
-- Market Theme Confirmed Evidence Repo-side Write CLI 已通過 QA conditional pass，條件已由 Architect 吸收滿足，待 commit / push：
-  - Owner 最新規則：非 schema 的 evidence rows 新增 / 回寫 / backfill 不再找 Owner 手動跑 SQL，應走既有接口 / repo script / approved service API。
-  - 新增 `scripts/write_market_theme_confirmed_evidence.py`：預設 dry-run / validate，不寫 DB；`--execute` 才走 Supabase upsert。
-  - `--execute` 需 payload validation passed、source family allowed、`SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` 存在；缺 env、forbidden source、missing source、mixed source 全部 fail closed。
-  - `services/market_theme_evidence_store.py` 新增 write plan、write env validation、client builder、upsert helper；未改 read-only loader confirmed 判斷。
-  - Upsert target 固定為 `public.market_theme_confirmed_evidence`，conflict target 固定為 `trade_date,market_index,sector_theme_key,source_family,source_name,as_of`，write payload 只包含既有 table contract 欄位。
-  - QA conditional pass 條件：untracked `scripts/write_market_theme_confirmed_evidence.py` 必須納入 repo；Architect 已納入。
-  - 驗證：`tests/test_market_theme_evidence_handoff.py tests/test_market_theme_evidence.py`，`43 passed, 17 warnings`；allowed dry-run exit 0 / rows_to_upsert=1；forbidden runtime exit 2；`--execute` 缺 env exit 2 / rows_written=0；`py_compile` 與 `git diff --check` 通過。
-  - 本輪沒有 production live write、formal backfill、DB schema / table / column 變更、RLS / grant / policy / role、live Telegram、策略 decision 或 Telegram `VERSION` 變更。
-- Market Theme Approved Payload Template And Dry-run Sample 已通過 QA conditional pass，條件已由 Architect 吸收滿足，待 commit / push：
-  - Owner 要求開始 evidence chain 下一步：建立第一份 market/theme approved payload 模板與可執行 dry-run 樣本。
-  - 新增 `docs/examples/market_theme_owner_approved_payload.template.json`：Owner-facing 填寫模板，列出 required fields、allowed / forbidden source family、manual approval required、not executed by generator。
-  - 新增 `docs/examples/market_theme_owner_approved_payload.sample.json`：allowed `owner_approved_persistent` dry-run sample，可用 approval package generator 產 JSON / Markdown / review-only SQL。
-  - 新增 `docs/examples/market_theme_forbidden_runtime_payload.sample.json`：runtime negative sample，必須 fail closed，不產 deterministic SQL。
-  - 更新 `docs/handoff/evidence_chain_market_theme_ops_artifacts.md`，說明 sample/template 不是 production confirmed、不是 DB rows、不是 GitHub fresh runner source-of-truth。
-  - QA conditional pass 條件：三份 `docs/examples/*market_theme*` untracked deliverables 必須納入 repo；Architect 已納入。
-  - 驗證：`tests/test_market_theme_evidence_handoff.py tests/test_market_theme_evidence.py`，`39 passed, 17 warnings`；allowed sample dry-run exit 0 且產 JSON/MD/SQL；forbidden runtime sample exit 2 且不產 SQL；`git diff --check` 通過；examples/docs/tests 無 secret / connection string pattern。
-  - 本輪沒有 live Supabase write、formal backfill、RLS / grant、live Telegram、策略 decision 或 Telegram `VERSION` 變更。
-- Evidence Chain Approval Package Generator 已通過 QA，待 commit / push：
-  - Owner 問題：既然 `market_theme_confirmed_evidence` 不需要擴表 / 擴字段，就不該只丟人工 SQL；需要把 manual SQL 變成可審核、可重跑、不可誤讀為已執行的 approval package。
-  - 新增 `scripts/generate_evidence_approval_package.py`：輸入 Owner-approved payload，輸出 review-only `approval_package.json`、`approval_package.md`，以及 validation passed 且 source allowed 時的 deterministic SQL。
-  - package 固定輸出 `schema_decision=no-schema-change`、`mode=non-live-approval-package`、`write_execution=disabled`。
-  - SQL header 固定標示 Owner manual approval required、Agent did not execute this SQL、This package is not evidence of production deployment。
-  - source guard：`production_db`、`owner_approved_persistent`、`market_data` 可產 review SQL；local/runtime/cache/worktree/report-derived/synthetic/default/test/fixture、缺 source、mixed allowed+forbidden source 全部 fail closed 且不產 SQL。
-  - 本輪沒有 live Supabase write、沒有正式 backfill、沒有 production RLS / grant 變更、沒有 live Telegram、沒有改策略 decision 或 Telegram `VERSION`。
-  - 驗證：`tests/test_market_theme_evidence_handoff.py tests/test_market_theme_evidence.py`，`36 passed, 17 warnings`；forbidden runtime payload exit 2 且 `deterministic_sql=None`；allowed payload exit 0 且產 JSON/MD/SQL；`py_compile` 與 `git diff --check` 通過。
-  - Runner gap：CAO auto 對 QA `通過` false fail，但 QA 報告與主 repo 驗證可吸收；需後續修 QA conclusion parser。
-- Evidence Chain Production Closure Gap Assessment 已推送：
-  - Owner 問題：繼續 evidence chain production 化；若需要擴字段 / 擴表就給 SQL。
-  - 結論：本輪 `schema_decision: no-schema-change`。現有 `public.market_theme_confirmed_evidence` schema 足以支援 read-only smoke 與 manual backfill 下一步；暫不需要新增表或欄位。
-  - 新增 `docs/handoff/evidence_chain_production_closure_gap_assessment.md`，記錄 current table contract、read-only smoke requirements、manual backfill requirements、production closure matrix、next manual steps。
-  - read-only smoke output 新增 `schema_decision: no-schema-change`。
-  - QA 首輪有效阻塞：production table row 若 `source_family=local` 但其他欄位是 fresh/confirmed/supporting，舊 loader 會 confirmed 並讓 smoke `telegram_confirmed=true`。
-  - 已修正：`services/market_theme_evidence_store.py` read-only loader 只接受 approved persistent source family：`production_db`、`owner_approved_persistent`、`market_data`；local/runtime/cache/worktree/report-derived/synthetic/default/test/fixture rows 全部 fail closed。
-  - 驗證：`tests/test_market_theme_evidence_handoff.py tests/test_market_theme_evidence.py`，`31 passed, 17 warnings`；smoke 缺 env exit 2 且 `telegram_confirmed=false`；`git diff --check` 通過。
-  - 非阻塞風險：若 production 查回 rows 同時含 forbidden row 與 allowed row，loader 會保守 fail closed，而不是跳過壞 row 找後面的好 row；回填時需避免 production 表混入 local/test rows。
-- Evidence Chain Production Ops Artifacts 已通過 QA，待 commit / push：
-  - 目的：在真正 production ingestion / backfill / RLS / read-only runner smoke 前，先提供可審核、可 dry-run、無 live side effect 的 repo-side 操作物。
-  - 新增 `scripts/validate_market_theme_evidence_ingestion.py`：驗證 Owner-approved payload；合法 persistent source 可選擇輸出 manual SQL，fake/local/runtime/cache/worktree/report-derived/synthetic/default/test source fail closed。
-  - 新增 `scripts/smoke_market_theme_evidence_readonly.py`：只使用 `SUPABASE_READONLY_KEY` 做 read-only smoke；缺 env、無 rows、權限錯誤或不合格 rows 都 `telegram_confirmed=false`。
-  - 新增 `db/sql/evidence_chain_market_theme_ops_manual_template.sql`：Owner 手動核准後才可選段使用的 read-only role/grant、RLS policy、optional backfill/upsert template 與 read-only verification queries。
-  - 新增 `docs/handoff/evidence_chain_market_theme_ops_artifacts.md`：記錄 dry-run、manual SQL、read-only smoke 與禁止 live write / backfill / RLS / Telegram 的邊界。
-  - SQL template 不是 one-click SQL；Step A/B/C 是註解模板，Step D 雖為 read-only 仍需替換 `:TRADE_DATE`。
-  - 本輪沒有 live Supabase write、沒有正式 backfill、沒有 production RLS / grant 變更、沒有 live Telegram、沒有改策略 decision 或 Telegram `VERSION`。
-  - 驗證：`tests/test_market_theme_evidence_handoff.py tests/test_market_theme_evidence.py`，`28 passed, 17 warnings`；read-only smoke 缺 env fail closed；fake source 不產生 SQL；`git diff --check` 通過。
-  - Runner gap：CAO auto 對 QA `通過` false fail，但 QA 報告與主 repo 驗證可吸收；需後續修 QA conclusion parser。
-- Evidence Chain Pre-Development Closure 已通過 QA：
-  - 目的：在繼續證據鏈前，先補 `public.market_theme_confirmed_evidence` 的 repo-side 非 live handoff 閉環，並把 DB usage 狀態說清楚。
-  - 新增 `services/market_theme_evidence_store.py` handoff helpers：`build_market_theme_evidence_handoff()` 與 `render_market_theme_evidence_handoff_sql()`。
-  - helper 只產生 manual SQL handoff，不做 live Supabase write、不 formal backfill、不改 RLS、不 live Telegram。
-  - `confirmed` 不由 helper 直接成立；builder 回傳 `confirmed=False`。只有 Owner 手動審核/執行 SQL 寫入 production table 後，GitHub fresh runner 才能透過 read-only loader 讀到 confirmed/supporting/fresh rows。
-  - fake/runtime/local/cache/worktree/test fixture/report-derived/synthetic/default/unknown source 全部 fail closed，不產生 SQL。
-  - QA 兩輪有效攔截：
-    - 缺 `evidence_status` 不得 default confirmed。
-    - 直接呼叫 SQL renderer 不得繞過 validator；empty / None rows 也不得產生 SQL 或例外。
-  - 新增測試：`tests/test_market_theme_evidence_handoff.py`。
-  - 驗證：`arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence_handoff.py tests/test_market_theme_evidence.py -q`，`25 passed, 17 warnings`。
-  - 仍未完成：production ingestion/backfill、RLS/read-only role、GitHub runner actual production data smoke、正式 production write。
-- Integration audit before evidence-chain resume 已完成，結論是 `conditional pass`：
-  - 假資料清理：positions、position_events、market/theme evidence、cross-day context 的主要 fake fallback 已有 fail-closed guard；缺 source 不應補成 fake confirmed / fake holding / fake event。
-  - 行情來源仍有 TWSE -> Yahoo fallback，屬真實外部行情備援，但仍是 conditional；兩源都失敗時應無有效數據，不得產生正常候選。
-  - DB 消費已收斂到目前 production schema：`daily_signal_snapshot` / `daily_price` 供 strategy summary 派生；`daily_signal_snapshot` current `VERSION` + `position_events` 供 cross-day context；`signal_runs/items/outcomes` 仍偏 reference-only。
-  - `public.market_theme_confirmed_evidence` 已完成 schema + read-only loader + provider + Telegram 接入，但缺 writer / ingestion / backfill / RLS read-only role / actual production data smoke，不能視為端到端完成。
-  - 本 audit 沒有產品代碼 / 測試 / SQL / runner diff；只更新 `TASK.md`、`CHANGELOG.md`、`QA_REPORT.md` 與總控文件。
-- `v20.4.5` Evidence Phase 5 Read-only Confirmed Evidence Loader 已通過 QA conditional pass，且 Architect 已滿足吸收條件：
-  - 新增 `services/market_theme_evidence_store.py`，只讀 `public.market_theme_confirmed_evidence`；不寫 DB、不 backfill、不改 RLS、不 live Telegram。
-  - Confirmed 條件固定為 `support_level in ('confirmed','supporting')`、`evidence_status='confirmed'`、`freshness='fresh'`；`support_level=strong` 只能作負面案例，fail closed，不得 accepted。
-  - `core/generator.py` 接入 loader；GitHub / fresh runner 缺 DB env、DB error、0 rows、資料不足時只能 `missing-source / source-error / absent / insufficient-data`，不得使用 local/runtime/report-derived fake confirmed。
-  - Provider 保留 loader fail-closed status，避免把 absent/source-error/missing-source/insufficient-data 壓成泛用狀態。
-  - Telegram evidence confirmed 只作背景證據，不改 BUY / SELL / RR / 加減碼 / 過熱 / 漲停不追門檻。
-  - QA 條件是吸收 untracked 新檔 `services/market_theme_evidence_store.py`；Architect 已納入主 repo。
-  - 驗證：`tests/test_market_theme_evidence.py tests/test_generator_report.py tests/test_notifier.py`，`93 passed, 161 warnings`；`git diff --check` 通過。
-  - 尚未驗證 production read-only role / RLS / 實際資料內容；若 production runner 無權讀取，預期 fail closed 為來源不足。
-- Evidence Phase 4 production table schema verification 已轉為 Owner 手動只讀檢查：
-  - Owner 表示 production table 已建好，但本機沒有安全可用 `SUPABASE_*` / `DATABASE_*` connection env，不能直接連線驗證。
-  - 新增只讀 verification SQL：`docs/handoff/evidence_phase_4_market_theme_confirmed_evidence_readonly_verification.sql`。
-  - SQL 只讀 `information_schema` / `pg_catalog`，檢查 table exists、columns、unexpected columns、check constraints、freshness / support_level / evidence_status、indexes、latest confirmed partial index、comments。
-  - QA conditional pass：此 artifact 只代表可手動驗證，不代表 production schema 已通過；allowed-values summary rows 不能排除額外允許值，必須人工比對 raw check constraints。
-  - Architect 額外用 `.qa_tmp/` 臨時 `pglast` parser 驗證 verification SQL parse OK，16 statements。
-  - Owner 回傳 production verification 結果：table exists PASS；17 個 contract 欄位全部 PASS；`freshness`、`support_level`、`evidence_status` raw check constraints 全部符合且未見額外值；7 個 expected indexes 全部 PASS，包含 latest confirmed partial index。
-  - 結論：production schema contract 已通過，已由 `v20.4.5` 接入 read-only loader；尚未完成 writer、backfill、RLS / read-only role 驗證或實際 production data smoke。
-- SQL artifact syntax/copy safety tiny patch 已完成：
-  - Owner 執行 Evidence Phase 4 SQL 時遇到 Supabase `ERROR 42601 syntax error at end of input`。
-  - 修正範圍只限 `db/sql/evidence_phase_4_market_theme_confirmed_evidence.sql` 與 `docs/handoff/evidence_phase_4_market_theme_confirmed_evidence.md`；未改 schema intent、產品代碼、策略、Telegram、runner、DB write path。
-  - SQL header 補明必須整段複製，尾端新增只讀 validation marker statement，避免漏貼尾段或分號時不易察覺。
-  - QA conditional pass：靜態完整性與危險詞掃描通過，但 QA 本機無 `psql` / Docker / Podman，未做 production/parser validation。
-  - Architect 額外用 `.qa_tmp/` 臨時 `pglast` 做本地非 production parser 驗證：修正版 SQL parse OK，`statements=27`。
-  - 初判：原錯誤高機率來自 Supabase editor 只執行不完整片段或貼上時漏掉尾段 / 分號；若再次失敗，需 Owner 回傳 line / column。
-- Evidence Phase 4 Production DB Schema SQL For Confirmed Market/Theme Evidence 已通過 QA：
-  - 新增手動 SQL artifact：`db/sql/evidence_phase_4_market_theme_confirmed_evidence.sql`。
-  - SQL 建立 `public.market_theme_confirmed_evidence`，用於未來 GitHub fresh runner 從 production DB read-only reconstruction confirmed market/theme evidence。
-  - 欄位契約包含：`market_index`、`sector_theme_key`、`watchlist_breadth`、`as_of`、`trade_date`、`freshness`、`evidence_value`、`support_level`、`lineage`、`source_family`、`source_name`。
-  - SQL 只包含 manual execution DDL / comments / indexes；未由 agent 執行，未 backfill、未 live write、未 live Telegram、未改策略 / watchlist / runner。
-  - QA 靜態驗證：無 destructive DDL/DML、無 broad grant、無 secret / connection string / live command pattern；`git diff --check` 通過。
-  - 執行風險：若 production 已有同名但欄位不完整 table，Owner 需先在 DB console review schema 差異後手動處理。
-- Evidence Phase 3 Production Confirmed Source Mapping 已由 Tech 判定 blocked：
-  - 目標：確認現有 production DB / Owner-approved persistent source 是否足夠讓 market/theme evidence 從 fail-closed 進入 confirmed。
-  - 結論：現有 repo 可證明 source contract 不足，未實作 read-only loader，未改產品代碼。
-  - 不足來源：`daily_signal_snapshot` 可作個股策略 / 分類 trace，但不是 market index，缺 sector/theme key 與 persistent breadth；`daily_price` 是個股價格資料，不是 TAIEX / sector index contract。
-  - runtime diagnostic、report-derived、payload dict 仍只能 detail / 診斷，不得 confirmed。
-  - 若要繼續，需要 Owner 確認或批准 production table / view / helper contract，至少包含 market_index、sector_theme_key、watchlist_breadth、freshness/as_of、evidence_value/support_level、lineage。
-  - 驗證：`tests/test_market_theme_evidence.py` 17 passed, 13 warnings；`git diff --check` 通過；無 schema / SQL / DB write / backfill / live Telegram / watchlist / 策略門檻變更。
-- `v20.4.2` Evidence Phase 2 Source-Family Gate And Wording Cleanup 已通過 QA：
-  - Telegram evidence summary 缺 production source 時收斂為短句：`證據：production 來源不足，不作確認。`，避免 absent/missing-source 長清單干擾手機主決策。
-  - `core/market_theme_evidence.py` confirmed / ready 收斂為 source-family gate：只有 `production_db` 或 `owner_approved_persistent`，且 required fields / freshness 滿足時才可 confirmed。
-  - `runtime_diagnostic`、runtime、local、cache、worktree、test fixture、report-derived source 不得 confirmed / ready；可留在 detail / limitations trace。
-  - QA 兩次攔截有效：先抓到 runtime_diagnostic 仍可 fake confirmed，再抓到 production confirmed 被 report-derived theme text 污染成 `source_family=runtime_diagnostic`。
-  - 現有 market/theme 資料仍不足以 confirmed；若要真正接入 confirmed evidence，需要另開任務定義 production table/view 欄位與 read-only loader，不在本輪建表或回填。
-  - 未新增 DB schema、field、table、migration、SQL、backfill、watchlist、live Supabase write 或 live Telegram。
-  - QA / Architect 驗證：`tests/test_market_theme_evidence.py tests/test_generator_report.py tests/test_notifier.py tests/test_strategy_evidence.py`，`100 passed, 13 warnings`；`git diff --check` 通過。
-- `v20.4.1` Cross-day Context Source Boundary Hardening 已通過 QA：
-  - `services/cross_day_context.py` 不再把 `today_position_events` / local runtime 資料提升為跨日 `previous_action`、`previous_action_date`、`dedupe_guard` 或 `source_of_truth`。
-  - 同 run 資訊只保留在 `same_run_guard`、`same_run_action`、`same_run_action_date`、`same_run_source`，不能作 GitHub fresh runner 的跨日記憶。
-  - `core/generator.py` 的 `cross_day_ready()` 收斂為：`source_status=ready`、`source_of_truth` 非空，且所有來源都必須是 persistent DB whitelist；只要混入 `local_position_events` 或非持久來源，即 fail closed。
-  - QA 首輪攔下 mixed-source 風險：`["position_events", "local_position_events"]` 會用假歷史影響 summary / detail / sorting / prepare；修正後 pure DB 生效，mixed local / missing source 全部 fail closed。
-  - 未新增 DB schema、field、table、migration、SQL、backfill、watchlist、live Supabase write 或 live Telegram。
-  - QA / Architect 驗證：`tests/test_cross_day_context.py tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py`，`92 passed, 13 warnings`；`git diff --check` 通過。
-- `v20.4.0` DB Strategy Consumption Phase 1 已通過 QA：
-  - 新增 `services/cross_day_context.py`，讓既有 DB / local runtime history 進入策略記憶與證據權重。
-  - Phase 1 context 包含前次狀態、前次行動、連續觀察天數、修復 / 失效、歷史證據權重、去重 guard、allowed / forbidden effects。
-  - `core/generator.py` 在 render 前注入 cross-day context；允許影響排序、summary、準備層、歷史追溯、同級停利 / 減碼去重、今日買入 guard。
-  - DB history 不得單獨把不可買變可買，不得進交易執行清單，不得放寬 BUY / SELL / RR / 過熱 / 漲停不追 / 停損停利核心門檻。
-  - 歷史停利 / 減碼只可去重同級行動；不得覆蓋硬風控、停損、`REDUCE_50`、`STOP_100` 或風控升級。
-  - QA 首輪攔下「歷史減碼覆蓋今日硬風控」跨區塊矛盾；修正後 REDUCE_50 fixture 與 QA STOP_100 probe 均通過。
-  - QA / Architect 驗證：`tests/test_cross_day_context.py tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py`，`89 passed, 13 warnings`；`git diff --check` 通過。
-- `v20.3.1` Data Authenticity Fail-closed 已通過 QA：
-  - DB / 真實來源不可用時，production runtime 不得用 fake/default/synthetic/fallback 補成可買、confirmed、持倉、今日交易、價格或 Telegram 結論。
-  - `services/position_store.py` 移除全 watchlist 0 股 fallback；缺 Supabase、positions DB error、positions 0 rows 都回 `{}` 並設 `missing-source / source-error / unavailable` warning。
-  - `position_events` DB source-error / missing-source 不再回全 0 event summary；只有 DB query 成功且空資料才代表今日真實無事件。
-  - `core/generator.py` 在持倉或今日交易事件 source warning 存在時直接 fail closed，不掃行情、不產生交易建議。
-  - `core/market_theme_evidence.py` 將 runtime watchlist breadth fallback 降為非交易診斷，不進 sources、不 confirmed、不再輸出 `weak/runtime`。
-  - QA / Architect 驗證：`tests/test_market_theme_evidence.py tests/test_generator_report.py tests/test_position_store.py tests/test_notifier.py`，`88 passed, 13 warnings`；full pytest `162 passed, 13 warnings`；`git diff --check` 通過。
-- `v20.3.0` Runtime Market Breadth Evidence Fallback 已通過 QA：
-  - 注意：此版本的 runtime weak fallback 已被 `v20.3.1` 收斂為非交易診斷；以下只保留歷史背景。
-  - 在沒有 DB evidence table/cache 時，可用當次 `results_map` 生成 runtime watchlist breadth fallback evidence。
-  - runtime fallback 最高只顯示 `weak/runtime` 或 `absent/missing-source`，缺 `market_index` / `sector_index` 時不得 confirmed。
-  - Telegram evidence 文案顯示內部觀察池廣度偏強 / 題材偏支持，但明確標示缺大盤 / 族群指數 evidence，未確認。
-  - runtime data 不足時列出缺來源，不再只輸出模糊 absent。
-  - 未建表、未新增 migration、未寫 Supabase、未 live Telegram、未 backfill、未改 BUY / SELL / RR / 過熱 / 漲停不追 / 可準備分類。
-  - QA 驗證：`tests/test_market_theme_evidence.py tests/test_generator_report.py tests/test_notifier.py tests/test_signal_validator.py tests/test_analysis_engine.py`，`120 passed, 21 warnings`。
-- `v20.2.5` Telegram Post-market Noise And Index Wording 已通過 QA：
-  - 盤後 summary 將 `今日交易紀錄 / 無新增` 改為 `今日交易 / 新增交易建議：無`，避免與 `已執行（不重複下單）` 並列時被誤讀為今日沒有交易。
-  - `僅追蹤 0` 時不再輸出 `等冷卻 0、等回測 0、等RR修復 0、等量能 0` 的零計數拆分。
-  - 未持倉詳情索引把 `可準備` 與 `僅追蹤` 分開列，不再用 `未持倉追蹤 8` 混稱可準備 8。
-  - QA 驗證：`tests/test_generator_report.py tests/test_notifier.py tests/test_market_theme_evidence.py`，`79 passed, 21 warnings`；策略 smoke `39 passed`。
-- `v20.2.4` R3 Hot Market Evidence Wording And Prepare Layer 已通過 QA：
-  - `evidence absent` 改為描述內部結構化市場 / 題材證據未啟用或不足，不再像是否定外部市場強勢。
-  - R3 進攻偏熱時，未持倉強勢但不可追標的新增 `強勢準備` / `可準備` 層：漲停鎖價、過熱降溫、突破回測都明確標示不可買 / 不追高 / 待觸發。
-  - 可買門檻未放寬，準備層不進交易執行清單。
-  - QA 首輪攔下 summary overflow 混桶；修正後 hidden items 同狀態才寫 `同狀態`，跨狀態改顯示分類數量，例如 `過熱降溫 1、突破回測 2`。
-  - QA 驗證：`tests/test_generator_report.py -k v20_2_4_r3_hot`，`tests/test_generator_report.py -k v20_2_4 tests/test_market_theme_evidence.py tests/test_notifier.py`，策略 smoke `tests/test_signal_validator.py tests/test_analysis_engine.py`。
-- `v20.2.3` Second Take-profit Execution Dedupe 已通過 QA：
-  - 報文優先使用既有 DB execution / local execution，再 fallback 到 `position_events` 判斷今日已賣。
-  - 第二段停利 completed：顯示 `第二段停利後觀察`、今日已賣、剩餘股數、第二段已執行，不再顯示完整可執行建議。
-  - 第二段停利 partial：只顯示剩餘建議股數，不回吐完整原建議。
-  - 第二段停利 unexecuted：仍保留 `第二段停利 / 本次建議 / 剩餘`，避免合法第二段被藏掉。
-  - 持倉卡 `今日 ...` 欄與 summary / 風控檢查共用 execution state，不再出現 `今日 無` 與 `今日已賣 N 股` 同卡矛盾。
-  - QA 驗證：`tests/test_generator_report.py tests/test_notifier.py tests/test_market_theme_evidence.py`，`76 passed, 21 warnings`；策略 smoke `8 passed`。
-- `v20.2.2` Post-profit State Consistency 已通過 QA：
-  - 同日已執行同級停利後，報文主行動轉為 `停利後觀察`，不再讓 Owner 誤讀為再次同級停利。
-  - 若同日已賣後仍有更高級 / 第二段停利建議，報文顯示 `第二段停利`，並同行列出今日已賣、剩餘股數、本次建議股數。
-  - QA 驗證：`tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py tests/test_analysis_engine.py`，`108 passed, 21 warnings`。
-- `v20.2.1` Telegram Breakout Distance Always Visible 已通過 QA：
-  - 持倉與未持倉卡片只要有突破距離資料，`已突破 / 臨界突破 / 接近突破 / 遠離突破` 都顯示括號距離。
-  - `data.breakout_distance` 缺失時 fallback 到 `result.breakout_distance`。
-  - 缺距離資料時不輸出 `0%`、`None%`、空括號或假距離。
-  - QA 驗證：`tests/test_generator_report.py tests/test_notifier.py tests/test_market_theme_evidence.py`，`72 passed, 21 warnings`。
-- `v20.2.0` Market Theme Evidence Production Contract 已推送：
-  - confirmed 必須同時有 fresh supportive `watchlist_breadth` 與 `market_index` / `sector_index`。
-  - `stale` / `unavailable` / `missing` freshness 優先於 allowed `freshness_reason`，不得 confirmed。
-  - Telegram evidence 區塊顯示 confirmed / weak / mixed / stale / absent 與限制句。
-  - 未新增 DB schema / cache / external provider / live write / backfill / live Telegram。
-- `v20.1.3` Telegram Holding Risk Tomorrow Plan Dedupe 已推送：
-  - 移除重複 `隔日計畫`。
-  - 持倉未修復 / 降級檢查只留在 `持倉風控檢查`。
-  - 無非重複明日事項時，不輸出 `明日計畫 0`、`無新增下單` 或空區塊。
-  - QA 驗證：`tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py`，`64 passed, 21 warnings`。
-- Post-cycle Review Gate 已推送：
-  - 每輪收口後必須總結根因、QA 攔截、是否回退既有契約、是否需要補 agent / runner / 流程。
-  - 不得只說「下次注意」。
-- `v20.1.2` Market Theme Evidence Structured Provider 已推送：
-  - `build_market_theme_evidence_provider()` 接入 formatter path。
-  - structured evidence 會重新驗證 source families / required fields / freshness。
-  - 未新增 DB schema / cache / external provider / live write / backfill。
-- `v20.1.1` Telegram Mobile Noise Reduction 已推送：
-  - 收斂手機閱讀、盤後語意、待觸發加碼文案與淘汰卡產業句。
-- `v20.1.0` Market Theme Evidence Dry-run 已推送：
-  - 建立 `market_theme_evidence` dry-run helper 與測試。
-  - report-derived only 只能 weak / track only，不可 confirmed。
-- 早期 v20.0.x 舊細節已壓縮：完整流水不再保留在本文件，必要時查 git history。
 ## Stable Product Contracts
 
-- Telegram 報文以手機閱讀為第一視角。
-- 使用者可見報文變更需同步 `core/generator.py` 的 `VERSION` 或等價 header 常量，除非 PM 明確定義不升版理由。
-- 持倉與未持倉卡片只要有突破距離資料，盤面行必須顯示括號距離；缺資料不得輸出假距離。
-- 未持倉漏斗母集合固定為：`可買 / 可準備 / 僅追蹤 / 淘汰`；`僅追蹤` 再拆 `等冷卻 / 等回測 / 等RR修復 / 等量能`。
-- `僅追蹤 0` 時不得輸出零計數拆分；summary / index 也不得把 `可準備` 全部混稱為 `未持倉追蹤`。
-- R3 強勢偏熱時，`可準備` 是不可買的準備層；必須清楚標示不可追高、不可買或待觸發，不得進交易執行清單。
-- 強勢準備 summary 超過 3 檔時，不得把不同狀態混成 `另 N 檔同狀態`；跨狀態需顯示分類數量或等價不誤導文案。
-- 同一檔持倉同一份報文只能有一個主行動；持倉風控優先於高分、最強、待觸發加碼。
-- 今日買入後預設是 `新倉風控觀察`；若要賣 / 減碼 / 停損，必須說明明確觸發條件。
-- 今日已減碼 / 停利達同級建議時，預設轉為觀察；只有更高級風控或硬停損可覆蓋。
-- DB / cross-day history 只能壓制同級重複行動；不得覆蓋硬風控、停損、`REDUCE_50`、`STOP_100` 或風控升級。
-- DB / cross-day history 可提升排序、追蹤優先級或可準備呈現，但不得單獨把不可買改成可買或放入交易執行清單。
-- 正式 TG 報文由 git / runner 啟動生成，runner 必須視為無狀態；跨日策略記憶、歷史證據、已執行事件必須來自 production DB 或 Owner 指定持久來源。
-- Runtime / local context 只能作為同一次報文內的輔助 guard 或顯示材料；不得當作下一次 GitHub runner 的跨日判斷依據。
-- `source_of_truth` 若混入任何 local / runtime / same-run 來源，即使同時有 DB source，generator 也必須 fail closed，不得使用該 context 影響排序、summary、detail、prepare 或 dedupe。
-- 同日第二段 / 額外停利必須尊重 execution 資料：completed 轉觀察、partial 只顯示剩餘、unexecuted 才顯示完整第二段建議。
-- 持倉卡、summary、風控檢查的今日已賣、剩餘、建議股數必須使用一致來源；不得同卡出現 `今日 無` 與 `今日已賣 N 股`。
-- 空區塊、0 計數、無行動占位都是手機噪音；未定義必要性時不顯示。
-- 市場 / 題材 evidence 不得放寬個股買點；confirmed theme 也不能自動產生 BUY。
-- `evidence absent` 只代表內部結構化證據未啟用 / 不足 / missing，不代表外部市場不強。
-- Runtime watchlist breadth fallback 只能作為非交易診斷或 missing-source 說明；不得稱市場證據、不得輸出 weak/runtime、不得 confirmed、不得改交易決策。
-- Market/theme evidence 的 `confirmed` / `ready` 必須同時滿足 production / Owner-approved persistent source family、required fields 與 freshness；report-derived / runtime diagnostic 只能作 trace，不得污染頂層 `source_family`。
-- Market/theme evidence handoff helper 只能產生 manual SQL，且自身不得回傳 `confirmed=True`；runtime/local/cache/worktree/test/report-derived/synthetic/default source、缺 `evidence_status`、空 rows 或 `None` rows 都不得產生 SQL。
-- Market/theme confirmed evidence loader 只能接受 approved persistent `source_family`：`production_db`、`owner_approved_persistent`、`market_data`。即使資料來自 production table，只要 row 自身標記為 local/runtime/cache/worktree/report-derived/synthetic/default/test/fixture，也必須 fail closed，不得洗成 confirmed。
-- Evidence ops artifacts 只能是 dry-run / manual template / read-only smoke；不得被描述為 production ingestion 已 live。SQL template 需替換 placeholder 並選段執行，不可整份盲跑。
-- Owner 最新流程邊界：只有新增表、擴字段、schema / RLS / grant / policy / role 變更需要先找 Owner。非 schema 的資料新增 / 回寫 / backfill 應走既有接口 / repo script / approved service API，不再要求 Owner 手動 SQL 或逐次批准；但仍必須保留 dry-run、validation、寫入範圍、fail-closed 與可追溯驗證。
-- positions / position_events 來源錯誤不可補假值：positions 不可回全 watchlist 0 股，position_events source-error 不可回全 0 event summary 或讓報文誤讀為今日無交易。
+- 正式 runner 視為無狀態；跨日狀態、已執行事件、歷史證據必須來自 production DB 或 Owner 指定持久來源。
+- DB schema / RLS / grant / policy / role / index / constraint 變更需要 Owner 先審 SQL。
+- 非 schema data write / backfill 走 repo script 或 service API，不要求 Owner 手寫 DML。
+- local / runtime / worktree / agent 對話只能作同 run 輔助，不能當 production history。
+- 缺資料、source-error 或可信度不足時 fail closed，不用假資料補成 confirmed。
 
-## Module Map
+## Current Blocker
 
-- 策略判斷：`services/analysis.py`
-- 報文與 Telegram formatter：`core/generator.py`
-- 市場 / 題材證據 dry-run 與 provider：`core/market_theme_evidence.py`
-- 市場 / 題材 confirmed evidence read-only loader：`services/market_theme_evidence_store.py`
-- 條件映射：`core/condition_engine.py`
-- 行情來源：`services/stock_api.py`
-- 股票清單：`core/watchlist.py`
-- 持倉讀取：`services/position_store.py`
-- 原始信號寫入：`services/signal_store.py`
-- 每日 snapshot 寫入：`services/daily_snapshot_store.py`
-- snapshot 組裝 / 驗證：`core/signal_snapshot.py`、`core/signal_validator.py`
-- 策略證據資料層：`services/strategy_evidence.py`
-- 跨日策略記憶 / 歷史證據權重：`services/cross_day_context.py`
-- replay / backfill：`scripts/dry_run_replay.py`、`scripts/backfill_signals.py`
-- Telegram 持倉命令：`supabase/functions/telegram-execution/index.ts`
+- task_id：`correction-market-theme-prod-coverage-2026-05`
+- 狀態：QA blocked，不能宣告三張 market/theme production 表五月資料完成。
+- 問題：先前把 script / integrity check 通過誤當成 production market/theme 五月 coverage 完成；Owner 截圖顯示主要是 `2026-05-29` latest-source rows，且可能有不同 `as_of` 批次。
+- 目前 correction path：需要可重跑 production read-only audit，確認 row coverage、date range、source distribution、business-key duplicates。
+- 未完成前不得做 cleanup / schema / backfill 決策，不得把 latest-only source 稱為五月歷史。
 
-## Known Boundaries
+## Data / Evidence Status
 
-- Production schema 已由 Owner 回傳 result sets 並判定 hard schema PASS；尚未驗 production read-only role / RLS / 實際資料內容。
-- Owner 已確認 GitHub Secrets 配有 Supabase URL / service role key；正式 runner 不應被預設判定為缺 write env。若 runner 實際讀不到，視為 secret mapping / workflow env wiring 問題，而不是要求 Owner 手動跑 SQL。
-- 非 schema 的 data write / backfill 以既有接口 / repo script 為準，不再要求 Owner 逐次批准；缺 interface 時先補 interface / script，不把 DML 交給 Owner 手動 SQL。
-- 未做 live Telegram delivery。
-- 未做 TWSE live replay / live backfill。
-- Schema / RLS / grant / 新表 / 擴字段仍需 Owner 事前確認。
-- 未接真實外部新聞 / 題材 ingestion。
-- 未驗證 Supabase RLS / 權限 / index / rollback。
-- 若下一步需要新增表、擴字段、schema / RLS / grant / policy / role 變更，必須先通知 Owner；若只是資料新增 / 回寫 / backfill，直接走既有接口 / repo script，並由 PM/Tech/QA 記錄與驗證。
+- `daily_price`、`daily_signal_snapshot` 已有五月資料與 current-version filter，但不能外推為 market/theme evidence 完成。
+- `market_theme_confirmed_evidence` 可被策略證據層消費；目前歷史覆蓋需以 production audit 為準。
+- `market_theme_index_daily_bars`、`sector_theme_members` 是否足夠支援歷史判斷，需由 audit / TASK 明確定義 consumer 與 source semantics。
+- 證據鏈下一步必須先補 correction audit 的 blocked wording / source-error，再決定是否需要真實 historical source、dedupe 或 schema guard。
 
-## Workflow Health
+## Validation Baseline
 
-- CAO 入口收斂為：
-  - `tools/cao_agent/run_architect_task.sh research "<研究問題>"`
-  - `tools/cao_agent/run_architect_task.sh plan "<技術規劃問題>"`
-  - `tools/cao_agent/run_architect_task.sh auto "<Owner 任務>"`
-- Tech write 只在隔離 worktree 產生候選 diff；預設位置為 repo 同級 `stock-bot-agent-worktrees/tech_write`。
-- Tech runner 不得默默丟棄 dirty worktree candidate diff；`run_tech_write.sh` 預設會拒絕 reset，除非顯式 `ALLOW_DISCARD_TECH_WORKTREE=1`。只修 handoff 摘要時用 `CLEAN_TECH_WORKTREE=0`。
-- QA code runner read-only，只允許 `.qa_tmp/` 測試暫存，hash gate 防止改 tracked files。
-- CAO runner prompt 已補效率 guard：
-  - PM 先判斷任務尺寸與停止條件，避免小 bug 膨脹。
-  - Tech 先定義最小改動策略，避免順手重構、過擬合測試或回退既有契約。
-  - QA 先定義 1-3 個風險預算與停止條件，避免 tiny patch 被驗成大任務。
-  - Tech plan 先輸出任務尺寸、最小影響面與不應觸碰模組。
-  - PM / Tech / QA agent profile 與 auto runner 已補 bypass guard：泛用操作口令不得被解讀成跳過 PM -> Tech -> QA。
-  - 實際腳本已納入 repo：`tools/cao_agent/run_auto_dev_cycle.sh`、`run_tech_write.sh`、`run_qa_code.sh`、`run_tech_plan.sh`。
-- CAO 本機可重建資產已納入 repo：
-  - runner 腳本、sandbox wrapper、profile 模板、profile 安裝腳本、bootstrap 腳本與部署文件。
-  - 可下載依賴記錄在 `tools/cao_agent/DEPLOYMENT.md`；手寫 agent role cards 以模板保存在 `tools/cao_agent/profiles/`。
-  - 中文 CAO UI 目前仍是外部 checkout，不直接放入主 repo；若要長期固定中文化，需另開任務抽 patch 或 fork。
-- commit / push 後需執行 `tools/cao_agent/cleanup_agent_worktrees.sh`，讓隔離 worktree 對齊主 repo。
-- 清理任務若涉及產品代碼、測試或 runtime 文件，必須有 PM 任務、Tech 證據表與 QA 反證；流程文件壓縮可由 Architect 直接處理。
+- 報文 / formatter 類：至少檢查手機閱讀順序、版本 header、跨區塊語意、漏斗與詳情一致。
+- DB / evidence 類：至少檢查 source-of-truth、fail-closed、read-after-write 或 read-only audit、consumer 是否真的使用 production source。
+- Runner 類：以 fresh runner / git path 為準；本地成功只算輔助證據。
 
-## Open Follow-Ups
+## Known Runner Gaps
 
-- 2026-05-29 報文研究結論：
-  - 英業達今日已停利後主決策仍顯示 `停利` 的高風險誤讀已由 `v20.2.2` 修正。
-  - 英業達第二段已執行後仍重複建議第二段停利的高風險誤讀已由 `v20.2.3` 修正。
-  - 本週台股 / AI / 電子偏強有公開資料支持，但零 BUY 不必然是錯；`v20.2.4` 已補「強勢市場但不可追」的準備層 / 手機文案，未放寬買點。
-- 證據鏈 v20.3.1 已將 runtime breadth fallback 收斂為非交易診斷；若要自動取得 market_index / sector_index、建表、cache、external provider 或持久化 evidence，先通知 Owner。
-- 若 Owner 仍覺得查詢慢，另開 performance measurement 任務，量測 production 實際秒數。
-- 後續可改善 `load_strategy_evidence_summary()` 顯式排序與 `漏失` 文案，但需另開任務。
-- Evidence 下一步：若只是寫入 / 回寫 evidence rows，走既有接口 / repo script，不再讓 Owner 手動處理；若涉及 read-only role / RLS / 新表 / 擴字段 / live Telegram，仍需單獨確認。
+- CAO auto wrapper 曾多次誤判 QA `通過` / `conditional pass`；需修 QA conclusion parser。
+- Worktree / runtime output 容易留下舊上下文；任務結束後應清理或重新生成 agent context。
+- Agent 規則已收斂為角色卡與安全邊界；具體事故不得再硬塞進 profile。
