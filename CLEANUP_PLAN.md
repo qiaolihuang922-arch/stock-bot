@@ -47,9 +47,9 @@
 ## Pending / Watchlist
 
 - 本輪 Owner 指出 market/theme 五月資料完成誤報：
-  - 根因分類：`high_risk_invariant` + `completion_claim_without_production_audit`。Architect 把 script/integrity check 通過錯當成 production 五月 market/theme 歷史完成，且沒有在 post-cycle review 中核對 Owner 目標與 production 表實際覆蓋範圍。
-  - 直接問題：`market_theme_confirmed_evidence`、`market_theme_index_daily_bars`、`sector_theme_members` 截圖顯示主要是 `2026-05-29` latest-source rows，且同一 business key 因不同 `as_of` 重複寫入多批；不能稱為五月完整歷史。
-  - 已補硬規則：`AGENTS.md` 新增 Production Data Completion Gate。任何 data import / backfill / evidence history 完成結論前，必須有 production read-only audit：row count、date range、distinct dates、as_of range、source distribution、business-key duplicates、source-of-truth/consumer mapping。
+  - 根因分類：`delivery_evidence_alignment_gap` + `doc_bloat_risk`。Architect 把 script / integrity check 通過錯當成 Owner 要的 production market/theme 五月資料完成，且 post-cycle review 沒有先核對「目標口徑」與「證據口徑」是否一致。
+  - 直接問題：`market_theme_confirmed_evidence`、`market_theme_index_daily_bars`、`sector_theme_members` 截圖只證明部分 latest-source rows，且同一 business key 因不同 `as_of` 重複寫入多批；不能稱為五月完整歷史。
+  - 流程修正：不把事故細節塞進 `AGENTS.md`。硬規則只保留抽象的 Delivery Evidence Alignment Gate；本次案例與待補項留在本文件追蹤。
   - 目前 correction flow 狀態：QA 阻塞。新 correction audit path 已建立，但 production read-only audit 目前 source-error，且 report contract 曾有 blocked 卻寫 read_only_audit_complete 的誤讀風險。不得宣告三表 audit complete。
   - 待補：修 correction report 的 blocked wording，取得可用 production read-only audit，再決定 dedupe / cleanup / write-prevention / schema or unique index 是否需要 Owner SQL。
 - 本輪 May Data Strategy Report Full Integrity Check：

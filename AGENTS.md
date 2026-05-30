@@ -137,23 +137,11 @@ Architect 必須檢查並記錄：
 - 禁止繞過既有接口直接手寫 production DML；若沒有可用接口，Tech 必須先補 interface / script 或 blocked 說明，不得把非 schema 資料寫入包裝成 Owner 手動 SQL。
 - live Telegram delivery 仍需 Owner 對該動作單獨批准。
 
-### 2.1 Production Data Completion Gate
+### 2.1 Delivery Evidence Alignment Gate
 
-任何角色不得把「腳本通過」「檢查 JSON 通過」「latest source 寫入」「某一日有 rows」說成「歷史資料完成」或「五月資料完成」。凡涉及 production data import / backfill / evidence history / cleanup / dedupe 的任務，完成結論前必須先有 production read-only audit，且至少列出：
+任何角色做完成結論前，必須先核對「Owner 要的成果」與「本輪證據實際證明的成果」是否同一件事。測試通過、dry-run 成功、單一路徑可執行、或局部資料可讀，只能證明該範圍，不得自動升格為資料完成、策略完成、流程完成或上線完成。
 
-- 目標表與本輪承諾範圍，例如五月全月、單一交易日、latest-only snapshot。
-- row count、min/max trade_date、distinct trade_dates、min/max as_of、distinct as_of。
-- source_family / source_name 分布。
-- 以 business key 分組的 duplicate groups，不得只看 id 或 as_of。
-- 每張表的 source-of-truth 與直接 consumer；不能把 `daily_price` / `daily_signal_snapshot` 的完成狀態外推到 market/theme evidence 表。
-- 若 source 只能提供 latest，結論必須寫 `latest-only` 或 `insufficient historical source`，不得稱為五月歷史。
-
-拒收條件：
-
-- production read-only audit 缺失、source-error、permission blocked、或只用本地 fixture / runner log / 截圖推論，卻宣告 data complete。
-- 同一 business key 因不同 `as_of` 重複寫入多批，卻沒有標記 duplicate / cleanup / write-prevention blocker。
-- `integrity check passed` 被用來替代 `data coverage passed`。
-- QA 未核對 Owner 原始目標與 production 表實際覆蓋範圍是否一致。
+涉及 production 資料、外部副作用、跨日狀態或使用者可見報文時，PM 必須在 `TASK.md` 定義完成口徑與必要證據；Tech 必須按該口徑交付可重跑證據；QA 必須反證證據是否覆蓋 Owner 目標，而不是只驗工具本身。若證據只覆蓋部分目標，結論必須寫 `partial` / `blocked` / follow-up，不得宣告完成。
 
 ### 2.2 GitHub Runtime / State Source 硬規則
 

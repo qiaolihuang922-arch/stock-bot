@@ -25,9 +25,9 @@
   - Report contract 有誤讀風險：blocked / insufficient_evidence 狀態下仍輸出 `read_only_audit_complete`。
   - 本輪不得宣告三表 audit complete，不得進入 cleanup/schema/backfill 決策。
 - 流程補強：
-  - `AGENTS.md` 新增 Production Data Completion Gate。
-  - data import / backfill / evidence history 完成結論前，必須有 production read-only audit：row count、date range、distinct dates、as_of range、source distribution、business-key duplicate groups。
-  - `integrity check passed` 不得替代 `data coverage passed`。
+  - `AGENTS.md` 改為抽象的 Delivery Evidence Alignment Gate：完成結論必須與 Owner 目標同口徑，局部工具通過不得升格為整體完成。
+  - 具體 production data 事故與待補項只留在 `CLEANUP_PLAN.md`，避免把單次錯誤硬塞成長規則。
+  - 後續 correction 任務仍需 production read-only audit 證明目標範圍；工具通過不能替代 coverage 通過。
 
 ## Next Action
 
