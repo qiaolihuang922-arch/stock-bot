@@ -48,8 +48,9 @@
 
 - 本輪 Write CLI Supabase Config Fallback：
   - 根因分類：`credential_source_contract_gap` + `runner_parser_false_fail`。
-  - 問題：write CLI 初版只認 env `SUPABASE_SERVICE_ROLE_KEY`，漏了既有 `config.py` 的 `SERVICE_ROLE_KEY`，導致本機已有配置仍誤報缺 env。
+  - 問題：write CLI 初版只認 env `SUPABASE_SERVICE_ROLE_KEY`，漏了既有 `config.py` 的 `SERVICE_ROLE_KEY`；Owner 也已確認 GitHub Secrets 有 Supabase URL / service role key，正式 runner 不應被當成缺憑證。
   - 已完成：env 優先，fallback `config.py`；兼容 `SERVICE_ROLE_KEY` 與 `SUPABASE_SERVICE_ROLE_KEY`；CLI output 僅顯示 sanitized source，不輸出 secret。
+  - 待補流程：若未來 GitHub runner 寫入仍報缺 env，先查 workflow env mapping / secret name wiring，不再回頭要求 Owner 手動跑普通 SQL。
   - QA 覆蓋：config fallback、env precedence、全缺 fail closed、payload invalid 時 env validation skipped、stdout 不含 URL/key sentinel。
   - 不新增 `AGENTS.md` 硬規則：屬於 write CLI 局部契約漏同步；已用 helper/tests 沉澱。
 - 本輪 Market Theme Confirmed Evidence Repo-side Write CLI：

@@ -34,7 +34,7 @@
 ## Recent High-Signal Milestones
 
 - Write CLI Supabase Config Fallback 已通過 QA，待 commit / push：
-  - Owner 指出 `SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY` 不該誤報缺失，因本專案 `config.py` 已有 `SUPABASE_URL` / `SERVICE_ROLE_KEY`。
+  - Owner 指出 `SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY` 不該誤報缺失，因本專案 `config.py` 已有 `SUPABASE_URL` / `SERVICE_ROLE_KEY`，且 GitHub Secrets 也已配置 Supabase URL / service role key。
   - `services/market_theme_evidence_store.py` write credential resolution 改為 env 優先，env 缺失時 fallback repo `config.py`；service key 兼容 `SERVICE_ROLE_KEY` 與 `SUPABASE_SERVICE_ROLE_KEY`。
   - `scripts/write_market_theme_confirmed_evidence.py` 的 execute JSON 只輸出 sanitized `url_source` / `key_source` / `missing`，不輸出 URL 或 key value。
   - payload validation 失敗時 env validation 顯示 skipped，不暗示 credential 已可寫。
@@ -281,6 +281,7 @@
 ## Known Boundaries
 
 - Production schema 已由 Owner 回傳 result sets 並判定 hard schema PASS；尚未驗 production read-only role / RLS / 實際資料內容。
+- Owner 已確認 GitHub Secrets 配有 Supabase URL / service role key；正式 runner 不應被預設判定為缺 write env。若 runner 實際讀不到，視為 secret mapping / workflow env wiring 問題，而不是要求 Owner 手動跑 SQL。
 - 非 schema 的 data write / backfill 以既有接口 / repo script 為準，不再要求 Owner 逐次批准；缺 interface 時先補 interface / script，不把 DML 交給 Owner 手動 SQL。
 - 未做 live Telegram delivery。
 - 未做 TWSE live replay / live backfill。

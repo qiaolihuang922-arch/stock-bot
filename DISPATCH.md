@@ -18,7 +18,7 @@
 
 ## Current Result
 
-- Owner 指出 `SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY` 不應誤報缺失，因為本專案 `config.py` 已有 `SUPABASE_URL` / `SERVICE_ROLE_KEY`。
+- Owner 指出 `SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY` 不應誤報缺失，因為本專案 `config.py` 已有 `SUPABASE_URL` / `SERVICE_ROLE_KEY`，且 GitHub Secrets 也已配置 Supabase URL / service role key。
 - 本輪修正 write CLI credential resolution：
   - env 優先：`SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`。
   - env 缺失時 fallback repo `config.py`：`SUPABASE_URL`、`SERVICE_ROLE_KEY`，並兼容 `SUPABASE_SERVICE_ROLE_KEY` alias。
@@ -39,7 +39,7 @@
 ## Next Action
 
 - Architect 進行 commit / push，然後清理 CAO worktree。
-- 下一步若要真正寫入 production：準備真實 approved persistent payload，先跑 write CLI dry-run；本機 / runner 可從 env 或 `config.py` 取得 Supabase URL / service role key 時，`--execute` 可走接口 upsert，再跑 read-only smoke。只有 schema/RLS/grant/table/column 或 live Telegram 才再找 Owner。
+- 下一步若要真正寫入 production：準備真實 approved persistent payload，先跑 write CLI dry-run；GitHub runner 應使用既有 GitHub Secrets 注入 env，本機可 fallback `config.py`。`--execute` 走接口 upsert，再跑 read-only smoke。只有 schema/RLS/grant/table/column 或 live Telegram 才再找 Owner。
 
 ## Status Values
 
