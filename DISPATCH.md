@@ -10,11 +10,11 @@
 - version_level: `none`
 - qa_level: `L2+`
 - owner_status: `requested`
-- architect_status: `qa_conditional_pass_absorbed_pending_commit`
+- architect_status: `pushed`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
 - qa_status: `conditional_pass`
-- commit: `pending`
+- commit: `80ae97d pushed`
 
 ## Current Result
 
@@ -40,7 +40,8 @@
 
 ## Next Action
 
-- Architect 進行 commit / push，然後清理 CAO worktree。
+- 本輪 diff 已 commit / push：`80ae97d docs: add evidence payload samples`。
+- Architect 清理 CAO worktree。
 - 下一步若 Owner 要真正進 production：用 template 替換真實 approved persistent evidence reference，產生 package 給 Owner 審核；正式 SQL execution、backfill、RLS / grant、live write、live Telegram 仍需單獨批准。
 
 ## Status Values
