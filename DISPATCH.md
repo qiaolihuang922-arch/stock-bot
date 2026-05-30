@@ -10,11 +10,11 @@
 - version_level: `none`
 - qa_level: `L2+`
 - owner_status: `requested`
-- architect_status: `qa_passed_pending_commit`
+- architect_status: `pushed`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
 - qa_status: `qa_passed`
-- commit: `pending`
+- commit: `93bd1b7 pushed`
 
 ## Current Result
 
@@ -40,7 +40,8 @@
 
 ## Next Action
 
-- Architect 進行 commit / push，然後清理 CAO worktree。
+- 本輪 diff 已 commit / push：`93bd1b7 feat: add evidence approval package`。
+- Architect 清理 CAO worktree。
 - 下一步若 Owner 要真正進 production：先提供 / 確認 approved payload，使用 approval package 審核 SQL；正式 SQL execution、backfill、RLS / grant、live write、live Telegram 仍需單獨批准。
 
 ## Status Values
