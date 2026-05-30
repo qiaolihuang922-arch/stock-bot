@@ -4,13 +4,13 @@
 
 ## Current Task
 
-- task_id: `git-runner-may-backfill-entrypoint`
-- task_name: `Git Runner May Backfill Entrypoint`
+- task_id: `db-pollution-and-obsolete-table-cleanup`
+- task_name: `DB Pollution Audit And Obsolete Table Cleanup`
 - task_type: `normal_patch`
 - version_level: `patch`
 - qa_level: `L2`
 - owner_status: `requested`
-- architect_status: `runner_backfill_verified`
+- architect_status: `cleanup_verified`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
 - qa_status: `qa_passed`
@@ -18,7 +18,7 @@
 
 ## Current Result
 
-- Owner 要先做「market/theme evidence 歷史趨勢消費」，讓舊資料不只是保存，而是被策略證據層使用。
+- Owner 要檢查五月回寫是否污染 DB，並清理無用 code / DB garbage。
 - 已完成 `market_theme_confirmed_evidence` history trend 消費：
   - loader 仍先找 requested date / 上一交易日最新 confirmed row。
   - 額外讀取 `trade_date <= requested_trade_date` 的最近 evidence rows，產出 `evidence_trend`。
@@ -34,12 +34,17 @@
   - `backfill_and_bot` 會先回填，再跑正式 bot。
   - 非 schema 寫入不需要 Owner 手動 SQL；正式結果以 GitHub runner 為準。
 - 邊界：`scripts/backfill_market_theme_sources.py` 目前的 TWSE OpenAPI source 是 latest source，不是整月 historical source；它會補最新 official market/theme evidence。history trend 只消費 production 已有 confirmed rows，不會偽造五月 market/theme history。
-- 同步使用者可見 Telegram header 版本：`v20.4.5`。
+- 同步使用者可見 Telegram header 版本：`v20.4.6`。
 - 已推送並完成 GitHub runner formal backfill：
   - run: `26680575871`，`run_mode=backfill_may`，成功。
   - official market/theme source：`sector_theme_members rows=12`、`market_theme_index_daily_bars rows=10`、`market_theme_confirmed_evidence rows=9`。
   - May signal/source backfill log：`daily_price rows=220`、`daily_signal_snapshot rows=220`、`VALIDATION OK`、`WRITE OK`；partial warnings：缺 `2376` source snapshot、缺 `2026-05-01` source trade date。
   - read-only DB check：May `daily_price` 目前 240 rows（12 檔 x 20 交易日），May `daily_signal_snapshot` `v20.4.5` 目前 240 rows；`2026-05-01` 無 source rows，五月實際交易資料從 `2026-05-04` 到 `2026-05-29`。
+- 本輪污染清理檢查：
+  - DB read-only audit：May `daily_price` 240 rows / 240 unique keys / duplicates 0；May `daily_signal_snapshot` 936 rows / 936 unique `(stock_id,trade_date,version)` / duplicates 0；`v20.4.5` 240 rows / 240 unique stock-date。
+  - `market_theme_confirmed_evidence` 9 rows / duplicates 0；`market_theme_index_daily_bars` 10 rows / duplicates 0；`sector_theme_members` 12 rows / duplicates 0。
+  - 未刪除非 current 版本 `daily_signal_snapshot` rows：它們是版本化歷史，不是 duplicate；已改策略讀取只使用目前 `VERSION`，避免舊版本污染跨日判斷。
+  - 清理 code garbage：`strategy_evidence` 不再寫 / 讀已刪除 draft tables，改從 `daily_signal_snapshot` + `daily_price` 派生 summary；`cross_day_context` 不再查已刪除 strategy draft tables，只用 current-version `daily_signal_snapshot` 與 `position_events`。
 - 本輪沒有 DB schema / table / column 變更、RLS / grant / policy / role 變更、live Telegram、策略 decision、watchlist 或交易門檻變更。
 - Architect 驗證：
   - `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py tests/test_market_theme_source_backfill.py tests/test_workflow_runtime_config.py tests/test_generator_report.py tests/test_notifier.py -q`：140 passed，157 warnings。
@@ -52,7 +57,7 @@
 
 ## Next Action
 
-- 五月資料回寫與 read-only 檢查已完成，可以繼續下一段證據鏈開發。
+- 五月資料回寫、污染檢查與 code garbage 清理已完成，可以繼續下一段證據鏈開發。
 - 下一段證據鏈開發前，先檢查正式報文 consumption：market/theme confirmed rows 是否已被 `load_confirmed_market_theme_evidence()` 讀入 summary / trend，且缺歷史月份時仍 fail closed。
 - 注意：報文底部 `📊 策略證據 v20.0｜資料表未建立` 屬於 `services/strategy_evidence.py` 的另一組 strategy evidence tables，不是本輪 `market_theme_confirmed_evidence` 假日讀取問題。
 

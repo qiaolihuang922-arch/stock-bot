@@ -181,10 +181,10 @@ class StrategyEvidenceTest(unittest.TestCase):
 
         strategy_evidence.load_strategy_evidence_summary(client, "v20.0.6", limit=25)
 
-        self.assertIn(("strategy_feature_snapshots", "order", "trade_date", {"desc": True}), client.calls)
-        self.assertIn(("strategy_feature_snapshots", "limit", 25), client.calls)
-        self.assertIn(("strategy_outcome_metrics", "limit", 25 * len(strategy_evidence.OUTCOME_HORIZONS)), client.calls)
-        self.assertIn(("strategy_classification_audit", "limit", 1), client.calls)
+        self.assertIn(("daily_signal_snapshot", "order", "trade_date", {"desc": True}), client.calls)
+        self.assertIn(("daily_signal_snapshot", "limit", 25), client.calls)
+        self.assertIn(("daily_price", "order", "trade_date", {"desc": True}), client.calls)
+        self.assertIn(("daily_price", "limit", 25), client.calls)
 
     def test_load_summary_uses_desc_limit_before_downstream_summary(self):
         class Query:
@@ -217,17 +217,25 @@ class StrategyEvidenceTest(unittest.TestCase):
             def __init__(self):
                 self.calls = []
                 self.rows = {
-                    "strategy_feature_snapshots": [],
-                    "strategy_outcome_metrics": [],
-                    "strategy_classification_audit": [{
+                    "daily_signal_snapshot": [{
                         "stock_id": "2337",
-                        "stock_name": "旺宏",
                         "trade_date": "2026-05-26",
-                        "strategy_version": "v20.0.6",
-                        "suggested_audit_category": "弱反彈語意需複核",
-                        "severity": "medium",
-                        "review_status": "open",
+                        "version": "v20.0.6",
+                        "close": 160,
+                        "volume_ratio": 1.0,
+                        "pattern": "BREAKOUT_NEAR",
+                        "market_state": "B",
+                        "structure_state": "NORMAL",
+                        "position_state": "WAIT",
+                        "rr": 0.8,
+                        "score": 4,
+                        "heat_level": 1,
+                        "action": "WAIT",
+                        "reasons": ["RR不足"],
+                        "is_tradeable": False,
+                        "is_best_candidate": False,
                     }],
+                    "daily_price": [],
                 }
 
             def table(self, name):
@@ -236,21 +244,17 @@ class StrategyEvidenceTest(unittest.TestCase):
         client = Client()
 
         text = strategy_evidence.load_strategy_evidence_summary(client, "v20.0.6", limit=25)
-        audit_calls = [
-            call
-            for call in client.calls
-            if call[0] == "strategy_classification_audit"
-        ]
+        signal_calls = [call for call in client.calls if call[0] == "daily_signal_snapshot"]
 
         self.assertLess(
-            audit_calls.index(("strategy_classification_audit", "order", "trade_date", {"desc": True})),
-            audit_calls.index(("strategy_classification_audit", "limit", 1)),
+            signal_calls.index(("daily_signal_snapshot", "order", "trade_date", {"desc": True})),
+            signal_calls.index(("daily_signal_snapshot", "limit", 25)),
         )
         self.assertLess(
-            audit_calls.index(("strategy_classification_audit", "limit", 1)),
-            audit_calls.index(("strategy_classification_audit", "execute")),
+            signal_calls.index(("daily_signal_snapshot", "limit", 25)),
+            signal_calls.index(("daily_signal_snapshot", "execute")),
         )
-        self.assertIn("⚠ 分類警示：弱反彈語意需複核 1 筆（旺宏）", text)
+        self.assertIn("RR不足｜樣本 0｜樣本不足，不判讀", text)
 
     def test_record_strategy_evidence_reuses_injected_client(self):
         payload = {
@@ -295,9 +299,9 @@ class StrategyEvidenceTest(unittest.TestCase):
                 client=client,
             )
 
-        self.assertTrue(result["recorded"])
-        self.assertEqual(result["feature_rows"], 1)
-        self.assertIn("strategy_feature_snapshots", client.tables)
+        self.assertFalse(result["recorded"])
+        self.assertEqual(result["reason"], "strategy_evidence_derived_from_daily_snapshot")
+        self.assertEqual(client.tables, {})
 
     def test_classification_report_separates_3d_win_rate_and_5d_mfe(self):
         feature_rows = [

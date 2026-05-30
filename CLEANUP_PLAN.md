@@ -59,6 +59,8 @@
   - 邊界保持：非 schema 寫入走 repo script / GitHub runner；不要求 Owner 跑 DML SQL；未新增 DB schema / RLS / grant / policy / role。
   - 已跑：GitHub run `26680575871` 成功，並已做 read-only DB count 檢查。
   - Post-cycle review：第一次 runner 失敗暴露舊表引用，已補 `market_daily_bars` / strategy draft tables 不再寫入 production；第二次 runner 成功。此為 `schema_consolidation_followup`，不用新增硬規則，已用 writer 測試防回退。
+  - 污染清理：DB 無 duplicate key；舊版本 `daily_signal_snapshot` rows 暫不刪除，因屬版本化歷史。產品讀取已加 current-version filter，防止舊版本污染正式判斷。
+  - Code garbage 已清理：停止讀寫已刪除 draft tables；strategy summary 改由 `daily_signal_snapshot` + `daily_price` 派生，cross-day context 改用 current-version `daily_signal_snapshot`。
   - 風險：market/theme official source 目前只能補 latest OpenAPI 交易日，不能憑空補五月整月；trend 只消費 production 既有 confirmed rows。
 - 本輪 Production Evidence Source Audit And Approved Payload Gate：
   - 根因分類：`production_source_semantics_gap` + `runner_parser_false_fail`。
@@ -242,9 +244,8 @@
   - Audit 結論：可吸收為 conditional pass，但不是恢復開發綠燈；下一步必須先補端到端缺口。
   - 明確缺口：
     - `public.market_theme_confirmed_evidence` 缺 writer / ingestion / backfill / production data smoke / RLS read-only role。
-    - `market_daily_bars` 偏 write-only，需決定是否進入 strategy / evidence reader。
     - `signal_runs/items/outcomes` 偏 reference-only，需決定是否作 cross-day / strategy reader source。
-    - `strategy_outcome_metrics` 正式 writer 狀態 conditional，需釐清是否只靠 backfill。
+    - strategy summary 目前由 `daily_signal_snapshot` + `daily_price` 派生；若未來要正式 outcome table，需另開 schema / writer / reader 任務。
   - 待補流程：建立 DB table usage ledger，欄位固定為 `table -> writer -> reader -> strategy/formatter consumer -> status -> next action`，每次新增 DB 表或 reader/writer 都要更新。
   - 不新增 `AGENTS.md` 硬規則：先用 `CURRENT_STATE.md` / `CLEANUP_PLAN.md` 維持進度圖；若再次出現「新表已建但 writer/consumer 不清」，再升級 PM 任務卡硬欄位。
 - 本輪 Evidence Chain Pre-Development Closure：

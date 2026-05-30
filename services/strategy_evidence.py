@@ -569,10 +569,8 @@ def strategy_evidence_error_kind(error):
     schema_markers = [
         "could not find the table",
         "schema cache",
-        "market_daily_bars",
-        "strategy_feature_snapshots",
-        "strategy_outcome_metrics",
-        "strategy_classification_audit",
+        "daily_signal_snapshot",
+        "daily_price",
         "relation",
         "does not exist",
         "pgrst205",
@@ -589,37 +587,28 @@ def format_strategy_evidence_error(error):
 
 
 def load_strategy_evidence_summary(client, version, limit=240):
-    feature_rows = (
-        client.table("strategy_feature_snapshots")
-        .select("stock_id,trade_date,strategy_version,watch_category,reject_family")
-        .eq("strategy_version", version)
+    signal_rows = (
+        client.table("daily_signal_snapshot")
+        .select("stock_id,trade_date,version,close,volume_ratio,pattern,market_state,structure_state,position_state,rr,score,heat_level,action,reasons,is_tradeable,is_best_candidate")
+        .eq("version", version)
         .order("trade_date", desc=True)
         .limit(limit)
         .execute()
         .data
         or []
     )
-    outcome_rows = (
-        client.table("strategy_outcome_metrics")
-        .select("stock_id,trade_date,strategy_version,watch_category,reject_family,horizon_days,close_return_pct,relative_return_pct,max_favorable_excursion_pct,max_adverse_excursion_pct,outcome_label")
-        .eq("strategy_version", version)
+    price_rows = (
+        client.table("daily_price")
+        .select("stock_id,trade_date,open,high,low,close,volume")
         .order("trade_date", desc=True)
-        .limit(limit * len(OUTCOME_HORIZONS))
+        .limit(limit)
         .execute()
         .data
         or []
     )
-    audit_rows = (
-        client.table("strategy_classification_audit")
-        .select("stock_id,trade_date,strategy_version,suggested_audit_category,severity,review_status")
-        .eq("strategy_version", version)
-        .order("trade_date", desc=True)
-        .limit(1)
-        .execute()
-        .data
-        or []
-    )
-    return report_from_rows(feature_rows, outcome_rows, audit_rows)
+    feature_rows = feature_rows_from_signal_rows(signal_rows)
+    outcome_rows = calculate_outcome_metrics(feature_rows, price_rows)
+    return report_from_rows(feature_rows, outcome_rows, [])
 
 
 def get_supabase_client():
@@ -633,32 +622,10 @@ def record_strategy_evidence(version, phase, results_map, now=None, client=None)
     if not payloads.get("recorded"):
         return payloads
 
-    client = client or get_supabase_client()
-    market_rows = payloads["market_rows"]
-    feature_rows = payloads["feature_rows"]
-    audit_rows = payloads["audit_rows"]
-
-    if market_rows:
-        client.table("market_daily_bars").upsert(
-            market_rows,
-            on_conflict="stock_id,trade_date,source"
-        ).execute()
-
-    if feature_rows:
-        client.table("strategy_feature_snapshots").upsert(
-            feature_rows,
-            on_conflict="stock_id,trade_date,strategy_version"
-        ).execute()
-
-    if audit_rows:
-        client.table("strategy_classification_audit").upsert(
-            audit_rows,
-            on_conflict="stock_id,trade_date,strategy_version,distortion_type"
-        ).execute()
-
     return {
-        "recorded": True,
-        "market_rows": len(market_rows),
-        "feature_rows": len(feature_rows),
-        "audit_rows": len(audit_rows)
+        "recorded": False,
+        "reason": "strategy_evidence_derived_from_daily_snapshot",
+        "market_rows": 0,
+        "feature_rows": 0,
+        "audit_rows": 0,
     }

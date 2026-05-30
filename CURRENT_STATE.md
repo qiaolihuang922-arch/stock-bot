@@ -7,7 +7,7 @@
 - 專案：台股策略報文機器人。
 - 交付形態：排程 / 腳本產生 Telegram 報文並發送給 Owner。
 - 股票清單唯一來源：`core/watchlist.py`，預設 12 檔。
-- 最新使用者可見 Telegram 版本：`v20.4.5`。
+- 最新使用者可見 Telegram 版本：`v20.4.6`。
 - 最新 pushed commit 以 `git log -1` 為準。
 - 固定 8 份 Markdown 不刪除，只改寫內容：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 
@@ -39,7 +39,7 @@
   - `evidence_trend` 目前包含 observed_days、recent_supporting_days、support_streak_days、days、allowed_effects、forbidden_effects。
   - `core/market_theme_evidence.py` 會把 trend 帶進 provider；confirmed summary 會輸出短行 `趨勢：連續支持｜近N個證據日｜連續N日支持`。
   - Trend 只作 wording / 排序提示 / detail trace；不得放寬買點、不得覆蓋風控、不得單獨變 BUY。
-  - 使用者可見 Telegram header 版本同步為 `v20.4.5`。
+  - 使用者可見 Telegram header 目前已同步為 `v20.4.6`。
   - 驗證：`tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py tests/test_market_theme_source_backfill.py tests/test_workflow_runtime_config.py tests/test_generator_report.py tests/test_notifier.py`，`140 passed, 157 warnings`；`git diff --check` 通過。
   - 邊界：未 production live write、未 backfill、未 schema / RLS / grant / policy / role 變更、未改策略 decision 或交易門檻。
 - Git Runner May Backfill Entrypoint 已推送並由 GitHub runner 成功執行：
@@ -53,6 +53,9 @@
   - Runner log：official market/theme 寫入 `sector_theme_members=12`、`market_theme_index_daily_bars=10`、`market_theme_confirmed_evidence=9`；五月 signal backfill `daily_price=220`、`daily_signal_snapshot=220`、`VALIDATION OK`、`WRITE OK`。
   - Read-only DB check：May `daily_price=240`，May `daily_signal_snapshot v20.4.5=240`；差異來自前一輪 failed runner 已先成功 upsert 部分真實 rows，最終 DB 為 12 檔 x 20 交易日。
   - Partial warnings：`2026-05-01` source 缺交易資料；本輪不補假 rows。
+  - 污染檢查：May `daily_price` / `daily_signal_snapshot` / `market_theme_confirmed_evidence` / `market_theme_index_daily_bars` / `sector_theme_members` 皆無 duplicate key。
+  - Code cleanup：`strategy_evidence` 改為只讀目前 production schema 的 `daily_signal_snapshot` + `daily_price`；`record_strategy_evidence` 不再寫已刪除 draft tables。
+  - Code cleanup：`cross_day_context` 只讀 current-version `daily_signal_snapshot` 與 `position_events`；非目前 `VERSION` 的舊 snapshot rows 不再影響跨日狀態。
   - 注意：`market_theme` official source backfill 目前只補最新 TWSE OpenAPI 交易日；history trend 只消費 production 已有 confirmed rows，不造五月 market/theme 假歷史。
   - 驗證：`tests/test_workflow_runtime_config.py tests/test_backfill_signals.py tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py tests/test_market_theme_source_backfill.py tests/test_generator_report.py tests/test_notifier.py`，`144 passed, 153 warnings`。
   - 邊界：未新增 schema / table / column / RLS / grant / policy / role；非 schema 寫入交由 GitHub runner，符合 git source-of-truth。
@@ -157,7 +160,7 @@
 - Integration audit before evidence-chain resume 已完成，結論是 `conditional pass`：
   - 假資料清理：positions、position_events、market/theme evidence、cross-day context 的主要 fake fallback 已有 fail-closed guard；缺 source 不應補成 fake confirmed / fake holding / fake event。
   - 行情來源仍有 TWSE -> Yahoo fallback，屬真實外部行情備援，但仍是 conditional；兩源都失敗時應無有效數據，不得產生正常候選。
-  - DB 消費不是全部閉環：`market_daily_bars` 偏 write-only；`signal_runs/items/outcomes` 偏 reference-only；`strategy_outcome_metrics` reader 存在但正式 writer 主要在 backfill。
+  - DB 消費已收斂到目前 production schema：`daily_signal_snapshot` / `daily_price` 供 strategy summary 派生；`daily_signal_snapshot` current `VERSION` + `position_events` 供 cross-day context；`signal_runs/items/outcomes` 仍偏 reference-only。
   - `public.market_theme_confirmed_evidence` 已完成 schema + read-only loader + provider + Telegram 接入，但缺 writer / ingestion / backfill / RLS read-only role / actual production data smoke，不能視為端到端完成。
   - 本 audit 沒有產品代碼 / 測試 / SQL / runner diff；只更新 `TASK.md`、`CHANGELOG.md`、`QA_REPORT.md` 與總控文件。
 - `v20.4.5` Evidence Phase 5 Read-only Confirmed Evidence Loader 已通過 QA conditional pass，且 Architect 已滿足吸收條件：
@@ -194,7 +197,7 @@
 - Evidence Phase 3 Production Confirmed Source Mapping 已由 Tech 判定 blocked：
   - 目標：確認現有 production DB / Owner-approved persistent source 是否足夠讓 market/theme evidence 從 fail-closed 進入 confirmed。
   - 結論：現有 repo 可證明 source contract 不足，未實作 read-only loader，未改產品代碼。
-  - 不足來源：`daily_signal_snapshot`、`strategy_feature_snapshots` 可作個股策略 / 分類 trace，但不是 market index，缺 sector/theme key 與 persistent breadth；`strategy_outcome_metrics` / `strategy_classification_audit` 是回測 / audit trace；`market_daily_bars` / `daily_price` 是個股價格資料，不是 TAIEX / sector index contract。
+  - 不足來源：`daily_signal_snapshot` 可作個股策略 / 分類 trace，但不是 market index，缺 sector/theme key 與 persistent breadth；`daily_price` 是個股價格資料，不是 TAIEX / sector index contract。
   - runtime diagnostic、report-derived、payload dict 仍只能 detail / 診斷，不得 confirmed。
   - 若要繼續，需要 Owner 確認或批准 production table / view / helper contract，至少包含 market_index、sector_theme_key、watchlist_breadth、freshness/as_of、evidence_value/support_level、lineage。
   - 驗證：`tests/test_market_theme_evidence.py` 17 passed, 13 warnings；`git diff --check` 通過；無 schema / SQL / DB write / backfill / live Telegram / watchlist / 策略門檻變更。

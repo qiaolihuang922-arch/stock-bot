@@ -62,12 +62,9 @@ class CrossDayContextTest(unittest.TestCase):
 
     def test_ready_history_calculates_repair_weight_and_same_day_guard(self):
         client = Client({
-            "strategy_feature_snapshots": [
-                {"stock_id": "2337", "trade_date": "2026-05-28", "watch_category": "弱勢淘汰", "reject_family": "弱勢"},
-                {"stock_id": "2337", "trade_date": "2026-05-27", "watch_category": "淘汰", "reject_family": "弱勢"},
-            ],
-            "strategy_outcome_metrics": [
-                {"stock_id": "2337", "trade_date": "2026-05-28", "close_return_pct": 3.5, "max_favorable_excursion_pct": 5.5},
+            "daily_signal_snapshot": [
+                {"stock_id": "2337", "trade_date": "2026-05-28", "action": "FAIL", "is_tradeable": False, "position_state": "WAIT"},
+                {"stock_id": "2337", "trade_date": "2026-05-27", "action": "WAIT", "is_tradeable": False, "position_state": "WAIT"},
             ],
             "position_events": [
                 {"stock_code": "2337", "stock_name": "旺宏", "event_date": "2026-05-29", "action_label": "買入", "shares_delta": 100},
@@ -122,8 +119,8 @@ class CrossDayContextTest(unittest.TestCase):
 
     def test_source_error_fails_closed_even_with_partial_rows_and_local_events(self):
         client = Client({
-            "strategy_feature_snapshots": [
-                {"stock_id": "2337", "trade_date": "2026-05-28", "watch_category": "等量能", "reject_family": None},
+            "daily_signal_snapshot": [
+                {"stock_id": "2337", "trade_date": "2026-05-28", "action": "WAIT", "is_tradeable": False, "position_state": "WAIT"},
             ],
             "position_events": RuntimeError("events unavailable"),
         })
@@ -150,6 +147,28 @@ class CrossDayContextTest(unittest.TestCase):
         self.assertEqual(context["historical_evidence_weight"], 0)
         self.assertEqual(context["dedupe_guard"], "unknown")
         self.assertEqual(context["same_run_guard"], "same_day_executed")
+
+    def test_daily_signal_snapshot_ignores_other_versions(self):
+        client = Client({
+            "daily_signal_snapshot": [
+                {"stock_id": "2337", "trade_date": "2026-05-28", "version": "v19.0", "action": "FAIL", "is_tradeable": False, "position_state": "WAIT"},
+                {"stock_id": "2337", "trade_date": "2026-05-27", "version": "v20.4.5", "action": "WAIT", "is_tradeable": False, "position_state": "WAIT"},
+            ],
+            "position_events": [],
+        })
+
+        contexts = build_cross_day_contexts(
+            {"旺宏": payload()},
+            client=client,
+            now=datetime(2026, 5, 29),
+            version="v20.4.5",
+        )
+
+        context = contexts["旺宏"]
+        self.assertEqual(context["source_status"], "ready")
+        self.assertEqual(context["source_of_truth"], ["daily_signal_snapshot"])
+        self.assertEqual(context["previous_state"], "observe")
+        self.assertEqual(context["repair_status"], "repaired")
 
 
 if __name__ == "__main__":

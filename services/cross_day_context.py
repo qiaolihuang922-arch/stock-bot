@@ -35,9 +35,6 @@ PERSISTENT_SOURCE_TABLES = {
     "signal_runs",
     "signal_items",
     "signal_outcomes",
-    "strategy_feature_snapshots",
-    "strategy_outcome_metrics",
-    "strategy_classification_audit",
 }
 
 
@@ -248,7 +245,7 @@ def _evidence_weight(outcome_rows):
     return max(-2, min(2, weight)), reasons[:3]
 
 
-def build_cross_day_contexts(results_map, client=None, today_position_events=None, now=None, limit=240):
+def build_cross_day_contexts(results_map, client=None, today_position_events=None, now=None, limit=240, version=None):
     contexts = {
         name: empty_cross_day_context(stock_code_for_name(name, data))
         for name, data in (results_map or {}).items()
@@ -262,9 +259,6 @@ def build_cross_day_contexts(results_map, client=None, today_position_events=Non
     rows_by_table = {}
     for table, fields in [
         ("daily_signal_snapshot", "stock_id,trade_date,version,action,is_tradeable,position_state,reasons"),
-        ("strategy_feature_snapshots", "stock_id,trade_date,strategy_version,watch_category,reject_family"),
-        ("strategy_outcome_metrics", "stock_id,trade_date,strategy_version,watch_category,reject_family,horizon_days,close_return_pct,max_favorable_excursion_pct,max_adverse_excursion_pct,outcome_label"),
-        ("strategy_classification_audit", "stock_id,trade_date,strategy_version,suggested_audit_category,severity,review_status"),
     ]:
         try:
             rows_by_table[table] = _fetch_rows(client, table, fields, limit)
@@ -282,34 +276,25 @@ def build_cross_day_contexts(results_map, client=None, today_position_events=Non
     today = _today_string(now)
     for name, data in results_map.items():
         symbol = stock_code_for_name(name, data)
-        feature_rows = [
-            row for row in rows_by_table.get("strategy_feature_snapshots", [])
-            if str(row.get("stock_id")) == symbol and str(row.get("trade_date")) != today
-        ]
         snapshot_rows = [
             row for row in rows_by_table.get("daily_signal_snapshot", [])
-            if str(row.get("stock_id")) == symbol and str(row.get("trade_date")) != today
-        ]
-        outcome_rows = [
-            row for row in rows_by_table.get("strategy_outcome_metrics", [])
-            if str(row.get("stock_id")) == symbol
+            if (
+                str(row.get("stock_id")) == symbol
+                and str(row.get("trade_date")) != today
+                and (not version or str(row.get("version")) == str(version))
+            )
         ]
         event_rows = [
             row for row in rows_by_table.get("position_events", [])
             if str(row.get("stock_code")) == symbol or row.get("stock_name") == name
         ]
-        latest_feature = feature_rows[0] if feature_rows else None
         latest_snapshot = snapshot_rows[0] if snapshot_rows else None
-        previous_state = (
-            _state_from_feature(latest_feature)
-            if latest_feature
-            else _state_from_snapshot(latest_snapshot)
-        )
+        previous_state = _state_from_snapshot(latest_snapshot)
         today_state = _today_state(data)
         repair_status, failure_status = _repair_status(previous_state, today_state, data)
         observe_days = 0
-        for row in feature_rows:
-            state = _state_from_feature(row)
+        for row in snapshot_rows:
+            state = _state_from_snapshot(row)
             if not _is_observe_state(state):
                 break
             observe_days += 1
@@ -317,7 +302,7 @@ def build_cross_day_contexts(results_map, client=None, today_position_events=Non
             observe_days = 1
         previous_action, previous_action_date, dedupe_guard = _latest_event_action(event_rows, today=today)
         today_guard, today_action = _today_event_guard((today_position_events or {}).get(name, {}))
-        weight, reasons = _evidence_weight(outcome_rows)
+        weight, reasons = 0, []
         if repair_status in ["repaired", "improving"] and weight < 1:
             weight += 1
             reasons.append("前次狀態修復中")
@@ -326,12 +311,8 @@ def build_cross_day_contexts(results_map, client=None, today_position_events=Non
             reasons.append("前次狀態轉弱")
 
         context_sources = []
-        if latest_feature:
-            context_sources.append("strategy_feature_snapshots")
         if latest_snapshot:
             context_sources.append("daily_signal_snapshot")
-        if outcome_rows:
-            context_sources.append("strategy_outcome_metrics")
         if event_rows:
             context_sources.append("position_events")
         context_sources = [

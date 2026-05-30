@@ -54,7 +54,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.5"
+VERSION = "v20.4.6"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -63,9 +63,6 @@ PERSISTENT_CROSS_DAY_SOURCES = {
     "signal_runs",
     "signal_items",
     "signal_outcomes",
-    "strategy_feature_snapshots",
-    "strategy_outcome_metrics",
-    "strategy_classification_audit",
 }
 
 EXECUTION_LEVELS = {
@@ -5389,6 +5386,7 @@ def generate_report():
             client=get_supabase_client(),
             today_position_events=position_events,
             now=now,
+            version=VERSION,
         )
     except Exception:
         cross_day_contexts = build_cross_day_contexts(
