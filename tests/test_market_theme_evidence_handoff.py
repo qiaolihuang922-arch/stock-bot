@@ -89,8 +89,10 @@ class WriteTable:
     def __init__(self, client, name):
         self.client = client
         self.name = name
+        self.mode = None
 
     def upsert(self, rows, on_conflict=None):
+        self.mode = "upsert"
         self.client.calls.append(
             {
                 "table": self.name,
@@ -98,18 +100,55 @@ class WriteTable:
                 "on_conflict": on_conflict,
             }
         )
+        self.client.rows = rows
+        return self
+
+    def select(self, fields):
+        self.mode = "select"
+        return self
+
+    def eq(self, key, value):
+        self.client.rows = [row for row in self.client.rows if row.get(key) == value]
+        return self
+
+    def order(self, key, desc=False):
+        self.client.rows = sorted(
+            self.client.rows,
+            key=lambda row: row.get(key) or "",
+            reverse=desc,
+        )
+        return self
+
+    def limit(self, limit):
+        self.client.rows = self.client.rows[:limit]
         return self
 
     def execute(self):
-        return type("Result", (), {"data": self.client.calls[-1]["rows"]})()
+        if self.mode == "upsert":
+            return type("Result", (), {"data": self.client.calls[-1]["rows"]})()
+        return type("Result", (), {"data": self.client.rows})()
 
 
 class WriteClient:
     def __init__(self):
         self.calls = []
+        self.rows = []
 
     def table(self, name):
         return WriteTable(self, name)
+
+
+class WriteThenReadErrorTable(WriteTable):
+    def select(self, fields):
+        raise RuntimeError(
+            "query failed for SUPABASE_SERVICE_ROLE_KEY=sentinel-service-secret "
+            "at https://example.supabase.co token=sentinel-token secret=sentinel-secret"
+        )
+
+
+class WriteThenReadErrorClient(WriteClient):
+    def table(self, name):
+        return WriteThenReadErrorTable(self, name)
 
 
 class MarketThemeEvidenceHandoffTest(unittest.TestCase):
@@ -464,7 +503,16 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
         self.assertEqual(completed.returncode, 0)
         output = json.loads(completed.stdout)
         self.assertEqual(output["mode"], "dry-run")
+        self.assertEqual(
+            output["source"],
+            "approved_persistent_source:owner_approved_market_theme_review_sample",
+        )
+        self.assertEqual(output["source_type"], "approved_persistent_source")
         self.assertEqual(output["target_table"], "public.market_theme_confirmed_evidence")
+        self.assertEqual(output["candidate_rows"], 1)
+        self.assertEqual(output["validation"], "pass")
+        self.assertEqual(output["write_mode"], "dry-run")
+        self.assertEqual(output["secret_redaction"], "pass")
         self.assertEqual(output["write_execution"], "disabled")
         self.assertEqual(output["payload_validation"]["status"], "passed")
         self.assertEqual(output["rows_to_upsert"], 1)
@@ -495,7 +543,13 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
         output = json.loads(completed.stdout)
         self.assertEqual(output["mode"], "dry-run")
         self.assertEqual(output["write_execution"], "disabled")
+        self.assertEqual(output["source"], "forbidden_or_unapproved_source:same_run_runtime_sample")
+        self.assertEqual(output["source_type"], "forbidden_or_unapproved_source")
         self.assertEqual(output["payload_validation"]["status"], "failed")
+        self.assertEqual(output["candidate_rows"], 0)
+        self.assertEqual(output["validation"], "fail")
+        self.assertEqual(output["write_mode"], "dry-run")
+        self.assertEqual(output["secret_redaction"], "pass")
         self.assertEqual(output["payload_validation"]["reason"], "forbidden source_family")
         self.assertEqual(output["rows_to_upsert"], 0)
         self.assertEqual(output["upsert_preview"], [])
@@ -524,6 +578,11 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
         self.assertEqual(output["mode"], "execute")
         self.assertEqual(output["write_execution"], "blocked")
         self.assertEqual(output["payload_validation"]["status"], "passed")
+        self.assertEqual(output["attempted_rows"], 1)
+        self.assertEqual(output["written_rows"], 0)
+        self.assertEqual(output["skipped_rows"], 1)
+        self.assertEqual(output["read_after_write"], "skipped")
+        self.assertEqual(output["secret_redaction"], "pass")
         self.assertEqual(output["env_validation"]["status"], "failed")
         self.assertEqual(
             output["env_validation"]["missing"],
@@ -564,6 +623,17 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
         self.assertEqual(output["write_execution"], "executed")
         self.assertEqual(output["env_validation"]["url_source"], "config.SUPABASE_URL")
         self.assertEqual(output["env_validation"]["key_source"], "config.SERVICE_ROLE_KEY")
+        self.assertEqual(output["attempted_rows"], 1)
+        self.assertEqual(output["written_rows"], 1)
+        self.assertEqual(output["skipped_rows"], 0)
+        self.assertEqual(output["validation"], "pass")
+        self.assertEqual(output["write_mode"], "commit")
+        self.assertEqual(output["secret_redaction"], "pass")
+        self.assertEqual(output["read_after_write"], "pass")
+        self.assertEqual(output["written_rows"], 1)
+        self.assertEqual(output["rows_written"], 1)
+        self.assertEqual(output["read_after_write_smoke"]["strategy_consumer"], "pass")
+        self.assertEqual(output["read_after_write_smoke"]["source_family"], "owner_approved_persistent")
         self.assertEqual(output["rows_written"], 1)
         self.assertEqual(len(client.calls), 1)
         self.assertNotIn("https://config.supabase.co", stdout_text)
@@ -597,6 +667,7 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
         self.assertEqual(returncode, 0)
         self.assertEqual(output["env_validation"]["url_source"], "config.SUPABASE_URL")
         self.assertEqual(output["env_validation"]["key_source"], "config.SUPABASE_SERVICE_ROLE_KEY")
+        self.assertEqual(output["read_after_write"], "pass")
         self.assertEqual(len(client.calls), 1)
         self.assertNotIn("https://alias.supabase.co", stdout_text)
         self.assertNotIn("config-alias-secret", stdout_text)
@@ -650,6 +721,10 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
         self.assertEqual(output["write_execution"], "executed")
         self.assertEqual(output["env_validation"]["url_source"], "env")
         self.assertEqual(output["env_validation"]["key_source"], "env")
+        self.assertEqual(output["read_after_write"], "pass")
+        self.assertEqual(output["read_after_write_smoke"]["sample_fallback"], "disabled")
+        self.assertEqual(output["read_after_write_smoke"]["runtime_fallback"], "disabled")
+        self.assertEqual(output["read_after_write_smoke"]["strategy_consumer"], "pass")
         self.assertEqual(output["rows_written"], 1)
         self.assertEqual(len(client.calls), 1)
         self.assertEqual(client.calls[0]["table"], "market_theme_confirmed_evidence")
@@ -663,6 +738,51 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
         self.assertIn("evidence_value", row)
         self.assertNotIn("id", row)
         self.assertNotIn("created_at", row)
+
+    def test_write_cli_read_after_write_exception_redacts_secret_sentinels(self):
+        root = Path(__file__).resolve().parents[1]
+        sample_path = root / "docs/examples/market_theme_owner_approved_payload.sample.json"
+        client = WriteThenReadErrorClient()
+
+        with tempfile.TemporaryFile(mode="w+", encoding="utf-8") as stdout:
+            old_stdout = sys.stdout
+            try:
+                sys.stdout = stdout
+                returncode = write_evidence_main(
+                    ["--payload", str(sample_path), "--execute"],
+                    client=client,
+                    env={
+                        "SUPABASE_URL": "https://example.supabase.co",
+                        "SUPABASE_SERVICE_ROLE_KEY": "fake-key-for-unit-test",
+                    },
+                )
+            finally:
+                sys.stdout = old_stdout
+            stdout.seek(0)
+            stdout_text = stdout.read()
+            output = json.loads(stdout_text)
+
+        self.assertEqual(returncode, 2)
+        self.assertEqual(output["write_execution"], "executed")
+        self.assertEqual(output["read_after_write"], "fail")
+        self.assertEqual(output["written_rows"], 0)
+        self.assertEqual(output["rows_written"], 0)
+        self.assertEqual(output["skipped_rows"], 1)
+        self.assertEqual(output["secret_redaction"], "pass")
+        self.assertEqual(output["read_after_write_smoke"]["status"], "fail-closed")
+        self.assertEqual(
+            output["read_after_write_smoke"]["note"],
+            "read-after-write smoke failed; details redacted",
+        )
+        note_text = json.dumps(output["read_after_write_smoke"], ensure_ascii=False)
+        self.assertNotIn("SUPABASE_SERVICE_ROLE_KEY", note_text)
+        for forbidden in [
+            "sentinel-service-secret",
+            "https://example.supabase.co",
+            "sentinel-token",
+            "sentinel-secret",
+        ]:
+            self.assertNotIn(forbidden, stdout_text)
 
     def test_readonly_smoke_cli_prints_schema_decision_and_fails_closed_without_env(self):
         completed = subprocess.run(
@@ -681,6 +801,13 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
         self.assertIn("mode: read-only", completed.stdout)
         self.assertIn("write: disabled", completed.stdout)
         self.assertIn("schema_decision: no-schema-change", completed.stdout)
+        self.assertIn("source: production", completed.stdout)
+        self.assertIn("source_family: production_db", completed.stdout)
+        self.assertIn("target: public.market_theme_confirmed_evidence", completed.stdout)
+        self.assertIn("sample_fallback: disabled", completed.stdout)
+        self.assertIn("runtime_fallback: disabled", completed.stdout)
+        self.assertIn("strategy_consumer: fail-closed", completed.stdout)
+        self.assertIn("source_family_allowed: false", completed.stdout)
         self.assertIn("status: fail-closed", completed.stdout)
         self.assertIn("telegram_confirmed: false", completed.stdout)
 
@@ -736,12 +863,43 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
                 self.assertEqual(smoke["mode"], "read-only")
                 self.assertEqual(smoke["write"], "disabled")
                 self.assertEqual(smoke["schema_decision"], "no-schema-change")
+                self.assertEqual(smoke["source"], "production")
+                self.assertIn("source_family", smoke)
+                self.assertEqual(smoke["target"], "public.market_theme_confirmed_evidence")
+                self.assertEqual(smoke["sample_fallback"], "disabled")
+                self.assertEqual(smoke["runtime_fallback"], "disabled")
                 self.assertEqual(smoke["env"], env)
                 self.assertEqual(smoke["table_read"], table_read)
                 self.assertEqual(smoke["status"], status)
                 self.assertEqual(smoke["telegram_confirmed"], telegram_confirmed)
+                self.assertEqual(
+                    smoke["strategy_consumer"],
+                    "pass" if telegram_confirmed else "fail-closed",
+                )
+                self.assertEqual(smoke["source_family_allowed"], bool(load_result["rows"]))
 
-    def test_readonly_loader_rejects_local_or_runtime_source_family_even_when_confirmed(self):
+    def test_readonly_smoke_helper_rejects_direct_runtime_confirmed_rows(self):
+        smoke = build_market_theme_evidence_readonly_smoke(
+            {
+                "status": "confirmed",
+                "confirmed": True,
+                "reason": "",
+                "rows": [
+                    handoff_payload(
+                        source_family="runtime",
+                        source_name="same_run_context",
+                    )
+                ],
+            }
+        )
+
+        self.assertEqual(smoke["status"], "insufficient-data")
+        self.assertFalse(smoke["telegram_confirmed"])
+        self.assertEqual(smoke["strategy_consumer"], "fail-closed")
+        self.assertFalse(smoke["source_family_allowed"])
+        self.assertEqual(smoke["source_family"], "runtime")
+
+    def test_readonly_loader_rejects_forbidden_unknown_or_mixed_source_family_even_when_confirmed(self):
         for source_family in [
             "local",
             "local_only_state",
@@ -754,6 +912,7 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
             "default",
             "test_fixture",
             "fixture",
+            "unknown_provider",
         ]:
             with self.subTest(source_family=source_family):
                 loaded = load_confirmed_market_theme_evidence(
@@ -763,8 +922,29 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
 
                 self.assertEqual(loaded["status"], "insufficient-data")
                 self.assertFalse(loaded["confirmed"])
-                self.assertEqual(smoke["status"], "fail-closed")
+                self.assertEqual(smoke["status"], "insufficient-data")
                 self.assertFalse(smoke["telegram_confirmed"])
+                self.assertEqual(smoke["strategy_consumer"], "fail-closed")
+                self.assertFalse(smoke["source_family_allowed"])
+
+    def test_readonly_loader_rejects_mixed_allowed_and_forbidden_source_families(self):
+        loaded = load_confirmed_market_theme_evidence(
+            client=EvidenceClient(
+                [
+                    handoff_payload(source_family="production_db"),
+                    handoff_payload(source_family="runtime"),
+                ]
+            )
+        )
+        smoke = build_market_theme_evidence_readonly_smoke(loaded)
+
+        self.assertEqual(loaded["status"], "insufficient-data")
+        self.assertFalse(loaded["confirmed"])
+        self.assertEqual(smoke["status"], "insufficient-data")
+        self.assertFalse(smoke["telegram_confirmed"])
+        self.assertEqual(smoke["strategy_consumer"], "fail-closed")
+        self.assertFalse(smoke["source_family_allowed"])
+        self.assertEqual(smoke["source_family"], "production_db,runtime")
 
     def test_readonly_loader_accepts_allowed_persistent_source_family(self):
         for source_family in [

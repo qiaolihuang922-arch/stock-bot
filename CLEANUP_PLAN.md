@@ -46,6 +46,14 @@
 
 ## Pending / Watchlist
 
+- 本輪 Evidence Chain Write CLI Read-after-write And Source Fail-closed Handoff：
+  - 根因分類：`evidence_chain_contract_hardening` + `handoff_summary_drift` + `runner_parser_false_fail`。
+  - 已完成：write CLI dry-run / execute output 補 source metadata、validation、write_mode、secret_redaction；execute 成功 upsert 後做 read-after-write smoke；read-only smoke 補 source_family / strategy_consumer / fallback disabled contract。
+  - QA 有效攔截：前輪抓到 read-after-write exception 可能洩漏 secret、runtime/unknown/mixed rows 可能被直接消費者誤收、以及 `CHANGELOG.md` 把產品候選 diff 與交付文件 diff 混在一起。最終 QA 已通過。
+  - 邊界保持：未改 DB schema / table / column / RLS / grant / policy / role；未 production live write；未 formal backfill；未 live Telegram；未改策略 decision 或 Telegram `VERSION`。
+  - 後續風險：若未來真的跑 production `--execute`，upsert 成功但 read-after-write 失敗時目前會 fail closed 並顯示 written rows 為 0；正式 live write 任務需重新檢查「DB 已有副作用但 CLI 回傳 fail」的操作者文案與 rollback / 重跑方式。
+  - Runner gap 重複：CAO / Tech 交付摘要仍容易出現 handoff drift；QA conclusion parser / conditional pass handling 仍需另修。
+  - 不新增 `AGENTS.md` 硬規則：既有 source-of-truth、資料寫入邊界、live write 禁令與 Post-cycle Review 已覆蓋；本輪用測試與 CLI contract 沉澱。
 - 本輪 GitHub Workflow Supabase Service-role Runtime Config Wiring：
   - 根因分類：`github_runner_secret_mapping_gap` + `runner_parser_false_fail`。
   - 問題：write CLI 已支援 env / config fallback，但 GitHub workflow fresh runner 只生成 `SUPABASE_URL / SUPABASE_KEY`，未生成 service-role aliases；這會讓正式 runner 明明有 secret，仍像缺 write credential。

@@ -33,6 +33,15 @@
 
 ## Recent High-Signal Milestones
 
+- Evidence Chain Write CLI Read-after-write And Source Fail-closed Handoff 已 commit，待 push：
+  - Owner 最新邊界：只有新增表、擴字段、schema / RLS / grant / policy / role 變更需要找 Owner；非 schema 的 evidence data 寫入 / 回寫應走 repo script / service API。
+  - 本輪延續既有 `public.market_theme_confirmed_evidence` contract，未新增 DB schema、table、column、RLS、grant、policy、role。
+  - `scripts/write_market_theme_confirmed_evidence.py` dry-run output 增加 source/source_name/source_type、candidate_rows、validation、write_mode、secret_redaction。
+  - `--execute` path upsert 後必須做 read-after-write smoke；讀回 confirmed evidence 才成功，讀回失敗則 fail closed，exception output 只保留 redacted note。
+  - `services/market_theme_evidence_store.py` read-only smoke 增加 source_family、target、confirmed_evidence_rows、sample/runtime fallback、strategy_consumer、source_family_allowed。
+  - runtime / unknown / mixed / forbidden source rows 即使看似 confirmed，也必須 `insufficient-data`、`telegram_confirmed=false`、`strategy_consumer=fail-closed`；allowed production / persistent row 可 pass。
+  - QA 通過：`arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py -q`，`49 passed, 17 warnings`；`git diff --check` 通過；approved dry-run exit 0；forbidden runtime dry-run exit 2；direct-consumer smoke 覆蓋 runtime / unknown / mixed fail closed 與 production row pass。
+  - 未改 Telegram 報文、策略 decision、watchlist、formal backfill、production live write 或 live Telegram。
 - GitHub Workflow Supabase Service-role Runtime Config Wiring 已推送：
   - Architect 額外檢查發現：`.github/workflows/stock-bot.yml` 的 `Create runtime config` 只把 `SUPABASE_URL / SUPABASE_KEY` 寫入 fresh runner `config.py`，沒有 service-role alias；這會讓 GitHub runner 的 evidence write path 找不到 `SUPABASE_SERVICE_ROLE_KEY` / `SERVICE_ROLE_KEY`。
   - workflow split-secret path 新增 `SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}`。

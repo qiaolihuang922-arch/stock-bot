@@ -4,43 +4,50 @@
 
 ## Current Task
 
-- task_id: `workflow_supabase_service_role_runtime_config_20260530`
-- task_name: `GitHub Workflow Supabase Service-role Runtime Config Wiring`
-- task_type: `tiny_patch`
+- task_id: `evidence_chain_candidate_changelog_qa_retry_20260530`
+- task_name: `Evidence Chain Write CLI Read-after-write And Source Fail-closed Handoff`
+- task_type: `normal_patch`
 - version_level: `none`
-- qa_level: `L1`
+- qa_level: `L2`
 - owner_status: `requested`
-- architect_status: `pushed`
+- architect_status: `committed`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
-- qa_status: `conditional_pass_satisfied`
-- commit: `4ce790e`
+- qa_status: `qa_passed`
+- commit: `current HEAD`
 
 ## Current Result
 
-- Owner 要「多多檢查」Supabase evidence write path。Architect 發現 GitHub workflow `Create runtime config` 只寫入 `SUPABASE_URL / SUPABASE_KEY`，沒有把 `SUPABASE_SERVICE_ROLE_KEY` 或 `SERVICE_ROLE_KEY` alias 寫進 fresh runner `config.py`。
-- 本輪修正 GitHub workflow runtime config wiring：
-  - split-secret path 新增 `SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}`。
-  - runtime `config.py` 同時保留 `SUPABASE_KEY`，並新增 `SUPABASE_SERVICE_ROLE_KEY` 與 `SERVICE_ROLE_KEY = SUPABASE_SERVICE_ROLE_KEY`。
-  - legacy `STOCK_CONFIG` path 保留；若新 secret 存在，只追加 service-role aliases，不覆蓋既有 `SUPABASE_KEY`。
-  - workflow validation log 只輸出 present / missing，不輸出 URL、read key、service-role key、截斷值或 hash。
-- 本輪沒有 production live write、沒有正式 backfill、沒有 DB schema / table / column 變更、沒有 RLS / grant / policy / role 變更、沒有 live Telegram、沒有改策略 decision 或 Telegram version。
-- QA conditional pass，Architect 已滿足條件：
-  - QA 條件：untracked `tests/test_workflow_runtime_config.py` 必須納入 repo，且修正 `CHANGELOG.md` 自述矛盾。
-  - Architect 已納入測試並修正 `CHANGELOG.md`。
-  - 主 repo 驗證：`.venv/bin/python -m pytest tests/test_workflow_runtime_config.py tests/test_market_theme_evidence_handoff.py -q`：29 passed。
-  - `git diff --check` 通過。
-- Runner 狀態：CAO auto cycle 對 QA `conditional pass` 再次誤判 failed；Architect 按 QA 報告條件與主 repo 驗證手動吸收，未整包搬 worktree。
+- Owner 要繼續 evidence chain，但只在需要新增表 / 擴字段 / RLS / grant / policy / role 時找 Owner；非 schema 資料寫入應走 repo script / service API。本輪延續既有 `market_theme_confirmed_evidence` write path，沒有要求 Owner 執行人工 DML。
+- 本輪完成 evidence write/read smoke contract 補強：
+  - write CLI dry-run 顯示 source/source_name/source_type、candidate_rows、validation、write_mode、secret_redaction。
+  - `--execute` 成功 upsert 後必須做 read-after-write smoke；讀回 confirmed evidence 才回傳成功，讀回失敗則 fail closed。
+  - read-after-write exception output 只顯示 redacted note，不輸出 URL、read key、service-role key、token、截斷值或 hash。
+  - read-only smoke 增加 source_family、target、confirmed_evidence_rows、sample/runtime fallback、strategy_consumer、source_family_allowed。
+  - runtime / unknown / mixed / forbidden source 即使 rows 看似 confirmed，也必須 `insufficient-data`、`telegram_confirmed=false`、`strategy_consumer=fail-closed`。
+  - allowed production / persistent row 可 pass。
+- 可吸收範圍限於 4 個產品候選檔案與交付文件：
+  - `scripts/smoke_market_theme_evidence_readonly.py`
+  - `scripts/write_market_theme_confirmed_evidence.py`
+  - `services/market_theme_evidence_store.py`
+  - `tests/test_market_theme_evidence_handoff.py`
+  - `CHANGELOG.md`、`QA_REPORT.md`、`TASK.md`
+- 本輪沒有 production live write、formal backfill、DB schema / table / column 變更、RLS / grant / policy / role 變更、live Telegram、策略 decision、Telegram formatter 或 Telegram `VERSION` 變更。
+- QA 結論：`通過`。
+  - `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py -q`：49 passed，17 warnings。
+  - `git diff --check`：通過。
+  - approved dry-run：exit 0，`validation=pass`，`candidate_rows=1`，`write_execution=disabled`。
+  - forbidden runtime dry-run：exit 2，`validation=fail`，`candidate_rows=0`，`write_execution=disabled`。
+  - QA 額外 direct-consumer smoke：runtime / unknown / mixed fail closed，production row pass。
 - Post-cycle review：
-  - 根因分類：`github_runner_secret_mapping_gap` + `runner_parser_false_fail`。
-  - QA 有效覆蓋 workflow-generated config、legacy STOCK_CONFIG、secret redaction、direct write CLI fake consumer。
-  - 不新增 `AGENTS.md` 硬規則；既有 GitHub Runtime / State Source 與資料寫入邊界已覆蓋。本輪用 workflow test 與 CLEANUP_PLAN runner 待補沉澱。
+  - 根因分類：`evidence_chain_contract_hardening` + `handoff_summary_drift` + `runner_parser_false_fail`。
+  - QA 有效攔截：前輪抓到 read-after-write exception secret leak、runtime fake confirmed、以及 `CHANGELOG.md` 與 diff 邊界自述矛盾；最終已修正並通過。
+  - 不新增 `AGENTS.md` 硬規則；既有 source-of-truth、資料寫入邊界、live write 禁令與 Post-cycle Review 已覆蓋。本輪沉澱為 tests、CLI contract 與 runner 待補。
 
 ## Next Action
 
-- 已 commit / push：`4ce790e fix: wire service role into workflow runtime config`。
-- Architect 清理 CAO worktree。
-- 下一步若要真正寫入 production：準備真實 approved persistent payload，先跑 write CLI dry-run；GitHub runner 會由 workflow runtime config 提供 service-role aliases，本機可 fallback `config.py`。`--execute` 走接口 upsert，再跑 read-only smoke。只有 schema/RLS/grant/table/column 或 live Telegram 才再找 Owner。
+- Architect 已完成主 repo 驗證與 commit；push 完成後清理 CAO worktree。
+- 下一步若要真正寫入 production：準備真實 approved persistent payload，先跑 write CLI dry-run；`--execute` 走接口 upsert，再跑 read-after-write smoke。只有 schema/RLS/grant/table/column 或 live Telegram 才再找 Owner。
 
 ## Status Values
 

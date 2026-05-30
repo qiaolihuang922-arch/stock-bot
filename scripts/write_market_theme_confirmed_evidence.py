@@ -12,7 +12,9 @@ if str(ROOT) not in sys.path:
 
 from services.market_theme_evidence_store import (
     build_market_theme_confirmed_evidence_write_plan,
+    build_market_theme_evidence_readonly_smoke,
     build_market_theme_write_client,
+    load_confirmed_market_theme_evidence,
     upsert_market_theme_confirmed_evidence,
     validate_market_theme_write_env,
 )
@@ -57,7 +59,14 @@ def _sanitized_preview(rows):
 def _dry_run_output(plan):
     return {
         "mode": "dry-run",
+        "source": f"{plan['source']['type']}:{plan['source']['name']}",
+        "source_name": plan["source"]["name"],
+        "source_type": plan["source"]["type"],
         "target_table": plan["target_table"],
+        "candidate_rows": plan["rows_to_upsert"],
+        "validation": "pass" if plan["payload_validation"]["status"] == "passed" else "fail",
+        "write_mode": "dry-run",
+        "secret_redaction": "pass",
         "write_execution": "disabled",
         "payload_validation": plan["payload_validation"],
         "upsert_conflict_target": plan["upsert_conflict_target"],
@@ -70,7 +79,17 @@ def _dry_run_output(plan):
 def _blocked_execute_output(plan, env_validation):
     return {
         "mode": "execute",
+        "source": f"{plan['source']['type']}:{plan['source']['name']}",
+        "source_name": plan["source"]["name"],
+        "source_type": plan["source"]["type"],
         "target_table": plan["target_table"],
+        "attempted_rows": plan["rows_to_upsert"],
+        "written_rows": 0,
+        "skipped_rows": plan["rows_to_upsert"],
+        "validation": "pass" if plan["payload_validation"]["status"] == "passed" else "fail",
+        "write_mode": "commit",
+        "secret_redaction": "pass",
+        "read_after_write": "skipped",
         "write_execution": "blocked",
         "payload_validation": plan["payload_validation"],
         "env_validation": env_validation,
@@ -80,16 +99,55 @@ def _blocked_execute_output(plan, env_validation):
     }
 
 
-def _executed_output(plan, env_validation):
+def _read_after_write_smoke(client, plan):
+    try:
+        trade_dates = sorted(
+            {
+                row.get("trade_date")
+                for row in plan["upsert_rows"]
+                if row.get("trade_date")
+            }
+        )
+        load_result = load_confirmed_market_theme_evidence(
+            client=client,
+            trade_date=trade_dates[0] if len(trade_dates) == 1 else None,
+            limit=max(20, plan["rows_to_upsert"] or 20),
+        )
+        return build_market_theme_evidence_readonly_smoke(load_result)
+    except Exception as exc:
+        return build_market_theme_evidence_readonly_smoke(
+            {
+                "status": "source-error",
+                "confirmed": False,
+                "reason": str(exc),
+                "rows": [],
+            }
+        )
+
+
+def _executed_output(plan, env_validation, read_after_write_smoke):
+    read_after_write = "pass" if read_after_write_smoke.get("status") == "ok" else "fail"
+    rows_written = plan["rows_to_upsert"] if read_after_write == "pass" else 0
     return {
         "mode": "execute",
+        "source": f"{plan['source']['type']}:{plan['source']['name']}",
+        "source_name": plan["source"]["name"],
+        "source_type": plan["source"]["type"],
         "target_table": plan["target_table"],
+        "attempted_rows": plan["rows_to_upsert"],
+        "written_rows": rows_written,
+        "skipped_rows": plan["rows_to_upsert"] - rows_written,
+        "validation": "pass",
+        "write_mode": "commit",
+        "secret_redaction": "pass",
+        "read_after_write": read_after_write,
+        "read_after_write_smoke": read_after_write_smoke,
         "write_execution": "executed",
         "payload_validation": plan["payload_validation"],
         "env_validation": env_validation,
         "upsert_conflict_target": plan["upsert_conflict_target"],
         "rows_to_upsert": plan["rows_to_upsert"],
-        "rows_written": plan["rows_to_upsert"],
+        "rows_written": rows_written,
         "upsert_preview": _sanitized_preview(plan["upsert_rows"]),
     }
 
@@ -131,9 +189,10 @@ def main(argv=None, client=None, env=None, config_module=None):
 
     write_client = client or _build_write_client(env, config_module)
     upsert_market_theme_confirmed_evidence(plan["upsert_rows"], write_client)
-    output = _executed_output(plan, env_validation)
+    read_after_write_smoke = _read_after_write_smoke(write_client, plan)
+    output = _executed_output(plan, env_validation, read_after_write_smoke)
     print(json.dumps(output, ensure_ascii=False, indent=2, sort_keys=True))
-    return 0
+    return 0 if output["read_after_write"] == "pass" else 2
 
 
 if __name__ == "__main__":

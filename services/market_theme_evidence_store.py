@@ -480,9 +480,53 @@ def build_market_theme_confirmed_evidence_write_plan(payload):
         {column: row.get(column) for column in WRITE_COLUMNS}
         for row in validation.get("rows", [])
     ] if passed else []
+    source_families = sorted(
+        {
+            str(row.get("source_family") or "").strip().lower()
+            for row in upsert_rows
+            if row.get("source_family")
+        }
+    )
+    source_names = sorted(
+        {
+            str(row.get("source_name") or "").strip()
+            for row in upsert_rows
+            if row.get("source_name")
+        }
+    )
+    if not source_families:
+        source_families = sorted(
+            {
+                str(family or "").strip().lower()
+                for family in _approval_payload_source_families(payload)
+                if family
+            }
+        )
+    if not source_names and isinstance(payload, dict):
+        names = []
+        if payload.get("source_name"):
+            names.append(str(payload.get("source_name")).strip())
+        for row in payload.get("rows", []) if isinstance(payload.get("rows"), list) else []:
+            if isinstance(row, dict) and row.get("source_name"):
+                names.append(str(row.get("source_name")).strip())
+        source_names = sorted({name for name in names if name})
+    source_type = (
+        "production"
+        if source_families == ["production_db"]
+        else "approved_persistent_source"
+        if source_families and all(family in HANDOFF_ALLOWED_SOURCE_FAMILIES for family in source_families)
+        else "forbidden_or_unapproved_source"
+        if source_families
+        else "missing-source"
+    )
     return {
         "target_table": TARGET_TABLE,
         "table": TABLE_NAME,
+        "source": {
+            "name": ",".join(source_names),
+            "type": source_type,
+            "families": source_families,
+        },
         "upsert_conflict_target": UPSERT_CONFLICT_TARGET,
         "payload_validation": {
             "status": "passed" if passed else "failed",
@@ -536,7 +580,23 @@ def build_market_theme_evidence_readonly_smoke(load_result):
     status = result.get("status") or "source-error"
     reason = str(result.get("reason") or "")
     rows = result.get("rows") if isinstance(result.get("rows"), list) else []
-    confirmed = bool(result.get("confirmed"))
+    source_families = sorted(
+        {
+            str(row.get("source_family") or "").strip().lower()
+            for row in rows
+            if isinstance(row, dict) and row.get("source_family")
+        }
+    )
+    source_family = (
+        ",".join(source_families)
+        or str(result.get("source_family") or "production_db").strip().lower()
+    )
+    source_family_allowed = bool(rows) and all(
+        isinstance(row, dict)
+        and _source_family_allowed_for_confirmed_loader(row.get("source_family"))
+        for row in rows
+    )
+    confirmed = bool(result.get("confirmed")) and source_family_allowed
 
     if status == "missing-source":
         env_status = "missing"
@@ -546,11 +606,14 @@ def build_market_theme_evidence_readonly_smoke(load_result):
         env_status = "present"
         lowered = reason.lower()
         table_read = "permission-denied" if "permission denied" in lowered or "permission" in lowered else "error"
-        note = reason or "production table read failed"
+        note = "read-after-write smoke failed; details redacted"
     else:
         env_status = "present"
         table_read = "ok"
-        if confirmed:
+        if rows and not source_family_allowed:
+            status = "insufficient-data"
+            note = "source_family is not an approved persistent source"
+        elif confirmed:
             note = "fresh production confirmed/supporting evidence available"
         elif not rows and status == "absent":
             note = "no production confirmed evidence available"
@@ -565,16 +628,40 @@ def build_market_theme_evidence_readonly_smoke(load_result):
         else:
             note = reason or "production evidence is insufficient"
 
+    strategy_consumer = "fail-closed"
+    if confirmed:
+        try:
+            from core.market_theme_evidence import build_market_theme_evidence_provider
+
+            consumer_input = result
+            if not result.get("sources") and rows:
+                consumer_input = _result_from_confirmed_row(rows[0])
+            evidence = build_market_theme_evidence_provider(market_theme_evidence=consumer_input)
+            if evidence.get("confirmed") and evidence.get("source_status") == "ready":
+                strategy_consumer = "pass"
+        except Exception:
+            strategy_consumer = "fail-closed"
+
+    smoke_status = "ok" if confirmed else status if rows and not source_family_allowed else "fail-closed"
+
     return {
         "title": "market_theme_confirmed_evidence smoke",
         "mode": "read-only",
         "write": "disabled",
         "schema_decision": "no-schema-change",
+        "source": "production",
+        "source_family": source_family,
+        "target": TARGET_TABLE,
         "env": env_status,
         "table_read": table_read,
         "rows": len(rows),
-        "status": "ok" if confirmed else "fail-closed",
+        "confirmed_evidence_rows": len(rows) if confirmed else 0,
+        "sample_fallback": "disabled",
+        "runtime_fallback": "disabled",
+        "strategy_consumer": strategy_consumer,
+        "status": smoke_status,
         "telegram_confirmed": confirmed,
+        "source_family_allowed": source_family_allowed,
         "note": note,
     }
 
@@ -662,6 +749,7 @@ def _validate_rows(rows):
             return _empty_result(
                 "insufficient-data",
                 "source_family is not an approved persistent source",
+                rows=rows,
             )
 
     confirmed_rows = [
