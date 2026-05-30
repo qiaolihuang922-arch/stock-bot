@@ -128,7 +128,10 @@ Architect 必須檢查並記錄：
 - CAO Tech write 只允許在隔離 worktree 產生 diff，不得直接寫主 repo；預設 worktree 為 repo 同級 `stock-bot-agent-worktrees/tech_write`，可用 `STOCK_BOT_AGENT_WORKTREE` 覆蓋。
 - 任何代碼 diff 合併主 repo 前，Architect 必須檢查 `git status`、`git diff --stat`、必要 diff 與對應 `TASK.md` / `CHANGELOG.md` / `QA_REPORT.md`。
 - 未定義需求前，不改策略、報文分類、DB schema、Telegram payload、watchlist、排程入口。
-- 禁止 live Supabase write、正式 backfill、live Telegram delivery，除非 Owner 對該動作單獨批准。
+- DB 結構變更才需要 Owner 事前確認：新增表、擴字段、改 schema、RLS / grant / policy / role 變更，必須先整理 SQL / 影響範圍給 Owner。
+- 非 DB 結構變更的資料新增 / 回寫 / backfill，不再要求 Owner 人工跑 SQL 或逐次批准；應優先使用既有產品接口 / repo script / approved service API 執行，並在 `TASK.md`、`CHANGELOG.md`、`QA_REPORT.md` 記錄資料來源、寫入範圍、dry-run / validation / rollback 或重跑方式。
+- 禁止繞過既有接口直接手寫 production DML；若沒有可用接口，Tech 必須先補 interface / script 或 blocked 說明，不得把非 schema 資料寫入包裝成 Owner 手動 SQL。
+- live Telegram delivery 仍需 Owner 對該動作單獨批准。
 
 ### 2.1 GitHub Runtime / State Source 硬規則
 
@@ -317,7 +320,8 @@ QA 套用規則：
 - patch 預設 `L1`；若碰策略、持倉、資料來源或 DB 邊界，升為 `L2`。
 - minor 預設 `L3`，除非 Architect 與 Owner 明確降級。
 - major 必須 `L3`，且需 Owner 明確批准測試範圍。
-- 正式 backfill、live Supabase write、live Telegram delivery 不包含在預設 `L3`，必須另行明確批准。
+- 正式資料新增 / 回寫 / backfill 若不改 schema，屬於既有接口資料操作，不需要 Owner 逐次批准，但必須在 QA 範圍內驗證 dry-run / validation / 寫入範圍 / fail-closed / 可追溯結果。
+- DB schema / table / column / RLS / grant / policy / role 變更與 live Telegram delivery 不包含在預設 `L3`，必須另行明確批准。
 - Architect 推送前只重跑必要驗證，不替代 QA 的完整職責。
 - 若任務改變函式回傳順序、回傳結構、訊息 list、payload shape 或外部呼叫契約，即使是 `L1`，QA 也必須檢查直接呼叫方與邊界契約。
 - PM 在需求中需列出「被改輸出」的直接消費者；Tech 在 `CHANGELOG.md` 需列出是否已同步直接呼叫方。
@@ -570,7 +574,7 @@ CAO 自動開發例外：
 - 不修改 `config.py`，不輸出任何 token 或密鑰。
 - 不恢復 `services/ai.py`、`services/learning.py` 到主流程，除非有明確任務。
 - 不在腳本內另建股票清單，12 檔股票必須來自 `core/watchlist.py`。
-- 不直接正式 backfill；必須先 dry-run、validate，再經確認後寫入。
+- 非 schema 的正式資料 backfill / 回寫優先走既有接口或 repo script；必須先 dry-run、validate，並記錄寫入範圍與驗證結果。不需要 Owner 逐次確認，除非涉及新增表、擴字段、schema / RLS / grant 變更或 live Telegram。
 - 需求未定義前，不先改策略或報文分類。
 - 不刪除 8 份固定 Markdown 工作流文件。
 

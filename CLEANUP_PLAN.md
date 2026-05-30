@@ -46,6 +46,11 @@
 
 ## Pending / Watchlist
 
+- Owner 最新資料寫入邊界：
+  - 根因分類：`approval_boundary_overbroad`。先前流程把非 schema 的資料新增 / 回寫 / backfill 也視為需要 Owner 手動批准，造成下一步容易被人工 SQL 卡住。
+  - 已更新硬規則：只有新增表、擴字段、schema / RLS / grant / policy / role 變更需要先找 Owner。
+  - 非 schema 的資料新增 / 回寫 / backfill 應走既有接口 / repo script / approved service API；不得把普通 DML 包裝成 Owner 手動 SQL。
+  - 待補產品流程：下一輪 evidence production write 任務應優先檢查 / 補齊 write interface，而不是再產 manual SQL 給 Owner。
 - 本輪 Market Theme Approved Payload Template And Dry-run Sample：
   - 根因分類：`owner_payload_contract_gap` + `sample_as_production_misread_risk` + `runner_parser_false_fail`。
   - 已完成：Owner-facing payload template、allowed dry-run sample、forbidden runtime negative sample、handoff docs 與局部 tests。

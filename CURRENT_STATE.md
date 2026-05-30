@@ -241,6 +241,7 @@
 - Market/theme evidence handoff helper 只能產生 manual SQL，且自身不得回傳 `confirmed=True`；runtime/local/cache/worktree/test/report-derived/synthetic/default source、缺 `evidence_status`、空 rows 或 `None` rows 都不得產生 SQL。
 - Market/theme confirmed evidence loader 只能接受 approved persistent `source_family`：`production_db`、`owner_approved_persistent`、`market_data`。即使資料來自 production table，只要 row 自身標記為 local/runtime/cache/worktree/report-derived/synthetic/default/test/fixture，也必須 fail closed，不得洗成 confirmed。
 - Evidence ops artifacts 只能是 dry-run / manual template / read-only smoke；不得被描述為 production ingestion 已 live。SQL template 需替換 placeholder 並選段執行，不可整份盲跑。
+- Owner 最新流程邊界：只有新增表、擴字段、schema / RLS / grant / policy / role 變更需要先找 Owner。非 schema 的資料新增 / 回寫 / backfill 應走既有接口 / repo script / approved service API，不再要求 Owner 手動 SQL 或逐次批准；但仍必須保留 dry-run、validation、寫入範圍、fail-closed 與可追溯驗證。
 - positions / position_events 來源錯誤不可補假值：positions 不可回全 watchlist 0 股，position_events source-error 不可回全 0 event summary 或讓報文誤讀為今日無交易。
 
 ## Module Map
@@ -264,13 +265,13 @@
 ## Known Boundaries
 
 - Production schema 已由 Owner 回傳 result sets 並判定 hard schema PASS；尚未驗 production read-only role / RLS / 實際資料內容。
-- 未做 live Supabase write。
+- 非 schema 的 data write / backfill 以既有接口 / repo script 為準，不再要求 Owner 逐次批准；缺 interface 時先補 interface / script，不把 DML 交給 Owner 手動 SQL。
 - 未做 live Telegram delivery。
 - 未做 TWSE live replay / live backfill。
-- 未做正式 backfill write。
+- Schema / RLS / grant / 新表 / 擴字段仍需 Owner 事前確認。
 - 未接真實外部新聞 / 題材 ingestion。
 - 未驗證 Supabase RLS / 權限 / index / rollback。
-- 若下一步需要建表、cache、正式外部 provider、live write 或 backfill，必須先通知 Owner。
+- 若下一步需要新增表、擴字段、schema / RLS / grant / policy / role 變更，必須先通知 Owner；若只是資料新增 / 回寫 / backfill，直接走既有接口 / repo script，並由 PM/Tech/QA 記錄與驗證。
 
 ## Workflow Health
 
@@ -303,4 +304,4 @@
 - 證據鏈 v20.3.1 已將 runtime breadth fallback 收斂為非交易診斷；若要自動取得 market_index / sector_index、建表、cache、external provider 或持久化 evidence，先通知 Owner。
 - 若 Owner 仍覺得查詢慢，另開 performance measurement 任務，量測 production 實際秒數。
 - 後續可改善 `load_strategy_evidence_summary()` 顯式排序與 `漏失` 文案，但需另開任務。
-- Evidence 下一步：可做 production read-only role / RLS / actual data smoke；正式 writer / backfill / live delivery 仍需單獨批准。
+- Evidence 下一步：若只是寫入 / 回寫 evidence rows，走既有接口 / repo script，不再讓 Owner 手動處理；若涉及 read-only role / RLS / 新表 / 擴字段 / live Telegram，仍需單獨確認。

@@ -42,7 +42,8 @@
 
 - 本輪 diff 已 commit / push：`80ae97d docs: add evidence payload samples`。
 - Architect 清理 CAO worktree。
-- 下一步若 Owner 要真正進 production：用 template 替換真實 approved persistent evidence reference，產生 package 給 Owner 審核；正式 SQL execution、backfill、RLS / grant、live write、live Telegram 仍需單獨批准。
+- Owner 最新流程邊界：只有新增表、擴字段、schema / RLS / grant / policy / role 變更需要先找 Owner。非 schema 的資料新增 / 回寫 / backfill 直接走既有接口 / repo script / approved service API，不再要求 Owner 手動 SQL 或逐次批准。
+- 下一步若要真正進 production：用 template 替換真實 approved persistent evidence reference；若只是寫入 evidence rows，Tech 應走既有接口 / repo script 並由 QA 驗證 dry-run、寫入範圍與 read-only smoke。只有 schema/RLS/grant/table/column 或 live Telegram 才再找 Owner。
 
 ## Status Values
 
