@@ -14,7 +14,7 @@
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
 - qa_status: `qa_passed`
-- commit: `pending`
+- commit: `pushed`
 
 ## Current Result
 
@@ -43,10 +43,11 @@
   - 未做 DB write / backfill。
   - 未改 DB schema / table / column / RLS / grant / policy / role。
   - 未改使用者可見 Telegram header，仍為 `v20.4.6`。
+- 已提交並推送：`cbe2a37 feat: add may data report integrity check`。
 
 ## Next Action
 
-- 提交並推送本輪 full integrity check；推送後清理 Tech worktree。
+- 清理 Tech worktree，保持下一輪從最新 main 開始。
 
 ## Status Values
 

@@ -34,7 +34,7 @@
 
 ## Recent High-Signal Milestones
 
-- May Data Strategy Report Full Integrity Check 已通過 QA，待 commit / push：
+- May Data Strategy Report Full Integrity Check 已通過 QA 並推送：
   - 目的：五月資料寫入後，完整檢查策略是否消費 production 資料、git/fresh-run dry-run 是否能產報文、策略與顯示是否衝突、報文跨區塊是否衝突。
   - 新增 `build_may_data_strategy_report_full_integrity_check()` 與 `scripts/smoke_market_theme_evidence_readonly.py --full-integrity-check-json`。
   - `generate_report(dry_run=True)` 會產生既有報文 shape，但跳過 `record_daily_signals`、`record_daily_snapshots`、`record_strategy_evidence`，避免 integrity check 寫 DB。
@@ -43,6 +43,7 @@
   - Architect 主 repo 驗證又攔下一個 sandbox 漏測：read client missing 時不許被內層 config/fallback 洗成 production passed；第二次返工後 missing/source-error 三個 source integrity 欄位均 blocked。
   - 主 repo 真實 smoke：`--full-integrity-check-json` exit code 0，stdout 第一字元 `{`，JSON parse OK，`schema_change=false`、`data_write=false`、`live_telegram=false`、`source_db=passed`、`report_generated=passed`。
   - 驗證：`tests/test_market_theme_evidence.py tests/test_generator_report.py tests/test_notifier.py`，`105 passed, 153 warnings`；`git diff --check` 通過。
+  - 已提交並推送：`cbe2a37 feat: add may data report integrity check`。
   - 邊界：未 live Telegram、未 DB write/backfill、未 schema/RLS/grant/policy/role 變更、未改 Telegram 使用者可見 header，仍為 `v20.4.6`。
 - Market Theme Production Trend Consumption Check 已通過 QA 並推送：
   - 目的：上一輪已將 useful source 寫入 `market_theme_confirmed_evidence`；本輪證明正式 `core/generator.py` report path 在 fresh runner 條件下會消費 production evidence trend。
