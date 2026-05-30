@@ -29,10 +29,11 @@ def source(source_type, level="supportive", freshness="fresh", freshness_reason=
 
 
 class EvidenceTable:
-    def __init__(self, rows=None, error=None):
+    def __init__(self, rows=None, error=None, calls=None):
         self.rows = rows or []
         self.error = error
-        self.calls = []
+        self.calls = calls if calls is not None else []
+        self.filters = []
 
     def select(self, fields):
         self.calls.append(("select", fields))
@@ -40,6 +41,12 @@ class EvidenceTable:
 
     def eq(self, key, value):
         self.calls.append(("eq", key, value))
+        self.filters.append(("eq", key, value))
+        return self
+
+    def lte(self, key, value):
+        self.calls.append(("lte", key, value))
+        self.filters.append(("lte", key, value))
         return self
 
     def order(self, key, desc=False):
@@ -53,16 +60,32 @@ class EvidenceTable:
     def execute(self):
         if self.error:
             raise self.error
-        return type("Result", (), {"data": self.rows})()
+        rows = list(self.rows)
+        for method, key, value in self.filters:
+            if method == "eq":
+                rows = [
+                    row for row in rows
+                    if str(row.get(key)) == str(value)
+                ]
+            if method == "lte":
+                rows = [
+                    row for row in rows
+                    if str(row.get(key)) <= str(value)
+                ]
+        return type("Result", (), {"data": rows})()
 
 
 class EvidenceClient:
     def __init__(self, rows=None, error=None):
-        self.table_obj = EvidenceTable(rows, error=error)
+        self.rows = rows or []
+        self.error = error
+        self.calls = []
+        self.table_obj = EvidenceTable(self.rows, error=self.error, calls=self.calls)
         self.tables = []
 
     def table(self, name):
         self.tables.append(name)
+        self.table_obj = EvidenceTable(self.rows, error=self.error, calls=self.calls)
         return self.table_obj
 
 
@@ -111,6 +134,35 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             evidence["confirmed_source_types"],
             ["watchlist_breadth", "sector_index"],
         )
+
+    def test_loader_allows_previous_trade_date_for_holiday_report_date(self):
+        client = EvidenceClient([confirmed_row(trade_date="2026-05-29")])
+
+        loaded = load_confirmed_market_theme_evidence(
+            client=client,
+            trade_date="2026-05-30",
+        )
+
+        self.assertIn(("eq", "trade_date", "2026-05-30"), client.table_obj.calls)
+        self.assertIn(("lte", "trade_date", "2026-05-30"), client.table_obj.calls)
+        self.assertEqual(loaded["status"], "confirmed")
+        self.assertEqual(loaded["trade_date"], "2026-05-29")
+        self.assertEqual(loaded["requested_trade_date"], "2026-05-30")
+        self.assertTrue(
+            all(
+                source["freshness_reason"] == "previous_trade_date_allowed"
+                for source in loaded["sources"]
+            )
+        )
+
+    def test_loader_rejects_stale_previous_trade_date(self):
+        loaded = load_confirmed_market_theme_evidence(
+            client=EvidenceClient([confirmed_row(trade_date="2026-05-20")]),
+            trade_date="2026-05-30",
+        )
+
+        self.assertEqual(loaded["status"], "insufficient-data")
+        self.assertFalse(loaded["confirmed"])
 
     def test_loader_fails_closed_when_source_missing_or_empty_or_error(self):
         with patch.object(market_theme_evidence_store, "_build_client", return_value=None):
@@ -482,7 +534,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             )
 
         summary = messages[-1]
-        self.assertIn("【05/28 盤中｜v20.4.3】", summary)
+        self.assertIn("【05/28 盤中｜v20.4.4】", summary)
         self.assertIn("證據：production 來源不足，不作確認。", summary)
         self.assertIn("詳情：runtime 觀察僅供診斷，非確認來源。", summary)
         self.assertIn("🧭 主線：市場偏多但買點未成立。", summary)

@@ -38,7 +38,7 @@ def handoff_payload(**overrides):
         "watchlist_breadth": {"supportive": 7, "tracked": 12},
         "source_family": "market_data",
         "source_name": "owner_reviewed_market_theme_handoff",
-        "lineage": {"source": "manual_owner_handoff", "rule_version": "v20.4.3"},
+        "lineage": {"source": "manual_owner_handoff", "rule_version": "v20.4.4"},
         "metadata": {"reviewed_by": "owner"},
         "notes": "manual non-live handoff",
     }

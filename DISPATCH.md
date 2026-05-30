@@ -4,13 +4,13 @@
 
 ## Current Task
 
-- task_id: `production-evidence-approved-payload-audit`
-- task_name: `Production Evidence Source Audit And Approved Payload Gate`
+- task_id: `holiday-market-theme-evidence-loader`
+- task_name: `Holiday Market Theme Evidence Loader Fallback`
 - task_type: `normal_patch`
-- version_level: `none`
+- version_level: `patch`
 - qa_level: `L2`
 - owner_status: `requested`
-- architect_status: `ready_to_commit`
+- architect_status: `verified_ready_to_commit`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
 - qa_status: `qa_passed`
@@ -18,31 +18,27 @@
 
 ## Current Result
 
-- Owner 要繼續 production evidence 閉環。read-only smoke 現已可讀 production，但 `market_theme_confirmed_evidence` rows=0；本輪新增 read-only production source audit / approved payload gate，先判斷現有 production DB 資料是否可安全生成 approved payload preview。
-- 本輪新增 `scripts/smoke_market_theme_evidence_readonly.py --production-source-audit-json`：
-  - 固定 `write_execution=disabled`、`live_write=false`。
-  - 讀取 `market_theme_confirmed_evidence`、`daily_signal_snapshot`、`signal_runs`、`signal_items` 的 source availability / row count。
-  - 只有 production row 明確具備 `market_index`、`sector_theme_key`、`watchlist_breadth`、`evidence_value`、`support_level`、`lineage` 等既有 contract 欄位，才可輸出 `approved_payload_preview`。
-  - 若只有個股策略 snapshot / signal item row count，必須 `can_generate_approved_payload=false`、`status=blocked`。
-- 本輪沒有 production live write、formal backfill、DB schema / table / column 變更、RLS / grant / policy / role 變更、live Telegram、策略 decision、Telegram formatter 或 Telegram `VERSION` 變更。
-- QA 結論：`conditional pass`，Architect 已用真實 production read-only audit 滿足主要條件。
-  - `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence_handoff.py -q`：34 passed。
-  - `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py -q`：21 passed。
+- Owner 貼出 `05/30 假日｜v20.4.3` 報文仍顯示 `production 來源不足`。根因是報文日期為假日 `2026-05-30`，但 GitHub workflow 可回填的 official TWSE evidence trade_date 是前一交易日 `2026-05-29`；原 loader 只做 exact `trade_date` 查詢，假日會 miss。
+- 本輪修正 `market_theme_confirmed_evidence` read path：
+  - 先 exact 查詢 requested `trade_date`。
+  - exact 無 rows 時，fallback 查詢 `trade_date <= requested_trade_date` 的最新 confirmed/fresh production evidence。
+  - 只允許短假日/周末間隔，超過 `MAX_PREVIOUS_TRADE_DATE_GAP_DAYS=4` 繼續 fail closed，避免很舊 evidence 被誤用。
+  - Provider sources 標記 `freshness_reason=previous_trade_date_allowed`，並保留 `requested_trade_date` 供追溯。
+- 同步使用者可見 Telegram header 版本：`v20.4.4`。
+- 本輪沒有 production live write、formal backfill、DB schema / table / column 變更、RLS / grant / policy / role 變更、live Telegram、策略 decision、watchlist 或交易門檻變更。
+- Architect 驗證：
+  - `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py tests/test_market_theme_source_backfill.py tests/test_workflow_runtime_config.py tests/test_generator_report.py tests/test_notifier.py -q`：138 passed，157 warnings。
   - `git diff --check`：通過。
-- Architect 主 repo 驗證：
-  - `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence_handoff.py tests/test_market_theme_evidence.py -q`：55 passed，17 warnings。
-  - `git diff --check`：通過。
-  - 真實 production read-only audit：`market_theme_confirmed_evidence rows=0`、`daily_signal_snapshot rows=48`、`signal_runs rows=1`、`signal_items rows=12`、`can_generate_approved_payload=false`、`status=blocked`。
-  - 缺少 semantics：`market_index`、`sector_theme_key`、`watchlist_breadth definition`、`evidence_value meaning`、`support_level rule`、`lineage from production DB columns`。
 - Post-cycle review：
-  - 根因分類：`production_source_semantics_gap` + `runner_parser_false_fail`。
-  - QA 有效覆蓋 dry-run only、fail-closed gate、直接消費者、Owner 誤讀風險。
-  - 不新增 `AGENTS.md` 硬規則；既有 source-of-truth、資料寫入邊界、live write 禁令與 Post-cycle Review 已覆蓋。本輪沉澱為 helper/test 與 runner 待補。
+  - 根因分類：`holiday_trade_date_lookup_gap`。
+  - 既有 GitHub runtime / source-of-truth 規則已覆蓋，不新增 `AGENTS.md` 硬規則。
+  - 補測假日可讀上一交易日、過舊 trade_date 仍 fail closed、版本 header 同步。
 
 ## Next Action
 
-- Architect commit / push，清理 CAO worktree。
-- 下一步需要 Owner 決策：是否允許把 `daily_signal_snapshot` / `signal_runs/items` 的 production DB row count 與策略欄位定義為 market/theme supporting evidence source；若允許，需明確給出 market_index、sector_theme_key、watchlist_breadth、evidence_value、support_level、lineage 的 mapping 規則。若不允許，需要提供外部市場/族群指數或另一張 production source 表。
+- Architect commit / push。
+- 推送後需由 GitHub workflow 重新跑一次正式報文；本地生成不作正式結果。
+- 注意：報文底部 `📊 策略證據 v20.0｜資料表未建立` 屬於 `services/strategy_evidence.py` 的另一組 strategy evidence tables，不是本輪 `market_theme_confirmed_evidence` 假日讀取問題。
 
 ## Status Values
 

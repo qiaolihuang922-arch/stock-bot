@@ -1,5 +1,6 @@
 import json
 import os
+from datetime import datetime
 
 
 TABLE_NAME = "market_theme_confirmed_evidence"
@@ -90,6 +91,7 @@ AUDIT_DIAGNOSTIC_TABLE_REASONS = {
     "signal_runs": "report run metadata; diagnostic only, not market/theme source",
     "signal_items": "report item rows; diagnostic only, not market/theme source",
 }
+MAX_PREVIOUS_TRADE_DATE_GAP_DAYS = 4
 
 
 def _config_value(name):
@@ -916,19 +918,26 @@ def build_market_theme_evidence_readonly_smoke(load_result):
     }
 
 
-def _provider_sources_from_row(row):
+def _provider_sources_from_row(row, requested_trade_date=None):
     theme_key = str(row.get("sector_theme_key") or "market_theme")
     support_level = str(row.get("support_level") or "").lower()
     evidence_value = row.get("evidence_value") or {}
     watchlist_breadth = row.get("watchlist_breadth") or {}
     lineage = row.get("lineage") or {}
     source_name = row.get("source_name") or "market_theme_confirmed_evidence"
+    row_trade_date = str(row.get("trade_date") or "")
+    requested = str(requested_trade_date or "")
+    freshness_reason = (
+        "previous_trade_date_allowed"
+        if requested and row_trade_date and requested != row_trade_date
+        else "same_trade_date"
+    )
     base = {
         "source_family": "production_db",
         "source_name": source_name,
         "as_of": row.get("as_of"),
         "freshness": "fresh",
-        "freshness_reason": "same_trade_date",
+        "freshness_reason": freshness_reason,
         "level": "supportive",
         "support_level": support_level,
         "evidence_status": row.get("evidence_status"),
@@ -968,8 +977,26 @@ def _confirmed_row(row):
     )
 
 
-def _result_from_confirmed_row(row):
-    sources = _provider_sources_from_row(row)
+def _date_gap_days(row_trade_date, requested_trade_date):
+    if not row_trade_date or not requested_trade_date:
+        return 0
+    try:
+        row_date = datetime.strptime(str(row_trade_date), "%Y-%m-%d").date()
+        requested_date = datetime.strptime(str(requested_trade_date), "%Y-%m-%d").date()
+    except ValueError:
+        return None
+    return (requested_date - row_date).days
+
+
+def _row_allowed_for_requested_date(row, requested_trade_date=None):
+    gap_days = _date_gap_days(row.get("trade_date"), requested_trade_date)
+    if gap_days is None:
+        return False
+    return 0 <= gap_days <= MAX_PREVIOUS_TRADE_DATE_GAP_DAYS
+
+
+def _result_from_confirmed_row(row, requested_trade_date=None):
+    sources = _provider_sources_from_row(row, requested_trade_date=requested_trade_date)
     return {
         "status": "confirmed",
         "confirmed": True,
@@ -982,13 +1009,14 @@ def _result_from_confirmed_row(row):
         "market_index": row.get("market_index"),
         "sector_theme_key": row.get("sector_theme_key"),
         "trade_date": row.get("trade_date"),
+        "requested_trade_date": requested_trade_date,
         "as_of": row.get("as_of"),
         "sources": sources,
         "rows": [row],
     }
 
 
-def _validate_rows(rows):
+def _validate_rows(rows, requested_trade_date=None):
     for row in rows:
         if not isinstance(row, dict):
             return _empty_result("source-error", "row is not an object")
@@ -1004,10 +1032,20 @@ def _validate_rows(rows):
 
     confirmed_rows = [
         row for row in rows
-        if not _missing_fields(row) and _confirmed_row(row)
+        if (
+            not _missing_fields(row)
+            and _confirmed_row(row)
+            and _row_allowed_for_requested_date(
+                row,
+                requested_trade_date=requested_trade_date,
+            )
+        )
     ]
     if confirmed_rows:
-        return _result_from_confirmed_row(confirmed_rows[0])
+        return _result_from_confirmed_row(
+            confirmed_rows[0],
+            requested_trade_date=requested_trade_date,
+        )
 
     if any(_missing_fields(row) for row in rows):
         return _empty_result("insufficient-data", "required fields missing")
@@ -1035,9 +1073,21 @@ def load_confirmed_market_theme_evidence(client=None, trade_date=None, limit=20)
             .data
             or []
         )
+        if trade_date and not rows:
+            rows = (
+                client.table(TABLE_NAME)
+                .select(SELECT_FIELDS)
+                .lte("trade_date", trade_date)
+                .order("trade_date", desc=True)
+                .order("as_of", desc=True)
+                .limit(limit)
+                .execute()
+                .data
+                or []
+            )
     except Exception as exc:
         return _empty_result("source-error", str(exc))
 
     if not rows:
         return _empty_result("absent", "production table returned no rows")
-    return _validate_rows(rows)
+    return _validate_rows(rows, requested_trade_date=trade_date)
