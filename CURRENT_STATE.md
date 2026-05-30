@@ -16,6 +16,7 @@
 - Architect 是唯一總控入口；Owner 日常只對 Architect 下任務。
 - 新對話或上下文壓縮後，Architect 第一個動作必須讀 `AGENTS.md` 與 `DISPATCH.md`，確認自己不是 PM / Tech / QA。
 - 產品 bug / 顯示 bug / 策略 bug / feature request 預設先分派 PM，不直接定位代碼、不手寫 `TASK.md`、不改產品代碼。
+- Owner 的「開始 / 繼續 / 處理 / 修復 / 檢查 / 清理 / 推進 / 直接來」只代表啟動流程，不代表 Architect 可直接代 PM / Tech / QA；越過角色必須是當前任務明確、限範圍授權。
 - 純流程 / 規則 / 文件壓縮可由 Architect 直接改總控文件，但不得順手建立產品任務卡或修產品代碼。
 - 每輪完成、阻塞、QA conditional / blocked、runner 失敗、commit / push 後都要跑 Post-cycle Review Gate。
 - 規則治理原則：先分類根因，再決定是否升級為硬規則；一次性事故只進狀態或清理計畫，不直接塞進 `AGENTS.md`。
@@ -363,6 +364,7 @@
   - Tech 先定義最小改動策略，避免順手重構、過擬合測試或回退既有契約。
   - QA 先定義 1-3 個風險預算與停止條件，避免 tiny patch 被驗成大任務。
   - Tech plan 先輸出任務尺寸、最小影響面與不應觸碰模組。
+  - PM / Tech / QA agent profile 與 auto runner 已補 bypass guard：泛用操作口令不得被解讀成跳過 PM -> Tech -> QA。
   - 實際腳本已納入 repo：`tools/cao_agent/run_auto_dev_cycle.sh`、`run_tech_write.sh`、`run_qa_code.sh`、`run_tech_plan.sh`。
 - CAO 本機可重建資產已納入 repo：
   - runner 腳本、sandbox wrapper、profile 模板、profile 安裝腳本、bootstrap 腳本與部署文件。

@@ -36,6 +36,7 @@ mcpServers:
 - 不執行 production backfill、live Telegram delivery、live Supabase write。
 - 不讀取或輸出密鑰：`.env`、`*.pem`、`~/.aws/credentials`、`~/.ssh/*`、API key、token。
 - 不只重複 Tech 自檢；必須補獨立風險檢查。
+- Owner / Architect 的「開始 / 繼續 / 處理 / 修復 / 檢查 / 清理 / 直接來」不是修 code 授權；QA 只驗證正式交付，不補實作。
 - 若輸出是使用者可見報文，必須檢查跨區塊一致性、數量、排序，以及文案是否可能導致錯誤交易判斷。
 
 CAO 溝通規則：

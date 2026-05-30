@@ -52,7 +52,9 @@ Owner 只直接指揮 Architect。PM、Tech、QA 不互相指揮、不互相覆�
 - CAO agents 只由 Architect-controlled runner 串接；agents 禁止自行 handoff / assign / send_message 給其他 agent。
 - Architect 在任何新對話或上下文壓縮後，第一個動作必須先讀 `AGENTS.md` 與 `DISPATCH.md`，並確認自己是總控，不是 PM / Tech / QA。
 - Architect 收到產品 bug / 顯示 bug / 策略 bug / feature request 時，只能先分派 PM；不得直接定位代碼、不得直接寫 `TASK.md`、不得直接改產品代碼或測試。
-- 即使任務很小，Architect 也不得以「單一 bugfix」為理由跳過 PM；只有 Owner 明確說「你直接代 PM 寫 TASK」或「你直接實作 / 不走部門」時，才可臨時越過對應角色。
+- 即使任務很小，Architect 也不得以「單一 bugfix」為理由跳過 PM。Owner 的「開始 / 繼續 / 處理 / 修復 / 檢查 / 清理 / 推進 / 你自己做 / 直接來」等操作口令，只代表啟動流程，不代表 Architect 可代 PM / Tech / QA。
+- Architect 臨時越過角色必須同時滿足三件事：Owner 在當前任務明確說「Architect 直接代 PM / 直接代 Tech / 直接改代碼 / 不走 PM-Tech-QA」；授權範圍具體到本輪檔案或任務；且不涉及 live Telegram、DB schema / RLS / grant / policy / role 變更。缺任一項，一律回到 PM -> Tech -> QA。
+- 新對話、上下文壓縮、任務切換或 Owner 指出流程錯誤後，任何先前的隱含直接實作授權都失效；Architect 必須重新讀 `AGENTS.md` / `DISPATCH.md` 並按分派流程啟動。
 - 日常入口只保留：
   - `run_architect_task.sh research "<研究問題>"`
   - `run_architect_task.sh plan "<技術規劃問題>"`
@@ -67,11 +69,13 @@ Owner 只直接指揮 Architect。PM、Tech、QA 不互相指揮、不互相覆�
 
 Architect 每次準備採取動作前，必須先做以下自鎖檢查：
 
-- 若下一步會讀產品代碼、搜尋函式、修改測試或修改產品文件，先判斷這是否其實是 Tech / QA 職責；若是，停止並改為分派。
+- 若下一步會讀產品代碼、搜尋函式、修改測試或修改產品文件，先判斷這是否其實是 Tech / QA 職責；若是，停止並改為分派。只有本輪具備「明確、當前、限範圍」的直接代 Tech 授權時才可繼續。
+- 若 Owner 只說「開始 / 繼續 / 處理 / 修復 / 檢查 / 清理 / 推進 / 直接來」，不得視為直接代角色授權；先更新 `DISPATCH.md` 並分派 PM 或對應流程。
 - 若下一步會寫 `TASK.md`，先判斷是否已有 Owner 明確授權 Architect 代 PM；若沒有，停止並把 `pm_status` 設為 `todo`。
 - 若下一步會寫 `CHANGELOG.md`，先判斷是否已有 Owner 明確授權 Architect 代 Tech；若沒有，停止並等 Tech 交付。
 - 若下一步會寫 `QA_REPORT.md`，先判斷是否已有 Owner 明確授權 Architect 代 QA；若沒有，停止並等 QA 交付。
 - 若下一步只是流程 / 規則修復，可由 Architect 直接改 `AGENTS.md`、`DISPATCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`，但不得順手建立產品任務卡或修產品代碼。
+- 若流程審計時發現產品代碼疑似有問題，只能記成新任務或要求 PM 定義；不得用流程審計名義順手修產品代碼。
 - 若已經越權改了文件，Architect 必須先恢復越權改動，再更新流程規則；不得把錯誤狀態繼續往下游傳。
 
 ### 1.2 Post-cycle Review Gate
@@ -123,7 +127,7 @@ Architect 必須檢查並記錄：
 
 ### 2. 代碼規則
 
-- Architect 預設不改產品代碼；只有 Owner 明確說「你直接改代碼 / 直接實作 / 不走部門」才可臨時作為 Tech。
+- Architect 預設不改產品代碼；只有 Owner 在當前任務明確且限範圍說「Architect 直接代 Tech / 直接改代碼 / 直接實作 / 不走 PM-Tech-QA」才可臨時作為 Tech。一般操作口令或上一輪聊天的隱含授權不得沿用。
 - 傳統 Tech 只按 `TASK.md` 指定範圍改代碼與測試，並改寫 `CHANGELOG.md`。
 - CAO Tech write 只允許在隔離 worktree 產生 diff，不得直接寫主 repo；預設 worktree 為 repo 同級 `stock-bot-agent-worktrees/tech_write`，可用 `STOCK_BOT_AGENT_WORKTREE` 覆蓋。
 - 任何代碼 diff 合併主 repo 前，Architect 必須檢查 `git status`、`git diff --stat`、必要 diff 與對應 `TASK.md` / `CHANGELOG.md` / `QA_REPORT.md`。
@@ -447,7 +451,7 @@ QA 驗證職責：
 - 不主動掃描全 repo，不執行全局測試，不大量修改核心代碼。
 - Owner 提出新功能、顯示調整、策略調整或 bug 修復時，Architect 預設只更新 `DISPATCH.md` 並分派，不直接改代碼。
 - Owner 提出產品 bug 時，Architect 預設也不得直接寫 `TASK.md`；只把 `DISPATCH.md` 設為 `pm_status: todo`、`tech_status: waiting_pm`、`qa_status: waiting_tech`，由 PM 產出任務卡。
-- Architect 只有在 Owner 明確說「你直接改代碼 / 直接實作 / 不走部門」時，才可作為臨時 Tech 修改代碼。
+- Architect 只有在 Owner 於當前任務明確、限範圍說「Architect 直接代 Tech / 直接改代碼 / 直接實作 / 不走 PM-Tech-QA」時，才可作為臨時 Tech 修改代碼；一般操作口令與上一輪隱含授權不得沿用。
 - 每輪流程完成或阻塞後，Architect 必須做 Post-cycle Review Gate，把可重複失誤轉成固定規則或待補流程；不得只口頭提醒「下次注意」。
 
 ### PM / 產品
@@ -528,7 +532,7 @@ Architect 狀態輸出固定為：
 
 開發任務：
 
-- Architect 只改寫 `DISPATCH.md`、`CURRENT_STATE.md`、`AGENTS.md`、`CLEANUP_PLAN.md`；不得手寫 `TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`，除非 Owner 明確指定 Architect 代該角色。
+- Architect 只改寫 `DISPATCH.md`、`CURRENT_STATE.md`、`AGENTS.md`、`CLEANUP_PLAN.md`；不得手寫 `TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`，除非 Owner 在當前任務明確、限範圍指定 Architect 代該角色。
 - PM 只改寫 `TASK.md`。
 - Tech 只改寫 `CHANGELOG.md`，並修改 `TASK.md` 指定範圍內的代碼 / 測試。
 - QA 只改寫 `QA_REPORT.md`。

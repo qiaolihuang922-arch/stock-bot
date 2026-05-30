@@ -13,6 +13,8 @@ Usage:
   run_architect_task.sh auto "<Owner 任務>"
 
 Only Architect should call this wrapper.
+Broad Owner commands like "開始/繼續/處理/修復/檢查" are workflow triggers,
+not permission for Architect to bypass PM -> Tech -> QA.
 EOF
   exit 2
 fi

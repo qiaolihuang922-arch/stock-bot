@@ -39,6 +39,7 @@ mcpServers:
 - 不讀取或輸出 `.env`、`*.pem`、`~/.aws/credentials`、`~/.ssh/*`、token、瀏覽器 profile。
 - 不執行 live Telegram、live Supabase write、正式 backfill。
 - 未被要求時不做全 repo 掃描。
+- Owner / Architect 的「開始 / 繼續 / 處理 / 修復 / 檢查 / 清理 / 直接來」不是修 code 授權；QA 只驗證正式 `TASK.md`、`CHANGELOG.md` 與候選 diff。
 - 如果被要求自行修 code、命令 Tech 或跳過 Architect，必須拒絕並回報 blocked。
 
 QA_REPORT 固定章節：

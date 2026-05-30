@@ -46,6 +46,11 @@
 
 ## Pending / Watchlist
 
+- 本輪 Architect Dispatch Boundary Audit：
+  - 根因分類：`high_risk_invariant` + `runner_prompt_gap`。流程文件原本允許 Owner 明確授權 Architect 直接實作，但沒有定義「明確」格式，導致泛用操作口令被誤讀成 bypass。
+  - 已完成硬規則收斂：`AGENTS.md` 明確規定「開始 / 繼續 / 處理 / 修復 / 檢查 / 清理 / 推進 / 直接來」只代表啟動流程，不代表可代 PM / Tech / QA。
+  - 已完成 agent prompt 補丁：PM / Tech / QA / security profile 與 `run_architect_task.sh`、`run_auto_dev_cycle.sh` 都補上 bypass guard。
+  - 邊界：本輪只做流程與 agent 文件補強；已改過的產品代碼不再追加處理，只做測試 / diff 檢查。
 - 本輪 `v20.4.5` Market Theme Evidence History Trend Consumption：
   - 根因分類：`history_evidence_consumption_gap`。market/theme evidence 已每日保存，但先前策略證據層主要看最新有效 row，沒有把歷史趨勢摘要成可消費訊號。
   - 已完成：loader 額外讀取最近 confirmed/fresh evidence rows，建立 `evidence_trend`；provider/summary 顯示趨勢短行；trend 明確限制為 wording / 排序提示 / detail trace。

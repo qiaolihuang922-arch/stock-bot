@@ -4,62 +4,38 @@
 
 ## Current Task
 
-- task_id: `db-pollution-and-obsolete-table-cleanup`
-- task_name: `DB Pollution Audit And Obsolete Table Cleanup`
-- task_type: `normal_patch`
-- version_level: `patch`
-- qa_level: `L2`
+- task_id: `architect-dispatch-boundary-audit`
+- task_name: `Architect Dispatch Boundary Audit And Agent Rule Hardening`
+- task_type: `process`
+- version_level: `none`
+- qa_level: `process`
 - owner_status: `requested`
-- architect_status: `cleanup_verified`
-- pm_status: `task_ready`
-- tech_status: `changelog_ready`
-- qa_status: `qa_passed`
-- commit: `pushed`
+- architect_status: `completed`
+- pm_status: `not_required`
+- tech_status: `not_required`
+- qa_status: `not_required`
+- commit: `pending`
 
 ## Current Result
 
-- Owner 要檢查五月回寫是否污染 DB，並清理無用 code / DB garbage。
-- 已完成 `market_theme_confirmed_evidence` history trend 消費：
-  - loader 仍先找 requested date / 上一交易日最新 confirmed row。
-  - 額外讀取 `trade_date <= requested_trade_date` 的最近 evidence rows，產出 `evidence_trend`。
-  - `evidence_trend` 包含 observed_days、recent_supporting_days、support_streak_days、days、allowed_effects、forbidden_effects。
-  - 趨勢只允許 wording / 排序提示 / detail trace；不得放寬買點、不得覆蓋風控、不得單獨變 BUY。
-  - Telegram evidence summary 在 confirmed 時新增短行：`趨勢：...`，讓 Owner 看出不是只看單日證據。
-- 本輪新增 GitHub workflow backfill 入口：
-  - `workflow_dispatch.run_mode`: `bot`、`backfill_may`、`backfill_and_bot`。
-  - `start_date` / `end_date` / `backfill_version` 可由 workflow input 指定，預設 `2026-05-01` 到 `2026-05-29`、`v20.4.5`。
-  - `backfill_may` 會從 GitHub runner 執行 `scripts/backfill_signals.py --source twse --allow-partial --write --confirm-write`，回寫 `daily_price`、`daily_signal_snapshot`。
-  - `--allow-partial` 只寫 source 實際可取得的真實 rows，並輸出缺資料 warnings；不得為了通過 validation 補假 3035 或假 05/01 snapshot。
-  - 舊 `market_daily_bars` / `strategy_feature_snapshots` / `strategy_outcome_metrics` / `strategy_classification_audit` production 表已不在目前 schema；backfill script 只計算衍生 rows 供 log 診斷，不寫入已刪除或語義不符的表。
-  - `backfill_and_bot` 會先回填，再跑正式 bot。
-  - 非 schema 寫入不需要 Owner 手動 SQL；正式結果以 GitHub runner 為準。
-- 邊界：`scripts/backfill_market_theme_sources.py` 目前的 TWSE OpenAPI source 是 latest source，不是整月 historical source；它會補最新 official market/theme evidence。history trend 只消費 production 已有 confirmed rows，不會偽造五月 market/theme history。
-- 同步使用者可見 Telegram header 版本：`v20.4.6`。
-- 已推送並完成 GitHub runner formal backfill：
-  - run: `26680575871`，`run_mode=backfill_may`，成功。
-  - official market/theme source：`sector_theme_members rows=12`、`market_theme_index_daily_bars rows=10`、`market_theme_confirmed_evidence rows=9`。
-  - May signal/source backfill log：`daily_price rows=220`、`daily_signal_snapshot rows=220`、`VALIDATION OK`、`WRITE OK`；partial warnings：缺 `2376` source snapshot、缺 `2026-05-01` source trade date。
-  - read-only DB check：May `daily_price` 目前 240 rows（12 檔 x 20 交易日），May `daily_signal_snapshot` `v20.4.5` 目前 240 rows；`2026-05-01` 無 source rows，五月實際交易資料從 `2026-05-04` 到 `2026-05-29`。
-- 本輪污染清理檢查：
-  - DB read-only audit：May `daily_price` 240 rows / 240 unique keys / duplicates 0；May `daily_signal_snapshot` 936 rows / 936 unique `(stock_id,trade_date,version)` / duplicates 0；`v20.4.5` 240 rows / 240 unique stock-date。
-  - `market_theme_confirmed_evidence` 9 rows / duplicates 0；`market_theme_index_daily_bars` 10 rows / duplicates 0；`sector_theme_members` 12 rows / duplicates 0。
-  - 未刪除非 current 版本 `daily_signal_snapshot` rows：它們是版本化歷史，不是 duplicate；已改策略讀取只使用目前 `VERSION`，避免舊版本污染跨日判斷。
-  - 清理 code garbage：`strategy_evidence` 不再寫 / 讀已刪除 draft tables，改從 `daily_signal_snapshot` + `daily_price` 派生 summary；`cross_day_context` 不再查已刪除 strategy draft tables，只用 current-version `daily_signal_snapshot` 與 `position_events`。
-- 本輪沒有 DB schema / table / column 變更、RLS / grant / policy / role 變更、live Telegram、策略 decision、watchlist 或交易門檻變更。
-- Architect 驗證：
-  - `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py tests/test_market_theme_source_backfill.py tests/test_workflow_runtime_config.py tests/test_generator_report.py tests/test_notifier.py -q`：140 passed，157 warnings。
-  - `arch -arm64 .venv/bin/python -m pytest tests/test_workflow_runtime_config.py tests/test_backfill_signals.py tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py tests/test_market_theme_source_backfill.py tests/test_generator_report.py tests/test_notifier.py -q`：144 passed，153 warnings。
+- Owner 指出流程逃逸：Architect 開始把「開始 / 繼續 / 檢查 / 清理 / 修復」等操作口令當成直接實作授權，沒有先分派 PM / Tech / QA。
+- 本輪只做流程與 agent 規則審計；不處理已改產品代碼，只檢查是否有破壞。
+- 根因分類：`high_risk_invariant` + `runner_prompt_gap`。
+  - 舊規則有「Owner 明確說直接實作可越過角色」例外，但沒有定義「明確」格式。
+  - `auto` runner 本身會先 PM -> Tech -> QA；問題主要是 Architect 人工判斷時把泛用操作語誤讀成 bypass。
+- 已補方向：
+  - `AGENTS.md`：一般操作口令不等於直接代角色授權；越過角色必須是當前任務、明確、限範圍。
+  - `DISPATCH.md` startup command：提醒新對話和上下文壓縮後隱含授權失效。
+  - CAO agent / runner prompt：PM 只能定義需求，Tech 必須有正式 `TASK.md`，QA 只驗證；任何跳過 Architect 或缺 TASK 的路徑要 blocked。
+- 已檢查文件範圍：固定流程文件 `AGENTS.md`、`DISPATCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`，以及 `tools/cao_agent/` 的 runner scripts 與 `profiles/stock_*.md.template`。
+- 驗證：
   - `git diff --check`：通過。
-- Post-cycle review：
-  - 根因分類：`history_evidence_consumption_gap` + `git_runner_backfill_entrypoint_gap`。
-  - 既有 GitHub runtime / source-of-truth 規則已覆蓋，不新增 `AGENTS.md` 硬規則。
-  - 補測歷史趨勢、summary 趨勢文案、write CLI read-after-write smoke 兼容歷史查詢、workflow dispatch backfill inputs、版本 header 同步。
+  - `arch -arm64 .venv/bin/python -m pytest tests/test_strategy_evidence.py tests/test_cross_day_context.py tests/test_generator_report.py tests/test_backfill_signals.py tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py -q`：148 passed，153 warnings。
 
 ## Next Action
 
-- 五月資料回寫、污染檢查與 code garbage 清理已完成，可以繼續下一段證據鏈開發。
-- 下一段證據鏈開發前，先檢查正式報文 consumption：market/theme confirmed rows 是否已被 `load_confirmed_market_theme_evidence()` 讀入 summary / trend，且缺歷史月份時仍 fail closed。
-- 注意：報文底部 `📊 策略證據 v20.0｜資料表未建立` 屬於 `services/strategy_evidence.py` 的另一組 strategy evidence tables，不是本輪 `market_theme_confirmed_evidence` 假日讀取問題。
+- commit / push 本輪流程補強。
+- 若 Owner 接著要求產品 / 策略 / 報文 / DB 功能，Architect 必須先分派 PM；不能因為上一輪曾直接處理而沿用 bypass。
 
 ## Status Values
 
@@ -97,7 +73,7 @@
 Owner 對 Architect：
 
 ```text
-你是 Architect / 總控，不是 PM、Tech、QA。先讀 AGENTS.md 和 DISPATCH.md；若是產品 bug / 顯示 bug / feature request，只能先更新 DISPATCH.md 分派 PM，不得直接寫 TASK.md、不得搜尋或修改產品代碼，除非 Owner 明確說你直接代該角色。
+你是 Architect / 總控，不是 PM、Tech、QA。先讀 AGENTS.md 和 DISPATCH.md；若是產品 bug / 顯示 bug / 策略 bug / feature request，只能先更新 DISPATCH.md 分派 PM，不得直接寫 TASK.md、不得搜尋或修改產品代碼。Owner 說「開始、繼續、處理、修復、檢查、清理、直接來」只代表啟動流程，不代表你可代 Tech；只有 Owner 在當前任務明確說「Architect 直接代 PM / 直接代 Tech / 直接改代碼 / 不走 PM-Tech-QA」且範圍具體，才可越過對應角色。
 ```
 
 Architect 可用 CAO：

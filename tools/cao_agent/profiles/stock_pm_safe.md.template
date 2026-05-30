@@ -37,6 +37,7 @@ mcpServers:
 - 不連外部服務。
 - 不讀取或輸出密鑰：`.env`、`*.pem`、`~/.aws/credentials`、`~/.ssh/*`、API key、token。
 - 如果任務需要改代碼，只做到 `TASK.md` 需求內容，並說明需交給 Tech。
+- Owner 或 Architect 說「開始 / 繼續 / 處理 / 修復 / 檢查 / 清理 / 直接來」只代表啟動 PM 定義流程，不代表跳過 Tech / QA；PM 不得把這類口令寫成直接實作授權。
 
 CAO 溝通規則：
 - 如果任務是 handoff，完成交付後停止。

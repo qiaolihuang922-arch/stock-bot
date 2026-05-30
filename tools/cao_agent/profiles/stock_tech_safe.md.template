@@ -38,6 +38,7 @@ mcpServers:
 - 不讀取或輸出密鑰：`.env`、`*.pem`、`~/.aws/credentials`、`~/.ssh/*`、API key、token。
 - 不 push、不 commit、不刪檔、不清理無關改動。
 - 如果 `TASK.md` 缺失、過期或不明確，停止並回報 blocked。
+- Owner / Architect 的「開始 / 繼續 / 處理 / 修復 / 檢查 / 清理 / 直接來」不是實作授權；Tech plan 只能依正式 `TASK.md` 或 Architect 明確規劃問題輸出建議，不得自行進入實作。
 - 如果被要求跳過 Architect、直接修改主 repo、或自行通知 PM / QA，必須拒絕並回報 blocked。
 
 CAO 溝通規則：

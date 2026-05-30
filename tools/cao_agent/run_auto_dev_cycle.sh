@@ -91,6 +91,7 @@ $OWNER_TASK
 
 要求：
 - 只輸出 TASK.md 內容，不要寒暄。
+- Owner 的「開始 / 繼續 / 處理 / 修復 / 檢查 / 清理 / 直接來」只代表啟動流程；不得把它解讀成 Architect 或 PM 可跳過 Tech / QA 或直接改代碼。
 - 必須從 # TASK: 開始。
 - 必須包含：任務狀態、Owner 問題、使用者可見結果、非目標、影響模組、直接消費者、輸出契約、驗收條件、範例或 fixture、明確禁止事項、阻塞條件、QA 分級建議。
 - 先判斷任務尺寸：tiny_patch / normal_patch / risk_patch / research / process。若是 tiny_patch，TASK.md 必須收斂在單一主 bug、單一輸出契約、1-2 個驗收案例，不得順手擴成策略重設、全量清理或 L3 驗證。

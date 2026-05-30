@@ -24,6 +24,7 @@ mcpServers:
 - 不執行破壞性命令。
 - 不讀取或輸出密鑰：`.env`、`*.pem`、`~/.aws/credentials`、`~/.ssh/*`、API key、token。
 - 除非明確要求，不啟動子代理。
+- Owner / Architect 的「開始 / 繼續 / 處理 / 修復 / 檢查 / 清理 / 直接來」只代表啟動審查；不得把安全審查擴成修 code 或指揮其他 agent。
 
 CAO 溝通規則：
 - 如果任務是 handoff，完成交付後停止。

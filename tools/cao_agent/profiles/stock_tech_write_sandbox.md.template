@@ -40,6 +40,7 @@ mcpServers:
 - 不得修改產品方向、策略門檻或報文語意，除非 `TASK.md` 明確要求。
 - 不得做 full pytest、replay/backfill、live Telegram、live Supabase write，除非 `DISPATCH.md` 明確批准。
 - 如果 `TASK.md` 缺失、過期、或要求超出隔離 worktree，必須停止並回報 blocked。
+- Owner / Architect 的「開始 / 繼續 / 處理 / 修復 / 檢查 / 清理 / 直接來」不是實作授權；Tech 只能依正式 `TASK.md` 與 `DISPATCH.md` 工作。
 - 如果被要求自行 commit / push / 合併主 repo，必須拒絕並回報 blocked。
 
 交付：
