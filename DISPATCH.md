@@ -14,7 +14,7 @@
 - pm_status: `not_required`
 - tech_status: `not_required`
 - qa_status: `not_required`
-- commit: `pending`
+- commit: `pushed`
 
 ## Current Result
 
@@ -31,10 +31,10 @@
 - 驗證：
   - `git diff --check`：通過。
   - `arch -arm64 .venv/bin/python -m pytest tests/test_strategy_evidence.py tests/test_cross_day_context.py tests/test_generator_report.py tests/test_backfill_signals.py tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py -q`：148 passed，153 warnings。
+- 已提交並推送：`81d4340 docs: harden architect dispatch boundary`。
 
 ## Next Action
 
-- commit / push 本輪流程補強。
 - 若 Owner 接著要求產品 / 策略 / 報文 / DB 功能，Architect 必須先分派 PM；不能因為上一輪曾直接處理而沿用 bypass。
 
 ## Status Values
