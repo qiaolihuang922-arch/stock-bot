@@ -10,11 +10,11 @@
 - version_level: `none`
 - qa_level: `L1`
 - owner_status: `requested`
-- architect_status: `qa_condition_satisfied_pending_commit`
+- architect_status: `pushed`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
 - qa_status: `conditional_pass_satisfied`
-- commit: `pending`
+- commit: `4ce790e`
 
 ## Current Result
 
@@ -38,7 +38,8 @@
 
 ## Next Action
 
-- Architect 進行 commit / push，然後清理 CAO worktree。
+- 已 commit / push：`4ce790e fix: wire service role into workflow runtime config`。
+- Architect 清理 CAO worktree。
 - 下一步若要真正寫入 production：準備真實 approved persistent payload，先跑 write CLI dry-run；GitHub runner 會由 workflow runtime config 提供 service-role aliases，本機可 fallback `config.py`。`--execute` 走接口 upsert，再跑 read-only smoke。只有 schema/RLS/grant/table/column 或 live Telegram 才再找 Owner。
 
 ## Status Values

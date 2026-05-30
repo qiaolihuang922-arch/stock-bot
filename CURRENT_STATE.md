@@ -33,7 +33,7 @@
 
 ## Recent High-Signal Milestones
 
-- GitHub Workflow Supabase Service-role Runtime Config Wiring 已由 QA conditional pass，條件已由 Architect 滿足，待 commit / push：
+- GitHub Workflow Supabase Service-role Runtime Config Wiring 已推送：
   - Architect 額外檢查發現：`.github/workflows/stock-bot.yml` 的 `Create runtime config` 只把 `SUPABASE_URL / SUPABASE_KEY` 寫入 fresh runner `config.py`，沒有 service-role alias；這會讓 GitHub runner 的 evidence write path 找不到 `SUPABASE_SERVICE_ROLE_KEY` / `SERVICE_ROLE_KEY`。
   - workflow split-secret path 新增 `SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}`。
   - runtime `config.py` 保留 `SUPABASE_KEY` 給既有讀路徑，新增 `SUPABASE_SERVICE_ROLE_KEY` 與 `SERVICE_ROLE_KEY = SUPABASE_SERVICE_ROLE_KEY` 給 write CLI fallback。
