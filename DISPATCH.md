@@ -4,50 +4,34 @@
 
 ## Current Task
 
-- task_id: `may-data-strategy-report-full-integrity-check`
-- task_name: `May Data Strategy Report Full Integrity Check`
+- task_id: `correction-market-theme-prod-coverage-2026-05`
+- task_name: `Correction Market Theme Production Coverage Audit`
 - task_type: `risk_patch`
 - version_level: `patch`
 - qa_level: `L3`
 - owner_status: `requested`
-- architect_status: `completed`
+- architect_status: `blocked`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
-- qa_status: `qa_passed`
-- commit: `pushed`
+- qa_status: `blocked`
+- commit: `pending`
 
 ## Current Result
 
-- Owner 要求：五月資料全部寫好後做完整檢查，確認四件事：
-  - 策略與資料有關聯，不能有假資料。
-  - git / runner 執行後能正常輸出報文。
-  - 策略與顯示沒有衝突。
-  - 報文本身沒有跨區塊衝突。
-- 已按 PM -> Tech -> QA 完成：
-  - 新增 `build_may_data_strategy_report_full_integrity_check()`，輸出完整 integrity JSON。
-  - `generate_report(dry_run=True)` 可產生報文 sample 並跳過 `record_daily_signals`、`record_daily_snapshots`、`record_strategy_evidence`，避免檢查流程寫 DB。
-  - `scripts/smoke_market_theme_evidence_readonly.py --full-integrity-check-json` 提供 git/fresh-run dry-run diagnostic。
-  - Integrity JSON 檢查 source integrity、fresh runner dry-run、decision/display consistency、report cross-section consistency。
-- QA 首輪有效阻塞：
-  - `--full-integrity-check-json` 在 source-error 情境 stdout 先輸出 warning，導致 `json.loads(stdout)` 失敗。
-  - Tech 返工後 QA 通過 stdout 純 JSON 反證。
-- Architect 主 repo 吸收後又抓到一個 sandbox 漏測：
-  - `_build_readonly_client=None` 時 source integrity 仍可能被內層 config/fallback 洗成 `passed`。
-  - 已退回 Tech 第二次返工；QA 驗證 missing/source-error 時 `production_db_readonly`、`may_data_available`、`market_theme_source_of_truth` 全部 `blocked`。
-- 主 repo 驗證已通過：
-  - `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_generator_report.py tests/test_notifier.py -q`：105 passed，153 warnings。
-  - `git diff --check` 通過。
-  - `arch -arm64 .venv/bin/python scripts/smoke_market_theme_evidence_readonly.py --trade-date 2026-05-29 --full-integrity-check-json`：exit code 0，stdout 第一字元 `{`，`json_parse=0`，`schema_change=false`、`data_write=false`、`live_telegram=false`、`source_db=passed`、`report_generated=passed`。
-- 邊界：
-  - 未 live Telegram。
-  - 未做 DB write / backfill。
-  - 未改 DB schema / table / column / RLS / grant / policy / role。
-  - 未改使用者可見 Telegram header，仍為 `v20.4.6`。
-- 已提交並推送：`cbe2a37 feat: add may data report integrity check`。
+- Owner 指出嚴重偏差：先前宣稱五月資料 / integrity check 完成，但 production DB 截圖顯示三張 market/theme 表主要只有 `2026-05-29` latest-source rows，且同一 business key 因不同 `as_of` 重複寫入多批。
+- 已重新開 correction 任務，PM 定義 production read-only audit：三張 market/theme 表 row coverage、duplicates、source/date 範圍，並明確區分 `daily_price` / `daily_signal_snapshot` 五月歷史與 market/theme 三表未完成。
+- Tech 建立 correction audit helper / CLI，但 QA 結論為阻塞：
+  - 實跑 `--correction-audit-json` 時三張 market/theme 表皆 `source-error`，不能完成 production row coverage / duplicate counts 反證。
+  - Report contract 有誤讀風險：blocked / insufficient_evidence 狀態下仍輸出 `read_only_audit_complete`。
+  - 本輪不得宣告三表 audit complete，不得進入 cleanup/schema/backfill 決策。
+- 流程補強：
+  - `AGENTS.md` 新增 Production Data Completion Gate。
+  - data import / backfill / evidence history 完成結論前，必須有 production read-only audit：row count、date range、distinct dates、as_of range、source distribution、business-key duplicate groups。
+  - `integrity check passed` 不得替代 `data coverage passed`。
 
 ## Next Action
 
-- 清理 Tech worktree，保持下一輪從最新 main 開始。
+- 先修 correction report 的 blocked wording / next_action 誤導，再解決 production read-only source-error；audit 未完成前，不再宣稱五月 market/theme 資料完成。
 
 ## Status Values
 

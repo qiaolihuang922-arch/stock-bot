@@ -137,7 +137,25 @@ Architect 必須檢查並記錄：
 - 禁止繞過既有接口直接手寫 production DML；若沒有可用接口，Tech 必須先補 interface / script 或 blocked 說明，不得把非 schema 資料寫入包裝成 Owner 手動 SQL。
 - live Telegram delivery 仍需 Owner 對該動作單獨批准。
 
-### 2.1 GitHub Runtime / State Source 硬規則
+### 2.1 Production Data Completion Gate
+
+任何角色不得把「腳本通過」「檢查 JSON 通過」「latest source 寫入」「某一日有 rows」說成「歷史資料完成」或「五月資料完成」。凡涉及 production data import / backfill / evidence history / cleanup / dedupe 的任務，完成結論前必須先有 production read-only audit，且至少列出：
+
+- 目標表與本輪承諾範圍，例如五月全月、單一交易日、latest-only snapshot。
+- row count、min/max trade_date、distinct trade_dates、min/max as_of、distinct as_of。
+- source_family / source_name 分布。
+- 以 business key 分組的 duplicate groups，不得只看 id 或 as_of。
+- 每張表的 source-of-truth 與直接 consumer；不能把 `daily_price` / `daily_signal_snapshot` 的完成狀態外推到 market/theme evidence 表。
+- 若 source 只能提供 latest，結論必須寫 `latest-only` 或 `insufficient historical source`，不得稱為五月歷史。
+
+拒收條件：
+
+- production read-only audit 缺失、source-error、permission blocked、或只用本地 fixture / runner log / 截圖推論，卻宣告 data complete。
+- 同一 business key 因不同 `as_of` 重複寫入多批，卻沒有標記 duplicate / cleanup / write-prevention blocker。
+- `integrity check passed` 被用來替代 `data coverage passed`。
+- QA 未核對 Owner 原始目標與 production 表實際覆蓋範圍是否一致。
+
+### 2.2 GitHub Runtime / State Source 硬規則
 
 本專案正式流程是由 git / runner 啟動後產生 Telegram 報文。Runner 環境必須視為無狀態；任何策略記憶、跨日判斷或已執行事件，若只存在本機、worktree、暫存檔、runtime dict、cache 或 agent 對話中，對正式 TG 報文都不可靠。
 

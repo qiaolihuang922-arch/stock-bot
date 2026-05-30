@@ -46,6 +46,12 @@
 
 ## Pending / Watchlist
 
+- 本輪 Owner 指出 market/theme 五月資料完成誤報：
+  - 根因分類：`high_risk_invariant` + `completion_claim_without_production_audit`。Architect 把 script/integrity check 通過錯當成 production 五月 market/theme 歷史完成，且沒有在 post-cycle review 中核對 Owner 目標與 production 表實際覆蓋範圍。
+  - 直接問題：`market_theme_confirmed_evidence`、`market_theme_index_daily_bars`、`sector_theme_members` 截圖顯示主要是 `2026-05-29` latest-source rows，且同一 business key 因不同 `as_of` 重複寫入多批；不能稱為五月完整歷史。
+  - 已補硬規則：`AGENTS.md` 新增 Production Data Completion Gate。任何 data import / backfill / evidence history 完成結論前，必須有 production read-only audit：row count、date range、distinct dates、as_of range、source distribution、business-key duplicates、source-of-truth/consumer mapping。
+  - 目前 correction flow 狀態：QA 阻塞。新 correction audit path 已建立，但 production read-only audit 目前 source-error，且 report contract 曾有 blocked 卻寫 read_only_audit_complete 的誤讀風險。不得宣告三表 audit complete。
+  - 待補：修 correction report 的 blocked wording，取得可用 production read-only audit，再決定 dedupe / cleanup / write-prevention / schema or unique index 是否需要 Owner SQL。
 - 本輪 May Data Strategy Report Full Integrity Check：
   - 根因分類：`full_integrity_gate_gap` + `json_cli_contract_gap` + `qa_sandbox_gap`。
   - 已完成：PM 定義四條完整驗收矩陣；Tech 補 full-integrity dry-run diagnostic；QA 檢查 source integrity、fresh runner dry-run、策略/顯示一致性與報文跨區塊一致性。
