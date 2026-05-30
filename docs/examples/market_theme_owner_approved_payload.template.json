@@ -1,0 +1,61 @@
+{
+  "_artifact_type": "owner-facing market/theme evidence payload template",
+  "_production_status": "template-only; not production confirmed; not inserted; not GitHub runner source-of-truth",
+  "_script_boundary": "scripts/generate_evidence_approval_package.py creates review artifacts only and does not execute SQL",
+  "_required_fields": [
+    "trade_date",
+    "source_family",
+    "source_name",
+    "evidence_status",
+    "freshness",
+    "rows",
+    "rows[].symbol",
+    "rows[].theme",
+    "rows[].support_level",
+    "rows[].evidence_url",
+    "rows[].reason"
+  ],
+  "_allowed_source_family": [
+    "owner_approved_persistent",
+    "production_db",
+    "market_data"
+  ],
+  "_forbidden_source_family": [
+    "runtime",
+    "local",
+    "cache",
+    "worktree",
+    "report-derived",
+    "synthetic",
+    "default",
+    "test",
+    "fixture",
+    "missing source"
+  ],
+  "_manual_approval_required": [
+    "Owner replaces placeholder values with approved persistent evidence",
+    "Owner reviews generated JSON, Markdown, and review-only SQL",
+    "Owner separately approves any SQL execution outside the generator",
+    "Owner runs read-only verification after any manual SQL execution"
+  ],
+  "_not_executed_by_generator": [
+    "live Supabase write",
+    "formal backfill",
+    "production RLS/grant/policy/role change",
+    "live Telegram delivery"
+  ],
+  "trade_date": "YYYY-MM-DD",
+  "source_family": "owner_approved_persistent",
+  "source_name": "owner-approved-persistent-source-name",
+  "evidence_status": "confirmed",
+  "freshness": "fresh",
+  "rows": [
+    {
+      "symbol": "REPLACE_WITH_SYMBOL",
+      "theme": "REPLACE_WITH_THEME_OR_SECTOR_KEY",
+      "support_level": "supporting",
+      "evidence_url": "REPLACE_WITH_OWNER_APPROVED_PERSISTENT_REFERENCE",
+      "reason": "REPLACE_WITH_OWNER_APPROVED_REASON"
+    }
+  ]
+}

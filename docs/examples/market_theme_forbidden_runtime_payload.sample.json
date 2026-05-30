@@ -1,0 +1,11 @@
+{
+  "_artifact_type": "forbidden source fail-closed sample",
+  "_production_status": "negative fixture only; not production confirmed; not inserted; not GitHub runner source-of-truth",
+  "_expected_result": "payload_validation.status=failed, deterministic_sql=null, write_execution=disabled",
+  "trade_date": "2026-05-29",
+  "source_family": "runtime",
+  "source_name": "same_run_runtime_sample",
+  "evidence_status": "confirmed",
+  "freshness": "fresh",
+  "rows": []
+}

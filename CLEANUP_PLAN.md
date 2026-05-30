@@ -46,6 +46,13 @@
 
 ## Pending / Watchlist
 
+- 本輪 Market Theme Approved Payload Template And Dry-run Sample：
+  - 根因分類：`owner_payload_contract_gap` + `sample_as_production_misread_risk` + `runner_parser_false_fail`。
+  - 已完成：Owner-facing payload template、allowed dry-run sample、forbidden runtime negative sample、handoff docs 與局部 tests。
+  - QA 有效攔截：三份 `docs/examples/*market_theme*` 是 untracked 但必要 deliverables；若只吸收 tracked diff，乾淨 checkout 會缺 template/sample 且測試失敗。Architect 已按條件納入。
+  - 邊界保持：sample/template 明確不是 production confirmed、不是 DB rows、不是 GitHub fresh runner source-of-truth；不 live write、不 backfill、不改 RLS/grant、不改 Telegram/策略。
+  - Runner gap 重複：auto cycle 對 QA `conditional pass` 仍誤判 failed；需修 QA conclusion parser 只讀 `## QA 結論` 後第一個有效結論詞，並正確處理 conditional pass。
+  - 不新增 `AGENTS.md` 硬規則：既有 source-of-truth、fake confirmed、live write 禁令已覆蓋；本輪沉澱為 template/sample/docs/tests 與 runner 待補。
 - 本輪 Evidence Chain Approval Package Generator：
   - 根因分類：`manual_sql_operator_risk` + `approval_flow_gap` + `runner_parser_false_fail`。
   - 已完成：repo-side non-live approval package generator；allowed persistent payload 可產 package JSON / Markdown / review-only deterministic SQL；forbidden / missing / mixed source fail closed 且不產 SQL。

@@ -33,6 +33,15 @@
 
 ## Recent High-Signal Milestones
 
+- Market Theme Approved Payload Template And Dry-run Sample 已通過 QA conditional pass，條件已由 Architect 吸收滿足，待 commit / push：
+  - Owner 要求開始 evidence chain 下一步：建立第一份 market/theme approved payload 模板與可執行 dry-run 樣本。
+  - 新增 `docs/examples/market_theme_owner_approved_payload.template.json`：Owner-facing 填寫模板，列出 required fields、allowed / forbidden source family、manual approval required、not executed by generator。
+  - 新增 `docs/examples/market_theme_owner_approved_payload.sample.json`：allowed `owner_approved_persistent` dry-run sample，可用 approval package generator 產 JSON / Markdown / review-only SQL。
+  - 新增 `docs/examples/market_theme_forbidden_runtime_payload.sample.json`：runtime negative sample，必須 fail closed，不產 deterministic SQL。
+  - 更新 `docs/handoff/evidence_chain_market_theme_ops_artifacts.md`，說明 sample/template 不是 production confirmed、不是 DB rows、不是 GitHub fresh runner source-of-truth。
+  - QA conditional pass 條件：三份 `docs/examples/*market_theme*` untracked deliverables 必須納入 repo；Architect 已納入。
+  - 驗證：`tests/test_market_theme_evidence_handoff.py tests/test_market_theme_evidence.py`，`39 passed, 17 warnings`；allowed sample dry-run exit 0 且產 JSON/MD/SQL；forbidden runtime sample exit 2 且不產 SQL；`git diff --check` 通過；examples/docs/tests 無 secret / connection string pattern。
+  - 本輪沒有 live Supabase write、formal backfill、RLS / grant、live Telegram、策略 decision 或 Telegram `VERSION` 變更。
 - Evidence Chain Approval Package Generator 已通過 QA，待 commit / push：
   - Owner 問題：既然 `market_theme_confirmed_evidence` 不需要擴表 / 擴字段，就不該只丟人工 SQL；需要把 manual SQL 變成可審核、可重跑、不可誤讀為已執行的 approval package。
   - 新增 `scripts/generate_evidence_approval_package.py`：輸入 Owner-approved payload，輸出 review-only `approval_package.json`、`approval_package.md`，以及 validation passed 且 source allowed 時的 deterministic SQL。

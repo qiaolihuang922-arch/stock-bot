@@ -39,8 +39,8 @@ Example:
 
 ```bash
 python scripts/generate_evidence_approval_package.py \
-  --payload approved_payload.json \
-  --output-dir artifacts/evidence_approval/2026-05-30
+  --payload docs/examples/market_theme_owner_approved_payload.sample.json \
+  --output-dir artifacts/evidence_approval/sample
 ```
 
 The generator writes review artifacts only:
@@ -56,6 +56,33 @@ the SQL, and the package is not evidence of production deployment.
 
 Forbidden source families, missing `source_family`, and mixed allowed/forbidden
 payloads fail closed and do not render SQL.
+
+Owner-facing payload artifacts:
+
+- `docs/examples/market_theme_owner_approved_payload.template.json` is the fill-in
+  template. It lists required fields, allowed source families, forbidden source
+  families, and the manual approval boundary.
+- `docs/examples/market_theme_owner_approved_payload.sample.json` is an allowed
+  dry-run sample using `source_family=owner_approved_persistent`.
+- `docs/examples/market_theme_forbidden_runtime_payload.sample.json` is a
+  negative fixture using `source_family=runtime`; it must fail closed and must
+  not render deterministic SQL.
+
+Template and sample files are not production confirmed evidence, are not DB
+rows, and are not a GitHub fresh runner source of truth. They are review inputs
+only. The generator does not execute SQL. A generated SQL file is review-only
+until Owner separately approves and executes it outside this script.
+
+Forbidden source dry-run example:
+
+```bash
+python scripts/generate_evidence_approval_package.py \
+  --payload docs/examples/market_theme_forbidden_runtime_payload.sample.json \
+  --output-dir artifacts/evidence_approval/forbidden_runtime
+```
+
+Expected result: exit code `2`, `payload_validation.status=failed`,
+`deterministic_sql=null`, and no SQL file in the output directory.
 
 ## Manual SQL
 

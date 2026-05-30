@@ -4,45 +4,44 @@
 
 ## Current Task
 
-- task_id: `evidence_chain_approval_package_20260530`
-- task_name: `Evidence Chain Approval Package Generator`
+- task_id: `evidence_chain_approval_payload_template_20260530`
+- task_name: `Market Theme Approved Payload Template And Dry-run Sample`
 - task_type: `risk_patch`
 - version_level: `none`
 - qa_level: `L2+`
 - owner_status: `requested`
-- architect_status: `pushed`
+- architect_status: `qa_conditional_pass_absorbed_pending_commit`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
-- qa_status: `qa_passed`
-- commit: `93bd1b7 pushed`
+- qa_status: `conditional_pass`
+- commit: `pending`
 
 ## Current Result
 
-- Owner 要求繼續證據鏈，並追問「為什麼要人工 SQL」。本輪把人工 SQL 往前收斂成 repo-side controlled approval package / write plan；仍不做 live write。
-- 本輪完成 non-live approval package generator：
-  - 新增 `scripts/generate_evidence_approval_package.py`。
-  - 輸入 Owner-approved payload 後，可輸出 `approval_package.json`、`approval_package.md`，以及 validation passed 且 source allowed 時的 deterministic review-only SQL。
-  - package 固定標示 `schema_decision=no-schema-change`、`mode=non-live-approval-package`、`write_execution=disabled`。
-  - SQL header 明確標示 Owner manual approval required、Agent did not execute this SQL、This package is not evidence of production deployment。
-  - forbidden / missing / mixed source family fail closed，不產生 SQL。
+- Owner 要求開始下一步：建立第一份 market/theme approved payload 模板與可執行 dry-run 樣本，讓 Owner 能用 approval package generator 產生可審核 package。
+- 本輪完成 approved payload template / sample workflow：
+  - 新增 `docs/examples/market_theme_owner_approved_payload.template.json`：Owner-facing 填寫模板，列出 required fields、allowed / forbidden source family、manual approval boundary。
+  - 新增 `docs/examples/market_theme_owner_approved_payload.sample.json`：allowed `owner_approved_persistent` dry-run sample，可產 package JSON / Markdown / review-only SQL。
+  - 新增 `docs/examples/market_theme_forbidden_runtime_payload.sample.json`：negative runtime sample，必須 fail closed，不產 deterministic SQL。
+  - 更新 handoff docs，固定 sample dry-run 指令、forbidden dry-run 指令、輸出檔案與 no-live-write / review-only / not production confirmed 邊界。
+  - 補測試覆蓋 template/sample/docs 契約、allowed sample CLI、forbidden sample CLI、sample-as-production 誤讀防線。
 - 本輪沒有 live Supabase write、沒有正式 backfill、沒有 production RLS / grant 變更、沒有 live Telegram、沒有改策略 decision 或使用者可見 Telegram version。
-- QA 通過：
-  - `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence_handoff.py tests/test_market_theme_evidence.py -q`：36 passed, 17 warnings。
-  - forbidden runtime payload exit 2，`deterministic_sql=None`。
-  - allowed owner-approved persistent payload exit 0，寫出 package JSON / Markdown / SQL。
-  - `py_compile`、`git diff --check` 通過。
-  - QA 額外反證：fixture-derived source fail closed、secret-like `postgres://` payload 不產生 SQL、generator 無 Supabase client / insert / upsert / rpc / execute / Telegram delivery pattern。
-- Runner 狀態：CAO auto cycle 再次把 QA 明確 `通過` 誤判為 failed；Architect 按 QA 報告與主 repo 驗證手動吸收，未整包搬 worktree。
+- QA conditional pass，條件已由 Architect 吸收滿足：
+  - QA 條件：三份 `docs/examples/*market_theme*` untracked deliverables 必須納入 repo；Architect 已納入。
+  - `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence_handoff.py tests/test_market_theme_evidence.py -q`：39 passed, 17 warnings。
+  - allowed sample dry-run exit 0，產出 `approval_package.json`、`approval_package.md`、`market_theme_confirmed_evidence_2026-05-29.sql`。
+  - forbidden runtime sample dry-run exit 2，`payload_validation.status=failed`、`deterministic_sql=None`，無 SQL file。
+  - `git diff --check` 通過；docs/examples / handoff docs / tests 無 secret / connection string pattern。
+- Runner 狀態：CAO auto cycle 對 QA `conditional pass` 再次誤判 failed；Architect 按 QA 報告與主 repo 驗證手動吸收，未整包搬 worktree。
 - Post-cycle review：
-  - 根因分類：`manual_sql_operator_risk` + `approval_flow_gap` + `runner_parser_false_fail`。
-  - QA 有效覆蓋誤讀、fake source 與 live side-effect 風險。
-  - 不新增 `AGENTS.md` 硬規則；既有 source-of-truth、fake confirmed、live write 禁令已覆蓋。本輪沉澱為 generator contract、tests、handoff docs 與 runner 待補。
+  - 根因分類：`owner_payload_contract_gap` + `sample_as_production_misread_risk` + `runner_parser_false_fail`。
+  - QA 有效攔截 untracked deliverables 風險；Architect 吸收時已納入三份 examples。
+  - 不新增 `AGENTS.md` 硬規則；既有 source-of-truth、fake confirmed、live write 禁令已覆蓋。本輪沉澱為 template/sample/docs/tests 與 runner 待補。
 
 ## Next Action
 
-- 本輪 diff 已 commit / push：`93bd1b7 feat: add evidence approval package`。
-- Architect 清理 CAO worktree。
-- 下一步若 Owner 要真正進 production：先提供 / 確認 approved payload，使用 approval package 審核 SQL；正式 SQL execution、backfill、RLS / grant、live write、live Telegram 仍需單獨批准。
+- Architect 進行 commit / push，然後清理 CAO worktree。
+- 下一步若 Owner 要真正進 production：用 template 替換真實 approved persistent evidence reference，產生 package 給 Owner 審核；正式 SQL execution、backfill、RLS / grant、live write、live Telegram 仍需單獨批准。
 
 ## Status Values
 

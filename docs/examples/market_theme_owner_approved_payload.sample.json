@@ -1,0 +1,19 @@
+{
+  "_artifact_type": "dry-run sample payload",
+  "_production_status": "sample-only; not production confirmed; not inserted; not GitHub runner source-of-truth",
+  "_script_boundary": "dry-run may generate review-only SQL; script does not execute SQL",
+  "trade_date": "2026-05-29",
+  "source_family": "owner_approved_persistent",
+  "source_name": "owner_approved_market_theme_review_sample",
+  "evidence_status": "confirmed",
+  "freshness": "fresh",
+  "rows": [
+    {
+      "symbol": "2330",
+      "theme": "AI supply chain",
+      "support_level": "supporting",
+      "evidence_url": "owner-to-replace-with-approved-reference",
+      "reason": "Owner approved persistent evidence sample; replace before production review"
+    }
+  ]
+}

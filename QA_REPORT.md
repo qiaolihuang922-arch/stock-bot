@@ -2,107 +2,81 @@
 
   ## 測試範圍
 
-  本輪任務尺寸：risk_patch，QA level：L2+。驗證聚焦 repo-side non-live approval package，不擴大到 full pytest、正式 backfill、live DB、live Telegram。
+  本輪 QA 風險預算判斷：risk_patch / L2。最值得抓的風險是：
 
-  已檢查：
+  1. Owner-facing template/sample 是否真的存在且不會被誤讀為 production confirmed。
+  2. allowed payload 是否可 dry-run 產出 JSON / MD / review-only SQL，forbidden runtime 是否 fail closed 且不產 SQL。
+  3. no-live-write / no-Telegram / no-version-change 邊界是否被 diff 或文件語意破壞。
 
-  - TASK.md
-  - CHANGELOG.md
-  - git status --short
-  - tracked diff：CHANGELOG.md、docs/handoff/evidence_chain_market_theme_ops_artifacts.md、tests/test_market_theme_evidence_handoff.py
-  - untracked but required task artifact：scripts/generate_evidence_approval_package.py
-  - 直接依賴：services/market_theme_evidence_store.py
+  停止條件：只驗證 TASK.md 指定的 approval package workflow、直接消費者與誤讀風險；不擴成 full pytest、replay、backfill、live DB 或 live Telegram。
 
-  已跑命令：
+  已執行：
 
-  - pytest tests/test_market_theme_evidence_handoff.py tests/test_market_theme_evidence.py -q：36 passed, 17 warnings
-  - git diff --check -- docs/handoff/evidence_chain_market_theme_ops_artifacts.md tests/test_market_theme_evidence_handoff.py CHANGELOG.md：通過
-  - 靜態掃描 generator：未發現 create_client、insert/upsert/rpc/execute、Telegram 發送或外部請求入口
-  - QA 補充負面檢查：fixture-derived fail closed、secret-like postgres:// payload 不產生 SQL、allowed package 明確標示 manual approval / not executed：通過
+  - arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence_handoff.py -q：18 passed。
+  - allowed sample dry-run：exit 0，產出 .qa_tmp/allowed/approval_package.json、.md、market_theme_confirmed_evidence_2026-05-29.sql。
+  - forbidden runtime sample dry-run：exit 2，payload_validation.status=failed、deterministic_sql=null，.qa_tmp/forbidden 無 SQL。
+  - git diff --check：通過。
+  - 局部 grep no-live-write / secrets pattern：未發現 generator 連線或 live write；命中僅為禁止字串、SQL review text、測試 fake execute()。
 
   ## 風險預算與停止條件
 
-  本輪最值得抓的風險：
+  本輪沒有理由升級到 full pytest / replay / backfill。驗證停止於：
 
-  1. approval package 被誤讀成已寫入 production。
-      - 驗證：檢查 package / SQL header / docs / not_executed wording。
-      - 結果：SQL header 含 Owner manual approval required、Agent did not execute this SQL、not evidence of production deployment；package 列出 live write / backfill / RLS / Telegram 未執行。
-  2. forbidden / fake / runtime source 仍產生 deterministic SQL。
-      - 驗證：Tech 測試覆蓋 forbidden、mixed source；QA 額外補 fixture-derived。
-      - 結果：fail closed，deterministic_sql is None。
-  3. generator 產生 live side effect。
-      - 驗證：讀 generator，掃描 Supabase client、DB write、Telegram、外部請求、SQL execute pattern。
-      - 結果：未發現 live write / live delivery pattern；只讀 JSON、build package、可選寫本地 artifacts。
-
-  停止條件已達成：package contract、source guard、SQL determinism、no-live-write pattern、read-only smoke fail-closed 相關局部測試均已覆蓋；未擴大到 TASK 禁止的 live 驗證。
+  - docs/examples 三份 template/sample JSON。
+  - handoff docs。
+  - generator CLI dry-run 行為。
+  - 直接測試檔。
+  - diff 是否越過 TASK 禁區。
 
   ## 關聯風險掃描
 
-  TASK.md、CHANGELOG.md 與 worktree diff 大致一致。需注意 scripts/generate_evidence_approval_package.py 是 untracked，git diff --stat 不會顯示；但它是本輪核心 artifact，屬於可吸收 diff 的必要部分。
+  發現一個吸收風險：CHANGELOG.md 宣告新增三份 docs/examples/*market_theme*，檔案在 worktree 存在，但目前是 untracked；git diff --stat 只顯示 CHANGELOG.md、handoff docs、test 三個 tracked diff。若 Architect 只吸收 git
+  diff，Owner-facing template/sample 會漏合併，測試也會在乾淨 checkout 失敗。
 
-  可吸收範圍：
+  可吸收內容必須明確包含：
 
-  - scripts/generate_evidence_approval_package.py
-  - docs/handoff/evidence_chain_market_theme_ops_artifacts.md
-  - tests/test_market_theme_evidence_handoff.py
-  - CHANGELOG.md
+  - tracked diff：docs/handoff/evidence_chain_market_theme_ops_artifacts.md、tests/test_market_theme_evidence_handoff.py、CHANGELOG.md
+  - untracked intended deliverables：docs/examples/market_theme_owner_approved_payload.template.json、docs/examples/market_theme_owner_approved_payload.sample.json、docs/examples/
+    market_theme_forbidden_runtime_payload.sample.json
 
-  worktree 殘留：
-
-  - .qa_tmp/config.py 為測試暫存/環境產物，不屬於可吸收產品 diff。
-  - 不建議整包合併 worktree，只吸收上述任務相關檔案。
-
-  清理 / 瘦身 / refactor 證據表要求：本輪不是清理任務，不適用。
+  Worktree 殘留：.qa_tmp/ 是 QA 暫存輸出，未出現在 git status --short，不得合併。
 
   ## 跨區塊語意一致性
 
-  Package、docs、CHANGELOG 對本輪邊界一致：
+  TASK.md、CHANGELOG.md、docs、sample、generated package 的核心語意一致：
 
-  - schema_decision=no-schema-change
-  - mode=non-live-approval-package
-  - write_execution=disabled
-  - 不做 live Supabase write
-  - 不做 formal backfill
-  - 不改 RLS / grant / policy / role
-  - 不改 Telegram formatter / VERSION
-  - package 不代表 production deployment
-
-  read-only smoke fail-closed 沒被本輪改動回退；局部測試仍覆蓋缺 env / 無 rows / 不合格 rows 不會讓 telegram_confirmed=true。
+  - allowed source family 包含 owner_approved_persistent。
+  - forbidden runtime fail closed。
+  - package 標示 mode=non-live-approval-package、write_execution=disabled。
+  - SQL header 標示 Agent did not execute this SQL 與不是 production deployment evidence。
+  - 未見 scripts/generate_evidence_approval_package.py、core/generator.py、Telegram formatter 或 VERSION diff。
 
   ## 使用者誤讀風險
 
-  Owner 可見 artifact 的手機 Telegram 報文本輪不變；本輪主要使用者可見面是 approval package / docs / SQL。
+  Owner 讀 repo 文件的順序下，handoff docs 開頭已說明 repo-side only、未 live write、非 production ingestion live evidence；template/sample 也標示 not production confirmed、not inserted、not GitHub runner source-of-
+  truth。
 
-  誤讀路徑檢查：
+  剩餘誤讀點：allowed sample 的資料本身使用 evidence_status=confirmed，且 SQL 會生成 insert 語句；目前靠 sample _production_status、docs、SQL header、package write_execution=disabled 抵消誤讀。這可接受，但前提是三份
+  untracked sample/template 一起被吸收。
 
-  - SQL header 明確說 agent 沒執行。
-  - package manual_approval_required 明確列出 Owner review、另行批准 SQL、執行後 read-only verification。
-  - not_executed 明確列出 live write、formal backfill、RLS/grant/policy/role changes、Telegram delivery。
-  - docs 說明 package 只是 review artifacts，不是 production ingestion live evidence。
-
-  未發現會讓 Owner 誤判「已入庫」「已上線」「Telegram 已 confirmed」的文案。
+  Telegram 手機閱讀：本輪 TASK 明確不改 Telegram 報文；QA 檢查未見 Telegram formatter / VERSION diff。package 的 post-run checklist 保留 Telegram fail-closed 語意，不會把 sample 變成 Telegram confirmed。
 
   ## 質疑與反證
 
-  QA 補充 Tech 未覆蓋的反證：
+  主動反證：
 
-  - fixture-derived 不是 Tech 測試清單中的精確值，但仍因非 approved persistent source fail closed，不產生 SQL。
-  - payload 內含 postgres:// secret-like marker 時，即使 source allowed，也會讓 validation failed 並清空 SQL。
-  - 靜態掃描 generator 沒有 Supabase client、DB execute、insert/upsert/rpc、Telegram delivery 或外部 request pattern。
-
-  對直接消費者：
-
-  - Owner / manual operator：package 與 SQL header 足以看出需要人工批准。
-  - QA / Architect：JSON package 欄位可驗證，CLI 有 exit code 區分 passed / failed。
-  - GitHub fresh runner / Telegram：未改 consumption；package 本身不會讓 confirmed 成立。
+  - 反證「sample 可被當 production」：docs/examples、handoff docs、generated SQL/package 都有 not production / review-only / write disabled 語意。
+  - 反證「forbidden runtime 仍產 SQL」：CLI exit 2，deterministic_sql=null，forbidden output dir 無 .sql。
+  - 反證「no-live-write 被 generator 破壞」：generator 無 Supabase client / insert/upsert/rpc live call；產出的 insert 僅寫入 review-only SQL file。
+  - 反證「乾淨 git diff 可完整交付」：不成立，三份核心 deliverables 目前是 untracked，這是本輪主要條件風險。
 
   ## 未測項目
 
-  - 未做 production DB live verification，符合 TASK 禁止事項。
-  - 未執行 production SQL、formal backfill、RLS/grant/policy/role 變更。
-  - 未做 live Telegram delivery 或完整 Telegram 長報文驗證，因本輪未改 Telegram 報文。
-  - 未跑 full pytest，符合本輪 L2+ 停止條件與 TASK 禁止擴大範圍。
+  未跑 full pytest、replay、formal backfill、live DB read-only smoke、live Supabase write、live Telegram delivery；這些都在 TASK 非目標或需 Owner 另行批准。未驗證 production rows 是否存在，因本輪只建立 review package
+  workflow。
 
   ## QA 結論
 
-  通過
+  conditional pass
+
+  條件：Architect 吸收本輪時必須把三份 docs/examples/*market_theme* untracked deliverables 納入可合併 diff；若只用目前 tracked git diff 合併，則本輪應視為阻塞，因 TASK/CHANGELOG 宣告的 template/sample 不會進入 repo。

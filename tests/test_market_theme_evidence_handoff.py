@@ -82,6 +82,36 @@ class EvidenceClient:
 
 
 class MarketThemeEvidenceHandoffTest(unittest.TestCase):
+    def test_owner_template_and_samples_document_source_boundaries(self):
+        root = Path(__file__).resolve().parents[1]
+        template_path = root / "docs/examples/market_theme_owner_approved_payload.template.json"
+        sample_path = root / "docs/examples/market_theme_owner_approved_payload.sample.json"
+        forbidden_path = root / "docs/examples/market_theme_forbidden_runtime_payload.sample.json"
+
+        template = json.loads(template_path.read_text(encoding="utf-8"))
+        sample = json.loads(sample_path.read_text(encoding="utf-8"))
+        forbidden = json.loads(forbidden_path.read_text(encoding="utf-8"))
+
+        self.assertIn("trade_date", template["_required_fields"])
+        self.assertIn("rows[].evidence_url", template["_required_fields"])
+        self.assertIn("owner_approved_persistent", template["_allowed_source_family"])
+        self.assertIn("production_db", template["_allowed_source_family"])
+        self.assertIn("market_data", template["_allowed_source_family"])
+        self.assertIn("runtime", template["_forbidden_source_family"])
+        self.assertIn("fixture", template["_forbidden_source_family"])
+        self.assertIn("not production confirmed", template["_production_status"])
+        self.assertIn("does not execute SQL", template["_script_boundary"])
+
+        self.assertEqual(sample["source_family"], "owner_approved_persistent")
+        self.assertEqual(sample["evidence_status"], "confirmed")
+        self.assertEqual(sample["freshness"], "fresh")
+        self.assertEqual(sample["rows"][0]["support_level"], "supporting")
+        self.assertIn("sample-only", sample["_production_status"])
+
+        self.assertEqual(forbidden["source_family"], "runtime")
+        self.assertEqual(forbidden["rows"], [])
+        self.assertIn("deterministic_sql=null", forbidden["_expected_result"])
+
     def test_handoff_builder_generates_manual_sql_without_live_write(self):
         handoff = build_market_theme_evidence_handoff([handoff_payload()])
 
@@ -306,6 +336,81 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
             sql_path = output_dir / "market_theme_confirmed_evidence_2026-05-29.sql"
             self.assertTrue(sql_path.exists())
             self.assertIn("Agent did not execute this SQL", sql_path.read_text(encoding="utf-8"))
+
+    def test_approval_package_cli_sample_paths_match_handoff_docs(self):
+        root = Path(__file__).resolve().parents[1]
+        sample_path = root / "docs/examples/market_theme_owner_approved_payload.sample.json"
+        forbidden_path = root / "docs/examples/market_theme_forbidden_runtime_payload.sample.json"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            allowed_output_dir = Path(tmpdir) / "allowed"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "scripts/generate_evidence_approval_package.py",
+                    "--payload",
+                    str(sample_path),
+                    "--output-dir",
+                    str(allowed_output_dir),
+                ],
+                cwd=root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(completed.returncode, 0)
+            allowed = json.loads(completed.stdout)
+            self.assertEqual(allowed["payload_validation"]["status"], "passed")
+            self.assertEqual(allowed["write_execution"], "disabled")
+            self.assertIn("Owner reviews package", allowed["manual_approval_required"])
+            self.assertIn("live Supabase write", allowed["not_executed"])
+            self.assertTrue((allowed_output_dir / "approval_package.json").exists())
+            self.assertTrue((allowed_output_dir / "approval_package.md").exists())
+            sql_path = allowed_output_dir / "market_theme_confirmed_evidence_2026-05-29.sql"
+            self.assertTrue(sql_path.exists())
+            sql = sql_path.read_text(encoding="utf-8")
+            self.assertIn("Agent did not execute this SQL", sql)
+            self.assertIn("not evidence of production deployment", sql)
+
+            forbidden_output_dir = Path(tmpdir) / "forbidden"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "scripts/generate_evidence_approval_package.py",
+                    "--payload",
+                    str(forbidden_path),
+                    "--output-dir",
+                    str(forbidden_output_dir),
+                ],
+                cwd=root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(completed.returncode, 2)
+            forbidden = json.loads(completed.stdout)
+            self.assertEqual(forbidden["payload_validation"]["status"], "failed")
+            self.assertEqual(forbidden["payload_validation"]["reason"], "forbidden source_family")
+            self.assertIsNone(forbidden["deterministic_sql"])
+            self.assertEqual(forbidden["write_execution"], "disabled")
+            self.assertTrue((forbidden_output_dir / "approval_package.json").exists())
+            self.assertTrue((forbidden_output_dir / "approval_package.md").exists())
+            self.assertIsNone(forbidden["output_paths"]["deterministic_sql"])
+            self.assertFalse(any(forbidden_output_dir.glob("*.sql")))
+
+    def test_handoff_docs_do_not_describe_samples_as_production_confirmed(self):
+        root = Path(__file__).resolve().parents[1]
+        text = (root / "docs/handoff/evidence_chain_market_theme_ops_artifacts.md").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("not production confirmed evidence", text)
+        self.assertIn("not a GitHub fresh runner source of truth", text)
+        self.assertIn("review-only", text)
+        self.assertIn("does not execute SQL", text)
+        self.assertIn("source_family=runtime", text)
 
     def test_readonly_smoke_cli_prints_schema_decision_and_fails_closed_without_env(self):
         completed = subprocess.run(
