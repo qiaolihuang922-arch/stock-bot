@@ -1,108 +1,71 @@
-# QA_REPORT:
+# QA_REPORT: 修復 GitHub workflow Supabase service-role runtime config wiring
 
   ## 測試範圍
 
-  本輪判定為 normal_patch / QA L1。驗證集中在 write CLI 與 services.market_theme_evidence_store 的 credential resolution，不擴成 full pytest、replay、backfill 或 production write。
-
-  已檢查：
-
-  - TASK.md
-  - CHANGELOG.md
-  - git status --short
-  - git diff --stat / 相關 diff
-  - 直接消費者：scripts/write_market_theme_confirmed_evidence.py、build_market_theme_write_client、validate_market_theme_write_env
-  - 使用者可見 CLI JSON 輸出
-
-  已跑命令：
-
-  - git diff --check：通過
-  - pytest tests/test_market_theme_evidence_handoff.py -q：25 passed
-  - pytest tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py -q：46 passed, 17 warnings
-  - QA 額外反證：payload validation 失敗時 credential validation 必須 skipped 且不洩漏 secret：通過
-  - QA 額外反證：env URL + config key 混合來源只輸出 sanitized source，不輸出值：通過
+  - 任務尺寸 / qa_level：tiny_patch / L1，未擴大到 full pytest、replay、backfill、live Supabase write 或 live Telegram。
+  - 讀取：TASK.md、CHANGELOG.md、.github/workflows/stock-bot.yml diff、tests/test_workflow_runtime_config.py、scripts/write_market_theme_confirmed_evidence.py 直接消費者路徑。
+  - 執行：
+      - git diff --check：passed
+      - .venv/bin/python -m pytest tests/test_workflow_runtime_config.py tests/test_market_theme_evidence_handoff.py -q：29 passed
+      - QA 補充反證：用 workflow 生成的 runtime config.py 直接餵給 write_market_theme_confirmed_evidence.py --execute fake client，確認 key_source = config.SERVICE_ROLE_KEY、rows_written = 1、未洩漏 read key / service-
+        role key。
 
   ## 風險預算與停止條件
 
-  本輪最值得抓的風險：
-
-  1. env/config precedence 錯誤，導致 env 被 config 覆蓋。
-      - 驗證：讀 diff、跑既有 env precedence test、補 mixed source sanitized validation。
-  2. 缺配置或 payload 失敗時沒有 fail closed，誤入 write path。
-      - 驗證：缺 env/config test、payload invalid + --execute 額外反證。
-  3. CLI / error / JSON 輸出洩漏 URL 或 service key。
-      - 驗證：檢查 sanitized output path，測試 stdout 不含 sentinel secret。
-
-  停止條件：
-
-  - 覆蓋 fallback、env precedence、fail-closed、secret redaction。
-  - 直接 CLI/store tests 通過。
-  - 確認無 Telegram、策略、DB schema、VERSION diff。
-  - 不驗 production Supabase live write，因 TASK 明確禁止。
+  - 風險 1：GitHub fresh runner 生成的 config.py 仍不能被 evidence write execute consumer 使用。
+    驗證：抽出 workflow Create runtime config shell，生成 config.py 後直接 import 給 write CLI fake client。結果通過。
+  - 風險 2：validation / stdout / stderr 洩漏 secret 值。
+    驗證：split secret、legacy STOCK_CONFIG、缺 service-role key 路徑均檢查 stdout/stderr 不含 sentinel secret。結果通過。
+  - 風險 3：可合併內容與 worktree 殘留混淆。
+    驗證：git status --short 顯示 .github/workflows/stock-bot.yml、CHANGELOG.md tracked modified，tests/test_workflow_runtime_config.py 是 untracked。這是本輪最主要條件風險。
+  - 停止條件：L1 靜態 / shell / 直接 consumer contract 已覆蓋；不再擴大驗證 production runner、真 Supabase write、DB schema、Telegram 報文。
 
   ## 關聯風險掃描
 
-  TASK.md、CHANGELOG.md、git diff 一致：改動集中於：
-
-  - services/market_theme_evidence_store.py
-  - scripts/write_market_theme_confirmed_evidence.py
-  - tests/test_market_theme_evidence_handoff.py
-  - CHANGELOG.md
-
-  rg 顯示 validate_market_theme_write_env / build_market_theme_write_client 的產品呼叫方限於 write CLI，CHANGELOG 的直接消費者說法成立。
-
-  可吸收 diff：
-
-  - write credential fallback
-  - CLI execute JSON 的 sanitized env_validation
-  - 直接測試更新
-
-  worktree 殘留：
-
-  - git status 僅上述 4 個 modified，未見 untracked 殘留。
-  - 不建議整包合併超出上述 diff；本輪不包含任何 Telegram、策略、schema、watchlist、replay/backfill 改動。
+  - Workflow split-secret path 已新增 SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}，並寫入：
+      - SUPABASE_SERVICE_ROLE_KEY = "$SUPABASE_SERVICE_ROLE_KEY"
+      - SERVICE_ROLE_KEY = SUPABASE_SERVICE_ROLE_KEY
+  - SUPABASE_KEY 仍存在，未被改名、刪除或替換成 service-role key。
+  - STOCK_CONFIG legacy path 保留，且在有新 secret 時只追加 service-role aliases。
+  - 缺 service-role secret 時 workflow runtime validation 只標示 missing，不把缺 key 包裝成 successful write；execute consumer 仍由既有 fail-closed validation 擋住。
+  - 未發現 DB schema、Telegram formatter、策略、watchlist、replay/backfill 變更。
 
   ## 跨區塊語意一致性
 
-  CLI JSON 的 mode、write_execution、payload_validation、env_validation 語意一致：
-
-  - dry-run 仍不寫入。
-  - payload validation 失敗時 env_validation.status=skipped，不暗示 credential 已可寫。
-  - env/config 通過時只顯示 url_source / key_source，不顯示 URL/key value。
-  - rows_written 只在 execute 成功時反映 upsert rows。
-
-  Telegram / summary / dashboard 不在本輪 diff，未改 formatter、VERSION、message list 或報文分組。
+  - TASK.md 要求不升使用者可見版本、不改 Telegram / CLI 報文內容；diff 未改 VERSION、Telegram formatter 或 message list。
+  - Workflow validation log 只輸出 present/missing，符合 TASK.md 的 no-secret logging contract。
+  - CHANGELOG.md 的產品描述大致吻合 diff，但有兩個交付一致性問題：
+      - tests/test_workflow_runtime_config.py 被列為修改檔案，但目前是 untracked，未出現在 git diff --name-only。
+      - CHANGELOG.md 在「未影響模組」寫「未修改 TASK.md、CHANGELOG.md、QA_REPORT.md」，但 CHANGELOG.md 本身已修改；這是文件自述錯誤，不影響產品 runtime，但會干擾 Architect 吸收。
 
   ## 使用者誤讀風險
 
-  Owner 執行 CLI 後最先看到的是 JSON：
-
-  - write_execution=blocked 或 executed 清楚。
-  - 缺配置時只列 missing 名稱，不暴露 secret，也不把缺 key 包裝成可寫。
-  - fallback 成功時顯示來源，例如 config.SERVICE_ROLE_KEY，不顯示值。
-
-  未發現會讓 Owner 誤判已 live write、已改策略、已改 Telegram 或已升版的輸出。注意：若本機 config.py 內有 placeholder/test credentials，--execute 且無 env 會依任務要求 fallback 並嘗試建立 client；這是本輪需求範圍內行為，
-  仍受 --execute opt-in 保護，未在 QA 中做 live write。
+  - 本輪不改 Telegram / summary / dashboard，沒有 Owner 手機報文可讀性風險。
+  - 使用者可見風險轉為 GitHub Actions log：目前 log 只會顯示 runtime config: ... present/missing，不會露出 URL、read key、service-role key，Owner 不會從 log 誤讀成已執行 production write。
+  - 若 Architect 只合併 tracked diff 而漏掉 untracked test，Owner 可能以為 CHANGELOG 宣稱的測試保護已進 repo；這是合併包裝風險。
 
   ## 質疑與反證
 
-  主動質疑 1：payload 本身不合法時，CLI 是否仍讀 credential 並輸出 source，讓 Owner 誤以為已可寫？
-
-  - 反證：用 forbidden runtime payload + fake config secrets 跑 --execute，結果 return code 2、write_execution=blocked、env_validation.status=skipped，stdout 不含 URL/key。
-
-  主動質疑 2：mixed source 情境是否會洩漏 env/config value？
-
-  - 反證：env 只給 URL、config 給 SERVICE_ROLE_KEY，validate_market_theme_write_env 只回傳 url_source=env、key_source=config.SERVICE_ROLE_KEY，不含 secret value。
-
-  主動質疑 3：Tech 是否把任務擴成其他 Supabase consumer 或 read-only loader？
-
-  - 反證：diff 未改 read-only _build_client、策略、Telegram、DB schema；rg 未發現其他產品呼叫方需同步。
+  - 反證「workflow 只寫 alias 但 consumer 仍讀不到」：QA 用 workflow 生成的實際 config.py 執行 write CLI fake client，結果 key_source = config.SERVICE_ROLE_KEY、write_execution = executed、fake client 1 call。
+  - 反證「缺 service-role key 會被誤報成功」：split-secret path 不帶 service-role key 時，runtime config step 回傳 0 但 log 顯示 SUPABASE_SERVICE_ROLE_KEY missing / SERVICE_ROLE_KEY alias missing，未洩漏 read key；真正
+    execute 寫入仍由 consumer validation 負責 fail closed。
+  - 反證「STOCK_CONFIG 被覆蓋」：測試覆蓋 legacy STOCK_CONFIG 保留 SUPABASE_KEY 並只追加 aliases。
+  - 反證「secret 被 log」：測試與 QA consumer smoke 都用 sentinel key 檢查 stdout/stderr，未發現洩漏。
 
   ## 未測項目
 
-  - 未執行 production Supabase --execute live write，符合 TASK 禁止事項。
-  - 未跑 full pytest、replay、backfill，因本輪為 L1 normal_patch，且無策略/Telegram/schema diff。
-  - 未驗證正式 secret 管理命名統一；CHANGELOG 已列為後續 cleanup，不屬本輪。
+  - 未在真 GitHub Actions runner 執行。
+  - 未執行 live Supabase write。
+  - 未驗證 production GitHub secret 是否真的命名為 SUPABASE_SERVICE_ROLE_KEY。
+  - 未測 replay/backfill、DB schema/RLS、Telegram 報文，符合本輪非目標與 L1 邊界。
 
   ## QA 結論
 
-  通過
+  conditional pass
+
+  條件：Architect 吸收時必須明確處理 tests/test_workflow_runtime_config.py 這個 untracked 檔案。若本輪要保留 Tech 宣稱的測試覆蓋，該檔必須納入可合併 diff；若不納入，CHANGELOG.md 的「修改檔案 / 自檢命令」與實際可合併內容
+  不一致，不能視為完整通過。
+
+  可吸收 diff：.github/workflows/stock-bot.yml runtime config wiring。
+  需一起決定的 worktree 殘留：tests/test_workflow_runtime_config.py untracked 測試檔。
+  文件修正建議：CHANGELOG.md 移除「未修改 CHANGELOG.md」的自相矛盾敘述，或改成「未修改 TASK.md / QA_REPORT.md」。

@@ -29,6 +29,7 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           if [ -n "$TELEGRAM_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ] && [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_KEY" ]; then
             cat > config.py <<PY
@@ -36,28 +37,48 @@ jobs:
           CHAT_ID = "$TELEGRAM_CHAT_ID"
           SUPABASE_URL = "$SUPABASE_URL"
           SUPABASE_KEY = "$SUPABASE_KEY"
+          SUPABASE_SERVICE_ROLE_KEY = "$SUPABASE_SERVICE_ROLE_KEY"
+          SERVICE_ROLE_KEY = SUPABASE_SERVICE_ROLE_KEY
           PY
           elif [ -n "$STOCK_CONFIG" ]; then
             # 中文註釋：v19.0 兼容舊的 STOCK secret，但優先使用拆分後的明確設定。
             printf '%s\n' "$STOCK_CONFIG" > config.py
+            if [ -n "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+              cat >> config.py <<PY
+          SUPABASE_SERVICE_ROLE_KEY = "$SUPABASE_SERVICE_ROLE_KEY"
+          SERVICE_ROLE_KEY = SUPABASE_SERVICE_ROLE_KEY
+          PY
+            fi
           else
             echo "Missing GitHub Secrets: configure TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, SUPABASE_URL, SUPABASE_KEY"
             exit 1
           fi
 
           python - <<'PY'
-          from config import TOKEN, CHAT_ID, SUPABASE_URL, SUPABASE_KEY
-          missing = [
+          import config
+
+          required = [
               name for name, value in {
-                  "TOKEN": TOKEN,
-                  "CHAT_ID": CHAT_ID,
-                  "SUPABASE_URL": SUPABASE_URL,
-                  "SUPABASE_KEY": SUPABASE_KEY
+                  "TOKEN": getattr(config, "TOKEN", ""),
+                  "CHAT_ID": getattr(config, "CHAT_ID", ""),
+                  "SUPABASE_URL": getattr(config, "SUPABASE_URL", ""),
+                  "SUPABASE_KEY": getattr(config, "SUPABASE_KEY", "")
               }.items()
               if not value
           ]
-          if missing:
-              raise SystemExit(f"Missing runtime config: {', '.join(missing)}")
+          service_role_key = getattr(config, "SUPABASE_SERVICE_ROLE_KEY", "")
+          service_role_alias = getattr(config, "SERVICE_ROLE_KEY", "")
+          statuses = {
+              "SUPABASE_URL": getattr(config, "SUPABASE_URL", ""),
+              "SUPABASE_KEY": getattr(config, "SUPABASE_KEY", ""),
+              "SUPABASE_SERVICE_ROLE_KEY": service_role_key,
+              "SERVICE_ROLE_KEY alias": service_role_alias,
+          }
+          for name, value in statuses.items():
+              state = "present" if value else "missing"
+              print(f"runtime config: {name} {state}")
+          if required:
+              raise SystemExit(f"Missing runtime config: {', '.join(required)}")
           PY
 
       - name: Run bot (retry 3 times)

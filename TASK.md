@@ -1,125 +1,153 @@
-# TASK: write CLI Supabase credentials env/config fallback
+# TASK: 修復 GitHub workflow Supabase service-role runtime config wiring
 
 ## 任務狀態
 
-- task_id: write-cli-supabase-config-fallback
-- 任務類型: normal_patch
+- task_id: workflow-supabase-service-role-runtime-config
+- 任務類型: tiny_patch
 - 狀態: ready_for_tech
-- 任務尺寸判斷: normal_patch
-- 主 bug: write CLI / evidence store 只看 env，未 fallback 到既有 config.py。
-- 不升級為 risk_patch: 不改 DB schema、不 live write、不改策略 decision、不改 Telegram 報文。
-- 版本建議: 本輪不升版，沿用目前 VERSION
+- 版本建議: 不升使用者可見版本；本輪只修 GitHub runner runtime config wiring，不改 Telegram / CLI 報文內容。
 - QA 分級建議: L1
-- 原因: CLI/config resolution 局部修復，需覆蓋直接 CLI 與 store consumer、負面缺配置、env 優先順序、secret 不外洩。
+- 任務尺寸判斷: tiny_patch
+- 本輪主 bug: GitHub workflow 產生的 runtime config.py 未注入 SUPABASE_SERVICE_ROLE_KEY / SERVICE_ROLE_KEY alias，導致 fresh runner 執行 evidence write script 時找不到 service-role credential。
 
 ## Owner 問題
 
-Owner 要修正 write CLI 的 Supabase credential resolution：本專案已有 config.py 配置，write path 不應只依賴 SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY env，否則在既有 config 可用但 env 缺失時會錯誤 fail。
+Owner 發現 .github/workflows/stock-bot.yml 的 Create runtime config 目前只寫入 SUPABASE_URL / SUPABASE_KEY，但 scripts/write_market_theme_confirmed_evidence.py --execute 需要以下任一來源：
+
+- env SUPABASE_SERVICE_ROLE_KEY
+- config.SERVICE_ROLE_KEY
+- config.SUPABASE_SERVICE_ROLE_KEY
+
+GitHub fresh run 若只依 workflow 生成 runtime config.py，可能無法執行 Supabase evidence write path。
 
 ## 使用者可見結果
 
-- 執行 scripts/write_market_theme_confirmed_evidence.py --execute 時：
-- 若 env 有值，優先使用 env。
-- 若 env 缺失，fallback 到既有 config.py。
-- 若 env 與 config 都缺必要配置，fail closed，並只顯示缺哪些配置名。
-- CLI / log / error 不得輸出任何 secret value，只能輸出來源狀態與缺失配置名稱。
-- 本輪不改 Telegram、策略結果、DB schema、正式寫庫流程或版本字串。
+- GitHub Actions fresh run 在有 secrets.SUPABASE_SERVICE_ROLE_KEY 時，runtime config.py 會產生 service-role alias。
+- 既有 SUPABASE_KEY 仍保留給讀取路徑使用，不被 service-role key 覆蓋。
+- validation / log 只能顯示欄位是否存在，不得輸出任何 secret 值。
+- 若舊的 STOCK_CONFIG secret 仍被使用，既有行為不得被破壞。
 
 ## 非目標
 
-- 不改 market theme 策略判斷。
-- 不改 evidence 資料 schema、table、RLS、grant、policy、role。
-- 不新增 live write 行為，不執行 production 寫入。
-- 不改 Telegram 報文、formatter、VERSION。
-- 不做全量清理、全 repo refactor、credential 管理重設。
-- 不引入新的 secrets storage 機制。
+- 不改 DB schema。
+- 不新增表、欄位、RLS、grant、policy、role。
+- 不改 Supabase evidence 寫入邏輯本身。
+- 不執行 live write。
+- 不發 live Telegram。
+- 不重設策略、不改報文分類、不改 watchlist。
+- 不做 workflow 全面重構或 secrets 命名大遷移。
+- 不移除 SUPABASE_KEY 既有讀路徑契約。
+- 不要求 L3 full pytest / replay / backfill。
 
 ## 影響模組
 
-- scripts/write_market_theme_confirmed_evidence.py
-- services/market_theme_evidence_store.py
-- 直接相關測試 fixture / unit tests
+- 直接檔案:
+- .github/workflows/stock-bot.yml
+- 可能需要的最小驗證檔:
+- 既有 workflow/static validation 測試，若 repo 已有相關測試則優先補在原位置。
+- 若無既有測試，可補最小靜態檢查，驗證 workflow 產生 runtime config 的 alias 與 no-secret logging contract。
 
 ## 直接消費者
 
-- CLI 使用者: 執行 scripts/write_market_theme_confirmed_evidence.py 的 Owner / runner。
-- evidence store caller: CLI 內部呼叫 services.market_theme_evidence_store 建立 Supabase client / write path。
-- 測試消費者: 既有 dry-run、forbidden write、credential 缺失相關測試。
+- GitHub Actions runner 的 Create runtime config step。
+- runtime 生成的 config.py。
+- scripts/write_market_theme_confirmed_evidence.py --execute 的 credential fallback path。
+- 既有 Supabase read path，仍使用 SUPABASE_URL / SUPABASE_KEY。
 
 ## 輸出契約
 
-- Credential resolution precedence:
-1. env SUPABASE_URL
-2. fallback config.SUPABASE_URL
-3. env SUPABASE_SERVICE_ROLE_KEY
-4. fallback config.SERVICE_ROLE_KEY
-5. fallback config.SUPABASE_SERVICE_ROLE_KEY
-- SERVICE_ROLE_KEY config alias 必須兼容。
-- SUPABASE_SERVICE_ROLE_KEY env 與 config.SUPABASE_SERVICE_ROLE_KEY 必須兼容。
-- env 存在時必須優先於 config，不得被 config 覆蓋。
-- 缺配置時必須 fail closed，不得建立 partial client 或進入 write。
-- CLI / error / debug output 只可顯示：
-- 使用來源狀態，例如 url_source=env、key_source=config.SERVICE_ROLE_KEY
-- 缺失配置名稱，例如 missing: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY|SERVICE_ROLE_KEY
-- CLI / error / debug output 不得顯示：
-- Supabase URL value
-- service role key value
-- key 前後綴、長度、遮罩片段或可反推 secret 的內容
+### 單一輸出契約
 
-## 已存在且不得回退的契約
+GitHub workflow 生成 runtime config.py 時，必須同時保留 read key 與 service-role alias：
 
-- dry-run 預設不得寫入。
-- forbidden / no-live-write 測試不得回退。
-- --execute 仍須明確 opt-in 才能進入 write path。
-- 缺必要 credential 時必須 fail closed。
-- 不得輸出 secret value。
-- 不得改 DB schema 或 production payload schema。
-- 不得改策略分類、Telegram 報文、VERSION。
+- SUPABASE_URL 仍由既有來源生成。
+- SUPABASE_KEY 仍由既有來源生成，供既有讀路徑使用。
+- 新增或修正 service-role aliases:
+- SUPABASE_SERVICE_ROLE_KEY
+- SERVICE_ROLE_KEY
+- service-role alias 必須優先來自 secrets.SUPABASE_SERVICE_ROLE_KEY。
+- 若 workflow 仍支援 STOCK_CONFIG 舊 secret，不能破壞其原有 config 注入行為。
+- validation 可以檢查 key 是否 present / missing，但不得 print secret value、截斷 secret、hash secret 或輸出可逆資訊。
+
+### 已存在且不得回退的契約
+
+- SUPABASE_KEY 不得被移除。
+- SUPABASE_KEY 不得被 service-role key 取代。
+- STOCK_CONFIG 舊 secret 使用路徑不得被破壞。
+- scripts/write_market_theme_confirmed_evidence.py --execute 既有 fallback 契約不得回退：
+- env SUPABASE_SERVICE_ROLE_KEY
+- config.SERVICE_ROLE_KEY
+- config.SUPABASE_SERVICE_ROLE_KEY
+- 本輪不得把缺 service-role key 包裝成成功寫入；缺 key 時應維持既有 fail-closed / validation failure 行為。
 
 ## 驗收條件
 
-1. 無 env、fake config module 提供 SUPABASE_URL + SERVICE_ROLE_KEY 時，--execute 可走 fake Supabase client path 並通過，不因 env 缺失 fail。
-2. 無 env、無可用 config 時，CLI / store fail closed，明確列出缺失配置名稱，且不建立 client、不寫入。
-3. env 與 config 同時存在時，實際使用 env 值；測試需能辨識 env 優先於 config。
-4. 兼容 config.SUPABASE_SERVICE_ROLE_KEY 作為 service key fallback。
-5. 所有錯誤、狀態輸出、測試 captured output 不包含 URL value 或 service key value。
-6. 既有 dry-run / forbidden write tests 維持通過，不得為了本修復放寬 write guard。
+1. Workflow static contract
+- .github/workflows/stock-bot.yml 的 runtime config 產生步驟會寫入 SUPABASE_SERVICE_ROLE_KEY 與 SERVICE_ROLE_KEY alias。
+- alias 來源包含 secrets.SUPABASE_SERVICE_ROLE_KEY。
+- SUPABASE_KEY 仍存在且未被改名或刪除。
+2. No secret leakage
+- workflow validation / shell output 不輸出 secret 原值。
+- 測試或靜態驗證需覆蓋：log 只允許 present/missing 類訊息，不允許 echo config secret value。
+3. Backward compatibility
+- 若 STOCK_CONFIG 舊 secret 仍存在並被使用，原本可生成的 config 欄位不被覆蓋或刪除。
+- 若 STOCK_CONFIG 不存在但 secrets.SUPABASE_SERVICE_ROLE_KEY 存在，fresh runner 仍能生成 service-role alias。
+4. Evidence write consumer compatibility
+- 靜態或最小單元驗證需證明 write_market_theme_confirmed_evidence.py --execute 可從 runtime config.SERVICE_ROLE_KEY 或 config.SUPABASE_SERVICE_ROLE_KEY 取得 service-role key。
+- 不需要真的連 Supabase、不做 live write。
 
 ## 範例或 fixture
 
-- fixture A: env 缺失，fake config 成功
-- env: unset SUPABASE_URL, unset SUPABASE_SERVICE_ROLE_KEY
-- fake config: SUPABASE_URL="https://fake.supabase.co", SERVICE_ROLE_KEY="fake-service-key"
-- expected: fake client factory 被呼叫；狀態只顯示 url_source=config.SUPABASE_URL, key_source=config.SERVICE_ROLE_KEY；不輸出實際 URL/key。
-- fixture B: env 優先
-- env: SUPABASE_URL="env-url", SUPABASE_SERVICE_ROLE_KEY="env-key"
-- fake config: SUPABASE_URL="config-url", SERVICE_ROLE_KEY="config-key"
-- expected: fake client 收到 env sentinel；輸出來源為 env；不輸出 sentinel value。
-- fixture C: 全缺 fail closed
-- env: unset
-- fake config: absent or missing relevant attrs
-- expected: non-zero / raised controlled error；message 包含缺失配置名；不寫入、不建立 client、不輸出 secret。
+### 期望 runtime config 形狀
+
+SUPABASE_URL = "..."
+SUPABASE_KEY = "..."  # existing read path key
+
+SUPABASE_SERVICE_ROLE_KEY = "..."  # from secrets.SUPABASE_SERVICE_ROLE_KEY
+SERVICE_ROLE_KEY = SUPABASE_SERVICE_ROLE_KEY
+
+### 期望 validation log 形狀
+
+runtime config: SUPABASE_URL present
+runtime config: SUPABASE_KEY present
+runtime config: SUPABASE_SERVICE_ROLE_KEY present
+runtime config: SERVICE_ROLE_KEY alias present
+
+不得出現：
+
+SUPABASE_SERVICE_ROLE_KEY=eyJ...
+SERVICE_ROLE_KEY=eyJ...
 
 ## 明確禁止事項
 
-- 禁止 live write production Supabase。
+- 禁止修改 DB schema / migration / RLS / grant / policy / role。
+- 禁止執行 scripts/write_market_theme_confirmed_evidence.py --execute 對 production 做 live write。
 - 禁止 live Telegram delivery。
-- 禁止改 DB schema / migration / RLS / grant / policy / role。
-- 禁止改策略、watchlist、market theme classification。
-- 禁止改 VERSION 或 Telegram formatter header。
-- 禁止在 log、exception、test assertion failure 中輸出 secret value。
-- 禁止把缺 credential fallback 成 dummy production client。
-- 禁止擴大成全 repo credential refactor。
+- 禁止把 service-role key 寫入 repo tracked file。
+- 禁止在 log、測試 snapshot、CHANGELOG 或 QA_REPORT 中輸出 secret 值。
+- 禁止刪除或改名 SUPABASE_KEY。
+- 禁止把 SUPABASE_KEY 改成 service-role key。
+- 禁止順手清理 workflow 其他 job、排程、策略、報文或 runner 行為。
+- 禁止擴大成全量 Supabase credential 重構。
 
 ## 阻塞條件
 
-- 若 Tech 無法定位既有 config.py import pattern，必須 blocked，要求 Architect 補充允許讀取的局部檔案或既有 config contract。
-- 若現有 tests 無法隔離 env/config，必須新增局部 fixture；不得用真 env 或 production config 驗收。
-- 若 fake client 無法避免 live write 風險，必須 blocked，不得執行 --execute 對真 Supabase。
-- 若發現現有 dry-run / forbidden write 契約本身不明確，先只記待辦，不納入本輪修復，除非阻塞上述驗收。
+- repo 中實際 workflow 已不再有 Create runtime config step，或已改由其他集中 runner 生成 config，Tech 必須 blocked 並回報實際 source-of-truth。
+- scripts/write_market_theme_confirmed_evidence.py 的 credential fallback 已與 Owner 描述不一致，Tech 必須 blocked，要求 Architect 重新確認契約。
+- 無法在不輸出 secret 的前提下驗證 workflow，Tech / QA 必須 blocked，不得以人工看 log 取代。
+- 若修復需要新增或修改 GitHub secrets 名稱以外的 production 設定，必須 blocked 交 Architect/Owner 確認。
 
 ## 本輪停止條件
 
-- 完成 credential resolution fallback、env precedence、fail-closed、secret redaction 四類局部驗收。
-- 通過直接 CLI / store 相關測試與既有 dry-run / forbidden write tests。
-- 停止於本 bug；任何 credential 架構整理、config 命名統一、production write workflow 改造、Telegram 顯示調整，均只記待辦，不進本輪。
+- 完成 .github/workflows/stock-bot.yml runtime config alias wiring。
+- 完成最小可驗證測試或靜態驗證，覆蓋 alias 生成、保留 SUPABASE_KEY、不輸出 secret。
+- QA 以 L1 驗證 workflow/static contract 與 evidence write credential fallback 相容即可停止。
+
+以下旁支問題只記待辦，不納入本輪：
+
+- Supabase evidence write 資料內容正確性。
+- evidence table schema 或 RLS 設計。
+- replay/backfill dry-run。
+- Telegram 報文呈現。
+- secrets 管理全面重構。
+- GitHub Actions job 全面整理。

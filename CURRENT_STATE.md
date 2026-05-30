@@ -33,6 +33,15 @@
 
 ## Recent High-Signal Milestones
 
+- GitHub Workflow Supabase Service-role Runtime Config Wiring 已由 QA conditional pass，條件已由 Architect 滿足，待 commit / push：
+  - Architect 額外檢查發現：`.github/workflows/stock-bot.yml` 的 `Create runtime config` 只把 `SUPABASE_URL / SUPABASE_KEY` 寫入 fresh runner `config.py`，沒有 service-role alias；這會讓 GitHub runner 的 evidence write path 找不到 `SUPABASE_SERVICE_ROLE_KEY` / `SERVICE_ROLE_KEY`。
+  - workflow split-secret path 新增 `SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}`。
+  - runtime `config.py` 保留 `SUPABASE_KEY` 給既有讀路徑，新增 `SUPABASE_SERVICE_ROLE_KEY` 與 `SERVICE_ROLE_KEY = SUPABASE_SERVICE_ROLE_KEY` 給 write CLI fallback。
+  - legacy `STOCK_CONFIG` path 不破壞；若新 service-role secret 存在，只追加 aliases，不覆蓋既有 read key。
+  - validation log 只顯示 present / missing，不輸出 URL、read key、service-role key、截斷值或 hash。
+  - QA 條件：untracked `tests/test_workflow_runtime_config.py` 必須納入 repo，且 `CHANGELOG.md` 自述矛盾需修正；Architect 已滿足。
+  - 主 repo 驗證：`.venv/bin/python -m pytest tests/test_workflow_runtime_config.py tests/test_market_theme_evidence_handoff.py -q`，`29 passed`；`git diff --check` 通過。
+  - 本輪沒有 production live write、formal backfill、DB schema / table / column 變更、RLS / grant / policy / role、live Telegram、策略 decision 或 Telegram `VERSION` 變更。
 - Write CLI Supabase Config Fallback 已通過 QA，待 commit / push：
   - Owner 指出 `SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY` 不該誤報缺失，因本專案 `config.py` 已有 `SUPABASE_URL` / `SERVICE_ROLE_KEY`，且 GitHub Secrets 也已配置 Supabase URL / service role key。
   - `services/market_theme_evidence_store.py` write credential resolution 改為 env 優先，env 缺失時 fallback repo `config.py`；service key 兼容 `SERVICE_ROLE_KEY` 與 `SUPABASE_SERVICE_ROLE_KEY`。

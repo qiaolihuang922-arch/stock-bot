@@ -46,6 +46,14 @@
 
 ## Pending / Watchlist
 
+- 本輪 GitHub Workflow Supabase Service-role Runtime Config Wiring：
+  - 根因分類：`github_runner_secret_mapping_gap` + `runner_parser_false_fail`。
+  - 問題：write CLI 已支援 env / config fallback，但 GitHub workflow fresh runner 只生成 `SUPABASE_URL / SUPABASE_KEY`，未生成 service-role aliases；這會讓正式 runner 明明有 secret，仍像缺 write credential。
+  - 已完成：workflow 注入 `SUPABASE_SERVICE_ROLE_KEY`，runtime config.py 同時生成 `SUPABASE_SERVICE_ROLE_KEY` 與 `SERVICE_ROLE_KEY`；保留 `SUPABASE_KEY` read path；legacy `STOCK_CONFIG` path 只追加 alias，不覆蓋舊 config。
+  - QA 有效攔截：`tests/test_workflow_runtime_config.py` 是 untracked 但必要 deliverable；`CHANGELOG.md` 有自述矛盾。Architect 已納入測試並修正 handoff 文件。
+  - 邊界保持：未改 schema / table / column / RLS / grant / policy / role；未 production live write；未 live Telegram；workflow log 只輸出 present / missing，不輸出 secret。
+  - Runner gap 重複：auto cycle 對 QA `conditional pass` 再次誤判 failed；需修 QA conclusion parser，並確保 conditional pass 的條件可以被 Architect 明確標記為 satisfied。
+  - 不新增 `AGENTS.md` 硬規則：既有 GitHub Runtime / State Source、資料寫入邊界與 Post-cycle Review 已覆蓋；本輪沉澱為 workflow test 與 runner 待補。
 - 本輪 Write CLI Supabase Config Fallback：
   - 根因分類：`credential_source_contract_gap` + `runner_parser_false_fail`。
   - 問題：write CLI 初版只認 env `SUPABASE_SERVICE_ROLE_KEY`，漏了既有 `config.py` 的 `SERVICE_ROLE_KEY`；Owner 也已確認 GitHub Secrets 有 Supabase URL / service role key，正式 runner 不應被當成缺憑證。

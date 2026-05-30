@@ -4,42 +4,42 @@
 
 ## Current Task
 
-- task_id: `evidence_write_cli_config_fallback_20260530`
-- task_name: `Write CLI Supabase Config Fallback`
-- task_type: `normal_patch`
+- task_id: `workflow_supabase_service_role_runtime_config_20260530`
+- task_name: `GitHub Workflow Supabase Service-role Runtime Config Wiring`
+- task_type: `tiny_patch`
 - version_level: `none`
 - qa_level: `L1`
 - owner_status: `requested`
-- architect_status: `qa_passed_pending_commit`
+- architect_status: `qa_condition_satisfied_pending_commit`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
-- qa_status: `qa_passed`
+- qa_status: `conditional_pass_satisfied`
 - commit: `pending`
 
 ## Current Result
 
-- Owner 指出 `SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY` 不應誤報缺失，因為本專案 `config.py` 已有 `SUPABASE_URL` / `SERVICE_ROLE_KEY`，且 GitHub Secrets 也已配置 Supabase URL / service role key。
-- 本輪修正 write CLI credential resolution：
-  - env 優先：`SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`。
-  - env 缺失時 fallback repo `config.py`：`SUPABASE_URL`、`SERVICE_ROLE_KEY`，並兼容 `SUPABASE_SERVICE_ROLE_KEY` alias。
-  - validation output 只顯示 `url_source` / `key_source` / `missing`，不輸出 URL 或 key value。
-  - payload validation 失敗時 env validation 顯示 skipped，避免讓 Owner 誤以為 credentials 已可寫。
+- Owner 要「多多檢查」Supabase evidence write path。Architect 發現 GitHub workflow `Create runtime config` 只寫入 `SUPABASE_URL / SUPABASE_KEY`，沒有把 `SUPABASE_SERVICE_ROLE_KEY` 或 `SERVICE_ROLE_KEY` alias 寫進 fresh runner `config.py`。
+- 本輪修正 GitHub workflow runtime config wiring：
+  - split-secret path 新增 `SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}`。
+  - runtime `config.py` 同時保留 `SUPABASE_KEY`，並新增 `SUPABASE_SERVICE_ROLE_KEY` 與 `SERVICE_ROLE_KEY = SUPABASE_SERVICE_ROLE_KEY`。
+  - legacy `STOCK_CONFIG` path 保留；若新 secret 存在，只追加 service-role aliases，不覆蓋既有 `SUPABASE_KEY`。
+  - workflow validation log 只輸出 present / missing，不輸出 URL、read key、service-role key、截斷值或 hash。
 - 本輪沒有 production live write、沒有正式 backfill、沒有 DB schema / table / column 變更、沒有 RLS / grant / policy / role 變更、沒有 live Telegram、沒有改策略 decision 或 Telegram version。
-- QA 通過：
-  - `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py -q`：46 passed, 17 warnings。
+- QA conditional pass，Architect 已滿足條件：
+  - QA 條件：untracked `tests/test_workflow_runtime_config.py` 必須納入 repo，且修正 `CHANGELOG.md` 自述矛盾。
+  - Architect 已納入測試並修正 `CHANGELOG.md`。
+  - 主 repo 驗證：`.venv/bin/python -m pytest tests/test_workflow_runtime_config.py tests/test_market_theme_evidence_handoff.py -q`：29 passed。
   - `git diff --check` 通過。
-  - `py_compile` 通過。
-  - QA 額外反證：payload invalid + fake config secrets 時 output 不含 URL/key；env URL + config key 混合來源只輸出 sanitized source。
-- Runner 狀態：CAO auto cycle 再次把 QA 明確 `通過` 誤判 failed；Architect 按 QA 報告與主 repo 驗證手動吸收，未整包搬 worktree。
+- Runner 狀態：CAO auto cycle 對 QA `conditional pass` 再次誤判 failed；Architect 按 QA 報告條件與主 repo 驗證手動吸收，未整包搬 worktree。
 - Post-cycle review：
-  - 根因分類：`credential_source_contract_gap` + `runner_parser_false_fail`。
-  - QA 有效覆蓋 config fallback、env precedence、fail-closed、secret redaction。
-  - 不新增 `AGENTS.md` 硬規則；這是 write CLI 的局部契約漏同步，已用 helper/tests 沉澱。
+  - 根因分類：`github_runner_secret_mapping_gap` + `runner_parser_false_fail`。
+  - QA 有效覆蓋 workflow-generated config、legacy STOCK_CONFIG、secret redaction、direct write CLI fake consumer。
+  - 不新增 `AGENTS.md` 硬規則；既有 GitHub Runtime / State Source 與資料寫入邊界已覆蓋。本輪用 workflow test 與 CLEANUP_PLAN runner 待補沉澱。
 
 ## Next Action
 
 - Architect 進行 commit / push，然後清理 CAO worktree。
-- 下一步若要真正寫入 production：準備真實 approved persistent payload，先跑 write CLI dry-run；GitHub runner 應使用既有 GitHub Secrets 注入 env，本機可 fallback `config.py`。`--execute` 走接口 upsert，再跑 read-only smoke。只有 schema/RLS/grant/table/column 或 live Telegram 才再找 Owner。
+- 下一步若要真正寫入 production：準備真實 approved persistent payload，先跑 write CLI dry-run；GitHub runner 會由 workflow runtime config 提供 service-role aliases，本機可 fallback `config.py`。`--execute` 走接口 upsert，再跑 read-only smoke。只有 schema/RLS/grant/table/column 或 live Telegram 才再找 Owner。
 
 ## Status Values
 
