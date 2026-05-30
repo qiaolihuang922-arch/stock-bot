@@ -1,7 +1,29 @@
 name: Stock Bot Pro
 
 "on":
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      run_mode:
+        description: "bot, backfill_may, or backfill_and_bot"
+        required: false
+        default: "bot"
+        type: choice
+        options:
+          - bot
+          - backfill_may
+          - backfill_and_bot
+      start_date:
+        description: "Backfill start date, YYYY-MM-DD"
+        required: false
+        default: "2026-05-01"
+      end_date:
+        description: "Backfill end date, YYYY-MM-DD"
+        required: false
+        default: "2026-05-29"
+      backfill_version:
+        description: "Strategy version for signal/evidence backfill"
+        required: false
+        default: "v20.4.5"
 
 jobs:
   run-bot:
@@ -82,7 +104,15 @@ jobs:
           PY
 
       - name: Backfill official market/theme evidence (retry 3 times)
+        env:
+          RUN_MODE: ${{ github.event.inputs.run_mode || 'bot' }}
         run: |
+          if [ "$RUN_MODE" = "backfill_may" ] || [ "$RUN_MODE" = "backfill_and_bot" ] || [ "$RUN_MODE" = "bot" ]; then
+            echo "market/theme evidence latest backfill enabled for run_mode=$RUN_MODE"
+          else
+            echo "market/theme evidence latest backfill skipped for run_mode=$RUN_MODE"
+            exit 0
+          fi
           success=0
           for i in 1 2 3
           do
@@ -95,8 +125,33 @@ jobs:
           done
           test "$success" -eq 1
 
-      - name: Run bot (retry 3 times)
+      - name: Backfill May signal and strategy evidence
+        env:
+          RUN_MODE: ${{ github.event.inputs.run_mode || 'bot' }}
+          BACKFILL_START_DATE: ${{ github.event.inputs.start_date || '2026-05-01' }}
+          BACKFILL_END_DATE: ${{ github.event.inputs.end_date || '2026-05-29' }}
+          BACKFILL_VERSION: ${{ github.event.inputs.backfill_version || 'v20.4.5' }}
         run: |
+          if [ "$RUN_MODE" != "backfill_may" ] && [ "$RUN_MODE" != "backfill_and_bot" ]; then
+            echo "May backfill skipped for run_mode=$RUN_MODE"
+            exit 0
+          fi
+          python scripts/backfill_signals.py \
+            --start-date "$BACKFILL_START_DATE" \
+            --end-date "$BACKFILL_END_DATE" \
+            --version "$BACKFILL_VERSION" \
+            --source twse \
+            --write \
+            --confirm-write
+
+      - name: Run bot (retry 3 times)
+        env:
+          RUN_MODE: ${{ github.event.inputs.run_mode || 'bot' }}
+        run: |
+          if [ "$RUN_MODE" != "bot" ] && [ "$RUN_MODE" != "backfill_and_bot" ]; then
+            echo "Run bot skipped for run_mode=$RUN_MODE"
+            exit 0
+          fi
           success=0
           for i in 1 2 3
           do

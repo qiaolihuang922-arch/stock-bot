@@ -4,8 +4,8 @@
 
 ## Current Task
 
-- task_id: `market-theme-evidence-history-trend`
-- task_name: `Market Theme Evidence History Trend Consumption`
+- task_id: `git-runner-may-backfill-entrypoint`
+- task_name: `Git Runner May Backfill Entrypoint`
 - task_type: `normal_patch`
 - version_level: `patch`
 - qa_level: `L2`
@@ -19,26 +19,35 @@
 ## Current Result
 
 - Owner 要先做「market/theme evidence 歷史趨勢消費」，讓舊資料不只是保存，而是被策略證據層使用。
-- 本輪擴充 `market_theme_confirmed_evidence` read path：
+- 已完成 `market_theme_confirmed_evidence` history trend 消費：
   - loader 仍先找 requested date / 上一交易日最新 confirmed row。
   - 額外讀取 `trade_date <= requested_trade_date` 的最近 evidence rows，產出 `evidence_trend`。
   - `evidence_trend` 包含 observed_days、recent_supporting_days、support_streak_days、days、allowed_effects、forbidden_effects。
   - 趨勢只允許 wording / 排序提示 / detail trace；不得放寬買點、不得覆蓋風控、不得單獨變 BUY。
   - Telegram evidence summary 在 confirmed 時新增短行：`趨勢：...`，讓 Owner 看出不是只看單日證據。
+- 本輪新增 GitHub workflow backfill 入口：
+  - `workflow_dispatch.run_mode`: `bot`、`backfill_may`、`backfill_and_bot`。
+  - `start_date` / `end_date` / `backfill_version` 可由 workflow input 指定，預設 `2026-05-01` 到 `2026-05-29`、`v20.4.5`。
+  - `backfill_may` 會從 GitHub runner 執行 `scripts/backfill_signals.py --source twse --write --confirm-write`，回寫 `daily_price`、`daily_signal_snapshot`、`market_daily_bars`、`strategy_feature_snapshots`、`strategy_outcome_metrics`、`strategy_classification_audit`。
+  - `backfill_and_bot` 會先回填，再跑正式 bot。
+  - 非 schema 寫入不需要 Owner 手動 SQL；正式結果以 GitHub runner 為準。
+- 邊界：`scripts/backfill_market_theme_sources.py` 目前的 TWSE OpenAPI source 是 latest source，不是整月 historical source；它會補最新 official market/theme evidence。history trend 只消費 production 已有 confirmed rows，不會偽造五月 market/theme history。
 - 同步使用者可見 Telegram header 版本：`v20.4.5`。
 - 本輪沒有 production live write、formal backfill、DB schema / table / column 變更、RLS / grant / policy / role 變更、live Telegram、策略 decision、watchlist 或交易門檻變更。
 - Architect 驗證：
   - `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py tests/test_market_theme_source_backfill.py tests/test_workflow_runtime_config.py tests/test_generator_report.py tests/test_notifier.py -q`：140 passed，157 warnings。
+  - `arch -arm64 .venv/bin/python -m pytest tests/test_workflow_runtime_config.py tests/test_backfill_signals.py tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py -q`：66 passed，13 warnings。
   - `git diff --check`：通過。
 - Post-cycle review：
-  - 根因分類：`history_evidence_consumption_gap`。
+  - 根因分類：`history_evidence_consumption_gap` + `git_runner_backfill_entrypoint_gap`。
   - 既有 GitHub runtime / source-of-truth 規則已覆蓋，不新增 `AGENTS.md` 硬規則。
-  - 補測歷史趨勢、summary 趨勢文案、write CLI read-after-write smoke 兼容歷史查詢、版本 header 同步。
+  - 補測歷史趨勢、summary 趨勢文案、write CLI read-after-write smoke 兼容歷史查詢、workflow dispatch backfill inputs、版本 header 同步。
 
 ## Next Action
 
 - Architect commit / push。
-- 推送後需由 GitHub workflow 重新跑一次正式報文；本地生成不作正式結果。
+- 推送後用 GitHub workflow dispatch 跑 `run_mode=backfill_may`，日期 `2026-05-01` 到 `2026-05-29`。
+- 回填完成後再跑一次 read-only / workflow result 檢查，才能繼續下一段證據鏈開發。
 - 注意：報文底部 `📊 策略證據 v20.0｜資料表未建立` 屬於 `services/strategy_evidence.py` 的另一組 strategy evidence tables，不是本輪 `market_theme_confirmed_evidence` 假日讀取問題。
 
 ## Status Values

@@ -51,6 +51,12 @@
   - 已完成：loader 額外讀取最近 confirmed/fresh evidence rows，建立 `evidence_trend`；provider/summary 顯示趨勢短行；trend 明確限制為 wording / 排序提示 / detail trace。
   - 邊界保持：不新增 DB schema、不 live write、不 backfill、不改策略 decision / watchlist / Telegram live delivery。
   - 不新增 `AGENTS.md` 硬規則：既有 GitHub runner source-of-truth、fail-closed、持倉行動一致性規則已覆蓋；本輪沉澱為 loader/provider contract 與測試。
+- 本輪 Git Runner May Backfill Entrypoint：
+  - 根因分類：`git_runner_backfill_entrypoint_gap`。Owner 要五月資料回寫後再跑流程檢查；本地寫入不是正式結果，所以需由 GitHub workflow 觸發。
+  - 已完成：workflow_dispatch 新增 `run_mode=backfill_may/backfill_and_bot` 與日期 / 版本 inputs；GitHub runner 可回寫五月 `daily_price`、`daily_signal_snapshot`、`market_daily_bars`、`strategy_feature_snapshots`、`strategy_outcome_metrics`、`strategy_classification_audit`。
+  - 邊界保持：非 schema 寫入走 repo script / GitHub runner；不要求 Owner 跑 DML SQL；未新增 DB schema / RLS / grant / policy / role。
+  - 待跑：push 後 dispatch `backfill_may`，完成後跑 read-only 檢查再繼續 evidence chain。
+  - 風險：market/theme official source 目前只能補 latest OpenAPI 交易日，不能憑空補五月整月；trend 只消費 production 既有 confirmed rows。
 - 本輪 Production Evidence Source Audit And Approved Payload Gate：
   - 根因分類：`production_source_semantics_gap` + `runner_parser_false_fail`。
   - 已完成：read-only production source audit JSON；row count / source availability / approved payload preview gate；個股策略 snapshot 不會直接升級為 market/theme confirmed evidence。

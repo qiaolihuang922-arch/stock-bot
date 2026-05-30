@@ -42,6 +42,14 @@
   - 使用者可見 Telegram header 版本同步為 `v20.4.5`。
   - 驗證：`tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py tests/test_market_theme_source_backfill.py tests/test_workflow_runtime_config.py tests/test_generator_report.py tests/test_notifier.py`，`140 passed, 157 warnings`；`git diff --check` 通過。
   - 邊界：未 production live write、未 backfill、未 schema / RLS / grant / policy / role 變更、未改策略 decision 或交易門檻。
+- Git Runner May Backfill Entrypoint 已完成本地驗證，待 commit / push：
+  - `.github/workflows/stock-bot.yml` 新增 `workflow_dispatch` inputs：`run_mode`、`start_date`、`end_date`、`backfill_version`。
+  - `run_mode=backfill_may` 會由 GitHub runner 執行 `scripts/backfill_signals.py --source twse --write --confirm-write`，預設回填 `2026-05-01` 到 `2026-05-29`、`v20.4.5`。
+  - 回填範圍：`daily_price`、`daily_signal_snapshot`、`market_daily_bars`、`strategy_feature_snapshots`、`strategy_outcome_metrics`、`strategy_classification_audit`。
+  - `run_mode=backfill_and_bot` 會先回填五月資料再跑正式 bot；`run_mode=bot` 維持原本行為。
+  - 注意：`market_theme` official source backfill 目前只補最新 TWSE OpenAPI 交易日；history trend 只消費 production 已有 confirmed rows，不造五月 market/theme 假歷史。
+  - 驗證：`tests/test_workflow_runtime_config.py tests/test_backfill_signals.py tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py`，`66 passed, 13 warnings`。
+  - 邊界：未新增 schema / table / column / RLS / grant / policy / role；非 schema 寫入交由 GitHub runner，符合 git source-of-truth。
 - Production Evidence Source Audit And Approved Payload Gate 已通過 QA conditional pass，條件已由 Architect 用真實 production read-only audit 補足，待 commit / push：
   - 新增 `scripts/smoke_market_theme_evidence_readonly.py --production-source-audit-json`，只讀 production source availability，不寫 DB、不 backfill、不發 Telegram。
   - Audit 固定輸出 `write_execution=disabled`、`live_write=false`，並檢查 `market_theme_confirmed_evidence`、`daily_signal_snapshot`、`signal_runs`、`signal_items` row count。

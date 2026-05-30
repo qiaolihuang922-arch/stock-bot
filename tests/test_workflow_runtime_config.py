@@ -114,6 +114,22 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
         self.assertNotIn("echo $SUPABASE_SERVICE_ROLE_KEY", workflow_text)
         self.assertNotIn("print(service_role_key)", workflow_text)
 
+    def test_workflow_dispatch_supports_git_runner_may_backfill(self):
+        workflow_text = WORKFLOW.read_text(encoding="utf-8")
+
+        self.assertIn("run_mode:", workflow_text)
+        self.assertIn("- backfill_may", workflow_text)
+        self.assertIn("- backfill_and_bot", workflow_text)
+        self.assertIn('default: "2026-05-01"', workflow_text)
+        self.assertIn('default: "2026-05-29"', workflow_text)
+        self.assertIn("python scripts/backfill_signals.py \\", workflow_text)
+        self.assertIn('--start-date "$BACKFILL_START_DATE"', workflow_text)
+        self.assertIn('--end-date "$BACKFILL_END_DATE"', workflow_text)
+        self.assertIn('--version "$BACKFILL_VERSION"', workflow_text)
+        self.assertIn("--write", workflow_text)
+        self.assertIn("--confirm-write", workflow_text)
+        self.assertIn('Run bot skipped for run_mode=$RUN_MODE', workflow_text)
+
 
 if __name__ == "__main__":
     unittest.main()
