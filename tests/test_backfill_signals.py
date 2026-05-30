@@ -1,11 +1,14 @@
 import unittest
 from datetime import date, timedelta
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from scripts.backfill_signals import (
     available_coverage,
     build_evidence_rows,
     build_rows_from_ohlcv,
     partial_coverage_warnings,
+    upsert_rows,
     validate_signal_payloads
 )
 
@@ -126,6 +129,52 @@ class BackfillSignalsTest(unittest.TestCase):
             ),
             [],
         )
+
+    def test_upsert_rows_only_writes_current_production_tables(self):
+        class Query:
+            def __init__(self, name, calls):
+                self.name = name
+                self.calls = calls
+
+            def upsert(self, rows, **kwargs):
+                self.calls.append((self.name, "upsert", len(rows), kwargs))
+                return self
+
+            def execute(self):
+                self.calls.append((self.name, "execute"))
+                return SimpleNamespace(data=[])
+
+        class Client:
+            def __init__(self):
+                self.calls = []
+
+            def table(self, name):
+                return Query(name, self.calls)
+
+        client = Client()
+        price_rows = [{
+            "stock_id": "3231",
+            "trade_date": "2026-05-04",
+            "close": 100,
+            "volume": 1000,
+            "source": "twse",
+        }]
+        signal_rows = [{
+            "stock_id": "3231",
+            "trade_date": "2026-05-04",
+            "version": "v20.4.5",
+        }]
+        deprecated_rows = ([{"stock_id": "3231"}], [{"stock_id": "3231"}], [{"stock_id": "3231"}], [{"stock_id": "3231"}])
+
+        with patch("scripts.backfill_signals.get_supabase_client", return_value=client):
+            upsert_rows(price_rows, signal_rows, deprecated_rows)
+
+        table_names = [call[0] for call in client.calls if call[1] == "upsert"]
+        self.assertEqual(table_names, ["daily_price", "daily_signal_snapshot"])
+        self.assertNotIn("market_daily_bars", table_names)
+        self.assertNotIn("strategy_feature_snapshots", table_names)
+        self.assertNotIn("strategy_outcome_metrics", table_names)
+        self.assertNotIn("strategy_classification_audit", table_names)
 
 
 if __name__ == "__main__":

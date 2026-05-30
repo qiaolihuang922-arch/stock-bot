@@ -53,7 +53,8 @@
   - 不新增 `AGENTS.md` 硬規則：既有 GitHub runner source-of-truth、fail-closed、持倉行動一致性規則已覆蓋；本輪沉澱為 loader/provider contract 與測試。
 - 本輪 Git Runner May Backfill Entrypoint：
   - 根因分類：`git_runner_backfill_entrypoint_gap`。Owner 要五月資料回寫後再跑流程檢查；本地寫入不是正式結果，所以需由 GitHub workflow 觸發。
-  - 已完成：workflow_dispatch 新增 `run_mode=backfill_may/backfill_and_bot` 與日期 / 版本 inputs；GitHub runner 可回寫五月 `daily_price`、`daily_signal_snapshot`、`market_daily_bars`、`strategy_feature_snapshots`、`strategy_outcome_metrics`、`strategy_classification_audit`。
+  - 已完成：workflow_dispatch 新增 `run_mode=backfill_may/backfill_and_bot` 與日期 / 版本 inputs；GitHub runner 可回寫五月 `daily_price`、`daily_signal_snapshot`。
+  - 已補表收斂 guard：舊 `market_daily_bars` / strategy evidence draft tables 不在目前 production schema，runner 不再寫入；衍生 rows 只作 log 診斷。
   - 已補 runner 真實資料 guard：`backfill_may` 使用 `--allow-partial`，只寫 TWSE source 實際可取得 rows；缺股票 / 缺日期以 warning 呈現，不用假資料補齊 validation。
   - 邊界保持：非 schema 寫入走 repo script / GitHub runner；不要求 Owner 跑 DML SQL；未新增 DB schema / RLS / grant / policy / role。
   - 待跑：push 後 dispatch `backfill_may`，完成後檢查 GitHub log row counts / partial warnings，再跑 read-only 檢查，才能繼續 evidence chain。

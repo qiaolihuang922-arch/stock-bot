@@ -254,33 +254,6 @@ def upsert_rows(price_rows, signal_rows, evidence_rows=None):
             on_conflict="stock_id,trade_date,version"
         ).execute()
 
-    if evidence_rows:
-        market_rows, feature_rows, outcome_rows, audit_rows = evidence_rows
-
-        if market_rows:
-            client.table("market_daily_bars").upsert(
-                market_rows,
-                on_conflict="stock_id,trade_date,source"
-            ).execute()
-
-        if feature_rows:
-            client.table("strategy_feature_snapshots").upsert(
-                feature_rows,
-                on_conflict="stock_id,trade_date,strategy_version"
-            ).execute()
-
-        if outcome_rows:
-            client.table("strategy_outcome_metrics").upsert(
-                outcome_rows,
-                on_conflict="stock_id,trade_date,strategy_version,horizon_days"
-            ).execute()
-
-        if audit_rows:
-            client.table("strategy_classification_audit").upsert(
-                audit_rows,
-                on_conflict="stock_id,trade_date,strategy_version,distortion_type"
-            ).execute()
-
 
 def print_summary(price_rows, signal_rows, validation_errors, evidence_rows=None, coverage_warnings=None):
     tradeable = sum(1 for row in signal_rows if row.get("is_tradeable"))
@@ -291,10 +264,10 @@ def print_summary(price_rows, signal_rows, validation_errors, evidence_rows=None
     print("BACKFILL PLAN")
     print(f"daily_price rows: {len(price_rows)}")
     print(f"daily_signal_snapshot rows: {len(signal_rows)}")
-    print(f"market_daily_bars rows: {len(market_rows)}")
-    print(f"strategy_feature_snapshots rows: {len(feature_rows)}")
-    print(f"strategy_outcome_metrics rows: {len(outcome_rows)}")
-    print(f"strategy_classification_audit rows: {len(audit_rows)}")
+    print(f"derived stock market rows (not written): {len(market_rows)}")
+    print(f"derived strategy feature rows (not written): {len(feature_rows)}")
+    print(f"derived strategy outcome rows (not written): {len(outcome_rows)}")
+    print(f"derived strategy audit rows (not written): {len(audit_rows)}")
     print(f"tradeable rows: {tradeable}")
     print(f"best candidate rows: {best}")
 

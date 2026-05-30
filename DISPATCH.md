@@ -28,8 +28,9 @@
 - 本輪新增 GitHub workflow backfill 入口：
   - `workflow_dispatch.run_mode`: `bot`、`backfill_may`、`backfill_and_bot`。
   - `start_date` / `end_date` / `backfill_version` 可由 workflow input 指定，預設 `2026-05-01` 到 `2026-05-29`、`v20.4.5`。
-  - `backfill_may` 會從 GitHub runner 執行 `scripts/backfill_signals.py --source twse --allow-partial --write --confirm-write`，回寫 `daily_price`、`daily_signal_snapshot`、`market_daily_bars`、`strategy_feature_snapshots`、`strategy_outcome_metrics`、`strategy_classification_audit`。
+  - `backfill_may` 會從 GitHub runner 執行 `scripts/backfill_signals.py --source twse --allow-partial --write --confirm-write`，回寫 `daily_price`、`daily_signal_snapshot`。
   - `--allow-partial` 只寫 source 實際可取得的真實 rows，並輸出缺資料 warnings；不得為了通過 validation 補假 3035 或假 05/01 snapshot。
+  - 舊 `market_daily_bars` / `strategy_feature_snapshots` / `strategy_outcome_metrics` / `strategy_classification_audit` production 表已不在目前 schema；backfill script 只計算衍生 rows 供 log 診斷，不寫入已刪除或語義不符的表。
   - `backfill_and_bot` 會先回填，再跑正式 bot。
   - 非 schema 寫入不需要 Owner 手動 SQL；正式結果以 GitHub runner 為準。
 - 邊界：`scripts/backfill_market_theme_sources.py` 目前的 TWSE OpenAPI source 是 latest source，不是整月 historical source；它會補最新 official market/theme evidence。history trend 只消費 production 已有 confirmed rows，不會偽造五月 market/theme history。

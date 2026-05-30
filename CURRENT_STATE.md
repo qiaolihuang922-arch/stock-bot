@@ -45,7 +45,8 @@
 - Git Runner May Backfill Entrypoint 已完成本地驗證，待 commit / push：
   - `.github/workflows/stock-bot.yml` 新增 `workflow_dispatch` inputs：`run_mode`、`start_date`、`end_date`、`backfill_version`。
   - `run_mode=backfill_may` 會由 GitHub runner 執行 `scripts/backfill_signals.py --source twse --allow-partial --write --confirm-write`，預設回填 `2026-05-01` 到 `2026-05-29`、`v20.4.5`。
-  - 回填範圍：`daily_price`、`daily_signal_snapshot`、`market_daily_bars`、`strategy_feature_snapshots`、`strategy_outcome_metrics`、`strategy_classification_audit`。
+  - 回填範圍：`daily_price`、`daily_signal_snapshot`。
+  - 舊 `market_daily_bars` / `strategy_feature_snapshots` / `strategy_outcome_metrics` / `strategy_classification_audit` 不在目前 production schema；五月 backfill 只計算衍生 rows 作 runner log 診斷，不寫入已刪除或語義不符的表。
   - `--allow-partial` 是真實資料保護：若 TWSE source 缺某檔或某交易日，只寫實際取得 rows 並輸出 partial coverage warnings，不補 synthetic rows。
   - `run_mode=backfill_and_bot` 會先回填五月資料再跑正式 bot；`run_mode=bot` 維持原本行為。
   - 注意：`market_theme` official source backfill 目前只補最新 TWSE OpenAPI 交易日；history trend 只消費 production 已有 confirmed rows，不造五月 market/theme 假歷史。
