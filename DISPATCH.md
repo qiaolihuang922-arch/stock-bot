@@ -14,7 +14,7 @@
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
 - qa_status: `qa_passed`
-- commit: `pending`
+- commit: `pushed`
 
 ## Current Result
 
@@ -45,11 +45,11 @@
   - 未改 Telegram 使用者可見版本或交易決策門檻。
 - Runner gap：
   - CAO auto wrapper 再次把 QA parser 標成 failed，但 QA_REPORT 內結論明確為 `通過`；Architect 已用主 repo 驗證與 production smoke 吸收。後續需修 QA conclusion parser。
+- 已提交並推送：`70bf549 feat: verify market theme production trend consumption`。
 
 ## Next Action
 
-- 提交並推送本輪 production trend consumption check。
-- 下一步 evidence chain 才能進入 production evidence 顯示 / 趨勢使用收斂；若要完整五月 market/theme history，仍需要真實 historical source，不得用 latest membership 或 daily_signal_snapshot 推回五月。
+- 下一步 evidence chain 可進入 production evidence 顯示 / 趨勢使用收斂；若要完整五月 market/theme history，仍需要真實 historical source，不得用 latest membership 或 daily_signal_snapshot 推回五月。
 
 ## Status Values
 

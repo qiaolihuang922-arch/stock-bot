@@ -34,13 +34,14 @@
 
 ## Recent High-Signal Milestones
 
-- Market Theme Production Trend Consumption Check 已通過 QA，待 commit / push：
+- Market Theme Production Trend Consumption Check 已通過 QA 並推送：
   - 目的：上一輪已將 useful source 寫入 `market_theme_confirmed_evidence`；本輪證明正式 `core/generator.py` report path 在 fresh runner 條件下會消費 production evidence trend。
   - 新增 `build_market_theme_production_trend_consumption_check()`，並讓 `market_theme_summary_evidence()` 支援測試注入 production-like loader；正式呼叫相容。
   - read-only smoke 新增 `--production-trend-consumption-check-json`，可直接檢查 source-of-truth、fresh runner rebuild、history consumption 與 forbidden fallback。
   - production read-only smoke 結果：`fresh_runner_rebuild=passed`、`source_of_truth=production.market_theme_confirmed_evidence`、`uses_market_theme_confirmed_evidence_history=true`、`uses_only_daily_signal_snapshot=false`、`uses_runtime_or_local_cache_as_history=false`。
   - table status：`market_theme_confirmed_evidence=consumed`、`market_theme_index_daily_bars=not-consumed`、`sector_theme_members=latest-only-blocked`。
   - 驗證：`tests/test_market_theme_evidence.py tests/test_generator_report.py tests/test_market_theme_evidence_handoff.py`，`132 passed, 153 warnings`；`git diff --check` 通過。
+  - 已提交並推送：`70bf549 feat: verify market theme production trend consumption`。
   - 邊界：未 DB write、未 backfill、未 schema / RLS / grant / policy / role 變更、未 live Telegram、未改 Telegram 版本或交易 decision。
 - Market Theme May History Backfill Gap 已通過 QA 並完成一次正式非 schema data write：
   - Owner 指出真正需要回寫 / 消費的應是 `market_theme_confirmed_evidence`、`market_theme_index_daily_bars`、`sector_theme_members`，不是已存在五月資料的 `daily_price` / `daily_signal_snapshot`。
