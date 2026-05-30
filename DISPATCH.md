@@ -10,11 +10,11 @@
 - version_level: `none`
 - qa_level: `L2`
 - owner_status: `requested`
-- architect_status: `committed`
+- architect_status: `pushed`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
 - qa_status: `qa_passed`
-- commit: `current HEAD`
+- commit: `latest pushed HEAD`
 
 ## Current Result
 
@@ -46,7 +46,7 @@
 
 ## Next Action
 
-- Architect 已完成主 repo 驗證與 commit；push 完成後清理 CAO worktree。
+- 已 commit / push；Architect 清理 CAO worktree。
 - 下一步若要真正寫入 production：準備真實 approved persistent payload，先跑 write CLI dry-run；`--execute` 走接口 upsert，再跑 read-after-write smoke。只有 schema/RLS/grant/table/column 或 live Telegram 才再找 Owner。
 
 ## Status Values

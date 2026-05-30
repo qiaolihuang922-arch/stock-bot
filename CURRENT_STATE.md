@@ -33,7 +33,7 @@
 
 ## Recent High-Signal Milestones
 
-- Evidence Chain Write CLI Read-after-write And Source Fail-closed Handoff 已 commit，待 push：
+- Evidence Chain Write CLI Read-after-write And Source Fail-closed Handoff 已推送：
   - Owner 最新邊界：只有新增表、擴字段、schema / RLS / grant / policy / role 變更需要找 Owner；非 schema 的 evidence data 寫入 / 回寫應走 repo script / service API。
   - 本輪延續既有 `public.market_theme_confirmed_evidence` contract，未新增 DB schema、table、column、RLS、grant、policy、role。
   - `scripts/write_market_theme_confirmed_evidence.py` dry-run output 增加 source/source_name/source_type、candidate_rows、validation、write_mode、secret_redaction。
