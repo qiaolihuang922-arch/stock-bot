@@ -4416,12 +4416,13 @@ def ai_supply_chain_mainline_supported(market_summary):
     return False
 
 
-def market_theme_summary_evidence(results_map, market_summary):
+def market_theme_summary_evidence(results_map, market_summary, evidence_loader=None):
+    loader = evidence_loader or load_confirmed_market_theme_evidence
 
     if isinstance(market_summary, dict):
         evidence = market_summary.get("market_theme_evidence")
         if not evidence:
-            loaded = load_confirmed_market_theme_evidence(
+            loaded = loader(
                 trade_date=market_summary.get("trade_date")
             )
             evidence = loaded
@@ -4433,7 +4434,7 @@ def market_theme_summary_evidence(results_map, market_summary):
             as_of=report_date,
         )
 
-    loaded = load_confirmed_market_theme_evidence()
+    loaded = loader()
     if loaded.get("status") in {"confirmed", "absent", "missing-source", "source-error", "insufficient-data"}:
         return build_market_theme_evidence_provider(
             results_map=results_map,
@@ -4447,6 +4448,74 @@ def market_theme_summary_evidence(results_map, market_summary):
         formatter_report_input=market_summary,
         missing_db_evidence=True,
     )
+
+
+def build_market_theme_production_trend_consumption_check(client=None, trade_date=None, limit=20):
+    load_result = {}
+
+    def loader(trade_date=None):
+        nonlocal load_result
+        load_result = load_confirmed_market_theme_evidence(
+            client=client,
+            trade_date=trade_date,
+            limit=limit,
+        )
+        return load_result
+
+    market_summary = {
+        "trade_date": trade_date,
+        "as_of": trade_date,
+    }
+    evidence = market_theme_summary_evidence(
+        {},
+        market_summary,
+        evidence_loader=loader,
+    )
+    trend = evidence.get("evidence_trend") or {}
+    uses_history = bool(
+        evidence.get("confirmed")
+        and evidence.get("source_status") == "ready"
+        and trend.get("observed_days", 0) > 0
+    )
+    source_status = load_result.get("status") or evidence.get("source_status") or "insufficient-data"
+    confirmed_table_status = (
+        "consumed"
+        if uses_history
+        else source_status
+        if source_status in {"missing-source", "source-error", "insufficient-data"}
+        else "insufficient-data"
+    )
+    blocked_reasons = []
+    if not uses_history:
+        blocked_reasons.append("official generator path does not consume production evidence trend")
+        reason = load_result.get("reason")
+        if reason:
+            blocked_reasons.append(reason)
+
+    return {
+        "mode": "market-theme-production-trend-consumption-check",
+        "schema_change": False,
+        "data_write": False,
+        "live_telegram": False,
+        "source_of_truth": "production.market_theme_confirmed_evidence",
+        "local_context_cleared": True,
+        "fresh_runner_rebuild": "passed" if uses_history else "blocked",
+        "generator_consumption": {
+            "entrypoint": "core.generator.market_theme_summary_evidence",
+            "uses_market_theme_confirmed_evidence_history": uses_history,
+            "uses_only_daily_signal_snapshot": False,
+            "uses_runtime_or_local_cache_as_history": False,
+            "observed_days": trend.get("observed_days", 0),
+            "recent_supporting_days": trend.get("recent_supporting_days", 0),
+            "support_streak_days": trend.get("support_streak_days", 0),
+        },
+        "table_status": {
+            "market_theme_confirmed_evidence": confirmed_table_status,
+            "sector_theme_members": "latest-only-blocked",
+            "market_theme_index_daily_bars": "not-consumed",
+        },
+        "blocked_reasons": blocked_reasons,
+    }
 
 
 def market_execution_bridge_lines(holding_items, watch_items, market_mode, market_summary=None):

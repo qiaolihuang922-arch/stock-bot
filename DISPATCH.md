@@ -4,8 +4,8 @@
 
 ## Current Task
 
-- task_id: `market-theme-may-history-backfill-gap`
-- task_name: `Market Theme May History Backfill Gap`
+- task_id: `market-theme-production-trend-consumption-check`
+- task_name: `Market Theme Production Trend Consumption Check`
 - task_type: `normal_patch`
 - version_level: `patch`
 - qa_level: `L2`
@@ -14,40 +14,42 @@
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
 - qa_status: `qa_passed`
-- commit: `pushed`
+- commit: `pending`
 
 ## Current Result
 
-- Owner 指出 evidence/source 三張表可能才是五月歷史證據鏈真正需要回寫的資料：
-  - `market_theme_confirmed_evidence`
-  - `market_theme_index_daily_bars`
-  - `sector_theme_members`
-- Owner 質疑：本輪回寫的 `daily_price` / `daily_signal_snapshot` 早就有資料，是否重複做了低價值回寫；而真正供 market/theme history trend 判斷的三張表沒有五月歷史，導致策略仍用不到老 evidence。
+- Owner 要求繼續 evidence chain；上一輪已把 useful source 寫入 `market_theme_confirmed_evidence`，本輪最小目標是證明正式 generator/report 路徑在 fresh runner 條件下真的消費 production evidence trend。
 - 已按 PM -> Tech -> QA 完成：
-  - `scripts/backfill_market_theme_sources.py` 改為 market/theme history backfill JSON report。
-  - `daily_price` / `daily_signal_snapshot` 明確標記為 `forbidden_as_primary_result`，本輪不再回寫它們。
-  - `sector_theme_members` 若只能取得 latest membership，標記 blocked，不得假裝五月歷史。
-  - `market_theme_index_daily_bars` 目前不是直接 strategy/report DB consumer，標記 skipped/not-consumed，不寫表。
-  - `market_theme_confirmed_evidence` 才是本輪可寫且策略會消費的表；write path 只 upsert validated confirmed evidence。
-  - Validation 新增 required fields、allowed source_family、forbidden source_family、lineage.source_tables guard，阻止 `daily_signal_snapshot` / runtime / local / report / chat 類 payload 污染 confirmed evidence。
-- 已正式執行非 schema data write：
-  - command: `arch -arm64 .venv/bin/python scripts/backfill_market_theme_sources.py --write --confirm-write`
-  - 寫入 / upsert：`market_theme_confirmed_evidence` 9 rows，coverage `2026-05-29`，read_after_write `passed`。
-  - strategy_consumption_check：`uses_market_theme_confirmed_evidence_history=true`、`uses_only_daily_signal_snapshot=false`、observed_days=1、recent_supporting_days=1、support_streak_days=1。
-  - 未寫入 `market_theme_index_daily_bars`；未寫入 `sector_theme_members`；未寫入 `daily_price` / `daily_signal_snapshot`。
-- DB 污染檢查：
-  - `market_theme_confirmed_evidence` rows=18、May rows=18、duplicate_extra_rows=0。
-  - `market_theme_index_daily_bars` rows=10、May rows=10、duplicate_extra_rows=0。
-  - `sector_theme_members` rows=12、May rows=0、duplicate_extra_rows=0。
+  - `core/generator.py` 新增 `build_market_theme_production_trend_consumption_check()`。
+  - `market_theme_summary_evidence()` 支援 injectable `evidence_loader`，讓測試可模擬 production persistent source；既有正式呼叫不改。
+  - `scripts/smoke_market_theme_evidence_readonly.py` 新增 `--production-trend-consumption-check-json`。
+  - `tests/test_market_theme_evidence.py` 補 formal generator path 反證：正式 report 消費 `market_theme_confirmed_evidence` trend，不把 `daily_signal_snapshot` / runtime / local cache 當 market/theme history。
+- 主 repo production read-only smoke 已通過：
+  - command: `arch -arm64 .venv/bin/python scripts/smoke_market_theme_evidence_readonly.py --trade-date 2026-05-29 --production-trend-consumption-check-json`
+  - `fresh_runner_rebuild=passed`
+  - `source_of_truth=production.market_theme_confirmed_evidence`
+  - `uses_market_theme_confirmed_evidence_history=true`
+  - `uses_only_daily_signal_snapshot=false`
+  - `uses_runtime_or_local_cache_as_history=false`
+  - `market_theme_confirmed_evidence=consumed`
+  - `market_theme_index_daily_bars=not-consumed`
+  - `sector_theme_members=latest-only-blocked`
 - QA：
-  - 首輪阻塞有效：forbidden `daily_signal_snapshot` payload 可被接受。
-  - Tech 返工後 QA conditional pass；修正 `CHANGELOG.md` 後 QA 通過。
-  - 主 repo 驗證：`arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_source_backfill.py tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py tests/test_workflow_runtime_config.py -q`：75 passed，13 warnings；`git diff --check` 通過。
-- 已提交並推送：`98aa97f feat: harden market theme history backfill`。
+  - QA 報告結論為 `通過`。
+  - QA sandbox 無 production DB 權限時，read-only smoke exit 2 並 fail closed，沒有誤報 consumed。
+  - Architect 在主 repo 補真實 production read-only smoke，滿足 QA 邊界。
+  - 主 repo 驗證：`arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_generator_report.py tests/test_market_theme_evidence_handoff.py -q`：132 passed，153 warnings；`git diff --check` 通過。
+- 本輪未做：
+  - 未寫 DB、未 backfill、未 live Telegram。
+  - 未改 DB schema / table / column / RLS / grant / policy / role。
+  - 未改 Telegram 使用者可見版本或交易決策門檻。
+- Runner gap：
+  - CAO auto wrapper 再次把 QA parser 標成 failed，但 QA_REPORT 內結論明確為 `通過`；Architect 已用主 repo 驗證與 production smoke 吸收。後續需修 QA conclusion parser。
 
 ## Next Action
 
-- 後續若要補完整五月 market/theme history，需要真實 historical source；目前 TWSE OpenAPI 只能提供 latest source，不得用 latest membership 或 daily_signal_snapshot 推回五月。
+- 提交並推送本輪 production trend consumption check。
+- 下一步 evidence chain 才能進入 production evidence 顯示 / 趨勢使用收斂；若要完整五月 market/theme history，仍需要真實 historical source，不得用 latest membership 或 daily_signal_snapshot 推回五月。
 
 ## Status Values
 

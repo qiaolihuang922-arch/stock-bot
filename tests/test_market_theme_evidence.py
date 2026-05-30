@@ -1,8 +1,12 @@
+import io
+import json
 import unittest
+from contextlib import redirect_stdout
 from datetime import datetime
 from unittest.mock import patch
 
 from core import generator
+from scripts import smoke_market_theme_evidence_readonly
 from core.market_theme_evidence import (
     build_market_theme_evidence,
     build_market_theme_evidence_provider,
@@ -91,6 +95,18 @@ class EvidenceClient:
         self.tables.append(name)
         self.table_obj = EvidenceTable(self.rows, error=self.error, calls=self.calls)
         return self.table_obj
+
+
+class MultiTableEvidenceClient:
+    def __init__(self, rows_by_table):
+        self.rows_by_table = rows_by_table
+        self.calls = []
+        self.tables = []
+
+    def table(self, name):
+        self.tables.append(name)
+        rows = self.rows_by_table.get(name, [])
+        return EvidenceTable(rows, calls=self.calls)
 
 
 def confirmed_row(**overrides):
@@ -207,6 +223,135 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         self.assertEqual(
             [day["trade_date"] for day in trend["days"]],
             ["2026-05-29", "2026-05-28", "2026-05-27"],
+        )
+
+    def test_generator_consumption_check_uses_production_trend_on_fresh_run(self):
+        client = MultiTableEvidenceClient({
+            "market_theme_confirmed_evidence": [
+                confirmed_row(trade_date="2026-05-29", sector_theme_key="semiconductor"),
+                confirmed_row(trade_date="2026-05-28", sector_theme_key="computer"),
+            ],
+            "daily_signal_snapshot": [
+                {"stock_id": "2330", "trade_date": "2026-05-29", "action": "BUY"},
+            ],
+        })
+
+        report = generator.build_market_theme_production_trend_consumption_check(
+            client=client,
+            trade_date="2026-05-29",
+        )
+
+        self.assertEqual(report["mode"], "market-theme-production-trend-consumption-check")
+        self.assertFalse(report["schema_change"])
+        self.assertFalse(report["data_write"])
+        self.assertFalse(report["live_telegram"])
+        self.assertTrue(report["local_context_cleared"])
+        self.assertEqual(report["fresh_runner_rebuild"], "passed")
+        self.assertEqual(
+            report["generator_consumption"]["entrypoint"],
+            "core.generator.market_theme_summary_evidence",
+        )
+        self.assertTrue(
+            report["generator_consumption"]["uses_market_theme_confirmed_evidence_history"]
+        )
+        self.assertFalse(report["generator_consumption"]["uses_only_daily_signal_snapshot"])
+        self.assertFalse(
+            report["generator_consumption"]["uses_runtime_or_local_cache_as_history"]
+        )
+        self.assertEqual(report["generator_consumption"]["observed_days"], 2)
+        self.assertEqual(report["generator_consumption"]["recent_supporting_days"], 2)
+        self.assertEqual(report["generator_consumption"]["support_streak_days"], 2)
+        self.assertEqual(
+            report["table_status"],
+            {
+                "market_theme_confirmed_evidence": "consumed",
+                "sector_theme_members": "latest-only-blocked",
+                "market_theme_index_daily_bars": "not-consumed",
+            },
+        )
+        self.assertEqual(report["blocked_reasons"], [])
+        self.assertIn("market_theme_confirmed_evidence", client.tables)
+        self.assertNotIn("daily_signal_snapshot", client.tables)
+
+    def test_generator_consumption_check_fails_closed_without_production_rows(self):
+        report = generator.build_market_theme_production_trend_consumption_check(
+            client=EvidenceClient([]),
+            trade_date="2026-05-29",
+        )
+
+        self.assertEqual(report["fresh_runner_rebuild"], "blocked")
+        self.assertFalse(
+            report["generator_consumption"]["uses_market_theme_confirmed_evidence_history"]
+        )
+        self.assertFalse(report["generator_consumption"]["uses_only_daily_signal_snapshot"])
+        self.assertFalse(
+            report["generator_consumption"]["uses_runtime_or_local_cache_as_history"]
+        )
+        self.assertEqual(
+            report["table_status"]["market_theme_confirmed_evidence"],
+            "insufficient-data",
+        )
+        self.assertIn(
+            "official generator path does not consume production evidence trend",
+            report["blocked_reasons"],
+        )
+
+    def test_readonly_smoke_cli_outputs_consumption_check_json_with_mocked_persistent_rows(self):
+        client = MultiTableEvidenceClient({
+            "market_theme_confirmed_evidence": [
+                confirmed_row(trade_date="2026-05-29"),
+            ],
+        })
+        output = io.StringIO()
+
+        with patch.object(
+            smoke_market_theme_evidence_readonly,
+            "_build_readonly_client",
+            return_value=client,
+        ), redirect_stdout(output):
+            exit_code = smoke_market_theme_evidence_readonly.main([
+                "--trade-date",
+                "2026-05-29",
+                "--production-trend-consumption-check-json",
+            ])
+
+        self.assertEqual(exit_code, 0)
+        report = json.loads(output.getvalue())
+        self.assertEqual(report["fresh_runner_rebuild"], "passed")
+        self.assertTrue(
+            report["generator_consumption"]["uses_market_theme_confirmed_evidence_history"]
+        )
+        self.assertFalse(report["data_write"])
+        self.assertFalse(report["live_telegram"])
+        self.assertNotIn("daily_signal_snapshot", client.tables)
+
+    def test_readonly_smoke_cli_consumption_check_fails_closed_without_read_client(self):
+        output = io.StringIO()
+
+        with patch.object(
+            smoke_market_theme_evidence_readonly,
+            "_build_readonly_client",
+            return_value=None,
+        ), redirect_stdout(output):
+            exit_code = smoke_market_theme_evidence_readonly.main([
+                "--trade-date",
+                "2026-05-29",
+                "--production-trend-consumption-check-json",
+            ])
+
+        self.assertEqual(exit_code, 2)
+        report = json.loads(output.getvalue())
+        self.assertEqual(report["fresh_runner_rebuild"], "blocked")
+        self.assertEqual(
+            report["table_status"]["market_theme_confirmed_evidence"],
+            "missing-source",
+        )
+        self.assertFalse(
+            report["generator_consumption"]["uses_market_theme_confirmed_evidence_history"]
+        )
+        self.assertIn(
+            "missing required Supabase read credentials",
+            report["blocked_reasons"],
         )
 
     def test_loader_fails_closed_when_source_missing_or_empty_or_error(self):

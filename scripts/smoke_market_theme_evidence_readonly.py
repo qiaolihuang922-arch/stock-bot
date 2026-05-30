@@ -115,6 +115,36 @@ def _render(smoke):
     )
 
 
+def _missing_source_consumption_report(trade_date=None):
+    return {
+        "mode": "market-theme-production-trend-consumption-check",
+        "schema_change": False,
+        "data_write": False,
+        "live_telegram": False,
+        "source_of_truth": "production.market_theme_confirmed_evidence",
+        "local_context_cleared": True,
+        "fresh_runner_rebuild": "blocked",
+        "generator_consumption": {
+            "entrypoint": "core.generator.market_theme_summary_evidence",
+            "uses_market_theme_confirmed_evidence_history": False,
+            "uses_only_daily_signal_snapshot": False,
+            "uses_runtime_or_local_cache_as_history": False,
+            "observed_days": 0,
+            "recent_supporting_days": 0,
+            "support_streak_days": 0,
+        },
+        "table_status": {
+            "market_theme_confirmed_evidence": "missing-source",
+            "sector_theme_members": "latest-only-blocked",
+            "market_theme_index_daily_bars": "not-consumed",
+        },
+        "blocked_reasons": [
+            "missing required Supabase read credentials",
+            f"trade_date={trade_date}" if trade_date else "trade_date not provided",
+        ],
+    }
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Run a read-only market/theme evidence smoke without DB writes or Telegram delivery."
@@ -126,10 +156,19 @@ def main(argv=None):
         action="store_true",
         help="Output read-only production source audit JSON for approved payload gating.",
     )
+    parser.add_argument(
+        "--production-trend-consumption-check-json",
+        action="store_true",
+        help="Output official generator/report path production trend consumption check JSON.",
+    )
     args = parser.parse_args(argv)
 
     client = _build_readonly_client()
     if client is None:
+        if args.production_trend_consumption_check_json:
+            report = _missing_source_consumption_report(args.trade_date)
+            print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
+            return 0 if report["fresh_runner_rebuild"] == "passed" else 2
         if args.production_source_audit_json:
             audit = {
                 "mode": "read-only-production-audit",
@@ -164,6 +203,16 @@ def main(argv=None):
             "rows": [],
         }
     else:
+        if args.production_trend_consumption_check_json:
+            from core.generator import build_market_theme_production_trend_consumption_check
+
+            report = build_market_theme_production_trend_consumption_check(
+                client=client,
+                trade_date=args.trade_date,
+                limit=args.limit,
+            )
+            print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
+            return 0 if report["fresh_runner_rebuild"] == "passed" else 2
         if args.production_source_audit_json:
             audit = build_market_theme_evidence_production_source_audit(
                 client=client,

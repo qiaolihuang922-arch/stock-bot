@@ -1,77 +1,107 @@
-# QA_REPORT: market/theme 五月歷史回寫 conditional pass 重驗
+# QA_REPORT:
 
   ## 測試範圍
 
-  本輪只重驗 Architect 指定的上一輪 conditional pass 條件，未擴大到 live DB/write/full replay。
+  本輪任務尺寸為 normal_patch，QA level 為 L2。我沒有擴成 full pytest / replay / backfill / live DB 驗證；驗證集中在 TASK 指定的 generator/report consumption、fresh-run 等價反證、source 邊界與手機閱讀誤讀風險。
 
-  - 讀取 TASK.md、CHANGELOG.md、git status --short、git diff --stat、指定三檔 diff。
-  - 驗證 CHANGELOG.md 已列出 CHANGELOG.md 為交付文件 diff。
-  - 驗證已移除「未直接編輯 CHANGELOG.md」或等價矛盾句。
-  - 驗證 CHANGELOG.md 仍準確描述 scripts/backfill_market_theme_sources.py 與 tests/test_market_theme_source_backfill.py。
-  - 快速確認 forbidden daily_signal_snapshot 反證測試仍存在並可執行。
-  - 執行：.venv/bin/python -m pytest tests/test_market_theme_source_backfill.py -q，結果 11 passed in 0.12s。
+  已檢查文件與 diff：
+
+  - TASK.md、CHANGELOG.md
+  - git diff --stat / git diff --name-only
+  - core/generator.py
+  - scripts/smoke_market_theme_evidence_readonly.py
+  - tests/test_market_theme_evidence.py
+  - 直接消費者：formatTelegramSummary()、formatTelegramMessages()、ai_supply_chain_mainline_supported()、read-only smoke CLI
+
+  可吸收候選 diff 限於：
+
+  - CHANGELOG.md
+  - core/generator.py
+  - scripts/smoke_market_theme_evidence_readonly.py
+  - tests/test_market_theme_evidence.py
+
+  worktree 殘留：
+
+  - 未看到其他 tracked file 變更。
+  - .qa_tmp/ 只作為本輪測試暫存使用，不應視為產品 diff。
+
+  執行命令：
+
+  - git diff --check：通過
+  - arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py -q：29 passed
+  - arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py -q：69 passed
+  - arch -arm64 .venv/bin/python scripts/smoke_market_theme_evidence_readonly.py --trade-date 2026-05-29 --production-trend-consumption-check-json：exit 2，fail-closed 為 source-error，原因為本 QA 沙盒下讀取外部 source
+    受限，未宣告 consumed。
+  - 額外 inline 反證：runtime/local source row 不會讓 fresh_runner_rebuild passed；手機 summary header 仍為 v20.4.6，且 evidence trend 不在新倉行動前誤導買入。
 
   ## 風險預算與停止條件
 
-  本輪最值得抓的風險：
+  本輪最值得抓的 3 個風險：
 
-  1. 交付摘要仍和 worktree diff 矛盾。
-      - 驗證：比對 git diff --name-only 與 CHANGELOG.md 修改檔案段落。
-      - 停止條件：三個 diff 檔案一致列出即可停止，不追查全 repo。
-  2. 舊 conditional pass 的矛盾句殘留，導致 Architect 吸收錯誤交付事實。
-      - 驗證：rg 搜尋「未直接編輯 CHANGELOG」、舊 production audit 檔名與舊摘要關鍵字。
-      - 停止條件：搜尋無命中即可停止。
-  3. forbidden daily_signal_snapshot guard 被移除或只剩表面欄位。
-      - 驗證：檢查測試是否同時覆蓋 report blocked 與 write client 無呼叫，並重跑局部測試。
-      - 停止條件：指定測試存在且局部測試通過即可停止。
+  1. fresh_runner_rebuild=passed 是否其實靠 local/runtime/cache
+     驗證：用 mocked persistent rows 驗 passed；再用 source_family=runtime row 反證 blocked。
+     停止條件：runtime/local row 不得 passed，且 uses_runtime_or_local_cache_as_history=false。
+  2. diagnostic JSON 是否把 daily_signal_snapshot 包裝成 market/theme trend source
+     驗證：檢查新增測試與 fake client table access；daily_signal_snapshot 存在但未被查詢。
+     停止條件：只讀 market_theme_confirmed_evidence，uses_only_daily_signal_snapshot=false。
+  3. 使用者可見 Telegram/report 是否被本輪偷偷改壞
+     驗證：檢查 VERSION 未改；跑 tests/test_generator_report.py；用手機閱讀順序檢查 summary。
+     停止條件：header 維持 v20.4.6，新倉決策先於 evidence 背景，evidence trend 不產生「今日可買」誤讀。
 
   ## 關聯風險掃描
 
-  git diff --name-only 只有：
+  TASK / CHANGELOG / diff 整體一致：
 
-  - CHANGELOG.md
-  - scripts/backfill_market_theme_sources.py
-  - tests/test_market_theme_source_backfill.py
+  - TASK 要求新增 fresh-run consumption verification report；diff 新增 build_market_theme_production_trend_consumption_check() 與 smoke CLI flag。
+  - TASK 禁止 DB schema、data write、live Telegram；diff 未碰 schema / write path / Telegram delivery。
+  - TASK 禁止修改 Telegram/report 文案與 header；diff 未改 VERSION = "v20.4.6"，formatter 文案未改。
+  - TASK 要求 sector_theme_members=latest-only-blocked、market_theme_index_daily_bars=not-consumed；新增 report 固定保持此狀態。
+  - CHANGELOG 宣稱未改策略、watchlist、持倉狀態機；diff 符合。
 
-  可吸收 diff 僅限上述三檔；不建議 Architect 將整個 worktree 或未檢查旁支一併視為可合併。
+  需要標明邊界：
 
-  CHANGELOG.md 已在修改內容與修改檔案中列出 CHANGELOG.md，並描述它是交付文件 diff。rg 搜尋舊矛盾句與舊檔名無命中，未看到上一輪「未直接編輯 CHANGELOG.md」或舊 production audit 三檔摘要殘留。
+  - 新增 consumption check 的 entrypoint 是 core.generator.market_theme_summary_evidence，屬於正式 formatter 會使用的等價 evidence helper smoke，不是完整跑一次 production Telegram generator。
+  - 真實 production DB / GitHub runner credentials 未在本 QA 沙盒完成讀取；CLI 正確 fail-closed 為 blocked/source-error，未被誤報 consumed。
 
   ## 跨區塊語意一致性
 
-  TASK.md 是 risk_patch / L3，但 Architect 本輪明確要求只重驗 conditional pass 條件；本次 QA 未擴大到 live DB/write/full replay，符合本輪收斂指令。
+  JSON contract 檢查結果一致：
 
-  CHANGELOG.md 對產品/測試 diff 的描述與實際 diff 一致：
-
-  - script：report shape、May range guard、forbidden source family/lineage、latest membership blocked、只 upsert confirmed evidence、read-after-write metrics。
-  - test：dry-run report shape、May range guard、forbidden daily_signal_snapshot、missing required fields、execute path、read-after-write trend metrics。
-  - 未影響模組：未改 Telegram/header/VERSION、未 live write、未正式 backfill，與 TASK 非目標一致。
+  - 成功路徑：mocked persistent DB rows 可得到 fresh_runner_rebuild=passed、uses_market_theme_confirmed_evidence_history=true、trend days > 0。
+  - 缺 source / source error 路徑：CLI exit 2，fresh_runner_rebuild=blocked，未宣告 consumed。
+  - runtime/local row 反證：fresh_runner_rebuild=blocked、uses_history=false，不把 runtime row 當 production history。
+  - daily_signal_snapshot 反證：即使 fake client 有 snapshot row，也沒有被查詢為 market/theme trend source。
 
   ## 使用者誤讀風險
 
-  本輪不是 Telegram / summary / dashboard 顯示任務，TASK.md 也明確寫手機閱讀路徑不適用。已快速確認 CHANGELOG.md 沒有宣稱 Telegram 內容或 header 改動；因此 Owner 不會因本輪交付摘要誤讀成「已正式回寫」或「已可 live 發
-  報」。
+  手機閱讀順序檢查：
 
-  仍需注意：CHANGELOG.md 的自檢段落提到候選 diff 統計為「2 個產品/測試檔案」，但目前 worktree 還有 CHANGELOG.md 交付文件 diff。這在上下文中可接受，因同段修改檔案已明列三檔；不構成本輪阻塞。
+  - Summary 第一行仍是 【05/29 盤中｜v20.4.6】，本輪未偷升/降版。
+  - 🧭 新倉：無有效進場。 出現在 evidence confirmed / trend 行之前。
+  - evidence 行顯示為背景追溯，仍包含「限制：題材可追蹤，不代表可買」。
+  - 未出現 今日可買 或 可買：台積電 這類會把 trend 誤讀成買進建議的文字。
+
+  結論：本輪新增 diagnostic 不會改 Owner 手機上的買賣判斷順序；現有報文仍把 market/theme trend 放在背景追溯，而不是交易指令。
 
   ## 質疑與反證
 
-  主動反證不是只重跑 Tech 自檢：
+  主動反證 Tech 未完全覆蓋的路徑：
 
-  - 檢查 forbidden daily_signal_snapshot 測試不只驗欄位存在。測試會把 source_family 與 lineage.source_tables 改成 daily_signal_snapshot，確認 report blocked、validated_rows=0、pollution_guard=blocked，並呼叫
-    upsert_source_payloads 預期丟 ValueError，最後驗證 fake client calls=[]，代表不會寫入。
-  - script 端仍有 FORBIDDEN_SOURCE_FAMILIES 與 FORBIDDEN_LINEAGE_SOURCE_TABLES 包含 daily_signal_snapshot，validation 會產生 forbidden source_family 與 forbidden lineage source_tables。
-  - report 仍固定輸出 daily_price_signal_snapshot_rewrite = forbidden_as_primary_result 與 uses_only_daily_signal_snapshot = False。
+  - 反證 source_family=runtime 的 confirmed-like row：結果仍 blocked，沒有 passed。
+  - 反證目前 QA 沙盒不能讀 production DB：CLI 回 source-error / blocked，沒有把 source-error 降級成 consumed。
+  - 反證手機誤讀：confirmed trend summary 不會產生可買文字，且新倉無進場先於 evidence 背景。
+
+  未發現 TASK / CHANGELOG / diff 不一致到需要 blocked 的問題。
 
   ## 未測項目
 
-  - 未執行 live Supabase write。
-  - 未執行正式 backfill。
-  - 未跑 full pytest、full replay、production audit。
-  - 未驗證真實 production DB read-after-write，因 Architect 本輪明確要求只重驗 conditional pass 條件。
+  - 未讀真實 production Supabase rows；目前 QA 沙盒執行 read-only CLI 得到 source-error，只能確認 fail-closed。
+  - 未跑 full pytest、replay、backfill dry-run，因 TASK 尺寸為 normal_patch / L2，且本輪非 write/backfill/schema 任務。
+  - 未驗證 GitHub runner 真實 secret/env 是否存在；本輪只驗證 mocked persistent DB rows 可 fresh-run 重建，以及缺 source 時不誤報 consumed。
 
   ## QA 結論
 
-  通過。
+  通過
 
-  上一輪 conditional pass 條件已滿足：CHANGELOG.md 已列為交付文件 diff，舊矛盾句已移除，摘要與目前三檔 diff 一致，forbidden daily_signal_snapshot 反證測試仍存在且局部測試通過。
+  本輪可吸收候選 diff 與 TASK 範圍一致；核心 consumption check、fresh-run 等價反證、daily_signal_snapshot 邊界、Telegram 手機誤讀風險均已覆蓋。真實 production DB / GitHub env 仍是後續 read-only 環境確認項，不構成本輪
+  blocked，因程式在缺 source/error 時已 fail closed。

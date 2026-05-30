@@ -46,6 +46,13 @@
 
 ## Pending / Watchlist
 
+- 本輪 Market Theme Production Trend Consumption Check：
+  - 根因分類：`source_consumption_proof_gap` + `runner_parser_false_fail`。上一輪已證明 useful rows 寫入 production table，但仍需證明正式 generator/report path 在 fresh runner 條件下真的消費 production evidence trend。
+  - 已完成：formal generator consumption check、read-only smoke JSON、production smoke、測試與 QA 反證。
+  - 實際結果：`market_theme_confirmed_evidence` 已被正式路徑消費；`daily_signal_snapshot` / runtime / local cache 不會被當成 market/theme history；`sector_theme_members` 仍是 latest-only blocked；`market_theme_index_daily_bars` 仍 not-consumed。
+  - 邊界保持：未 DB write、未 backfill、未 schema / RLS / grant / policy / role、未 live Telegram、未改策略 decision。
+  - Runner gap 重複：CAO auto wrapper 再次把 QA `通過` 報告標成 QA parser failed；需修 QA conclusion parser，只讀 `## QA 結論` 或最終結論段的第一個有效詞，避免有效 QA 被誤判。
+  - 不新增 `AGENTS.md` 硬規則：既有 GitHub runner source-of-truth、fail-closed、DB consumption 規則已覆蓋；本輪沉澱為 smoke / tests / runner 待補。
 - 本輪 Market Theme May History Backfill Gap：
   - 根因分類：`wrong_backfill_target` + `source_consumption_gap`。前一輪把五月 `daily_price` / `daily_signal_snapshot` 回寫得太像成果，但 Owner 真正需要的是能被 market/theme evidence trend 消費的資料。
   - 已完成：PM 明確三張表的 source / consumer contract；Tech 將 backfill script 改成 JSON report 與嚴格 validation/write gate；QA 首輪攔下 forbidden `daily_signal_snapshot` payload 污染 confirmed evidence，返工後通過。
