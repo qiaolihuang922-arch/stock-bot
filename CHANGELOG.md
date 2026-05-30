@@ -1,87 +1,85 @@
-# CHANGELOG: 交付摘要，移除「未直接編輯 CHANGELOG.md」或等價矛盾句。
-  - 明確列出目前需保留的 production source audit 候選 diff:
-      - services/market_theme_evidence_store.py
-      - scripts/smoke_market_theme_evidence_readonly.py
-      - tests/test_market_theme_evidence_handoff.py
-  - 明確列出交付文件 diff:
-      - CHANGELOG.md
-  - 補充 Architect 已在可讀 production 的本機 config fallback 下執行:
-      - scripts/smoke_market_theme_evidence_readonly.py --trade-date 2026-05-29 --production-source-audit-json
-  - Architect production audit 結果:
-      - market_theme_confirmed_evidence rows=0
-      - daily_signal_snapshot rows=48
-      - signal_runs rows=1
-      - signal_items rows=12
-      - can_generate_approved_payload=false
-      - status=blocked
-  - 不宣告 QA 通過；Tech 自檢只代表交付前檢查。
+# CHANGELOG: market/theme 五月歷史回寫 source-of-truth 與策略消費閉環
+
+  ## 修改內容
+
+  - 任務尺寸與風險: risk_patch。理由是本輪涉及 backfill script/interface、DB write gate、pollution guard、read-after-write report 與 strategy/evidence trend consumption；但本次 Tech 交付摘要修正本身只收斂文件交付內容，不
+    擴大產品 diff。
+  - scripts/backfill_market_theme_sources.py:
+      - 新增 market-theme-history-backfill JSON report，包含 TASK.md 要求的 date_range、write_execution、live_telegram、schema_change、三張表的 source audit 欄位、daily_price_signal_snapshot_rewrite、
+        strategy_consumption_check 與 blocked_reasons。
+      - 新增 May date range 預設值 2026-05-01 到 2026-05-29，並在 validation 中拒絕日期超出範圍的 confirmed evidence row。
+      - 對 market_theme_confirmed_evidence 加入 required fields、allowed source family、forbidden source family、lineage source table、freshness、confirmed status、payload object 檢查。
+      - write path 只允許 upsert validated market_theme_confirmed_evidence rows；不再刪除或寫入 sector_theme_members、market_theme_index_daily_bars。
+      - sector_theme_members 在只能取得 latest company profile membership 時標記 missing/blocked；market_theme_index_daily_bars 若 DB table 不是直接消費者則 report skipped/not-consumed。
+      - execute 後透過 load_confirmed_market_theme_evidence 做 read-after-write，並把 observed/recent/support streak trend metrics 放入 report。
+  - tests/test_market_theme_source_backfill.py:
+      - 補 dry-run report shape、latest membership blocked、May range guard、forbidden daily_signal_snapshot source guard、missing required fields guard、execute path 只 upsert confirmed evidence、read-after-write trend
+        metrics 等局部測試。
+  - CHANGELOG.md:
+      - 交付文件 diff。內容為本最終回答，補列 CHANGELOG.md 為交付文件，移除與 worktree 狀態矛盾的舊摘要，並保留上述產品/測試實作摘要。
 
   ## 修改檔案
 
-  - 產品候選 diff:
-      - services/market_theme_evidence_store.py
-      - scripts/smoke_market_theme_evidence_readonly.py
-      - tests/test_market_theme_evidence_handoff.py
-  - 交付文件 diff:
-      - CHANGELOG.md
+  - scripts/backfill_market_theme_sources.py
+  - tests/test_market_theme_source_backfill.py
+  - CHANGELOG.md
 
   ## 最小改動策略
 
-  - 本次只修正交付摘要，不修改產品代碼、不修改測試、不重構、不清理旁支。
-  - 保留目前 production source audit 候選 diff，不因交付摘要修正而擴大或縮小產品範圍。
-  - 不改策略方向、不改 Telegram / CLI 使用者報文、不改 DB schema、不改 live write path。
-  - 不把 production row count 包裝成 confirmed market/theme evidence；缺 source semantics 時維持 fail closed / blocked。
+  - 本次只修正交付摘要內容，未再修改產品代碼與測試。
+  - 產品候選 diff 限定在 TASK.md 指定的 market/theme source backfill script 與直接測試。
+  - 不順手重構、不清理旁支、不改策略方向、不改 Telegram 報文、不新增 DB schema。
+  - 不把 daily_price / daily_signal_snapshot 五月資料包裝成本輪成果；只作禁止重寫契約的 report 欄位。
 
   ## 契約影響
 
-  - 本次交付摘要修正不改函式回傳結構、message list、payload shape、報文排序、報文分組、DB 寫入或 CLI 輸出契約。
-  - 產品候選 diff 的契約重點仍是 read-only production audit / dry-run JSON:
-      - write_execution=disabled
-      - live_write=false
-      - source_family=production_db
-      - 缺 market/theme source semantics 時 can_generate_approved_payload=false
-      - 缺 source semantics 時 status=blocked
-      - 不產生 live write、不 execute approved payload
-  - 版本契約: 本輪不改 Telegram / CLI 使用者報文版本；未同步 VERSION 或 Telegram header，因本輪沒有使用者可見報文變更。
+  - 改變 scripts/backfill_market_theme_sources.py 的 CLI/report 輸出契約：由文字摘要改為 TASK.md 指定的 JSON report shape。
+  - 改變 write path 行為：execute 只 upsert validated market_theme_confirmed_evidence，不寫入 sector_theme_members 或 market_theme_index_daily_bars。
+  - 新增 validation/fail-closed contract：forbidden source family、forbidden lineage、missing required fields、日期超出 May range、latest-only membership 都會 blocked/skipped。
+  - 新增 read-after-write report contract：execute 後回填 read_after_write 與 strategy_consumption_check trend metrics。
+  - 未改 Telegram formatter、message list、payload、報文排序、報文分組、VERSION/header。
+  - 版本同步: TASK.md 指定本輪不改 Telegram 使用者可見報文與 header，因此未同步 VERSION 或 Telegram header。
 
   ## 直接消費者同步
 
-  - Architect / Owner: 透過 read-only audit / dry-run output 判斷是否可進入 evidence write approval；本次摘要已補 Architect 實際 production audit 結果。
-  - QA: 可依 TASK.md、本 CHANGELOG.md、git diff 與必要局部源碼驗證候選 diff；本摘要明確標示目前 production audit 結果為 blocked，不宣告 QA 通過。
-  - 後續 approved payload generator / write CLI: 目前仍不可消費 approved payload，因 can_generate_approved_payload=false 且 approved_payload_preview 應維持 null。
-  - 本次未改 public helper、payload、message list 或 formatter，因此沒有新增需同步的產品呼叫方。
+  - Architect / Owner: 透過 backfill script JSON report 判斷 source availability、write scope、pollution guard、read-after-write 與 blocked/skipped reason。
+  - QA: 透過 tests/test_market_theme_source_backfill.py 驗證 report contract、write gate、pollution guard 與 read-after-write metrics。
+  - Strategy/evidence trend consumer: execute path 使用 load_confirmed_market_theme_evidence 驗證 confirmed evidence history 可被讀回；本輪不改其 public return shape。
+  - Telegram/report generator: 僅維持既有 evidence trend 消費關係，不改報文 contract。
+  - 本輪沒有新增或改動 formatter、message list 或 Telegram payload 呼叫方。
 
   ## 未影響模組
 
-  - 未改策略 decision、watchlist、持倉狀態機或交易建議。
-  - 未改 Telegram formatter、header、VERSION、message list contract 或手機閱讀內容。
-  - 未改 DB schema、table、column、RLS、grant、policy 或 role。
-  - 未執行 live Supabase write、insert、upsert、update、delete。
+  - 未改策略 BUY/SELL/RR/停損停利核心門檻。
+  - 未改 watchlist、持倉狀態機、交易建議。
+  - 未改 Telegram formatter、header、VERSION 或手機閱讀內容。
+  - 未改 DB schema、table、column、RLS、grant、policy、role。
+  - 未執行 live Telegram。
+  - 未執行 live Supabase write。
   - 未執行正式 backfill。
-  - 未發 Telegram。
-  - 未使用 fake/local/runtime/report-derived/chat data 產生 confirmed evidence。
-  - 未把 production row count 提升為 approved market/theme evidence semantics。
+  - 未使用 fake/local/runtime/report-derived/chat data 生成 confirmed evidence。
+  - 未重寫 daily_price / daily_signal_snapshot 五月資料。
 
   ## 已跑自檢命令
 
-  - sed -n '1,240p' TASK.md: 確認任務為 production DB market/theme evidence source audit 與 approved payload dry-run preview，原任務尺寸為 normal_patch，且要求缺 source semantics 時 blocked。
-  - sed -n '1,240p' CHANGELOG.md: 確認既有交付摘要需重寫，避免與 Architect 指令矛盾。
-  - git status --short: 確認目前候選產品 diff 僅包含 services/market_theme_evidence_store.py、scripts/smoke_market_theme_evidence_readonly.py、tests/test_market_theme_evidence_handoff.py。
-  - git diff --stat: 確認目前候選 diff 為 3 個產品 / 測試檔案，未由本次摘要修正擴大產品 diff。
-  - git diff --name-only: 確認候選 diff 檔案清單與本 CHANGELOG 列出的產品候選 diff 一致。
-  - Architect 補充執行結果: 在可讀 production 的本機 config fallback 下執行 scripts/smoke_market_theme_evidence_readonly.py --trade-date 2026-05-29 --production-source-audit-json，結果 market_theme_confirmed_evidence
-    rows=0、daily_signal_snapshot rows=48、signal_runs rows=1、signal_items rows=12、can_generate_approved_payload=false、status=blocked。
+  - pwd && git status --short: 確認工作目錄為 /Users/liveroom/stock-bot-agent-worktrees/tech_write，產品候選 diff 為 scripts/backfill_market_theme_sources.py、tests/test_market_theme_source_backfill.py。
+  - sed -n '1,240p' TASK.md: 確認任務為 risk_patch，要求 market/theme May history backfill report、validation、write safety、read-after-write 與 fresh runner consumption。
+  - sed -n '1,260p' CHANGELOG.md: 確認舊摘要與目前 worktree 狀態矛盾，需重寫交付摘要。
+  - git diff --stat: 確認候選 diff 為 2 個產品/測試檔案，488 insertions(+), 50 deletions(-)。
+  - git diff --name-only: 確認候選 diff 檔案清單與本 CHANGELOG 的產品/測試檔案一致。
+  - python -m pytest tests/test_market_theme_source_backfill.py: 未執行成功，系統 python command not found。
+  - .venv/bin/python -m pytest tests/test_market_theme_source_backfill.py: 通過，11 passed in 0.12s。
 
   ## 殘留風險
 
-  - Production DB 目前仍缺可核驗的 market/theme source semantics；daily_signal_snapshot、signal_runs、signal_items 的 row count 只能證明資料存在，不能證明可安全映射為 market_theme_confirmed_evidence approved payload。
-  - can_generate_approved_payload=false 代表本輪不能進入 write approval 或 execute；需要 Owner / Architect 後續確認可作為 market_index、sector_theme_key、watchlist_breadth、evidence_value、support_level、lineage 的
-    production source semantics。
-  - 本次不宣告 QA 通過；QA 仍需依 TASK.md、本摘要與候選 diff 驗證 dry-run 不寫 DB、不使用 forbidden source、不把 runtime/report/chat data 提升為 confirmed。
+  - Tech 自檢只代表交付前檢查，不宣告 QA 通過。
+  - 尚未執行 live Supabase write 或正式 backfill；execute path 仍需在批准後由 QA/Architect 依 TASK.md 驗證 dry-run、write flag、read-after-write 與 fresh runner consumption。
+  - 若五月 historical source 只能取得 latest snapshot 或缺 lineage/source semantics，report 會維持 blocked/skipped，不能進入正式寫入。
+  - market_theme_index_daily_bars 與 sector_theme_members 目前依直接消費者與 historical membership 可證明性限制而 skipped/blocked；若後續要寫入，需要另開任務定義直接消費者與 source-of-truth。
 
   ## 旁支待辦
 
-  - 若 Owner 要讓 production rows 轉成 approved payload，需要另開任務定義 source semantics 與 lineage mapping。
-  - 若需要正式寫入 market_theme_confirmed_evidence，需另開 write approval / dry-run to execute 任務，且仍不得繞過既有 approval gate。
-  - 若 production source 需要新增 schema、view、function、RLS、grant、policy 或 role，需另走 DB schema 變更流程，不納入本輪。
-  - 若要擴充其他日期、backfill、Telegram 顯示或完整 ingestion pipeline，需另開任務。
+  - 若 Owner/Architect 提供可核驗五月 market/theme historical source，另開任務接入 source loader 與 approved payload mapping。
+  - 若需要正式 execute/write，另開 write approval 任務並保留 dry-run、validation、duplicate/upsert guard、read-after-write。
+  - 若需要 DB schema/view/function/RLS/grant/policy/role 變更，另走 DB schema 變更流程。
+  - 若後續要把 evidence trend 顯示到 Telegram summary/detail，另開 Telegram 報文任務並同步版本契約。

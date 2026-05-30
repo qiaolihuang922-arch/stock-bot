@@ -15,7 +15,13 @@ if str(ROOT) not in sys.path:
 import requests
 
 from core.watchlist import STOCKS
-from services.market_theme_evidence_store import upsert_market_theme_confirmed_evidence
+from services.market_theme_evidence_store import (
+    HANDOFF_ALLOWED_SOURCE_FAMILIES,
+    REQUIRED_ROW_FIELDS,
+    load_confirmed_market_theme_evidence,
+    _source_family_forbidden,
+    upsert_market_theme_confirmed_evidence,
+)
 
 
 RULE_VERSION = "twse_official_market_theme_v1"
@@ -25,6 +31,27 @@ SOURCE_NAME = "twse_openapi_mi_index"
 MEMBER_SOURCE_NAME = "twse_openapi_t187ap03_L"
 BREADTH_SOURCE_NAME = "twse_openapi_twtazu_od"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
+DEFAULT_START_DATE = "2026-05-01"
+DEFAULT_END_DATE = "2026-05-29"
+ALLOWED_LINEAGE_SOURCE_TABLES = {
+    "market_theme_confirmed_evidence",
+    "market_theme_index_daily_bars",
+    "sector_theme_members",
+}
+FORBIDDEN_LINEAGE_SOURCE_TABLES = {
+    "daily_signal_snapshot",
+    "report",
+    "runtime",
+    "local",
+    "chat",
+}
+FORBIDDEN_SOURCE_FAMILIES = {
+    "daily_signal_snapshot",
+    "report",
+    "runtime",
+    "local",
+    "chat",
+}
 
 TWSE_MI_INDEX_URL = "https://openapi.twse.com.tw/v1/exchangeReport/MI_INDEX"
 TWSE_BREADTH_URL = "https://openapi.twse.com.tw/v1/opendata/twtazu_od"
@@ -366,46 +393,245 @@ def build_source_payloads(index_raw, breadth_raw, profiles_raw, trade_date=None,
     }
 
 
-def _delete_source_rows(client, table, source_name, trade_date=None):
-    query = client.table(table).delete().eq("source_name", source_name)
-    if trade_date and table != "sector_theme_members":
-        query = query.eq("trade_date", trade_date)
-    query.execute()
+def _empty_coverage():
+    return {"first_trade_date": None, "last_trade_date": None, "trade_dates": 0}
 
 
-def upsert_source_payloads(client, payloads, trade_date=None):
-    _delete_source_rows(client, "sector_theme_members", MEMBER_SOURCE_NAME)
-    _delete_source_rows(client, "market_theme_index_daily_bars", SOURCE_NAME, trade_date)
-    _delete_source_rows(client, "market_theme_confirmed_evidence", SOURCE_NAME, trade_date)
-
-    if payloads["member_rows"]:
-        client.table("sector_theme_members").insert(payloads["member_rows"]).execute()
-    if payloads["index_rows"]:
-        client.table("market_theme_index_daily_bars").insert(payloads["index_rows"]).execute()
-    if payloads["confirmed_rows"]:
-        upsert_market_theme_confirmed_evidence(payloads["confirmed_rows"], client)
+def _coverage(rows):
+    dates = sorted({row.get("trade_date") for row in rows or [] if row.get("trade_date")})
+    if not dates:
+        return _empty_coverage()
+    return {
+        "first_trade_date": dates[0],
+        "last_trade_date": dates[-1],
+        "trade_dates": len(dates),
+    }
 
 
-def print_summary(trade_date, payloads):
-    print("TWSE MARKET THEME SOURCE BACKFILL")
-    print(f"trade_date: {trade_date or 'latest-from-source'}")
-    print(f"status: {payloads['status']}")
-    print(f"reason: {payloads['reason']}")
-    print(f"sector_theme_members rows: {len(payloads['member_rows'])}")
-    print(f"market_theme_index_daily_bars rows: {len(payloads['index_rows'])}")
-    print(f"market_theme_confirmed_evidence rows: {len(payloads['confirmed_rows'])}")
-    compact = [
-        {
-            "theme": row["sector_theme_key"],
-            "support_level": row["support_level"],
-            "freshness": row["freshness"],
-            "theme_change_pct": row["evidence_value"]["theme_change_pct"],
-            "market_change_pct": row["evidence_value"]["market_change_pct"],
-            "breadth": row["watchlist_breadth"].get("up_ratio"),
-        }
-        for row in payloads["confirmed_rows"]
+def _row_dates_outside_range(rows, start_date, end_date):
+    return [
+        row.get("trade_date")
+        for row in rows or []
+        if not row.get("trade_date") or row.get("trade_date") < start_date or row.get("trade_date") > end_date
     ]
-    print(json.dumps(compact, ensure_ascii=False, indent=2, sort_keys=True))
+
+
+def _confirmed_row_validation_errors(row, start_date, end_date):
+    if not isinstance(row, dict):
+        return ["row must be an object"]
+    errors = []
+    missing = sorted(
+        field
+        for field in REQUIRED_ROW_FIELDS
+        if field not in row or row.get(field) in (None, "")
+    )
+    if missing:
+        errors.append(f"required fields missing: {', '.join(missing)}")
+    trade_date = row.get("trade_date")
+    if trade_date and (trade_date < start_date or trade_date > end_date):
+        errors.append("source date outside requested May range")
+    source_family = str(row.get("source_family") or "").strip().lower()
+    if source_family in FORBIDDEN_SOURCE_FAMILIES or _source_family_forbidden(source_family):
+        errors.append("forbidden source_family")
+    elif source_family not in HANDOFF_ALLOWED_SOURCE_FAMILIES:
+        errors.append("source_family is not an approved persistent source")
+    if row.get("freshness") != "fresh":
+        errors.append("partial-coverage")
+    if row.get("evidence_status") != "confirmed":
+        errors.append("evidence_status is not confirmed")
+    if not isinstance(row.get("evidence_value"), dict):
+        errors.append("evidence_value must be an object")
+    if not isinstance(row.get("watchlist_breadth"), dict):
+        errors.append("watchlist_breadth must be an object")
+    lineage = row.get("lineage")
+    if not isinstance(lineage, dict):
+        errors.append("lineage must be an object")
+    else:
+        source_tables = lineage.get("source_tables")
+        if not isinstance(source_tables, list) or not source_tables:
+            errors.append("lineage.source_tables missing")
+        else:
+            normalized_tables = {str(table or "").strip().lower() for table in source_tables}
+            if normalized_tables & FORBIDDEN_LINEAGE_SOURCE_TABLES:
+                errors.append("forbidden lineage source_tables")
+            if not normalized_tables.issubset(ALLOWED_LINEAGE_SOURCE_TABLES):
+                errors.append("lineage.source_tables is not an approved market/theme source")
+    return errors
+
+
+def _validated_confirmed_rows(payloads, start_date, end_date):
+    rows = list(payloads.get("confirmed_rows") or [])
+    if payloads.get("status") != "ready":
+        return [], "missing-source"
+    if not rows:
+        return [], "missing-source"
+    errors = []
+    for row in rows:
+        for error in _confirmed_row_validation_errors(row, start_date, end_date):
+            if error and error not in errors:
+                errors.append(error)
+    if errors:
+        return [], "; ".join(errors)
+    return rows, ""
+
+
+def _report_table(
+    table,
+    source_of_truth,
+    historical_source_status,
+    consumer_path,
+    candidate_rows=0,
+    validated_rows=0,
+    written_rows=0,
+    skipped_rows=0,
+    duplicate_conflicts=0,
+    coverage=None,
+    pollution_guard="blocked",
+    read_after_write="not-run",
+    status="blocked",
+    blocked_reasons=None,
+):
+    return {
+        "table": table,
+        "source_of_truth": source_of_truth,
+        "historical_source_status": historical_source_status,
+        "consumer_path": consumer_path,
+        "candidate_rows": candidate_rows,
+        "validated_rows": validated_rows,
+        "written_rows": written_rows,
+        "skipped_rows": skipped_rows,
+        "coverage": coverage or _empty_coverage(),
+        "duplicate_conflicts": duplicate_conflicts,
+        "pollution_guard": pollution_guard,
+        "read_after_write": read_after_write,
+        "status": status,
+        "blocked_reasons": blocked_reasons or [],
+    }
+
+
+def build_market_theme_history_backfill_report(
+    payloads,
+    start_date=DEFAULT_START_DATE,
+    end_date=DEFAULT_END_DATE,
+    write_execution="dry-run",
+    written_confirmed_rows=0,
+    read_after_write_result=None,
+):
+    confirmed_rows, confirmed_reason = _validated_confirmed_rows(payloads, start_date, end_date)
+    confirmed_candidate_rows = len(payloads.get("confirmed_rows") or [])
+    read_after_write = "not-run"
+    if write_execution == "executed":
+        read_after_write = (
+            "passed"
+            if isinstance(read_after_write_result, dict) and read_after_write_result.get("confirmed")
+            else "blocked"
+        )
+    confirmed_table = _report_table(
+        "market_theme_confirmed_evidence",
+        "production DB market_theme_confirmed_evidence rows after validation",
+        "partial" if confirmed_rows else "missing",
+        "market_theme_evidence_store.evidence_trend",
+        candidate_rows=confirmed_candidate_rows,
+        validated_rows=len(confirmed_rows),
+        written_rows=written_confirmed_rows,
+        skipped_rows=max(confirmed_candidate_rows - len(confirmed_rows), 0),
+        coverage=_coverage(confirmed_rows),
+        pollution_guard="passed" if confirmed_rows else "blocked",
+        read_after_write=read_after_write,
+        status=(
+            "executed"
+            if write_execution == "executed" and written_confirmed_rows
+            else "ready"
+            if confirmed_rows
+            else "blocked"
+        ),
+        blocked_reasons=[] if confirmed_rows else [confirmed_reason or "missing-source"],
+    )
+
+    index_rows = list(payloads.get("index_rows") or [])
+    index_bad_dates = _row_dates_outside_range(index_rows, start_date, end_date)
+    index_reasons = []
+    if not index_rows:
+        index_reasons.append("missing official historical index bars source")
+    if index_bad_dates:
+        index_reasons.append("source date outside requested May range")
+    index_reasons.append("DB source table is not a direct strategy/report consumer in this script")
+    index_table = _report_table(
+        "market_theme_index_daily_bars",
+        "official_or_owner_approved_historical_market_theme_bars",
+        "not-consumed" if index_rows and not index_bad_dates else "missing",
+        "confirmed evidence generation uses fetched official rows; DB table write skipped",
+        candidate_rows=len(index_rows),
+        validated_rows=0,
+        skipped_rows=len(index_rows),
+        coverage=_coverage(index_rows if not index_bad_dates else []),
+        pollution_guard="passed" if index_rows and not index_bad_dates else "blocked",
+        status="skipped",
+        blocked_reasons=index_reasons,
+    )
+
+    member_rows = list(payloads.get("member_rows") or [])
+    member_table = _report_table(
+        "sector_theme_members",
+        "official_or_owner_approved_historical_membership",
+        "missing",
+        "watchlist breadth generation requires dated membership; latest company profile is not May membership",
+        candidate_rows=len(member_rows),
+        validated_rows=0,
+        skipped_rows=len(member_rows),
+        coverage=_empty_coverage(),
+        pollution_guard="blocked",
+        status="blocked" if member_rows else "skipped",
+        blocked_reasons=[
+            "only latest company profile membership available; cannot prove May daily membership"
+        ],
+    )
+
+    trend = (
+        read_after_write_result.get("evidence_trend", {})
+        if isinstance(read_after_write_result, dict)
+        else {}
+    )
+    uses_history = bool(
+        isinstance(read_after_write_result, dict)
+        and read_after_write_result.get("confirmed")
+        and trend.get("observed_days", 0) > 0
+    )
+    blocked_reasons = []
+    for table in (confirmed_table, index_table, member_table):
+        for reason in table.get("blocked_reasons", []):
+            if reason not in blocked_reasons:
+                blocked_reasons.append(reason)
+
+    return {
+        "mode": "market-theme-history-backfill",
+        "date_range": {"start": start_date, "end": end_date},
+        "write_execution": write_execution,
+        "live_telegram": False,
+        "schema_change": False,
+        "tables": [confirmed_table, index_table, member_table],
+        "daily_price_signal_snapshot_rewrite": "forbidden_as_primary_result",
+        "strategy_consumption_check": {
+            "uses_market_theme_confirmed_evidence_history": uses_history,
+            "uses_only_daily_signal_snapshot": False,
+            "observed_days": trend.get("observed_days", 0),
+            "recent_supporting_days": trend.get("recent_supporting_days", 0),
+            "support_streak_days": trend.get("support_streak_days", 0),
+        },
+        "blocked_reasons": blocked_reasons,
+    }
+
+
+def upsert_source_payloads(client, payloads, start_date=DEFAULT_START_DATE, end_date=DEFAULT_END_DATE):
+    confirmed_rows, reason = _validated_confirmed_rows(payloads, start_date, end_date)
+    if not confirmed_rows:
+        raise ValueError(f"market_theme_confirmed_evidence blocked: {reason or 'missing-source'}")
+    upsert_market_theme_confirmed_evidence(confirmed_rows, client)
+    return {"market_theme_confirmed_evidence": len(confirmed_rows)}
+
+
+def print_summary(report):
+    print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
 
 
 def main(argv=None):
@@ -413,6 +639,8 @@ def main(argv=None):
         description="Backfill market/theme source tables and confirmed evidence from official TWSE OpenAPI."
     )
     parser.add_argument("--trade-date", help="YYYY-MM-DD. Defaults to the latest date returned by TWSE.")
+    parser.add_argument("--start-date", default=DEFAULT_START_DATE)
+    parser.add_argument("--end-date", default=DEFAULT_END_DATE)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--write", action="store_true")
     parser.add_argument("--confirm-write", action="store_true")
@@ -432,19 +660,39 @@ def main(argv=None):
         profiles_raw,
         trade_date=args.trade_date,
     )
-    print_summary(args.trade_date, payloads)
-
-    if payloads["status"] != "ready":
-        raise SystemExit(1)
+    report = build_market_theme_history_backfill_report(
+        payloads,
+        start_date=args.start_date,
+        end_date=args.end_date,
+        write_execution="dry-run",
+    )
     if args.write:
         client = get_supabase_client()
-        trade_date = args.trade_date or (
-            payloads["index_rows"][0]["trade_date"] if payloads["index_rows"] else None
+        write_counts = upsert_source_payloads(
+            client,
+            payloads,
+            start_date=args.start_date,
+            end_date=args.end_date,
         )
-        upsert_source_payloads(client, payloads, trade_date=trade_date)
-        print("WRITE OK")
-    else:
-        print("DRY RUN ONLY: no database writes")
+        requested_trade_date = args.trade_date or (
+            payloads["confirmed_rows"][0]["trade_date"] if payloads["confirmed_rows"] else None
+        )
+        read_after_write = load_confirmed_market_theme_evidence(
+            client=client,
+            trade_date=requested_trade_date,
+        )
+        report = build_market_theme_history_backfill_report(
+            payloads,
+            start_date=args.start_date,
+            end_date=args.end_date,
+            write_execution="executed",
+            written_confirmed_rows=write_counts.get("market_theme_confirmed_evidence", 0),
+            read_after_write_result=read_after_write,
+        )
+    print_summary(report)
+    confirmed_table = report["tables"][0]
+    if confirmed_table["status"] == "blocked":
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":

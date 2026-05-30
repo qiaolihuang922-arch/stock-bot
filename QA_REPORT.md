@@ -1,96 +1,77 @@
-# QA_REPORT:
+# QA_REPORT: market/theme 五月歷史回寫 conditional pass 重驗
 
   ## 測試範圍
 
-  本輪任務尺寸為 normal_patch、QA level 為 L2。我沒有擴成 full pytest / replay / backfill；驗證集中在 read-only audit JSON contract、fail-closed gate、直接消費者與 Owner 可見 dry-run 輸出誤讀風險。
+  本輪只重驗 Architect 指定的上一輪 conditional pass 條件，未擴大到 live DB/write/full replay。
 
-  已檢查：
-
-  - TASK.md
-  - CHANGELOG.md
-  - git status
-  - git diff --stat
-  - services/market_theme_evidence_store.py
-  - scripts/smoke_market_theme_evidence_readonly.py
-  - tests/test_market_theme_evidence_handoff.py
-
-  已跑命令：
-
-  - arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence_handoff.py -q -> 34 passed
-  - arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py -q -> 21 passed
-  - git diff --check -> passed
-  - scripts/smoke_market_theme_evidence_readonly.py --trade-date 2026-05-29 --production-source-audit-json -> exit code 2，輸出 blocked JSON，未洩漏 secret/hash/fingerprint
-  - 追加直接消費者 smoke：mock production source rows 可產生 approved_payload_preview，且 fake client 未觸發 insert/update/upsert/delete
+  - 讀取 TASK.md、CHANGELOG.md、git status --short、git diff --stat、指定三檔 diff。
+  - 驗證 CHANGELOG.md 已列出 CHANGELOG.md 為交付文件 diff。
+  - 驗證已移除「未直接編輯 CHANGELOG.md」或等價矛盾句。
+  - 驗證 CHANGELOG.md 仍準確描述 scripts/backfill_market_theme_sources.py 與 tests/test_market_theme_source_backfill.py。
+  - 快速確認 forbidden daily_signal_snapshot 反證測試仍存在並可執行。
+  - 執行：.venv/bin/python -m pytest tests/test_market_theme_source_backfill.py -q，結果 11 passed in 0.12s。
 
   ## 風險預算與停止條件
 
-  最值得抓的 3 個風險：
+  本輪最值得抓的風險：
 
-  1. 把個股 snapshot / signal item row count 誤升級成 market/theme confirmed evidence。
-      - 驗證：測試與 diff 顯示需具備 market_index / sector_theme_key / watchlist_breadth / evidence_value / support_level / lineage 並通過 validator 才能 preview。
-      - 結果：local contract 通過。
-  2. dry-run audit 變成 live write 或產出可誤執行 payload。
-      - 驗證：JSON 固定 write_execution=disabled、live_write=false；追加 fake client 阻擋 write method。
-      - 結果：未見 write path 被呼叫。
-  3. Owner 讀 dry-run output 時誤以為 production source row count 已被完整確認。
-      - 驗證：實跑 CLI。
-      - 結果：本環境 production read 失敗；輸出 blocked，但 signal_runs source-error 時 signal_items 顯示 rows: 0，可能讓 Owner 誤讀成 signal_items 已查且為 0。
-
-  停止條件：不做 live production write、不做 backfill、不做 full repo 測試；production row count 只能在允許 read-only Supabase network 的 runner 完成。
+  1. 交付摘要仍和 worktree diff 矛盾。
+      - 驗證：比對 git diff --name-only 與 CHANGELOG.md 修改檔案段落。
+      - 停止條件：三個 diff 檔案一致列出即可停止，不追查全 repo。
+  2. 舊 conditional pass 的矛盾句殘留，導致 Architect 吸收錯誤交付事實。
+      - 驗證：rg 搜尋「未直接編輯 CHANGELOG」、舊 production audit 檔名與舊摘要關鍵字。
+      - 停止條件：搜尋無命中即可停止。
+  3. forbidden daily_signal_snapshot guard 被移除或只剩表面欄位。
+      - 驗證：檢查測試是否同時覆蓋 report blocked 與 write client 無呼叫，並重跑局部測試。
+      - 停止條件：指定測試存在且局部測試通過即可停止。
 
   ## 關聯風險掃描
 
-  TASK.md、主要 code diff、測試方向大致一致：新增 read-only audit helper、CLI flag、局部 tests，不改策略、Telegram、DB schema 或 write CLI。
+  git diff --name-only 只有：
 
-  需注意兩個不一致/殘留：
+  - CHANGELOG.md
+  - scripts/backfill_market_theme_sources.py
+  - tests/test_market_theme_source_backfill.py
 
-  - CHANGELOG.md 說「未直接編輯 CHANGELOG.md」，但 git status / git diff --stat 顯示 CHANGELOG.md 已修改。這是交付文件描述不精準，不影響產品 code contract，但 Architect 吸收時不能把整包 diff 當成產品可合併 diff。
-  - 可吸收產品 diff 應限於：
-      - services/market_theme_evidence_store.py
-      - scripts/smoke_market_theme_evidence_readonly.py
-      - tests/test_market_theme_evidence_handoff.py
-  - worktree 殘留/交付文件 diff：
-      - CHANGELOG.md 僅作 handoff 摘要，不應被當成產品實作範圍。
+  可吸收 diff 僅限上述三檔；不建議 Architect 將整個 worktree 或未檢查旁支一併視為可合併。
+
+  CHANGELOG.md 已在修改內容與修改檔案中列出 CHANGELOG.md，並描述它是交付文件 diff。rg 搜尋舊矛盾句與舊檔名無命中，未看到上一輪「未直接編輯 CHANGELOG.md」或舊 production audit 三檔摘要殘留。
 
   ## 跨區塊語意一致性
 
-  本輪不是 Telegram / UI 任務，無手機報文版本或 formatter header 需驗證。
+  TASK.md 是 risk_patch / L3，但 Architect 本輪明確要求只重驗 conditional pass 條件；本次 QA 未擴大到 live DB/write/full replay，符合本輪收斂指令。
 
-  Owner 可見 JSON 的閱讀順序檢查：
+  CHANGELOG.md 對產品/測試 diff 的描述與實際 diff 一致：
 
-  - 開頭能看到 mode=read-only-production-audit
-  - 能看到 write_execution=disabled、live_write=false
-  - 能看到 can_generate_approved_payload=false 與 status=blocked
-  - blocked 時 approved_payload_preview=null
-  - missing_source_semantics 有列出需要 Owner/PM 補的 source semantics
-
-  語意風險：當上游 production read 失敗時，source_tables 裡部分表有 status=source-error，但 signal_items 在無 run_ids 時被填成 ok/rows=0。這會削弱「來源表 row count」的可追溯語意。
+  - script：report shape、May range guard、forbidden source family/lineage、latest membership blocked、只 upsert confirmed evidence、read-after-write metrics。
+  - test：dry-run report shape、May range guard、forbidden daily_signal_snapshot、missing required fields、execute path、read-after-write trend metrics。
+  - 未影響模組：未改 Telegram/header/VERSION、未 live write、未正式 backfill，與 TASK 非目標一致。
 
   ## 使用者誤讀風險
 
-  主要誤讀風險不是買賣建議，而是 Owner 可能把 signal_items rows=0 解讀為 production 已查無資料。實際上，當 signal_runs 讀取失敗或沒有可用 run id 時，程式沒有直接查 signal_items，而是用空結果代替。
+  本輪不是 Telegram / summary / dashboard 顯示任務，TASK.md 也明確寫手機閱讀路徑不適用。已快速確認 CHANGELOG.md 沒有宣稱 Telegram 內容或 header 改動；因此 Owner 不會因本輪交付摘要誤讀成「已正式回寫」或「已可 live 發
+  報」。
 
-  此風險不會造成 approved payload 被產出，因為整體仍 blocked；但會影響 Owner 對 production source availability 的判斷。
+  仍需注意：CHANGELOG.md 的自檢段落提到候選 diff 統計為「2 個產品/測試檔案」，但目前 worktree 還有 CHANGELOG.md 交付文件 diff。這在上下文中可接受，因同段修改檔案已明列三檔；不構成本輪阻塞。
 
   ## 質疑與反證
 
-  Tech 已覆蓋 snapshot rows 不可升級、explicit contract columns 才 preview、缺 credentials fail closed。QA 追加反證：
+  主動反證不是只重跑 Tech 自檢：
 
-  - 直接消費者：mock safe mapping row 產生 preview，preview 欄位可被 validator 接受，且未觸發 write method。
-  - 負面/誤讀案例：實跑 CLI 在 production read 失敗時 blocked 且 redacted，但 signal_items row count 可能被誤讀為已查。
-  - 契約風險：TASK.md 要求至少回報指定 production tables 是否有 2026-05-29 資料；目前 sandbox 無法完成真實 production row count，因此不能給完全通過。
+  - 檢查 forbidden daily_signal_snapshot 測試不只驗欄位存在。測試會把 source_family 與 lineage.source_tables 改成 daily_signal_snapshot，確認 report blocked、validated_rows=0、pollution_guard=blocked，並呼叫
+    upsert_source_payloads 預期丟 ValueError，最後驗證 fake client calls=[]，代表不會寫入。
+  - script 端仍有 FORBIDDEN_SOURCE_FAMILIES 與 FORBIDDEN_LINEAGE_SOURCE_TABLES 包含 daily_signal_snapshot，validation 會產生 forbidden source_family 與 forbidden lineage source_tables。
+  - report 仍固定輸出 daily_price_signal_snapshot_rewrite = forbidden_as_primary_result 與 uses_only_daily_signal_snapshot = False。
 
   ## 未測項目
 
-  - 未驗證真實 production DB row count，因 CLI 在目前 sandbox 讀 production 發生 source-error。
-  - 未做 live write、upsert、insert、update、delete。
-  - 未做 backfill / replay。
-  - 未做 full pytest。
-  - 未驗證 Supabase read-only runner 實際 credential 權限是否符合 production。
+  - 未執行 live Supabase write。
+  - 未執行正式 backfill。
+  - 未跑 full pytest、full replay、production audit。
+  - 未驗證真實 production DB read-after-write，因 Architect 本輪明確要求只重驗 conditional pass 條件。
 
   ## QA 結論
 
-  conditional pass
+  通過。
 
-  本地 code contract、fail-closed、dry-run only、局部直接消費者驗證通過；但 production row count 驗收未能在目前環境完成，且 signal_runs 失敗時 signal_items rows=0 有 Owner 誤讀風險。建議 Architect 僅吸收產品 code/test
-  diff，不要整包合併 handoff 文件；正式完成前需在可連 production read-only 的 runner 重跑 audit CLI，並修正或接受 signal_items skipped/rows=0 的語意風險。
+  上一輪 conditional pass 條件已滿足：CHANGELOG.md 已列為交付文件 diff，舊矛盾句已移除，摘要與目前三檔 diff 一致，forbidden daily_signal_snapshot 反證測試仍存在且局部測試通過。

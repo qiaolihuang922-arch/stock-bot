@@ -34,6 +34,18 @@
 
 ## Recent High-Signal Milestones
 
+- Market Theme May History Backfill Gap 已通過 QA 並完成一次正式非 schema data write：
+  - Owner 指出真正需要回寫 / 消費的應是 `market_theme_confirmed_evidence`、`market_theme_index_daily_bars`、`sector_theme_members`，不是已存在五月資料的 `daily_price` / `daily_signal_snapshot`。
+  - PM 定義後，Tech 將 `scripts/backfill_market_theme_sources.py` 收斂為 market/theme history backfill JSON report。
+  - 本輪不再把 `daily_price` / `daily_signal_snapshot` 當回寫成果，report 固定標記 `daily_price_signal_snapshot_rewrite=forbidden_as_primary_result`。
+  - `sector_theme_members` 只有 latest membership 時 blocked；`market_theme_index_daily_bars` 目前不是直接 DB consumer 時 skipped/not-consumed。
+  - `market_theme_confirmed_evidence` 是唯一正式寫入表；write path 只 upsert validated confirmed evidence，且驗 required fields、allowed source family、forbidden source family、lineage.source_tables。
+  - 已正式執行 `scripts/backfill_market_theme_sources.py --write --confirm-write`：upsert `market_theme_confirmed_evidence` 9 rows，coverage `2026-05-29`，read-after-write passed。
+  - Strategy consumption check：`uses_market_theme_confirmed_evidence_history=true`、`uses_only_daily_signal_snapshot=false`、observed_days=1、recent_supporting_days=1、support_streak_days=1。
+  - DB duplicate check：三張 market/theme 表按各自 business key duplicate_extra_rows=0。
+  - QA 首輪有效阻塞 forbidden `daily_signal_snapshot` payload 污染 confirmed evidence；Tech 返工後 QA 通過。
+  - 驗證：`tests/test_market_theme_source_backfill.py tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py tests/test_workflow_runtime_config.py`，`75 passed, 13 warnings`；`git diff --check` 通過。
+  - 邊界：未改 DB schema / RLS / grant / policy / role；未 live Telegram；未改策略買賣門檻；未做完整五月 market/theme historical source 補齊，因目前 TWSE OpenAPI source 只能證明 latest 日期。
 - `v20.4.5` Market Theme Evidence History Trend Consumption 已完成本地驗證，待 commit / push：
   - Owner 要把 market/theme evidence 的歷史資料用起來，不再只看最新一筆。
   - `services/market_theme_evidence_store.py` 仍先讀 requested date / 上一交易日最新 confirmed row，並額外讀最近 `trade_date <= requested_trade_date` evidence rows 建立 `evidence_trend`。

@@ -46,6 +46,12 @@
 
 ## Pending / Watchlist
 
+- 本輪 Market Theme May History Backfill Gap：
+  - 根因分類：`wrong_backfill_target` + `source_consumption_gap`。前一輪把五月 `daily_price` / `daily_signal_snapshot` 回寫得太像成果，但 Owner 真正需要的是能被 market/theme evidence trend 消費的資料。
+  - 已完成：PM 明確三張表的 source / consumer contract；Tech 將 backfill script 改成 JSON report 與嚴格 validation/write gate；QA 首輪攔下 forbidden `daily_signal_snapshot` payload 污染 confirmed evidence，返工後通過。
+  - 實際寫入：只 upsert `market_theme_confirmed_evidence` 9 rows；read-after-write passed，strategy consumption check 已確認用到 confirmed evidence history。
+  - 防污染：`sector_theme_members` latest-only blocked；`market_theme_index_daily_bars` 沒直接 DB consumer 時 skipped/not-consumed；`daily_price` / `daily_signal_snapshot` 不再作本輪成果。
+  - 邊界：目前只能補 latest official market/theme evidence，不能憑空補完整五月 daily market/theme history；若要完整五月，需真實 historical source 或 Owner-approved provider。
 - 本輪 Architect Dispatch Boundary Audit：
   - 根因分類：`high_risk_invariant` + `runner_prompt_gap`。流程文件原本允許 Owner 明確授權 Architect 直接實作，但沒有定義「明確」格式，導致泛用操作口令被誤讀成 bypass。
   - 已完成硬規則收斂：`AGENTS.md` 明確規定「開始 / 繼續 / 處理 / 修復 / 檢查 / 清理 / 推進 / 直接來」只代表啟動流程，不代表可代 PM / Tech / QA。

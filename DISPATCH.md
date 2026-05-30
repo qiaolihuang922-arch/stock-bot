@@ -4,38 +4,50 @@
 
 ## Current Task
 
-- task_id: `architect-dispatch-boundary-audit`
-- task_name: `Architect Dispatch Boundary Audit And Agent Rule Hardening`
-- task_type: `process`
-- version_level: `none`
-- qa_level: `process`
+- task_id: `market-theme-may-history-backfill-gap`
+- task_name: `Market Theme May History Backfill Gap`
+- task_type: `normal_patch`
+- version_level: `patch`
+- qa_level: `L2`
 - owner_status: `requested`
 - architect_status: `completed`
-- pm_status: `not_required`
-- tech_status: `not_required`
-- qa_status: `not_required`
-- commit: `pushed`
+- pm_status: `task_ready`
+- tech_status: `changelog_ready`
+- qa_status: `qa_passed`
+- commit: `pending`
 
 ## Current Result
 
-- Owner 指出流程逃逸：Architect 開始把「開始 / 繼續 / 檢查 / 清理 / 修復」等操作口令當成直接實作授權，沒有先分派 PM / Tech / QA。
-- 本輪只做流程與 agent 規則審計；不處理已改產品代碼，只檢查是否有破壞。
-- 根因分類：`high_risk_invariant` + `runner_prompt_gap`。
-  - 舊規則有「Owner 明確說直接實作可越過角色」例外，但沒有定義「明確」格式。
-  - `auto` runner 本身會先 PM -> Tech -> QA；問題主要是 Architect 人工判斷時把泛用操作語誤讀成 bypass。
-- 已補方向：
-  - `AGENTS.md`：一般操作口令不等於直接代角色授權；越過角色必須是當前任務、明確、限範圍。
-  - `DISPATCH.md` startup command：提醒新對話和上下文壓縮後隱含授權失效。
-  - CAO agent / runner prompt：PM 只能定義需求，Tech 必須有正式 `TASK.md`，QA 只驗證；任何跳過 Architect 或缺 TASK 的路徑要 blocked。
-- 已檢查文件範圍：固定流程文件 `AGENTS.md`、`DISPATCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`，以及 `tools/cao_agent/` 的 runner scripts 與 `profiles/stock_*.md.template`。
-- 驗證：
-  - `git diff --check`：通過。
-  - `arch -arm64 .venv/bin/python -m pytest tests/test_strategy_evidence.py tests/test_cross_day_context.py tests/test_generator_report.py tests/test_backfill_signals.py tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py -q`：148 passed，153 warnings。
-- 已提交並推送：`81d4340 docs: harden architect dispatch boundary`。
+- Owner 指出 evidence/source 三張表可能才是五月歷史證據鏈真正需要回寫的資料：
+  - `market_theme_confirmed_evidence`
+  - `market_theme_index_daily_bars`
+  - `sector_theme_members`
+- Owner 質疑：本輪回寫的 `daily_price` / `daily_signal_snapshot` 早就有資料，是否重複做了低價值回寫；而真正供 market/theme history trend 判斷的三張表沒有五月歷史，導致策略仍用不到老 evidence。
+- 已按 PM -> Tech -> QA 完成：
+  - `scripts/backfill_market_theme_sources.py` 改為 market/theme history backfill JSON report。
+  - `daily_price` / `daily_signal_snapshot` 明確標記為 `forbidden_as_primary_result`，本輪不再回寫它們。
+  - `sector_theme_members` 若只能取得 latest membership，標記 blocked，不得假裝五月歷史。
+  - `market_theme_index_daily_bars` 目前不是直接 strategy/report DB consumer，標記 skipped/not-consumed，不寫表。
+  - `market_theme_confirmed_evidence` 才是本輪可寫且策略會消費的表；write path 只 upsert validated confirmed evidence。
+  - Validation 新增 required fields、allowed source_family、forbidden source_family、lineage.source_tables guard，阻止 `daily_signal_snapshot` / runtime / local / report / chat 類 payload 污染 confirmed evidence。
+- 已正式執行非 schema data write：
+  - command: `arch -arm64 .venv/bin/python scripts/backfill_market_theme_sources.py --write --confirm-write`
+  - 寫入 / upsert：`market_theme_confirmed_evidence` 9 rows，coverage `2026-05-29`，read_after_write `passed`。
+  - strategy_consumption_check：`uses_market_theme_confirmed_evidence_history=true`、`uses_only_daily_signal_snapshot=false`、observed_days=1、recent_supporting_days=1、support_streak_days=1。
+  - 未寫入 `market_theme_index_daily_bars`；未寫入 `sector_theme_members`；未寫入 `daily_price` / `daily_signal_snapshot`。
+- DB 污染檢查：
+  - `market_theme_confirmed_evidence` rows=18、May rows=18、duplicate_extra_rows=0。
+  - `market_theme_index_daily_bars` rows=10、May rows=10、duplicate_extra_rows=0。
+  - `sector_theme_members` rows=12、May rows=0、duplicate_extra_rows=0。
+- QA：
+  - 首輪阻塞有效：forbidden `daily_signal_snapshot` payload 可被接受。
+  - Tech 返工後 QA conditional pass；修正 `CHANGELOG.md` 後 QA 通過。
+  - 主 repo 驗證：`arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_source_backfill.py tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py tests/test_workflow_runtime_config.py -q`：75 passed，13 warnings；`git diff --check` 通過。
 
 ## Next Action
 
-- 若 Owner 接著要求產品 / 策略 / 報文 / DB 功能，Architect 必須先分派 PM；不能因為上一輪曾直接處理而沿用 bypass。
+- Commit / push 本輪變更。
+- 後續若要補完整五月 market/theme history，需要真實 historical source；目前 TWSE OpenAPI 只能提供 latest source，不得用 latest membership 或 daily_signal_snapshot 推回五月。
 
 ## Status Values
 
