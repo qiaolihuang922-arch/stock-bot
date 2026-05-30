@@ -57,7 +57,8 @@
   - 已補表收斂 guard：舊 `market_daily_bars` / strategy evidence draft tables 不在目前 production schema，runner 不再寫入；衍生 rows 只作 log 診斷。
   - 已補 runner 真實資料 guard：`backfill_may` 使用 `--allow-partial`，只寫 TWSE source 實際可取得 rows；缺股票 / 缺日期以 warning 呈現，不用假資料補齊 validation。
   - 邊界保持：非 schema 寫入走 repo script / GitHub runner；不要求 Owner 跑 DML SQL；未新增 DB schema / RLS / grant / policy / role。
-  - 待跑：push 後 dispatch `backfill_may`，完成後檢查 GitHub log row counts / partial warnings，再跑 read-only 檢查，才能繼續 evidence chain。
+  - 已跑：GitHub run `26680575871` 成功，並已做 read-only DB count 檢查。
+  - Post-cycle review：第一次 runner 失敗暴露舊表引用，已補 `market_daily_bars` / strategy draft tables 不再寫入 production；第二次 runner 成功。此為 `schema_consolidation_followup`，不用新增硬規則，已用 writer 測試防回退。
   - 風險：market/theme official source 目前只能補 latest OpenAPI 交易日，不能憑空補五月整月；trend 只消費 production 既有 confirmed rows。
 - 本輪 Production Evidence Source Audit And Approved Payload Gate：
   - 根因分類：`production_source_semantics_gap` + `runner_parser_false_fail`。

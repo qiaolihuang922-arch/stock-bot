@@ -42,13 +42,17 @@
   - 使用者可見 Telegram header 版本同步為 `v20.4.5`。
   - 驗證：`tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py tests/test_market_theme_source_backfill.py tests/test_workflow_runtime_config.py tests/test_generator_report.py tests/test_notifier.py`，`140 passed, 157 warnings`；`git diff --check` 通過。
   - 邊界：未 production live write、未 backfill、未 schema / RLS / grant / policy / role 變更、未改策略 decision 或交易門檻。
-- Git Runner May Backfill Entrypoint 已完成本地驗證，待 commit / push：
+- Git Runner May Backfill Entrypoint 已推送並由 GitHub runner 成功執行：
   - `.github/workflows/stock-bot.yml` 新增 `workflow_dispatch` inputs：`run_mode`、`start_date`、`end_date`、`backfill_version`。
   - `run_mode=backfill_may` 會由 GitHub runner 執行 `scripts/backfill_signals.py --source twse --allow-partial --write --confirm-write`，預設回填 `2026-05-01` 到 `2026-05-29`、`v20.4.5`。
   - 回填範圍：`daily_price`、`daily_signal_snapshot`。
   - 舊 `market_daily_bars` / `strategy_feature_snapshots` / `strategy_outcome_metrics` / `strategy_classification_audit` 不在目前 production schema；五月 backfill 只計算衍生 rows 作 runner log 診斷，不寫入已刪除或語義不符的表。
   - `--allow-partial` 是真實資料保護：若 TWSE source 缺某檔或某交易日，只寫實際取得 rows 並輸出 partial coverage warnings，不補 synthetic rows。
   - `run_mode=backfill_and_bot` 會先回填五月資料再跑正式 bot；`run_mode=bot` 維持原本行為。
+  - GitHub run `26680575871` 成功；`run_mode=backfill_may` 只做回寫並跳過 bot，不 live Telegram。
+  - Runner log：official market/theme 寫入 `sector_theme_members=12`、`market_theme_index_daily_bars=10`、`market_theme_confirmed_evidence=9`；五月 signal backfill `daily_price=220`、`daily_signal_snapshot=220`、`VALIDATION OK`、`WRITE OK`。
+  - Read-only DB check：May `daily_price=240`，May `daily_signal_snapshot v20.4.5=240`；差異來自前一輪 failed runner 已先成功 upsert 部分真實 rows，最終 DB 為 12 檔 x 20 交易日。
+  - Partial warnings：`2026-05-01` source 缺交易資料；本輪不補假 rows。
   - 注意：`market_theme` official source backfill 目前只補最新 TWSE OpenAPI 交易日；history trend 只消費 production 已有 confirmed rows，不造五月 market/theme 假歷史。
   - 驗證：`tests/test_workflow_runtime_config.py tests/test_backfill_signals.py tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py tests/test_market_theme_source_backfill.py tests/test_generator_report.py tests/test_notifier.py`，`144 passed, 153 warnings`。
   - 邊界：未新增 schema / table / column / RLS / grant / policy / role；非 schema 寫入交由 GitHub runner，符合 git source-of-truth。
