@@ -1,6 +1,8 @@
 import json
 import os
+import re
 from datetime import datetime
+from pathlib import Path
 
 
 TABLE_NAME = "market_theme_confirmed_evidence"
@@ -91,6 +93,70 @@ AUDIT_DIAGNOSTIC_TABLE_REASONS = {
     "signal_runs": "report run metadata; diagnostic only, not market/theme source",
     "signal_items": "report item rows; diagnostic only, not market/theme source",
 }
+CORRECTION_AUDIT_MODE = "market-theme-production-correction-audit"
+CORRECTION_AUDIT_TABLES = (
+    TABLE_NAME,
+    INDEX_SOURCE_TABLE,
+    MEMBER_SOURCE_TABLE,
+)
+CORRECTION_AUDIT_SELECT_FIELDS = {
+    TABLE_NAME: (
+        "trade_date,as_of,market_index,sector_theme_key,source_family,source_name,"
+        "freshness,evidence_status,support_level,lineage,metadata"
+    ),
+    INDEX_SOURCE_TABLE: (
+        "trade_date,as_of,index_scope,market_index,sector_theme_key,"
+        "source_family,source_name,metadata"
+    ),
+    MEMBER_SOURCE_TABLE: (
+        "sector_theme_key,stock_code,stock_name,market_index,is_active,"
+        "valid_from,valid_to,source_family,source_name"
+    ),
+}
+CORRECTION_AUDIT_ACTION_READ_ONLY_COMPLETE = "read_only_audit_complete"
+CORRECTION_AUDIT_ACTION_READ_ONLY_BLOCKED = "read_only_audit_blocked"
+CORRECTION_AUDIT_ACTION_PRODUCTION_READ_PERMISSION_NEEDED = "production_read_permission_needed"
+CORRECTION_AUDIT_ACTION_CURRENT_VERSION_MISSING = "blocked_current_version_snapshot_missing"
+CORRECTION_AUDIT_ACTION_BACKFILL_NEEDED = "followup_backfill_task_needed"
+CORRECTION_AUDIT_ACTION_CLEANUP_NEEDED = "followup_cleanup_or_dedupe_task_needed"
+CORRECTION_AUDIT_ACTION_OWNER_APPROVAL = "owner_approval_required_for_schema_or_write"
+CORRECTION_AUDIT_GENERATOR_VERSION_SOURCE = "core/generator.py VERSION"
+CORRECTION_AUDIT_KEY_FIELDS = {
+    TABLE_NAME: ("trade_date", "market_index", "sector_theme_key"),
+    INDEX_SOURCE_TABLE: ("trade_date", "index_scope", "market_index", "sector_theme_key"),
+    MEMBER_SOURCE_TABLE: (
+        "sector_theme_key",
+        "stock_code",
+        "market_index",
+        "valid_from",
+        "valid_to",
+    ),
+}
+MAY_2026_START = "2026-05-01"
+MAY_2026_END = "2026-05-29"
+MAY_2026_EXPECTED_TRADE_DATES = (
+    "2026-05-04",
+    "2026-05-05",
+    "2026-05-06",
+    "2026-05-07",
+    "2026-05-08",
+    "2026-05-11",
+    "2026-05-12",
+    "2026-05-13",
+    "2026-05-14",
+    "2026-05-15",
+    "2026-05-18",
+    "2026-05-19",
+    "2026-05-20",
+    "2026-05-21",
+    "2026-05-22",
+    "2026-05-25",
+    "2026-05-26",
+    "2026-05-27",
+    "2026-05-28",
+    "2026-05-29",
+)
+MAY_2026_EXPECTED_TRADING_DAYS = 20
 MAX_PREVIOUS_TRADE_DATE_GAP_DAYS = 4
 EVIDENCE_TREND_LOOKBACK_ROWS = 20
 
@@ -410,6 +476,385 @@ def _select_count_rows(client, table, fields="*", filters=None, limit=1000):
             "row_count": 0,
             "reason": str(exc),
         }
+
+
+def _sorted_unique(values):
+    return sorted({str(value) for value in values if value not in (None, "")})
+
+
+def _source_distribution(rows):
+    distribution = {}
+    for row in rows:
+        family = str(row.get("source_family") or "unknown")
+        name = str(row.get("source_name") or "unknown")
+        key = f"{family}:{name}"
+        distribution[key] = distribution.get(key, 0) + 1
+    return dict(sorted(distribution.items()))
+
+
+def _business_key(row, key_fields):
+    return tuple(row.get(field) for field in key_fields)
+
+
+def _format_business_key(key_fields, key):
+    return {
+        field: value
+        for field, value in zip(key_fields, key)
+        if value not in (None, "")
+    }
+
+
+def _duplicate_audit(rows, key_fields, sample_limit=5):
+    groups = {}
+    for row in rows:
+        key = _business_key(row, key_fields)
+        groups.setdefault(key, []).append(row)
+
+    duplicates = []
+    for key, group_rows in groups.items():
+        if len(group_rows) <= 1:
+            continue
+        as_of_values = _sorted_unique(row.get("as_of") for row in group_rows)
+        duplicates.append(
+            {
+                "business_key": _format_business_key(key_fields, key),
+                "trade_date": group_rows[0].get("trade_date"),
+                "sector_theme_key": group_rows[0].get("sector_theme_key"),
+                "as_of_values": as_of_values,
+                "rows": len(group_rows),
+            }
+        )
+    duplicates.sort(
+        key=lambda item: (
+            str(item.get("trade_date") or ""),
+            str(item.get("sector_theme_key") or ""),
+            json.dumps(item.get("business_key") or {}, ensure_ascii=False, sort_keys=True),
+        )
+    )
+    return {
+        "duplicate_group_count": len(duplicates),
+        "duplicate_row_count": sum(item["rows"] for item in duplicates),
+        "sample_duplicate_groups": duplicates[:sample_limit],
+    }
+
+
+def _latest_source_only(rows, trade_dates, as_of_values):
+    if not rows:
+        return "unknown"
+    if not trade_dates:
+        return "unknown"
+    return len(trade_dates) == 1 or (len(as_of_values) > 1 and len(trade_dates) <= 1)
+
+
+def _market_theme_table_conclusion(table, rows, row_count, trade_dates, as_of_values, limited):
+    expected_trade_dates = set(MAY_2026_EXPECTED_TRADE_DATES)
+    observed_trade_dates = set(trade_dates)
+    if limited:
+        return "insufficient_evidence: row_count exceeds fetched read-only sample"
+    if row_count == 0:
+        return "insufficient_evidence: production read returned no rows"
+    if not trade_dates:
+        return "insufficient_evidence: table has no trade_date column in audit output"
+    if len(trade_dates) == 1:
+        return "latest_only: only one observed trade_date; do not call this May history"
+    if observed_trade_dates != expected_trade_dates:
+        return "partial: observed trade_dates do not exactly match May 2026 expected trading dates"
+    if len(as_of_values) > 1:
+        return "complete_range_with_multiple_as_of_batches: verify duplicates before any write"
+    return "complete_range"
+
+
+def _mapping_table_conclusion(row_count, limited):
+    if limited:
+        return "insufficient_evidence: row_count exceeds fetched read-only sample"
+    if row_count == 0:
+        return "insufficient_evidence: production read returned no mapping rows"
+    return "mapping_only: membership table has no trade_date; do not call May history"
+
+
+def _compact_coverage_conclusion(coverage_conclusion):
+    if coverage_conclusion.startswith("complete"):
+        return "complete"
+    if coverage_conclusion.startswith("latest_only"):
+        return "latest_only"
+    if coverage_conclusion.startswith("partial"):
+        return "partial"
+    if coverage_conclusion.startswith("mapping_only"):
+        return "mapping_only"
+    return "insufficient_evidence"
+
+
+def _build_correction_table_report(table, count_result):
+    rows = count_result.get("rows") or []
+    row_count = count_result.get("row_count", 0)
+    fetched_rows = len(rows)
+    trade_dates = _sorted_unique(row.get("trade_date") for row in rows)
+    as_of_values = _sorted_unique(row.get("as_of") for row in rows)
+    valid_from_values = _sorted_unique(row.get("valid_from") for row in rows)
+    valid_to_values = _sorted_unique(row.get("valid_to") for row in rows)
+    key_fields = CORRECTION_AUDIT_KEY_FIELDS[table]
+    duplicate_report = _duplicate_audit(rows, key_fields)
+    limited = row_count > fetched_rows
+    if count_result.get("status") != "ok":
+        conclusion = "blocked: production read-only query failed"
+    elif table == MEMBER_SOURCE_TABLE:
+        conclusion = _mapping_table_conclusion(row_count, limited)
+    else:
+        conclusion = _market_theme_table_conclusion(
+            table,
+            rows,
+            row_count,
+            trade_dates,
+            as_of_values,
+            limited,
+        )
+    report = {
+        "table": table,
+        "read_status": count_result.get("status"),
+        "read_error": "details redacted" if count_result.get("status") != "ok" else "",
+        "row_count": row_count,
+        "fetched_rows": fetched_rows,
+        "trade_date_min": trade_dates[0] if trade_dates else None,
+        "trade_date_max": trade_dates[-1] if trade_dates else None,
+        "distinct_trade_dates": len(trade_dates),
+        "as_of_min": as_of_values[0] if as_of_values else None,
+        "as_of_max": as_of_values[-1] if as_of_values else None,
+        "distinct_as_of": len(as_of_values),
+        "source_distribution": _source_distribution(rows),
+        "latest_source_only": _latest_source_only(rows, trade_dates, as_of_values),
+        "valid_from_min": valid_from_values[0] if valid_from_values else None,
+        "valid_from_max": valid_from_values[-1] if valid_from_values else None,
+        "valid_to_min": valid_to_values[0] if valid_to_values else None,
+        "valid_to_max": valid_to_values[-1] if valid_to_values else None,
+        "active_rows": sum(1 for row in rows if row.get("is_active") is True),
+        "duplicate_groups": {
+            "key_fields": list(key_fields),
+            **duplicate_report,
+        },
+        "coverage_conclusion": conclusion,
+    }
+    report.update(
+        {
+            "date_min": report["trade_date_min"],
+            "date_max": report["trade_date_max"],
+            "distinct_dates": report["distinct_trade_dates"],
+            "business_key_fields": list(key_fields),
+            "duplicate_group_count": duplicate_report["duplicate_group_count"],
+            "duplicate_row_count": duplicate_report["duplicate_row_count"],
+            "sample_duplicate_groups": duplicate_report["sample_duplicate_groups"],
+            "conclusion": _compact_coverage_conclusion(conclusion),
+        }
+    )
+    return report
+
+
+def _may_history_status(count_result):
+    rows = count_result.get("rows") or []
+    if count_result.get("status") != "ok":
+        return "insufficient_evidence"
+    trade_dates = _sorted_unique(row.get("trade_date") for row in rows)
+    observed_trade_dates = set(trade_dates)
+    if observed_trade_dates == set(MAY_2026_EXPECTED_TRADE_DATES):
+        return "confirmed"
+    return "insufficient_evidence"
+
+
+def _daily_signal_current_version_coverage(count_result):
+    rows = count_result.get("rows") or []
+    trade_dates = _sorted_unique(row.get("trade_date") for row in rows)
+    if count_result.get("status") != "ok":
+        conclusion = "insufficient_evidence"
+    elif count_result.get("row_count", 0) > len(rows):
+        conclusion = "insufficient_evidence"
+    elif count_result.get("row_count", 0) == 0:
+        conclusion = "no_current_version_may_rows"
+    elif set(trade_dates) == set(MAY_2026_EXPECTED_TRADE_DATES):
+        conclusion = "covered"
+    else:
+        conclusion = "insufficient_evidence"
+    return {
+        "row_count": count_result.get("row_count", 0),
+        "date_min": trade_dates[0] if trade_dates else None,
+        "date_max": trade_dates[-1] if trade_dates else None,
+        "distinct_trade_dates": len(trade_dates),
+        "conclusion": conclusion,
+    }
+
+
+def _market_theme_may_history_status(table_reports):
+    daily_tables = (TABLE_NAME, INDEX_SOURCE_TABLE)
+    conclusions = [
+        str(table_reports.get(table, {}).get("coverage_conclusion") or "")
+        for table in daily_tables
+    ]
+    if any(conclusion.startswith("blocked") for conclusion in conclusions):
+        return "insufficient_evidence"
+    if any(conclusion.startswith("latest_only") for conclusion in conclusions):
+        return "partial"
+    if any(conclusion.startswith("partial") for conclusion in conclusions):
+        return "partial"
+    if all(conclusion.startswith("complete") for conclusion in conclusions):
+        return "complete"
+    return "insufficient_evidence"
+
+
+def _load_current_generator_version():
+    generator_path = Path(__file__).resolve().parents[1] / "core" / "generator.py"
+    text = generator_path.read_text(encoding="utf-8")
+    match = re.search(r'^VERSION\s*=\s*["\']([^"\']+)["\']', text, re.MULTILINE)
+    if not match:
+        raise RuntimeError("unable to read core/generator.py VERSION")
+    return match.group(1)
+
+
+def _append_action(actions, action):
+    if action not in actions:
+        actions.append(action)
+
+
+def _correction_audit_read_complete(table_reports, daily_signal_current_version_coverage):
+    if daily_signal_current_version_coverage.get("conclusion") != "covered":
+        return False
+    for table in (TABLE_NAME, INDEX_SOURCE_TABLE):
+        report = table_reports.get(table, {})
+        if report.get("read_status") != "ok":
+            return False
+        if not str(report.get("coverage_conclusion") or "").startswith("complete"):
+            return False
+    member_report = table_reports.get(MEMBER_SOURCE_TABLE, {})
+    member_conclusion = str(member_report.get("coverage_conclusion") or "")
+    if member_report.get("read_status") != "ok":
+        return False
+    if member_conclusion.startswith(("blocked", "insufficient_evidence")):
+        return False
+    if not member_conclusion.startswith("mapping_only"):
+        return False
+    return True
+
+
+def build_market_theme_production_correction_audit(client, limit=10000, generator_version=None):
+    """Build the read-only correction report for market/theme production coverage."""
+    version_read_error = None
+    if generator_version is None:
+        try:
+            generator_version = _load_current_generator_version()
+        except Exception as exc:
+            version_read_error = str(exc)
+            generator_version = ""
+
+    table_reports = {}
+    blocked_reasons = []
+    if version_read_error:
+        blocked_reasons.append(version_read_error)
+    for table in CORRECTION_AUDIT_TABLES:
+        result = _select_count_rows(
+            client,
+            table,
+            CORRECTION_AUDIT_SELECT_FIELDS[table],
+            limit=limit,
+        )
+        report = _build_correction_table_report(table, result)
+        table_reports[table] = report
+        if result.get("status") != "ok":
+            blocked_reasons.append(f"{table}: production read-only query failed")
+        elif report["row_count"] > report["fetched_rows"]:
+            blocked_reasons.append(f"{table}: row_count exceeds fetched sample limit")
+
+    daily_price_result = _select_count_rows(
+        client,
+        "daily_price",
+        "trade_date",
+        filters=[("gte", ("trade_date", MAY_2026_START)), ("lte", ("trade_date", MAY_2026_END))],
+        limit=limit,
+    )
+    daily_signal_result = _select_count_rows(
+        client,
+        "daily_signal_snapshot",
+        "trade_date,version",
+        filters=[
+            ("gte", ("trade_date", MAY_2026_START)),
+            ("lte", ("trade_date", MAY_2026_END)),
+            ("eq", ("version", generator_version)),
+        ],
+        limit=limit,
+    )
+    daily_signal_current_version_coverage = _daily_signal_current_version_coverage(
+        daily_signal_result
+    )
+    if daily_signal_result.get("status") != "ok":
+        blocked_reasons.append("daily_signal_snapshot: production read-only query failed")
+    elif daily_signal_current_version_coverage["row_count"] == 0:
+        blocked_reasons.append(
+            "current VERSION snapshot missing: "
+            f"daily_signal_snapshot has no May rows for current generator VERSION {generator_version}"
+        )
+    elif daily_signal_current_version_coverage["conclusion"] != "covered":
+        blocked_reasons.append(
+            "current VERSION snapshot coverage not covered: "
+            f"{daily_signal_current_version_coverage['conclusion']}"
+        )
+
+    market_theme_status = _market_theme_may_history_status(table_reports)
+    if market_theme_status != "complete":
+        blocked_reasons.append(
+            f"market/theme May history status not complete: {market_theme_status}"
+        )
+    read_complete = _correction_audit_read_complete(
+        table_reports,
+        daily_signal_current_version_coverage,
+    )
+    next_action = []
+    if read_complete and not blocked_reasons:
+        _append_action(next_action, CORRECTION_AUDIT_ACTION_READ_ONLY_COMPLETE)
+    else:
+        _append_action(next_action, CORRECTION_AUDIT_ACTION_READ_ONLY_BLOCKED)
+    if (
+        any(report.get("read_status") != "ok" for report in table_reports.values())
+        or daily_signal_result.get("status") != "ok"
+    ):
+        _append_action(next_action, CORRECTION_AUDIT_ACTION_PRODUCTION_READ_PERMISSION_NEEDED)
+    if daily_signal_current_version_coverage["conclusion"] == "no_current_version_may_rows":
+        _append_action(next_action, CORRECTION_AUDIT_ACTION_CURRENT_VERSION_MISSING)
+        _append_action(next_action, CORRECTION_AUDIT_ACTION_BACKFILL_NEEDED)
+    if any(
+        report["duplicate_groups"]["duplicate_group_count"] > 0
+        for report in table_reports.values()
+    ):
+        _append_action(next_action, CORRECTION_AUDIT_ACTION_CLEANUP_NEEDED)
+        _append_action(next_action, CORRECTION_AUDIT_ACTION_OWNER_APPROVAL)
+    if market_theme_status != "complete":
+        _append_action(next_action, CORRECTION_AUDIT_ACTION_BACKFILL_NEEDED)
+    status = "blocked" if blocked_reasons else "pass"
+    blocked_reason = "; ".join(blocked_reasons) if blocked_reasons else None
+
+    return {
+        "status": status,
+        "blocked_reason": blocked_reason,
+        "generator_version": {
+            "source": CORRECTION_AUDIT_GENERATOR_VERSION_SOURCE,
+            "value": generator_version,
+        },
+        "daily_signal_snapshot_may_current_version_coverage": daily_signal_current_version_coverage,
+        "market_theme_tables": table_reports,
+        "next_action": next_action,
+        "mode": CORRECTION_AUDIT_MODE,
+        "write_execution": "disabled",
+        "live_write": False,
+        "schema_change": False,
+        "live_telegram": False,
+        "may_range": {"start": MAY_2026_START, "end": MAY_2026_END},
+        "tables": table_reports,
+        "cross_table_conclusion": {
+            "daily_price_may_history_status": _may_history_status(daily_price_result),
+            "daily_signal_snapshot_may_history_status": daily_signal_current_version_coverage["conclusion"],
+            "market_theme_tables_may_history_status": market_theme_status,
+            "must_not_claim": [
+                "latest-only market/theme rows are May full history",
+            ],
+            "next_action": next_action,
+        },
+        "blocked_reasons": blocked_reasons,
+    }
 
 
 def _audit_source_table_entry(table, count_result, **extra):

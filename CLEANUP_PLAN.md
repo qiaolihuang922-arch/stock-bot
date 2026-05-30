@@ -26,8 +26,10 @@
 - `correction-market-theme-prod-coverage-2026-05`
   - 根因：`delivery_evidence_alignment_gap` + `doc_bloat_risk`。
   - 問題：script / integrity check 通過被誤宣告為 production market/theme 五月資料完成；Owner 截圖只證明部分 latest-source rows，且可能有不同 `as_of` 批次。
-  - 正確下一步：修 correction report 的 blocked wording / next_action，取得可重跑 production read-only audit，再判斷 dedupe / cleanup / schema guard / backfill。
-  - 禁止：audit 未完成前不得宣告三表完成，不得把 latest-only source 稱為五月歷史。
+  - 已完成：correction audit report 與 CLI 改為 fail-closed；read incomplete / source-error / current VERSION 缺五月 rows 時 `status=blocked`，不輸出 `read_only_audit_complete`。
+  - production 現況：current `v20.4.6` May snapshot 0 rows；`market_theme_confirmed_evidence` / `market_theme_index_daily_bars` 只有 `2026-05-29` latest rows；`sector_theme_members` 是 mapping，不是 daily history。
+  - 正確下一步：另開 PM 任務處理 current-version backfill、market/theme historical coverage 定義與 confirmed evidence dedupe；不得把這些 cleanup/backfill 混進本 correction audit 任務。
+  - 禁止：audit 未完成前不得宣告三表完成，不得把 latest-only source 稱為五月歷史，不得用舊版本 snapshot 代表 current report coverage。
 - CAO QA conclusion parser
   - 根因：`runner_gap`。
   - 問題：auto wrapper 曾把有效 `通過` / `conditional pass` 誤判 failed。

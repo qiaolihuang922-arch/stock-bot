@@ -20,8 +20,15 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from services.market_theme_evidence_store import (
+    CORRECTION_AUDIT_ACTION_BACKFILL_NEEDED,
+    CORRECTION_AUDIT_ACTION_CURRENT_VERSION_MISSING,
+    CORRECTION_AUDIT_GENERATOR_VERSION_SOURCE,
+    CORRECTION_AUDIT_ACTION_PRODUCTION_READ_PERMISSION_NEEDED,
+    CORRECTION_AUDIT_ACTION_READ_ONLY_BLOCKED,
+    _load_current_generator_version,
     build_market_theme_evidence_production_source_audit,
     build_market_theme_evidence_readonly_smoke,
+    build_market_theme_production_correction_audit,
     load_confirmed_market_theme_evidence,
 )
 
@@ -145,6 +152,107 @@ def _missing_source_consumption_report(trade_date=None):
     }
 
 
+def _missing_source_correction_audit_report(source_reason="missing required Supabase read credentials"):
+    try:
+        version = _load_current_generator_version()
+        version_blocked_reason = None
+    except Exception as exc:
+        version = ""
+        version_blocked_reason = str(exc)
+
+    tables = {}
+    for table in [
+        "market_theme_confirmed_evidence",
+        "market_theme_index_daily_bars",
+        "sector_theme_members",
+    ]:
+        tables[table] = {
+            "table": table,
+            "read_status": "missing-source",
+            "read_error": "details redacted",
+            "row_count": 0,
+            "fetched_rows": 0,
+            "trade_date_min": None,
+            "trade_date_max": None,
+            "distinct_trade_dates": 0,
+            "as_of_min": None,
+            "as_of_max": None,
+            "distinct_as_of": 0,
+            "valid_from_min": None,
+            "valid_from_max": None,
+            "valid_to_min": None,
+            "valid_to_max": None,
+            "active_rows": 0,
+            "source_distribution": {},
+            "latest_source_only": "unknown",
+            "duplicate_groups": {
+                "key_fields": [],
+                "duplicate_group_count": 0,
+                "duplicate_row_count": 0,
+                "sample_duplicate_groups": [],
+            },
+            "coverage_conclusion": f"blocked: {source_reason}",
+            "date_min": None,
+            "date_max": None,
+            "distinct_dates": 0,
+            "business_key_fields": [],
+            "duplicate_group_count": 0,
+            "duplicate_row_count": 0,
+            "sample_duplicate_groups": [],
+            "conclusion": "insufficient_evidence",
+        }
+    next_action = [
+        CORRECTION_AUDIT_ACTION_READ_ONLY_BLOCKED,
+        CORRECTION_AUDIT_ACTION_PRODUCTION_READ_PERMISSION_NEEDED,
+        CORRECTION_AUDIT_ACTION_CURRENT_VERSION_MISSING,
+        CORRECTION_AUDIT_ACTION_BACKFILL_NEEDED,
+    ]
+    return {
+        "status": "blocked",
+        "blocked_reason": "; ".join(
+            reason
+            for reason in [
+                version_blocked_reason,
+                (
+                    f"{source_reason}; "
+                    f"cannot verify May rows for current generator VERSION {version}"
+                ),
+            ]
+            if reason
+        ),
+        "generator_version": {
+            "source": CORRECTION_AUDIT_GENERATOR_VERSION_SOURCE,
+            "value": version,
+        },
+        "daily_signal_snapshot_may_current_version_coverage": {
+            "row_count": 0,
+            "date_min": None,
+            "date_max": None,
+            "distinct_trade_dates": 0,
+            "conclusion": "insufficient_evidence",
+        },
+        "market_theme_tables": tables,
+        "next_action": next_action,
+        "mode": "market-theme-production-correction-audit",
+        "write_execution": "disabled",
+        "live_write": False,
+        "schema_change": False,
+        "live_telegram": False,
+        "may_range": {"start": "2026-05-01", "end": "2026-05-29"},
+        "tables": tables,
+        "cross_table_conclusion": {
+            "daily_price_may_history_status": "not_checked",
+            "daily_signal_snapshot_may_history_status": "not_checked",
+            "market_theme_tables_may_history_status": "insufficient_evidence",
+            "must_not_claim": [
+                "latest-only market/theme rows are May full history",
+            ],
+            "next_action": next_action,
+        },
+        "blocked_reasons": [source_reason],
+    }
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Run a read-only market/theme evidence smoke without DB writes or Telegram delivery."
@@ -166,10 +274,27 @@ def main(argv=None):
         action="store_true",
         help="Output May data strategy/report full integrity check JSON without DB writes or Telegram delivery.",
     )
+    parser.add_argument(
+        "--correction-audit-json",
+        action="store_true",
+        help="Output read-only production correction audit JSON for market/theme table coverage and duplicates.",
+    )
     args = parser.parse_args(argv)
 
-    client = _build_readonly_client()
+    try:
+        client = _build_readonly_client()
+    except Exception as exc:
+        if not args.correction_audit_json:
+            raise
+        source_reason = f"production read-only client unavailable: {type(exc).__name__}"
+        report = _missing_source_correction_audit_report(source_reason)
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 2
     if client is None:
+        if args.correction_audit_json:
+            report = _missing_source_correction_audit_report()
+            print(json.dumps(report, ensure_ascii=False, indent=2))
+            return 2
         if args.full_integrity_check_json:
             from core.generator import build_may_data_strategy_report_full_integrity_check, generate_report
 
@@ -220,6 +345,13 @@ def main(argv=None):
             "rows": [],
         }
     else:
+        if args.correction_audit_json:
+            report = build_market_theme_production_correction_audit(
+                client=client,
+                limit=args.limit,
+            )
+            print(json.dumps(report, ensure_ascii=False, indent=2))
+            return 0 if not report["blocked_reasons"] else 2
         if args.full_integrity_check_json:
             from core.generator import build_may_data_strategy_report_full_integrity_check, generate_report
 

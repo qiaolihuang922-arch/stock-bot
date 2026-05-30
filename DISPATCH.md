@@ -4,27 +4,30 @@
 
 ## Current Task
 
-- task_id: `rules-and-agent-doc-compression-2026-05-30`
-- task_name: `Rules And Agent File Compression`
-- task_type: `process`
+- task_id: `correction-market-theme-prod-coverage-2026-05`
+- task_name: `Correction Audit Fail-Closed And May Production Coverage`
+- task_type: `risk_patch`
 - version_level: `none`
-- qa_level: `process`
+- qa_level: `L3`
 - owner_status: `requested`
-- architect_status: `pushed`
-- pm_status: `not_required`
-- tech_status: `not_required`
-- qa_status: `not_required`
-- commit: `pushed`
+- architect_status: `completed`
+- pm_status: `completed`
+- tech_status: `completed`
+- qa_status: `conditional pass`
+- commit: `pending`
 
 ## Current Result
 
-- Owner 要求清除規則文件內過時 / 淘汰內容，把留下的規則壓短但不丟失職責與保護力，包含 CAO agent 文件。
-- 本輪是流程文件治理，不處理產品代碼、不新增 DB schema、不 live write、不 live Telegram。
-- 目標：`AGENTS.md` 留抽象規則；`CURRENT_STATE.md` 留短上下文；`CLEANUP_PLAN.md` 留案例 / 待補；agent profiles 留角色卡、安全邊界與輸出契約。
+- 已修 correction audit：read incomplete、source-error、missing-source、current VERSION 五月 snapshot 不足時，頂層 `status` 必須 `blocked`，`next_action` 不得含 `read_only_audit_complete`。
+- 已新增 `--correction-audit-json` fail-closed CLI；Supabase client / dependency 失敗時輸出 blocked JSON 與 return code 2，不再 traceback。
+- QA 結論為 `conditional pass`：code / CLI fail-closed contract 成立；但這不代表 production 三張 market/theme 表五月資料完整。
+- Architect 補跑 production read-only audit：`daily_price` 五月 240 rows / 20 trading days / 12 stocks；`daily_signal_snapshot` 全版本 936 rows，但 current `core/generator.py VERSION` = `v20.4.6` 五月 0 rows。
+- market/theme 三表 production 現況：`market_theme_confirmed_evidence` 18 rows only `2026-05-29` 且 9 duplicate business-key groups；`market_theme_index_daily_bars` 10 rows only `2026-05-29`；`sector_theme_members` 12 active mapping rows from `2026-01-01`，不是五月 daily history。
 
 ## Next Action
 
-- 提交並推送本輪規則文件與 agent profile 壓縮；後續回到 correction audit 時，仍須先解決 QA blocked 的 production read-only audit。
+- 提交並推送本輪 correction audit fail-closed 修復與文件狀態。
+- 下一輪若要繼續證據鏈，先開 PM 任務處理 current `v20.4.6` 五月 snapshot backfill / market-theme historical coverage / confirmed evidence dedupe；audit 完成前不得宣稱三張 market/theme 表五月資料完成。
 
 ## Status Values
 

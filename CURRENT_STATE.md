@@ -39,17 +39,20 @@
 ## Current Blocker
 
 - task_id：`correction-market-theme-prod-coverage-2026-05`
-- 狀態：QA blocked，不能宣告三張 market/theme production 表五月資料完成。
+- 狀態：correction audit fail-closed 修復已完成，QA `conditional pass`；production 五月 coverage 仍 blocked。
 - 問題：先前把 script / integrity check 通過誤當成 production market/theme 五月 coverage 完成；Owner 截圖顯示主要是 `2026-05-29` latest-source rows，且可能有不同 `as_of` 批次。
-- 目前 correction path：需要可重跑 production read-only audit，確認 row coverage、date range、source distribution、business-key duplicates。
-- 未完成前不得做 cleanup / schema / backfill 決策，不得把 latest-only source 稱為五月歷史。
+- 已修 correction path：`--correction-audit-json` 可重跑，source-error / missing-source / read incomplete / current VERSION 缺五月 rows 會 `blocked`，不再誤給 `read_only_audit_complete`。
+- 未完成前不得做 cleanup / schema / backfill 決策，不得把 latest-only source 稱為五月歷史；下一步需另開資料修復任務。
 
 ## Data / Evidence Status
 
-- `daily_price`、`daily_signal_snapshot` 已有五月資料與 current-version filter，但不能外推為 market/theme evidence 完成。
-- `market_theme_confirmed_evidence` 可被策略證據層消費；目前歷史覆蓋需以 production audit 為準。
-- `market_theme_index_daily_bars`、`sector_theme_members` 是否足夠支援歷史判斷，需由 audit / TASK 明確定義 consumer 與 source semantics。
-- 證據鏈下一步必須先補 correction audit 的 blocked wording / source-error，再決定是否需要真實 historical source、dedupe 或 schema guard。
+- production read-only audit on 2026-05-30：
+  - `daily_price`：240 rows，20 trading days，12 stocks，date range `2026-05-04` to `2026-05-29`，無 business-key duplicates。
+  - `daily_signal_snapshot`：全版本 936 rows；`v20.4.5` 有 240 rows；current `core/generator.py VERSION` = `v20.4.6` 有 0 May rows。
+  - `market_theme_confirmed_evidence`：18 rows，only `2026-05-29`，source `market_data:twse_openapi_mi_index`，9 duplicate business-key groups。
+  - `market_theme_index_daily_bars`：10 rows，only `2026-05-29`，source `market_data:twse_openapi_mi_index`，無 duplicate groups。
+  - `sector_theme_members`：12 active mapping rows，valid_from `2026-01-01`，source `market_data:twse_openapi_t187ap03_L`；這是 mapping，不是五月 daily history。
+- 證據鏈下一步不得直接繼續功能擴張；先定義並執行 current-version snapshot backfill、market/theme historical coverage 或 dedupe 任務。
 
 ## Validation Baseline
 

@@ -8,10 +8,16 @@ from pathlib import Path
 from unittest.mock import patch
 
 from services.market_theme_evidence_store import (
+    MAY_2026_EXPECTED_TRADE_DATES,
+    _build_correction_table_report,
+    _daily_signal_current_version_coverage,
+    _load_current_generator_version,
+    _may_history_status,
     build_market_theme_write_client,
     build_market_theme_evidence_handoff,
     build_market_theme_evidence_production_source_audit,
     build_market_theme_evidence_readonly_smoke,
+    build_market_theme_production_correction_audit,
     load_confirmed_market_theme_evidence,
     validate_market_theme_evidence_ingestion_payload,
 )
@@ -181,6 +187,20 @@ class AuditTable:
         ]
         return self
 
+    def gte(self, key, value):
+        self._rows = [
+            row for row in self._rows
+            if str(row.get(key) or "") >= str(value)
+        ]
+        return self
+
+    def lte(self, key, value):
+        self._rows = [
+            row for row in self._rows
+            if str(row.get(key) or "") <= str(value)
+        ]
+        return self
+
     def in_(self, key, values):
         allowed = set(values or [])
         self._rows = [
@@ -194,7 +214,18 @@ class AuditTable:
         return self
 
     def execute(self):
-        return type("Result", (), {"data": self._rows, "count": len(self._rows)})()
+        rows = self._rows
+        if self._selected != "*":
+            selected_fields = [
+                field.strip()
+                for field in self._selected.split(",")
+                if field.strip()
+            ]
+            rows = [
+                {field: row.get(field) for field in selected_fields if field in row}
+                for row in rows
+            ]
+        return type("Result", (), {"data": rows, "count": len(rows)})()
 
 
 class AuditClient:
@@ -1156,6 +1187,833 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
         self.assertNotIn("SUPABASE_KEY", stdout_text)
         self.assertNotIn("hash", stdout_text.lower())
         self.assertNotIn("fingerprint", stdout_text.lower())
+
+    def test_correction_audit_reports_latest_only_duplicates_and_separate_may_history(self):
+        version = _load_current_generator_version()
+
+        may_dates = [
+            "2026-05-04",
+            "2026-05-05",
+            "2026-05-06",
+            "2026-05-07",
+            "2026-05-08",
+            "2026-05-11",
+            "2026-05-12",
+            "2026-05-13",
+            "2026-05-14",
+            "2026-05-15",
+            "2026-05-18",
+            "2026-05-19",
+            "2026-05-20",
+            "2026-05-21",
+            "2026-05-22",
+            "2026-05-25",
+            "2026-05-26",
+            "2026-05-27",
+            "2026-05-28",
+            "2026-05-29",
+        ]
+        duplicate_confirmed = [
+            handoff_payload(
+                trade_date="2026-05-29",
+                as_of="2026-05-29T13:30:00+08:00",
+                source_family="production_db",
+                source_name="daily_signal_snapshot",
+            ),
+            handoff_payload(
+                trade_date="2026-05-29",
+                as_of="2026-05-29T14:30:00+08:00",
+                source_family="production_db",
+                source_name="daily_signal_snapshot",
+            ),
+        ]
+        client = AuditClient(
+            {
+                "market_theme_confirmed_evidence": duplicate_confirmed,
+                "market_theme_index_daily_bars": [
+                    {
+                        "trade_date": "2026-05-29",
+                        "as_of": "2026-05-29T13:30:00+08:00",
+                        "index_scope": "sector_theme",
+                        "market_index": "TAIEX",
+                        "sector_theme_key": "semiconductor",
+                        "source_family": "market_data",
+                        "source_name": "twse_openapi",
+                    },
+                    {
+                        "trade_date": "2026-05-29",
+                        "as_of": "2026-05-29T14:30:00+08:00",
+                        "index_scope": "sector_theme",
+                        "market_index": "TAIEX",
+                        "sector_theme_key": "semiconductor",
+                        "source_family": "market_data",
+                        "source_name": "twse_openapi",
+                    },
+                ],
+                "sector_theme_members": [
+                    {
+                        "sector_theme_key": "semiconductor",
+                        "stock_code": "2330",
+                        "market_index": "TAIEX",
+                        "is_active": True,
+                        "valid_from": "2026-05-29",
+                        "valid_to": None,
+                        "source_family": "owner_approved_persistent",
+                        "source_name": "owner_theme_map",
+                    }
+                ],
+                "daily_price": [{"trade_date": date} for date in may_dates],
+                "daily_signal_snapshot": (
+                    [{"trade_date": date, "version": version} for date in may_dates]
+                    + [{"trade_date": date, "version": "v19.1"} for date in may_dates]
+                ),
+            }
+        )
+
+        report = build_market_theme_production_correction_audit(client)
+        confirmed = report["tables"]["market_theme_confirmed_evidence"]
+        index_bars = report["tables"]["market_theme_index_daily_bars"]
+        members = report["tables"]["sector_theme_members"]
+        conclusion = report["cross_table_conclusion"]
+
+        self.assertEqual(report["mode"], "market-theme-production-correction-audit")
+        self.assertEqual(report["status"], "blocked")
+        self.assertIn(
+            "market/theme May history status not complete: partial",
+            report["blocked_reason"],
+        )
+        self.assertEqual(
+            report["generator_version"],
+            {"source": "core/generator.py VERSION", "value": version},
+        )
+        self.assertEqual(report["write_execution"], "disabled")
+        self.assertFalse(report["live_write"])
+        self.assertFalse(report["schema_change"])
+        self.assertFalse(report["live_telegram"])
+        self.assertEqual(
+            report["daily_signal_snapshot_may_current_version_coverage"],
+            {
+                "row_count": 20,
+                "date_min": "2026-05-04",
+                "date_max": "2026-05-29",
+                "distinct_trade_dates": 20,
+                "conclusion": "covered",
+            },
+        )
+        self.assertIs(report["market_theme_tables"], report["tables"])
+        self.assertEqual(confirmed["row_count"], 2)
+        self.assertEqual(confirmed["trade_date_min"], "2026-05-29")
+        self.assertEqual(confirmed["date_min"], "2026-05-29")
+        self.assertEqual(confirmed["distinct_dates"], 1)
+        self.assertEqual(confirmed["distinct_as_of"], 2)
+        self.assertTrue(confirmed["latest_source_only"])
+        self.assertEqual(
+            confirmed["source_distribution"],
+            {"production_db:daily_signal_snapshot": 2},
+        )
+        self.assertEqual(
+            confirmed["duplicate_groups"]["key_fields"],
+            ["trade_date", "market_index", "sector_theme_key"],
+        )
+        self.assertEqual(confirmed["duplicate_groups"]["duplicate_group_count"], 1)
+        self.assertEqual(confirmed["duplicate_groups"]["duplicate_row_count"], 2)
+        self.assertEqual(confirmed["duplicate_group_count"], 1)
+        self.assertEqual(confirmed["duplicate_row_count"], 2)
+        self.assertEqual(confirmed["conclusion"], "latest_only")
+        self.assertIn("latest_only", confirmed["coverage_conclusion"])
+        self.assertEqual(index_bars["duplicate_groups"]["duplicate_group_count"], 1)
+        self.assertEqual(members["latest_source_only"], "unknown")
+        self.assertIsNone(members["trade_date_min"])
+        self.assertEqual(members["distinct_trade_dates"], 0)
+        self.assertEqual(members["valid_from_min"], "2026-05-29")
+        self.assertEqual(members["valid_from_max"], "2026-05-29")
+        self.assertEqual(members["active_rows"], 1)
+        self.assertEqual(members["conclusion"], "mapping_only")
+        self.assertIn("membership table has no trade_date", members["coverage_conclusion"])
+        self.assertEqual(
+            conclusion["daily_price_may_history_status"],
+            "confirmed",
+        )
+        self.assertEqual(
+            conclusion["daily_signal_snapshot_may_history_status"],
+            "covered",
+        )
+        self.assertEqual(
+            conclusion["market_theme_tables_may_history_status"],
+            "partial",
+        )
+        self.assertIn(
+            "latest-only market/theme rows are May full history",
+            conclusion["must_not_claim"],
+        )
+        self.assertNotIn("read_only_audit_complete", conclusion["next_action"])
+        self.assertIn("read_only_audit_blocked", conclusion["next_action"])
+        self.assertIn("followup_cleanup_or_dedupe_task_needed", conclusion["next_action"])
+        self.assertIn("owner_approval_required_for_schema_or_write", conclusion["next_action"])
+        self.assertIn("followup_backfill_task_needed", conclusion["next_action"])
+        self.assertNotIn("continue evidence chain", " ".join(conclusion["next_action"]))
+        self.assertIn(
+            "market/theme May history status not complete: partial",
+            report["blocked_reasons"],
+        )
+
+    def test_correction_audit_blocks_when_market_theme_insufficient_with_current_version_covered(self):
+        version = _load_current_generator_version()
+        may_dates = [
+            "2026-05-04",
+            "2026-05-05",
+            "2026-05-06",
+            "2026-05-07",
+            "2026-05-08",
+            "2026-05-11",
+            "2026-05-12",
+            "2026-05-13",
+            "2026-05-14",
+            "2026-05-15",
+            "2026-05-18",
+            "2026-05-19",
+            "2026-05-20",
+            "2026-05-21",
+            "2026-05-22",
+            "2026-05-25",
+            "2026-05-26",
+            "2026-05-27",
+            "2026-05-28",
+            "2026-05-29",
+        ]
+        client = AuditClient(
+            {
+                "market_theme_confirmed_evidence": [],
+                "market_theme_index_daily_bars": [],
+                "sector_theme_members": [],
+                "daily_price": [{"trade_date": date} for date in may_dates],
+                "daily_signal_snapshot": [
+                    {"trade_date": date, "version": version}
+                    for date in may_dates
+                ],
+            }
+        )
+
+        report = build_market_theme_production_correction_audit(client)
+
+        self.assertEqual(report["status"], "blocked")
+        self.assertIn(
+            "market/theme May history status not complete: insufficient_evidence",
+            report["blocked_reason"],
+        )
+        self.assertEqual(
+            report["daily_signal_snapshot_may_current_version_coverage"]["conclusion"],
+            "covered",
+        )
+        self.assertIn("read_only_audit_blocked", report["next_action"])
+        self.assertNotIn("read_only_audit_complete", report["next_action"])
+
+    def test_may_coverage_accepts_twenty_strategy_dates_starting_may_fourth(self):
+        may_dates = [
+            "2026-05-04",
+            "2026-05-05",
+            "2026-05-06",
+            "2026-05-07",
+            "2026-05-08",
+            "2026-05-11",
+            "2026-05-12",
+            "2026-05-13",
+            "2026-05-14",
+            "2026-05-15",
+            "2026-05-18",
+            "2026-05-19",
+            "2026-05-20",
+            "2026-05-21",
+            "2026-05-22",
+            "2026-05-25",
+            "2026-05-26",
+            "2026-05-27",
+            "2026-05-28",
+            "2026-05-29",
+        ]
+        count_result = {
+            "status": "ok",
+            "row_count": len(may_dates),
+            "rows": [{"trade_date": date} for date in may_dates],
+        }
+
+        self.assertEqual(_may_history_status(count_result), "confirmed")
+        self.assertEqual(
+            _daily_signal_current_version_coverage(count_result),
+            {
+                "row_count": 20,
+                "date_min": "2026-05-04",
+                "date_max": "2026-05-29",
+                "distinct_trade_dates": 20,
+                "conclusion": "covered",
+            },
+        )
+
+    def test_may_coverage_rejects_twenty_rows_with_wrong_trade_date_set(self):
+        may_dates = [
+            "2026-05-01",
+            "2026-05-04",
+            "2026-05-05",
+            "2026-05-06",
+            "2026-05-07",
+            "2026-05-08",
+            "2026-05-11",
+            "2026-05-12",
+            "2026-05-13",
+            "2026-05-14",
+            "2026-05-15",
+            "2026-05-18",
+            "2026-05-19",
+            "2026-05-20",
+            "2026-05-21",
+            "2026-05-22",
+            "2026-05-25",
+            "2026-05-26",
+            "2026-05-27",
+            "2026-05-29",
+        ]
+        count_result = {
+            "status": "ok",
+            "row_count": len(may_dates),
+            "rows": [{"trade_date": date} for date in may_dates],
+        }
+
+        self.assertEqual(_may_history_status(count_result), "insufficient_evidence")
+        self.assertEqual(
+            _daily_signal_current_version_coverage(count_result)["conclusion"],
+            "insufficient_evidence",
+        )
+
+    def test_may_coverage_rejects_expected_dates_plus_extra_may_first(self):
+        may_dates = [
+            *MAY_2026_EXPECTED_TRADE_DATES,
+            "2026-05-01",
+        ]
+        count_result = {
+            "status": "ok",
+            "row_count": len(may_dates),
+            "rows": [{"trade_date": date} for date in may_dates],
+        }
+
+        self.assertEqual(_may_history_status(count_result), "insufficient_evidence")
+        self.assertEqual(
+            _daily_signal_current_version_coverage(count_result),
+            {
+                "row_count": 21,
+                "date_min": "2026-05-01",
+                "date_max": "2026-05-29",
+                "distinct_trade_dates": 21,
+                "conclusion": "insufficient_evidence",
+            },
+        )
+
+    def test_may_coverage_rejects_limited_current_version_sample(self):
+        count_result = {
+            "status": "ok",
+            "row_count": 10001,
+            "rows": [
+                {"trade_date": date}
+                for date in MAY_2026_EXPECTED_TRADE_DATES
+            ],
+        }
+
+        self.assertEqual(
+            _daily_signal_current_version_coverage(count_result)["conclusion"],
+            "insufficient_evidence",
+        )
+
+    def test_may_coverage_rejects_nineteen_strategy_dates(self):
+        may_dates = [
+            "2026-05-04",
+            "2026-05-05",
+            "2026-05-06",
+            "2026-05-07",
+            "2026-05-08",
+            "2026-05-11",
+            "2026-05-12",
+            "2026-05-13",
+            "2026-05-14",
+            "2026-05-15",
+            "2026-05-18",
+            "2026-05-19",
+            "2026-05-20",
+            "2026-05-21",
+            "2026-05-22",
+            "2026-05-25",
+            "2026-05-26",
+            "2026-05-27",
+            "2026-05-29",
+        ]
+        count_result = {
+            "status": "ok",
+            "row_count": len(may_dates),
+            "rows": [{"trade_date": date} for date in may_dates],
+        }
+
+        self.assertEqual(_may_history_status(count_result), "insufficient_evidence")
+        self.assertEqual(
+            _daily_signal_current_version_coverage(count_result)["conclusion"],
+            "insufficient_evidence",
+        )
+
+    def test_correction_table_report_rejects_twenty_distinct_wrong_trade_date_set(self):
+        wrong_dates = [
+            "2026-05-01",
+            *MAY_2026_EXPECTED_TRADE_DATES[:-2],
+            "2026-05-29",
+        ]
+        count_result = {
+            "status": "ok",
+            "row_count": len(wrong_dates),
+            "rows": [
+                handoff_payload(
+                    trade_date=date,
+                    sector_theme_key=f"theme_{index}",
+                )
+                for index, date in enumerate(wrong_dates)
+            ],
+        }
+
+        report = _build_correction_table_report(
+            "market_theme_confirmed_evidence",
+            count_result,
+        )
+
+        self.assertEqual(report["distinct_dates"], 20)
+        self.assertEqual(report["date_min"], "2026-05-01")
+        self.assertEqual(report["date_max"], "2026-05-29")
+        self.assertEqual(report["conclusion"], "partial")
+        self.assertNotIn("complete", report["coverage_conclusion"])
+
+    def test_correction_table_report_accepts_exact_expected_dates_with_multiple_as_of_batches(self):
+        count_result = {
+            "status": "ok",
+            "row_count": len(MAY_2026_EXPECTED_TRADE_DATES),
+            "rows": [
+                handoff_payload(
+                    trade_date=date,
+                    as_of=f"{date}T{13 + (index % 2)}:30:00+08:00",
+                    sector_theme_key=f"theme_{index}",
+                )
+                for index, date in enumerate(MAY_2026_EXPECTED_TRADE_DATES)
+            ],
+        }
+
+        report = _build_correction_table_report(
+            "market_theme_confirmed_evidence",
+            count_result,
+        )
+
+        self.assertEqual(report["distinct_dates"], 20)
+        self.assertEqual(report["date_min"], "2026-05-04")
+        self.assertEqual(report["date_max"], "2026-05-29")
+        self.assertEqual(report["conclusion"], "complete")
+        self.assertIn(
+            "complete_range_with_multiple_as_of_batches",
+            report["coverage_conclusion"],
+        )
+
+    def test_correction_table_report_rejects_nineteen_expected_trade_dates(self):
+        partial_dates = MAY_2026_EXPECTED_TRADE_DATES[:-1]
+        count_result = {
+            "status": "ok",
+            "row_count": len(partial_dates),
+            "rows": [
+                handoff_payload(
+                    trade_date=date,
+                    sector_theme_key=f"theme_{index}",
+                )
+                for index, date in enumerate(partial_dates)
+            ],
+        }
+
+        report = _build_correction_table_report(
+            "market_theme_confirmed_evidence",
+            count_result,
+        )
+
+        self.assertEqual(report["distinct_dates"], 19)
+        self.assertEqual(report["conclusion"], "partial")
+        self.assertNotIn("complete", report["coverage_conclusion"])
+
+    def test_correction_audit_blocks_when_current_version_may_snapshot_missing(self):
+        version = _load_current_generator_version()
+
+        client = AuditClient(
+            {
+                "market_theme_confirmed_evidence": [
+                    handoff_payload(trade_date="2026-05-01"),
+                    handoff_payload(trade_date="2026-05-29", sector_theme_key="ai_server"),
+                ],
+                "market_theme_index_daily_bars": [
+                    {
+                        "trade_date": "2026-05-01",
+                        "index_scope": "sector_theme",
+                        "market_index": "TAIEX",
+                        "sector_theme_key": "semiconductor",
+                        "source_family": "market_data",
+                        "source_name": "twse_openapi",
+                    },
+                    {
+                        "trade_date": "2026-05-29",
+                        "index_scope": "sector_theme",
+                        "market_index": "TAIEX",
+                        "sector_theme_key": "ai_server",
+                        "source_family": "market_data",
+                        "source_name": "twse_openapi",
+                    },
+                ],
+                "sector_theme_members": [
+                    {
+                        "sector_theme_key": "semiconductor",
+                        "stock_code": "2330",
+                        "market_index": "TAIEX",
+                        "valid_from": "2026-05-01",
+                        "valid_to": None,
+                        "source_family": "owner_approved_persistent",
+                        "source_name": "owner_theme_map",
+                    }
+                ],
+                "daily_price": [{"trade_date": "2026-05-01"}, {"trade_date": "2026-05-29"}],
+                "daily_signal_snapshot": [
+                    {"trade_date": "2026-05-01", "version": "v19.1"},
+                    {"trade_date": "2026-05-29", "version": "v19.1"},
+                ],
+            }
+        )
+
+        report = build_market_theme_production_correction_audit(client)
+
+        self.assertEqual(report["status"], "blocked")
+        self.assertIn(
+            f"daily_signal_snapshot has no May rows for current generator VERSION {version}",
+            report["blocked_reason"],
+        )
+        self.assertEqual(
+            report["daily_signal_snapshot_may_current_version_coverage"]["row_count"],
+            0,
+        )
+        self.assertEqual(
+            report["daily_signal_snapshot_may_current_version_coverage"]["conclusion"],
+            "no_current_version_may_rows",
+        )
+        self.assertIn("blocked_current_version_snapshot_missing", report["next_action"])
+        self.assertIn("read_only_audit_blocked", report["next_action"])
+        self.assertNotIn("read_only_audit_complete", report["next_action"])
+        self.assertIn("followup_backfill_task_needed", report["next_action"])
+        self.assertNotIn("continue evidence chain", " ".join(report["next_action"]))
+
+    def test_correction_audit_blocks_when_current_version_daily_signal_has_extra_may_first(self):
+        version = _load_current_generator_version()
+        daily_signal_dates = [
+            *MAY_2026_EXPECTED_TRADE_DATES,
+            "2026-05-01",
+        ]
+        client = AuditClient(
+            {
+                "market_theme_confirmed_evidence": [
+                    handoff_payload(
+                        trade_date=date,
+                        sector_theme_key=f"theme_{index}",
+                    )
+                    for index, date in enumerate(MAY_2026_EXPECTED_TRADE_DATES)
+                ],
+                "market_theme_index_daily_bars": [
+                    {
+                        "trade_date": date,
+                        "index_scope": "sector_theme",
+                        "market_index": "TAIEX",
+                        "sector_theme_key": f"theme_{index}",
+                        "source_family": "market_data",
+                        "source_name": "twse_openapi",
+                    }
+                    for index, date in enumerate(MAY_2026_EXPECTED_TRADE_DATES)
+                ],
+                "sector_theme_members": [
+                    {
+                        "trade_date": date,
+                        "sector_theme_key": f"theme_{index}",
+                        "stock_code": f"23{index:02d}",
+                        "market_index": "TAIEX",
+                        "valid_from": date,
+                        "valid_to": None,
+                        "source_family": "owner_approved_persistent",
+                        "source_name": "owner_theme_map",
+                    }
+                    for index, date in enumerate(MAY_2026_EXPECTED_TRADE_DATES)
+                ],
+                "daily_price": [
+                    {"trade_date": date}
+                    for date in MAY_2026_EXPECTED_TRADE_DATES
+                ],
+                "daily_signal_snapshot": [
+                    {"trade_date": date, "version": version}
+                    for date in daily_signal_dates
+                ],
+            }
+        )
+
+        report = build_market_theme_production_correction_audit(client)
+
+        self.assertEqual(report["status"], "blocked")
+        self.assertEqual(
+            report["daily_signal_snapshot_may_current_version_coverage"],
+            {
+                "row_count": 21,
+                "date_min": "2026-05-01",
+                "date_max": "2026-05-29",
+                "distinct_trade_dates": 21,
+                "conclusion": "insufficient_evidence",
+            },
+        )
+        self.assertIn(
+            "current VERSION snapshot coverage not covered: insufficient_evidence",
+            report["blocked_reason"],
+        )
+        self.assertIn("read_only_audit_blocked", report["next_action"])
+        self.assertNotIn("read_only_audit_complete", report["next_action"])
+
+    def test_correction_audit_source_error_next_action_is_blocked_not_complete(self):
+        version = _load_current_generator_version()
+        may_dates = [
+            "2026-05-01",
+            "2026-05-04",
+            "2026-05-05",
+            "2026-05-06",
+            "2026-05-07",
+            "2026-05-08",
+            "2026-05-11",
+            "2026-05-12",
+            "2026-05-13",
+            "2026-05-14",
+            "2026-05-15",
+            "2026-05-18",
+            "2026-05-19",
+            "2026-05-20",
+            "2026-05-21",
+            "2026-05-22",
+            "2026-05-25",
+            "2026-05-26",
+            "2026-05-27",
+            "2026-05-29",
+        ]
+
+        class SourceErrorAuditClient(AuditClient):
+            def table(self, name):
+                if name == "market_theme_index_daily_bars":
+                    raise RuntimeError("permission denied for table")
+                return super().table(name)
+
+        client = SourceErrorAuditClient(
+            {
+                "market_theme_confirmed_evidence": [
+                    handoff_payload(trade_date=date, sector_theme_key=f"theme_{index}")
+                    for index, date in enumerate(may_dates)
+                ],
+                "sector_theme_members": [
+                    {
+                        "sector_theme_key": "semiconductor",
+                        "stock_code": "2330",
+                        "market_index": "TAIEX",
+                        "valid_from": "2026-05-01",
+                        "valid_to": None,
+                        "source_family": "owner_approved_persistent",
+                        "source_name": "owner_theme_map",
+                    }
+                ],
+                "daily_price": [{"trade_date": date} for date in may_dates],
+                "daily_signal_snapshot": [
+                    {"trade_date": date, "version": version}
+                    for date in may_dates
+                ],
+            }
+        )
+
+        report = build_market_theme_production_correction_audit(client)
+
+        self.assertEqual(report["status"], "blocked")
+        self.assertIn("market_theme_index_daily_bars", report["blocked_reason"])
+        self.assertIn("read_only_audit_blocked", report["next_action"])
+        self.assertIn("production_read_permission_needed", report["next_action"])
+        self.assertNotIn("read_only_audit_complete", report["next_action"])
+
+    def test_correction_audit_passes_when_daily_tables_complete_and_members_mapping_only(self):
+        version = _load_current_generator_version()
+        client = AuditClient(
+            {
+                "market_theme_confirmed_evidence": [
+                    handoff_payload(
+                        trade_date=date,
+                        sector_theme_key=f"theme_{index}",
+                    )
+                    for index, date in enumerate(MAY_2026_EXPECTED_TRADE_DATES)
+                ],
+                "market_theme_index_daily_bars": [
+                    {
+                        "trade_date": date,
+                        "index_scope": "sector_theme",
+                        "market_index": "TAIEX",
+                        "sector_theme_key": f"theme_{index}",
+                        "source_family": "market_data",
+                        "source_name": "twse_openapi",
+                    }
+                    for index, date in enumerate(MAY_2026_EXPECTED_TRADE_DATES)
+                ],
+                "sector_theme_members": [
+                    {
+                        "trade_date": "2026-05-29",
+                        "sector_theme_key": "semiconductor",
+                        "stock_code": "2330",
+                        "stock_name": "TSMC",
+                        "market_index": "TAIEX",
+                        "is_active": True,
+                        "valid_from": "2026-01-01",
+                        "valid_to": None,
+                        "source_family": "market_data",
+                        "source_name": "twse_openapi_t187ap03_L",
+                    },
+                    {
+                        "trade_date": "2026-05-29",
+                        "sector_theme_key": "ai_server",
+                        "stock_code": "2382",
+                        "stock_name": "Quanta",
+                        "market_index": "TAIEX",
+                        "is_active": True,
+                        "valid_from": "2026-01-15",
+                        "valid_to": None,
+                        "source_family": "market_data",
+                        "source_name": "twse_openapi_t187ap03_L",
+                    },
+                ],
+                "daily_price": [
+                    {"trade_date": date}
+                    for date in MAY_2026_EXPECTED_TRADE_DATES
+                ],
+                "daily_signal_snapshot": [
+                    {"trade_date": date, "version": version}
+                    for date in MAY_2026_EXPECTED_TRADE_DATES
+                ],
+            }
+        )
+
+        report = build_market_theme_production_correction_audit(client)
+        members = report["tables"]["sector_theme_members"]
+
+        self.assertEqual(report["status"], "pass")
+        self.assertIsNone(report["blocked_reason"])
+        self.assertEqual(
+            report["cross_table_conclusion"]["market_theme_tables_may_history_status"],
+            "complete",
+        )
+        self.assertEqual(members["read_status"], "ok")
+        self.assertEqual(members["read_error"], "")
+        self.assertIsNone(members["trade_date_min"])
+        self.assertIsNone(members["trade_date_max"])
+        self.assertEqual(members["distinct_trade_dates"], 0)
+        self.assertEqual(members["valid_from_min"], "2026-01-01")
+        self.assertEqual(members["valid_from_max"], "2026-01-15")
+        self.assertEqual(members["active_rows"], 2)
+        self.assertEqual(members["conclusion"], "mapping_only")
+        self.assertIn("membership table has no trade_date", members["coverage_conclusion"])
+        self.assertNotIn("source-error", json.dumps(members, ensure_ascii=False))
+        self.assertIn("read_only_audit_complete", report["next_action"])
+        self.assertNotIn("read_only_audit_blocked", report["next_action"])
+        self.assertNotIn("followup_backfill_task_needed", report["next_action"])
+
+    def test_correction_audit_cli_missing_credentials_returns_blocked_contract(self):
+        with tempfile.TemporaryFile(mode="w+", encoding="utf-8") as stdout:
+            old_stdout = sys.stdout
+            try:
+                sys.stdout = stdout
+                with patch(
+                    "scripts.smoke_market_theme_evidence_readonly._build_readonly_client",
+                    return_value=None,
+                ):
+                    returncode = readonly_smoke_main(["--correction-audit-json"])
+            finally:
+                sys.stdout = old_stdout
+            stdout.seek(0)
+            stdout_text = stdout.read()
+            output = json.loads(stdout_text)
+
+        self.assertEqual(returncode, 2)
+        self.assertEqual(output["mode"], "market-theme-production-correction-audit")
+        self.assertEqual(output["status"], "blocked")
+        self.assertIn("current generator VERSION", output["blocked_reason"])
+        self.assertEqual(
+            output["generator_version"]["source"],
+            "core/generator.py VERSION",
+        )
+        self.assertEqual(
+            output["daily_signal_snapshot_may_current_version_coverage"]["row_count"],
+            0,
+        )
+        self.assertEqual(output["write_execution"], "disabled")
+        self.assertFalse(output["live_write"])
+        self.assertEqual(
+            output["cross_table_conclusion"]["market_theme_tables_may_history_status"],
+            "insufficient_evidence",
+        )
+        self.assertIn("missing required Supabase read credentials", output["blocked_reasons"])
+        self.assertIn("blocked_current_version_snapshot_missing", output["next_action"])
+        self.assertIn("read_only_audit_blocked", output["next_action"])
+        self.assertIn("production_read_permission_needed", output["next_action"])
+        self.assertNotIn("read_only_audit_complete", output["next_action"])
+        self.assertIn("followup_backfill_task_needed", output["next_action"])
+        self.assertNotIn("continue evidence chain", stdout_text)
+        self.assertNotIn("SUPABASE_KEY", stdout_text)
+        self.assertNotIn("hash", stdout_text.lower())
+        self.assertNotIn("fingerprint", stdout_text.lower())
+
+    def test_correction_audit_cli_import_error_returns_blocked_contract(self):
+        with tempfile.TemporaryFile(mode="w+", encoding="utf-8") as stdout:
+            old_stdout = sys.stdout
+            try:
+                sys.stdout = stdout
+                with patch(
+                    "scripts.smoke_market_theme_evidence_readonly._build_readonly_client",
+                    side_effect=ImportError("No module named supabase"),
+                ):
+                    returncode = readonly_smoke_main(["--correction-audit-json"])
+            finally:
+                sys.stdout = old_stdout
+            stdout.seek(0)
+            stdout_text = stdout.read()
+            output = json.loads(stdout_text)
+
+        self.assertEqual(returncode, 2)
+        self.assertEqual(output["status"], "blocked")
+        self.assertIn("production read-only client unavailable: ImportError", output["blocked_reason"])
+        self.assertIn("read_only_audit_blocked", output["next_action"])
+        self.assertIn("production_read_permission_needed", output["next_action"])
+        self.assertNotIn("read_only_audit_complete", output["next_action"])
+        self.assertNotIn("Traceback", stdout_text)
+        self.assertNotIn("No module named supabase", stdout_text)
+
+    def test_correction_audit_cli_client_exception_returns_blocked_contract(self):
+        with tempfile.TemporaryFile(mode="w+", encoding="utf-8") as stdout:
+            old_stdout = sys.stdout
+            try:
+                sys.stdout = stdout
+                with patch(
+                    "scripts.smoke_market_theme_evidence_readonly._build_readonly_client",
+                    side_effect=RuntimeError("incompatible Supabase client options"),
+                ):
+                    returncode = readonly_smoke_main(["--correction-audit-json"])
+            finally:
+                sys.stdout = old_stdout
+            stdout.seek(0)
+            stdout_text = stdout.read()
+            output = json.loads(stdout_text)
+
+        self.assertEqual(returncode, 2)
+        self.assertEqual(output["status"], "blocked")
+        self.assertIn("production read-only client unavailable: RuntimeError", output["blocked_reason"])
+        self.assertIn("read_only_audit_blocked", output["next_action"])
+        self.assertIn("production_read_permission_needed", output["next_action"])
+        self.assertNotIn("read_only_audit_complete", output["next_action"])
+        self.assertNotIn("Traceback", stdout_text)
+        self.assertNotIn("incompatible Supabase client options", stdout_text)
 
     def test_readonly_smoke_matrix_fails_closed_except_valid_confirmed_rows(self):
         cases = [
