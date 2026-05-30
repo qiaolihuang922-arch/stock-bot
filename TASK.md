@@ -1,227 +1,114 @@
-# TASK: evidence chain 候選整包交付修正與指定驗證
+# TASK: 修復 evidence read-only smoke credential fallback
 
 ## 任務狀態
 
-- task_id：evidence_chain_candidate_changelog_qa_retry_20260530
-- 任務類型：normal_patch
-- 任務尺寸判斷：normal_patch
-- 狀態：ready_for_tech
-- 版本建議：本輪不升版，沿用目前 VERSION
-- QA 分級建議：L2
-- QA 分級理由：本輪不改策略、不改 Telegram、不 live write，但驗證範圍涉及 evidence chain write CLI / dry-run / fake execute / read-after-write / source fail-closed contract，超出單一文件 tiny patch；不升到 L3，因 Owner
-明確指定驗證清單且禁止 full scope 擴張。
+- task_id: fix-evidence-readonly-smoke-credential-fallback
+- 任務類型: tiny_patch
+- 狀態: ready_for_tech
+- 版本建議: patch
+- 版本契約: 本輪不改 Telegram / 策略 / 使用者報文版本；若專案有 CLI/script 版本 header，沿用目前版本，不為此 smoke fallback 單獨升版。
+- QA 分級建議: L1
 
 ## Owner 問題
 
-Owner 要繼續現有 evidence chain 候選，不清空 diff。Architect 已在隔離 worktree 放入 untracked dummy config.py 並加入 git exclude，Tech / QA 不得把 config.py 納入 diff。
-
-目前需要 Tech 重新輸出整包 CHANGELOG.md，不能 blocked，不能寫「未編輯 CHANGELOG」或等價自相矛盾句。Tech 必須把 Owner 指定的 arm64 pytest 命令列為自檢之一；只有該命令仍失敗時才可 blocked。
-
-隨後 QA 針對整包候選做指定驗證，確認 evidence chain 候選在 dry-run、fake execute、read-after-write、secret redaction、source fail-closed 與 allowed production row 上符合既有契約。
+scripts/smoke_market_theme_evidence_readonly.py 目前只讀 SUPABASE_URL + SUPABASE_READONLY_KEY env。當本機 config.py 已有 SUPABASE_URL / SUPABASE_KEY，但 env 未提供 readonly key 時，script 會誤報 production DB env/
+config missing，造成 evidence read-only smoke 在可安全讀取的本機設定下被錯誤阻塞。
 
 ## 使用者可見結果
 
-- Owner 看到本輪 evidence chain 候選可被完整交付與驗收，不再卡在交付摘要矛盾或測試環境誤判。
-- Telegram 報文不變。
-- Telegram VERSION 不變。
-- 策略 decision 不變。
-- 不產生 production DB 寫入。
-- 不發送 live Telegram。
+- Owner / developer 執行 read-only smoke 時，憑證解析順序符合安全 fallback：
+1. SUPABASE_URL: 優先 env，其次 config.SUPABASE_URL
+2. key: 優先 env SUPABASE_READONLY_KEY
+3. 其次 env SUPABASE_KEY
+4. 再其次 config.SUPABASE_READONLY_KEY
+5. 最後 config.SUPABASE_KEY
+- 若仍缺 URL 或 key，script 必須 fail closed，清楚提示缺必要 DB read credential，但不得輸出任何 secret value、hash、partial/truncated value。
+- 成功 fallback 時，script 可以建立 Supabase client，或在測試中以 fake client 驗證 credential resolution contract。
 
 ## 非目標
 
-- 不清空、重置或重做現有 evidence chain 候選 diff。
-- 不把 untracked dummy config.py 納入 diff。
-- 不改 DB schema、table、column、RLS、grant、policy、role 或 migration。
-- 不做 production live write。
-- 不做 formal backfill。
-- 不做 live Telegram delivery。
-- 不改策略 decision、BUY / SELL / RR / 加減碼 / 停損停利門檻。
-- 不改 Telegram formatter、summary、header、message list contract 或 VERSION。
-- 不擴成 evidence chain 架構重設、全 repo refactor、全量清理或 full pytest。
-- 本輪不處理新發現的旁支問題；旁支只記待辦交回 Architect。
+- 不改策略 decision。
+- 不改 Telegram 報文、formatter、message list contract 或手機閱讀內容。
+- 不改 DB schema / RLS / grant / policy / role。
+- 不做 live write。
+- 不做 backfill。
+- 不改 market theme evidence 的資料模型、查詢語意或 production 資料內容。
+- 不做全 repo credential refactor。
+- 不清理其他 smoke scripts。
 
 ## 影響模組
 
-- 直接交付文件：
-- CHANGELOG.md
-- QA_REPORT.md
-- 直接候選範圍：
-- evidence chain approved / forbidden dry-run
-- fake execute read-after-write
-- read-after-write exception secret redaction
-- runtime / unknown / mixed source fail-closed
-- allowed production row pass
-- 直接測試：
-- tests/test_market_theme_evidence.py
-- tests/test_market_theme_evidence_handoff.py
-- 環境邊界：
-- 隔離 worktree 的 untracked dummy config.py 只供測試環境使用，不是交付 diff。
-
-## 直接消費者
-
-- Tech：依本任務卡修正並重新輸出整包 CHANGELOG.md，保留現有候選 diff。
-- QA：依本任務卡與 Tech 的 CHANGELOG.md 做整包驗證，輸出完整 QA_REPORT.md。
-- Architect：依 TASK.md、CHANGELOG.md、QA_REPORT.md 判斷是否可吸收候選。
-- Owner：透過 Architect final summary 看到 evidence chain 候選是否解除阻塞。
+- 直接模組:
+- scripts/smoke_market_theme_evidence_readonly.py
+- 對應的直接測試檔，位置由 Tech 依現有測試結構選擇。
+- 直接消費者:
+- 本機 / CI 手動執行 evidence read-only smoke 的 developer / Owner。
+- Architect / QA 用來確認 production DB read-only evidence path 是否可讀的 smoke command。
 
 ## 輸出契約
 
-### Tech 輸出契約
-
-CHANGELOG.md 必須從 # CHANGELOG: 開始，並重新輸出整包內容，至少包含：
-
-- 修改內容：描述本輪實際完成的 evidence chain 候選與交付修正。
-- 修改檔案：逐一列出實際 diff 檔案；不得列入 untracked dummy config.py。
-- 契約影響：說明 dry-run、fake execute、read-after-write、source status、telegram_confirmed、strategy_consumer、secret redaction、allowed production row 的 contract。
-- 版本同步：明確寫本輪不改 Telegram VERSION，且未改 Telegram header。
-- 直接消費者同步：CLI / tests / QA 驗證路徑已同步。
-- 未影響模組：DB schema、production live write、formal backfill、live Telegram、策略 decision、Telegram formatter / summary / header 均未改。
-- 自檢命令：必須包含以下命令之一：
-- arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py -q
-- 殘留風險：只列本輪真實殘留風險，不得用「QA 會驗」代替自檢。
-
-Tech 禁止在 CHANGELOG.md 寫：
-
-- 未編輯 CHANGELOG.md
-- 本回覆提供完整 CHANGELOG 供 runner 寫入
-- 任何暗示 CHANGELOG.md 沒被本輪更新、但實際又已 modified 的矛盾文字。
-- 在 arm64 指定測試未失敗前，不得寫 blocked。
-
-### QA 輸出契約
-
-QA_REPORT.md 必須從 # QA_REPORT: 開始，並整包驗證以下項目：
-
-- approved dry-run pass。
-- forbidden dry-run fail closed / pass negative expectation。
-- fake execute read-after-write pass。
-- read-after-write exception secret redaction。
-- runtime source：status=insufficient-data、telegram_confirmed=false、strategy_consumer=fail-closed。
-- unknown source：status=insufficient-data、telegram_confirmed=false、strategy_consumer=fail-closed。
-- mixed source：status=insufficient-data、telegram_confirmed=false、strategy_consumer=fail-closed。
-- allowed production row pass。
-- git diff --check 通過。
-- 確認 dummy config.py 未納入 diff。
-- 確認未改 DB schema、未 live write、未 live Telegram、未改策略 decision、未改 Telegram VERSION。
-
-QA 必須使用或覆蓋以下命令：
-
-arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py -q
-git diff --check
-
-## 已存在且不得回退的契約
-
-- evidence chain 候選 diff 必須保留，不得清空。
-- config.py 是隔離 worktree 的 untracked dummy config，不得納入 diff。
-- write credential resolution 既有契約不得回退：env 優先，env 缺失時可 fallback repo config；service key alias 兼容 SERVICE_ROLE_KEY 與 SUPABASE_SERVICE_ROLE_KEY。
-- execute JSON / validation output 不得輸出 URL、read key、service-role key、截斷值或 hash。
-- approved dry-run 可產生合法 dry-run 結果。
-- forbidden dry-run 必須 fail closed，不得產生可執行寫入。
-- fake execute 只可用於測試 read-after-write contract，不代表 production live write。
-- read-after-write exception 必須 secret redaction。
-- runtime / unknown / mixed source 不得 confirmed，必須：
-- status=insufficient-data
-- telegram_confirmed=false
-- strategy_consumer=fail-closed
-- allowed production row 必須 pass。
-- 本輪不得改 DB schema。
-- 本輪不得 live write。
-- 本輪不得 live Telegram。
-- 本輪不得改策略 decision。
-- 本輪不得改 Telegram VERSION。
+- 單一主 bug: credential fallback resolution。
+- 單一輸出契約:
+- script 判斷 DB credential 時，必須使用以下 resolution order：
+- URL: os.environ["SUPABASE_URL"] -> config.SUPABASE_URL
+- key: os.environ["SUPABASE_READONLY_KEY"] -> os.environ["SUPABASE_KEY"] -> config.SUPABASE_READONLY_KEY -> config.SUPABASE_KEY
+- 缺 URL 或 key 時回傳 fail closed，不建立 client，不進行 DB read。
+- log / stderr / exception message 不得包含 secret value、hash、前後幾碼、長度推測或任何可識別 credential 的派生資訊。
+- 已存在且不得回退的契約:
+- 此 smoke 必須是 read-only smoke。
+- 缺憑證不得 fallback 成 live write、backfill 或 DB mutation。
+- 不得要求 Owner 手動執行 SQL。
+- 不得改 Telegram / 策略 decision。
+- 不得把 SUPABASE_SERVICE_ROLE_KEY 或其他高權限 secret 納入 fallback。
 
 ## 驗收條件
 
-1. Tech 重新輸出整包 CHANGELOG.md，且不包含「未編輯 CHANGELOG.md」或等價自相矛盾句。
-2. Tech CHANGELOG.md 明確列出實際修改檔案，且不包含 dummy config.py。
-3. Tech 自檢至少包含並通過：
-
-arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py -q
-
-4. 若上述 arm64 pytest 仍失敗，Tech 才可 blocked，且必須列出失敗測試與錯誤摘要。
-5. QA 重新輸出完整 QA_REPORT.md，不得只重跑 Tech 命令；必須逐項覆蓋 Owner 指定驗證清單。
-6. QA 驗證 approved dry-run、forbidden dry-run、fake execute read-after-write、read-after-write exception secret redaction、runtime / unknown / mixed source fail-closed、allowed production row。
-7. QA 驗證 git diff --check 通過。
-8. QA 確認未清空現有 evidence chain 候選 diff，且 dummy config.py 未納入 diff。
-9. QA 確認未改 DB schema、未 live write、未 live Telegram、未改策略 decision、未改 Telegram VERSION。
-10. QA 結論只有在以上條件全部滿足時才可寫 通過；若指定契約任一失敗，必須 阻塞 或 conditional pass 並列出可驗證條件。
+1. config fallback 可用:
+- 在 env 沒有 SUPABASE_READONLY_KEY、但 config.SUPABASE_URL + config.SUPABASE_KEY 存在時，credential resolver 能選到 config fallback，並可建立 client，或以 fake client 驗證傳入的是 resolved URL/key。
+2. fail closed 可用:
+- env 與 config 都缺 URL 或 key 時，script 必須失敗並停止，不建立 client，不進行 DB read。
+- 失敗訊息只能說明缺必要 read credential，不得包含任何 secret value/hash/truncated value。
+3. priority 不回退:
+- 若 env SUPABASE_READONLY_KEY 存在，必須優先於 env SUPABASE_KEY 與 config key。
+- 若 env SUPABASE_KEY 存在且 readonly key 不存在，必須優先於 config key。
+4. 範圍不擴張:
+- diff 只應集中在 smoke credential resolution 與直接測試。
+- 不得修改策略、Telegram、DB schema、RLS、grant、policy、backfill 或 live delivery path。
 
 ## 範例或 fixture
 
-### Tech 自檢命令形狀
-
-arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py -q
-
-### QA 驗證命令形狀
-
-arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py -q
-git diff --check
-
-### source fail-closed 期望形狀
-
-runtime source:
-status=insufficient-data
-telegram_confirmed=false
-strategy_consumer=fail-closed
-
-unknown source:
-status=insufficient-data
-telegram_confirmed=false
-strategy_consumer=fail-closed
-
-mixed source:
-status=insufficient-data
-telegram_confirmed=false
-strategy_consumer=fail-closed
-
-### allowed production row 期望形狀
-
-source_family=production_db
-support_level=confirmed 或 supporting
-evidence_status=confirmed
-freshness=fresh
-result=pass
-
-### 手機閱讀路徑
-
-本輪不改 Telegram 報文、summary、header 或 VERSION，因此沒有新的手機報文輸出形狀。QA 只需確認 Telegram 使用者可見輸出未被本輪 diff 改動；不得要求新增手機報文 snapshot。
+- fixture A: env SUPABASE_URL=https://example.supabase.co, env SUPABASE_READONLY_KEY=ro_env, env SUPABASE_KEY=anon_env, config.SUPABASE_KEY=config_key
+- expected: resolver 使用 SUPABASE_READONLY_KEY
+- expected output shape: readonly smoke credential source resolved 或等價安全訊息，不含 key 值。
+- fixture B: env 無 Supabase key，fake config 有 SUPABASE_URL=https://example.supabase.co + SUPABASE_KEY=config_key
+- expected: resolver 可建立 fake client / 呼叫 fake client factory。
+- expected: 不誤報 production DB env/config missing。
+- fixture C: env 與 config 都缺 key
+- expected: fail closed。
+- expected output shape: missing required Supabase read credentials 或等價安全訊息。
+- forbidden output examples: config_key, conf...key, key hash, key length。
 
 ## 明確禁止事項
 
-- 禁止清空、重置或丟棄現有 evidence chain 候選 diff。
-- 禁止把 dummy config.py 納入 diff。
-- 禁止使用 destructive git 操作處理候選 diff。
-- 禁止修改 DB schema、table、column、RLS、grant、policy、role 或 migration。
-- 禁止 production live write。
-- 禁止 formal backfill。
-- 禁止 live Telegram delivery。
-- 禁止修改策略 decision。
-- 禁止修改 Telegram VERSION。
-- 禁止修改 Telegram formatter、summary、header 或 message list contract。
-- 禁止把 runtime / local / unknown / mixed source 描述成 production source-of-truth。
-- 禁止在指定 arm64 pytest 尚未失敗前寫 blocked。
-- 禁止把本輪擴成 full pytest、全 repo refactor、evidence chain 架構重設或策略重設。
+- 禁止輸出任何 secret value、hash、partial/truncated value、長度或 fingerprint。
+- 禁止新增 live write、DB mutation、backfill、資料修復流程。
+- 禁止改 DB schema / RLS / grant / policy / role。
+- 禁止改 Telegram 報文、formatter header、message list、策略 decision、watchlist 或持倉狀態機。
+- 禁止讀取或引用 .env、*.pem、~/.aws/credentials、~/.ssh/*、token 檔案。
+- 禁止把 service role 或高權限 credential 加入 fallback。
+- 禁止為此 tiny patch 擴成全量 credential 管理重構或全 repo smoke 清理。
 
 ## 阻塞條件
 
-- arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py -q 仍失敗，且失敗不是可由本輪交付摘要修正解決。
-- Tech 無法確認 CHANGELOG.md 實際 diff 或無法移除自相矛盾文字。
-- dummy config.py 已被納入 diff，且無法在不破壞候選 diff 的前提下移除。
-- QA 發現現有 evidence chain 候選 diff 被清空、重置或混入本輪禁止變更。
-- QA 發現 DB schema、live write、live Telegram、策略 decision 或 Telegram VERSION 被修改。
-- QA 發現 runtime / unknown / mixed source 任一未 fail closed。
-- QA 發現 read-after-write exception 會外洩 secret。
-- QA 發現 allowed production row 無法 pass。
+- 若現有 script 沒有可分離測試的 credential resolution seam，Tech 仍應只做最小可測抽取；若需要大規模重構才可測，先 blocked 回報。
+- 若 config.py 中不存在 SUPABASE_READONLY_KEY 或 SUPABASE_KEY 的明確可讀 contract，且無法以 fake config module 驗證 fallback，Tech blocked 要求 Architect 補充現有 config 契約。
+- 若測試環境無法安全 mock config/env/client factory，且會迫使測試讀真實 secret，必須 blocked。
+- 若修復需要 DB schema、RLS、grant、policy 或 live credential 權限變更，必須 blocked，不納入本輪。
 
 ## 本輪停止條件
 
-完成以下範圍即停止：
-
-1. Tech 重新輸出合格整包 CHANGELOG.md。
-2. Tech 用指定 arm64 pytest 作為自檢之一。
-3. QA 依 Owner 指定清單完成整包驗證。
-4. QA 通過 git diff --check。
-5. Architect 可依 CHANGELOG.md 與 QA_REPORT.md 判斷是否吸收候選。
-
-以下旁支不納入本輪：新增 DB schema、production backfill、真實 live write、live Telegram、策略門檻調整、Telegram 文案優化、runner 長期環境治理、full pytest 或 evidence chain 下一階段產品設計。若驗證中發現相關問題，只記
-待辦交回 Architect。
+- 完成 credential fallback resolution。
+- 補上直接測試覆蓋 config fallback 與缺憑證 fail closed。
+- 驗證不輸出 secret 派生資訊。
+- Tech 自檢只跑直接相關測試；QA 只做 L1 局部測試與一個負面 secret-output 反證。
+- 發現其他 smoke script 同類問題、credential 命名不一致、CI secret 配置問題，只記為後續待辦，不納入本輪。

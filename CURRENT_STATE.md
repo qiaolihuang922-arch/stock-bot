@@ -33,6 +33,13 @@
 
 ## Recent High-Signal Milestones
 
+- Evidence Read-only Smoke Credential Fallback 已通過 QA，待 commit / push：
+  - Architect 跑 production read-only smoke 時發現：原 script 只認 env `SUPABASE_READONLY_KEY`，本機 `config.py` 已有 `SUPABASE_URL / SUPABASE_KEY` 時仍誤報 missing；手動注入 config key 後可讀 production，且 `market_theme_confirmed_evidence` 目前 rows=0。
+  - `scripts/smoke_market_theme_evidence_readonly.py` 新增安全 credential fallback：URL 走 env `SUPABASE_URL` -> `config.SUPABASE_URL`；read key 走 env `SUPABASE_READONLY_KEY` -> env `SUPABASE_KEY` -> `config.SUPABASE_READONLY_KEY` -> `config.SUPABASE_KEY`。
+  - 缺 URL/key 時 fail closed，不建立 client、不讀 DB；不把 `SUPABASE_SERVICE_ROLE_KEY` 或其他高權限 key 納入 read-only fallback。
+  - CLI 不輸出 secret value、hash、截斷值、fingerprint 或長度。
+  - 驗證：`arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence_handoff.py -q`，`31 passed`；`git diff --check` 通過；直接 smoke 已能讀 production 並回 `env=present/table_read=ok/rows=0/status=fail-closed`。
+  - 未改 DB schema、RLS、grant、policy、production live write、backfill、Telegram 或策略 decision。
 - Evidence Chain Write CLI Read-after-write And Source Fail-closed Handoff 已推送：
   - Owner 最新邊界：只有新增表、擴字段、schema / RLS / grant / policy / role 變更需要找 Owner；非 schema 的 evidence data 寫入 / 回寫應走 repo script / service API。
   - 本輪延續既有 `public.market_theme_confirmed_evidence` contract，未新增 DB schema、table、column、RLS、grant、policy、role。

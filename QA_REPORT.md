@@ -2,107 +2,93 @@
 
   ## 測試範圍
 
-  本輪依 TASK.md 判定為 normal_patch / L2，沒有擴成 full pytest、replay、backfill 或 production live write。
+  本輪任務尺寸為 tiny_patch，QA level 為 L1。驗證範圍收斂在 scripts/smoke_market_theme_evidence_readonly.py 的 credential fallback、直接測試、直接消費者與 secret-output 風險；未擴成 full pytest / replay / backfill。
 
-  已驗證：
+  可吸收 diff：
 
-  - TASK.md、CHANGELOG.md、git diff --name-only 一致。
-  - 可吸收 diff：4 個產品候選檔案 + CHANGELOG.md。
-  - 產品候選 diff：
-      - scripts/smoke_market_theme_evidence_readonly.py
-      - scripts/write_market_theme_confirmed_evidence.py
-      - services/market_theme_evidence_store.py
-      - tests/test_market_theme_evidence_handoff.py
-  - 交付文件 diff：
-      - CHANGELOG.md
-  - config.py 不在 tracked diff；git ls-files config.py 無輸出。
-  - git diff --check 通過。
-  - 指定測試通過：49 passed, 17 warnings。
+  - scripts/smoke_market_theme_evidence_readonly.py
+  - tests/test_market_theme_evidence_handoff.py
+  - CHANGELOG.md
 
-  執行命令：
+  worktree 殘留：
 
-  - arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py -q
-  - git diff --check
-  - CLI approved dry-run / forbidden runtime dry-run smoke
-  - helper 層 direct-consumer smoke：runtime / unknown / mixed / production row
+  - git status --short --untracked-files=all 僅顯示上述 3 個 tracked 修改；未發現需合併的旁支殘留。QA 測試暫存使用 .qa_tmp/，未改 tracked file。
+
+  已執行：
+
+  - arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence_handoff.py -q：31 passed
+  - PYTHONPYCACHEPREFIX=.qa_tmp/pycache arch -arm64 .venv/bin/python -m py_compile scripts/smoke_market_theme_evidence_readonly.py tests/test_market_theme_evidence_handoff.py：通過
+  - git diff --check：通過
+  - QA 補充負面反證：只有 SUPABASE_SERVICE_ROLE_KEY 時 resolver fail closed、不建立 client、不 fallback 到高權限 key：通過
+  - QA 補充 secret derivative render 反證：fail-closed render 不含 secret / hash / fingerprint / length：通過
+
+  備註：第一次 py_compile 未設 PYTHONPYCACHEPREFIX 時被 sandbox 擋在使用者 Cache 寫入，改用 .qa_tmp/pycache 後通過；不屬於程式失敗。
 
   ## 風險預算與停止條件
 
-  本輪最值得抓的風險：
+  本輪最值得抓的 3 個風險：
 
-  1. 交付邊界錯誤
-     驗證：比對 CHANGELOG.md、git diff --name-only、git status --short。
-     結果：符合；產品候選 4 檔，交付文件 1 檔，dummy config.py 未納入 diff。
-  2. source fail-closed 被繞過
-     驗證：指定測試 + 額外 helper smoke。
-     結果：runtime / unknown / mixed 都是 status=insufficient-data、telegram_confirmed=false、strategy_consumer=fail-closed。
-  3. approved production / persistent row 無法被直接消費者接受
-     驗證：指定測試 + helper smoke。
-     結果：allowed production row 為 confirmed=True，readonly smoke 為 status=ok、telegram_confirmed=true、strategy_consumer=pass。
+  1. credential resolution 順序錯，仍誤報缺 env/config。
+      - 驗證：讀 diff、跑直接測試，確認 URL 與 key fallback 順序符合 TASK。
+      - 停止條件：直接測試通過且 _build_readonly_client() 使用 resolver。
+  2. 缺憑證時沒有 fail closed，或仍建立 client / 讀 DB。
+      - 驗證：直接測試與 QA 補充 fake client negative，確認 missing credentials 不呼叫 client factory。
+      - 停止條件：fake client calls 為空，status failed。
+  3. secret 或高權限 key 被輸出 / 被納入 fallback。
+      - 驗證：檢查 diff 無 SUPABASE_SERVICE_ROLE_KEY fallback；補測 service-role only case；檢查 fail-closed render 不含 secret 派生資訊。
+      - 停止條件：service-role only 無 client、render 無 secret/hash/fingerprint/length。
 
-  停止條件：完成 Owner 指定 L2 驗證清單即停止；未做 full pytest、production write、backfill、live Telegram。
+  停止於 L1 局部契約驗證；其他 smoke script、CI secret 命名與 live Supabase read 不納入本輪。
 
   ## 關聯風險掃描
 
-  CHANGELOG.md 已不再自相矛盾；沒有「未編輯 CHANGELOG.md」或等價文字。
+  TASK.md、CHANGELOG.md、git diff 一致：本輪只改 read-only smoke credential fallback 與直接測試，未見策略、Telegram、DB schema、RLS、grant、policy、backfill、live delivery path 變更。
 
-  CLI dry-run 反證：
+  直接消費者掃描：
 
-  - approved sample：return code 0，validation=pass，write_execution=disabled，candidate_rows=1。
-  - forbidden runtime sample：return code 2，validation=fail，write_execution=disabled，candidate_rows=0，reason 為 forbidden source_family。
+  - scripts/smoke_market_theme_evidence_readonly.py main() 仍透過 _build_readonly_client() 建 client，已接到新 resolver。
+  - scripts/generate_evidence_approval_package.py 只引用 CLI command 字串，呼叫方式未變。
+  - 測試新增 fake config / fake client 驗證，不讀真實 .env 或真實 secret。
 
-  指定測試已覆蓋：
-
-  - fake execute read-after-write pass。
-  - read-after-write exception secret redaction。
-  - env/config credential fallback。
-  - source fail-closed。
-  - allowed persistent / production source row。
-
-  diff 掃描未見：
-
-  - DB schema / migration 檔案變更。
-  - core/generator.py / Telegram formatter / VERSION 變更。
-  - backfill、live Telegram delivery 入口變更。
+  未發現清理 / 瘦身 / refactor 任務，因此不適用 path / claim / evidence / risk / action 證據表阻塞條件。
 
   ## 跨區塊語意一致性
 
-  TASK.md 要求「產品候選 diff 4 個檔案，交付文件 diff 是 CHANGELOG.md」；CHANGELOG.md 與 git diff --name-only 一致。
+  本輪不改 Telegram / summary / dashboard / formatter header / message list，無手機報文版面變更。
 
-  TASK.md 要求不改 Telegram、策略、DB schema、live write；diff 實際只落在 evidence store、write CLI、readonly smoke script、handoff tests、CHANGELOG。
+  CLI smoke fail-closed 語意一致：
 
-  CHANGELOG.md 的自檢命令與 QA 實跑命令一致，結果也一致：49 passed, 17 warnings。
+  - TASK 要求缺 URL 或 key 時 fail closed。
+  - diff 中 main 使用 missing required Supabase read credentials。
+  - render 仍顯示 mode: read-only、write: disabled、status: fail-closed、telegram_confirmed: false。
+  - 不會把缺憑證誤讀成已確認 production evidence。
 
   ## 使用者誤讀風險
 
-  本輪未改 Telegram 報文、summary、header 或 VERSION，因此沒有新的 Owner 手機報文閱讀路徑要驗 snapshot。已確認 diff 未碰 Telegram formatter 與 core/generator.py。
+  Owner / developer 執行 smoke 時，缺憑證輸出只提示缺必要 read credential，不會顯示 key 值、hash、截斷值或長度。這降低了把 secret 貼到 log / 聊天 / issue 的風險。
 
-  仍需注意的後續風險：--execute 路徑若真實 upsert 成功但 read-after-write 失敗，輸出會 fail closed 並把 written_rows/rows_written 顯示為 0。本輪禁止 production live write，所以不阻塞；但未來若開放正式寫入，這個文案可能讓
-  Owner 誤讀「沒有任何 DB 副作用」。
+  成功 fallback 時，CLI 使用方式不變；主要風險是使用者不知道實際 key 來源，但 TASK 沒要求輸出 credential source，且輸出 source 可能增加 secret 誤讀或 debug 擴張風險。本輪接受不顯示 key source。
 
   ## 質疑與反證
 
-  主動反證 Tech 未單獨列出的直接消費者路徑：
+  主動質疑 1：Tech 測試有覆蓋 readonly/env/config key，但是否漏掉「service-role 高權限 key 被誤用」？
 
-  - build_market_theme_evidence_readonly_smoke(load_confirmed_market_theme_evidence(...))
-  - runtime direct confirmed row 被降為 insufficient-data / false / fail-closed。
-  - unknown provider 被降為 insufficient-data / false / fail-closed。
-  - mixed production_db + runtime 被降為 insufficient-data / false / fail-closed。
-  - production row 可通過為 ok / true / pass。
+  - 反證：QA 補測只有 SUPABASE_SERVICE_ROLE_KEY / config service role key 時 resolver 回 failed、credentials 為空、client factory 未被呼叫。通過。
 
-  清理 / 瘦身 / refactor 證據表要求：本輪不是清理任務，未適用；未看到刪除候選或「可刪 / 不可刪」判斷。
+  主動質疑 2：缺憑證輸出是否可能包含 secret 派生資訊？
+
+  - 反證：QA 補測 render 不含 hash、fingerprint、length，直接測試也檢查 secret 字串不出現在 output。通過。
+
+  主動質疑 3：這個 patch 是否回退 read-only contract？
+
+  - 反證：diff 未新增 write/backfill/live Telegram；service role 未納入 read-only smoke fallback；write: disabled render contract 保留。可接受。
 
   ## 未測項目
 
-  - 未做 production live Supabase write。
-  - 未做 formal backfill / replay。
-  - 未發 live Telegram。
-  - 未驗 GitHub runner 真實 secrets。
-  - 未驗 production evidence table 實際資料內容正確性。
-  - 未做 full pytest，符合本輪 normal_patch / L2 停止條件。
+  - 未用真實 Supabase credential 跑 live read-only smoke；本輪 TASK 明確允許 fake client 驗證 resolver contract，且避免讀取或輸出真實 secret。
+  - 未跑 full pytest、replay、backfill dry-run；tiny_patch / L1 不需要。
+  - 未驗證其他 smoke scripts 是否也有 env/config fallback 問題；TASK 停止條件要求列為後續風險，不納入本輪。
 
   ## QA 結論
 
   通過
-
-  可吸收範圍限於目前 tracked diff：4 個產品候選檔案與 CHANGELOG.md。不要把 worktree 本機 dummy config.py 或任何未追蹤環境檔併入交付。

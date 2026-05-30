@@ -15,6 +15,11 @@ from services.market_theme_evidence_store import (
     validate_market_theme_evidence_ingestion_payload,
 )
 from scripts.generate_evidence_approval_package import build_approval_package
+from scripts.smoke_market_theme_evidence_readonly import (
+    _build_readonly_client,
+    _render as render_readonly_smoke,
+    resolve_readonly_smoke_credentials,
+)
 from scripts.write_market_theme_confirmed_evidence import main as write_evidence_main
 
 
@@ -784,32 +789,117 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
         ]:
             self.assertNotIn(forbidden, stdout_text)
 
-    def test_readonly_smoke_cli_prints_schema_decision_and_fails_closed_without_env(self):
-        completed = subprocess.run(
-            [
-                sys.executable,
-                "scripts/smoke_market_theme_evidence_readonly.py",
-            ],
-            cwd=Path(__file__).resolve().parents[1],
-            text=True,
-            capture_output=True,
-            check=False,
+    def test_readonly_smoke_render_prints_schema_decision_and_fails_closed_without_credentials(self):
+        smoke = build_market_theme_evidence_readonly_smoke(
+            {
+                "status": "missing-source",
+                "confirmed": False,
+                "reason": "missing required Supabase read credentials",
+                "rows": [],
+            }
+        )
+        output = render_readonly_smoke(smoke)
+
+        self.assertIn("mode: read-only", output)
+        self.assertIn("write: disabled", output)
+        self.assertIn("schema_decision: no-schema-change", output)
+        self.assertIn("source: production", output)
+        self.assertIn("source_family: production_db", output)
+        self.assertIn("target: public.market_theme_confirmed_evidence", output)
+        self.assertIn("sample_fallback: disabled", output)
+        self.assertIn("runtime_fallback: disabled", output)
+        self.assertIn("strategy_consumer: fail-closed", output)
+        self.assertIn("source_family_allowed: false", output)
+        self.assertIn("status: fail-closed", output)
+        self.assertIn("telegram_confirmed: false", output)
+
+    def test_readonly_smoke_client_falls_back_to_config_key_without_leaking_secret(self):
+        created = []
+
+        def fake_create_client(url, key):
+            created.append((url, key))
+            return object()
+
+        client = _build_readonly_client(
             env={},
+            config_module=SimpleNamespace(
+                SUPABASE_URL="https://config.supabase.co",
+                SUPABASE_KEY="config-read-secret",
+            ),
+            client_factory=fake_create_client,
         )
 
-        self.assertEqual(completed.returncode, 2)
-        self.assertIn("mode: read-only", completed.stdout)
-        self.assertIn("write: disabled", completed.stdout)
-        self.assertIn("schema_decision: no-schema-change", completed.stdout)
-        self.assertIn("source: production", completed.stdout)
-        self.assertIn("source_family: production_db", completed.stdout)
-        self.assertIn("target: public.market_theme_confirmed_evidence", completed.stdout)
-        self.assertIn("sample_fallback: disabled", completed.stdout)
-        self.assertIn("runtime_fallback: disabled", completed.stdout)
-        self.assertIn("strategy_consumer: fail-closed", completed.stdout)
-        self.assertIn("source_family_allowed: false", completed.stdout)
-        self.assertIn("status: fail-closed", completed.stdout)
-        self.assertIn("telegram_confirmed: false", completed.stdout)
+        self.assertIsNotNone(client)
+        self.assertEqual(created, [("https://config.supabase.co", "config-read-secret")])
+
+    def test_readonly_smoke_credential_priority_prefers_env_readonly_then_env_key(self):
+        readonly_first = resolve_readonly_smoke_credentials(
+            env={
+                "SUPABASE_URL": "env-url",
+                "SUPABASE_READONLY_KEY": "env-readonly-secret",
+                "SUPABASE_KEY": "env-read-secret",
+            },
+            config_module=SimpleNamespace(
+                SUPABASE_URL="config-url",
+                SUPABASE_READONLY_KEY="config-readonly-secret",
+                SUPABASE_KEY="config-read-secret",
+            ),
+        )
+        env_key_second = resolve_readonly_smoke_credentials(
+            env={
+                "SUPABASE_URL": "env-url",
+                "SUPABASE_KEY": "env-read-secret",
+            },
+            config_module=SimpleNamespace(
+                SUPABASE_READONLY_KEY="config-readonly-secret",
+                SUPABASE_KEY="config-read-secret",
+            ),
+        )
+
+        self.assertEqual(readonly_first["credentials"]["SUPABASE_URL"], "env-url")
+        self.assertEqual(
+            readonly_first["credentials"]["SUPABASE_READONLY_KEY"],
+            "env-readonly-secret",
+        )
+        self.assertEqual(
+            env_key_second["credentials"]["SUPABASE_READONLY_KEY"],
+            "env-read-secret",
+        )
+
+    def test_readonly_smoke_missing_credentials_fail_closed_without_secret_derivatives(self):
+        created = []
+
+        resolution = resolve_readonly_smoke_credentials(
+            env={},
+            config_module=SimpleNamespace(SUPABASE_URL="", SUPABASE_KEY=""),
+        )
+        client = _build_readonly_client(
+            env={},
+            config_module=SimpleNamespace(SUPABASE_URL="", SUPABASE_KEY=""),
+            client_factory=lambda url, key: created.append((url, key)),
+        )
+        smoke = build_market_theme_evidence_readonly_smoke(
+            {
+                "status": "missing-source",
+                "confirmed": False,
+                "reason": "missing required Supabase read credentials",
+                "rows": [],
+            }
+        )
+        output = render_readonly_smoke(smoke)
+
+        self.assertEqual(resolution["status"], "failed")
+        self.assertEqual(
+            resolution["missing"],
+            ["SUPABASE_URL", "SUPABASE_READONLY_KEY|SUPABASE_KEY"],
+        )
+        self.assertEqual(resolution["credentials"], {})
+        self.assertIsNone(client)
+        self.assertEqual(created, [])
+        self.assertNotIn("config-read-secret", output)
+        self.assertNotIn("hash", output.lower())
+        self.assertNotIn("fingerprint", output.lower())
+        self.assertNotIn("length", output.lower())
 
     def test_readonly_smoke_matrix_fails_closed_except_valid_confirmed_rows(self):
         cases = [

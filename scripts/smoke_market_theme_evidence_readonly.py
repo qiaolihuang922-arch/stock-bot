@@ -23,16 +23,69 @@ from services.market_theme_evidence_store import (
     load_confirmed_market_theme_evidence,
 )
 
+_CONFIG_MODULE_UNSET = object()
 
-def _build_readonly_client():
-    url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_READONLY_KEY")
+
+def _load_config_module():
+    try:
+        import config
+    except Exception:
+        return None
+    return config
+
+
+def _config_module_value(config_module, name):
+    if config_module is None:
+        return ""
+    return getattr(config_module, name, "") or ""
+
+
+def resolve_readonly_smoke_credentials(env=None, config_module=_CONFIG_MODULE_UNSET):
+    source = env if env is not None else os.environ
+    config_source = _load_config_module() if config_module is _CONFIG_MODULE_UNSET else config_module
+
+    url = source.get("SUPABASE_URL") or _config_module_value(config_source, "SUPABASE_URL")
+    key = (
+        source.get("SUPABASE_READONLY_KEY")
+        or source.get("SUPABASE_KEY")
+        or _config_module_value(config_source, "SUPABASE_READONLY_KEY")
+        or _config_module_value(config_source, "SUPABASE_KEY")
+    )
+
+    missing = []
     if not url or not key:
+        if not url:
+            missing.append("SUPABASE_URL")
+        if not key:
+            missing.append("SUPABASE_READONLY_KEY|SUPABASE_KEY")
+        return {
+            "status": "failed",
+            "missing": missing,
+            "credentials": {},
+        }
+
+    return {
+        "status": "passed",
+        "missing": [],
+        "credentials": {
+            "SUPABASE_URL": url,
+            "SUPABASE_READONLY_KEY": key,
+        },
+    }
+
+
+def _build_readonly_client(env=None, config_module=_CONFIG_MODULE_UNSET, client_factory=None):
+    resolution = resolve_readonly_smoke_credentials(env, config_module)
+    if resolution["status"] != "passed":
         return None
 
-    from supabase import create_client
+    if client_factory is None:
+        from supabase import create_client
 
-    return create_client(url, key)
+        client_factory = create_client
+
+    credentials = resolution["credentials"]
+    return client_factory(credentials["SUPABASE_URL"], credentials["SUPABASE_READONLY_KEY"])
 
 
 def _render(smoke):
@@ -73,7 +126,7 @@ def main(argv=None):
         load_result = {
             "status": "missing-source",
             "confirmed": False,
-            "reason": "SUPABASE_URL or SUPABASE_READONLY_KEY missing",
+            "reason": "missing required Supabase read credentials",
             "rows": [],
         }
     else:

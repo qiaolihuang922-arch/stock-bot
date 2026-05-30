@@ -46,6 +46,14 @@
 
 ## Pending / Watchlist
 
+- 本輪 Evidence Read-only Smoke Credential Fallback：
+  - 根因分類：`credential_fallback_gap` + `runner_parser_false_fail`。
+  - 已完成：read-only smoke 支援 env/config read key fallback；缺憑證 fail closed；service-role key 不進 read-only fallback；secret 不輸出派生資訊。
+  - QA 有效覆蓋：config fallback、缺憑證不建立 client、service-role only fail closed、render 不含 secret/hash/fingerprint/length。
+  - 邊界保持：未改 DB schema / RLS / grant / policy / role；未 live write；未 backfill；未 Telegram；未策略 decision。
+  - 仍需後續：production 表目前 rows=0；下一輪應由 PM 定義 `daily_signal_snapshot` / `signal_runs/items` 是否可映射為 approved persistent market/theme evidence，不可由 Architect 直接硬寫 payload。
+  - Runner gap 重複：auto wrapper 對 QA `通過` 仍 false fail；需修 QA conclusion parser。
+  - 不新增 `AGENTS.md` 硬規則：既有 credential / source-of-truth / live write 邊界已覆蓋；本輪沉澱為 helper/test 與 runner 待補。
 - 本輪 Evidence Chain Write CLI Read-after-write And Source Fail-closed Handoff：
   - 根因分類：`evidence_chain_contract_hardening` + `handoff_summary_drift` + `runner_parser_false_fail`。
   - 已完成：write CLI dry-run / execute output 補 source metadata、validation、write_mode、secret_redaction；execute 成功 upsert 後做 read-after-write smoke；read-only smoke 補 source_family / strategy_consumer / fallback disabled contract。
