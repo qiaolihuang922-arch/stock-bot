@@ -10,11 +10,11 @@
 - version_level: `none`
 - qa_level: `L2+`
 - owner_status: `requested`
-- architect_status: `qa_conditional_pass_absorbed_pending_commit`
+- architect_status: `pushed`
 - pm_status: `task_ready`
 - tech_status: `changelog_ready`
 - qa_status: `conditional_pass`
-- commit: `pending`
+- commit: `c0491ae pushed`
 
 ## Current Result
 
@@ -42,7 +42,8 @@
 
 ## Next Action
 
-- Architect 進行 commit / push，然後清理 CAO worktree。
+- 本輪 diff 已 commit / push：`c0491ae feat: add evidence write cli`。
+- Architect 清理 CAO worktree。
 - 下一步若要真正寫入 production：準備真實 approved persistent payload，先跑 write CLI dry-run；若 env / permissions 具備，可用 `--execute` 走接口 upsert，再跑 read-only smoke。只有 schema/RLS/grant/table/column 或 live Telegram 才再找 Owner。
 
 ## Status Values
