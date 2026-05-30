@@ -39,20 +39,21 @@
 ## Current Blocker
 
 - task_id：`correction-market-theme-prod-coverage-2026-05`
-- 狀態：correction audit fail-closed 修復已完成，QA `conditional pass`；production 五月 coverage 仍 blocked。
+- 狀態：correction audit fail-closed 修復已完成，QA `conditional pass`；production market/theme 五月 coverage 仍 blocked。
 - 問題：先前把 script / integrity check 通過誤當成 production market/theme 五月 coverage 完成；Owner 截圖顯示主要是 `2026-05-29` latest-source rows，且可能有不同 `as_of` 批次。
 - 已修 correction path：`--correction-audit-json` 可重跑，source-error / missing-source / read incomplete / current VERSION 缺五月 rows 會 `blocked`，不再誤給 `read_only_audit_complete`。
+- Post-cycle review 新發現：`daily_signal_snapshot` 的歷史設計是每日當時版本留存；current VERSION 舊五月 0 rows 不應作為歷史 coverage blocker。現有 audit 仍需 follow-up 任務修正此語義。
 - 未完成前不得做 cleanup / schema / backfill 決策，不得把 latest-only source 稱為五月歷史；下一步需另開資料修復任務。
 
 ## Data / Evidence Status
 
 - production read-only audit on 2026-05-30：
   - `daily_price`：240 rows，20 trading days，12 stocks，date range `2026-05-04` to `2026-05-29`，無 business-key duplicates。
-  - `daily_signal_snapshot`：全版本 936 rows；`v20.4.5` 有 240 rows；current `core/generator.py VERSION` = `v20.4.6` 有 0 May rows。
+  - `daily_signal_snapshot`：按每日當時版本留存，不要求舊五月回填為 current version；全版本 936 rows，`v20.4.5` 有 240 rows，current `v20.4.6` 有 0 May rows 只作診斷。
   - `market_theme_confirmed_evidence`：18 rows，only `2026-05-29`，source `market_data:twse_openapi_mi_index`，9 duplicate business-key groups。
   - `market_theme_index_daily_bars`：10 rows，only `2026-05-29`，source `market_data:twse_openapi_mi_index`，無 duplicate groups。
   - `sector_theme_members`：12 active mapping rows，valid_from `2026-01-01`，source `market_data:twse_openapi_t187ap03_L`；這是 mapping，不是五月 daily history。
-- 證據鏈下一步不得直接繼續功能擴張；先定義並執行 current-version snapshot backfill、market/theme historical coverage 或 dedupe 任務。
+- 證據鏈下一步不得直接繼續功能擴張；先修 correction audit 的 `daily_signal_snapshot` 語義，再定義並執行 market/theme historical coverage 與 confirmed evidence dedupe 任務。`daily_signal_snapshot` 不做舊五月 current-version backfill，只驗後續 runner 每日正常寫入。
 
 ## Validation Baseline
 

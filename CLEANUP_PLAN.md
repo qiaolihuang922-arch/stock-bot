@@ -27,9 +27,10 @@
   - 根因：`delivery_evidence_alignment_gap` + `doc_bloat_risk`。
   - 問題：script / integrity check 通過被誤宣告為 production market/theme 五月資料完成；Owner 截圖只證明部分 latest-source rows，且可能有不同 `as_of` 批次。
   - 已完成：correction audit report 與 CLI 改為 fail-closed；read incomplete / source-error / current VERSION 缺五月 rows 時 `status=blocked`，不輸出 `read_only_audit_complete`。
-  - production 現況：current `v20.4.6` May snapshot 0 rows；`market_theme_confirmed_evidence` / `market_theme_index_daily_bars` 只有 `2026-05-29` latest rows；`sector_theme_members` 是 mapping，不是 daily history。
-  - 正確下一步：另開 PM 任務處理 current-version backfill、market/theme historical coverage 定義與 confirmed evidence dedupe；不得把這些 cleanup/backfill 混進本 correction audit 任務。
-  - 禁止：audit 未完成前不得宣告三表完成，不得把 latest-only source 稱為五月歷史，不得用舊版本 snapshot 代表 current report coverage。
+  - production 現況：`daily_signal_snapshot` 是每日版本留存，不要求舊五月回填為 current version；`market_theme_confirmed_evidence` / `market_theme_index_daily_bars` 只有 `2026-05-29` latest rows；`sector_theme_members` 是 mapping，不是 daily history。
+  - 新復盤結論：現有 correction audit 把 current VERSION 舊五月缺 rows 當 blocker，與 `daily_signal_snapshot` 每日版本留存設計衝突；此屬 `delivery_evidence_alignment_gap`，需先修 audit 語義。
+  - 正確下一步：另開 PM 任務先修 `daily_signal_snapshot` audit 語義，再處理 market/theme historical coverage 定義與 confirmed evidence dedupe；不得把這些 cleanup/backfill 混進本 correction audit 任務。
+  - 禁止：audit 未完成前不得宣告三表完成，不得把 latest-only source 稱為五月歷史，不得用舊版本 snapshot 或 current-version 缺五月 rows 推導錯誤 backfill 需求。
 - CAO QA conclusion parser
   - 根因：`runner_gap`。
   - 問題：auto wrapper 曾把有效 `通過` / `conditional pass` 誤判 failed。
