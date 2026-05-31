@@ -14,7 +14,7 @@
 - pm_status: `completed`
 - tech_status: `completed`
 - qa_status: `通過`
-- commit: `committed`
+- commit: `pushed`
 
 ## Current Result
 
@@ -30,7 +30,7 @@
 
 ## Next Action
 
-- 已提交，待 push 完成后可以继续下一阶段证据链功能扩张；不得跳过本轮执行记忆修复的验证结论。
+- 已提交并推送；可以继续下一阶段证据链功能扩张，但不得跳过本轮执行记忆修复的验证结论。
 - 先补 runner gap：auto wrapper 曾把有效 QA `通過` 误判失败；Tech worktree stale diff 曾阻塞新任务，需纳入 runner/worktree hygiene 待办。
 
 ## Status Values
