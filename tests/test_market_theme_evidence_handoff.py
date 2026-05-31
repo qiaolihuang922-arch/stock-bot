@@ -1298,6 +1298,22 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
                 "date_max": "2026-05-29",
                 "distinct_trade_dates": 20,
                 "conclusion": "covered",
+                "generator_version": version,
+                "may_row_count_for_current_version": 20,
+                "diagnostic": "current_version_rows_present",
+                "blocks_history_coverage": False,
+            },
+        )
+        self.assertEqual(
+            report["daily_signal_snapshot"]["history_coverage"],
+            {
+                "basis": "daily_version_as_recorded",
+                "row_count_all_versions": 40,
+                "date_min": "2026-05-04",
+                "date_max": "2026-05-29",
+                "distinct_trade_dates": 20,
+                "version_distribution": {"v19.1": 20, version: 20},
+                "conclusion": "covered",
             },
         )
         self.assertIs(report["market_theme_tables"], report["tables"])
@@ -1349,8 +1365,10 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
         self.assertNotIn("read_only_audit_complete", conclusion["next_action"])
         self.assertIn("read_only_audit_blocked", conclusion["next_action"])
         self.assertIn("followup_cleanup_or_dedupe_task_needed", conclusion["next_action"])
+        self.assertIn("market_theme_dedupe_followup_required", conclusion["next_action"])
         self.assertIn("owner_approval_required_for_schema_or_write", conclusion["next_action"])
-        self.assertIn("followup_backfill_task_needed", conclusion["next_action"])
+        self.assertIn("market_theme_historical_fetch_required", conclusion["next_action"])
+        self.assertNotIn("followup_backfill_task_needed", conclusion["next_action"])
         self.assertNotIn("continue evidence chain", " ".join(conclusion["next_action"]))
         self.assertIn(
             "market/theme May history status not complete: partial",
@@ -1636,29 +1654,24 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
         self.assertEqual(report["conclusion"], "partial")
         self.assertNotIn("complete", report["coverage_conclusion"])
 
-    def test_correction_audit_blocks_when_current_version_may_snapshot_missing(self):
+    def test_correction_audit_treats_missing_current_version_may_snapshot_as_diagnostic(self):
         version = _load_current_generator_version()
 
         client = AuditClient(
             {
                 "market_theme_confirmed_evidence": [
-                    handoff_payload(trade_date="2026-05-01"),
-                    handoff_payload(trade_date="2026-05-29", sector_theme_key="ai_server"),
+                    handoff_payload(trade_date="2026-05-29"),
+                    handoff_payload(
+                        trade_date="2026-05-29",
+                        as_of="2026-05-29T14:30:00+08:00",
+                    ),
                 ],
                 "market_theme_index_daily_bars": [
-                    {
-                        "trade_date": "2026-05-01",
-                        "index_scope": "sector_theme",
-                        "market_index": "TAIEX",
-                        "sector_theme_key": "semiconductor",
-                        "source_family": "market_data",
-                        "source_name": "twse_openapi",
-                    },
                     {
                         "trade_date": "2026-05-29",
                         "index_scope": "sector_theme",
                         "market_index": "TAIEX",
-                        "sector_theme_key": "ai_server",
+                        "sector_theme_key": "semiconductor",
                         "source_family": "market_data",
                         "source_name": "twse_openapi",
                     },
@@ -1674,10 +1687,13 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
                         "source_name": "owner_theme_map",
                     }
                 ],
-                "daily_price": [{"trade_date": "2026-05-01"}, {"trade_date": "2026-05-29"}],
+                "daily_price": [
+                    {"trade_date": date}
+                    for date in MAY_2026_EXPECTED_TRADE_DATES
+                ],
                 "daily_signal_snapshot": [
-                    {"trade_date": "2026-05-01", "version": "v19.1"},
-                    {"trade_date": "2026-05-29", "version": "v19.1"},
+                    {"trade_date": date, "version": "v20.4.5"}
+                    for date in MAY_2026_EXPECTED_TRADE_DATES
                 ],
             }
         )
@@ -1686,9 +1702,10 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
 
         self.assertEqual(report["status"], "blocked")
         self.assertIn(
-            f"daily_signal_snapshot has no May rows for current generator VERSION {version}",
+            "market/theme May history status not complete: partial",
             report["blocked_reason"],
         )
+        self.assertNotIn("current generator VERSION", report["blocked_reason"])
         self.assertEqual(
             report["daily_signal_snapshot_may_current_version_coverage"]["row_count"],
             0,
@@ -1697,10 +1714,22 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
             report["daily_signal_snapshot_may_current_version_coverage"]["conclusion"],
             "no_current_version_may_rows",
         )
-        self.assertIn("blocked_current_version_snapshot_missing", report["next_action"])
+        self.assertEqual(
+            report["daily_signal_snapshot"]["current_version_run_health"]["diagnostic"],
+            "current_version_old_month_zero_rows",
+        )
+        self.assertFalse(
+            report["daily_signal_snapshot"]["current_version_run_health"]["blocks_history_coverage"]
+        )
+        self.assertEqual(
+            report["daily_signal_snapshot"]["history_coverage"]["conclusion"],
+            "covered",
+        )
+        self.assertNotIn("blocked_current_version_snapshot_missing", report["next_action"])
         self.assertIn("read_only_audit_blocked", report["next_action"])
         self.assertNotIn("read_only_audit_complete", report["next_action"])
-        self.assertIn("followup_backfill_task_needed", report["next_action"])
+        self.assertIn("market_theme_historical_fetch_required", report["next_action"])
+        self.assertIn("market_theme_dedupe_followup_required", report["next_action"])
         self.assertNotIn("continue evidence chain", " ".join(report["next_action"]))
 
     def test_correction_audit_blocks_when_current_version_daily_signal_has_extra_may_first(self):
@@ -1764,10 +1793,14 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
                 "date_max": "2026-05-29",
                 "distinct_trade_dates": 21,
                 "conclusion": "insufficient_evidence",
+                "generator_version": version,
+                "may_row_count_for_current_version": 21,
+                "diagnostic": "current_version_rows_present",
+                "blocks_history_coverage": False,
             },
         )
         self.assertIn(
-            "current VERSION snapshot coverage not covered: insufficient_evidence",
+            "daily_signal_snapshot May history coverage not covered: partial",
             report["blocked_reason"],
         )
         self.assertIn("read_only_audit_blocked", report["next_action"])
@@ -1939,7 +1972,7 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
         self.assertEqual(returncode, 2)
         self.assertEqual(output["mode"], "market-theme-production-correction-audit")
         self.assertEqual(output["status"], "blocked")
-        self.assertIn("current generator VERSION", output["blocked_reason"])
+        self.assertNotIn("current generator VERSION", output["blocked_reason"])
         self.assertEqual(
             output["generator_version"]["source"],
             "core/generator.py VERSION",
@@ -1948,6 +1981,17 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
             output["daily_signal_snapshot_may_current_version_coverage"]["row_count"],
             0,
         )
+        self.assertEqual(
+            output["daily_signal_snapshot"]["history_coverage"]["conclusion"],
+            "insufficient_evidence",
+        )
+        self.assertEqual(
+            output["daily_signal_snapshot"]["current_version_run_health"]["diagnostic"],
+            "source_error",
+        )
+        self.assertFalse(
+            output["daily_signal_snapshot"]["current_version_run_health"]["blocks_history_coverage"]
+        )
         self.assertEqual(output["write_execution"], "disabled")
         self.assertFalse(output["live_write"])
         self.assertEqual(
@@ -1955,11 +1999,12 @@ class MarketThemeEvidenceHandoffTest(unittest.TestCase):
             "insufficient_evidence",
         )
         self.assertIn("missing required Supabase read credentials", output["blocked_reasons"])
-        self.assertIn("blocked_current_version_snapshot_missing", output["next_action"])
+        self.assertNotIn("blocked_current_version_snapshot_missing", output["next_action"])
         self.assertIn("read_only_audit_blocked", output["next_action"])
         self.assertIn("production_read_permission_needed", output["next_action"])
+        self.assertIn("source_error_blocked", output["next_action"])
         self.assertNotIn("read_only_audit_complete", output["next_action"])
-        self.assertIn("followup_backfill_task_needed", output["next_action"])
+        self.assertNotIn("followup_backfill_task_needed", output["next_action"])
         self.assertNotIn("continue evidence chain", stdout_text)
         self.assertNotIn("SUPABASE_KEY", stdout_text)
         self.assertNotIn("hash", stdout_text.lower())

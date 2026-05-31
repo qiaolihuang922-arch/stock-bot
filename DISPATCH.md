@@ -4,31 +4,31 @@
 
 ## Current Task
 
-- task_id: `correction-market-theme-prod-coverage-2026-05`
-- task_name: `Correction Audit Fail-Closed And May Production Coverage`
-- task_type: `risk_patch`
+- task_id: `correction-daily-signal-snapshot-history-semantics`
+- task_name: `Correction Audit Daily Signal Snapshot History Semantics`
+- task_type: `normal_patch`
 - version_level: `none`
-- qa_level: `L3`
+- qa_level: `L2`
 - owner_status: `requested`
 - architect_status: `completed`
 - pm_status: `completed`
 - tech_status: `completed`
-- qa_status: `conditional pass`
+- qa_status: `通過`
 - commit: `pending`
 
 ## Current Result
 
-- 已修 correction audit：read incomplete、source-error、missing-source、current VERSION 五月 snapshot 不足時，頂層 `status` 必須 `blocked`，`next_action` 不得含 `read_only_audit_complete`。
-- 已新增 `--correction-audit-json` fail-closed CLI；Supabase client / dependency 失敗時輸出 blocked JSON 與 return code 2，不再 traceback。
-- QA 結論為 `conditional pass`：code / CLI fail-closed contract 成立；但這不代表 production 三張 market/theme 表五月資料完整。
-- Post-cycle review 發現口徑錯誤：`daily_signal_snapshot` 是每日當時版本留存，不能把 current `v20.4.6` 舊五月 0 rows 當成歷史 backfill blocker；現有 correction audit 仍需另開任務把它降為 diagnostic / run-health 檢查。
-- Architect 補跑 production read-only audit：`daily_price` 五月 240 rows / 20 trading days / 12 stocks；`daily_signal_snapshot` 是按每日當時版本留存，五月全版本 936 rows，其中 `v20.4.5` 有 240 rows；current `v20.4.6` 五月 0 rows 只作診斷，不作歷史 backfill blocker。
-- market/theme 三表 production 現況：`market_theme_confirmed_evidence` 18 rows only `2026-05-29` 且 9 duplicate business-key groups；`market_theme_index_daily_bars` 10 rows only `2026-05-29`；`sector_theme_members` 12 active mapping rows from `2026-01-01`，不是五月 daily history。
+- 已修 correction audit 的 `daily_signal_snapshot` 語義：歷史 coverage 依 daily-version-as-recorded 全版本檢查；current `core/generator.py VERSION` 只作 run-health diagnostic。
+- current `v20.4.6` 舊五月 0 rows 現在輸出 `diagnostic=current_version_old_month_zero_rows` 且 `blocks_history_coverage=false`，不再被當成五月歷史 backfill blocker。
+- QA 結論：`通過`。QA 反證 market/theme latest-only / mapping-only 仍 blocked，且 `next_action` 不再要求 daily snapshot current VERSION backfill。
+- Architect 用正確 arm64 interpreter 補跑 production read-only audit：`daily_signal_snapshot.history_coverage.conclusion=covered`，全版本 936 rows / 20 trading days；current version 0 rows 僅診斷。
+- market/theme 三表 production 現況仍 blocked：`market_theme_confirmed_evidence` 18 rows only `2026-05-29` 且 9 duplicate business-key groups；`market_theme_index_daily_bars` 10 rows only `2026-05-29`；`sector_theme_members` 12 active mapping rows from `2026-01-01`，不是五月 daily history。
 
 ## Next Action
 
-- 先開 PM 任務修正 correction audit 的 `daily_signal_snapshot` 語義：歷史按當日版本驗證，current VERSION 只檢查後續 runner/run-health，不要求舊五月回填。
-- 修正後再抓取 market/theme historical coverage，並處理 confirmed evidence dedupe；audit 完成前不得宣稱三張 market/theme 表五月資料完成。
+- 開下一張 PM 任務：實作 market/theme historical fetch 與 confirmed evidence dedupe。
+- 抓取任務必須用 production DB / repo script / approved service API 寫入，不要求 Owner 手寫普通 DML；若需要新增表、擴字段、index / constraint、RLS / grant / policy，先產 SQL 給 Owner。
+- 完成後重跑 `--correction-audit-json`，必須看到 market/theme 五月 coverage 不再 latest-only，duplicate business-key groups 清零或有明確去重規則，才能繼續證據鏈功能擴張。
 
 ## Status Values
 

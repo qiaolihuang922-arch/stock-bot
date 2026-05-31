@@ -120,6 +120,9 @@ CORRECTION_AUDIT_ACTION_CURRENT_VERSION_MISSING = "blocked_current_version_snaps
 CORRECTION_AUDIT_ACTION_BACKFILL_NEEDED = "followup_backfill_task_needed"
 CORRECTION_AUDIT_ACTION_CLEANUP_NEEDED = "followup_cleanup_or_dedupe_task_needed"
 CORRECTION_AUDIT_ACTION_OWNER_APPROVAL = "owner_approval_required_for_schema_or_write"
+CORRECTION_AUDIT_ACTION_MARKET_THEME_FETCH_REQUIRED = "market_theme_historical_fetch_required"
+CORRECTION_AUDIT_ACTION_MARKET_THEME_DEDUPE_REQUIRED = "market_theme_dedupe_followup_required"
+CORRECTION_AUDIT_ACTION_SOURCE_ERROR_BLOCKED = "source_error_blocked"
 CORRECTION_AUDIT_GENERATOR_VERSION_SOURCE = "core/generator.py VERSION"
 CORRECTION_AUDIT_KEY_FIELDS = {
     TABLE_NAME: ("trade_date", "market_index", "sector_theme_key"),
@@ -681,6 +684,56 @@ def _daily_signal_current_version_coverage(count_result):
     }
 
 
+def _daily_signal_snapshot_history_coverage(count_result):
+    rows = count_result.get("rows") or []
+    trade_dates = _sorted_unique(row.get("trade_date") for row in rows)
+    versions = {}
+    for row in rows:
+        version = str(row.get("version") or "unknown")
+        versions[version] = versions.get(version, 0) + 1
+    if count_result.get("status") != "ok":
+        basis = "insufficient_evidence"
+        conclusion = "insufficient_evidence"
+    elif count_result.get("row_count", 0) > len(rows):
+        basis = "insufficient_evidence"
+        conclusion = "insufficient_evidence"
+    elif count_result.get("row_count", 0) == 0:
+        basis = "insufficient_evidence"
+        conclusion = "insufficient_evidence"
+    elif set(trade_dates) == set(MAY_2026_EXPECTED_TRADE_DATES):
+        basis = "daily_version_as_recorded"
+        conclusion = "covered"
+    else:
+        basis = "daily_version_as_recorded"
+        conclusion = "partial"
+    return {
+        "basis": basis,
+        "row_count_all_versions": count_result.get("row_count", 0),
+        "date_min": trade_dates[0] if trade_dates else None,
+        "date_max": trade_dates[-1] if trade_dates else None,
+        "distinct_trade_dates": len(trade_dates),
+        "version_distribution": dict(sorted(versions.items())),
+        "conclusion": conclusion,
+    }
+
+
+def _daily_signal_current_version_run_health(count_result, generator_version):
+    coverage = _daily_signal_current_version_coverage(count_result)
+    if count_result.get("status") != "ok":
+        diagnostic = "source_error"
+    elif coverage["row_count"] == 0:
+        diagnostic = "current_version_old_month_zero_rows"
+    else:
+        diagnostic = "current_version_rows_present"
+    return {
+        **coverage,
+        "generator_version": generator_version,
+        "may_row_count_for_current_version": coverage["row_count"],
+        "diagnostic": diagnostic,
+        "blocks_history_coverage": False,
+    }
+
+
 def _market_theme_may_history_status(table_reports):
     daily_tables = (TABLE_NAME, INDEX_SOURCE_TABLE)
     conclusions = [
@@ -712,8 +765,8 @@ def _append_action(actions, action):
         actions.append(action)
 
 
-def _correction_audit_read_complete(table_reports, daily_signal_current_version_coverage):
-    if daily_signal_current_version_coverage.get("conclusion") != "covered":
+def _correction_audit_read_complete(table_reports, daily_signal_snapshot_history_coverage):
+    if daily_signal_snapshot_history_coverage.get("conclusion") != "covered":
         return False
     for table in (TABLE_NAME, INDEX_SOURCE_TABLE):
         report = table_reports.get(table, {})
@@ -778,20 +831,29 @@ def build_market_theme_production_correction_audit(client, limit=10000, generato
         ],
         limit=limit,
     )
-    daily_signal_current_version_coverage = _daily_signal_current_version_coverage(
-        daily_signal_result
+    daily_signal_history_result = _select_count_rows(
+        client,
+        "daily_signal_snapshot",
+        "trade_date,version",
+        filters=[
+            ("gte", ("trade_date", MAY_2026_START)),
+            ("lte", ("trade_date", MAY_2026_END)),
+        ],
+        limit=limit,
     )
-    if daily_signal_result.get("status") != "ok":
+    daily_signal_snapshot_history_coverage = _daily_signal_snapshot_history_coverage(
+        daily_signal_history_result
+    )
+    daily_signal_current_version_run_health = _daily_signal_current_version_run_health(
+        daily_signal_result,
+        generator_version,
+    )
+    if daily_signal_history_result.get("status") != "ok":
         blocked_reasons.append("daily_signal_snapshot: production read-only query failed")
-    elif daily_signal_current_version_coverage["row_count"] == 0:
+    elif daily_signal_snapshot_history_coverage["conclusion"] != "covered":
         blocked_reasons.append(
-            "current VERSION snapshot missing: "
-            f"daily_signal_snapshot has no May rows for current generator VERSION {generator_version}"
-        )
-    elif daily_signal_current_version_coverage["conclusion"] != "covered":
-        blocked_reasons.append(
-            "current VERSION snapshot coverage not covered: "
-            f"{daily_signal_current_version_coverage['conclusion']}"
+            "daily_signal_snapshot May history coverage not covered: "
+            f"{daily_signal_snapshot_history_coverage['conclusion']}"
         )
 
     market_theme_status = _market_theme_may_history_status(table_reports)
@@ -801,7 +863,7 @@ def build_market_theme_production_correction_audit(client, limit=10000, generato
         )
     read_complete = _correction_audit_read_complete(
         table_reports,
-        daily_signal_current_version_coverage,
+        daily_signal_snapshot_history_coverage,
     )
     next_action = []
     if read_complete and not blocked_reasons:
@@ -810,20 +872,19 @@ def build_market_theme_production_correction_audit(client, limit=10000, generato
         _append_action(next_action, CORRECTION_AUDIT_ACTION_READ_ONLY_BLOCKED)
     if (
         any(report.get("read_status") != "ok" for report in table_reports.values())
-        or daily_signal_result.get("status") != "ok"
+        or daily_signal_history_result.get("status") != "ok"
     ):
         _append_action(next_action, CORRECTION_AUDIT_ACTION_PRODUCTION_READ_PERMISSION_NEEDED)
-    if daily_signal_current_version_coverage["conclusion"] == "no_current_version_may_rows":
-        _append_action(next_action, CORRECTION_AUDIT_ACTION_CURRENT_VERSION_MISSING)
-        _append_action(next_action, CORRECTION_AUDIT_ACTION_BACKFILL_NEEDED)
+        _append_action(next_action, CORRECTION_AUDIT_ACTION_SOURCE_ERROR_BLOCKED)
     if any(
         report["duplicate_groups"]["duplicate_group_count"] > 0
         for report in table_reports.values()
     ):
         _append_action(next_action, CORRECTION_AUDIT_ACTION_CLEANUP_NEEDED)
+        _append_action(next_action, CORRECTION_AUDIT_ACTION_MARKET_THEME_DEDUPE_REQUIRED)
         _append_action(next_action, CORRECTION_AUDIT_ACTION_OWNER_APPROVAL)
     if market_theme_status != "complete":
-        _append_action(next_action, CORRECTION_AUDIT_ACTION_BACKFILL_NEEDED)
+        _append_action(next_action, CORRECTION_AUDIT_ACTION_MARKET_THEME_FETCH_REQUIRED)
     status = "blocked" if blocked_reasons else "pass"
     blocked_reason = "; ".join(blocked_reasons) if blocked_reasons else None
 
@@ -834,7 +895,16 @@ def build_market_theme_production_correction_audit(client, limit=10000, generato
             "source": CORRECTION_AUDIT_GENERATOR_VERSION_SOURCE,
             "value": generator_version,
         },
-        "daily_signal_snapshot_may_current_version_coverage": daily_signal_current_version_coverage,
+        "daily_signal_snapshot": {
+            "history_coverage": daily_signal_snapshot_history_coverage,
+            "current_version_run_health": daily_signal_current_version_run_health,
+        },
+        "daily_signal_snapshot_may_current_version_coverage": daily_signal_current_version_run_health,
+        "market_theme_historical_coverage": {
+            TABLE_NAME: {"conclusion": table_reports[TABLE_NAME]["conclusion"]},
+            INDEX_SOURCE_TABLE: {"conclusion": table_reports[INDEX_SOURCE_TABLE]["conclusion"]},
+            MEMBER_SOURCE_TABLE: {"conclusion": table_reports[MEMBER_SOURCE_TABLE]["conclusion"]},
+        },
         "market_theme_tables": table_reports,
         "next_action": next_action,
         "mode": CORRECTION_AUDIT_MODE,
@@ -846,7 +916,7 @@ def build_market_theme_production_correction_audit(client, limit=10000, generato
         "tables": table_reports,
         "cross_table_conclusion": {
             "daily_price_may_history_status": _may_history_status(daily_price_result),
-            "daily_signal_snapshot_may_history_status": daily_signal_current_version_coverage["conclusion"],
+            "daily_signal_snapshot_may_history_status": daily_signal_snapshot_history_coverage["conclusion"],
             "market_theme_tables_may_history_status": market_theme_status,
             "must_not_claim": [
                 "latest-only market/theme rows are May full history",

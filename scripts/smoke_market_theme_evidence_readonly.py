@@ -20,11 +20,10 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from services.market_theme_evidence_store import (
-    CORRECTION_AUDIT_ACTION_BACKFILL_NEEDED,
-    CORRECTION_AUDIT_ACTION_CURRENT_VERSION_MISSING,
     CORRECTION_AUDIT_GENERATOR_VERSION_SOURCE,
     CORRECTION_AUDIT_ACTION_PRODUCTION_READ_PERMISSION_NEEDED,
     CORRECTION_AUDIT_ACTION_READ_ONLY_BLOCKED,
+    CORRECTION_AUDIT_ACTION_SOURCE_ERROR_BLOCKED,
     _load_current_generator_version,
     build_market_theme_evidence_production_source_audit,
     build_market_theme_evidence_readonly_smoke,
@@ -204,8 +203,7 @@ def _missing_source_correction_audit_report(source_reason="missing required Supa
     next_action = [
         CORRECTION_AUDIT_ACTION_READ_ONLY_BLOCKED,
         CORRECTION_AUDIT_ACTION_PRODUCTION_READ_PERMISSION_NEEDED,
-        CORRECTION_AUDIT_ACTION_CURRENT_VERSION_MISSING,
-        CORRECTION_AUDIT_ACTION_BACKFILL_NEEDED,
+        CORRECTION_AUDIT_ACTION_SOURCE_ERROR_BLOCKED,
     ]
     return {
         "status": "blocked",
@@ -213,10 +211,7 @@ def _missing_source_correction_audit_report(source_reason="missing required Supa
             reason
             for reason in [
                 version_blocked_reason,
-                (
-                    f"{source_reason}; "
-                    f"cannot verify May rows for current generator VERSION {version}"
-                ),
+                source_reason,
             ]
             if reason
         ),
@@ -230,6 +225,43 @@ def _missing_source_correction_audit_report(source_reason="missing required Supa
             "date_max": None,
             "distinct_trade_dates": 0,
             "conclusion": "insufficient_evidence",
+            "generator_version": version,
+            "may_row_count_for_current_version": 0,
+            "diagnostic": "source_error",
+            "blocks_history_coverage": False,
+        },
+        "daily_signal_snapshot": {
+            "history_coverage": {
+                "basis": "insufficient_evidence",
+                "row_count_all_versions": 0,
+                "date_min": None,
+                "date_max": None,
+                "distinct_trade_dates": 0,
+                "version_distribution": {},
+                "conclusion": "insufficient_evidence",
+            },
+            "current_version_run_health": {
+                "row_count": 0,
+                "date_min": None,
+                "date_max": None,
+                "distinct_trade_dates": 0,
+                "conclusion": "insufficient_evidence",
+                "generator_version": version,
+                "may_row_count_for_current_version": 0,
+                "diagnostic": "source_error",
+                "blocks_history_coverage": False,
+            },
+        },
+        "market_theme_historical_coverage": {
+            "market_theme_confirmed_evidence": {
+                "conclusion": "insufficient_evidence",
+            },
+            "market_theme_index_daily_bars": {
+                "conclusion": "insufficient_evidence",
+            },
+            "sector_theme_members": {
+                "conclusion": "insufficient_evidence",
+            },
         },
         "market_theme_tables": tables,
         "next_action": next_action,
