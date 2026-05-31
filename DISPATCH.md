@@ -4,11 +4,11 @@
 
 ## Current Task
 
-- task_id: `correction-daily-signal-snapshot-history-semantics`
-- task_name: `Correction Audit Daily Signal Snapshot History Semantics`
-- task_type: `normal_patch`
+- task_id: `correction-market-theme-prod-coverage-2026-05`
+- task_name: `Market Theme 2026-05 Historical Fetch And Dedupe`
+- task_type: `risk_patch`
 - version_level: `none`
-- qa_level: `L2`
+- qa_level: `L3`
 - owner_status: `requested`
 - architect_status: `completed`
 - pm_status: `completed`
@@ -18,17 +18,19 @@
 
 ## Current Result
 
-- 已修 correction audit 的 `daily_signal_snapshot` 語義：歷史 coverage 依 daily-version-as-recorded 全版本檢查；current `core/generator.py VERSION` 只作 run-health diagnostic。
-- current `v20.4.6` 舊五月 0 rows 現在輸出 `diagnostic=current_version_old_month_zero_rows` 且 `blocks_history_coverage=false`，不再被當成五月歷史 backfill blocker。
-- QA 結論：`通過`。QA 反證 market/theme latest-only / mapping-only 仍 blocked，且 `next_action` 不再要求 daily snapshot current VERSION backfill。
-- Architect 用正確 arm64 interpreter 補跑 production read-only audit：`daily_signal_snapshot.history_coverage.conclusion=covered`，全版本 936 rows / 20 trading days；current version 0 rows 僅診斷。
-- market/theme 三表 production 現況仍 blocked：`market_theme_confirmed_evidence` 18 rows only `2026-05-29` 且 9 duplicate business-key groups；`market_theme_index_daily_bars` 10 rows only `2026-05-29`；`sector_theme_members` 12 active mapping rows from `2026-01-01`，不是五月 daily history。
+- 已完成 market/theme 2026-05 historical fetch 與 confirmed evidence dedupe。
+- 使用 repo script 寫入 production DB，非手寫普通 DML，無 schema / RLS / grant / policy / index / constraint 變更。
+- 寫入結果：`market_theme_confirmed_evidence` 180 rows，`market_theme_index_daily_bars` 200 rows，日期範圍 `2026-05-04` 到 `2026-05-29`，20 trade dates。
+- 獨立 read-only audit：`status=pass`，`next_action=["read_only_audit_complete"]`。
+- duplicate groups：confirmed evidence 0，index bars 0。
+- `sector_theme_members` 維持 `mapping_only`，不計入 daily history。
+- `daily_signal_snapshot` 維持 daily-version-as-recorded 語義：history covered，current `v20.4.6` May 0 rows 只作 diagnostic。
 
 ## Next Action
 
-- 開下一張 PM 任務：實作 market/theme historical fetch 與 confirmed evidence dedupe。
-- 抓取任務必須用 production DB / repo script / approved service API 寫入，不要求 Owner 手寫普通 DML；若需要新增表、擴字段、index / constraint、RLS / grant / policy，先產 SQL 給 Owner。
-- 完成後重跑 `--correction-audit-json`，必須看到 market/theme 五月 coverage 不再 latest-only，duplicate business-key groups 清零或有明確去重規則，才能繼續證據鏈功能擴張。
+- 可以開始下一階段證據鏈功能擴張：讓策略消費 `market_theme_confirmed_evidence` 的歷史 trend。
+- 先補 runner gap：QA runner 對 production read-only audit 任務不能固定 dummy Supabase config，否則會把已完成的 production audit 誤判 blocked。
+- 若下一階段涉及 schema 變更，仍需先給 Owner SQL；普通資料寫入仍走 repo script / service API。
 
 ## Status Values
 

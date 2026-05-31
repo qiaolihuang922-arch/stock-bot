@@ -1,92 +1,82 @@
-# CHANGELOG:
+# CHANGELOG: market/theme 2026-05 historical fetch
 
-  ## 任務尺寸與風險
+## 任務尺寸與風險
 
-  - 任務尺寸：normal_patch
-  - 風險判斷：改 correction audit 的 JSON / CLI 輸出語義與 next_action 判讀，但不碰 DB write、backfill、schema、策略 decision、Telegram 報文或 live delivery。
+- 任務類型：risk_patch。
+- 原因：涉及 production DB market/theme 歷史資料寫入、confirmed evidence duplicate business-key 清理、read-after-write audit。
 
-  ## 修改內容
+## 修改內容
 
-  - 修正 correction audit 對 daily_signal_snapshot 的判讀：
-      - 新增全版本五月歷史 coverage 判斷：daily_signal_snapshot.history_coverage。
-      - 將 current core/generator.py VERSION 五月 rows 改為 run-health diagnostic：daily_signal_snapshot.current_version_run_health。
-      - current VERSION 舊五月 0 rows 現在輸出 diagnostic=current_version_old_month_zero_rows 且 blocks_history_coverage=false，不再加入 blocked_reason。
-  - 保持 market/theme historical coverage blocked：
-      - market_theme_confirmed_evidence / market_theme_index_daily_bars latest-only 仍不放行。
-      - sector_theme_members mapping-only 仍不當作五月 daily history。
-  - 調整 next_action：
-      - market/theme 不完整時輸出 market_theme_historical_fetch_required。
-      - duplicate evidence 時輸出 market_theme_dedupe_followup_required。
-      - source-error 時輸出 source_error_blocked。
-      - 不再因 daily_signal_snapshot current VERSION 五月 0 rows 輸出 blocked_current_version_snapshot_missing 或 generic backfill action。
-  - 同步 missing-source CLI fallback，避免缺 Supabase read source 時暗示要補 current VERSION 舊五月 snapshot。
+- 擴充 `scripts/backfill_market_theme_sources.py`：
+  - 新增 `--historical-range`，可按日期範圍抓 TWSE historical MI_INDEX。
+  - 修正 TWSE 歷史來源為 `https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?response=json&date=YYYYMMDD&type=IND|MS`。
+  - 支援 IND 欄位 `漲跌百分比(%)`，並保留 `漲跌百分比` 相容。
+  - 支援 MS table `漲跌證券數合計`，由 `股票` 欄位解析 `up/down/flat/limit_up/limit_down`。
+  - `market_theme_index_daily_bars` 與 `market_theme_confirmed_evidence` 一起由同一 repo script 寫入。
+  - 寫入前依 correction audit business key 刪除既有同 key rows，再寫入本次唯一版本，避免不同 `as_of` 批次重複：
+    - confirmed evidence：`trade_date, market_index, sector_theme_key`
+    - index bars：`trade_date, index_scope, market_index, sector_theme_key`
+  - source gaps fail closed：任一交易日缺 official index 或 breadth row 時不寫入。
+- 擴充 `tests/test_market_theme_source_backfill.py`：
+  - 覆蓋 afterTrading endpoint 與參數。
+  - 覆蓋 IND `漲跌百分比(%)`。
+  - 覆蓋 MS `股票` 欄位 breadth parsing。
+  - 覆蓋 source gap 不進 write path。
+  - 覆蓋 duplicate confirmed rows 依 audit business key 收斂。
 
-  ## 修改檔案
+## 修改檔案
 
-  - services/market_theme_evidence_store.py
-  - scripts/smoke_market_theme_evidence_readonly.py
-  - tests/test_market_theme_evidence_handoff.py
+- `scripts/backfill_market_theme_sources.py`
+- `tests/test_market_theme_source_backfill.py`
 
-  ## 最小改動策略
+## 契約影響
 
-  - 只改 correction audit report builder、CLI missing-source fallback 與既有 handoff 測試。
-  - 未新增 market/theme 抓取、dedupe、backfill、schema guard 或 Telegram 行為。
-  - 保留既有 legacy key daily_signal_snapshot_may_current_version_coverage，但內容同步擴充 run-health 欄位，降低直接消費者斷裂風險。
+- CLI 新增 `--historical-range`。
+- `scripts/backfill_market_theme_sources.py --write --confirm-write --historical-range` 會處理兩張 production 表：
+  - `market_theme_confirmed_evidence`
+  - `market_theme_index_daily_bars`
+- duplicate 處理規則改為 repo script 內按 audit business key replace，不再保留同 key 多個 `as_of` 批次。
+- 無 DB schema、RLS、grant、policy、index、constraint 變更。
 
-  ## 契約影響
+## 直接消費者同步
 
-  - 新增 JSON 欄位：
-      - daily_signal_snapshot.history_coverage
-      - daily_signal_snapshot.current_version_run_health
-      - market_theme_historical_coverage
-  - daily_signal_snapshot_may_current_version_coverage 仍存在，但新增：
-      - generator_version
-      - may_row_count_for_current_version
-      - diagnostic
-      - blocks_history_coverage
-  - blocked_reason 不再把 current VERSION 舊五月 0 rows 當 historical coverage blocker。
-  - next_action 不再要求 daily_signal_snapshot 舊五月 current VERSION backfill。
-  - DB 寫入、CLI live 行為、Telegram 報文與版本字串：無變更。
+- `scripts/smoke_market_theme_evidence_readonly.py --correction-audit-json --limit 20000` 的 duplicate business-key 口徑未改，已用作 read-after-write audit。
+- `sector_theme_members` 仍只作 mapping source，audit 結論維持 `mapping_only`，不計入 daily history。
+- 策略後續可透過 production `market_theme_confirmed_evidence` 歷史取得 market/theme evidence trend，不再只能看到 05/29 latest-only。
 
-  ## 直接消費者同步
+## 未影響模組
 
-  - Owner / Architect：可由 history_coverage.conclusion=covered 與 current_version_run_health.blocks_history_coverage=false 判斷 snapshot 歷史 coverage 與 current VERSION run-health 已分離。
-  - QA：測試已覆蓋 current VERSION 舊五月 0 rows 但全版本歷史存在時，不因 current VERSION 0 rows blocked；market/theme latest-only / mapping-only 仍 blocked。
-  - CLI fallback：--correction-audit-json missing-source contract 同步新增新欄位，並移除 current VERSION backfill 暗示。
+- Telegram / UI 報文。
+- strategy buy/sell scoring / ranking。
+- `daily_signal_snapshot` history semantics。
+- DB schema / index / constraint / RLS / grant / policy。
+- live Telegram delivery。
 
-  ## 未影響模組
+## 已跑自檢與 production 寫入
 
-  - 未改 production DB write / insert / update / delete。
-  - 未改 market/theme historical fetch。
-  - 未改 confirmed evidence dedupe 實作。
-  - 未改 DB schema、RLS、grant、policy、role、index、constraint。
-  - 未改策略 decision、持倉建議、watchlist、交易狀態機。
-  - 未改 Telegram 報文版本、文案或 live delivery。
+- `PYTHONPATH=. arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_source_backfill.py -q`
+  - 結果：14 passed。
+- `git diff --check`
+  - 結果：通過。
+- dry-run：
+  - `PYTHONPATH=. arch -arm64 .venv/bin/python scripts/backfill_market_theme_sources.py --historical-range --start-date 2026-05-04 --end-date 2026-05-29 --dry-run`
+  - 結果：ready，`source_gaps=[]`。
+  - candidate rows：`market_theme_confirmed_evidence=180`、`market_theme_index_daily_bars=200`。
+  - coverage：`2026-05-04` to `2026-05-29`，20 trade dates。
+- production write：
+  - `PYTHONPATH=. arch -arm64 .venv/bin/python scripts/backfill_market_theme_sources.py --historical-range --start-date 2026-05-04 --end-date 2026-05-29 --write --confirm-write`
+  - 結果：executed。
+  - written rows：`market_theme_confirmed_evidence=180`、`market_theme_index_daily_bars=200`。
+  - schema_change：false；live_telegram：false。
+- independent read-only audit：
+  - `PYTHONPATH=. arch -arm64 .venv/bin/python scripts/smoke_market_theme_evidence_readonly.py --correction-audit-json --limit 20000`
+  - 結果：`status=pass`，`next_action=["read_only_audit_complete"]`。
+  - `market_theme_confirmed_evidence`：180 rows，20 trade dates，date range `2026-05-04` to `2026-05-29`，`latest_source_only=false`，duplicate groups 0。
+  - `market_theme_index_daily_bars`：200 rows，20 trade dates，date range `2026-05-04` to `2026-05-29`，`latest_source_only=false`，duplicate groups 0。
+  - `sector_theme_members`：12 active rows，`mapping_only`，duplicate groups 0。
 
-  ## 已跑自檢命令
+## 殘留風險
 
-  - python -m pytest tests/test_market_theme_evidence_handoff.py -k 'correction_audit or may_coverage'
-      - 結果：blocked by environment，python: command not found。
-  - python3 -m pytest tests/test_market_theme_evidence_handoff.py -k 'correction_audit or may_coverage'
-      - 結果：blocked by environment，No module named pytest。
-  - PYTHONPATH=. UV_CACHE_DIR=/private/tmp/uv-cache-stock-tech uv run pytest tests/test_market_theme_evidence_handoff.py -k 'correction_audit or may_coverage'
-      - 結果：14 passed。
-  - PYTHONPATH=. UV_CACHE_DIR=/private/tmp/uv-cache-stock-tech uv run pytest tests/test_market_theme_evidence_handoff.py
-      - 結果：51 passed。
-  - PYTHONPYCACHEPREFIX=/private/tmp/pycache-stock-tech PYTHONPATH=. UV_CACHE_DIR=/private/tmp/uv-cache-stock-tech uv run python -m compileall -q services/market_theme_evidence_store.py scripts/
-    smoke_market_theme_evidence_readonly.py tests/test_market_theme_evidence_handoff.py
-      - 結果：passed。
-  - git diff --check
-      - 結果：passed。
-
-  ## 殘留風險
-
-  - 自檢使用既有 fixture，未讀 production DB；不能宣告 production market/theme 三表五月資料完整。
-  - legacy constants blocked_current_version_snapshot_missing / followup_backfill_task_needed 仍留在 module 中供其他路徑相容，但 correction audit 本輪路徑不再輸出它們。
-  - QA 仍需反證 Owner 讀取 JSON 時不會誤判 market/theme 已完成或 snapshot 需要 current VERSION backfill。
-
-  ## 旁支待辦
-
-  - 下一張任務再處理 market/theme historical fetch。
-  - 下一張任務再處理 market_theme_confirmed_evidence duplicate / dedupe。
-  - 若後續要完全移除 legacy next_action constants，需另開契約清理任務並盤點所有消費者。
+- TWSE historical endpoint 偶發回應不完整或連線錯誤；script 已 fail closed，但後續若要自動每日補資料，應加重試與 source gap 明細輸出。
+- 本輪只補 2026-05-04 到 2026-05-29；更多月份 backfill 另開任務。
+- 尚未把 market/theme evidence trend 擴展成新的策略加權規則；本輪只完成資料抓取、寫入與 audit 通過。

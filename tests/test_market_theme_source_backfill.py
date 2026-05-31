@@ -1,13 +1,17 @@
 import unittest
+from unittest.mock import patch
 
 from scripts.backfill_market_theme_sources import (
     MARKET_INDEX,
     build_confirmed_rows,
+    build_historical_source_payloads,
     build_index_rows,
     build_market_theme_history_backfill_report,
     build_market_breadth,
     build_member_rows,
     build_source_payloads,
+    fetch_twse_historical_index_payload,
+    fetch_twse_historical_index_rows,
     upsert_source_payloads,
 )
 
@@ -23,7 +27,26 @@ class WriteTable:
         )
         return self
 
+    def insert(self, rows):
+        self.client.calls.append({"table": self.name, "rows": rows, "insert": True})
+        return self
+
+    def delete(self):
+        self.pending = {"table": self.name, "delete": True, "filters": []}
+        return self
+
+    def eq(self, field, value):
+        self.pending["filters"].append(("eq", field, value))
+        return self
+
+    def is_(self, field, value):
+        self.pending["filters"].append(("is", field, value))
+        return self
+
     def execute(self):
+        if hasattr(self, "pending"):
+            self.client.calls.append(self.pending)
+            del self.pending
         return type("Result", (), {"data": []})()
 
 
@@ -74,6 +97,43 @@ class MarketThemeSourceBackfillTest(unittest.TestCase):
         self.assertEqual(rows[1]["source_family"], "market_data")
         self.assertEqual(rows[1]["index_method"], "external_index")
 
+    def test_historical_index_fetch_uses_after_trading_endpoint_and_percent_field(self):
+        class Response:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {
+                    "tables": [
+                        {
+                            "fields": ["指數", "收盤指數", "漲跌百分比(%)"],
+                            "data": [
+                                ["發行量加權股價指數", "44,732.94", "2.51"],
+                                ["電子工業類指數", "2,928.42", "2.62"],
+                            ],
+                        }
+                    ]
+                }
+
+        with patch("scripts.backfill_market_theme_sources.requests.get", return_value=Response()) as get:
+            payload = fetch_twse_historical_index_payload("2026-05-29", report_type="IND")
+            raw_rows = fetch_twse_historical_index_rows("2026-05-29")
+
+        first_call, second_call = get.call_args_list
+        self.assertEqual(
+            first_call.args[0],
+            "https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX",
+        )
+        self.assertEqual(
+            first_call.kwargs["params"],
+            {"response": "json", "date": "20260529", "type": "IND"},
+        )
+        self.assertEqual(second_call.kwargs["params"]["type"], "IND")
+        self.assertEqual(payload["tables"][0]["fields"], ["指數", "收盤指數", "漲跌百分比(%)"])
+        rows = build_index_rows(raw_rows, trade_date="2026-05-29", as_of="2026-05-29T06:00:00+00:00")
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[1]["change_pct"], 2.62)
+
     def test_build_market_breadth_uses_official_twse_breadth(self):
         breadth = build_market_breadth(
             [
@@ -93,6 +153,25 @@ class MarketThemeSourceBackfillTest(unittest.TestCase):
         self.assertEqual(breadth["denominator"], 1076)
         self.assertEqual(breadth["up_count"], 805)
         self.assertEqual(breadth["up_ratio"], round(805 / 1076, 4))
+
+    def test_build_market_breadth_parses_after_trading_ms_stock_column(self):
+        breadth = build_market_breadth(
+            [
+                {"類型": "上漲(漲停)", "整體市場": "568(43)", "股票": "558(43)"},
+                {"類型": "下跌(跌停)", "整體市場": "454(0)", "股票": "438(0)"},
+                {"類型": "持平", "整體市場": "76", "股票": "74"},
+            ],
+            trade_date="2026-05-29",
+        )
+
+        self.assertEqual(breadth["trade_date"], "2026-05-29")
+        self.assertEqual(breadth["denominator"], 1070)
+        self.assertEqual(breadth["up_count"], 558)
+        self.assertEqual(breadth["down_count"], 438)
+        self.assertEqual(breadth["flat_count"], 74)
+        self.assertEqual(breadth["limit_up_count"], 43)
+        self.assertEqual(breadth["limit_down_count"], 0)
+        self.assertEqual(breadth["up_ratio"], round(558 / 1070, 4))
 
     def test_build_member_rows_uses_twse_company_profile_industry(self):
         rows = build_member_rows(
@@ -160,7 +239,7 @@ class MarketThemeSourceBackfillTest(unittest.TestCase):
         report = build_market_theme_history_backfill_report(payloads)
 
         self.assertEqual(report["mode"], "market-theme-history-backfill")
-        self.assertEqual(report["date_range"], {"start": "2026-05-01", "end": "2026-05-29"})
+        self.assertEqual(report["date_range"], {"start": "2026-05-04", "end": "2026-05-29"})
         self.assertEqual(report["write_execution"], "dry-run")
         self.assertFalse(report["live_telegram"])
         self.assertFalse(report["schema_change"])
@@ -171,9 +250,9 @@ class MarketThemeSourceBackfillTest(unittest.TestCase):
         self.assertEqual(confirmed["candidate_rows"], 1)
         self.assertEqual(confirmed["validated_rows"], 1)
         self.assertEqual(confirmed["coverage"]["first_trade_date"], "2026-05-29")
-        self.assertEqual(index_table["historical_source_status"], "not-consumed")
-        self.assertEqual(index_table["status"], "skipped")
-        self.assertEqual(index_table["written_rows"], 0)
+        self.assertEqual(index_table["historical_source_status"], "partial")
+        self.assertEqual(index_table["status"], "ready")
+        self.assertEqual(index_table["validated_rows"], 2)
         self.assertEqual(member_table["table"], "sector_theme_members")
         self.assertEqual(member_table["historical_source_status"], "missing")
         self.assertEqual(member_table["status"], "blocked")
@@ -256,7 +335,7 @@ class MarketThemeSourceBackfillTest(unittest.TestCase):
         self.assertEqual(confirmed["status"], "blocked")
         self.assertIn("required fields missing: as_of", confirmed["blocked_reasons"])
 
-    def test_execute_path_upserts_only_confirmed_evidence_rows(self):
+    def test_execute_path_replaces_business_keys_then_writes_index_and_confirmed_rows(self):
         payloads = build_source_payloads(
             [
                 {"日期": "1150529", "指數": "發行量加權股價指數", "收盤指數": "44732.94", "漲跌百分比": "2.51"},
@@ -270,11 +349,51 @@ class MarketThemeSourceBackfillTest(unittest.TestCase):
 
         counts = upsert_source_payloads(client, payloads)
 
-        self.assertEqual(counts, {"market_theme_confirmed_evidence": 1})
-        self.assertEqual(len(client.calls), 1)
+        self.assertEqual(
+            counts,
+            {
+                "market_theme_confirmed_evidence": 1,
+                "market_theme_index_daily_bars": 2,
+            },
+        )
+        self.assertEqual(len(client.calls), 5)
         self.assertEqual(client.calls[0]["table"], "market_theme_confirmed_evidence")
+        self.assertTrue(client.calls[0]["delete"])
+        self.assertEqual(client.calls[1]["table"], "market_theme_index_daily_bars")
+        self.assertTrue(client.calls[1]["delete"])
+        self.assertEqual(client.calls[2]["table"], "market_theme_index_daily_bars")
+        self.assertTrue(client.calls[2]["delete"])
+        self.assertEqual(client.calls[3]["table"], "market_theme_confirmed_evidence")
+        self.assertEqual(client.calls[4]["table"], "market_theme_index_daily_bars")
+        self.assertTrue(client.calls[4]["insert"])
         self.assertNotIn("sector_theme_members", [call["table"] for call in client.calls])
-        self.assertNotIn("market_theme_index_daily_bars", [call["table"] for call in client.calls])
+
+    def test_historical_payloads_collect_range_and_fail_closed_on_source_gaps(self):
+        def fetch_index_rows(trade_date):
+            if trade_date == "2026-05-05":
+                return []
+            return [
+                {"date": trade_date, "指數": "發行量加權股價指數", "收盤指數": "44732.94", "漲跌百分比": "2.51"},
+                {"date": trade_date, "指數": "電子工業類指數", "收盤指數": "2928.42", "漲跌百分比": "2.62"},
+            ]
+
+        def fetch_breadth_rows(trade_date):
+            return [
+                {"date": trade_date, "上漲": "805", "下跌": "202", "持平": "69"},
+            ]
+
+        payloads = build_historical_source_payloads(
+            fetch_index_rows,
+            fetch_breadth_rows,
+            [],
+            "2026-05-04",
+            "2026-05-06",
+            as_of="2026-05-29T06:00:00+00:00",
+        )
+
+        self.assertEqual(payloads["status"], "blocked")
+        self.assertEqual(payloads["source_gaps"], [{"trade_date": "2026-05-05", "reason": "no official TWSE MI_INDEX rows matched"}])
+        self.assertEqual({row["trade_date"] for row in payloads["index_rows"]}, {"2026-05-04", "2026-05-06"})
 
     def test_executed_report_uses_read_after_write_trend_metrics(self):
         payloads = build_source_payloads(

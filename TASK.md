@@ -1,216 +1,144 @@
-# TASK: correction audit daily_signal_snapshot 歷史版本語義修正
+# TASK: Market Theme Historical Fetch 2026-05 And Evidence Dedupe
 
 ## 任務狀態
 
-- task_id：correction-audit-daily-signal-snapshot-version-semantics-2026-05
-- 任務類型：normal_patch
-- 狀態：ready_for_tech
-- 版本建議：不升 Telegram 版本；本輪不改使用者可見 Telegram 報文。
-- QA 分級建議：L2
-- 任務尺寸判斷：不是 tiny_patch。雖然是單一主 bug，但會改 correction audit 的 blocked / diagnostic 輸出契約與下游判讀；不得擴成 market/theme 抓取、DB backfill、schema guard、策略重設或全量清理。
-
-## Owner 問題
-
-開始 market/theme 歷史抓取前，必須先修正 correction audit 對 daily_signal_snapshot 的語義判斷。
-
-正確語義：
-
-- daily_signal_snapshot 歷史資料是「每日當時版本」留存。
-- 不要求舊五月資料回填成目前 core/generator.py VERSION。
-- current VERSION 在舊五月 0 rows 只能作為 diagnostic / run-health 訊號。
-- audit 不得把「current VERSION 舊五月 0 rows」當作歷史 coverage blocker。
-- audit 不得要求或暗示需要 backfill 舊五月 current VERSION snapshot。
-
-同時保持 market/theme historical coverage 仍 blocked：
-
-- market_theme_confirmed_evidence 只有 2026-05-29 latest-only。
-- market_theme_index_daily_bars 只有 2026-05-29 latest-only。
-- sector_theme_members 是 mapping-only，不是五月 daily history。
-
-完成本輪 correction audit 語義修正後，才能進入下一張 market/theme 歷史抓取任務。
+- task_id: market-theme-history-fetch-2026-05
+- 任務類型: risk_patch
+- 狀態: ready_for_tech
+- 版本建議: none
+- QA 分級建議: L3
+- Owner 問題: production DB 的 market/theme 五月資料目前是 latest-only，不是 2026-05 歷史資料；market_theme_confirmed_evidence 還有 duplicate business-key groups，導致 correction audit 不能作為可信歷史證據。
 
 ## 使用者可見結果
 
-Owner 看到的是 correction audit / full-integrity 類輸出的判讀被收斂：
+完成後，Owner / Architect 用下列 read-only audit 可看到 market/theme 五月 coverage 不再是只有 2026-05-29，且 confirmed evidence duplicate groups 已清零或有明確可驗的保留規則：
 
-- daily_signal_snapshot 五月歷史 coverage 可以用「全版本 / 當日版本留存」判斷。
-- current VERSION 舊五月 0 rows 顯示為 diagnostic / run-health，不造成歷史 coverage blocked。
-- 不再出現要求舊五月 current VERSION backfill 的文字、next_action 或 blocked_reason。
-- market/theme 三表仍明確 blocked，不被 daily_signal_snapshot 修正誤放行。
+arch -arm64 .venv/bin/python scripts/smoke_market_theme_evidence_readonly.py --correction-audit-json --limit 20000
 
-本輪不是 Telegram / UI 任務，無手機閱讀路徑與 Telegram 示例輸出要求。
+本任務不改 Telegram / UI 報文；使用者可見結果是 audit JSON 與 Tech/QA 交付摘要。
 
 ## 非目標
 
-- 不抓取 market/theme 歷史資料。
-- 不處理 market_theme_confirmed_evidence duplicate / dedupe。
-- 不補寫或 backfill daily_signal_snapshot。
-- 不補寫或 backfill market/theme 任一 production table。
-- 不改 DB schema、RLS、grant、policy、role、index、constraint。
-- 不改策略 decision、持倉建議、watchlist、交易狀態機。
-- 不改 Telegram 報文版本、文案或 live delivery。
-- 不把 market/theme latest-only / mapping-only 狀態改判為完成。
-- 不把 Owner 的「開始」解讀成跳過 Tech / QA 或直接改代碼授權。
+- 不改策略買賣邏輯、分數、排序或 Telegram 文案。
+- 不新增 market/theme 策略功能。
+- 不把 sector_theme_members 當 daily history 回填。
+- 不手寫普通 production DML。
+- 不造假資料、不用 local cache / runtime dict / agent 對話當 production history。
+- 不做 DB schema / index / constraint / RLS / grant / policy 變更；若必要，先 blocked 並輸出 SQL 給 Owner。
 
 ## 影響模組
 
-- correction audit / full-integrity report 產生路徑。
-- daily_signal_snapshot 五月 coverage 判讀邏輯。
-- audit JSON / CLI 輸出中的 status、blocked_reason、next_action、diagnostic 欄位。
-- market/theme coverage blocker 的 report wording。
-- 相關測試或 fixture。
+Tech 需在主 repo 中定位既有 repo script / service API，最小範圍完成：
+
+- market/theme historical fetch 或 backfill script / service path。
+- production DB 寫入 path，僅限既有 approved interface。
+- market_theme_index_daily_bars 五月歷史資料寫入。
+- market_theme_confirmed_evidence 五月 confirmed evidence 寫入與 duplicate business-key group 處理。
+- scripts/smoke_market_theme_evidence_readonly.py 只作驗收工具；除非 audit 本身缺必要欄位或錯判，否則不改 audit 口徑。
 
 ## 直接消費者
 
-- Owner：判斷 correction audit 是否已正確區分 snapshot 歷史 coverage 與 current VERSION run-health。
-- Architect：依 TASK / CHANGELOG / QA_REPORT 判斷能否進入下一張 market/theme 歷史抓取任務。
-- Tech：只按本任務修正 audit 語義，不執行抓取、backfill 或 schema 改動。
-- QA：反證 current VERSION 舊五月 0 rows 不再阻塞 snapshot 歷史 coverage，且 market/theme 仍 blocked。
-
-## 輸出契約
-
-correction audit / full-integrity JSON 或等價 report 必須維持單一輸出契約，至少包含以下語義欄位：
-
-status: pass | blocked
-blocked_reason: null | string
-daily_signal_snapshot:
-history_coverage:
-basis: daily_version_as_recorded | insufficient_evidence
-row_count_all_versions: number
-date_min: YYYY-MM-DD | null
-date_max: YYYY-MM-DD | null
-distinct_trade_dates: number
-version_distribution: map
-conclusion: covered | partial | insufficient_evidence
-current_version_run_health:
-generator_version: string
-may_row_count_for_current_version: number
-diagnostic: current_version_old_month_zero_rows | current_version_rows_present | source_error
-blocks_history_coverage: false
-market_theme_historical_coverage:
-market_theme_confirmed_evidence:
-conclusion: latest_only | partial | complete | insufficient_evidence
-market_theme_index_daily_bars:
-conclusion: latest_only | partial | complete | insufficient_evidence
-sector_theme_members:
-conclusion: mapping_only | insufficient_evidence
-next_action:
-- market_theme_historical_fetch_required
-- market_theme_dedupe_followup_required
-- source_error_blocked
-
-契約要求：
-
-- daily_signal_snapshot.current_version_run_health.blocks_history_coverage 對舊五月 current VERSION 0 rows 必須是 false。
-- blocked_reason 不得把 current VERSION 舊五月 0 rows 寫成 historical coverage blocker。
-- next_action 不得包含或暗示 daily_signal_snapshot 舊五月 current VERSION backfill。
-- 若 daily_signal_snapshot 全版本歷史資料本身讀不到、日期不足或 source-error，仍可 blocked，但原因必須是 source_error / insufficient_evidence / actual history coverage gap，不是 current VERSION 舊五月 0 rows。
-- market/theme 三表若仍是 latest-only / mapping-only，整體進入 market/theme 抓取前的 readiness 必須保持 blocked。
-
-## 驗收條件
-
-1. 使用 production read-only 或既有 fixture 證明：daily_signal_snapshot 五月全版本存在歷史 rows，且 current VERSION 五月 0 rows 時，audit 不因 current VERSION 0 rows blocked。
-2. report / JSON 仍顯示 current VERSION 五月 0 rows 為 diagnostic / run-health，且明確 blocks_history_coverage=false。
-3. market/theme historical coverage 仍 blocked：market_theme_confirmed_evidence 與 market_theme_index_daily_bars 只有 2026-05-29 latest-only，sector_theme_members 是 mapping-only。
-4. next_action 指向 market/theme historical fetch / dedupe follow-up，不得要求 daily_signal_snapshot backfill。
-5. 不執行 production write、backfill、cleanup、schema/RLS/grant/policy/role/index 變更或 live Telegram。
-6. 本輪停止條件：只要 correction audit 已正確區分 daily_signal_snapshot history coverage 與 current VERSION run-health，且 market/theme blocker 未被誤放行，即完成。本輪不追 market/theme 抓取實作、dedupe 實作、資料補寫
-或報文調整。
-
-## 範例或 fixture
-
-### Case A：舊五月 current VERSION 0 rows 不阻塞 snapshot 歷史 coverage
-
-status: blocked
-blocked_reason: market_theme_historical_coverage_incomplete
-
-daily_signal_snapshot:
-history_coverage:
-basis: daily_version_as_recorded
-row_count_all_versions: 936
-date_min: 2026-05-04
-date_max: 2026-05-29
-distinct_trade_dates: 20
-version_distribution:
-v20.4.5: 240
-conclusion: covered
-current_version_run_health:
-generator_version: v20.4.6
-may_row_count_for_current_version: 0
-diagnostic: current_version_old_month_zero_rows
-blocks_history_coverage: false
-
-market_theme_historical_coverage:
-market_theme_confirmed_evidence:
-conclusion: latest_only
-market_theme_index_daily_bars:
-conclusion: latest_only
-sector_theme_members:
-conclusion: mapping_only
-
-next_action:
-- market_theme_historical_fetch_required
-- market_theme_dedupe_followup_required
-
-### Case B：snapshot source-error 才可阻塞 snapshot history
-
-status: blocked
-blocked_reason: daily_signal_snapshot_source_error
-
-daily_signal_snapshot:
-history_coverage:
-basis: insufficient_evidence
-conclusion: insufficient_evidence
-current_version_run_health:
-diagnostic: source_error
-blocks_history_coverage: false
-
-next_action:
-- source_error_blocked
+- Architect / Owner 的 correction audit flow。
+- scripts/smoke_market_theme_evidence_readonly.py --correction-audit-json --limit 20000。
+- 後續 evidence chain / market-theme 消費者，只能在本任務驗收完成後再擴張。
 
 ## 已存在且不得回退的契約
 
-- production DB 是跨日狀態與歷史資料判斷的 source-of-truth。
-- runner 視為無狀態；local/cache/runtime/worktree 不能當 production history。
-- daily_signal_snapshot 歷史是按每日當時版本留存，不要求舊五月回填 current VERSION。
-- current core/generator.py VERSION 舊五月 0 rows 只作 diagnostic / run-health，不作歷史 coverage blocker。
-- market/theme historical coverage 目前仍 blocked；latest-only / mapping-only 不得稱為五月完整歷史。
-- DB schema / RLS / grant / policy / role / index / constraint 變更需 Owner 事前確認。
-- production write / cleanup / backfill 不在本輪授權內。
-- live Telegram delivery 需 Owner 單獨批准。
-- PM -> Tech -> QA 完整交付，不得跳過 QA。
-- 證據不足時必須 blocked 或 insufficient_evidence，不得推論補齊。
+- production runner 視為無狀態；跨日歷史證據必須來自 production DB 或 Owner 指定持久來源。
+- 非 schema data write / backfill 必須走既有 repo script 或 approved service API。
+- 缺 source、source-error、欄位不足或可信度不足時 fail closed，不得補假資料。
+- daily_signal_snapshot 五月歷史已完成，不納入本輪回填。
+- sector_theme_members 是 mapping source，不是 daily history。
+- 目前 baseline：
+- market_theme_confirmed_evidence: 18 rows only 2026-05-29，9 duplicate business-key groups。
+- market_theme_index_daily_bars: 10 rows only 2026-05-29。
+- sector_theme_members: 12 active mapping rows, valid_from=2026-01-01，僅可作 mapping。
+- 若 Tech 無法從既有 code / audit 中確認 duplicate business-key 定義，必須 blocked，列出表欄位與候選 key，不得自行假設並寫入 production。
+
+## 輸出契約
+
+Tech 交付的 CHANGELOG.md 必須說明：
+
+- 使用的真實資料來源與 fetch path。
+- 寫入介面：repo script 或 service API 名稱、參數、執行方式。
+- 寫入範圍：
+- market_theme_index_daily_bars 覆蓋 2026-05 可得交易日，不可只有 latest date。
+- market_theme_confirmed_evidence 覆蓋 2026-05 可得交易日，不可只有 latest date。
+- duplicate business-key 處理規則：
+- 預設目標是 duplicate groups 清零。
+- 若保留多筆，必須列出 business key、保留理由、audit 如何不再把它判為錯誤。
+- read-after-write 驗證結果，至少包含 audit JSON 中 market/theme coverage、date range、row count、duplicate groups。
+- 若有 source gaps，需列出缺哪些日期、來源回應、是否 fail closed。
+
+## 驗收條件
+
+1. 用真實來源經 repo script / service API 完成 production 寫入，不手寫普通 DML。
+2. market_theme_index_daily_bars 的 2026-05 production coverage 不再只有 2026-05-29；應覆蓋來源可得的五月交易日，預期對齊 2026-05-04 到 2026-05-29 的 20 個交易日，除非真實來源明確缺日。
+3. market_theme_confirmed_evidence 的 2026-05 production coverage 不再只有 2026-05-29。
+4. market_theme_confirmed_evidence duplicate business-key groups 清零；若未清零，必須有明確保留規則且 audit JSON 不能再把它當未處理 duplicate 問題。
+5. sector_theme_members 只作 mapping source；驗收不得把其 valid_from=2026-01-01 rows 算成五月 daily history。
+6. 重跑：
+
+arch -arm64 .venv/bin/python scripts/smoke_market_theme_evidence_readonly.py --correction-audit-json --limit 20000
+
+結果必須顯示 market/theme 五月 coverage 不再 latest-only，且 duplicate groups 清零或符合保留規則。
+7. QA 必須補一個 Tech 未覆蓋的反證路徑，例如：確認 source gap 不被假資料填滿、確認 duplicate key 不只是被 audit 忽略、或確認 sector_theme_members 沒被算作 daily history。
+
+## 範例或 fixture
+
+驗收 JSON 形狀需能支持下列判讀，欄位名以現有 audit 實際輸出為準：
+
+{
+"market_theme_index_daily_bars": {
+"history_coverage": {
+"conclusion": "covered",
+"date_range": ["2026-05-04", "2026-05-29"],
+"latest_only": false
+}
+},
+"market_theme_confirmed_evidence": {
+"history_coverage": {
+"conclusion": "covered",
+"latest_only": false
+},
+"duplicate_business_key_groups": 0
+},
+"sector_theme_members": {
+"role": "mapping_source",
+"counts_as_daily_history": false
+}
+}
+
+若真實來源缺部分交易日，範例可改為 partial，但 Tech/QA 必須列出每個缺日與 source evidence；不得宣告完整 covered。
 
 ## 明確禁止事項
 
-- 禁止 production DB insert / update / delete。
-- 禁止 backfill daily_signal_snapshot 或 market/theme tables。
-- 禁止 schema、RLS、grant、policy、role、index、constraint 變更。
-- 禁止 live Telegram。
-- 禁止 market/theme 歷史抓取實作。
-- 禁止 confirmed evidence dedupe 實作。
-- 禁止把 current VERSION 舊五月 0 rows 作為 daily_signal_snapshot 歷史 coverage blocker。
-- 禁止在 next_action 要求 daily_signal_snapshot 舊五月 current VERSION backfill。
-- 禁止把 market/theme latest-only / mapping-only 說成完整 historical coverage。
-- 禁止把 Owner 的「開始 / 繼續 / 處理 / 修復 / 檢查 / 清理 / 直接來」解讀成跳過 Tech / QA 或直接改代碼授權。
+- 禁止手寫普通 production DML 直接 insert/update/delete。
+- 禁止用假資料、推測資料、local cache 或單日 latest rows 複製成歷史。
+- 禁止把 sector_theme_members 當 daily bars 或 confirmed evidence history。
+- 禁止未經 Owner 先審 SQL 就做 schema、index、constraint、RLS、grant、policy、role 變更。
+- 禁止 live Telegram delivery。
+- 禁止把 smoke / integrity check 單純通過升格為「production 五月資料已完成」，必須對齊 audit coverage 與 duplicate 結果。
 
 ## 阻塞條件
 
-Tech 遇到以下任一情況必須 blocked：
+Tech 必須 blocked 並回報，若出現任一情況：
 
-- 無法確認 correction audit 目前輸出契約或入口。
-- 無法可靠區分 daily_signal_snapshot 全版本歷史 coverage 與 current VERSION run-health。
-- 無法讀取 current core/generator.py VERSION，且輸出契約需要該值。
-- production read-only / fixture 證據不足以驗證本輪語義。
-- 修正必須依賴 production write、backfill、cleanup 或 schema 變更。
-- 修正會誤放行 market/theme historical coverage。
-- 需要改動策略 decision、Telegram live delivery 或 DB 結構才能完成。
+- 找不到既有 repo script / service API 可安全寫入 production market/theme history。
+- 需要 schema / index / constraint / RLS / grant / policy / role 變更。
+- 真實來源沒有 2026-05 歷史資料或來源回應不可驗。
+- 無法確認 market_theme_confirmed_evidence duplicate business-key 定義。
+- production credentials / 權限 / source 讀寫失敗。
+- audit output 無法區分 latest-only、source gap、duplicate groups。
 
-## QA 分級建議
+## 本輪停止條件
 
-- QA level：L2
-- QA 必須至少補一個 Tech 未覆蓋的反證案例：current VERSION 舊五月 0 rows 但全版本五月歷史存在，audit 不得因此 blocked。
-- QA 必須檢查 market/theme blocker 沒有被本輪修正誤清除。
-- QA 必須檢查 blocked_reason 與 next_action 沒有要求 daily_signal_snapshot backfill。
-- QA 不得只重跑 Tech 命令；需檢查輸出語義是否會讓 Owner 誤讀為 market/theme 已完成或 snapshot 需要 backfill。
-- QA 結論只能是 通過、阻塞、conditional pass。
+完成範圍到「2026-05 market/theme 歷史抓取寫入 + confirmed evidence duplicate 處理 + read-only audit 驗收」為止。
+
+旁支問題只記待辦，不納入本輪：
+
+- 後續 evidence chain 功能擴張。
+- 策略是否消費 market/theme history。
+- Telegram 報文改版。
+- DB schema 正規化或 constraint 補強。
+- 其他月份或全歷史 backfill。

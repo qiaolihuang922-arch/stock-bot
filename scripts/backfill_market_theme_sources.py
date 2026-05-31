@@ -5,7 +5,7 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,6 +18,7 @@ from core.watchlist import STOCKS
 from services.market_theme_evidence_store import (
     HANDOFF_ALLOWED_SOURCE_FAMILIES,
     REQUIRED_ROW_FIELDS,
+    build_market_theme_production_correction_audit,
     load_confirmed_market_theme_evidence,
     _source_family_forbidden,
     upsert_market_theme_confirmed_evidence,
@@ -31,7 +32,7 @@ SOURCE_NAME = "twse_openapi_mi_index"
 MEMBER_SOURCE_NAME = "twse_openapi_t187ap03_L"
 BREADTH_SOURCE_NAME = "twse_openapi_twtazu_od"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
-DEFAULT_START_DATE = "2026-05-01"
+DEFAULT_START_DATE = "2026-05-04"
 DEFAULT_END_DATE = "2026-05-29"
 ALLOWED_LINEAGE_SOURCE_TABLES = {
     "market_theme_confirmed_evidence",
@@ -54,6 +55,7 @@ FORBIDDEN_SOURCE_FAMILIES = {
 }
 
 TWSE_MI_INDEX_URL = "https://openapi.twse.com.tw/v1/exchangeReport/MI_INDEX"
+TWSE_MI_INDEX_HISTORY_URL = "https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX"
 TWSE_BREADTH_URL = "https://openapi.twse.com.tw/v1/opendata/twtazu_od"
 TWSE_COMPANY_PROFILE_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap03_L"
 
@@ -124,6 +126,10 @@ INDUSTRY_CODE_TO_THEME = {
 
 def _twse_date_to_iso(value):
     text = str(value or "").strip()
+    if len(text) == 10 and text[4] == "-" and text[7] == "-":
+        return text
+    if len(text) == 8 and text.isdigit():
+        return f"{int(text[:4]):04d}-{int(text[4:6]):02d}-{int(text[6:]):02d}"
     if len(text) != 7:
         return ""
     try:
@@ -140,6 +146,16 @@ def _num(value):
         return float(text)
     except ValueError:
         return None
+
+
+def _parse_count_with_limit(value):
+    text = str(value or "").replace(",", "").strip()
+    if not text:
+        return 0, 0
+    if "(" in text and text.endswith(")"):
+        count_text, limit_text = text[:-1].split("(", 1)
+        return int(_num(count_text) or 0), int(_num(limit_text) or 0)
+    return int(_num(text) or 0), 0
 
 
 def _now_iso():
@@ -173,8 +189,68 @@ def fetch_json(url):
     return response.json()
 
 
+def fetch_json_with_params(url, params):
+    response = requests.get(url, params=params, headers=HEADERS, timeout=20)
+    response.raise_for_status()
+    return response.json()
+
+
 def fetch_twse_index_rows():
     return fetch_json(TWSE_MI_INDEX_URL)
+
+
+def _iso_to_twse_query_date(value):
+    return str(value or "").replace("-", "")
+
+
+def fetch_twse_historical_index_payload(trade_date, report_type="IND"):
+    return fetch_json_with_params(
+        TWSE_MI_INDEX_HISTORY_URL,
+        {
+            "response": "json",
+            "date": _iso_to_twse_query_date(trade_date),
+            "type": report_type,
+        },
+    )
+
+
+def _extract_twse_table_rows(payload, required_columns=None):
+    required = set(required_columns or [])
+    if isinstance(payload, list):
+        return payload
+    if not isinstance(payload, dict):
+        return []
+    rows = []
+    for table in payload.get("tables") or []:
+        if not isinstance(table, dict):
+            continue
+        fields = table.get("fields") or []
+        if required and not required.issubset(set(fields)):
+            continue
+        for item in table.get("data") or []:
+            if isinstance(item, dict):
+                rows.append(item)
+            elif isinstance(item, list):
+                rows.append(
+                    {
+                        field: item[index] if index < len(item) else ""
+                        for index, field in enumerate(fields)
+                    }
+                )
+    return rows
+
+
+def fetch_twse_historical_index_rows(trade_date):
+    return _extract_twse_table_rows(
+        fetch_twse_historical_index_payload(trade_date, report_type="IND"),
+        required_columns=["指數", "收盤指數"],
+    )
+
+
+def fetch_twse_historical_breadth_rows(trade_date):
+    return _extract_twse_table_rows(
+        fetch_twse_historical_index_payload(trade_date, report_type="MS"),
+    )
 
 
 def fetch_twse_breadth_rows():
@@ -193,10 +269,10 @@ def build_index_rows(raw_rows, trade_date=None, as_of=None):
         spec = OFFICIAL_INDEX_MAP.get(index_name)
         if not spec:
             continue
-        row_trade_date = _twse_date_to_iso(raw.get("日期"))
+        row_trade_date = _twse_date_to_iso(raw.get("日期") or raw.get("date") or trade_date)
         if trade_date and row_trade_date != trade_date:
             continue
-        change_pct = _num(raw.get("漲跌百分比"))
+        change_pct = _num(raw.get("漲跌百分比") or raw.get("漲跌百分比(%)"))
         close = _num(raw.get("收盤指數"))
         if not row_trade_date or close is None:
             continue
@@ -224,7 +300,7 @@ def build_index_rows(raw_rows, trade_date=None, as_of=None):
                     "twse_index_name": index_name,
                     "twse_change_sign": raw.get("漲跌"),
                     "twse_change_points": _num(raw.get("漲跌點數")),
-                    "source_url": TWSE_MI_INDEX_URL,
+                    "source_url": TWSE_MI_INDEX_HISTORY_URL if trade_date else TWSE_MI_INDEX_URL,
                 },
             }
         )
@@ -232,15 +308,47 @@ def build_index_rows(raw_rows, trade_date=None, as_of=None):
 
 
 def build_market_breadth(raw_rows, trade_date=None):
+    ms_rows = [
+        raw
+        for raw in raw_rows or []
+        if isinstance(raw, dict) and "股票" in raw and str(raw.get("類型") or "").strip()
+    ]
+    if ms_rows:
+        up = down = flat = limit_up = limit_down = 0
+        for raw in ms_rows:
+            row_type = str(raw.get("類型") or "").strip()
+            count, limit_count = _parse_count_with_limit(raw.get("股票"))
+            if row_type.startswith("上漲"):
+                up = count
+                limit_up = limit_count
+            elif row_type.startswith("下跌"):
+                down = count
+                limit_down = limit_count
+            elif row_type.startswith("持平"):
+                flat = count
+        denominator = up + down + flat
+        if denominator:
+            return {
+                "trade_date": trade_date or "",
+                "denominator": denominator,
+                "up_count": up,
+                "down_count": down,
+                "flat_count": flat,
+                "limit_up_count": limit_up,
+                "limit_down_count": limit_down,
+                "up_ratio": round(up / denominator, 4),
+                "source_name": BREADTH_SOURCE_NAME,
+                "source_url": TWSE_MI_INDEX_HISTORY_URL,
+            }
     for raw in raw_rows or []:
-        if raw.get("類型") != "股票":
+        if raw.get("類型") and raw.get("類型") != "股票":
             continue
-        row_trade_date = _twse_date_to_iso(raw.get("出表日期"))
+        row_trade_date = _twse_date_to_iso(raw.get("出表日期") or raw.get("日期") or raw.get("date") or trade_date)
         if trade_date and row_trade_date != trade_date:
             continue
-        up = int(_num(raw.get("上漲")) or 0)
-        down = int(_num(raw.get("下跌")) or 0)
-        flat = int(_num(raw.get("持平")) or 0)
+        up = int(_num(raw.get("上漲") or raw.get("漲證券數")) or 0)
+        down = int(_num(raw.get("下跌") or raw.get("跌證券數")) or 0)
+        flat = int(_num(raw.get("持平") or raw.get("持平證券數")) or 0)
         limit_up = int(_num(raw.get("漲停")) or 0)
         limit_down = int(_num(raw.get("跌停")) or 0)
         denominator = up + down + flat
@@ -257,6 +365,19 @@ def build_market_breadth(raw_rows, trade_date=None):
             "source_url": TWSE_BREADTH_URL,
         }
     return {}
+
+
+def _parse_date(value):
+    return datetime.strptime(value, "%Y-%m-%d").date()
+
+
+def _business_days(start_date, end_date):
+    current = _parse_date(start_date)
+    end = _parse_date(end_date)
+    while current <= end:
+        if current.weekday() < 5:
+            yield current.isoformat()
+        current += timedelta(days=1)
 
 
 def build_member_rows(raw_rows, watchlist_codes=None, as_of=None):
@@ -390,6 +511,50 @@ def build_source_payloads(index_raw, breadth_raw, profiles_raw, trade_date=None,
         "member_rows": build_member_rows(profiles_raw, as_of=as_of),
         "index_rows": index_rows,
         "confirmed_rows": build_confirmed_rows(index_rows, breadth, as_of=as_of),
+    }
+
+
+def build_historical_source_payloads(
+    fetch_index_rows,
+    fetch_breadth_rows,
+    profiles_raw,
+    start_date,
+    end_date,
+    as_of=None,
+):
+    as_of = as_of or _now_iso()
+    source_gaps = []
+    index_rows = []
+    confirmed_rows = []
+    for trade_date in _business_days(start_date, end_date):
+        index_raw = fetch_index_rows(trade_date)
+        breadth_raw = fetch_breadth_rows(trade_date)
+        payloads = build_source_payloads(
+            index_raw,
+            breadth_raw,
+            profiles_raw,
+            trade_date=trade_date,
+            as_of=as_of,
+        )
+        if payloads.get("status") != "ready":
+            source_gaps.append(
+                {"trade_date": trade_date, "reason": payloads.get("reason") or "missing-source"}
+            )
+            continue
+        if not build_market_breadth(breadth_raw, trade_date=trade_date):
+            source_gaps.append(
+                {"trade_date": trade_date, "reason": "missing official TWSE breadth rows"}
+            )
+            continue
+        index_rows.extend(payloads["index_rows"])
+        confirmed_rows.extend(payloads["confirmed_rows"])
+    return {
+        "status": "ready" if index_rows and confirmed_rows and not source_gaps else "blocked",
+        "reason": "ready" if index_rows and confirmed_rows and not source_gaps else "source gaps in requested range",
+        "source_gaps": source_gaps,
+        "member_rows": build_member_rows(profiles_raw, as_of=as_of),
+        "index_rows": index_rows,
+        "confirmed_rows": confirmed_rows,
     }
 
 
@@ -555,18 +720,25 @@ def build_market_theme_history_backfill_report(
         index_reasons.append("missing official historical index bars source")
     if index_bad_dates:
         index_reasons.append("source date outside requested May range")
-    index_reasons.append("DB source table is not a direct strategy/report consumer in this script")
     index_table = _report_table(
         "market_theme_index_daily_bars",
         "official_or_owner_approved_historical_market_theme_bars",
-        "not-consumed" if index_rows and not index_bad_dates else "missing",
-        "confirmed evidence generation uses fetched official rows; DB table write skipped",
+        "partial" if index_rows and not index_bad_dates else "missing",
+        "market_theme_index_daily_bars production source and correction audit",
         candidate_rows=len(index_rows),
-        validated_rows=0,
-        skipped_rows=len(index_rows),
+        validated_rows=len(index_rows) if not index_bad_dates else 0,
+        written_rows=len(index_rows) if write_execution == "executed" and not index_bad_dates else 0,
+        skipped_rows=0 if index_rows and not index_bad_dates else len(index_rows),
         coverage=_coverage(index_rows if not index_bad_dates else []),
         pollution_guard="passed" if index_rows and not index_bad_dates else "blocked",
-        status="skipped",
+        read_after_write=read_after_write,
+        status=(
+            "executed"
+            if write_execution == "executed" and index_rows and not index_bad_dates
+            else "ready"
+            if index_rows and not index_bad_dates
+            else "blocked"
+        ),
         blocked_reasons=index_reasons,
     )
 
@@ -619,15 +791,66 @@ def build_market_theme_history_backfill_report(
             "support_streak_days": trend.get("support_streak_days", 0),
         },
         "blocked_reasons": blocked_reasons,
+        "source_gaps": list(payloads.get("source_gaps") or []),
     }
+
+
+def _dedupe_by_key(rows, key_fields):
+    deduped = {}
+    for row in rows or []:
+        deduped[tuple(row.get(field) for field in key_fields)] = row
+    return list(deduped.values())
+
+
+def _delete_existing_business_keys(client, table, rows, key_fields):
+    for row in _dedupe_by_key(rows, key_fields):
+        query = client.table(table).delete()
+        for field in key_fields:
+            value = row.get(field)
+            query = query.is_(field, "null") if value is None else query.eq(field, value)
+        query.execute()
+
+
+def _insert_market_theme_index_rows(rows, client):
+    return client.table("market_theme_index_daily_bars").insert(rows).execute()
 
 
 def upsert_source_payloads(client, payloads, start_date=DEFAULT_START_DATE, end_date=DEFAULT_END_DATE):
     confirmed_rows, reason = _validated_confirmed_rows(payloads, start_date, end_date)
     if not confirmed_rows:
         raise ValueError(f"market_theme_confirmed_evidence blocked: {reason or 'missing-source'}")
+    index_rows = list(payloads.get("index_rows") or [])
+    index_bad_dates = _row_dates_outside_range(index_rows, start_date, end_date)
+    if not index_rows or index_bad_dates:
+        raise ValueError(
+            "market_theme_index_daily_bars blocked: missing-source or source date outside requested May range"
+        )
+    confirmed_rows = _dedupe_by_key(
+        confirmed_rows,
+        ("trade_date", "market_index", "sector_theme_key"),
+    )
+    index_rows = _dedupe_by_key(
+        index_rows,
+        ("trade_date", "index_scope", "market_index", "sector_theme_key"),
+    )
+    _delete_existing_business_keys(
+        client,
+        "market_theme_confirmed_evidence",
+        confirmed_rows,
+        ("trade_date", "market_index", "sector_theme_key"),
+    )
+    _delete_existing_business_keys(
+        client,
+        "market_theme_index_daily_bars",
+        index_rows,
+        ("trade_date", "index_scope", "market_index", "sector_theme_key"),
+    )
     upsert_market_theme_confirmed_evidence(confirmed_rows, client)
-    return {"market_theme_confirmed_evidence": len(confirmed_rows)}
+    _insert_market_theme_index_rows(index_rows, client)
+    return {
+        "market_theme_confirmed_evidence": len(confirmed_rows),
+        "market_theme_index_daily_bars": len(index_rows),
+    }
 
 
 def print_summary(report):
@@ -644,6 +867,7 @@ def main(argv=None):
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--write", action="store_true")
     parser.add_argument("--confirm-write", action="store_true")
+    parser.add_argument("--historical-range", action="store_true")
     args = parser.parse_args(argv)
 
     if args.write and not args.confirm_write:
@@ -651,15 +875,24 @@ def main(argv=None):
     if not args.write and not args.dry_run:
         raise SystemExit("Use --dry-run for preview, or --write --confirm-write for DB upsert")
 
-    index_raw = fetch_twse_index_rows()
-    breadth_raw = fetch_twse_breadth_rows()
     profiles_raw = fetch_twse_company_profiles()
-    payloads = build_source_payloads(
-        index_raw,
-        breadth_raw,
-        profiles_raw,
-        trade_date=args.trade_date,
-    )
+    if args.historical_range:
+        payloads = build_historical_source_payloads(
+            fetch_twse_historical_index_rows,
+            fetch_twse_historical_breadth_rows,
+            profiles_raw,
+            args.start_date,
+            args.end_date,
+        )
+    else:
+        index_raw = fetch_twse_index_rows()
+        breadth_raw = fetch_twse_breadth_rows()
+        payloads = build_source_payloads(
+            index_raw,
+            breadth_raw,
+            profiles_raw,
+            trade_date=args.trade_date,
+        )
     report = build_market_theme_history_backfill_report(
         payloads,
         start_date=args.start_date,
@@ -681,6 +914,7 @@ def main(argv=None):
             client=client,
             trade_date=requested_trade_date,
         )
+        correction_audit = build_market_theme_production_correction_audit(client, limit=20000)
         report = build_market_theme_history_backfill_report(
             payloads,
             start_date=args.start_date,
@@ -689,6 +923,7 @@ def main(argv=None):
             written_confirmed_rows=write_counts.get("market_theme_confirmed_evidence", 0),
             read_after_write_result=read_after_write,
         )
+        report["correction_audit"] = correction_audit
     print_summary(report)
     confirmed_table = report["tables"][0]
     if confirmed_table["status"] == "blocked":
