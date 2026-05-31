@@ -1,86 +1,68 @@
 # DISPATCH.md
 
-本文件由 Architect 維護，用來讓獨立對話窗接力。各角色按本文件判斷是否工作。
+新對話先讀 `AGENTS.md`、本文件、`CURRENT_STATE.md`。本文件只保留接力必需資訊。
 
 ## Current Task
 
-- task_id: `risk_patch_20260531_holiday_report_execution_memory_evidence_dates`
-- task_name: `05/31 Holiday Report Execution Memory And Evidence Date Fix`
+- task_id: `next_evidence_chain_development`
+- task_name: `Continue Evidence Chain Development`
 - task_type: `risk_patch`
-- version_level: `patch`
-- qa_level: `L2`
 - owner_status: `requested`
-- architect_status: `completed`
-- pm_status: `completed`
-- tech_status: `completed`
-- qa_status: `通過`
-- commit: `pushed`
+- architect_status: `ready`
+- pm_status: `todo`
+- tech_status: `todo`
+- qa_status: `todo`
+- latest_commit: see `git log -1`
 
 ## Current Result
 
-- 已完成 05/31 假日报文修复候选并通过 QA。
-- 英業達 2356 第二段停利读取 production cross-day execution memory；若 2026-05-29 已卖出 `-112`、`-75`，报文显示已执行不重复，不再输出「本次建議 56 股」或进入明日计划。
-- 若 production source 可读但已有 prior take-profit guard、execution memory 缺失或 sold_shares 不足，现在 fail closed：显示「停利記憶不足」，不输出明确重复卖出股数。
-- market/theme evidence 用户可见来源改为 actual/latest trade date，并显示 holiday report 使用最近交易日 evidence。
-- market/theme trend lookback rows 提高到 240，并显示 lookback_range，避免五月历史被默认 row limit 压成近 2 日。
-- `策略證據 v20.0` 增加 strategy sample 层说明，避免样本 0 被误读为 market/theme production evidence 无效。
-- 使用者可见版本升到 `v20.4.7`。
-- Tech 自检：`tests/test_generator_report.py` 71 passed；`tests/test_market_theme_evidence.py tests/test_cross_day_context.py` 39 passed；`git diff --check` passed。
-- QA 复验：`通過`；补充验证 missing / zero execution memory 不再进入明日计划，正常 `-112/-75` memory 仍显示已执行不重复。
+- 已推送：
+  - `6367d78 fix holiday execution memory report`
+  - `4f19e16 docs mark holiday fix pushed`
+- 05/31 假日报文主 bug 已修：
+  - 英業達 2356 若 production cross-day execution memory 顯示 2026-05-29 已賣 `-112`、`-75`，報文不再輸出「第二段停利，本次建議 56 股」，也不進明日計畫。
+  - 若 production source 可讀但 prior take-profit 的 execution memory 缺失或 `sold_shares <= 0`，報文 fail closed：`停利記憶不足`，不輸出明確賣出股數。
+  - market/theme evidence 顯示 latest/evidence trade date、holiday report 使用最近交易日 evidence、trend `lookback_range`。
+  - `策略證據 v20.0` 已標示為 strategy sample 層，不否定 market/theme production evidence。
+- 驗證：
+  - QA 結論：`通過`。
+  - `PYTHONPATH=. arch -arm64 .venv/bin/python -m pytest -q`：264 passed，153 warnings（第三方 deprecation 類）。
+  - `git diff --check`：passed。
 
 ## Next Action
 
-- 已提交并推送；可以继续下一阶段证据链功能扩张，但不得跳过本轮执行记忆修复的验证结论。
-- 先补 runner gap：auto wrapper 曾把有效 QA `通過` 误判失败；Tech worktree stale diff 曾阻塞新任务，需纳入 runner/worktree hygiene 待办。
+下一個新對話要繼續「證據鏈開發」，不是回頭修 05/31 重複停利。
 
-## Status Values
+建議第一張 PM 任務：
 
-- `todo`: 等待該角色處理。
-- `not_required`: 本輪不需要該角色。
-- `in_progress`: Architect 正在處理。
-- `blocked`: 遇到阻塞。
-- `completed`: 已完成未推送。
-- `pushed`: 已提交並推送。
+```text
+讓 production market/theme evidence 從「已確認背景」進一步成為可讀的策略輔助層：
+1. 不放寬買點、不直接改 BUY/SELL。
+2. 把 market/theme trend、lookback_range、support_streak_days 轉成報文中清楚的題材/市場輔助說明。
+3. 明確區分：市場/題材 evidence、分類回測 strategy sample、個股買點/風控。
+4. 手機閱讀時不得再讓使用者以為 evidence confirmed 等於可以追高。
+```
 
-## Fixed Startup Commands
+## Fixed Commands
 
 Owner 對 Architect：
 
 ```text
-你是 Architect / 總控，不是 PM、Tech、QA。先讀 AGENTS.md 和 DISPATCH.md；產品 bug / 顯示 bug / 策略 bug / feature request 先分派 PM，不直接寫 TASK.md、不搜尋或修改產品代碼。Owner 說「開始、繼續、處理、修復、檢查、清理、直接來」只代表啟動流程；只有當前任務明確、限範圍授權，Architect 才可代 PM / Tech / QA。
+你是 Architect / 總控，不是 PM、Tech、QA。先讀 AGENTS.md、DISPATCH.md、CURRENT_STATE.md；產品/策略/報文 feature 先分派 PM，不直接寫產品代碼。
 ```
 
-Architect CAO 入口：
+Architect 入口：
 
 ```text
-研究：tools/cao_agent/run_architect_task.sh research "<研究問題>"
-規劃：tools/cao_agent/run_architect_task.sh plan "<技術規劃問題>"
-自動開發：tools/cao_agent/run_architect_task.sh auto "<Owner 任務>"
-
-CAO 服務確認：tools/cao_agent/ensure_cao_services.sh
-分配或回覆 CAO 前端地址前，先確認 http://127.0.0.1:9889/ 與 http://127.0.0.1:5173/ 已啟動。
+tools/cao_agent/run_architect_task.sh research "<研究問題>"
+tools/cao_agent/run_architect_task.sh plan "<技術規劃問題>"
+tools/cao_agent/run_architect_task.sh auto "<Owner 任務>"
 ```
 
-Owner 對 PM：
+CAO 服務：
 
 ```text
-讀 AGENTS.md、DISPATCH.md、CURRENT_STATE.md、RESEARCH.md。若 pm_status 是 todo 或 Architect 指定 PM，撰寫 # TASK:，不修改代碼。
-```
-
-Owner 對 Tech：
-
-```text
-讀 AGENTS.md、DISPATCH.md、CURRENT_STATE.md、TASK.md。若 tech_status 是 todo 且 TASK.md ready，依 TASK.md 實作並撰寫 # CHANGELOG:；缺直接消費者、驗收條件或輸出契約則 blocked。
-```
-
-Owner 對 QA：
-
-```text
-讀 AGENTS.md、DISPATCH.md、CURRENT_STATE.md、TASK.md、CHANGELOG.md。若 qa_status 是 todo 且 Tech 已交付，按 qa_level 驗證並撰寫 # QA_REPORT:；不能只重跑 Tech 測試。
-```
-
-Owner 回到 Architect：
-
-```text
-讀 DISPATCH.md、TASK.md、CHANGELOG.md、QA_REPORT.md，更新 CURRENT_STATE.md 和 CLEANUP_PLAN.md。
+tools/cao_agent/ensure_cao_services.sh
+CAO API: http://127.0.0.1:9889/
+CAO UI:  http://127.0.0.1:5173/
 ```
