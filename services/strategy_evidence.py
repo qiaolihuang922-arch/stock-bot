@@ -521,7 +521,10 @@ def build_audit_rows(feature_rows):
 
 
 def format_strategy_evidence_summary(report=None, audits=None, error=None):
-    lines = ["📊 策略證據 v20.0"]
+    lines = [
+        "📊 策略證據 v20.0",
+        "說明：以下為 strategy sample 層，不影響 market/theme production confirmed evidence。",
+    ]
     if error:
         lines.append(format_strategy_evidence_error(error))
         return "\n".join(lines)

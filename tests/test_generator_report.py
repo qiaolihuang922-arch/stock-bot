@@ -68,7 +68,7 @@ class GeneratorReportTest(unittest.TestCase):
         summary = messages[-1]
         detail = messages[0]
         self.assertIsNone(reply_markup)
-        self.assertIn("｜v20.4.6】", summary)
+        self.assertIn("｜v20.4.7】", summary)
         self.assertIn("⚠ 持倉來源缺失：missing-source，持倉 / 今日交易狀態不可信", summary)
         self.assertIn("新倉：無有效進場", summary)
         self.assertIn("證據：production 來源不足，不作確認。", summary)
@@ -1145,7 +1145,7 @@ class GeneratorReportTest(unittest.TestCase):
                 datetime(2026, 5, 26),
             )
 
-        self.assertIn("v20.4.6", messages[-1])
+        self.assertIn("v20.4.7", messages[-1])
         self.assertIn("📡 資料：即時價 realtime｜日線 yahoo", messages[-1])
         self.assertIn("🧭 今日結論：R3 進攻偏熱；交易執行：無新增下單；持倉風控檢查 5 檔；未持倉 4 檔可準備、2 檔僅追蹤", messages[-1])
         self.assertIn("🧭 原因：強勢股多過熱，RR不足，不追高", messages[-1])
@@ -1618,7 +1618,7 @@ class GeneratorReportTest(unittest.TestCase):
 
         summary = messages[-1]
         unheld = messages[1]
-        self.assertIn("【05/29 盤中｜v20.4.6】", summary)
+        self.assertIn("【05/29 盤中｜v20.4.7】", summary)
         self.assertIn("追蹤最強：\n- 旺宏 修復中｜連續觀察 4 天，不可買，待觸發", summary)
         self.assertIn("可買 0｜可準備 1（不可買）｜僅追蹤 0｜淘汰 0", summary)
         self.assertIn("【旺宏 2337】👀 可準備", unheld)
@@ -1846,7 +1846,7 @@ class GeneratorReportTest(unittest.TestCase):
         )
 
         summary = messages[-1]
-        self.assertIn("【05/28 盤後｜v20.4.6】", summary)
+        self.assertIn("【05/28 盤後｜v20.4.7】", summary)
         self.assertIn("明日計畫 1\n1. 技嘉｜待觸發加碼10", summary)
         self.assertIn("持倉風控檢查\n1. 技嘉｜風控：守警戒線，不追價", summary)
         self.assertLess(summary.index("持倉風控檢查"), summary.index("明日計畫 1"))
@@ -1890,7 +1890,7 @@ class GeneratorReportTest(unittest.TestCase):
         )
 
         summary = messages[-1]
-        self.assertIn("【05/28 盤後｜v20.4.6】", summary)
+        self.assertIn("【05/28 盤後｜v20.4.7】", summary)
         self.assertLess(summary.index("持倉風控檢查"), summary.index("明日計畫 1"))
         self.assertIn("智原｜", summary)
         self.assertIn("緯創｜", summary)
@@ -2110,7 +2110,7 @@ class GeneratorReportTest(unittest.TestCase):
             datetime(2026, 5, 27),
         )
 
-        self.assertIn("v20.4.6", messages[-1])
+        self.assertIn("v20.4.7", messages[-1])
         self.assertEqual(payload["holding_decision"]["level"], "POST_PROFIT_WATCH")
         self.assertIn("【智原 3035】📌 停利後觀察", card)
         self.assertIn("決策：停利後觀察，暫不加碼", card)
@@ -2146,7 +2146,7 @@ class GeneratorReportTest(unittest.TestCase):
         card = messages[0]
         summary = messages[-1]
 
-        self.assertIn("【05/29 盤中｜v20.4.6】", summary)
+        self.assertIn("【05/29 盤中｜v20.4.7】", summary)
         self.assertEqual(payload["holding_decision"]["level"], "POST_PROFIT_WATCH")
         self.assertIn("【英業達 2356】📌 停利後觀察", card)
         self.assertIn("倉位：188股", card)
@@ -2228,7 +2228,7 @@ class GeneratorReportTest(unittest.TestCase):
         executed_context = "今日已賣 75 股｜剩餘 225 股｜第二段已執行"
 
         self.assertEqual(generator.position_summary_action("英業達", payload), "第二段停利後觀察")
-        self.assertIn("【05/29 盤中｜v20.4.6】", summary)
+        self.assertIn("【05/29 盤中｜v20.4.7】", summary)
         self.assertIn("【英業達 2356】📌 第二段停利後觀察", card)
         self.assertIn("今日 賣 75股", card)
         self.assertIn(f"決策：第二段停利後觀察，{executed_context}", card)
@@ -2239,6 +2239,138 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("本次建議 56 股", summary + card)
         self.assertNotIn("英業達｜+30.00%｜第二段停利｜", summary)
         self.assertNotIn("英業達｜+30.00%｜停利｜保留核心倉", summary)
+
+    def test_holiday_second_take_profit_uses_latest_trading_day_execution_memory(self):
+        payload = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 130],
+            {"shares": 225, "avg_price": 100, "realized_profit_taken_ratio": 0.5},
+            price=130,
+            change=5.2,
+        )
+        payload["stock_code"] = "2356"
+        payload["holding_decision"] = {
+            "action": "停利 25%",
+            "level": "TAKE_PROFIT_25",
+            "shares": 56,
+            "note": "過熱延伸再次達停利條件",
+            "warning_price": 123,
+            "hard_stop_price": 118,
+            "allow_add": False,
+        }
+        payload["cross_day_context"] = {
+            "source_status": "ready",
+            "source_of_truth": ["position_events"],
+            "previous_action": "take_profit",
+            "previous_action_date": "2026-05-29",
+            "dedupe_guard": "prior_take_profit_completed",
+            "execution_memory": {
+                "source": "position_events",
+                "latest_trade_date": "2026-05-29",
+                "sell_deltas": [-112, -75],
+                "sold_shares": 187,
+                "labels": ["停利 25%"],
+            },
+        }
+
+        with patch.object(
+            generator,
+            "load_confirmed_market_theme_evidence",
+            return_value={"status": "missing-source", "confirmed": False, "reason": "test", "rows": []},
+        ):
+            messages = generator.formatTelegramMessages(
+                {"英業達": payload},
+                "FULL DETAIL",
+                None,
+                None,
+                "🟡 局部機會",
+                datetime(2026, 5, 31),
+                report_phase="假日",
+            )
+
+        card = messages[0]
+        summary = messages[-1]
+        context = (
+            "production latest_trade_date=2026-05-29｜已賣出 -112、-75"
+            "｜realized_profit_taken_ratio=0.5｜剩餘 225 股｜第二段已執行"
+        )
+
+        self.assertEqual(generator.position_summary_action("英業達", payload), "第二段停利後觀察")
+        self.assertIn("【05/31 假日｜v20.4.7】", summary)
+        self.assertIn("【英業達 2356】📌 第二段停利後觀察", card)
+        self.assertIn("今日 最近交易日賣 187股", card)
+        self.assertIn(context, card)
+        self.assertIn(f"英業達｜已執行｜{context}", summary)
+        self.assertIn(f"1. 英業達｜已執行｜{context}", summary)
+        self.assertNotIn("第二段停利 本次建議 56 股", summary + card)
+        self.assertNotIn("本次建議 56 股", summary + card)
+        self.assertNotIn("英業達｜明日風控｜第二段停利", summary)
+        self.assertNotIn("英業達｜+30.00%｜第二段停利｜", summary)
+
+    def test_holiday_second_take_profit_fails_closed_when_execution_memory_missing(self):
+        memory_cases = [
+            None,
+            {
+                "source": "position_events",
+                "latest_trade_date": "2026-05-29",
+                "sell_deltas": [],
+                "sold_shares": 0,
+                "labels": ["停利 25%"],
+            },
+        ]
+
+        for execution_memory in memory_cases:
+            with self.subTest(execution_memory=execution_memory):
+                payload = render_payload(
+                    [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 130],
+                    {"shares": 225, "avg_price": 100, "realized_profit_taken_ratio": 0.5},
+                    price=130,
+                    change=5.2,
+                )
+                payload["stock_code"] = "2356"
+                payload["holding_decision"] = {
+                    "action": "停利 25%",
+                    "level": "TAKE_PROFIT_25",
+                    "shares": 56,
+                    "note": "過熱延伸再次達停利條件",
+                    "warning_price": 123,
+                    "hard_stop_price": 118,
+                    "allow_add": False,
+                }
+                payload["cross_day_context"] = {
+                    "source_status": "ready",
+                    "source_of_truth": ["position_events"],
+                    "previous_action": "take_profit",
+                    "previous_action_date": "2026-05-29",
+                    "dedupe_guard": "prior_take_profit_completed",
+                    "execution_memory": execution_memory,
+                }
+
+                with patch.object(
+                    generator,
+                    "load_confirmed_market_theme_evidence",
+                    return_value={"status": "missing-source", "confirmed": False, "reason": "test", "rows": []},
+                ):
+                    messages = generator.formatTelegramMessages(
+                        {"英業達": payload},
+                        "FULL DETAIL",
+                        None,
+                        None,
+                        "🟡 局部機會",
+                        datetime(2026, 5, 31),
+                        report_phase="假日",
+                    )
+
+                card = messages[0]
+                summary = messages[-1]
+                rendered = summary + card
+
+                self.assertEqual(generator.position_summary_action("英業達", payload), "停利記憶不足")
+                self.assertIn("停利記憶不足", rendered)
+                self.assertIn("execution memory insufficient-data｜不輸出重複停利股數", rendered)
+                self.assertNotIn("第二段停利 本次建議 56 股", rendered)
+                self.assertNotIn("本次建議 56 股", rendered)
+                self.assertNotIn("英業達｜明日風控｜第二段停利", summary)
+                self.assertNotIn("明日風控｜第二段停利", summary)
 
     def test_v20_2_3_partial_same_day_second_take_profit_uses_local_execution_data(self):
         payload = render_payload(
@@ -2347,7 +2479,7 @@ class GeneratorReportTest(unittest.TestCase):
         position = messages[0]
         unheld = messages[1]
 
-        self.assertIn("【05/28 盤中｜v20.4.6】", summary)
+        self.assertIn("【05/28 盤中｜v20.4.7】", summary)
         self.assertIn("✅ 今日盤中交易執行", summary)
         self.assertNotIn("明日執行", summary)
         self.assertIn("交易執行 1 項；持倉風控檢查 1 檔；已執行 1 項不重複", summary)
@@ -2443,7 +2575,7 @@ class GeneratorReportTest(unittest.TestCase):
         position = messages[0]
         unheld = messages[1]
 
-        self.assertIn("【05/28 盤中｜v20.4.6】", summary)
+        self.assertIn("【05/28 盤中｜v20.4.7】", summary)
         self.assertIn("🧭 今日結論：", summary)
         self.assertIn("交易執行：無新增下單", summary)
         self.assertIn("✅ 今日盤中交易執行\n無新增下單", summary)
@@ -2573,7 +2705,7 @@ class GeneratorReportTest(unittest.TestCase):
         position = messages[0]
         unheld = messages[1]
 
-        self.assertIn("【05/28 盤中｜v20.4.6】", summary)
+        self.assertIn("【05/28 盤中｜v20.4.7】", summary)
         self.assertIn("證據：production 來源不足，不作確認。", summary)
         self.assertIn("詳情：runtime 觀察僅供診斷，非確認來源。", summary)
         self.assertIn("🧭 主線：市場偏多但買點未成立。", summary)
@@ -2774,7 +2906,7 @@ class GeneratorReportTest(unittest.TestCase):
         summary = messages[-1]
         unheld = messages[1]
 
-        self.assertIn("【05/29 盤中｜v20.4.6】", summary)
+        self.assertIn("【05/29 盤中｜v20.4.7】", summary)
         self.assertIn("🧭 今日結論：R3 進攻偏熱；交易執行：無新增下單；未持倉 3 檔可準備、1 檔僅追蹤", summary)
         self.assertIn("證據：production 來源不足，不作確認。", summary)
         self.assertIn("詳情：runtime 觀察僅供診斷，非確認來源。", summary)
@@ -2865,7 +2997,7 @@ class GeneratorReportTest(unittest.TestCase):
         summary = messages[-1]
         unheld = messages[1]
 
-        self.assertIn("【05/29 盤中｜v20.4.6】", summary)
+        self.assertIn("【05/29 盤中｜v20.4.7】", summary)
         self.assertIn("🧭 今日結論：R3 進攻偏熱；交易執行：無新增下單；未持倉 6 檔可準備、1 檔僅追蹤", summary)
         self.assertIn(
             "強勢準備：\n"
@@ -2961,7 +3093,7 @@ class GeneratorReportTest(unittest.TestCase):
 
         summary = messages[-1]
 
-        self.assertIn("【05/29 盤後｜v20.4.6】", summary)
+        self.assertIn("【05/29 盤後｜v20.4.7】", summary)
         self.assertIn("今日交易\n新增交易建議：無", summary)
         self.assertIn("已執行（不重複下單）", summary)
         self.assertIn("英業達｜已執行｜今日已執行停利 187 股", summary)
@@ -3009,7 +3141,7 @@ class GeneratorReportTest(unittest.TestCase):
 
         summary = messages[-1]
 
-        self.assertIn("【05/28 盤中｜v20.4.6】", summary)
+        self.assertIn("【05/28 盤中｜v20.4.7】", summary)
         self.assertIn("🧭 主線：市場偏多但買點未成立。", summary)
         self.assertIn("🧭 新倉：無有效進場。", summary)
         self.assertIn("買點未成立", summary)
@@ -3086,7 +3218,7 @@ class GeneratorReportTest(unittest.TestCase):
         unheld = messages[1]
 
         self.assertEqual(phase_mock.call_count, 1)
-        self.assertIn("【05/28 盤中｜v20.4.6】", summary)
+        self.assertIn("【05/28 盤中｜v20.4.7】", summary)
         self.assertIn("✅ 今日盤中交易執行", summary)
         self.assertIn("光寶科｜可買｜分批，不追價", summary)
         self.assertIn("【光寶科 2301】🟢 可買｜10%倉｜買點成立", unheld)
@@ -3125,7 +3257,7 @@ class GeneratorReportTest(unittest.TestCase):
         summary = messages[-1]
         unheld = messages[1]
 
-        self.assertIn("【05/28 盤後｜v20.4.6】", summary)
+        self.assertIn("【05/28 盤後｜v20.4.7】", summary)
         self.assertIn("今日交易\n新增交易建議：無", summary)
         self.assertIn("明日計畫 1", summary)
         self.assertIn("光寶科｜明日追蹤｜開盤後確認，不追價", summary)
@@ -3161,7 +3293,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("FULL DETAIL", messages[0])
         self.assertIn("【持倉標的】", messages[1])
         self.assertIn("【未持倉標的】", messages[2])
-        self.assertIn("｜v20.4.6】", messages[-1])
+        self.assertIn("｜v20.4.7】", messages[-1])
 
 
 if __name__ == "__main__":

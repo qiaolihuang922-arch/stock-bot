@@ -93,7 +93,7 @@ def _fetch_rows(client, table, fields, limit):
 def _fetch_event_rows(client, limit):
     return (
         client.table("position_events")
-        .select("stock_code,stock_name,event_date,action_label,shares_delta,created_at")
+        .select("stock_code,stock_name,event_date,action_label,shares_delta,shares_before,shares_after,created_at")
         .order("event_date", desc=True)
         .limit(limit)
         .execute()
@@ -209,6 +209,38 @@ def _latest_event_action(rows, today=None):
     return action, date, guard
 
 
+def _latest_execution_memory(rows):
+    if not rows:
+        return None
+    latest_date = rows[0].get("event_date")
+    same_date_rows = [
+        row for row in rows
+        if str(row.get("event_date") or "") == str(latest_date or "")
+    ]
+    sell_deltas = []
+    labels = []
+    for row in same_date_rows:
+        try:
+            delta = int(row.get("shares_delta") or 0)
+        except (TypeError, ValueError):
+            delta = 0
+        action = _action_from_text(row.get("action_label"))
+        if delta < 0 or action in {"take_profit", "reduce", "stop_loss"}:
+            sell_deltas.append(delta if delta < 0 else -abs(delta))
+        label = row.get("action_label")
+        if label and label not in labels:
+            labels.append(label)
+    if not sell_deltas:
+        return None
+    return {
+        "source": "position_events",
+        "latest_trade_date": latest_date,
+        "sell_deltas": sell_deltas,
+        "sold_shares": sum(abs(value) for value in sell_deltas),
+        "labels": labels,
+    }
+
+
 def _today_event_guard(today_events):
     today_events = today_events or {}
     if today_events.get("bought_shares", 0) > 0:
@@ -301,6 +333,7 @@ def build_cross_day_contexts(results_map, client=None, today_position_events=Non
         if not observe_days and _is_observe_state(previous_state):
             observe_days = 1
         previous_action, previous_action_date, dedupe_guard = _latest_event_action(event_rows, today=today)
+        execution_memory = _latest_execution_memory(event_rows)
         today_guard, today_action = _today_event_guard((today_position_events or {}).get(name, {}))
         weight, reasons = 0, []
         if repair_status in ["repaired", "improving"] and weight < 1:
@@ -333,6 +366,7 @@ def build_cross_day_contexts(results_map, client=None, today_position_events=Non
             weight = 0
             reasons = []
             dedupe_guard = "unknown"
+            execution_memory = None
         contexts[name] = {
             **empty_cross_day_context(symbol, status=status, sources=context_sources),
             "source_status": status,
@@ -346,6 +380,7 @@ def build_cross_day_contexts(results_map, client=None, today_position_events=Non
             "historical_evidence_weight": max(-2, min(2, weight)),
             "weight_reason": reasons[:3],
             "dedupe_guard": dedupe_guard,
+            "execution_memory": execution_memory,
             "same_run_guard": today_guard,
             "same_run_action": today_action,
             "same_run_action_date": today if today_guard else None,

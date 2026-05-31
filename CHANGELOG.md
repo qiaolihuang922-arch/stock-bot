@@ -1,82 +1,91 @@
-# CHANGELOG: market/theme 2026-05 historical fetch
+# CHANGELOG: 05/31 holiday report execution memory fail-closed fix
 
-## 任務尺寸與風險
+  ## 任務尺寸與風險
 
-- 任務類型：risk_patch。
-- 原因：涉及 production DB market/theme 歷史資料寫入、confirmed evidence duplicate business-key 清理、read-after-write audit。
+  - 任務尺寸判斷：risk_patch。
+  - 原因：涉及持倉停利去重、使用者可見 Telegram 報文主行動、明日計畫與 production cross-day execution memory fail-closed 語意。
+  - 本輪只修 QA 阻塞點，保留既有候選 diff 中已合格的 execution memory、evidence 日期、trend lookback、strategy sample 分層修正。
 
-## 修改內容
+  ## 修改內容
 
-- 擴充 `scripts/backfill_market_theme_sources.py`：
-  - 新增 `--historical-range`，可按日期範圍抓 TWSE historical MI_INDEX。
-  - 修正 TWSE 歷史來源為 `https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?response=json&date=YYYYMMDD&type=IND|MS`。
-  - 支援 IND 欄位 `漲跌百分比(%)`，並保留 `漲跌百分比` 相容。
-  - 支援 MS table `漲跌證券數合計`，由 `股票` 欄位解析 `up/down/flat/limit_up/limit_down`。
-  - `market_theme_index_daily_bars` 與 `market_theme_confirmed_evidence` 一起由同一 repo script 寫入。
-  - 寫入前依 correction audit business key 刪除既有同 key rows，再寫入本次唯一版本，避免不同 `as_of` 批次重複：
-    - confirmed evidence：`trade_date, market_index, sector_theme_key`
-    - index bars：`trade_date, index_scope, market_index, sector_theme_key`
-  - source gaps fail closed：任一交易日缺 official index 或 breadth row 時不寫入。
-- 擴充 `tests/test_market_theme_source_backfill.py`：
-  - 覆蓋 afterTrading endpoint 與參數。
-  - 覆蓋 IND `漲跌百分比(%)`。
-  - 覆蓋 MS `股票` 欄位 breadth parsing。
-  - 覆蓋 source gap 不進 write path。
-  - 覆蓋 duplicate confirmed rows 依 audit business key 收斂。
+  - 修正 core/generator.py：
+      - 當 second-stage take-profit 且 cross_day_context.source_status=ready，同時 previous_action=take_profit 或 dedupe_guard=prior_take_profit_completed/same_day_executed，但 execution_memory 缺失或 sold_shares<=0 時，
+        狀態改為 blocked。
+      - blocked 文案維持 fail closed：停利記憶不足 / execution memory insufficient-data｜不輸出重複停利股數。
+      - blocked 狀態不落回「第二段停利」本次建議股數，也不列入 pending 明日計畫。
+      - 保留已存在的正向路徑：production execution memory 有 sold_shares>0 時顯示 latest trade date、sell deltas、remaining shares，並標示第二段已執行。
+      - 報文版本維持候選 diff 的 v20.4.7。
+  - 擴充 tests/test_generator_report.py：
+      - 新增 QA 指定負面案例：2356、2026-05-31 假日、previous_action=take_profit、dedupe_guard=prior_take_profit_completed、execution_memory=None。
+      - 同測試覆蓋 execution_memory.sold_shares=0。
+      - 斷言 action 為 停利記憶不足，summary/card 不含「本次建議 56 股」，且 summary 不含「明日風控｜第二段停利」。
+  - 保留既有候選 diff：
+      - services/cross_day_context.py 的 execution memory 組裝。
+      - core/market_theme_evidence.py、services/market_theme_evidence_store.py 的 evidence date / lookback 展示。
+      - services/strategy_evidence.py 的 strategy sample 分層文案。
+      - tests/test_market_theme_evidence.py 相關覆蓋。
 
-## 修改檔案
+  ## 修改檔案
 
-- `scripts/backfill_market_theme_sources.py`
-- `tests/test_market_theme_source_backfill.py`
+  - core/generator.py
+  - tests/test_generator_report.py
+  - services/cross_day_context.py
+  - core/market_theme_evidence.py
+  - services/market_theme_evidence_store.py
+  - services/strategy_evidence.py
+  - tests/test_market_theme_evidence.py
 
-## 契約影響
+  ## 最小改動策略
 
-- CLI 新增 `--historical-range`。
-- `scripts/backfill_market_theme_sources.py --write --confirm-write --historical-range` 會處理兩張 production 表：
-  - `market_theme_confirmed_evidence`
-  - `market_theme_index_daily_bars`
-- duplicate 處理規則改為 repo script 內按 audit business key replace，不再保留同 key 多個 `as_of` 批次。
-- 無 DB schema、RLS、grant、policy、index、constraint 變更。
+  - 只在既有 second_take_profit_execution_state() 判斷中補足「source ready 但停利 execution memory 欄位不足」的 blocked 分支。
+  - 未改策略閾值、買點、DB schema、production write path、live Telegram delivery、報文分組順序。
+  - 未重構持倉狀態機；只同步既有直接呼叫方對 blocked state 的文案與排序。
 
-## 直接消費者同步
+  ## 契約影響
 
-- `scripts/smoke_market_theme_evidence_readonly.py --correction-audit-json --limit 20000` 的 duplicate business-key 口徑未改，已用作 read-after-write audit。
-- `sector_theme_members` 仍只作 mapping source，audit 結論維持 `mapping_only`，不計入 daily history。
-- 策略後續可透過 production `market_theme_confirmed_evidence` 歷史取得 market/theme evidence trend，不再只能看到 05/29 latest-only。
+  - 使用者可見報文版本：v20.4.7。
+  - second_take_profit_execution_state() 內部 helper 回傳沿用既有 dict shape，候選 diff 已加入 execution_memory、realized_profit_taken_ratio 供 formatter 使用。
+  - message list / 報文分組順序未變。
+  - payload / DB write / CLI 輸出未變。
+  - production source 缺失、錯誤、資料不足，或 source ready 但 prior take-profit execution memory 欄位不足時，皆 fail closed，不輸出明確重複賣出股數。
+  - 無 DB schema、RLS、grant、policy、role、index、constraint 變更。
+  - 無 live write、無 live Telegram、無正式 backfill。
 
-## 未影響模組
+  ## 直接消費者同步
 
-- Telegram / UI 報文。
-- strategy buy/sell scoring / ranking。
-- `daily_signal_snapshot` history semantics。
-- DB schema / index / constraint / RLS / grant / policy。
-- live Telegram delivery。
+  - Summary：2356 欄位不足時顯示 blocked 語意，不顯示「本次建議 56 股」。
+  - 持倉卡片：主行動同步為「停利記憶不足」。
+  - 今日交易 / 已執行區塊：只有 production execution memory 足夠時才顯示已執行。
+  - 持倉風控：blocked 顯示 fail-closed 語意。
+  - 明日計畫：blocked 不進 pending plan，不列出「明日風控｜第二段停利」。
+  - 索引 / detail formatter：沿用同一 position_summary_action() 與 second_take_profit_context_text()，避免跨區塊語意分裂。
+  - market/theme evidence 與 strategy evidence 直接消費者保留候選 diff 的日期、lookback、sample 分層同步。
 
-## 已跑自檢與 production 寫入
+  ## 未影響模組
 
-- `PYTHONPATH=. arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_source_backfill.py -q`
-  - 結果：14 passed。
-- `git diff --check`
-  - 結果：通過。
-- dry-run：
-  - `PYTHONPATH=. arch -arm64 .venv/bin/python scripts/backfill_market_theme_sources.py --historical-range --start-date 2026-05-04 --end-date 2026-05-29 --dry-run`
-  - 結果：ready，`source_gaps=[]`。
-  - candidate rows：`market_theme_confirmed_evidence=180`、`market_theme_index_daily_bars=200`。
-  - coverage：`2026-05-04` to `2026-05-29`，20 trade dates。
-- production write：
-  - `PYTHONPATH=. arch -arm64 .venv/bin/python scripts/backfill_market_theme_sources.py --historical-range --start-date 2026-05-04 --end-date 2026-05-29 --write --confirm-write`
-  - 結果：executed。
-  - written rows：`market_theme_confirmed_evidence=180`、`market_theme_index_daily_bars=200`。
-  - schema_change：false；live_telegram：false。
-- independent read-only audit：
-  - `PYTHONPATH=. arch -arm64 .venv/bin/python scripts/smoke_market_theme_evidence_readonly.py --correction-audit-json --limit 20000`
-  - 結果：`status=pass`，`next_action=["read_only_audit_complete"]`。
-  - `market_theme_confirmed_evidence`：180 rows，20 trade dates，date range `2026-05-04` to `2026-05-29`，`latest_source_only=false`，duplicate groups 0。
-  - `market_theme_index_daily_bars`：200 rows，20 trade dates，date range `2026-05-04` to `2026-05-29`，`latest_source_only=false`，duplicate groups 0。
-  - `sector_theme_members`：12 active rows，`mapping_only`，duplicate groups 0。
+  - 策略核心買賣分數、進出場閾值、持倉數量計算公式。
+  - DB schema / production write path / RLS / grant / policy。
+  - live Telegram delivery。
+  - full replay / full backfill。
+  - 未持倉買點放寬或新增推薦。
 
-## 殘留風險
+  ## 已跑自檢命令
 
-- TWSE historical endpoint 偶發回應不完整或連線錯誤；script 已 fail closed，但後續若要自動每日補資料，應加重試與 source gap 明細輸出。
-- 本輪只補 2026-05-04 到 2026-05-29；更多月份 backfill 另開任務。
-- 尚未把 market/theme evidence trend 擴展成新的策略加權規則；本輪只完成資料抓取、寫入與 audit 通過。
+  - PYTHONPATH=. arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py -q
+      - 結果：71 passed。
+  - PYTHONPATH=. arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py tests/test_cross_day_context.py -q
+      - 結果：39 passed。
+  - git diff --check
+      - 結果：通過。
+
+  ## 殘留風險
+
+  - 未跑 full pytest；本輪依 risk_patch/L2 只跑 touched paths 與直接契約測試。
+  - 未連 production DB、未 live Telegram、未 replay/backfill。
+  - 其他股票若也有 prior action 但 execution memory 欄位不足，會走同一路徑 fail closed；未逐檔做資料驗證。
+  - TASK.md 仍有重複拼接痕跡，本輪未改任務文件。
+
+  ## 旁支待辦
+
+  - 若後續要覆蓋更多 historical execution memory 邊界，可另開任務補 production-like fixture matrix。
+  - 若要驗證 05/31 完整手機報文實例，交由 QA 依 TASK.md、本 CHANGELOG、git diff 與局部源碼做 L2 驗收；Tech 不宣告 QA 通過。

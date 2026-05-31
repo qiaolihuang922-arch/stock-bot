@@ -684,12 +684,36 @@ def format_market_theme_summary_lines(evidence):
         lines.append("限制：內部題材證據未達確認，仍依量價 / 風控判斷")
 
     source_labels = []
+    source_trade_dates = []
+    requested_trade_dates = []
     for source in evidence.get("sources") or evidence.get("source_family_details") or []:
         if not isinstance(source, dict) or source.get("source_type") == REPORT_DERIVED_FAMILY:
             continue
         source_name = source.get("source_type") or source.get("source_family") or "unknown"
         freshness = source.get("freshness_reason") or source.get("freshness") or "unavailable"
-        source_labels.append(f"{source_name} {freshness}")
+        trade_date = source.get("trade_date")
+        requested_trade_date = source.get("requested_trade_date")
+        if trade_date and trade_date not in source_trade_dates:
+            source_trade_dates.append(trade_date)
+        if requested_trade_date and requested_trade_date not in requested_trade_dates:
+            requested_trade_dates.append(requested_trade_date)
+        if trade_date:
+            source_labels.append(f"{source_name} latest_trade_date={trade_date} ({freshness})")
+        else:
+            source_labels.append(f"{source_name} {freshness}")
+
+    if source_trade_dates:
+        latest_trade_date = max(str(value) for value in source_trade_dates)
+        previous_dates = sorted(
+            {str(value) for value in source_trade_dates if str(value) != latest_trade_date},
+            reverse=True,
+        )
+        date_parts = [f"latest_trade_date={latest_trade_date}"]
+        if previous_dates:
+            date_parts.append(f"previous_trade_date={previous_dates[0]}")
+        if requested_trade_dates and str(requested_trade_dates[0]) != latest_trade_date:
+            date_parts.append(f"report_date={requested_trade_dates[0]} uses latest trading day evidence")
+        lines.append("證據日期：" + "；".join(date_parts))
 
     if source_labels:
         lines.append(f"來源：{'; '.join(source_labels[:3])}")
@@ -705,6 +729,11 @@ def format_market_theme_summary_lines(evidence):
             "趨勢："
             f"{status_text}｜近{trend.get('observed_days')}個證據日｜"
             f"連續{trend.get('support_streak_days', 0)}日支持"
+            + (
+                f"｜lookback_range={trend.get('lookback_range')}"
+                if trend.get("lookback_range")
+                else ""
+            )
         )
 
     return lines

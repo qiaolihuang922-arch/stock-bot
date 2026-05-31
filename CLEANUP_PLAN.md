@@ -23,6 +23,13 @@
 
 ## Active Watchlist
 
+- `risk_patch_20260531_holiday_report_execution_memory_evidence_dates`
+  - 根因：`execution_memory_source_window_gap` + `delivery_evidence_effect_gap` + `runner_gap`。
+  - 問題：05/31 假日报文已有 market/theme production confirmed，但英業達 2356 仍因只读假日当天 events 而重复显示「第二段停利 本次建議 56 股」；evidence 来源写 same_trade_date，strategy sample 0 与 market/theme evidence 易混淆。
+  - 已完成：PM -> Tech -> QA；Tech 首版被 QA 用「source ready 但 execution_memory 缺 sold_shares」反证阻塞；第二版补 fail-closed 后 QA `通過`。
+  - 已完成修正：production cross-day execution memory 足够时显示已执行不重复；memory 缺失 / sold_shares 不足时显示「停利記憶不足」，不输出重复卖出股数，不进明日计划。
+  - 已完成修正：market/theme evidence 显示 latest/evidence trade date 与 lookback_range；strategy evidence 标示 strategy sample 层。
+  - 後續：本轮提交后继续证据链功能扩张；买点阈值不因 evidence confirmed 自动放宽。
 - `correction-market-theme-prod-coverage-2026-05`
   - 根因：`delivery_evidence_alignment_gap` + `doc_bloat_risk`。
   - 問題：script / integrity check 通過被誤宣告為 production market/theme 五月資料完成；Owner 截圖只證明部分 latest-source rows，且可能有不同 `as_of` 批次。
@@ -35,7 +42,7 @@
   - 禁止：不得用舊版本 snapshot 或 current-version 缺五月 rows 推導錯誤 backfill 需求；不得把 mapping table 當 daily history。
 - CAO QA conclusion parser
   - 根因：`runner_gap`。
-  - 問題：auto wrapper 曾把有效 `通過` / `conditional pass` 誤判 failed。
+  - 問題：auto wrapper 曾把有效 `通過` / `conditional pass` 誤判 failed；本轮 `20260531_181618_4086` 的第二份 QA `通過` 需人工吸收。
   - 下一步：parser 只讀 `## QA 結論` 或最終結論段第一個有效詞，並讓 conditional pass 條件可由 Architect 明確標記 satisfied。
 - CAO production-read QA config
   - 根因：`runner_gap`。
@@ -43,7 +50,7 @@
   - 下一步：為 read-only production audit 任務提供安全模式：使用主 repo config 的 read-only key，或由 Architect 產出 audit artifact 讓 QA 反證，不讓 dummy config 覆蓋 production evidence。
 - Worktree / agent context hygiene
   - 根因：`runner_gap` + `doc_bloat`。
-  - 問題：runtime output、過期 `.cao_agent_context` 與舊 worktree 易造成誤讀。
+  - 問題：runtime output、過期 `.cao_agent_context` 與舊 worktree 易造成誤讀；本轮 Tech worktree stale diff 已归档到 `.cao_agent_context/stale_diffs/20260531_tech_write_stale_market_theme_backfill.diff` 后清理。
   - 下一步：流程結束後清理 generated context / outputs，或在新任務啟動時重新生成乾淨 context。
 
 ## Cleanup Boundaries

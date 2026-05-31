@@ -172,7 +172,11 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         )
 
         self.assertIn("證據：production confirmed，市場/題材支持成立。", lines)
-        self.assertIn("趨勢：連續支持｜近3個證據日｜連續3日支持", lines)
+        self.assertIn("證據日期：latest_trade_date=2026-05-29", lines)
+        self.assertIn(
+            "趨勢：連續支持｜近3個證據日｜連續3日支持｜lookback_range=2026-05-27~2026-05-29",
+            lines,
+        )
 
     def test_loader_allows_previous_trade_date_for_holiday_report_date(self):
         client = EvidenceClient([confirmed_row(trade_date="2026-05-29")])
@@ -220,10 +224,34 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         self.assertEqual(trend["status"], "confirmed_trend")
         self.assertEqual(trend["observed_days"], 3)
         self.assertEqual(trend["support_streak_days"], 3)
+        self.assertEqual(trend["lookback_range"], "2026-05-27~2026-05-29")
         self.assertEqual(
             [day["trade_date"] for day in trend["days"]],
             ["2026-05-29", "2026-05-28", "2026-05-27"],
         )
+
+    def test_holiday_summary_shows_actual_evidence_dates_not_same_trade_date_only(self):
+        loaded = load_confirmed_market_theme_evidence(
+            client=EvidenceClient([
+                confirmed_row(trade_date="2026-05-29", sector_theme_key="semiconductor"),
+                confirmed_row(trade_date="2026-05-28", sector_theme_key="computer"),
+                confirmed_row(trade_date="2026-05-27", sector_theme_key="electronics"),
+                confirmed_row(trade_date="2026-05-26", sector_theme_key="ai_server"),
+            ]),
+            trade_date="2026-05-31",
+        )
+
+        lines = format_market_theme_summary_lines(
+            build_market_theme_evidence_provider(market_theme_evidence=loaded)
+        )
+        text = "\n".join(lines)
+
+        self.assertIn("證據日期：latest_trade_date=2026-05-29", text)
+        self.assertIn("report_date=2026-05-31 uses latest trading day evidence", text)
+        self.assertIn("來源：watchlist_breadth latest_trade_date=2026-05-29", text)
+        self.assertIn("趨勢：連續支持｜近4個證據日｜連續4日支持", text)
+        self.assertIn("lookback_range=2026-05-26~2026-05-29", text)
+        self.assertNotIn("來源：watchlist_breadth same_trade_date; sector_index same_trade_date", text)
 
     def test_generator_consumption_check_uses_production_trend_on_fresh_run(self):
         client = MultiTableEvidenceClient({
@@ -365,7 +393,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             "【持倉標的】\n\n【2330】📌 續抱觀察",
             "【未持倉標的】\n\n【2317】👀 等冷卻｜不可買",
             "\n".join([
-                "【05/29 盤中｜v20.4.6】",
+                "【05/29 盤中｜v20.4.7】",
                 "🧭 今日結論：R3 進攻偏熱；交易執行：無新增下單；未持倉 1 檔僅追蹤",
                 "✅ 今日盤中交易執行",
                 "無新增下單",
@@ -385,7 +413,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         self.assertFalse(report["schema_change"])
         self.assertFalse(report["data_write"])
         self.assertFalse(report["live_telegram"])
-        self.assertEqual(report["telegram_header_version"], "v20.4.6")
+        self.assertEqual(report["telegram_header_version"], "v20.4.7")
         self.assertEqual(report["source_integrity"]["production_db_readonly"], "passed")
         self.assertEqual(report["source_integrity"]["may_data_available"], "passed")
         self.assertEqual(
@@ -408,7 +436,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             "【持倉標的】\n\n無持倉",
             "【未持倉標的】\n\n【2317】👀 等冷卻｜不可買",
             "\n".join([
-                "【05/29 盤中｜v20.4.6】",
+                "【05/29 盤中｜v20.4.7】",
                 "🧭 今日結論：新倉：2317 可買",
                 "✅ 今日盤中交易執行",
                 "未持倉漏斗（非執行）：",
@@ -439,7 +467,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             "【持倉標的】\n\n無持倉",
             "【未持倉標的】\n\n【2317】👀 等冷卻｜不可買",
             "\n".join([
-                "【05/29 盤中｜v20.4.6】",
+                "【05/29 盤中｜v20.4.7】",
                 "🧭 今日結論：交易執行：無新增下單；未持倉 1 檔僅追蹤",
                 "✅ 今日盤中交易執行",
                 "未持倉漏斗（非執行）：",
@@ -474,7 +502,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             "【持倉標的】\n\n無持倉",
             "【未持倉標的】\n\n【2317】👀 等冷卻｜不可買",
             "\n".join([
-                "【05/29 盤中｜v20.4.6】",
+                "【05/29 盤中｜v20.4.7】",
                 "🧭 今日結論：交易執行：無新增下單；未持倉 1 檔僅追蹤",
                 "✅ 今日盤中交易執行",
                 "未持倉漏斗（非執行）：",
@@ -888,7 +916,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             )
 
         summary = messages[-1]
-        self.assertIn("【05/28 盤中｜v20.4.6】", summary)
+        self.assertIn("【05/28 盤中｜v20.4.7】", summary)
         self.assertIn("證據：production 來源不足，不作確認。", summary)
         self.assertIn("詳情：runtime 觀察僅供診斷，非確認來源。", summary)
         self.assertIn("🧭 主線：市場偏多但買點未成立。", summary)

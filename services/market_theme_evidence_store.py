@@ -161,7 +161,7 @@ MAY_2026_EXPECTED_TRADE_DATES = (
 )
 MAY_2026_EXPECTED_TRADING_DAYS = 20
 MAX_PREVIOUS_TRADE_DATE_GAP_DAYS = 4
-EVIDENCE_TREND_LOOKBACK_ROWS = 20
+EVIDENCE_TREND_LOOKBACK_ROWS = 240
 
 
 def _config_value(name):
@@ -1458,6 +1458,7 @@ def _provider_sources_from_row(row, requested_trade_date=None):
         "support_level": support_level,
         "evidence_status": row.get("evidence_status"),
         "trade_date": row.get("trade_date"),
+        "requested_trade_date": requested_trade_date,
         "theme": theme_key,
         "theme_label": theme_key,
         "source_of_truth": "production_db",
@@ -1518,10 +1519,6 @@ def _trend_from_rows(rows, requested_trade_date=None):
             isinstance(row, dict)
             and not _missing_fields(row)
             and _confirmed_row(row)
-            and _row_allowed_for_requested_date(
-                row,
-                requested_trade_date=requested_trade_date,
-            )
         )
     ]
     by_date = {}
@@ -1579,6 +1576,13 @@ def _trend_from_rows(rows, requested_trade_date=None):
         "status": status,
         "lookback_rows": len(rows),
         "observed_days": observed_days,
+        "latest_trade_date": days[0]["trade_date"] if days else None,
+        "earliest_trade_date": days[-1]["trade_date"] if days else None,
+        "lookback_range": (
+            f"{days[-1]['trade_date']}~{days[0]['trade_date']}"
+            if days
+            else None
+        ),
         "supporting_days": supporting_days,
         "recent_supporting_days": recent_supporting_days,
         "support_streak_days": support_streak_days,

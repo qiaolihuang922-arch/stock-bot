@@ -57,7 +57,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.6"
+VERSION = "v20.4.7"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -3179,8 +3179,41 @@ def second_take_profit_execution_state(data, decision=None):
     except (TypeError, ValueError):
         realized_ratio = 0
     is_second_stage = is_take_profit and realized_ratio > 0
+    context = cross_day_context(data)
+    execution_memory = context.get("execution_memory") or {}
+    historical_take_profit_completed = (
+        is_second_stage
+        and context.get("source_status") == "ready"
+        and (
+            context.get("dedupe_guard") in ["prior_take_profit_completed", "same_day_executed"]
+            or context.get("previous_action") == "take_profit"
+        )
+        and execution_memory.get("sold_shares", 0) > 0
+    )
+    historical_take_profit_memory_insufficient = (
+        is_second_stage
+        and context.get("source_status") == "ready"
+        and (
+            context.get("dedupe_guard") in ["prior_take_profit_completed", "same_day_executed"]
+            or context.get("previous_action") == "take_profit"
+        )
+        and execution_memory.get("sold_shares", 0) <= 0
+    )
+    execution_memory_blocked = (
+        is_second_stage
+        and (
+            context.get("source_status") in ["source-error", "missing-source", "insufficient-data"]
+            or historical_take_profit_memory_insufficient
+        )
+    )
 
-    if not is_take_profit or sold_shares <= 0:
+    if historical_take_profit_completed:
+        status = "completed"
+        sold_shares = execution_memory.get("sold_shares", 0)
+        source = "cross_day_position_events"
+    elif execution_memory_blocked:
+        status = "blocked"
+    elif not is_take_profit or sold_shares <= 0:
         status = "none"
     elif sold_shares >= suggested_shares:
         status = "completed"
@@ -3195,6 +3228,8 @@ def second_take_profit_execution_state(data, decision=None):
         "remaining_shares": remaining_shares,
         "source": source,
         "is_second_stage": is_second_stage,
+        "execution_memory": execution_memory,
+        "realized_profit_taken_ratio": realized_ratio,
     }
 
 
@@ -3208,11 +3243,24 @@ def second_take_profit_context_text(data, decision=None):
     state = second_take_profit_execution_state(data, decision)
 
     if state["status"] == "completed":
+        if state.get("source") == "cross_day_position_events":
+            memory = state.get("execution_memory") or {}
+            deltas = "、".join(str(value) for value in memory.get("sell_deltas") or [])
+            return (
+                f"production latest_trade_date={memory.get('latest_trade_date')}"
+                f"｜已賣出 {deltas or state['sold_shares']}"
+                f"｜realized_profit_taken_ratio={state.get('realized_profit_taken_ratio')}"
+                f"｜剩餘 {state['remaining_shares']} 股"
+                f"｜第二段已執行"
+            )
         return (
             f"今日已賣 {state['sold_shares']} 股"
             f"｜剩餘 {state['remaining_shares']} 股"
             f"｜第二段已執行"
         )
+
+    if state["status"] == "blocked":
+        return "execution memory insufficient-data｜不輸出重複停利股數"
 
     if state["status"] == "partial":
         return (
@@ -3232,6 +3280,8 @@ def holding_today_trade_text(data, decision=None):
 
     state = second_take_profit_execution_state(data, decision)
     if state["status"] in ["completed", "partial"] and state["sold_shares"] > 0:
+        if state.get("source") == "cross_day_position_events":
+            return f"最近交易日賣 {state['sold_shares']}股"
         return f"賣 {state['sold_shares']}股"
 
     return event_summary_text(data.get("position_events") or {})
@@ -3260,6 +3310,9 @@ def position_summary_action(name, data):
 
     if second_profit_state.get("status") == "partial":
         return "第二段停利剩餘建議"
+
+    if second_profit_state.get("status") == "blocked":
+        return "停利記憶不足"
 
     if second_profit_state.get("is_second_stage"):
         return "第二段停利"
@@ -3429,7 +3482,7 @@ def position_summary_note(name, data):
     if action == "停損":
         return decision.get("note") or "停損優先，避免虧損擴大"
 
-    if action in ["第二段停利", "第二段停利剩餘建議", "第二段停利後觀察"]:
+    if action in ["第二段停利", "第二段停利剩餘建議", "第二段停利後觀察", "停利記憶不足"]:
         return second_take_profit_context_text(data, decision)
 
     if action == "停利":
@@ -3617,7 +3670,7 @@ def holding_tomorrow_trigger(name, data):
     if level == "STOP_100":
         return "清出後等重新買點"
 
-    if action in ["第二段停利", "第二段停利剩餘建議", "第二段停利後觀察"]:
+    if action in ["第二段停利", "第二段停利剩餘建議", "第二段停利後觀察", "停利記憶不足"]:
         return second_take_profit_context_text(data, decision)
 
     duplicate_action = cross_day_duplicate_action(data, decision)
@@ -3682,6 +3735,7 @@ def position_priority_rank(name, data):
         "減碼": 1,
         "第二段停利": 1,
         "第二段停利剩餘建議": 1,
+        "停利記憶不足": 2,
         "停利": 1,
         "新倉風控觀察": 2,
         "風控觀察": 3,
@@ -3741,6 +3795,7 @@ def holding_execution_priority(name, data):
         "減碼": 1,
         "第二段停利": 2,
         "第二段停利剩餘建議": 2,
+        "停利記憶不足": 3,
         "停利": 2,
         "新倉風控觀察": 3,
         "風控觀察": 4,
@@ -3838,6 +3893,7 @@ def holding_execution_item(name, data):
             "核心風控觀察",
             "洗盤警戒",
             "停利後觀察",
+            "停利記憶不足",
         ],
         "line": (
             f"{name}"
@@ -4899,10 +4955,15 @@ def holding_reason_line(name, data):
 
     second_profit_state = second_take_profit_execution_state(data, decision).get("status")
     if second_profit_state == "completed":
+        if second_take_profit_execution_state(data, decision).get("source") == "cross_day_position_events":
+            return "production execution memory 顯示第二段已執行，避免重複賣出"
         return "今日第二段停利已執行，避免重複賣出"
 
     if second_profit_state == "partial":
         return "同日已賣後再次觸發停利，需標明第二段與股數"
+
+    if second_profit_state == "blocked":
+        return "execution memory 不足，fail closed 不輸出停利股數"
 
     if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]:
         if cross_day_duplicate_action(data, decision) == "take_profit":
@@ -4944,6 +5005,9 @@ def holding_next_step_line(name, data):
 
     if action == "第二段停利":
         return "執行本次建議後，剩餘部位回到風控觀察"
+
+    if action == "停利記憶不足":
+        return "先補 production execution memory，再評估是否有新停利條件"
 
     if level in ["REDUCE_25", "REDUCE_50"]:
         if cross_day_duplicate_action(data, decision) == "reduce":
@@ -5037,6 +5101,12 @@ def holding_detail_decision_lines(name, data):
         return (
             f"第二段停利，{second_take_profit_context_text(data, decision)}",
             f"觸發條件：{note or '停利條件再次成立'}"
+        )
+
+    if summary_action == "停利記憶不足":
+        return (
+            "停利記憶不足，暫不輸出賣出股數",
+            "production execution memory 缺失或矛盾，fail closed"
         )
 
     duplicate_action = cross_day_duplicate_action(data, decision)

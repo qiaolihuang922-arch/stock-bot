@@ -4,34 +4,34 @@
 
 ## Current Task
 
-- task_id: `correction-market-theme-prod-coverage-2026-05`
-- task_name: `Market Theme 2026-05 Historical Fetch And Dedupe`
+- task_id: `risk_patch_20260531_holiday_report_execution_memory_evidence_dates`
+- task_name: `05/31 Holiday Report Execution Memory And Evidence Date Fix`
 - task_type: `risk_patch`
-- version_level: `none`
-- qa_level: `L3`
+- version_level: `patch`
+- qa_level: `L2`
 - owner_status: `requested`
 - architect_status: `completed`
 - pm_status: `completed`
 - tech_status: `completed`
 - qa_status: `通過`
-- commit: `pushed`
+- commit: `committed`
 
 ## Current Result
 
-- 已完成 market/theme 2026-05 historical fetch 與 confirmed evidence dedupe。
-- 使用 repo script 寫入 production DB，非手寫普通 DML，無 schema / RLS / grant / policy / index / constraint 變更。
-- 寫入結果：`market_theme_confirmed_evidence` 180 rows，`market_theme_index_daily_bars` 200 rows，日期範圍 `2026-05-04` 到 `2026-05-29`，20 trade dates。
-- 獨立 read-only audit：`status=pass`，`next_action=["read_only_audit_complete"]`。
-- duplicate groups：confirmed evidence 0，index bars 0。
-- `sector_theme_members` 維持 `mapping_only`，不計入 daily history。
-- `daily_signal_snapshot` 維持 daily-version-as-recorded 語義：history covered，current `v20.4.6` May 0 rows 只作 diagnostic。
-- 完整檢查已完成：full pytest 261 passed；production trend consumption check `fresh_runner_rebuild=passed`，generator path 已消費 production `market_theme_confirmed_evidence` history，未使用 daily_signal_snapshot / runtime / local cache 作 market/theme evidence。
+- 已完成 05/31 假日报文修复候选并通过 QA。
+- 英業達 2356 第二段停利读取 production cross-day execution memory；若 2026-05-29 已卖出 `-112`、`-75`，报文显示已执行不重复，不再输出「本次建議 56 股」或进入明日计划。
+- 若 production source 可读但已有 prior take-profit guard、execution memory 缺失或 sold_shares 不足，现在 fail closed：显示「停利記憶不足」，不输出明确重复卖出股数。
+- market/theme evidence 用户可见来源改为 actual/latest trade date，并显示 holiday report 使用最近交易日 evidence。
+- market/theme trend lookback rows 提高到 240，并显示 lookback_range，避免五月历史被默认 row limit 压成近 2 日。
+- `策略證據 v20.0` 增加 strategy sample 层说明，避免样本 0 被误读为 market/theme production evidence 无效。
+- 使用者可见版本升到 `v20.4.7`。
+- Tech 自检：`tests/test_generator_report.py` 71 passed；`tests/test_market_theme_evidence.py tests/test_cross_day_context.py` 39 passed；`git diff --check` passed。
+- QA 复验：`通過`；补充验证 missing / zero execution memory 不再进入明日计划，正常 `-112/-75` memory 仍显示已执行不重复。
 
 ## Next Action
 
-- 可以開始下一階段證據鏈功能擴張：把 production `market_theme_confirmed_evidence` history trend 轉成更明確的策略提示 / 題材證據呈現。
-- 先補 runner gap：QA runner 對 production read-only audit 任務不能固定 dummy Supabase config，否則會把已完成的 production audit 誤判 blocked。
-- 若下一階段涉及 schema 變更，仍需先給 Owner SQL；普通資料寫入仍走 repo script / service API。
+- 已提交，待 push 完成后可以继续下一阶段证据链功能扩张；不得跳过本轮执行记忆修复的验证结论。
+- 先补 runner gap：auto wrapper 曾把有效 QA `通過` 误判失败；Tech worktree stale diff 曾阻塞新任务，需纳入 runner/worktree hygiene 待办。
 
 ## Status Values
 

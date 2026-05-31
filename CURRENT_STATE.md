@@ -38,13 +38,14 @@
 
 ## Current Result
 
-- task_id：`correction-market-theme-prod-coverage-2026-05`
-- 狀態：market/theme 2026-05 historical fetch 與 confirmed evidence dedupe 已完成。
+- task_id：`risk_patch_20260531_holiday_report_execution_memory_evidence_dates`
+- 狀態：05/31 假日报文 execution memory / evidence 日期修复已通过 QA，待 commit/push。
 - 問題：先前把 script / integrity check 通過誤當成 production market/theme 五月 coverage 完成；Owner 截圖顯示主要是 `2026-05-29` latest-source rows，且可能有不同 `as_of` 批次。
 - 已修 correction path：`--correction-audit-json` 可重跑，source-error / missing-source / read incomplete / current VERSION 缺五月 rows 會 `blocked`，不再誤給 `read_only_audit_complete`。
 - 已修 snapshot 語義：`daily_signal_snapshot` 的歷史設計是每日當時版本留存；current VERSION 舊五月 0 rows 只作 run-health diagnostic，不作歷史 coverage blocker。
 - 已用 repo script 寫入 production：`market_theme_confirmed_evidence` 180 rows、`market_theme_index_daily_bars` 200 rows，均為 20 trade dates，duplicate groups 0。
-- 下一步可以推進證據鏈功能擴張，但要先讓策略實際消費 production `market_theme_confirmed_evidence` history trend。
+- 已修 05/31 假日报文主问题：英業達 2356 已卖 `-112`、`-75` 的 production cross-day execution memory 会显示已执行不重复；execution memory 缺失 / sold_shares 不足时 fail closed，不再输出「本次建議 56 股」或进入明日计划。
+- 已修 evidence 呈现：market/theme 来源显示 latest/evidence trade date 与 holiday report 使用最近交易日；trend 显示 lookback_range；strategy sample 0 与 market/theme production evidence 分层。
 
 ## Data / Evidence Status
 
@@ -56,9 +57,10 @@
   - `sector_theme_members`：12 active mapping rows，valid_from `2026-01-01`，source `market_data:twse_openapi_t187ap03_L`；這是 mapping，不是五月 daily history。
 - 獨立 audit 命令：`PYTHONPATH=. arch -arm64 .venv/bin/python scripts/smoke_market_theme_evidence_readonly.py --correction-audit-json --limit 20000`，結果 `status=pass` / `read_only_audit_complete`。
 - production trend consumption check：`fresh_runner_rebuild=passed`；`core.generator.market_theme_summary_evidence` 已消費 production `market_theme_confirmed_evidence` history，`observed_days=8`、`recent_supporting_days=3`、`support_streak_days=8`；未使用 daily_signal_snapshot / runtime / local cache 作 market/theme evidence。
+- 05/31 report formatter fix：使用者可见版本 `v20.4.7`；targeted tests 已过：`tests/test_generator_report.py` 71 passed、`tests/test_market_theme_evidence.py tests/test_cross_day_context.py` 39 passed；QA 复验 `通過`。
 - full integrity check：production DB readonly passed、May data available passed、dry-run report generated passed、summary/cards/checklist/funnel/version consistency 全部 passed，blocked_reasons 空。
-- full pytest：261 passed，warnings 153（第三方 pyiceberg / supabase / Python 3.9 deprecation 類警告）。
-- 證據鏈下一步：把 production history trend 轉成更明確的策略提示 / 題材證據呈現，而不是只證明資料表存在。
+- full pytest：最新 `264 passed，153 warnings`；warnings 為第三方 pyiceberg / supabase / Python 3.9 deprecation 類。
+- 證據鏈下一步：在本轮 commit/push 后，继续把 production history trend 轉成更明確的策略提示 / 題材證據呈現；不得把 market/theme evidence 当作买点放宽。
 
 ## Validation Baseline
 
@@ -69,6 +71,8 @@
 ## Known Runner Gaps
 
 - CAO auto wrapper 曾多次誤判 QA `通過` / `conditional pass`；需修 QA conclusion parser。
+- 本轮再次出现：QA 第一轮 `阻塞` 被 auto 正确停下；QA 第二轮 `通過` 仍让 auto wrapper 以 stage QA failed 退出，需修 parser 读取 `## QA 結論` 后首个有效词。
 - CAO QA runner 固定 dummy Supabase config，會讓 production read-only audit 類任務誤 blocked；需允許使用主 repo config 或注入 Architect 產出的 audit artifact。
 - Worktree / runtime output 容易留下舊上下文；任務結束後應清理或重新生成 agent context。
+- 本轮 Tech worktree 残留旧 market/theme backfill candidate diff，已归档到 `.cao_agent_context/stale_diffs/20260531_tech_write_stale_market_theme_backfill.diff` 后清理；runner 应在新任务启动前自动归档/拒收 stale diff。
 - Agent 規則已收斂為角色卡與安全邊界；具體事故不得再硬塞進 profile。

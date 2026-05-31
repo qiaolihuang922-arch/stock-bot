@@ -1,99 +1,83 @@
 # QA_REPORT:
 
-## 測試範圍
+  ## 測試範圍
 
-- 任務尺寸：risk_patch，QA level：L3。
-- 驗證對象：`TASK.md`、`CHANGELOG.md`、`scripts/backfill_market_theme_sources.py`、`tests/test_market_theme_source_backfill.py`、production read-after-write audit。
-- 可吸收 diff：
-  - `CHANGELOG.md`
-  - `TASK.md`
-  - `scripts/backfill_market_theme_sources.py`
-  - `tests/test_market_theme_source_backfill.py`
-- 不吸收 worktree 整包；只吸收上述任務相關 diff。
+  - QA 風險預算：risk_patch / L2。本輪只讀驗證 Tech 修復上一份 QA 阻塞點後的候選 diff，不擴大到 full replay、backfill、production DB live read/write 或 live Telegram。
+  - 本輪最值得抓的 3 個風險：
+      1. source_status=ready 且 previous_action=take_profit / dedupe_guard=prior_take_profit_completed，但 execution_memory 缺失或 sold_shares=0 時，2356 是否仍輸出「第二段停利 本次建議 56 股」或進明日計畫。
+      2. 有 -112/-75 execution memory 時，2356 是否仍顯示已執行不重複，而不是被新的 blocked 分支誤擋。
+      3. market/theme evidence 日期是否不只顯示 same_trade_date，且 strategy sample 0 不否定 market/theme production evidence。
+  - 對應驗證：
+      - 已讀 TASK.md、CHANGELOG.md、上一份 QA 阻塞報告、git status、git diff。
+      - 已檢查 core/generator.py、services/cross_day_context.py、core/market_theme_evidence.py、services/market_theme_evidence_store.py、services/strategy_evidence.py 與對應 tests。
+      - 已跑 touched-path tests，並補一段 QA 自建 fixture 按手機閱讀順序檢查 Summary / card / 明日計畫。
+  - 停止條件：
+      - TASK / CHANGELOG / diff 若矛盾且影響交付，阻塞。
+      - 2356 缺 execution memory 或 sold_shares=0 仍出現 56 股或進明日計畫，阻塞。
+      - 正常 -112/-75 execution memory 被誤判 blocked，阻塞。
+      - 必要 L2 測試不可執行且無可用 runner 環境，阻塞。
 
-## 風險預算與停止條件
+  ## 風險預算與停止條件
 
-1. production 仍是 latest-only 卻被誤宣告完成。
-   - 驗證：獨立重跑 `scripts/smoke_market_theme_evidence_readonly.py --correction-audit-json --limit 20000`。
-   - 停止條件：`status` 不是 `pass`、date range 不是 20 trade dates、或 `latest_source_only=true`。
-2. duplicate groups 只是被 script 忽略，production business-key duplicates 未清零。
-   - 驗證：核對 audit 的 `duplicate_group_count` 與 business-key fields。
-   - 停止條件：confirmed evidence 或 index bars 任一 duplicate group 不為 0。
-3. `sector_theme_members` 被誤當 daily history，或本輪偷偷擴成 schema / Telegram / strategy 變更。
-   - 驗證：核對 audit `mapping_only`，並檢查 diff 不含 schema / Telegram / strategy。
-   - 停止條件：mapping 被計入 daily history，或出現 schema / live Telegram 變更。
+  - 任務尺寸匹配：TASK.md 標示 risk_patch，QA 建議 L2；Tech 未觸及 DB schema / write path / live delivery，本輪不升級到 full matrix。
+  - 可吸收 diff：
+      - core/generator.py：版本升 v20.4.7，補 execution memory insufficient-data fail-closed，並同步 Summary / card / execution item / detail formatter。
+      - services/cross_day_context.py：讀取 shares_before/shares_after，新增 latest execution memory 組裝。
+      - core/market_theme_evidence.py、services/market_theme_evidence_store.py：補 actual/latest trade date 與 trend lookback_range 顯示，lookback rows 提高到 240。
+      - services/strategy_evidence.py：strategy sample 層說明不影響 market/theme production confirmed evidence。
+      - tests/test_generator_report.py、tests/test_market_theme_evidence.py：覆蓋正向、負向與日期顯示。
+  - worktree 殘留：
+      - tracked modified files 僅上述 8 個含 CHANGELOG.md；未看到其他 untracked 殘留。
+      - QA 未修改 tracked file；只用 .qa_tmp 作測試暫存環境。
+  - 停止條件未觸發。
 
-## 關聯風險掃描
+  ## 關聯風險掃描
 
-- production write 使用 repo script，不是手寫普通 DML：
-  - `PYTHONPATH=. arch -arm64 .venv/bin/python scripts/backfill_market_theme_sources.py --historical-range --start-date 2026-05-04 --end-date 2026-05-29 --write --confirm-write`
-- 寫入結果：
-  - `market_theme_confirmed_evidence` written rows：180。
-  - `market_theme_index_daily_bars` written rows：200。
-  - `schema_change=false`，`live_telegram=false`。
-- 獨立 read-only audit：
-  - `PYTHONPATH=. arch -arm64 .venv/bin/python scripts/smoke_market_theme_evidence_readonly.py --correction-audit-json --limit 20000`
-  - exit code：0。
-  - `status=pass`，`next_action=["read_only_audit_complete"]`。
-- CAO `run_qa_code.sh` 仍會 blocked，原因是 runner 強制用 `.qa_tmp/config.py` dummy Supabase (`SUPABASE_URL=http://localhost`)；此為 runner gap，不代表 production audit 失敗。
+  - 上一份 QA 阻塞點已被針對性修正：core/generator.py 現在把 source_status=ready、已有 prior take-profit guard、但 execution_memory.sold_shares <= 0 的 second-stage take-profit 視為 blocked，文案為 execution memory
+    insufficient-data｜不輸出重複停利股數。
+  - services/cross_day_context.py 的 positive path 仍會把同一 latest trade date 的賣出 delta 組成 sell_deltas=[-112,-75]、sold_shares=187，供 generator 顯示已執行。
+  - market/theme trend 查詢路徑仍有 .lte("trade_date", trade_date)，移除 trend 內部 4 日 gap filter 不會把 05/31 報文引入未來日期；本輪不擴成所有日期矩陣。
+  - TASK.md 有重複拼接痕跡，但核心契約與 CHANGELOG.md、diff 一致，未構成本輪阻塞。
 
-## 跨區塊語意一致性
+  ## 跨區塊語意一致性
 
-- `market_theme_confirmed_evidence`：
-  - row_count：180。
-  - date range：`2026-05-04` to `2026-05-29`。
-  - distinct trade dates：20。
-  - `latest_source_only=false`。
-  - duplicate business-key groups：0。
-  - conclusion：`complete`。
-- `market_theme_index_daily_bars`：
-  - row_count：200。
-  - date range：`2026-05-04` to `2026-05-29`。
-  - distinct trade dates：20。
-  - `latest_source_only=false`。
-  - duplicate business-key groups：0。
-  - conclusion：`complete`.
-- `sector_theme_members`：
-  - row_count：12。
-  - conclusion：`mapping_only`。
-  - duplicate business-key groups：0。
-  - 不計入 May daily history。
-- `daily_signal_snapshot`：
-  - history coverage 仍為 `covered`。
-  - current `v20.4.6` May 0 rows 仍是 diagnostic，`blocks_history_coverage=false`。
+  - 測試結果：
+      - 初次用預設 Python 跑測試因 shell / venv 架構不一致失敗：pydantic_core arm64、當前需要 x86_64。
+      - 改用 Tech 自檢同款 arch -arm64 後通過：
+          - tests/test_generator_report.py -q：71 passed。
+          - tests/test_market_theme_evidence.py tests/test_cross_day_context.py -q：39 passed。
+          - git diff --check：通過。
+  - QA 補充 fixture：
+      - execution_memory=None：action 為 停利記憶不足，不含「本次建議 56 股」，Summary 無「明日計畫」，2356 未進明日計畫。
+      - execution_memory.sold_shares=0：同上。
+      - execution_memory.sell_deltas=[-112,-75]：action 為 第二段停利後觀察，Summary 顯示「已執行 1 項不重複」，card 顯示 production latest_trade_date=2026-05-29｜已賣出 -112、-75｜...｜第二段已執行，不含 56 股且不進明日
+        計畫。
+  - 手機閱讀順序檢查結果符合 TASK：Summary、持倉卡片、今日交易 / 已執行、持倉風控、明日計畫未再互相矛盾。
 
-## 使用者誤讀風險
+  ## 使用者誤讀風險
 
-- 本輪不改 Telegram / UI / summary；無手機報文閱讀路徑。
-- Owner 可見 audit JSON 第一層現在是 `status=pass`，且 market/theme 兩張歷史表均為 `complete`；不再是 latest-only。
-- `sector_theme_members` 仍明確標示 `mapping_only`，避免誤讀成 daily history。
+  - 2356 缺 memory 時，使用者不會看到明確賣出股數，也不會看到明日再賣第二段；改為「停利記憶不足」與「先補 production execution memory」。
+  - 有 memory 時，使用者會看到 latest trade date、賣出 deltas、剩餘股數與第二段已執行，能理解不是 05/31 假日當天新賣出。
+  - market/theme evidence fixture 顯示：
+      - 證據日期：latest_trade_date=2026-05-29；report_date=2026-05-31 uses latest trading day evidence
+      - lookback_range=2026-05-26~2026-05-29
+      - 不再只有 same_trade_date。
+  - strategy evidence 開頭明確寫明 strategy sample 層不影響 market/theme production confirmed evidence；樣本 0 不會否定 market/theme evidence。
 
-## 質疑與反證
+  ## 質疑與反證
 
-- Tech / Architect 自檢：
-  - `PYTHONPATH=. arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_source_backfill.py -q`
-    - 結果：14 passed。
-  - `git diff --check`
-    - 結果：通過。
-  - dry-run:
-    - `source_gaps=[]`。
-    - candidate rows：confirmed 180、index 200。
-    - coverage：20 trade dates。
-- Production read-after-write audit 反證：
-  - confirmed evidence 不再 latest-only：20 trade dates，`latest_source_only=false`。
-  - index bars 不再 latest-only：20 trade dates，`latest_source_only=false`。
-  - confirmed duplicate groups 清零：0。
-  - index duplicate groups 清零：0。
-- Source gap 反證：
-  - 測試覆蓋 source gap 時 `upsert_source_payloads` 拒寫並丟 `ValueError`，不會用假資料填洞。
+  - Tech 自檢已覆蓋負向案例，但 QA 另補了手機閱讀路徑反證，特別檢查「明日計畫」整段是否仍含 2356。結果 missing / zero memory 兩種情境均 HAS_TOMORROW_PLAN=False。
+  - QA 也反證 positive path：-112/-75 execution memory 沒有被 insufficient-data 分支誤擋，仍走已執行不重複。
+  - QA 另檢查 evidence 日期與 strategy sample 文案；未發現 sample 層覆蓋 production confirmed evidence 的輸出風險。
 
-## 未測項目
+  ## 未測項目
 
-- 未跑 full repo pytest；本輪風險集中在 market/theme production write path、read-only audit 與 duplicate contract。
-- 未補更多月份；本輪只處理 2026-05-04 到 2026-05-29。
-- 未把 market/theme trend 轉成新的策略加權；本輪只完成資料抓取、寫入、去重與 audit 通過。
-- CAO QA runner 需另修：允許 production read-only audit 使用主 repo config 或讓 Architect 注入只讀 audit artifact，否則此類任務會被 dummy config 誤阻塞。
+  - 未跑 full pytest、full replay、backfill、production DB live read/write、live Telegram；符合本輪 L2 邊界。
+  - 未逐檔驗證其他股票的 historical execution memory；同一路徑會自然套用，但逐檔資料 audit 屬旁支。
+  - 未驗證所有 report date 的 trend lookback 組合；本輪只驗 2026-05-31 假日報文風險。
 
-## QA 結論
+  ## QA 結論
 
-通過
+  通過
+
+  本輪候選 diff 可吸收；不要把 worktree 外的任何其他殘留當成本次合併內容。
