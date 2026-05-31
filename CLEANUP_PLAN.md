@@ -30,6 +30,7 @@
   - production 現況：`daily_signal_snapshot` 是每日版本留存，不要求舊五月回填為 current version；`market_theme_confirmed_evidence` / `market_theme_index_daily_bars` 只有 `2026-05-29` latest rows；`sector_theme_members` 是 mapping，不是 daily history。
   - 已完成復盤修正：correction audit 已把 current VERSION 舊五月缺 rows 降為 run-health diagnostic；`daily_signal_snapshot.history_coverage` 改依全版本 daily-version-as-recorded 判斷。
   - 已完成 production 資料修復：`market_theme_confirmed_evidence` 180 rows / 20 trade dates / duplicate groups 0；`market_theme_index_daily_bars` 200 rows / 20 trade dates / duplicate groups 0；`sector_theme_members` 維持 mapping-only。
+  - 已完成完整檢查：correction audit pass、trend consumption check pass、full integrity check pass、full pytest 261 passed。
   - 後續：另開 PM 任務讓策略消費 production market/theme history trend；不得把資料完成直接升格為策略已有效使用。
   - 禁止：不得用舊版本 snapshot 或 current-version 缺五月 rows 推導錯誤 backfill 需求；不得把 mapping table 當 daily history。
 - CAO QA conclusion parser

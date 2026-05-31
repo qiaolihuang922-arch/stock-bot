@@ -14,7 +14,7 @@
 - pm_status: `completed`
 - tech_status: `completed`
 - qa_status: `通過`
-- commit: `pending`
+- commit: `pushed`
 
 ## Current Result
 
@@ -25,10 +25,11 @@
 - duplicate groups：confirmed evidence 0，index bars 0。
 - `sector_theme_members` 維持 `mapping_only`，不計入 daily history。
 - `daily_signal_snapshot` 維持 daily-version-as-recorded 語義：history covered，current `v20.4.6` May 0 rows 只作 diagnostic。
+- 完整檢查已完成：full pytest 261 passed；production trend consumption check `fresh_runner_rebuild=passed`，generator path 已消費 production `market_theme_confirmed_evidence` history，未使用 daily_signal_snapshot / runtime / local cache 作 market/theme evidence。
 
 ## Next Action
 
-- 可以開始下一階段證據鏈功能擴張：讓策略消費 `market_theme_confirmed_evidence` 的歷史 trend。
+- 可以開始下一階段證據鏈功能擴張：把 production `market_theme_confirmed_evidence` history trend 轉成更明確的策略提示 / 題材證據呈現。
 - 先補 runner gap：QA runner 對 production read-only audit 任務不能固定 dummy Supabase config，否則會把已完成的 production audit 誤判 blocked。
 - 若下一階段涉及 schema 變更，仍需先給 Owner SQL；普通資料寫入仍走 repo script / service API。
 

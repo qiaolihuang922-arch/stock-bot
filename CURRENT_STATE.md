@@ -55,7 +55,10 @@
   - `market_theme_index_daily_bars`：200 rows，20 trade dates，date range `2026-05-04` to `2026-05-29`，source `market_data:twse_openapi_mi_index`，`latest_source_only=false`，duplicate business-key groups 0。
   - `sector_theme_members`：12 active mapping rows，valid_from `2026-01-01`，source `market_data:twse_openapi_t187ap03_L`；這是 mapping，不是五月 daily history。
 - 獨立 audit 命令：`PYTHONPATH=. arch -arm64 .venv/bin/python scripts/smoke_market_theme_evidence_readonly.py --correction-audit-json --limit 20000`，結果 `status=pass` / `read_only_audit_complete`。
-- 證據鏈下一步：把 strategy / generator 的 market/theme evidence consumer 接上 production history trend，而不是只顯示資料表存在。
+- production trend consumption check：`fresh_runner_rebuild=passed`；`core.generator.market_theme_summary_evidence` 已消費 production `market_theme_confirmed_evidence` history，`observed_days=8`、`recent_supporting_days=3`、`support_streak_days=8`；未使用 daily_signal_snapshot / runtime / local cache 作 market/theme evidence。
+- full integrity check：production DB readonly passed、May data available passed、dry-run report generated passed、summary/cards/checklist/funnel/version consistency 全部 passed，blocked_reasons 空。
+- full pytest：261 passed，warnings 153（第三方 pyiceberg / supabase / Python 3.9 deprecation 類警告）。
+- 證據鏈下一步：把 production history trend 轉成更明確的策略提示 / 題材證據呈現，而不是只證明資料表存在。
 
 ## Validation Baseline
 
