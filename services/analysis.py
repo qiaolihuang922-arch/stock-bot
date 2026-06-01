@@ -1356,10 +1356,6 @@ def detect_entry_stage(
     metrics=None
 ):
 
-    breakout_lv = breakout_price(
-        resistance
-    )
-
     hold_days = breakout_hold_days(
         closes,
         resistance
@@ -1817,7 +1813,6 @@ def holding_signal(
     dist = result.get("breakout_distance")
     quality = result.get("entry_quality", "D")
     confidence = result.get("confidence_score", 0)
-    profile = result.get("entry_profile", "NONE")
     same_day_profit_taken = (
         realized_profit_taken_date is not None
         and signal_date is not None
@@ -3412,9 +3407,6 @@ def pick_best_stock(results_dict):
             continue
 
         if result.get("action", 0) <= 0:
-            continue
-
-        if result.get("entry_quality") in ["C", "D"]:
             continue
 
         if result.get("entry_quality") not in ["A+", "A"]:

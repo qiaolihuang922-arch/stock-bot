@@ -4,14 +4,14 @@
 
 ## Current Task
 
-- task_id: `risk_patch_wait_breakout_low_rr_gap_20260601`
-- task_name: `WAIT Breakout Low RR Gap Display`
-- task_type: `risk_patch`
-- owner_status: `requested_batch_task_1_first`
-- architect_status: `qa_conditional_satisfied_pending_git_close`
+- task_id: `tiny_patch_cleanup_unused_variables_analysis_py_20260601`
+- task_name: `Cleanup Unused Variables In Analysis`
+- task_type: `tiny_patch`
+- owner_status: `requested_batch_task_3_after_task_1`
+- architect_status: `qa_passed_pending_git_close`
 - pm_status: `done`
 - tech_status: `done`
-- qa_status: `conditional_pass_test_file_must_be_included`
+- qa_status: `passed`
 - latest_commit: see `git log -1`
 
 ## Current Follow-up
@@ -24,13 +24,12 @@
 
 ## Current Result
 
-- 本輪目標是任務一：修 `condition_engine.py` 的 WAIT breakout 低 RR 缺口顯示 bug。
-- 修正：`decision_type="wait_breakout_low_rr"` 不再被尾端 `rr >= 1.0` 通用兜底覆蓋；`rr=1.2` 時 WAIT 缺口保留 `rr`，可見原因映射為 `RR不足`。
-- Probe：新增 `tests/test_condition_engine.py`，覆蓋 `wait_breakout_low_rr + WAIT + rr=1.2` 的 condition gap 與 `_reason_labels`。
-- QA：Re-QA `conditional pass`；條件是新增測試檔必須納入 commit。主 repo 已吸收該檔，收口時需確認 staged / committed。
-- 邊界：未改 strategy decision、decision_type 產生邏輯、DB write、live Telegram。
-- 流程事件：第一次 auto 被 Tech worktree stale diff 擋下；舊 diff 已存到 `.cao_agent_context/artifacts/tech_write_stale_diff_before_wait_rr_task_20260601_192018.patch` 後用 runner 顯式丟棄開關重跑。
-- 流程事件：第一次 PM 漏掉 Owner 的 risk_patch 口徑，已帶 `任務类型必须 risk_patch` 重跑。
+- 任務一已完成並推送：commit `1f9601d fix wait breakout rr gap reason`，Git completion gate passed。
+- 本輪目標是任務三：清理 `services/analysis.py` 三處指定 unused / redundant dead code。
+- 修正：刪除 `detect_entry_stage()` unused `breakout_lv`、`holding_signal()` unused `profile`、`pick_best_stock()` redundant C/D filter；保留 A+/A allowlist。
+- QA：Re-QA `通過`；確認 scoped diff 只刪 8 行，沒有策略 / 輸出 / DB / Telegram / VERSION 變更。
+- 靜態檢查：pyflakes / ruff / flake8 環境缺失；Tech/QA 改用 AST targeted static check 與 direct consumer probe，符合 tiny_patch L1 範圍。
+- 流程事件：第一次 QA 因 main `CHANGELOG.md` stale 成任務一內容而 blocked；已同步任務三 CHANGELOG 後 Re-QA 通過。
 - Git completion gate：final 前必須以 `tools/cao_agent/check_git_completion_gate.sh` 驗證 `main` matches `origin/main` 且 worktree clean。
 - 上一輪 v20.4.21 報文修正已在 commit `b177345 restore afterhours control summary` 推送，本輪不再改動該產品 diff。
 - 已吸收內容：
@@ -56,7 +55,7 @@
 
 ## Next Action
 
-- 收口：確認 `tests/test_condition_engine.py` 已 stage，commit / push 後跑 `tools/cao_agent/check_git_completion_gate.sh`。
+- 收口：commit / push 後跑 `tools/cao_agent/check_git_completion_gate.sh`。
 - 後續同類報文任務：先補或更新手機閱讀 probe，再改 formatter；不要只寫規則。
 - 旁支另開：Telegram reply markup 仍附在最後一則 message，新 message order 下可能需要 delivery consumer 任務評估按鈕落點。
 - 旁支另開：如果 Owner 認定 2356 英業達實際未賣，需查 production ledger/source truth 為何目前為 `shares=0 / CLOSED`；本輪未寫 DB、不校正 ledger。

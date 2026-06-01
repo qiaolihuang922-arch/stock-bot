@@ -15,6 +15,13 @@
 
 ## Completed
 
+- `tiny_patch_cleanup_unused_variables_analysis_py_20260601`:
+  - 問題：Owner 指定 `services/analysis.py` 三處 unused / redundant dead code：`detect_entry_stage()` unused `breakout_lv`、`holding_signal()` unused `profile`、`pick_best_stock()` redundant C/D filter。
+  - 結果：刪除三處指定 dead code，共 8 行；保留 `pick_best_stock()` A+/A allowlist。
+  - 可重跑補強：Tech/QA 因環境缺 pyflakes / ruff / flake8，改用 AST targeted static check；QA 補 direct consumer probe，確認 B/C/D/None/空值排除，A/A+ 接受。
+  - QA 反證：Re-QA `通過`；scoped diff 只碰 `services/analysis.py` 三處刪除，未碰 strategy decision、報文、DB、Telegram、VERSION。
+  - 流程治理：第一次 Re-QA 因 main `CHANGELOG.md` stale 成前一任務內容而 blocked；同步任務三 CHANGELOG 後通過。這暴露 auto wrapper 對 Tech 交付摘要寫回主 repo 的同步仍需補強。
+  - 邊界：不改策略邏輯、不改輸出契約、不改 DB write / live Telegram。
 - `risk_patch_wait_breakout_low_rr_gap_20260601`:
   - 問題：`condition_engine.py` 的 `wait_breakout_low_rr + rr=1.2` 被尾端 `rr >= 1.0` 通用兜底覆蓋，導致 WAIT 缺口空白，報文無等待原因。
   - 結果：`decision_type="wait_breakout_low_rr"` 跳過通用 RR 兜底；低於 breakout 門檻時 `rr` gap 保留，直接原因標籤顯示 `RR不足`。

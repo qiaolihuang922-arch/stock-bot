@@ -1,142 +1,102 @@
-# TASK: 修復 WAIT breakout 低 RR 缺口顯示
+# TASK: cleanup_unused_variables_analysis_py
 
 ## 任務狀態
 
-- task_id: risk_patch_wait_breakout_low_rr_gap_20260601
-- 任務尺寸判斷: risk_patch
+- task_id: tiny_patch_cleanup_unused_variables_analysis_py_20260601
+- 任務類型: tiny_patch
 - 狀態: ready_for_tech
-- QA 分級建議: L2
-- 版本建議: 使用者可見 WAIT 等待原因會被修正；若 repo 對 Telegram / 報文內容變更要求版本追蹤，需依既有版本契約升版，禁止回退既有版本字串。
+- 版本建議: 不升使用者可見報文版本
+- QA 分級建議: L1
 
 ## Owner 問題
 
-condition_engine.py 在 decision_type=wait_breakout_low_rr 且 rr=1.2 時，本應依 breakout 類 WAIT 門檻 rr >= 1.5 判斷為 RR 不足。
+services/analysis.py 內有三處已確認 unused / redundant dead code，需要直接刪除，避免靜態檢查噪音與後續誤讀，但不得改變策略邏輯或輸出行為。
 
-目前末尾兜底：
+本輪只處理這三處：
 
-if rr >= 1.0:
-conditions["rr"] = True
-
-覆蓋了按 decision_type 差異化的 RR 閾值判斷，導致 summarize_conditions(WAIT) 回傳空缺口列表，Telegram / 報文中 WAIT 標的沒有任何等待原因。
+1. detect_entry_stage() 內 breakout_lv 計算後未被整個函式使用。
+2. holding_signal() 內 profile = result.get('entry_profile', 'NONE') 賦值後未在函式內使用。
+3. pick_best_stock() 內第一個 entry_quality in ['C','D'] 過濾已被下一行 not in ['A+','A'] 覆蓋，屬冗餘 check。
 
 ## 使用者可見結果
 
-手機閱讀 WAIT breakout 標的時，若 RR 低於 breakout 門檻，報文必須顯示等待原因含「RR不足」或既有等價 RR 缺口文案。
-
-示例輸出形狀：
-
-WAIT / 等待突破
-等待原因：RR不足
-
-實際標題、符號、排序、欄位名稱需沿用現有報文格式；本任務只修 WAIT 缺口原因，不重寫報文版面。
+使用者可見報文、Telegram message、CLI 輸出、策略建議結果不得改變。
+本任務完成後，外部可見結果應只有程式碼更乾淨、靜態檢查不再產生這三處 unused / redundant warning。
 
 ## 非目標
 
-- 不改策略 decision 結果。
-- 不改 decision_type 產生邏輯。
-- 不改 breakout RR 門檻數值 1.5。
-- 不改一般非 breakout WAIT 的 RR 門檻語意。
-- 不改 DB schema、RLS、grant、policy、role、index / constraint。
-- 不改 DB write path、不做 backfill。
-- 不做 live Telegram delivery。
-- 不做 condition engine 全面 refactor。
-- 不擴大為所有 WAIT 類型策略重新設計。
+- 不重構 services/analysis.py。
+- 不調整 detect_entry_stage()、holding_signal()、pick_best_stock() 的策略判斷。
+- 不修改 RR、entry quality、持倉建議、買賣 / 加減碼、停損停利邏輯。
+- 不改 DB schema、DB write path、production data、Telegram live delivery。
+- 不做全 repo dead code cleanup。
+- 不順手處理其他 linter warning；若發現旁支問題，只記到交付摘要或後續待辦，不納入本輪。
 
 ## 影響模組
 
-- condition_engine.py
-- RR condition 判斷。
-- WAIT 缺口摘要輸入。
-- 相關測試 / probe
-- 新增或更新可重跑 probe，覆蓋 wait_breakout_low_rr + rr=1.2。
+- services/analysis.py
 
 ## 直接消費者
 
-- summarize_conditions(WAIT) 或現有等價 WAIT 缺口摘要函式。
-- Telegram / 報文 WAIT 區塊等待原因列表。
-- QA 可重跑 probe。
+- 直接函式消費者：
+- 呼叫 detect_entry_stage() 的分析流程。
+- 呼叫 holding_signal() 的持倉訊號流程。
+- 呼叫 pick_best_stock() 的候選股挑選流程。
+- 驗收消費者：
+- Tech 自檢的 pyflakes 或等價靜態檢查。
+- QA L1 針對 scoped diff 與靜態檢查結果做反證。
 
 ## 輸出契約
 
-當輸入符合以下條件：
-
-- decision_type = "wait_breakout_low_rr"
-- decision = "WAIT" 或等價 WAIT 狀態
-- rr = 1.2
-- breakout RR 門檻為 1.5
-
-必須滿足：
-
-- RR condition 不得被末尾 rr >= 1.0 兜底覆蓋為通過。
-- WAIT 缺口列表不得為空。
-- WAIT 缺口列表必須包含 RR 不足。
-- 報文 WAIT 等待原因必須可讓手機閱讀者看出等待原因是 RR 未達 breakout 門檻。
-- 既有缺口列表格式、欄位名稱、排序規則、中文文案 key 不得回退；若 Tech 無法確認既有契約，需 blocked 並要求 Architect 補上下游契約。
+- 函式回傳契約：不變。
+- payload / dict key：不變。
+- message list / Telegram 報文排序：不變。
+- CLI 輸出：不變。
+- DB 讀寫契約：不變。
+- 版本契約：不升 VERSION，不得修改報文 header 或版本字串。
+- 程式碼契約：只刪除三處指定 dead code，不新增替代分支或新 helper。
 
 ## 已存在且不得回退的契約
 
-- WAIT 缺口摘要由 condition 結果驅動。
-- breakout 類 WAIT 的 RR 判斷需使用 breakout 對應門檻 1.5。
-- 非 breakout 場景既有 RR 顯示與通過 / 不通過語意不得被本修復改變。
-- WAIT 報文不得出現無等待原因的空白 WAIT 狀態。
-- 本修復不得影響 strategy decision、DB write、live Telegram delivery。
+- detect_entry_stage() 的 stage 判斷結果不得因刪除 unused breakout_lv 而改變。
+- holding_signal() 的 signal、action、reason、entry profile 相關輸出不得改變。
+- pick_best_stock() 仍只能接受 entry_quality 為 A+ 或 A 的候選；C、D 以及其他非 A+ / A 值仍應被排除。
+- 使用者可見報文版本與內容不得因本任務變動。
 
 ## 驗收條件
 
-1. 新增或更新可重跑 probe，覆蓋 decision_type=wait_breakout_low_rr、rr=1.2，驗證 WAIT 缺口列表包含 RR 不足且不是空列表。
-2. Probe 必須能由 Tech 在 CHANGELOG.md 記錄固定命令與結果。
-3. 測試需確認修復範圍只影響 condition gap / summarize output，不改策略 decision。
-4. QA 需補至少一個 Tech 未覆蓋的反證，例如確認非 breakout WAIT 或 rr >= 1.5 breakout 場景未被誤標 RR不足。
-5. 不得產生 DB write、不觸發 live Telegram、不要求 production credential。
+1. Scoped diff 只包含 services/analysis.py 中三處指定 dead code 刪除；不得出現策略條件、輸出欄位、版本字串或測試 fixture 的無關改動。
+2. 執行 pyflakes 或等價靜態檢查，確認清理後沒有新增 unused variable warning，且這三處不再被回報。
+3. 至少執行一個輕量語法或既有測試自檢，例如 py_compile services/analysis.py 或現有 analysis 相關測試；若環境缺依賴，需列出實際錯誤並 blocked，不得宣告通過。
 
 ## 範例或 Fixture
 
-最小 fixture：
-
-decision_type = "wait_breakout_low_rr"
-rr = 1.2
-breakout_rr_threshold = 1.5
-decision = "WAIT"
-
-預期：
-
-gaps = summarize_conditions(...)
-
-assert gaps
-assert any("RR" in gap and ("不足" in gap or "low" in gap.lower()) for gap in gaps)
-
-若專案既有測試使用 enum、dataclass、dict payload 或固定中文文案，Tech 必須沿用既有 fixture 風格，不新增平行測試框架。
+- Static check target:
+- services/analysis.py
+- 驗收案例 1:
+- 檢查 detect_entry_stage() 內不再存在 unused breakout_lv 賦值。
+- 函式仍可通過語法檢查。
+- 驗收案例 2:
+- 檢查 pick_best_stock() 仍保留 entry_quality not in ['A+','A'] 或等價排除契約。
+- 不允許因刪除前一行冗餘 check 而放行 C、D 或其他非 A+ / A 候選。
 
 ## 明確禁止事項
 
-- 禁止修改策略買賣 / WAIT decision 判斷。
-- 禁止修改 DB schema 或 production write path。
-- 禁止新增 production DML、backfill、live Telegram delivery。
-- 禁止把本 risk_patch 擴大成 condition engine 全面重構。
-- 禁止只改報文文案來掩蓋 condition 判斷錯誤。
-- 禁止刪除、放寬既有測試來讓 probe 通過。
-- 禁止把 Owner 的「修復」解讀成可跳過 PM -> Tech -> QA。
+- 禁止改變任何策略決策、排序、分數、RR、entry quality 規則。
+- 禁止新增 fallback、try/except、mock data 或 production read/write。
+- 禁止改 Telegram、presentation、report、DB、runner、schema、測試大範圍重寫。
+- 禁止把本任務擴成全量 lint cleanup。
+- 禁止 live Telegram delivery。
+- 禁止用「看起來沒影響」替代靜態檢查或可重跑自檢證據。
 
 ## 阻塞條件
 
-- 找不到 condition_engine.py 或找不到 WAIT 缺口摘要直接消費路徑。
-- 現有 RR 缺口文案 / key 完全不可判定，無法確認「RR不足」應如何表示。
-- 測試環境補齊後仍無法重跑 probe。
-- Tech 發現 rr >= 1.0 兜底被其他明確契約依賴，修復會改變非 breakout 行為。
-- Tech 發現需改策略 decision、DB write 或 live Telegram 才能完成。
+- 若實際程式碼中三處位置與 Owner 描述不符，Tech 必須 blocked 並列出差異，不得自行改其他邏輯。
+- 若刪除任一行會造成函式輸出、測試、策略判斷變更，Tech 必須 blocked。
+- 若 pyflakes 或等價工具無法執行，需改用可說明等價性的靜態檢查；若完全無法檢查，blocked。
+- 若發現其他 unused warning，不納入本輪；只可列為 follow-up，除非它直接阻塞這三處驗收。
 
 ## 本輪停止條件
 
-驗到以下範圍即完成本輪：
-
-- wait_breakout_low_rr + rr=1.2 的 WAIT 缺口列表含 RR 不足。
-- 可重跑 probe 通過。
-- 確認未改 strategy decision、DB write、live Telegram。
-
-以下旁支只記待辦，不納入本輪：
-
-- 全部 WAIT 類型門檻審計。
-- RR 門檻產品策略調整。
-- 報文整體版面重整。
-- condition engine 大規模 refactor。
-- production ledger / Telegram delivery consumer 檢查。
+完成三處指定 dead code 刪除，且 scoped diff、靜態檢查、輕量語法或既有測試自檢通過，即停止。
+其他 lint、重構、策略合理性、報文內容、DB 或 Telegram 問題全部不納入本輪，最多記為後續待辦。

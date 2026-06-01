@@ -28,15 +28,14 @@
 
 ## Current Worktree
 
-- task_id：`risk_patch_wait_breakout_low_rr_gap_20260601`
-- 狀態：PM done / Tech done / QA `conditional pass`，條件是 `tests/test_condition_engine.py` 必須納入 commit；主 repo 已吸收可吸收 diff，等待 stage / commit / push / Git completion gate。
-- commit：上一輪流程 gate 已在 `7ec978a add architect edit scope gate` 推送到 `origin/main`；本輪將另收口。
-- 問題：`condition_engine.py` 尾端 `rr >= 1.0` 兜底覆蓋 `wait_breakout_low_rr` 的 breakout RR 門檻，造成 WAIT 缺口空白。
-- 修正：`decision_type="wait_breakout_low_rr"` 跳過通用 RR 兜底；`rr=1.2` 時 `conditions["rr"] == False`，`summarize_conditions(..., "WAIT")` 含 `rr`，`_reason_labels` 含 `RR不足`。
-- 新增 probe：`tests/test_condition_engine.py`。
-- 驗證：Re-QA output `.cao_agent_context/outputs/20260601_193237_24364_stock_qa_code_readonly.answer.txt`，結論 `conditional pass`；主 repo 已跑 `py_compile` passed、`tests/test_condition_engine.py tests/test_analysis_engine.py` 34 passed、`git diff --check` passed。
-- 邊界：未改 strategy decision、decision_type 產生邏輯、DB write、live Telegram。
-- 流程事件：第一次 auto 因 Tech worktree stale diff blocked；舊 diff 已存到 `.cao_agent_context/artifacts/tech_write_stale_diff_before_wait_rr_task_20260601_192018.patch` 後以 runner 顯式丟棄開關重跑。
+- task_id：`tiny_patch_cleanup_unused_variables_analysis_py_20260601`
+- 狀態：PM done / Tech done / QA `通過`；主 repo 已吸收可吸收 diff，等待 stage / commit / push / Git completion gate。
+- commit：任務一已在 `1f9601d fix wait breakout rr gap reason` 推送到 `origin/main`；本輪將另收口。
+- 問題：`services/analysis.py` 有三處 Owner 已確認 unused / redundant dead code。
+- 修正：刪除 `detect_entry_stage()` unused `breakout_lv`、`holding_signal()` unused `profile`、`pick_best_stock()` redundant C/D filter；保留 A+/A allowlist。
+- 驗證：Re-QA output `.cao_agent_context/outputs/20260601_194500_12054_stock_qa_code_readonly.answer.txt`，結論 `通過`；主 repo 已跑 `py_compile services/analysis.py` passed、`git diff --check` passed。
+- 邊界：未改 strategy decision、RR、entry_quality allowlist、DB write、live Telegram、VERSION。
+- 流程事件：第一次 auto 因 Tech worktree stale diff blocked；舊 diff 已存到 `.cao_agent_context/artifacts/tech_write_stale_diff_before_unused_cleanup_20260601_193745.patch` 後以 runner 顯式丟棄開關重跑。
 - 上一輪 v20.4.21 行為摘要保留如下，供重開對話辨識已落地內容：
 - 關鍵行為：
   - 不升 VERSION，仍為 `v20.4.21`。
