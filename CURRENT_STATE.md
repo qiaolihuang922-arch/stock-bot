@@ -28,14 +28,13 @@
 
 ## Current Worktree
 
-- task_id：`presentation_report_structured_noise_flags_tiny_patch_20260601`
-- 狀態：PM done / Tech done / QA `通過`；主 repo 已吸收可吸收 diff，等待 stage / commit / push / Git completion gate。
-- commit：任務三已在 `dcc0cd5 cleanup unused analysis locals` 推送到 `origin/main`；本輪將另收口。
-- 問題：`presentation/report.py` 兩處顯示層邏輯依賴 rendered string 反向判斷，容易因合法 `production` 字樣或警告文案改動造成誤過濾 / 消失。
-- 修正：`_decision_brief_lines()` 改用 `summary_excluded_lines / summary_excluded_sections`；`_afterhours_brief_lines()` 改用 `daily_write_warning` 結構化參數；`core/generator.py` bridge 新增 optional kwargs。
-- 驗證：Re-QA output `.cao_agent_context/outputs/20260601_195959_7787_stock_qa_code_readonly.answer.txt`，結論 `通過`；主 repo `py_compile` passed、targeted `tests/test_generator_report.py -k 'daily_write_warning or legal_production or telegram_messages_use_summary_cards_and_detail or source_missing'` 6 passed、`git diff --check` passed。
-- 邊界：未改 strategy decision、RR、DB write、live Telegram、VERSION。
-- 流程事件：第一次 auto 因 Tech worktree stale diff blocked；舊 diff 已存到 `.cao_agent_context/artifacts/tech_write_stale_diff_before_presentation_string_task_20260601.patch` 後以 runner 顯式丟棄開關重跑。
+- task_id：`strategy-support-stop-candidate-20260601`
+- 狀態：PM done / Tech candidate done / QA `阻塞`；主 repo 未吸收產品 diff，僅記 blocked handoff。
+- commit：任務四已在 `bc73f7f use structured brief warning flags` 推送到 `origin/main`。
+- 問題：`support` 納入 `strategy()` stop candidate 會改變使用者可見 `stop / risk / rr`，但 VERSION 未升且沒有 Owner 放行；QA runner 也在輸出 final sentinel 前 timeout / stream disconnected。
+- 捕獲輸出：`.cao_agent_context/outputs/20260601_203135_9901_stock_qa_code_readonly.txt`。
+- 結論：任務二 blocked，不吸收 `services/analysis.py` / `tests/test_analysis_engine.py` candidate diff。
+- 下一步：Owner 最新貼出報文一致性 / 策略顯示衝突組；先另開 PM 任務，優先處理盤後第三則「今日無有效新倉」與第一則今日買入持倉矛盾。
 - 上一輪 v20.4.21 行為摘要保留如下，供重開對話辨識已落地內容：
 - 關鍵行為：
   - 不升 VERSION，仍為 `v20.4.21`。

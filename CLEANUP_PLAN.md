@@ -15,6 +15,13 @@
 
 ## Completed
 
+- `strategy-support-stop-candidate-20260601`:
+  - 問題：Owner 要評估並修復 `strategy()` 未使用 `support` 導致 stop / RR 偏差。
+  - 狀態：blocked，未吸收產品 diff。
+  - Tech candidate：新增 `_stop_candidate_with_support()`，有效 support 且 `support < price` 時用 `max(baseline_stop, support)`；測試覆蓋 support 上移、低於 baseline、無效 support。
+  - QA 捕獲輸出：focused probes 方向通過，但 runner 在 final sentinel 前 timeout / stream disconnected。
+  - 阻塞原因：TASK 版本契約要求可見 RR / 止損變化需同步升版；candidate 會改變報文可見 `stop / risk / rr`，但 VERSION 未升且未取得 Owner 放行。
+  - 邊界：主 repo 未吸收 `services/analysis.py` / `tests/test_analysis_engine.py` candidate diff；後續需重新決定 VERSION/可見契約後再跑 PM -> Tech -> QA。
 - `presentation_report_structured_noise_flags_tiny_patch_20260601`:
   - 問題：`presentation/report.py` 用 rendered summary 字串做反向判斷，合法 `production` summary 可能被詞表誤濾，盤後每日快照警告也依賴固定中文文案偵測。
   - 結果：`_decision_brief_lines()` 改用 `summary_excluded_lines / summary_excluded_sections` 結構化排除；`_afterhours_brief_lines()` 改用 `daily_write_warning` 結構化參數。

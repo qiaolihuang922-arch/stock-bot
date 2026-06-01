@@ -1,131 +1,133 @@
-# TASK: presentation_report_structured_noise_flags_tiny_patch_20260601
+# TASK: 將 support 納入 strategy() 止損候選計算
 
 ## 任務狀態
 
-- task_id: presentation_report_structured_noise_flags_tiny_patch_20260601
-- 任務類型: tiny_patch
+- task_id: strategy-support-stop-candidate-20260601
+- 任務類型: normal_patch
 - 狀態: ready_for_tech
-- 版本建議: 不升版，維持既有 VERSION，目前上下文顯示為 v20.4.21
-- QA 分級建議: L1
-- 本輪主 bug: presentation/report.py 顯示層用已渲染字串做反向判斷，導致文案變動或合法字樣可能誤觸發 / 誤過濾
+- 版本建議: 若使用者可見報文內容或策略版本字串會呈現 RR / 止損變化，需同步升版；若只影響內部測試 fixture 且無版本 header，則不新增版本字串。
+- QA 分級建議: L2
 
 ## Owner 問題
 
-presentation/report.py 有兩處顯示層字串匹配脆弱性需要收斂修復：
+services/analysis.py 的 strategy() 中已解包：
 
-1. _decision_brief_lines() 目前用 noisy_contains 與硬編碼詞表過濾 summary_message 每行，應改為由上游以結構化欄位傳遞「哪些 summary 噪音內容不應進 brief」，不要從已渲染字串反向判斷。
-2. _afterhours_brief_lines() 目前用中文文案 '每日快照未寫入' 偵測寫入警告，應改為由 generator 以結構化參數傳入寫入警告狀態，不依賴報文文案字串。
+support, resistance = support_resistance(closes)
+
+但 support 未參與止損候選計算。現有止損候選：
+
+stop_candidate = min(ma5, avg(closes[-3:]))
+
+完全忽略支撐位，可能導致止損價與 RR 計算偏離策略語意。Owner 指定本輪評估並修正是否應將 support 納入 stop_candidate，例如：
+
+stop_candidate = max(support, min(ma5, avg(closes[-3:])))
+
+並補測試驗證修改後 RR / 風險計算方向符合預期。
 
 ## 使用者可見結果
 
-手機閱讀盤後 Telegram 報文時：
-
-- 寫入警告仍能在盤後 brief 正確出現。
-- summary_message 若含合法的 production 字樣，不會因字串詞表被誤判為噪音而消失。
-- 報文既有分組、排序、版本字串、策略結論不因本輪改動改變。
+- 使用者看到的策略輸出、報文或 CLI 中，若包含止損價、風險距離、RR / risk-reward 類欄位，這些值可能因 support 被納入而改變。
+- 當有效 support 高於原本 min(ma5, avg(closes[-3:])) 時，止損候選應優先貼近支撐位，而不是被較低的短均或近三日均值壓低。
+- 若 support 無效、缺失、非數值、非正數，或納入後會產生不合理止損，應維持既有 fallback 行為，不讓策略輸出崩潰。
 
 ## 非目標
 
-- 不重設報文結構。
-- 不改策略 decision、持倉建議、買賣 / 加減碼 / 停損停利邏輯。
-- 不改 DB write path、schema、RLS、grant、policy、role、index / constraint。
-- 不改 live Telegram delivery。
-- 不升 VERSION。
-- 不做全檔案清理、命名重構或 presentation 大拆分。
-- 不處理 Telegram reply markup 附著最後一則 message 的旁支風險。
+- 不重設策略核心。
+- 不改買賣 / 加減碼 / 持倉狀態機。
+- 不改 DB schema、RLS、grant、policy、role、index / constraint。
+- 不做 live Telegram delivery。
+- 不回填 production DB。
+- 不調整 support_resistance() 本身演算法，除非現有函式輸出型別與本任務無法相容且需先 blocked。
+- 不順手清理整個 services/analysis.py。
+- 不擴大到所有策略指標的 RR 定義重構。
 
 ## 影響模組
 
-- 主要影響: presentation/report.py
-- 可能需要同步的直接上游: core/generator.py 或現有 generator 報文組裝入口，用於傳遞結構化參數
-- 測試 / probe: 既有報文測試檔中補最小覆蓋，優先使用現有 generator/report fixture，不新增大型測試框架
+- services/analysis.py
+- strategy() 的止損候選計算。
+- 由止損候選推導出的止損價、風險距離、RR / risk-reward 類輸出。
+- 測試
+- 需新增或更新覆蓋 support 介入與 fallback 的 focused tests。
+- 可能受影響但不得任意改契約
+- 既有報文 formatter。
+- 既有 CLI / runner 消費 strategy() 結果的欄位。
+- 既有 Telegram 報文組裝流程。
 
 ## 直接消費者
 
-- Telegram 盤後報文手機閱讀者
-- generator 產出的 message list / report formatter 消費者
-- QA 用既有 dry-run / fixture probe 驗證 rendered message
+- strategy() 的既有 Python callers。
+- 依賴 strategy() 回傳結果產生的策略報文 / Telegram message builder。
+- 依賴止損價、RR 或風險距離的既有測試與 fixture。
+- Owner 手機閱讀的最終策略報文，僅限本輪改動實際影響到報文欄位時。
+
+## 已存在且不得回退的契約
+
+- 不得移除或重新命名 strategy() 現有回傳欄位。
+- 不得改變 strategy() 既有 public return type。
+- 不得改變既有 caller 需要的欄位順序、payload shape 或 message list shape。
+- 不得讓 support_resistance(closes) 的 resistance 既有用途退化。
+- 不得將缺資料或無效 support 解讀成可交易訊號。
+- 不得在 production DB 或 live Telegram 上產生寫入 / 發送副作用。
+- 若 Tech 發現現有契約與上述描述不一致，必須 blocked 並回報 Architect，不得自行改契約。
 
 ## 輸出契約
 
-本輪只收斂一個輸出契約：盤後報文 brief 的顯示內容由結構化狀態控制，不再依賴已渲染文案反向匹配。
+- strategy() 必須維持既有輸入參數與回傳 shape。
+- 止損候選計算契約：
+- 先計算既有短線止損基準：baseline_stop = min(ma5, avg(closes[-3:]))。
+- 若 support 是有效 numeric 且可作為合理多方止損候選，則 stop_candidate 應不低於 baseline_stop，建議為 max(support, baseline_stop)。
+- 若 support 無效或不合理，stop_candidate 必須回退為 baseline_stop。
+- RR / risk-reward 契約：
+- 不新增新的 RR 欄位名稱。
+- 不改既有 RR 欄位語意，除非現有名稱與計算方向本身不明確；若不明確，Tech 必須先記錄現有公式並只測「納入 support 後由 stop_candidate 造成的方向變化」。
+- 報文契約：
+- 若報文露出止損或 RR，文字區塊結構不得變。
+- 示例形狀保持既有卡片 / 行格式，例如：
 
-- _decision_brief_lines() 不得再靠 summary_message 文字包含 production 或其他硬編碼噪音詞判斷是否過濾合法 summary 行。
-- summary 噪音內容應由結構化欄位、明確 flag、或 generator 傳入的排除集合控制；合法 summary 行原文可保留。
-- _afterhours_brief_lines() 是否顯示每日快照寫入警告，應由 generator 傳入的結構化寫入警告狀態控制。
-- 寫入警告實際顯示文案可沿用既有使用者可見文案；判斷來源不得是比對該文案字串。
-- message list 順序、盤後分組、Summary/brief 位置不得因本輪 tiny patch 改變。
-- 已存在且不得回退的契約:
-- VERSION 不升版，維持目前既有版本。
-- 盤後明日語境、短期背景命名、第三則資料依據人話化、未持倉漏斗非執行語意不得回退。
-- strategy decision、RR 計算、holding_status、DB write path 不變。
-- 無有效進場不得被寫成推薦感文案。
+停損: <price>
+RR: <value>
 
-## 手機閱讀路徑與示例輸出形狀
-
-手機閱讀路徑：
-
-1. 打開盤後 Telegram 報文。
-2. 先讀第一則 / brief 區塊。
-3. 確認 summary 合法內容仍出現。
-4. 確認每日快照寫入警告在有結構化警告狀態時出現。
-
-示例形狀，文字可依既有 formatter 為準：
-
-盤後重點
-- production 資料來源正常，今日仍無有效進場
-- 每日快照未寫入：請檢查寫入來源
-
-反例，不能發生：
-
-盤後重點
-- 每日快照未寫入：請檢查寫入來源
-
-若第一行是合法 summary，不能只因含 production 被過濾。
+- 本輪不新增手機報文區塊、不新增解釋長句。
 
 ## 驗收條件
 
-1. summary_message 含合法 production 字樣時，盤後 brief 仍保留該行，不被 noisy_contains 類文字詞表誤過濾。
-2. generator 傳入「每日快照寫入警告」結構化狀態時，盤後 brief 正確顯示寫入警告；變更警告文案本身不應破壞是否顯示的判斷。
-3. 檢查 diff 確認未改 strategy decision、DB write、live Telegram delivery、VERSION。
-4. 測試範圍收斂於上述兩個 probe 與必要既有報文測試；不要求 full L3 production 驗證。
+- support 高於原本 baseline_stop 的 fixture 中，strategy() 使用的止損候選必須因 support 納入而上移。
+- 上述 fixture 中，由止損候選推導出的 RR / risk-reward 類值必須依現有公式呈現可解釋的方向變化，測試需明確 assert 舊 baseline 與新結果的差異方向。
+- support 低於或等於 baseline_stop 時，結果不得比既有 baseline 更差，且不應出現非預期下移。
+- support 無效時，策略仍可執行並維持 baseline fallback。
+- 既有 strategy() consumers 的 return shape 測試不得失敗。
+- 不產生 DB write、live Telegram send、持倉狀態機變更。
+- Tech 需在 CHANGELOG.md 寫明實際公式、修改檔案、自檢命令與結果。
 
-## 範例或 Fixture
+## 範例或 fixture
 
-Tech 應補 1-2 個最小 probe：
-
-- probe A: 建立含合法 summary_message 行的 fixture，例如 production 資料來源正常，今日仍無有效進場，驗 rendered afterhours brief 包含該行。
-- probe B: 建立 generator 傳入寫入警告狀態的 fixture，驗 rendered afterhours brief 包含既有每日快照寫入警告文案。
-
-若既有 fixture 已能表達 afterhours report，優先擴充既有 fixture，不新增平行大型 fixtures。
+- fixture A: support > min(ma5, avg(closes[-3:]))
+- 期待：stop_candidate 從 baseline 上移至 support 或 support 約束後的合理值。
+- 期待：RR / risk-reward 依現有公式產生相對舊 baseline 的方向變化，測試名稱需說明該方向。
+- fixture B: support <= min(ma5, avg(closes[-3:]))
+- 期待：stop_candidate 等於既有 baseline，不因 support 更低而下移。
+- fixture C: support 無效或資料不足
+- 期待：fallback 至既有 baseline，strategy() 不 crash。
 
 ## 明確禁止事項
 
-- 禁止用新增中文 / 英文關鍵字詞表替代現有詞表，形成另一個字串匹配。
-- 禁止從 rendered message、summary 文案、warning 文案反推狀態。
-- 禁止修改策略輸出以配合顯示層。
-- 禁止新增 DB 欄位、寫 production DB、改 schema 或改 live delivery。
-- 禁止升 VERSION。
-- 禁止把本輪 tiny patch 擴大成 presentation/report.py 全面重構。
-- 禁止只改文案不補 probe。
+- 禁止改 DB schema 或 production DML。
+- 禁止 live Telegram delivery。
+- 禁止改持倉狀態機。
+- 禁止把本任務擴成策略重構。
+- 禁止改 support_resistance() 的輸出契約。
+- 禁止刪除既有回傳欄位或改名。
+- 禁止只改公式不補測試。
+- 禁止用「看起來合理」取代可重跑測試證據。
 
 ## 阻塞條件
 
-- 若現有 generator 到 presentation 之間完全沒有可傳遞結構化狀態的資料通道，Tech 應 blocked，回報缺少哪個接口，而不是改回字串匹配。
-- 若無法判定目前 VERSION 常量位置或值，Tech 不得自行升版；保持不改並在 CHANGELOG 說明。
-- 若現有 fixture 無法生成盤後 brief，Tech 可補最小 fixture；若需要 production credential 或 live Telegram 才能驗證，應 blocked，不能用 live delivery 驗收。
+- Tech 無法確認 strategy() 現有 return shape 或 RR 公式時，blocked。
+- support_resistance(closes) 可能回傳非 numeric 且現有程式無明確處理方式時，blocked 或先以最小 defensive guard 處理並列明。
+- 納入 support 後會讓止損價高於或等於進場 / 現價，且現有策略沒有處理此情境時，blocked，需 Architect/Owner 決定 clamp 或 fallback 規則。
+- 測試環境缺依賴且無法補齊時，blocked，不得宣告通過。
 
 ## 本輪停止條件
 
-完成以下即停止：
-
-- 移除本輪指定兩處 brittle rendered-string 判斷。
-- 補上 1-2 個 probe 覆蓋合法 production summary 不被誤濾、寫入警告由結構化狀態顯示。
-- 自檢證明 presentation/report.py 與必要 generator bridge / tests 通過，且 VERSION、策略 decision、DB write path 無 diff。
-
-旁支問題只記待辦，不納入本輪：
-
-- 全報文其他字串匹配盤點。
-- Telegram reply markup 落點。
-- presentation 分層重構。
-- production ledger / source-of-truth 稽核。
+- 完成條件：strategy() 止損候選已按契約納入有效 support，focused tests 覆蓋 support 生效、support 不生效、support fallback 三類案例，且既有相關測試通過。
+- 旁支不納入本輪：RR 命名重構、策略參數重新校準、報文文案優化、全量 fixture 更新、production replay、DB 回填。這些若被發現，只記為後續待辦，不阻塞本輪，除非直接導致本任務驗收無法判定。
