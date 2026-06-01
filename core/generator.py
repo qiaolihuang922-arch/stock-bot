@@ -57,7 +57,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.16"
+VERSION = "v20.4.17"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -5991,7 +5991,7 @@ def _brief_holding_line(holding_items):
         if position_summary_action(name, data) in {"停利記憶不足", "停利記憶待確認"}
     ]
     if blocked:
-        return f"持倉：{'、'.join(blocked)} 先補 production execution memory；其餘依第一則風控卡處理。"
+        return f"持倉：{'、'.join(blocked)} 先補交易執行記憶；其餘依第一則風控卡處理。"
 
     return "持倉：依第一則既有卡片處理，不新增第二個主行動。"
 
@@ -6009,13 +6009,13 @@ def _brief_background_line(report_context):
     strategy = _field_by_key(report_context, "evidence.strategy_sample")
     strategy_status = strategy.get("source_status", "missing-source")
     market_text = (
-        "市場/題材資料已確認只能說明環境，不構成買點"
+        "市場/題材背景只用來理解環境，不構成買點"
         if market.get("source_status") == "available"
-        else "市場/題材來源不足時只顯示限制"
+        else "市場/題材背景可靠度不足，只作觀察"
     )
     if strategy_status in {"missing-source", "source-error", "insufficient-data"}:
-        return f"背景：{market_text}；策略樣本 {strategy_status}，本輪 fail-closed。"
-    return f"背景：{market_text}；策略樣本可讀，但不新增第三則進場理由。"
+        return f"背景：{market_text}；策略樣本本輪不採用。"
+    return f"背景：{market_text}；策略樣本只作輔助，不新增進場理由。"
 
 
 def _market_theme_data_basis_line(report_context):
@@ -6023,38 +6023,54 @@ def _market_theme_data_basis_line(report_context):
     field = _field_by_key(report_context, "evidence.market_theme")
     status = field.get("source_status") or _manifest_status(evidence.get("source_status"))
     trend = evidence.get("evidence_trend") or {}
-    date_parts = []
-    if evidence.get("as_of"):
-        date_parts.append(f"as_of {evidence.get('as_of')}")
+    trend_parts = []
     if trend.get("observed_days"):
-        date_parts.append(f"{trend.get('observed_days')} 個觀察日")
+        trend_parts.append(f"近 {trend.get('observed_days')} 個交易證據日")
     if trend.get("recent_supporting_days") is not None:
-        date_parts.append(f"近期支持 {trend.get('recent_supporting_days')} 日")
-    date_text = f"（{'; '.join(date_parts)}）" if date_parts else ""
+        trend_parts.append(f"近期 {trend.get('recent_supporting_days')} 日支持")
+    trend_text = "，".join(trend_parts) if trend_parts else "近幾個交易證據日"
 
     if evidence.get("confirmed") and status == "available":
-        return f"market/theme：production DB 已有可用 confirmed evidence{date_text}，用途限市場/題材背景。"
+        return (
+            f"市場 / 題材背景：{trend_text}仍支持目前背景觀察，可靠度中等；"
+            "這只用來理解環境，不等於買點。"
+        )
     if status in {"missing-source", "source-error", "insufficient-data"}:
-        return f"market/theme：{status}{date_text}，production 來源不足時只顯示限制，不構成買點。"
-    return f"market/theme：{status or 'insufficient-data'}{date_text}，用途限市場/題材背景。"
+        return (
+            "市場 / 題材背景：近幾個交易證據日不足以形成可靠背景，"
+            "只作觀察，不作買點。"
+        )
+    return f"市場 / 題材背景：{trend_text}只作背景觀察，可靠度有限，不等於買點。"
 
 
 def _strategy_sample_data_basis_line(report_context):
     strategy = _field_by_key(report_context, "evidence.strategy_sample")
     status = strategy.get("source_status", "missing-source")
-    value = strategy.get("value") or "無可驗證樣本來源"
     if status in {"missing-source", "source-error", "insufficient-data"}:
-        return f"strategy sample：{status}，{value}，fail-closed，不產生進場理由。"
-    return "strategy sample：available，classification backtest source 可用；僅作資料依據，不新增第三則買點。"
+        return "策略樣本：本輪缺少可驗證樣本，可靠度低，未納入買賣判斷。"
+    return "策略樣本：樣本來源可驗證，只作輔助參考，不新增買點。"
 
 
 def _position_candidate_data_basis_line(report_context):
     statuses = report_context.get("source_status_summary") or {}
     position_status = statuses.get("position", "missing-source")
     candidate_status = statuses.get("funnel", "missing-source")
+    position_ready = position_status == "available"
+    candidate_ready = candidate_status in {"available", "derived"}
+
+    if position_ready and candidate_ready:
+        return (
+            "持倉 / 價格 / 候選資料：持倉與價格資料可支持風控檢查；"
+            "候選資料可支持分類，缺資料的標的會保守處理，不作有效進場。"
+        )
+    if position_ready:
+        return (
+            "持倉 / 價格 / 候選資料：持倉與價格資料可支持風控檢查；"
+            "候選資料不足，本輪不給缺資料標的進場結論。"
+        )
     return (
-        f"持倉/候選：持倉 {position_status}；候選 {candidate_status}；"
-        "依 production DB 或 Owner 指定持久 source-of-truth，來源不足只顯示限制，不推導新行動。"
+        "持倉 / 價格 / 候選資料：部分持倉或候選資料不足，只能支持有限風控檢查；"
+        "缺資料標的本輪不給進場結論。"
     )
 
 
@@ -6071,6 +6087,14 @@ def _decision_brief_lines(summary_message):
         "lookback_range",
         "source_of_truth",
         "db_table",
+        "missing-source",
+        "source-missing",
+        "source-error",
+        "insufficient-data",
+        "unavailable",
+        "fail-closed",
+        "production",
+        "runtime",
     )
     lines = []
     skip_strategy_evidence = False

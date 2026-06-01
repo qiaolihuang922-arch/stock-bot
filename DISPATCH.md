@@ -4,10 +4,10 @@
 
 ## Current Task
 
-- task_id: `telegram_card_source_humanize_v20_4_16`
-- task_name: `Telegram Card Source Humanization`
+- task_id: `telegram-evidence-human-readable-v20.4.17`
+- task_name: `Telegram Third Message Data Basis Humanization`
 - task_type: `normal_patch`
-- owner_status: `rejected_raw_card_source_and_holding_rr_conflict`
+- owner_status: `rejected_raw_engineering_data_basis`
 - architect_status: `qa_passed_pending_git_close`
 - pm_status: `done`
 - tech_status: `done`
@@ -19,19 +19,17 @@
 - 本輪已完成 QA，收口時必須 commit / push 到 `origin/main`。
 - Git completion gate：final 前必須以 `tools/cao_agent/check_git_completion_gate.sh` 驗證 `main` matches `origin/main` 且 worktree clean。
 - 已吸收 PM -> Tech -> QA 交付到主 repo 工作樹：
-  - 報文版本升至 `v20.4.16`。
+  - 報文版本升至 `v20.4.17`。
   - TG message list 順序維持：messages[0] 持倉、messages[1] 未持倉 / 非持倉、messages[2] short/evidence；`include_detail=True` 時 Details Backup 仍追加在最後。
-  - 第一則持倉卡 raw `Source：position available｜price available｜risk derived｜RR derived` 改為 `資料：持倉與現價已確認；風控由持倉成本/停損推算`。
-  - 第二則未持倉卡 raw `Source：price available｜OHLCV available｜RR derived｜score derived｜volume derived` 改為 `資料：現價與 OHLCV 已確認；RR/分數/量能為模型推算`。
-  - 缺 price / OHLCV 時顯示 `資料：缺...，停止新倉判斷` 並 fail-closed，不輸出可買 / 推薦語氣。
-  - 持倉卡非加碼情境顯示 `數據：新倉 RR：持倉不適用`，不再露出 `RR 2.33` 這類新倉 RR 數字。
+  - 第三則 `資料依據` 改為人話可靠度 / 用途 / 限制：市場題材只作背景，不等於買點；策略樣本不可用時不納入買賣判斷；持倉 / 價格 / 候選資料說明可支持風控 / 分類與缺資料保守處理。
+  - 第三則不再顯示 `production`、`runtime`、`production DB`、`classification backtest`、`source-of-truth`、`available`、`derived`、`as_of`、`source_status`、`missing-source`、`source-error`、`insufficient-data`、`fail-closed` 或 ISO timestamp。
   - 不改策略 decision、持倉/未持倉判斷、DB schema、write path、live Telegram。
 - 驗證：
   - QA 結論：`通過`。
   - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py services/notifier.py`：passed。
-  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py`：119 passed，169 warnings（第三方 deprecation 類）。
+  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py`：120 passed，169 warnings（第三方 deprecation 類）。
   - `git diff --check`：passed。
-  - QA 補充反證：缺 price 且 strategy result 為 BUY 時，完整三則 sample 仍輸出 `資料：缺現價，停止新倉判斷` 與 `新倉：無有效進場`，沒有可買 / 建議倉位 / 推薦語氣。
+  - QA 補充反證：完整第三則 sample 注入 raw 工程語、ISO timestamp、不可用 strategy sample 後，第三則仍只顯示人話可靠度 / 用途 / 限制；market/theme 未升格買點，strategy sample 未進入買賣判斷。
   - scoped 可吸收 diff：`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`、`core/generator.py`、`tests/test_generator_report.py`、`tests/test_market_theme_evidence.py`。
 
 ## Next Action

@@ -1,225 +1,228 @@
-# TASK: Telegram 卡片 Source 人話化與持倉 RR 顯示契約修正
+# TASK: v20.4.17 第三則「資料依據」改為人話可靠度與用途說明
 
 ## 任務狀態
 
-- task_id: telegram_card_source_humanize_v20_4_16
+- task_id: telegram-evidence-human-readable-v20.4.17
 - 任務類型: normal_patch
-- 狀態: QA 通過，待 git 收口
-- 版本建議: 升版至 v20.4.16
+- 狀態: ready_for_tech
+- 版本建議: v20.4.17
 - QA 分級建議: L2
-- 本輪主 bug: 第一則持倉卡、第二則未持倉卡內 Source 行為工程欄位直出，且持倉卡出現新倉 RR 數字造成語意衝突。
-- 本輪停止條件: 完整三則 Telegram sample 中，第一則與第二則卡片的 Source/資料行已手機可讀、沒有 raw field/status dump、持倉卡不再顯示新倉 RR 數字，未持倉缺資料時明確 fail-closed。其他報文文案優化、策略排序、分數公式、
-資料補齊流程只記待辦，不納入本輪。
+- 本輪主 bug: 第三則 Telegram「資料依據」仍輸出工程語、表名、欄位狀態與 raw timestamp，導致 Owner 手機閱讀時無法直接理解資料可靠度與策略用途。
 
 ## Owner 問題
 
-Owner 指出 Telegram 第一則持倉卡與第二則未持倉卡的 Source 行不可讀，例如：
+Owner 指出 v20.4.16 第三則「資料依據」仍出現工程語與 raw metadata，例如：
 
-- Source：position available｜price available｜risk derived｜RR derived
-- Source：price available｜OHLCV available｜RR derived｜score derived｜volume derived
+- production DB
+- classification backtest
+- source-of-truth
+- available
+- derived
+- as_of
+- ISO timestamp
 
-這些是工程欄位直出，手機閱讀時沒有決策價值。Owner 要求改成手機可讀的「資料」或「依據」短句，說明哪些資料已確認、哪些是推算、缺資料時 fail-closed。
+Owner 不需要表名、來源欄位狀態或工程語。第三則應改成人話回答：
 
-同時 Owner 指出持倉卡有顯示衝突：持倉卡理應「持倉不看新倉 RR」，卻出現 RR 2.33 之類數字，容易被誤讀成持倉仍以新倉 RR 判斷。
+- 證據源是否可靠。
+- 資料對策略判斷是否有用。
+- 可靠度與限制是什麼。
+- 哪些資料只能作背景，不能當買點。
+- 哪些樣本不足或缺來源時本輪不採用，必須 fail-closed。
 
 ## 使用者可見結果
 
-Telegram 報文中：
+Telegram 三則報文仍維持既有閱讀路徑；本輪只改第三則「資料依據」的人話內容與版本字串。
 
-- 第一則持倉卡不再出現 raw position available｜price available｜risk derived｜RR derived。
-- 第二則未持倉卡不再出現 raw price available｜OHLCV available｜RR derived｜score derived｜volume derived。
-- Source 行改名或改寫為手機可讀短句，例如：資料：持倉與現價已確認；風控由持倉成本/停損推算。
-- 未持倉缺必要資料時，卡片明確顯示不可行動，例如：資料：缺 OHLCV，停止新倉判斷，不得用像推薦的語氣。
-- 持倉卡不得顯示新倉 RR 數字；若保留 RR 欄位，必須明確寫成 新倉 RR：持倉不適用 或等價不可誤讀文案。
+手機閱讀路徑：
+
+1. Owner 在手機 Telegram 依序收到完整三則報文。
+2. 第一則、第二則的策略決策、持倉、候選分類與行動語意不得因本任務改變。
+3. 第三則標題仍是「資料依據」或既有等價標題。
+4. 第三則不再顯示工程來源名、表名、欄位狀態、raw timestamp。
+5. 第三則用簡短人話說明資料可靠度、用途與限制。
 
 ## 非目標
 
-- 不改策略 decision、買賣 / 加減碼 / 停損停利判斷。
-- 不改分數公式、RR 計算公式、volume 判斷公式。
+- 不改任何策略 decision。
+- 不改買入、賣出、加碼、減碼、停損、停利、觀察等行動判斷。
+- 不改候選分類邏輯。
 - 不改 DB schema、RLS、grant、policy、role、index、constraint。
-- 不改 DB write path，不新增 production backfill。
-- 不 live Telegram delivery。
-- 不重排三則 Telegram 報文的主流程與卡片分組。
-- 不做全量文案重寫或報文大改版。
+- 不改 DB write path。
+- 不新增或改 live Telegram delivery。
+- 不做全量報文重設、策略重寫、資料管線重構。
+- 不擴大清理其他報文區塊。
+- 不把 market/theme 背景資訊升格成買點。
+- 不因 strategy sample 不可用而補猜策略判斷。
 
 ## 影響模組
 
-Tech 需定位並僅修改 Telegram 報文 formatter / card renderer / sample fixture / 對應測試。
+Tech 需在 repo 中定位實際第三則 Telegram「資料依據」生成位置後，只修改必要範圍。預期影響面：
 
-預期影響範圍：
-
-- Telegram 第一則持倉卡的 Source/資料行 formatter。
-- Telegram 第二則未持倉卡的 Source/資料行 formatter。
-- 持倉卡 RR 顯示條件或文案契約。
-- Telegram sample/golden output 測試。
-- 版本字串或報文 header 常量升至 v20.4.16。
-
-不得影響：
-
-- strategy decision function return。
-- DB payload / write contract。
-- live delivery command。
-- screening universe / ranking / scoring logic。
-- 持倉狀態機。
+- Telegram 三則報文的第三則內容 formatter / renderer。
+- 報文版本字串或常量：升為 v20.4.17。
+- 相關 sample / snapshot / fixture 測試。
+- 必要時只更新對應測試 fixture，不改策略計算核心。
 
 ## 直接消費者
 
-- Owner 手機閱讀 Telegram 三則報文。
-- Telegram message renderer / formatter 的既有測試或 snapshot。
-- 任何依賴 Telegram sample/golden output 的 QA 檢查流程。
+- Owner 手機 Telegram 閱讀者。
+- Telegram report renderer 的三則訊息輸出。
+- 現有 dry-run / sample generator / tests 中消費三則 Telegram message list 的測試或工具。
+- QA 驗收用完整三則 Telegram sample。
 
 ## 已存在且不得回退的契約
 
-- Telegram 報文仍維持既有三則 sample 結構；本輪只修第一則持倉卡與第二則未持倉卡的資料來源可讀性與持倉 RR 衝突。
-- Summary 仍只回答決策：今天能不能買、持倉先處理什麼、未持倉哪些只是追蹤、哪些不可行動。
-- 可買、可準備、僅追蹤、淘汰 / 不可行動不得混在同一語意。
-- 無可買時不得使用像推薦的文案。
-- 同一持倉在同一份報文只能有一個主行動。
-- 今日買入後預設只能新倉風控觀察；若轉弱要賣，必須同行說明跌破警戒、停損或策略失效。
-- 使用者可見版本不得回退；本輪應升至 v20.4.16。
-- 若 Tech 無法確認目前三則報文結構、版本常量或 Source 行生成位置，必須 blocked，要求 Architect 補充，不得自行重構報文架構。
+- 維持完整三則 Telegram 報文輸出，不得合併、刪除或改變三則主體順序。
+- 第三則仍承擔「資料依據」用途，不得移到第一則或第二則。
+- 第一則、第二則既有策略決策、分組、排序、候選分類與行動文案不得因本任務回退。
+- 無可買時不得出現像推薦的文案；既有「新倉無有效進場」類不可買語意不得回退。
+- market/theme 資料只能作背景或環境說明，不得變成買點或推薦理由。
+- strategy sample 缺來源或樣本不足時必須 fail-closed，不得進入策略判斷。
+- 使用者可見版本不得停留在 v20.4.16；本輪需升為 v20.4.17。
+- 不確定的既有契約不得自行假設；若會影響三則報文結構或策略 decision，Tech 必須 blocked 並回報 Architect 補充。
 
 ## 輸出契約
 
-### 第一則：持倉卡資料行
+第三則「資料依據」輸出應包含三類人話說明，順序建議如下：
 
-Raw field/status dump 禁止輸出：
+1. 市場 / 題材背景
+- 說明近幾個交易證據日是否支持目前背景判斷。
+- 說明可靠度。
+- 明確說明用途限背景，不等於買點。
+2. 策略樣本
+- 若缺 source、樣本不足、資料不足或可信度不足，輸出「本輪不採用」。
+- 說明可靠度低或不可用。
+- 必須 fail-closed，不得暗示已納入判斷。
+3. 持倉 / 價格 / 候選資料
+- 若資料足夠，說明可支持風控、持倉檢查或候選分類。
+- 若缺資料，說明限制與本輪如何保守處理。
+- 不輸出 raw 狀態字、表名、來源名、欄位名或 timestamp。
 
-Source：position available｜price available｜risk derived｜RR derived
+第三則不得輸出以下 raw 語彙或等價工程語：
 
-應輸出手機可讀短句，建議欄名為 資料 或 依據：
+- production DB
+- classification backtest
+- source-of-truth
+- available
+- derived
+- as_of
+- ISO timestamp，例如 2026-06-01T...
+- raw table name
+- raw source/status field name
 
-資料：持倉與現價已確認；風控由持倉成本/停損推算
+允許輸出的人話示例形狀：
 
-若缺持倉或現價必要資料，必須 fail-closed：
+📌 資料依據
 
-資料：缺持倉或現價，停止持倉建議
+市場 / 題材背景：
+近幾個交易證據日仍支持目前的背景觀察，可靠度中等；這只用來理解環境，不等於買點。
 
-持倉卡不得出現新倉 RR 數字：
+策略樣本：
+本輪樣本來源不足，可靠度低，未納入買賣判斷。
 
-新倉 RR：持倉不適用
+持倉 / 價格 / 候選資料：
+持倉與價格資料可支持風控檢查；候選資料可支持分類，但缺資料的標的會保守處理，不作有效進場。
 
-或直接不顯示新倉 RR 欄位。
+若資料不足的人話示例形狀：
 
-### 第二則：未持倉卡資料行
+📌 資料依據
 
-Raw field/status dump 禁止輸出：
+市場 / 題材背景：
+近幾個交易證據日不足以形成可靠背景，只作觀察，不作買點。
 
-Source：price available｜OHLCV available｜RR derived｜score derived｜volume derived
+策略樣本：
+本輪缺少可驗證樣本，可靠度低，未納入判斷。
 
-應輸出手機可讀短句：
-
-資料：現價與 OHLCV 已確認；RR/分數/量能為模型推算
-
-若缺必要資料，必須 fail-closed 並不可行動：
-
-資料：缺 OHLCV，停止新倉判斷
-狀態：不可行動
-
-若只有推算資料，不得寫成「已確認」。
-
-### 欄位順序
-
-- 保留既有卡片主要欄位順序。
-- Source/資料行只替換原 Source 行位置，不新增長段落。
-- 手機單行優先；必要時最多兩個短分句。
-- 不輸出英文 raw key：available、derived、OHLCV available、score derived、volume derived、RR derived。
+持倉 / 價格 / 候選資料：
+部分持倉或候選資料不足，只能支持有限風控檢查；缺資料標的本輪不給進場結論。
 
 ## 驗收條件
 
-1. 完整三則 Telegram sample 產出後，第一則持倉卡與第二則未持倉卡均無 raw Source/status dump。
-2. 第一則持倉卡不顯示新倉 RR 數字，例如不得出現 RR 2.33 這類未標明持倉不適用的數字。
-3. 第二則未持倉卡在資料完整時，以人話說明「已確認」與「推算」來源。
-4. 第二則未持倉卡在缺 price 或 OHLCV 任一必要資料時 fail-closed，顯示不可行動或停止新倉判斷，不得給可買/準備買語氣。
-5. 報文版本/header 顯示 v20.4.16，且沒有回退既有三則報文結構。
-6. Tech 自檢需包含至少一個 fixture 或 golden sample 更新；QA 需另外用完整三則 Telegram sample 做手機閱讀路徑檢查。
+1. 版本與三則報文
+- 完整三則 Telegram sample 可產生。
+- 使用者可見版本為 v20.4.17。
+- 第三則仍是「資料依據」用途。
+- 第一則、第二則策略 decision、持倉行動與候選分類不因本任務改變。
+2. 第三則禁用 raw 語彙
+- QA 必須用完整三則 Telegram sample 檢查第三則。
+- 第三則不得包含：
+- production DB
+- classification backtest
+- source-of-truth
+- available
+- derived
+- as_of
+- ISO timestamp
+- raw table/source/status/timestamp 類工程語
+3. market/theme 語意
+- 第三則需說明近幾個交易證據日是否支持背景。
+- 需說明可靠度與限制。
+- 需明確呈現用途限背景，不等於買點。
+- 不得讓 market/theme 看起來像推薦理由或有效進場條件。
+4. strategy sample fail-closed
+- 缺 source、樣本不足或不可驗證時，第三則需說明「本輪不採用」或等價語意。
+- 需說明可靠度低 / 不可用。
+- 第一則、第二則不得因不可用 strategy sample 產生買賣判斷。
+5. 持倉 / 候選資料
+- 資料可用時，第三則需說明可支持風控 / 候選分類。
+- 資料不足時，需說明限制與保守處理。
+- 不得輸出 available、derived、source-of-truth 或 raw source/status。
 
-## 範例或 Fixture
+## 範例或 fixture
 
-### Fixture A：持倉卡資料完整
+Tech 至少提供 1 個完整三則 Telegram sample fixture，覆蓋：
 
-輸入條件：
+- market/theme 有近幾個交易證據日支持，但只作背景。
+- strategy sample 缺 source 或樣本不足，第三則顯示本輪不採用。
+- 持倉 / 價格 / 候選資料可支持風控或分類。
+- 第三則不含 raw 工程語。
 
-- position 存在
-- price 存在
-- risk 由持倉資料推算
-- 原本可能有 RR derived
+QA 需另補一個負面檢查或反證路徑：
 
-期望輸出形狀：
-
-[第一則 / 持倉]
-...既有持倉主行動...
-資料：持倉與現價已確認；風控由持倉成本/停損推算
-新倉 RR：持倉不適用
-
-不得出現：
-
-Source：position available｜price available｜risk derived｜RR derived
-RR 2.33
-
-### Fixture B：未持倉卡資料完整
-
-輸入條件：
-
-- price 存在
-- OHLCV 存在
-- RR / score / volume 由模型推算
-
-期望輸出形狀：
-
-[第二則 / 未持倉]
-...既有候選狀態...
-資料：現價與 OHLCV 已確認；RR/分數/量能為模型推算
-
-不得出現：
-
-Source：price available｜OHLCV available｜RR derived｜score derived｜volume derived
-
-### Fixture C：未持倉缺 OHLCV
-
-輸入條件：
-
-- price 存在
-- OHLCV 缺失
-
-期望輸出形狀：
-
-[第二則 / 未持倉]
-狀態：不可行動
-資料：缺 OHLCV，停止新倉判斷
-
-不得出現可買、推薦、準備進場等語氣。
-
-## QA 要求
-
-QA 分級：L2
-
-QA 必須檢查：
-
-- 完整三則 Telegram sample，而不是只看單一卡片 formatter。
-- 手機閱讀路徑：第一則持倉卡、第二則未持倉卡在窄寬閱讀時 Source/資料行可理解且不過長。
-- 第一則持倉卡沒有新倉 RR 數字衝突。
-- 第二則未持倉卡資料完整時，人話區分已確認資料與推算結果。
-- 第二則未持倉卡缺資料時仍 fail-closed。
-- 版本顯示為 v20.4.16。
-- QA 必須補一個 Tech 未覆蓋的反證案例：例如缺 price 或缺 OHLCV 任一項時，不得仍輸出可買語氣。
+- 對第三則做 forbidden-term scan。
+- 檢查 ISO timestamp pattern。
+- 檢查 strategy sample 不可用時不進入買賣判斷。
+- 檢查 market/theme 沒被寫成買點。
 
 ## 明確禁止事項
 
-- 禁止修改策略 decision。
-- 禁止修改 DB schema / RLS / grant / policy / role / index / constraint。
-- 禁止新增或修改 production DB write。
+- 禁止改策略 decision。
+- 禁止改 DB schema / write path。
 - 禁止 live Telegram delivery。
-- 禁止把 raw engineering field/status 直接換成另一組 raw key。
-- 禁止把持倉卡新倉 RR 數字改名後繼續顯示為可判斷指標。
-- 禁止擴大成全報文重構、策略重設或全量清理。
-- 禁止用 local cache、runtime dict 或 agent 對話當跨日持倉 source-of-truth。
+- 禁止把 raw table name、source/status 欄位、timestamp 搬到別的區塊。
+- 禁止只改英文詞為中文工程詞，仍讓 Owner 看到資料庫、表名、欄位狀態。
+- 禁止把資料不足寫成可用。
+- 禁止把 market/theme 背景寫成可買理由。
+- 禁止 strategy sample 不可靠時仍納入判斷。
+- 禁止擴大成全報文重構或策略重設。
 
 ## 阻塞條件
 
-- 無法定位 Telegram 三則 sample 或卡片 renderer。
-- 無法確認目前版本常量 / header 位置。
-- 缺少可產出完整三則 Telegram sample 的 fixture 或命令。
-- 修改 Source/資料行會牽動 strategy decision、DB schema/write 或 live delivery。
-- 無法在缺 price / 缺 OHLCV 情境維持 fail-closed。
-- 現有契約與本 TASK 衝突時，Tech 必須 blocked 並回報差異，不得自行擴大範圍。
+Tech 必須 blocked 並回報 Architect，如果出現以下情況：
+
+- 無法定位第三則「資料依據」生成位置。
+- 版本字串來源不明，可能造成 v20.4.16 / v20.4.17 不一致。
+- 修改第三則必須同步改策略 decision 才能通過測試。
+- 現有 sample generator 無法產生完整三則 Telegram sample，且無可替代 fixture。
+- 無法判斷某些 raw 欄位是否仍被下游直接消費。
+- 測試環境缺依賴且無法補齊，導致不能驗完整 sample。
+
+## 本輪停止條件
+
+驗到以下範圍即算本輪完成：
+
+- 完整三則 Telegram sample 可產生。
+- 第三則「資料依據」已改為人話可靠度與用途說明。
+- 第三則 forbidden raw 語彙與 ISO timestamp scan 通過。
+- v20.4.17 版本可見。
+- market/theme 只作背景、strategy sample 不可用 fail-closed、持倉 / 候選資料用途說明成立。
+- QA L2 針對完整三則 sample 做至少一個 Tech 未覆蓋的反證檢查。
+
+以下旁支問題不納入本輪，若發現只記入後續待辦：
+
+- 其他報文區塊文案優化。
+- 候選分類策略調整。
+- 歷史資料補齊。
+- DB source-of-truth 設計。
+- Telegram delivery runner 改造。
+- 全量 snapshot 重建。

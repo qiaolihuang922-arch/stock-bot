@@ -15,6 +15,14 @@
 
 ## Completed
 
+- `telegram-evidence-human-readable-v20.4.17`:
+  - 問題：Owner 指出第三則 `資料依據` 又出現 `production DB`、`classification backtest`、`source-of-truth`、`available/derived/as_of` 等工程語，且沒有用人話說明證據源是否可靠、策略是否有用。
+  - 結果：PM -> Tech -> QA 完成，QA `通過`；收口需 commit / push 並跑 Git completion gate。
+  - 關鍵修正：第三則改為三段人話資料依據：市場 / 題材背景可靠度與不作買點；策略樣本不可用時可靠度低且不納入買賣判斷；持倉 / 價格 / 候選資料可支持風控 / 分類，缺資料標的保守處理。
+  - QA 反證：完整三則 sample 注入 raw 工程語、ISO timestamp、不可用 strategy sample 後，第三則仍不含 `production`、`runtime`、`source_status`、`as_of`、`classification backtest` 等禁詞；market/theme 未升格買點，strategy sample 未進入買賣判斷。
+  - 流程問題：前一輪 QA 已指出第三則 `決策簡報` 仍會從 summary 帶出 `production/runtime` 診斷，本輪補強輸出層過濾並同步舊測試契約，避免只修 `資料依據` 三行而漏掉同一則訊息的其他段落。
+  - 規則治理：`repeated_pattern` + `evidence_chain` + `mobile_reading`。證據鏈要用人話回答可靠度、用途與限制；不可把表名、欄位狀態或 debug source 當作使用者可見證據。
+  - 邊界：不改策略 decision、候選分類、DB schema/write、live Telegram。
 - `telegram_card_source_humanize_v20_4_16`：
   - 問題：Owner 指出第一則/第二則卡片 `Source：... available/derived` 完全看不懂，且持倉卡出現新倉 RR 數字，和「持倉不看新倉RR」衝突。
   - 結果：PM -> Tech -> QA 完成，QA `通過`；收口需 commit / push 並跑 Git completion gate。
