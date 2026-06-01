@@ -4,10 +4,10 @@
 
 ## Current Task
 
-- task_id: `pm-normal-limit-up-low-volume-risk`
-- task_name: `Low Volume Limit-up Risk Prompt`
+- task_id: `holding-weak-observation-clock-20260601`
+- task_name: `Holding Weak Observation Clock`
 - task_type: `normal_patch`
-- owner_status: `reported_low_volume_limit_up_risk_missing`
+- owner_status: `reported_holding_weak_watch_lacks_observation_days`
 - architect_status: `qa_passed_pending_git_close`
 - pm_status: `done`
 - tech_status: `done`
@@ -42,6 +42,9 @@
 - 本輪修最新報文衝突第四優先級：群創 / 仁寶類縮量漲停與緯創 / 英業達類攻擊量漲停在可準備文案中被等同。
 - 修正：報文版本升 `v20.4.23`；未持倉 `漲停鎖價` 且 `volume_ratio < 1.0` 時，卡片與強勢準備摘要顯示 `縮量漲停，需開板回測確認，不等同攻擊量`；`volume_ratio >= 1.0` 或非漲停不顯示。
 - QA：Re-QA `通過`；補 `V=1.0` 邊界與低量非漲停反證；確認分組 / decision 不變、未改策略 / DB / live Telegram。
+- 本輪修最新報文衝突第五優先級：智原類弱勢遠離持倉只有「續抱觀察 / 降低優先級」，沒有觀察第幾天或資料未確認狀態。
+- 修正：報文版本升 `v20.4.24`；弱勢遠離且續抱觀察持倉若 `holding` 或 dict-shaped `position_events` 有可信正整數觀察天數，條件行顯示 `弱勢觀察第 N 天` 與下一日降級條件；缺可信來源顯示 `觀察天數未確認`。list-shaped `position_events` fail-closed，不 crash。
+- QA：最終 Re-QA `通過`；完整 `formatTelegramMessages()` probe 覆蓋 holding / dict events 正例、list / top-level / result / invalid fail-closed、主決策不變、未改策略 / DB / live Telegram。
 - Git completion gate：final 前必須以 `tools/cao_agent/check_git_completion_gate.sh` 驗證 `main` matches `origin/main` 且 worktree clean。
 - 上一輪 v20.4.21 報文修正已在 commit `b177345 restore afterhours control summary` 推送，本輪不再改動該產品 diff。
 - 已吸收內容：
@@ -68,7 +71,7 @@
 ## Next Action
 
 - 收口：commit / push 後跑 `tools/cao_agent/check_git_completion_gate.sh`。
-- 後續 PM 任務按 Owner 最新問題拆分：智原 observation_days / 觀察天數量化。
+- 後續：若 Owner 要真正顯示長期第 N 天，需要另開 production source / observation start 資料治理；本輪只保證有可信來源時顯示、缺來源時不假造。
 - 後續同類報文任務：先補或更新手機閱讀 probe，再改 formatter；不要只寫規則。
 - 旁支另開：Telegram reply markup 仍附在最後一則 message，新 message order 下可能需要 delivery consumer 任務評估按鈕落點。
 - 旁支另開：如果 Owner 認定 2356 英業達實際未賣，需查 production ledger/source truth 為何目前為 `shares=0 / CLOSED`；本輪未寫 DB、不校正 ledger。

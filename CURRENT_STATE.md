@@ -6,7 +6,7 @@
 
 - 專案：台股策略 Telegram 報文機器人。
 - 正式結果以 git / runner 產生報文為準。
-- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前收口目標為 `v20.4.23`。
+- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前收口目標為 `v20.4.24`。
 - 固定 8 份 Markdown 不刪：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 - Architect 是總控；產品 / 策略 / 報文 bug 或 feature 預設走 PM -> Tech -> QA。
 - 跨日狀態、已執行交易、歷史 evidence 必須來自 production DB 或 Owner 指定持久來源；local/runtime/worktree 不能當跨日記憶。
@@ -28,15 +28,15 @@
 
 ## Current Worktree
 
-- task_id：`pm-normal-limit-up-low-volume-risk`
+- task_id：`holding-weak-observation-clock-20260601`
 - 狀態：PM done / Tech done / QA `通過`；主 repo 已吸收可吸收 diff，等待 commit / push / Git completion gate。
 - commit：任務二 blocked 文件已在 `9120672 mark support stop task blocked` 推送到 `origin/main`。
 - 已完成前置任務：光寶科今日買入盤後不可續買說明已在 `2bd0a48 explain today buy non-current entry` 推送；技嘉過熱 RR 顯示已在 `2036415 show overheat blocker for zero rr` 推送。
-- 問題：群創 / 仁寶類 `漲停鎖價` 但 `V < 1.0`，和緯創 / 英業達類攻擊量漲停在可準備文案中被等同。
-- 修正：`core/generator.py` 新增 `low_volume_limit_up_risk_text()`；未持倉卡片與第三則強勢準備摘要對 `漲停鎖價 + volume_ratio < 1.0` 顯示 `縮量漲停，需開板回測確認，不等同攻擊量`；`volume_ratio >= 1.0` 或非漲停不顯示。
-- 驗證：Re-QA output `.cao_agent_context/outputs/20260601_220302_17956_stock_qa_code_readonly.answer.txt`，結論 `通過`；主 repo targeted py_compile / pytest / diff check passed。
-- 邊界：未改 strategy decision、RR 計算、DB write、live Telegram。
-- 後續：Owner 同批剩餘問題需拆分處理：智原 observation_days / 觀察天數量化。
+- 問題：智原類弱勢遠離持倉只顯示 `續抱觀察 / 降低優先級`，缺觀察第幾天或來源未確認狀態。
+- 修正：報文版本升 `v20.4.24`；弱勢遠離且續抱觀察持倉在條件行顯示可信 `弱勢觀察第 N 天`，或缺來源時 fail-closed 顯示 `觀察天數未確認`；`position_events` 非 dict 時不 crash，視為無可信事件。
+- 驗證：最終 Re-QA output `.cao_agent_context/outputs/20260601_223651_26823_stock_qa_code_readonly.answer.txt`，結論 `通過`；主 repo 待跑 targeted tests / py_compile / diff check。
+- 邊界：未改 strategy decision、RR 計算、DB write、live Telegram、持倉狀態機。
+- 後續：若 Owner 要真正補齊長期第 N 天，需要另開 production source / observation start 資料治理；本輪不 backfill、不新增 schema。
 - 上一輪 v20.4.21 行為摘要保留如下，供重開對話辨識已落地內容：
 - 關鍵行為：
   - 不升 VERSION，仍為 `v20.4.21`。

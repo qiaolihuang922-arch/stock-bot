@@ -68,7 +68,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.23"
+VERSION = "v20.4.24"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -686,7 +686,15 @@ def compact_entry_judgement(result):
     return "｜".join(parts)
 
 
+def position_events_dict(data):
+    events = data.get("position_events") or {}
+    return events if isinstance(events, dict) else {}
+
+
 def event_summary_text(events):
+    if not isinstance(events, dict):
+        return ""
+
     if not events or not events.get("event_count"):
         return ""
 
@@ -1352,6 +1360,8 @@ def holding_status(
     position_events=None,
     observation_days=0
 ):
+    if not isinstance(position_events, dict):
+        position_events = {}
 
     signal = strategy_holding_signal(
         result,
@@ -2077,7 +2087,7 @@ def render_stock(
         "twse"
     )
     holding = data.get("holding")
-    today_events = data.get("position_events") or {}
+    today_events = position_events_dict(data)
 
     # 中文註釋：v19.1.3 顯示層只讀 condition_engine 映射結果，不自行判斷交易條件。
     conditions = condition_engine(
@@ -2420,7 +2430,7 @@ def stock_pnl(data):
 
 def today_event_weight(data):
 
-    events = data.get("position_events") or {}
+    events = position_events_dict(data)
     return 0 if events.get("event_count") else 1
 
 
@@ -2468,7 +2478,7 @@ def ensure_holding_decision(name, data, signal_date=None):
         holding.get("realized_profit_taken_ratio", 0),
         holding.get("realized_profit_taken_date"),
         signal_date or datetime.now(tz).date().isoformat(),
-        data.get("position_events") or {},
+        position_events_dict(data),
         holding.get("observation_days", data.get("observation_days", 0))
     )
 
@@ -3108,7 +3118,7 @@ def sort_position_summary(positions):
 def position_summary_rank(name, data):
 
     decision = ensure_holding_decision(name, data)
-    today_text = event_summary_text(data.get("position_events") or {})
+    today_text = event_summary_text(position_events_dict(data))
     pnl = stock_pnl(data)
     action = decision.get("action", "") if decision else ""
     level = decision.get("level", "") if decision else ""
@@ -3205,7 +3215,7 @@ def today_sold_shares_from_execution_data(data):
         if total > 0:
             return total, key
 
-    events = data.get("position_events") or {}
+    events = position_events_dict(data)
     return sold_shares_from_execution_record(events), "position_events"
 
 
@@ -3354,13 +3364,13 @@ def holding_today_trade_text(data, decision=None):
             return f"最近交易日賣 {state['sold_shares']}股"
         return f"賣 {state['sold_shares']}股"
 
-    return event_summary_text(data.get("position_events") or {})
+    return event_summary_text(position_events_dict(data))
 
 
 def position_summary_action(name, data):
 
     decision = ensure_holding_decision(name, data)
-    today_text = event_summary_text(data.get("position_events") or {})
+    today_text = event_summary_text(position_events_dict(data))
     action = decision.get("action", "") if decision else ""
     level = decision.get("level", "") if decision else ""
     pnl = stock_pnl(data)
@@ -3467,7 +3477,7 @@ def is_today_buy_holding(data):
     if not data.get("holding"):
         return False
 
-    events = data.get("position_events") or {}
+    events = position_events_dict(data)
     if events.get("bought_shares", 0) > 0:
         return True
 
@@ -3480,7 +3490,7 @@ def today_buy_holding_source(data):
     if not is_today_buy_holding(data):
         return None
 
-    events = data.get("position_events") or {}
+    events = position_events_dict(data)
     explicit = (
         data.get("buy_source")
         or (data.get("holding") or {}).get("buy_source")
@@ -3523,7 +3533,7 @@ def today_buy_holding_context_line(data):
 
 def is_reduce_after_observation(data):
 
-    events = data.get("position_events") or {}
+    events = position_events_dict(data)
     decision = ensure_holding_decision("", data)
     level = decision.get("level") if decision else ""
 
@@ -3555,7 +3565,7 @@ def is_core_risk_watch_display(data):
 
 def is_new_position_loss(data):
 
-    events = data.get("position_events") or {}
+    events = position_events_dict(data)
     return (
         data.get("holding")
         and events.get("bought_shares", 0) > 0
@@ -3584,7 +3594,7 @@ def is_holding_shakeout_warning_display(data):
 def position_summary_note(name, data):
 
     decision = ensure_holding_decision(name, data)
-    today_text = event_summary_text(data.get("position_events") or {})
+    today_text = event_summary_text(position_events_dict(data))
     note = decision.get("note") if decision else ""
 
     action = position_summary_action(name, data)
@@ -3950,7 +3960,7 @@ def _holding_source_status(data):
 
 
 def _position_events_source_status(data):
-    events = data.get("position_events") or {}
+    events = position_events_dict(data)
     if not data.get("holding"):
         return "not-applicable"
     if _position_ledger_conflict(data) != "none":
@@ -3964,7 +3974,7 @@ def _position_ledger_conflict(data):
     explicit = data.get("evidence_conflict") or data.get("conflict")
     if explicit:
         return str(explicit)
-    events = data.get("position_events") or {}
+    events = position_events_dict(data)
     for key in ["conflict", "_conflict", "conflict_id"]:
         if events.get(key):
             return str(events.get(key))
@@ -4598,7 +4608,7 @@ def holding_execution_item(name, data):
 
     label = holding_execution_label(name, data)
     trigger = holding_tomorrow_trigger(name, data)
-    events = data.get("position_events") or {}
+    events = position_events_dict(data)
     decision = ensure_holding_decision(name, data) or {}
     second_profit_state = second_take_profit_execution_state(data, decision)
 
@@ -5854,10 +5864,67 @@ def holding_next_step_line(name, data):
     return "暫不加碼"
 
 
+def positive_observation_days_from_holding(data):
+
+    sources = [data.get("holding") or {}]
+    events = position_events_dict(data)
+    if events:
+        sources.append(events)
+
+    keys = ["observation_days", "watch_days"]
+
+    for source in sources:
+        for key in keys:
+            try:
+                value = source.get(key)
+                if value is None or isinstance(value, bool):
+                    continue
+                if isinstance(value, float) and not value.is_integer():
+                    continue
+                if isinstance(value, str) and not value.strip().isdigit():
+                    continue
+                days = int(value)
+            except (AttributeError, TypeError, ValueError):
+                continue
+            if days > 0:
+                return days
+
+    return None
+
+
+def is_weak_far_holding_watch(data):
+
+    result = data.get("result") or {}
+    if data.get("weak_far_from_trigger") is True or result.get("weak_far_from_trigger") is True:
+        return True
+
+    try:
+        distance = float(result.get("breakout_distance", data.get("breakout_distance")))
+    except (TypeError, ValueError):
+        return False
+
+    return result.get("structure_phase") == "WEAK" and distance > 4
+
+
+def weak_far_observation_condition_line(data):
+
+    if not is_weak_far_holding_watch(data):
+        return None
+
+    days = positive_observation_days_from_holding(data)
+    if days is None:
+        return "觀察：觀察天數未確認；若無法重新接近買點 / 突破區，降低優先級"
+
+    return (
+        f"觀察：弱勢觀察第 {days} 天；"
+        f"若第 {days + 1} 天仍未重新接近買點 / 突破區，降低優先級"
+    )
+
+
 def holding_detail_decision_lines(name, data):
 
     decision = ensure_holding_decision(name, data)
-    today_text = event_summary_text(data.get("position_events") or {})
+    today_text = event_summary_text(position_events_dict(data))
     summary_action = position_summary_action(name, data)
     level = decision.get("level") if decision else ""
     action_text = decision.get("action") if decision else ""
@@ -5957,7 +6024,8 @@ def holding_detail_decision_lines(name, data):
         return "保留底倉，暫不加碼", "觀察減碼後是否轉弱，跌破警戒價優先風控"
 
     if summary_action == "續抱觀察":
-        return "續抱觀察，暫不加碼", "若無法重新接近買點，降低優先級"
+        condition = weak_far_observation_condition_line(data)
+        return "續抱觀察，暫不加碼", condition or "若無法重新接近買點，降低優先級"
 
     if "買" in today_text:
         return "續抱，暫不加碼", "浮盈不足，等量價確認後再評估加碼"
@@ -7435,7 +7503,7 @@ def generate_report(dry_run=False):
             data["holding"].get("realized_profit_taken_ratio", 0),
             data["holding"].get("realized_profit_taken_date"),
             now.date().isoformat(),
-            data.get("position_events") or {},
+            position_events_dict(data),
             data["holding"].get("observation_days", data.get("observation_days", 0))
         )
 

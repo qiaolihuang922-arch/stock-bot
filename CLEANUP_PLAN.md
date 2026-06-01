@@ -15,6 +15,13 @@
 
 ## Completed
 
+- `holding-weak-observation-clock-20260601`:
+  - 問題：Owner 指出智原類弱勢遠離持倉只有 `續抱觀察 / 降低優先級`，沒有 observation_days 或量化降級時鐘，手機閱讀不知道第幾天觀察。
+  - 結果：報文版本升 `v20.4.24`；弱勢遠離且續抱觀察持倉若 `holding` 或 dict-shaped `position_events` 有可信正整數觀察天數，條件行顯示 `弱勢觀察第 N 天` 與下一日降級條件；缺可信來源顯示 `觀察天數未確認`。
+  - 可重跑補強：新增完整 `formatTelegramMessages()` 手機閱讀 probe，覆蓋 holding / dict events 正例、top-level / result / invalid / list-shaped events fail-closed、主決策維持續抱觀察。
+  - QA 反證：第一次擋下 top-level/result 被當可信天數；第二次擋下 CHANGELOG 與 code 對 list 支援不一致；第三次擋下完整 formatter 對 list-shaped `position_events` crash；最終 Re-QA `通過`。
+  - 流程治理：這輪證明 helper 測試不夠，持倉報文任務必須補完整 message list 直接消費者 probe；也再次暴露 Tech/QA worktree 不帶 `.cao_agent_context/outputs` 的 handoff 可見性缺口。
+  - 邊界：不改 strategy decision、RR 計算、持倉狀態機、DB schema/write、live Telegram；production source 若缺 observation days 仍會顯示未確認，資料治理另開。
 - `pm-normal-limit-up-low-volume-risk`:
   - 問題：Owner 指出群創 / 仁寶類漲停鎖價但 `V < 1.0`，報文和緯創 / 英業達類攻擊量漲停同樣放進 `可準備｜漲停鎖價`，缺少縮量風險差異。
   - 結果：報文版本升 `v20.4.23`；未持倉 `漲停鎖價 + volume_ratio < 1.0` 時，卡片與強勢準備摘要顯示 `縮量漲停，需開板回測確認，不等同攻擊量`。
