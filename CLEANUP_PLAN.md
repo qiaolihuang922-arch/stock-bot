@@ -15,6 +15,13 @@
 
 ## Completed
 
+- `pm-normal-limit-up-low-volume-risk`:
+  - 問題：Owner 指出群創 / 仁寶類漲停鎖價但 `V < 1.0`，報文和緯創 / 英業達類攻擊量漲停同樣放進 `可準備｜漲停鎖價`，缺少縮量風險差異。
+  - 結果：報文版本升 `v20.4.23`；未持倉 `漲停鎖價 + volume_ratio < 1.0` 時，卡片與強勢準備摘要顯示 `縮量漲停，需開板回測確認，不等同攻擊量`。
+  - 可重跑補強：新增手機閱讀 probe，覆蓋低量漲停正例、攻擊量漲停負例、`V=1.0` 邊界與低量非漲停反證。
+  - QA 反證：Re-QA `通過`；確認分組 / decision 不變，未把縮量漲停升級或降級，未改策略 / DB / live Telegram。
+  - 流程治理：`runner_gap` 再次出現，第一次 QA 因 main `CHANGELOG.md` stale 成上一輪 RR 任務而 blocked；同步正確 CHANGELOG 後通過。後續需補 auto wrapper 將 Tech answer 可靠寫回主 repo handoff files。
+  - 邊界：不改 strategy decision、RR 計算、持倉狀態機、DB schema/write、live Telegram。
 - `normal_patch_unheld_overheat_rr_zero_display`:
   - 問題：Owner 指出技嘉同為 `可準備｜過熱降溫`，卻顯示 `RR 0.00（不足）`，和聯電 / 華邦電 `RR -（過熱）` 不一致。
   - 結果：未持倉 RR 顯示新增窄條件：過熱 blocker 且 `rr=0` 時顯示 `-（過熱）`；非過熱 `rr=0` 仍顯示 `0.00（不足）`，持倉路徑不變。

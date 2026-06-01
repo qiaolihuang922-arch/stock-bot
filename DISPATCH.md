@@ -4,10 +4,10 @@
 
 ## Current Task
 
-- task_id: `normal_patch_unheld_overheat_rr_zero_display`
-- task_name: `Unheld Overheat RR Zero Display`
+- task_id: `pm-normal-limit-up-low-volume-risk`
+- task_name: `Low Volume Limit-up Risk Prompt`
 - task_type: `normal_patch`
-- owner_status: `reported_gigabyte_overheat_rr_display_inconsistent`
+- owner_status: `reported_low_volume_limit_up_risk_missing`
 - architect_status: `qa_passed_pending_git_close`
 - pm_status: `done`
 - tech_status: `done`
@@ -39,6 +39,9 @@
 - 本輪修最新報文衝突第三優先級：技嘉類 `可準備｜過熱降溫` 但 `RR 0.00（不足）` 與其他過熱股 `RR -（過熱）` 不一致。
 - 修正：未持倉 RR 顯示新增窄條件，過熱 blocker 且 `rr=0` 時顯示 `RR -（過熱）`；非過熱 `rr=0` 與持倉路徑不變。
 - QA：Re-QA `通過`；確認技嘉類卡片手機順序為過熱降溫 / 待降溫 / RR 過熱，非過熱與持倉反證通過。
+- 本輪修最新報文衝突第四優先級：群創 / 仁寶類縮量漲停與緯創 / 英業達類攻擊量漲停在可準備文案中被等同。
+- 修正：報文版本升 `v20.4.23`；未持倉 `漲停鎖價` 且 `volume_ratio < 1.0` 時，卡片與強勢準備摘要顯示 `縮量漲停，需開板回測確認，不等同攻擊量`；`volume_ratio >= 1.0` 或非漲停不顯示。
+- QA：Re-QA `通過`；補 `V=1.0` 邊界與低量非漲停反證；確認分組 / decision 不變、未改策略 / DB / live Telegram。
 - Git completion gate：final 前必須以 `tools/cao_agent/check_git_completion_gate.sh` 驗證 `main` matches `origin/main` 且 worktree clean。
 - 上一輪 v20.4.21 報文修正已在 commit `b177345 restore afterhours control summary` 推送，本輪不再改動該產品 diff。
 - 已吸收內容：
@@ -65,7 +68,7 @@
 ## Next Action
 
 - 收口：commit / push 後跑 `tools/cao_agent/check_git_completion_gate.sh`。
-- 後續 PM 任務按 Owner 最新問題拆分：縮量漲停風險、智原 observation_days。
+- 後續 PM 任務按 Owner 最新問題拆分：智原 observation_days / 觀察天數量化。
 - 後續同類報文任務：先補或更新手機閱讀 probe，再改 formatter；不要只寫規則。
 - 旁支另開：Telegram reply markup 仍附在最後一則 message，新 message order 下可能需要 delivery consumer 任務評估按鈕落點。
 - 旁支另開：如果 Owner 認定 2356 英業達實際未賣，需查 production ledger/source truth 為何目前為 `shares=0 / CLOSED`；本輪未寫 DB、不校正 ledger。

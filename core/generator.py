@@ -68,7 +68,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.22"
+VERSION = "v20.4.23"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -4715,6 +4715,23 @@ def strong_prepare_bucket(data):
     return None, None
 
 
+def low_volume_limit_up_risk_text(data):
+
+    try:
+        vol = float(data.get("volume_ratio"))
+    except (TypeError, ValueError):
+        return None
+
+    if vol >= 1.0:
+        return None
+
+    label, _action = strong_prepare_bucket(data)
+    if label != "漲停鎖價":
+        return None
+
+    return "縮量漲停，需開板回測確認，不等同攻擊量"
+
+
 def unheld_funnel_state(name, data, market_mode=None, report_context=None):
 
     result = data.get("result") or {}
@@ -5567,6 +5584,9 @@ def format_strong_prepare_summary(watch_items, market_mode, limit=3):
             continue
         label, action = strong_prepare_bucket(data)
         if label and action:
+            risk_text = low_volume_limit_up_risk_text(data)
+            if risk_text:
+                action = risk_text
             items.append((unheld_execution_priority(index, name, data, market_mode=market_mode), label, name, action))
 
     if not items:
@@ -5678,6 +5698,7 @@ def _telegram_presentation_deps():
         "tomorrow_watch_state": tomorrow_watch_state,
         "unheld_funnel_state": unheld_funnel_state,
         "strong_prepare_bucket": strong_prepare_bucket,
+        "low_volume_limit_up_risk_text": low_volume_limit_up_risk_text,
         "rejected_primary_reason": rejected_primary_reason,
         "unheld_entry_size_detail_text": unheld_entry_size_detail_text,
         "unheld_entry_wait_text": unheld_entry_wait_text,

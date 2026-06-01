@@ -301,6 +301,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         if deps["is_valid_entry"](stock_result) and not source_eligible
         else deps["rejected_transition_reason_line"](stock_result) if funnel_state == "淘汰" else None
     )
+    low_volume_limit_up_risk = deps["low_volume_limit_up_risk_text"](data)
     lines = [
         f"【{deps['stock_title'](name, data)}】{title_icon} {title_action}｜{title_label}",
         f"盤面：{deps['plain_label'](deps['compact_market_line'](stock_result, dist))}",
@@ -316,6 +317,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
             deps["_source_status_line"](report_context, name, holding=False) if report_context else None
         ),
         data_line,
+        low_volume_limit_up_risk,
         (
             None
             if _report_phase(report_context) == "盤後" and deps["_strategy_sample_unavailable"](report_context)
