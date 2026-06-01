@@ -13,7 +13,7 @@ for file in "${required_files[@]}"; do
   fi
 done
 
-if ! rg -q 'task_id: (evidence-chain-maturity-100|telegram-evidence-human-readable-v20-4-20)' TASK.md; then
+if ! rg -q 'task_id: (evidence-chain-maturity-100|telegram-evidence-human-readable-v20-4-20|pm-20260601-presentation-report-split)' TASK.md; then
   echo "Evidence handoff gate failed: TASK.md is not a supported evidence handoff task." >&2
   exit 1
 fi
@@ -34,7 +34,7 @@ path = Path(sys.argv[1])
 artifact = json.loads(path.read_text(encoding="utf-8"))
 if artifact.get("artifact_type") != "evidence_chain_maturity_report":
     raise SystemExit("Evidence handoff gate failed: artifact_type is not evidence_chain_maturity_report.")
-if artifact.get("generator_version") != "v20.4.20":
+if artifact.get("generator_version") != "v20.4.21":
     raise SystemExit("Evidence handoff gate failed: artifact generator_version is stale.")
 
 def git_text(args):
@@ -47,15 +47,22 @@ head = git_text(["rev-parse", "HEAD"]).strip() or "unknown"
 status = git_text(["status", "--short"])
 diff = git_text(["diff", "HEAD", "--"])
 untracked_entries = []
+ignored_status_paths = {".qa_tmp/evidence_maturity_report.json", str(path)}
+status_lines = []
 for line in status.splitlines():
+    status_path = line[3:] if len(line) > 3 else ""
+    if status_path in ignored_status_paths:
+        continue
+    status_lines.append(line)
     if line.startswith("?? "):
-        candidate = Path(line[3:])
+        candidate_path = line[3:]
+        candidate = Path(candidate_path)
         try:
             content_hash = hashlib.sha256(candidate.read_bytes()).hexdigest()
         except Exception:
             content_hash = "unreadable"
-        untracked_entries.append(f"{candidate}:{content_hash}")
-status_payload = status + "\n".join(sorted(untracked_entries))
+        untracked_entries.append(f"{candidate_path}:{content_hash}")
+status_payload = "\n".join(status_lines) + "\n".join(sorted(untracked_entries))
 status_hash = hashlib.sha256(status_payload.encode("utf-8")).hexdigest()
 diff_hash = hashlib.sha256((diff + status_payload).encode("utf-8")).hexdigest()
 if artifact.get("repo_head") != head:

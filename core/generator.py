@@ -12,6 +12,7 @@ import json
 import re
 import subprocess
 import pytz
+from presentation.report import render_telegram_messages
 
 from services.stock_api import (
     get_twse,
@@ -61,7 +62,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.20"
+VERSION = "v20.4.21"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -6614,7 +6615,13 @@ def _worktree_binding():
     status = _git_text(["status", "--short"])
     diff = _git_text(["diff", "HEAD", "--"])
     untracked_entries = []
+    ignored_status_paths = {".qa_tmp/evidence_maturity_report.json"}
+    status_lines = []
     for line in status.splitlines():
+        status_path = line[3:] if len(line) > 3 else ""
+        if status_path in ignored_status_paths:
+            continue
+        status_lines.append(line)
         if line.startswith("?? "):
             path = line[3:]
             try:
@@ -6623,7 +6630,7 @@ def _worktree_binding():
             except Exception:
                 content_hash = "unreadable"
             untracked_entries.append(f"{path}:{content_hash}")
-    status_payload = status + "\n".join(sorted(untracked_entries))
+    status_payload = "\n".join(status_lines) + "\n".join(sorted(untracked_entries))
     return {
         "repo_head": head or "unknown",
         "worktree_status_sha256": hashlib.sha256(status_payload.encode("utf-8")).hexdigest(),
@@ -7288,88 +7295,33 @@ def format_details_backup_messages(full_msg):
 
 
 def formatTelegramMessages(results_map, full_msg, best, score, market_summary, now, position_warning=None, include_detail=False, daily_write_warning=None, strategy_evidence_summary=None, report_phase=None):
-
-    ordered_items = ordered_result_items(results_map)
-    if report_phase is None:
-        report_phase = get_market_phase()
-    watch_items_for_mode = [
-        (name, data)
-        for name, data in ordered_items
-        if not data.get("holding")
-    ]
-    market_mode, _risk_level = derive_market_state(watch_items_for_mode)
-    report_context = build_report_context(
+    return render_telegram_messages(
         results_map,
-        market_summary,
-        now,
-        strategy_evidence_summary=strategy_evidence_summary,
-        report_phase=report_phase,
-        position_warning=position_warning,
-    )
-    holding_items = sort_position_summary([
-        (name, data)
-        for name, data in ordered_items
-        if data.get("holding")
-    ])
-    position_cards = [
-        formatTelegramPositionCard(name, data, report_context=report_context)
-        for name, data in holding_items
-    ]
-    unheld_cards = [
-        formatTelegramUnheldCard(name, data, report_phase=report_phase, market_mode=market_mode, report_context=report_context)
-        for _index, (name, data) in sort_watchlist_grouped([
-            (name, data)
-            for name, data in ordered_items
-            if not data.get("holding")
-        ])
-    ]
-
-    telegram_header = f"【{now.strftime('%m/%d')} {report_phase}｜{VERSION}】"
-    holdings_message = (
-        f"{telegram_header}\n"
-        "【持倉標的】\n\n"
-        + ("\n\n".join(position_cards) if position_cards else "無持倉")
-    )
-    unheld_message = (
-        f"{telegram_header}\n"
-        "【未持倉標的】\n\n"
-        + ("\n\n".join(unheld_cards) if unheld_cards else "無")
-    )
-    summary_message = formatTelegramSummary(
-        results_map,
+        full_msg,
         best,
         score,
         market_summary,
         now,
-        position_warning,
-        daily_write_warning,
-        strategy_evidence_summary,
+        version=VERSION,
+        deps={
+            "ordered_result_items": ordered_result_items,
+            "get_market_phase": get_market_phase,
+            "derive_market_state": derive_market_state,
+            "build_report_context": build_report_context,
+            "sort_position_summary": sort_position_summary,
+            "formatTelegramPositionCard": formatTelegramPositionCard,
+            "formatTelegramUnheldCard": formatTelegramUnheldCard,
+            "sort_watchlist_grouped": sort_watchlist_grouped,
+            "formatTelegramSummary": formatTelegramSummary,
+            "format_brief_data_evidence_message": format_brief_data_evidence_message,
+            "format_details_backup_messages": format_details_backup_messages,
+        },
+        position_warning=position_warning,
+        include_detail=include_detail,
+        daily_write_warning=daily_write_warning,
+        strategy_evidence_summary=strategy_evidence_summary,
         report_phase=report_phase,
-        report_context=report_context,
     )
-    evidence_message = format_brief_data_evidence_message(
-        report_context,
-        holding_items,
-        [
-            (name, data)
-            for name, data in ordered_items
-            if not data.get("holding")
-        ],
-        market_mode=market_mode,
-        summary_message=summary_message,
-    )
-
-    messages = []
-
-    messages.append(holdings_message)
-    messages.append(unheld_message)
-    messages.append(f"{telegram_header}\n{evidence_message}")
-
-    if include_detail:
-        for chunk in format_details_backup_messages(full_msg):
-            messages.append(chunk)
-
-    return messages
 
 
 REPORT_DAILY_MIN_ROWS = MIN_DATA_POINTS

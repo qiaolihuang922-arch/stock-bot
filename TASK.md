@@ -1,275 +1,186 @@
-# TASK: v20.4.20 Telegram 第三則 evidence 報文恢復人話分層
+# TASK: 保守拆分 Telegram 顯示層到 presentation/report module
 
 ## 任務狀態
 
-- task_id: telegram-evidence-human-readable-v20-4-20
+- task_id: pm-20260601-presentation-report-split
 - 任務類型: normal_patch
-- 狀態: qa_passed
-- 版本建議: v20.4.20
+- 狀態: qa_conditional_pass_pending_git_stage
+- 版本建議: v20.4.21
 - QA 分級建議: L2
-- 本輪主 bug: v20.4.19 盤後 Telegram 第三則把內部 evidence slot/schema 直接露出給使用者，且部分卡片 RR / strategy sample 顯示造成可用證據錯覺。
+- 主問題: 第一刀保守拆分顯示層，不重設策略、不擴大清理範圍。
 
 ## Owner 問題
 
-Owner 指出 v20.4.19 盤後 Telegram 報文第三則閱讀體驗很糟：
-
-- 第三則直接露出 source/status/use/limit/conflict、英文 source、derived/missing/not-used 等內部 evidence schema。
-- 手機閱讀噪音過高，不像盤後簡報。
-- 需要先修合理度與衝突呈現：內部 artifact/verifier 保留 100% 能力，但使用者報文不能是 raw slot dump。
-- 真正資料衝突仍要用人話說出，不能假裝無衝突。
-- 持倉卡 RR 不得再衝突：持倉非加碼情境一律顯示新倉 RR 不適用。
-- strategy sample missing/insufficient 不得在卡片中顯示回測數字，避免看起來像可用證據。
+Owner 要求拆分策略層與顯示層：策略 decision 邏輯不要混入 Telegram 使用者可見報文格式化。本輪只做第一刀，從 core/generator.py 抽出 Telegram 顯示層到獨立 presentation/report 類 module；策略、DB、evidence、holding 狀態機
+不改。
 
 ## 使用者可見結果
 
-Owner 在手機 Telegram 看第三則時，看到的是「人話簡報 + 資料依據摘要」，不是 evidence schema dump。
-
-手機閱讀路徑：
-
-1. 第一則持倉報文：持倉卡若不是加碼情境，RR 顯示為「新倉 RR 不適用」或等價短句，不顯示新倉 RR 數字。
-2. 第二則未持倉 / 非持倉報文：若 strategy sample missing/insufficient，卡片不得用樣本數、勝率、回測 RR 等數字營造可用證據；需顯示不可用 / 不納入判斷。
-3. 第三則 evidence 報文：用中文短段落列出資料來源、人話限制、衝突摘要、不可用原因；不得逐 slot 顯示內部欄位名。
-4. 第三則摘要若顯示「新倉：無有效進場」，不得同時顯示推薦感的最強標的、排序或評級。
-
-示例輸出形狀：
-
-📌 資料依據與限制
-
-市場與價格：
-使用 production 資料；可支援盤後觀察，但不單獨構成買點。
-
-策略樣本：
-目前缺少可驗證的策略樣本來源，本次不納入買賣判斷；卡片內不顯示回測數字。
-
-執行記憶：
-production ledger 與事件紀錄仍有待釐清的差異；涉及已賣出、已停利或剩餘股數時採保守顯示，不輸出未確認結論。
-
-持倉 RR：
-既有持倉若不是加碼情境，只顯示新倉 RR 不適用。
+- Telegram 報文內容、順序、手機閱讀體驗維持既有結果。
+- 使用者仍透過既有 public entry 使用 formatTelegramMessages，或透過明確 import bridge 相容。
+- 報文 header / version 顯示更新到 v20.4.21，不得回退既有可見版本契約。
+- 無有效進場時，手機上不得出現像推薦的「最強標的」區塊或文案。
 
 ## 非目標
 
-- 不改 DB schema、migration、RLS、grant、policy、role、index、constraint。
-- 不寫 production DB、不 backfill、不手寫 DML。
-- 不做 live Telegram delivery。
-- 不刪除、不弱化 evidence_manifest、maturity artifact、verifier、gate。
-- 不回退 v20.4.19 evidence maturity 100 能力。
-- 不重設策略、不調整買賣門檻、不改 BUY/SELL decision。
-- 不修 production ledger 內容本身。
-- 不把 Owner 認知與 production ledger 的差異直接判定誰對誰錯。
-- 不清理全 repo、不重構整個報文系統。
-- 不處理 Telegram reply markup 附著最後一則 message 的旁支問題。
+- 不改策略 decision。
+- 不改 RR 計算。
+- 不改 holding_status 判斷。
+- 不改 record_daily_signals。
+- 不改 record_strategy_evidence。
+- 不改 Supabase / DB read-write path。
+- 不改 production DB schema、RLS、grant、policy、role、index、constraint。
+- 不做全量 generator 重構。
+- 不拆多個無關檔案。
+- 不新增 live Telegram delivery。
+- 不新增或改寫跨日持久化 source-of-truth。
 
 ## 影響模組
 
-Tech 需自行定位實際檔案；預期只限於：
-
-- Telegram 第三則 evidence / short message renderer。
-- 持倉卡 RR 顯示 formatter。
-- strategy sample missing/insufficient 的卡片顯示 formatter。
-- evidence_manifest 到使用者報文的 presentation layer。
-- 對應 tests / fixtures。
-- 版本常量與報文 header。
-
-不得觸碰：
-
-- production DB write path。
-- evidence maturity verifier 的判斷能力。
-- read-only artifact schema。
-- strategy decision core。
-- live Telegram sender。
+- 主要影響:
+- core/generator.py
+- 新增或調整一個獨立 Telegram presentation/report module，例如 presentation/report.py 或既有同等命名位置。
+- 對應測試 / gate。
+- 不應影響:
+- 策略 decision module。
+- RR module。
+- holding 狀態機。
+- DB client / Supabase service。
+- evidence recording。
+- daily signal recording。
+- live delivery runner。
 
 ## 直接消費者
 
-- Owner 手機 Telegram 閱讀者。
-- Telegram message list consumer。
-- evidence_manifest / maturity artifact / verifier 內部 consumer。
-- QA 報文 fixture 驗證。
-- Architect 收口版本與 gate 檢查。
-
-## 已存在且不得回退的契約
-
-- Telegram message list 順序維持：messages[0] 持倉、messages[1] 未持倉 / 非持倉、messages[2] short/evidence；include_detail=True 時 Details Backup 追加最後。
-- v20.4.19 已建立的 evidence_manifest / maturity artifact / verifier 100% 能力不得刪除或降級。
-- structural/maturity artifact 內部仍可保留 source/status/use/limit/conflict 等 machine-readable 欄位。
-- read-only artifact 安全旗標不得回退：schema_change=false、data_write=false、live_telegram=false、credential_values_included=false。
-- 缺資料、source-error、insufficient-data、unresolved-conflict 必須 fail closed。
-- strategy sample 不可用時不得納入買賣判斷。
-- market/theme 只能作背景，不等於買點。
-- 報文版本不得回退到 v20.4.19 或更早；本輪使用者可見報文變更建議升至 v20.4.20。
-- 若 Tech 發現現有實作契約與本 TASK 衝突，必須 blocked 回報，不得自行破壞內部 artifact/verifier。
+- Telegram 報文產生流程。
+- 既有呼叫 formatTelegramMessages 的 runner / CLI / tests。
+- Owner 手機閱讀 Telegram messages 的最終輸出。
 
 ## 輸出契約
 
-### A. 第三則 Telegram Evidence Presentation Contract
+### Public import contract
 
-第三則使用者可見報文必須：
+- 必須保留 formatTelegramMessages public compatibility。
+- 若實作搬移到新 module，core/generator.py 必須提供明確 import bridge 或相容 wrapper。
+- 既有 consumer 不應因 import path 改變而破壞。
 
-- 使用中文人話段落或短 bullet。
-- 顯示資料依據、限制、不可用原因與衝突摘要。
-- 若結論是新倉無有效進場，`🔥 最強` 必須顯示無有效進場標的；不得顯示僅追蹤、不可行動或 source 不合格標的名稱與排序/評級。
-- 對真正衝突顯示人話摘要，例如：
-- production ledger 與 Owner 認知待釐清
-- strategy sample 缺來源，本次不納入判斷
-- ledger insufficient/unresolved，採保守顯示
-- 不得逐筆 dump internal slot。
-- 不得顯示裸欄位名作為主內容：source:、status:、use:、limit:、conflict:。
-- 不得顯示 raw internal status 作為使用者句子：derived、missing、not-used、missing-source、insufficient-data、unresolved-conflict，除非被中文翻譯或包成人話說明。
+### Presentation input contract
 
-內部 artifact 可繼續保留上述欄位與 raw status；限制只針對 Telegram 使用者可見報文。
+- 新 presentation/report module 只能讀取已生成的 results_map / report_context 或既有等價格式化上下文。
+- 顯示層不得直接取得 DB client。
+- 顯示層不得呼叫 record / write / evidence side effect。
+- 顯示層不得 mutate result、holding_decision 或 strategy output object。
 
-### B. Conflict Summary Contract
+### Telegram message contract
 
-當 evidence_manifest/artifact 有真衝突或缺資料時，第三則不得沉默，需轉成中文摘要：
+- 輸出仍為三則 Telegram messages，與既有關鍵 fixture 的內容、分組、順序保持一致，除版本字串升到 v20.4.21 外不得任意改文案。
+- 手機閱讀路徑維持既有 Owner 指定順序:
+- 第 1 則: 持倉標的 / 持倉先處理什麼。
+- 第 2 則: 未持倉標的 / 可準備、僅追蹤、淘汰。
+- 第 3 則: 簡報＋資料依據 / 今日能不能買、風險、補充證據。
+- 無有效進場時:
+- Summary 應呈現「新倉：無有效進場」或既有等價不可買文案。
+- 不得顯示「最強標的」作為可買推薦。
+- 不得出現會讓手機使用者誤讀為可下單的標題、排序或 CTA。
 
-- strategy sample missing-source -> 策略樣本缺可驗證來源，本次不納入買賣判斷
-- strategy sample insufficient-data -> 策略樣本不足，本次不納入買賣判斷
-- ledger insufficient-data -> 執行記憶不足，涉及已賣/停利/剩餘股數採保守顯示
-- ledger unresolved-conflict -> ledger 與事件紀錄仍有衝突，未確認部分不輸出確定結論
-- production ledger vs Owner 認知 -> production ledger 與 Owner 認知待釐清，本報文先以 production source 保守呈現
+### 已存在且不得回退的契約
 
-### C. 持倉 RR Display Contract
-
-持倉卡 RR 顯示規則：
-
-- 若標的是既有持倉且本卡主行動不是「加碼」或明確新倉評估，不得顯示新倉 RR 數字。
-- 顯示為：新倉 RR：不適用（既有持倉） 或等價短句。
-- 不得出現像建準案例的衝突顯示：持倉非加碼卻顯示 RR 2.73。
-- 加碼情境若現有策略已有明確新倉 / 加碼 RR contract，可保留；若 Tech 無法確認 contract，先 blocked，不要自行發明加碼規則。
-
-### D. Strategy Sample Card Contract
-
-當 strategy sample source 是 missing / insufficient / unavailable：
-
-- 卡片不得顯示會被理解為可用證據的回測數字，例如勝率、樣本數、回測 RR、平均報酬。
-- 顯示為：策略樣本：不可用，本次不納入判斷 或等價短句。
-- 第三則 evidence 需同步用人話說明不可用原因。
-- 內部 artifact/verifier 仍保留 raw status 與完整欄位。
+- formatTelegramMessages 可被既有 caller import / call。
+- 三則 messages 的主要輸出形狀維持。
+- 既有關鍵 fixture 對應的 Telegram 輸出維持。
+- 無有效進場不顯示最強標的。
+- maturity gate 仍為 100。
+- 策略 decision、RR、holding_status、record_daily_signals、record_strategy_evidence、DB read/write path 行為不變。
+- 若 Tech 無法在現有 repo 中確認上述既有 fixture 或 caller，必須 blocked，請 Architect 補 fixture / caller 名稱，不得自行假設新契約。
 
 ## 驗收條件
 
-1. 第三則人話報文
-
-- 使用 v20.4.20 fixture 產生 Telegram messages。
-- messages[2] 不包含 raw slot dump。
-- messages[2] 不出現裸欄位名：source:、status:、use:、limit:、conflict:。
-- messages[2] 不直接露出 raw status：derived、missing、not-used、missing-source、insufficient-data、unresolved-conflict。
-- 有資料缺失或衝突時，messages[2] 有中文人話摘要，沒有假裝無衝突。
-- 當 messages[2] 顯示「新倉：無有效進場」時，不得同時顯示 `最強：<標的>`、排序★或評級★。
-
-2. 內部 evidence 能力不回退
-
-- maturity artifact / verifier 標準命令仍可跑。
-- evidence_manifest 內部仍保留 machine-readable 欄位。
-- verifier 對 missing-source / insufficient-data / unresolved-conflict 仍 fail closed。
-- read-only artifact 安全旗標仍存在且為 false。
-- 不因隱藏 raw slot dump 而刪除內部欄位。
-
-3. 持倉 RR 顯示
-
-- fixture 覆蓋「既有持倉 + 非加碼」。
-- 持倉卡顯示 新倉 RR 不適用 或等價短句。
-- 不顯示 RR 2.73 這類新倉 RR 數字。
-- 不改策略 decision，只改使用者可見顯示。
-
-4. Strategy sample 不可用顯示
-
-- fixture 覆蓋 missing-source 與 insufficient-data 至少一種。
-- 卡片不顯示回測數字作為可用證據。
-- 卡片顯示不可用 / 不納入判斷。
-- 第三則同步摘要不可用原因。
-
-5. 手機閱讀檢查
-
-- QA 必須檢查第三則在手機閱讀下首屏/短段落可讀，不是長表格或 raw schema。
-- QA 至少補一個 Tech 未覆蓋的反證：例如內部 artifact 仍含 raw fields，但 Telegram text 不含 raw dump。
+1. 結構拆分
+- Telegram 使用者可見 formatting / message assembly 已從 core/generator.py 抽到獨立 presentation/report module。
+- core/generator.py 僅保留相容入口、資料準備或 orchestration 所需最小 glue。
+2. Side-effect gate
+- 新 presentation/report module 不 import:
+- record_daily_signals
+- record_strategy_evidence
+- get_supabase_client
+- 新 presentation/report module 不呼叫 DB write 或 evidence write。
+- 顯示層不 mutate result / holding_decision，需用測試、lint gate、AST 檢查或等價可重跑命令證明。
+3. Output regression
+- 既有關鍵 fixture 產生的三則 Telegram messages 與拆分前一致。
+- 允許差異僅限版本字串更新為 v20.4.21，若現有版本契約另有常量，必須同步更新。
+- 無有效進場 fixture 不顯示最強標的。
+- maturity gate 驗證仍為 100。
+4. Compatibility
+- 既有 formatTelegramMessages import path 仍可用，或有明確 bridge 測試覆蓋。
+- 直接 consumer 測試至少覆蓋一條現有 runner / formatter call path。
 
 ## 範例或 fixture
 
-Tech 至少建立或更新以下 fixture：
+Tech 必須使用 repo 內已存在的關鍵 fixture；若 fixture 名稱不明，先用 rg 找既有 Telegram formatter / generator snapshot / expected message 測試。
 
-### Fixture 1: third-message-raw-slot-hidden
+最低 fixture 組合:
 
-輸入條件：
+- fixture_existing_three_messages: 既有正常報文案例，驗證輸出仍為 3 則 messages。
+- fixture_no_valid_entry: 無有效進場案例，驗證不顯示最強標的，Summary 只呈現不可買。
+- fixture_maturity_gate: 驗證 maturity gate 仍為 100。
 
-- evidence_manifest 含 source/status/use/limit/conflict。
-- 至少一筆 strategy sample missing-source。
-- 至少一筆 ledger unresolved-conflict。
+示例輸出形狀，不要求逐字新增:
 
-期望：
+Message[0]
+v20.4.21
+持倉標的
+持倉：...
 
-- 內部 artifact 保留 raw fields。
-- Telegram messages[2] 顯示中文摘要。
-- Telegram messages[2] 不含 raw slot dump。
+Message[1]
+未持倉標的
+可準備 / 僅追蹤 / 淘汰...
+不得出現「最強標的」作為可買推薦
 
-### Fixture 2: holding-non-add-rr-not-applicable
-
-輸入條件：
-
-- 標的是既有持倉。
-- 主行動不是加碼。
-- 系統可計算或曾傳入新倉 RR，例如 2.73。
-
-期望：
-
-- 持倉卡顯示 新倉 RR 不適用。
-- 不顯示 2.73 作為持倉 RR。
-- strategy decision 不變。
-
-### Fixture 3: strategy-sample-unavailable-card
-
-輸入條件：
-
-- strategy sample status 為 missing-source 或 insufficient-data。
-- 原資料中可能存在 synthetic/sample/backtest 數字。
-
-期望：
-
-- 卡片顯示不可用 / 不納入判斷。
-- 不顯示勝率、樣本數、回測 RR 等像可用證據的數字。
-- 第三則以中文說明不可用原因。
+Message[2]
+簡報＋資料依據
+新倉：無有效進場 / 風控 / 補充證據...
 
 ## 明確禁止事項
 
-- 禁止刪除 evidence maturity verifier。
-- 禁止降低 maturity report / artifact schema 能力。
-- 禁止把內部 artifact 改成人話而失去 machine-readable 欄位。
-- 禁止用隱藏衝突的方式改善報文可讀性。
-- 禁止把 missing-source / insufficient-data 包裝成可用證據。
-- 禁止改 BUY/SELL/加減碼/停利停損策略決策。
-- 禁止改 DB schema 或 production write path。
+- 禁止修改策略 decision 結果。
+- 禁止修改 RR、maturity gate、holding_status。
+- 禁止在 presentation/report module import 或呼叫 DB client。
+- 禁止在 presentation/report module record strategy evidence。
+- 禁止在 presentation/report module write DB。
+- 禁止顯示層 mutate input objects。
+- 禁止把本輪擴成全量 architecture rewrite。
+- 禁止清理無關 legacy code。
 - 禁止 live Telegram delivery。
-- 禁止手寫 production DML。
-- 禁止把本輪擴成全報文重構、策略重設或 ledger 修復。
+- 禁止 production DML 或 DB schema 變更。
+- 禁止用「測試通過」宣告策略正確；本輪只驗顯示層拆分與輸出未回退。
 
 ## 阻塞條件
 
-Tech 必須 blocked，而不是自行假設，若遇到：
-
-- 無法辨識第三則 Telegram renderer 與內部 artifact renderer 的分層位置。
-- 無法確認加碼情境是否有既有 RR 顯示 contract。
-- 現有 tests/fixtures 無法產生三則 messages。
-- maturity artifact/verifier 標準命令缺失或無法跑。
-- 修第三則必須刪除 evidence_manifest raw 欄位才做得到。
-- 需要 DB schema/write/live Telegram 才能驗證。
-- production ledger vs Owner 認知需要判定真相才能繼續；本輪只要求人話顯示待釐清，不修資料。
+- 找不到既有 formatTelegramMessages consumer，且無法確認 public compatibility 需求。
+- 找不到可代表現有三則 messages 的 fixture / snapshot / expected output。
+- 找不到 maturity gate 既有契約來源，無法證明仍為 100。
+- 拆分必須修改策略 decision、RR、holding_status 或 DB write path 才能完成。
+- 需要 DB schema / RLS / grant / policy / role 變更。
+- 測試環境無法執行 formatter regression 或 side-effect gate。
 
 ## 本輪停止條件
 
-完成定義：
+完成到以下範圍即停止:
 
-- v20.4.20 報文第三則不再顯示 raw evidence slot dump。
-- 內部 evidence_manifest / maturity artifact / verifier 100% 能力保留。
-- 真衝突與缺資料用中文摘要顯示。
-- 持倉非加碼 RR 顯示不適用。
-- strategy sample missing/insufficient 不在卡片中呈現為可用回測證據。
-- QA L2 覆蓋手機閱讀、內部 artifact 不回退、至少一個反證案例。
+- 只抽出 Telegram 使用者可見 display/report assembly。
+- 保留 formatTelegramMessages 相容入口。
+- Side-effect gate 證明 presentation module 無 DB / evidence write import 或 call。
+- 三則 messages 關鍵 fixture regression 通過。
+- 無有效進場不顯示最強標的。
+- maturity gate 仍為 100。
+- version 更新到 v20.4.21 且與 header / 常量一致。
 
-不納入本輪，需另開待辦：
+以下旁支只記待辦，不納入本輪:
 
-- production ledger 資料修復或 Owner 認知對帳。
-- strategy sample source-of-truth 補資料。
-- 買賣策略合理度重設。
-- Telegram reply markup 落點調整。
-- 全報文文案重構。
-- DB / runner / GitHub Actions 大型流程重構。
+- 更完整的 strategy / presentation 分層設計。
+- 所有 generator helper 的全量搬移。
+- 報文文案重寫。
+- 新增策略指標。
+- DB persistence 改造。
+- live runner / Telegram delivery 流程改造。
+- snapshot fixture 大規模重建。

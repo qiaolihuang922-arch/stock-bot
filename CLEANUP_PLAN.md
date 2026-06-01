@@ -15,6 +15,14 @@
 
 ## Completed
 
+- `pm-20260601-presentation-report-split`:
+  - 問題：Owner 指出策略層與顯示層混用，`core/generator.py` 同時做策略編排、Telegram formatter、evidence/report assembly，後續容易讓報文修正反向影響策略/證據。
+  - 結果：PM -> Tech -> QA 完成，QA `conditional pass`；條件是 `presentation/__init__.py` 與 `presentation/report.py` 必須納入 commit，收口需 commit / push 並跑 Git completion gate。
+  - 關鍵修正：報文版本升 v20.4.21；新增 `presentation/report.py` 承接 Telegram 三則 message assembly；`core/generator.py` 保留 `formatTelegramMessages(...)` 相容 wrapper。
+  - 邊界保護：新增 AST gate，確認 presentation module 不 import / call `record_daily_signals`、`record_strategy_evidence`、`get_supabase_client`、`record_daily_snapshots`，也不直接 mutate `results_map/result/holding_decision` roots。
+  - QA 反證：三則 message 順序仍是持倉、未持倉、簡報＋資料依據；Details Backup 只在 `include_detail=True` 時追加最後；maturity_score=100。
+  - 規則治理：`repeated_pattern` + `architecture_boundary` + `mobile_reading`。第一刀只拆 assembly，避免大重構；後續再拆 formatter helper 與 strategy helper。
+  - 邊界：不改 strategy decision、RR、holding_status、DB schema/write、live Telegram。
 - `telegram-evidence-human-readable-v20-4-20`:
   - 問題：Owner 指出 v20.4.19 報文仍糟糕，第三則 evidence 末尾又出現 raw `source/status/use/limit/conflict` slot dump，且摘要可能同時說「新倉：無有效進場」又顯示 `🔥 最強：<標的>`，手機閱讀上像推薦衝突。
   - 結果：PM -> Tech -> QA 完成，QA `通過`；收口需 commit / push 並跑 Git completion gate。
