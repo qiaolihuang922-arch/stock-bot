@@ -15,6 +15,14 @@
 
 ## Completed
 
+- `import-boundary-gate-20260601`:
+  - 問題：Owner 擔心拆分後文件/模組變多，靠記憶無法搞清楚，要求先建立分層地圖與 import gate。
+  - 結果：本輪不新增業務模組、不新增架構文檔；在既有 `tests/test_generator_report.py` 增加可重跑 AST import boundary gate。
+  - 模組地圖：`presentation` 是顯示層；`services` 是 DB/外部資料服務層；`core` 目前含策略與過渡 orchestration；`core/generator.py -> presentation.report` 是唯一 transitional bridge。
+  - Gate：禁止 `presentation` import signal writer / strategy evidence writer / DB client；禁止 `services` 與 `core` import `presentation`，但 allowlist `core/generator.py -> presentation.report`。
+  - 反證：fake import fixture 會輸出 `Import boundary violation`，並列出 offending rule/file/import。
+  - 規則治理：`architecture_boundary` + `runner_gap` + `doc_bloat`。後續拆分不能靠對話記憶，必須讓測試掃 import graph。
+  - 邊界：不改 Telegram、VERSION、strategy decision、RR、holding_status、DB schema/write、live Telegram。
 - `pm-20260601-presentation-report-split`:
   - 問題：Owner 指出策略層與顯示層混用，`core/generator.py` 同時做策略編排、Telegram formatter、evidence/report assembly，後續容易讓報文修正反向影響策略/證據。
   - 結果：PM -> Tech -> QA 完成，QA `conditional pass`；條件是 `presentation/__init__.py` 與 `presentation/report.py` 必須納入 commit，收口需 commit / push 並跑 Git completion gate。

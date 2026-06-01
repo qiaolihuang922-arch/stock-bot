@@ -117,8 +117,191 @@ FORBIDDEN_SHORT_EVIDENCE_TERMS = [
     "fail-closed",
 ]
 
+ROOT = Path(__file__).resolve().parents[1]
+IMPORT_GATE_SCAN_PATHS = [
+    ROOT / "presentation",
+    ROOT / "services",
+    ROOT / "core",
+    ROOT / "main.py",
+    ROOT / "app.py",
+]
+IMPORT_GATE_EXCLUDED_PARTS = {
+    ".git",
+    ".venv",
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    "build",
+    "dist",
+}
+PRESENTATION_FORBIDDEN_IMPORT_PREFIXES = {
+    "services.signal_store",
+    "services.daily_snapshot_store.record_daily_snapshots",
+    "services.strategy_evidence",
+}
+PRESENTATION_FORBIDDEN_SYMBOLS = {
+    "record_daily_signals",
+    "record_daily_snapshots",
+    "record_strategy_evidence",
+    "get_supabase_client",
+}
+PRESENTATION_BRIDGE_ALLOWLIST = {
+    ("core/generator.py", "presentation.report"),
+}
+PRESENTATION_INTEGRATION_ALLOWLIST = {
+    "services/notifier.py",
+}
+
+
+def _iter_import_gate_python_files():
+    for scan_path in IMPORT_GATE_SCAN_PATHS:
+        if scan_path.is_file():
+            yield scan_path
+            continue
+        for path in scan_path.rglob("*.py"):
+            relative_parts = path.relative_to(ROOT).parts
+            if IMPORT_GATE_EXCLUDED_PARTS.intersection(relative_parts):
+                continue
+            yield path
+
+
+def _import_targets(node):
+    if isinstance(node, ast.Import):
+        for alias in node.names:
+            yield alias.name
+        return
+
+    if isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+        module = node.module
+        for alias in node.names:
+            if alias.name == "*":
+                yield module
+            elif module == "presentation":
+                yield f"presentation.{alias.name}"
+            else:
+                yield f"{module}.{alias.name}"
+
+
+def _presentation_import_is_forbidden(target):
+    if target in PRESENTATION_FORBIDDEN_IMPORT_PREFIXES:
+        return True
+    if any(target.startswith(f"{prefix}.") for prefix in PRESENTATION_FORBIDDEN_IMPORT_PREFIXES):
+        return True
+    symbol = target.rsplit(".", 1)[-1]
+    return symbol in PRESENTATION_FORBIDDEN_SYMBOLS and target.startswith("services.")
+
+
+def _find_import_boundary_violations(sources_by_relative_path):
+    violations = []
+    for relative_path, source in sources_by_relative_path.items():
+        tree = ast.parse(source, filename=relative_path)
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.Import, ast.ImportFrom)):
+                continue
+            for target in _import_targets(node):
+                if relative_path.startswith("presentation/"):
+                    if _presentation_import_is_forbidden(target):
+                        violations.append(
+                            (
+                                "presentation_db_or_strategy_writer_import",
+                                relative_path,
+                                target,
+                            )
+                        )
+                    continue
+
+                if not (
+                    relative_path.startswith("services/")
+                    or relative_path.startswith("core/")
+                ):
+                    continue
+                if not target.startswith("presentation"):
+                    continue
+                if relative_path in PRESENTATION_INTEGRATION_ALLOWLIST:
+                    continue
+                if any(
+                    relative_path == allowed_path
+                    and (target == allowed_target or target.startswith(f"{allowed_target}."))
+                    for allowed_path, allowed_target in PRESENTATION_BRIDGE_ALLOWLIST
+                ):
+                    continue
+                violations.append(
+                    (
+                        "strategy_or_service_imports_presentation",
+                        relative_path,
+                        target,
+                    )
+                )
+    return violations
+
+
+def _format_import_boundary_violations(violations):
+    return "\n".join(
+        "Import boundary violation: {rule}\nfile={path}\nimport={target}".format(
+            rule=rule,
+            path=path,
+            target=target,
+        )
+        for rule, path, target in violations
+    )
+
 
 class GeneratorReportTest(unittest.TestCase):
+    def test_import_boundary_gate_for_strategy_presentation_and_service_layers(self):
+        sources_by_relative_path = {
+            str(path.relative_to(ROOT)): path.read_text(encoding="utf-8")
+            for path in _iter_import_gate_python_files()
+        }
+
+        violations = _find_import_boundary_violations(sources_by_relative_path)
+
+        self.assertFalse(violations, _format_import_boundary_violations(violations))
+
+    def test_import_boundary_gate_reports_offending_file_import_and_rule(self):
+        sources_by_relative_path = {
+            "presentation/fake_report.py": (
+                "from services.strategy_evidence import record_strategy_evidence\n"
+            ),
+            "presentation/fake_signal.py": (
+                "from services.signal_store import record_daily_signals\n"
+            ),
+            "presentation/fake_snapshot.py": (
+                "from services.daily_snapshot_store import record_daily_snapshots\n"
+            ),
+            "presentation/fake_client.py": (
+                "from services.strategy_evidence import get_supabase_client\n"
+            ),
+            "services/fake_service.py": "from presentation import report\n",
+            "core/fake_strategy.py": "import presentation.report\n",
+            "core/generator.py": "from presentation.report import render_telegram_messages\n",
+            "main.py": "from presentation import report\n",
+            "services/notifier.py": "from presentation import report\n",
+        }
+
+        violations = _find_import_boundary_violations(sources_by_relative_path)
+        formatted = _format_import_boundary_violations(violations)
+
+        self.assertIn(
+            "Import boundary violation: presentation_db_or_strategy_writer_import",
+            formatted,
+        )
+        self.assertIn("file=presentation/fake_report.py", formatted)
+        self.assertIn("import=services.strategy_evidence.record_strategy_evidence", formatted)
+        self.assertIn("file=presentation/fake_signal.py", formatted)
+        self.assertIn("import=services.signal_store.record_daily_signals", formatted)
+        self.assertIn("file=presentation/fake_snapshot.py", formatted)
+        self.assertIn("import=services.daily_snapshot_store.record_daily_snapshots", formatted)
+        self.assertIn("file=presentation/fake_client.py", formatted)
+        self.assertIn("import=services.strategy_evidence.get_supabase_client", formatted)
+        self.assertIn(
+            "Import boundary violation: strategy_or_service_imports_presentation",
+            formatted,
+        )
+        self.assertIn("file=services/fake_service.py", formatted)
+        self.assertIn("import=presentation.report", formatted)
+        self.assertIn("file=core/fake_strategy.py", formatted)
+        self.assertEqual(6, len(violations), formatted)
+
     def test_presentation_report_module_has_no_storage_or_evidence_write_imports(self):
         source = Path(presentation_report.__file__).read_text(encoding="utf-8")
         tree = ast.parse(source)
