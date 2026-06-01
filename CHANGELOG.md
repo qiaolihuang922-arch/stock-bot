@@ -1,20 +1,21 @@
-# CHANGELOG: tg-message-order-v20.4.12
+# CHANGELOG:
 
   ## 任務尺寸與風險
 
-  - 任務尺寸：tiny_patch。
-  - 風險判斷：本輪只改 Telegram message list order 與使用者可見版本；不改策略 decision、payload 欄位、DB/write/live delivery。
+  - 任務尺寸：tiny_patch
+  - 風險判斷：只改 Telegram 第三則 short/evidence 文案與版本字串；不改策略 decision、DB read/write、payload shape、message list 結構或 live delivery。
 
   ## 修改內容
 
-  - 將 core/generator.py 的 VERSION 升級為 v20.4.12。
-  - 調整 formatTelegramMessages() 回傳順序：
-      - messages[0]：持倉 message。
-      - messages[1]：未持倉 message。
-      - messages[2]：summary + Evidence Compact。
-      - optional details backup 仍在 include_detail=True 時追加於最後。
-  - 持倉與未持倉 message 都加上 v20.4.12 header，符合手機端逐則閱讀路徑。
-  - 更新測試，驗證完整 message list order、持倉/未持倉分離、summary/evidence 在 action messages 之後，且 Telegram output 不再殘留 v20.4.11 header。
+  - 將 core/generator.py 的 VERSION 升級為 v20.4.13。
+  - 將第三則原 Evidence Compact raw/debug 類證據段落改為自然語言「簡短證據摘要」：
+      - 持倉判斷依據用自然語言描述持久化紀錄是否可驗證。
+      - 未持倉判斷依據用自然語言描述策略樣本 / 候選來源是否足夠。
+      - 資料不足時明確 fail-closed，不把缺證據項目升格成行動建議。
+  - 移除第三則漏斗中的 Source：漏斗 count ... do not show fake ... debug 類文字。
+  - 移除已不再使用的舊 compact evidence raw formatter helper，避免 raw position_events/as_of 文案入口殘留。
+  - 補測完整三則 Telegram output 順序、第三則禁止 debug terms、2356 第二段停利記憶不足自然語言 fail-closed、策略樣本 unavailable/insufficient fail-closed。
+  - 同步既有版本斷言到 v20.4.13。
 
   ## 修改檔案
 
@@ -24,48 +25,46 @@
 
   ## 最小改動策略
 
-  - 只修改 formatter 組裝順序與版本常量。
-  - 沒有重構 formatter、沒有改策略計算、沒有改資料讀取、沒有改 sender 逐則送出行為。
-  - 測試只同步既有版本斷言與新增/調整 message list order 驗證。
+  - 保留 formatTelegramMessages() 回傳 list 結構：持倉 first、未持倉 second、short/evidence last；include_detail=True 時 Details Backup 仍追加最後。
+  - 保留既有 formatter 入口名稱，避免改 runner / notifier 呼叫契約。
+  - 只替換第三則 evidence 文案與必要測試，不重構報文系統。
 
   ## 契約影響
 
-  - formatTelegramMessages() 回傳型別維持 list。
-  - message payload 仍為既有字串 message，未新增必填欄位。
-  - message list 順序契約變更為：持倉 -> 未持倉 -> summary/evidence -> optional details。
-  - 使用者可見版本同步為 v20.4.12。
-  - 未改 DB schema、DB write path、live Telegram delivery、策略 decision payload。
+  - 使用者可見版本：v20.4.12 -> v20.4.13。
+  - Telegram message order：不變。
+  - Payload shape / function return shape：不變。
+  - DB 寫入 / schema / RLS / grant / policy / role：不變。
+  - 策略 decision / action mapping：不變。
+  - 第三則使用者可見文案不再輸出 Evidence Compact raw heading、position_events、db_table、source_of_truth、latest_trade_date、lookback_range、raw Report：as_of、raw 候選：price/source 或漏斗 source debug 行。
 
   ## 直接消費者同步
 
-  - Owner Telegram 手機閱讀路徑：第一則先看持倉，第二則看未持倉，第三則看 summary/evidence。
-  - Telegram sender/consumer：services.notifier.send_many() 已確認仍依 list order 逐則送出，本輪不需修改。
-  - QA/test：tests/test_generator_report.py 已覆蓋含持倉與未持倉 candidate 的完整 message list order。
+  - Owner 手機 Telegram：第三則改為自然語言證據摘要，降低 debug 噪音。
+  - QA sample 驗收：新增完整三則 output 與 unavailable strategy sample fixture。
+  - Telegram runner / notifier：仍消費同一 message list；未修改 services/notifier.py。
 
   ## 未影響模組
 
-  - BUY/SELL、加減碼、停損停利策略 engine 未改。
-  - DB schema / RLS / grant / policy / role / index / constraint 未改。
-  - production write、backfill、live Telegram 未執行也未新增。
-  - Telegram delivery API client 未改。
+  - 策略買賣 / 加減碼 / 停損停利判斷未改。
+  - DB schema、production write、backfill、live Telegram 未碰。
+  - 第一則持倉卡與第二則未持倉卡主結構、排序與策略語意未改。
+  - market/theme evidence 讀取邏輯未改，只同步版本測試期望。
 
   ## 已跑自檢命令
 
-  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py：115 passed，165 warnings。
-  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py services/notifier.py：passed。
-  - git diff --check：passed。
-  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_notifier.py tests/test_generator_report.py tests/test_market_theme_evidence.py：118 passed，165
-    warnings。
-  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_strategy_evidence.py tests/test_market_theme_evidence.py tests/
-    test_notifier.py tests/test_cross_day_context.py tests/test_analysis_engine.py：167 passed，165 warnings。
-  - rg -n "v20\\.4\\.11" core tests services -g '*.py'：只剩測試中的負向斷言 assertNotIn("v20.4.11", ...)。
+  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py services/notifier.py：passed
+  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py：119 passed，169
+    warnings（第三方 deprecation 類）
+  - git diff --check：passed
+  - 追加 sample probe：完整三則 / detail output 順序與第三則禁止 debug terms 檢查 passed
 
   ## 殘留風險
 
-  - include_detail=True 時 optional Details Backup 仍會追加在 summary/evidence 後方；這是既有 debug/detail 行為，本輪未全面改拆分規則。
-  - send_many() 仍把 reply markup 掛在最後一則 message；本輪依 TASK 不改 delivery consumer 行為。
+  - 本輪未重設整份第三則 summary 結構，只針對 TASK 指定的 evidence/debug 噪音與漏斗 source debug 行降噪。
+  - 未做 live Telegram delivery；Tech 自檢只代表交付前檢查，不代表 QA 通過。
 
   ## 旁支待辦
 
-  - 另開任務評估 Telegram reply markup 在新 message order 下的按鈕落點。
-  - 另開任務評估 Details Backup 是否仍應作為最後一則，或需另定細部拆分契約。
+  - 若 Owner 後續要求第三則整體更短，可另開任務收斂 summary 主體。
+  - Telegram reply markup 仍附在最後一則 message 的 delivery consumer 風險未納入本輪。

@@ -57,7 +57,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.12"
+VERSION = "v20.4.13"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -4923,12 +4923,6 @@ def format_unheld_funnel(watch_items, market_mode=None, report_context=None):
     elif tracking_only_count:
         lines.append(f"僅追蹤 {tracking_only_count} 檔，不列入交易執行")
 
-    if report_context:
-        funnel_field = _field_by_key(report_context, "funnel.unheld_counts")
-        lines.append(
-            f"Source：漏斗 count {funnel_field.get('source_status', 'missing-source')}｜{funnel_field.get('fallback_rule', 'fail closed')}"
-        )
-
     return "\n".join(lines)
 
 
@@ -5974,90 +5968,147 @@ def split_message(text, limit=3400):
     return chunks
 
 
-def _holding_execution_source_status(data):
+def _natural_holding_evidence_line(holding_items, report_context):
 
-    context = cross_day_context(data)
-    sources = context.get("source_of_truth") or []
-    if isinstance(sources, str):
-        sources = [sources]
-    if context.get("source_status") in ["source-error", "missing-source", "insufficient-data"]:
-        return context.get("source_status")
-    if context.get("source_status") == "ready" and "position_events" in sources:
-        return "available"
-    events = data.get("position_events") or {}
-    if events.get("_source_status") == "unavailable" or events.get("available") is False:
-        return "source-error"
-    if events:
-        return "available"
-    return "available" if data.get("holding") else "not-applicable"
+    if not holding_items:
+        return "持倉判斷依據：本輪沒有持倉標的；持倉側不輸出額外行動。"
+
+    source_summary = (report_context.get("source_status_summary") or {}).get("position")
+    if source_summary in {"missing-source", "source-error", "insufficient-data"}:
+        return "持倉判斷依據：缺少可驗證的持久化交易紀錄，持倉狀態不升格為已確認倉位。"
+
+    blocked_second_stage = []
+    for name, data in holding_items:
+        state = second_take_profit_execution_state(data, ensure_holding_decision(name, data))
+        if state.get("is_second_stage") and state.get("status") != "completed":
+            blocked_second_stage.append(name)
+
+    if blocked_second_stage:
+        names = "、".join(blocked_second_stage)
+        return f"持倉判斷依據：已讀取持久化持倉紀錄；{names} 缺少可驗證的第二段停利執行紀錄，維持 fail-closed 風控。"
+
+    return "持倉判斷依據：已讀取可驗證的持久化持倉紀錄，持倉處理以前兩則風控清單為準。"
 
 
-def _execution_memory_evidence_text(name, data):
+def _natural_unheld_evidence_line(watch_items, report_context, market_mode=None):
 
-    status = _holding_execution_source_status(data)
-    context = cross_day_context(data)
-    state = second_take_profit_execution_state(data, ensure_holding_decision(name, data))
-    memory = state.get("execution_memory") or {}
-    as_of = (
-        memory.get("latest_trade_date")
-        or context.get("previous_action_date")
-        or context.get("same_run_action_date")
-        or "-"
-    )
-    suffix = ""
-    if state.get("is_second_stage"):
-        if state.get("status") == "completed":
-            suffix = "，已確認第二段停利 event"
-        elif state.get("status") == "partial":
-            suffix = "，今日部分執行；剩餘建議需扣除已賣"
-        else:
-            suffix = "，未確認第二段停利 event"
-    elif status in {"missing-source", "source-error", "insufficient-data"}:
-        suffix = "，execution memory 不足時 fail closed"
+    strategy = _field_by_key(report_context, "evidence.strategy_sample")
+    strategy_status = strategy.get("source_status", "missing-source")
 
-    return f"{name} execution：position_events {status}，as_of {as_of}{suffix}"
+    if not watch_items:
+        if strategy_status in {"missing-source", "source-error", "insufficient-data"}:
+            return "未持倉判斷依據：今日策略樣本不足；本輪沒有候選可支持新倉結論。"
+        return "未持倉判斷依據：今日沒有未持倉候選，未輸出新倉行動。"
+
+    funnel = build_unheld_funnel(watch_items, market_mode=market_mode, report_context=report_context)
+    actionable = len(funnel["可買"])
+    blocked = [
+        name for name, _data in watch_items
+        if _stock_decision_source_status(report_context, name) != "available"
+    ]
+
+    if len(blocked) == len(watch_items):
+        if strategy_status in {"missing-source", "source-error", "insufficient-data"}:
+            return "未持倉判斷依據：今日策略樣本與候選來源不足，無法支持可行動新倉結論。"
+        return "未持倉判斷依據：候選價格、日線或 RR 來源不足，無法支持可行動新倉結論。"
+
+    if blocked:
+        return f"未持倉判斷依據：候選清單中 {actionable} 檔具備可驗證來源；資料不足的標的維持追蹤或不可行動。"
+
+    if strategy_status in {"missing-source", "source-error", "insufficient-data"}:
+        return f"未持倉判斷依據：候選來源可讀，但今日策略樣本不足；可行動清單不因樣本缺口額外升級。"
+
+    return f"未持倉判斷依據：候選清單來源可驗證；本輪可行動新倉 {actionable} 檔。"
+
+
+def _natural_fail_closed_line(report_context, holding_items, watch_items):
+
+    statuses = report_context.get("source_status_summary") or {}
+    blocked_statuses = {"missing-source", "source-error", "insufficient-data"}
+    blocked = [
+        label for key, label in [
+            ("position", "持倉紀錄"),
+            ("strategy_sample", "策略樣本"),
+            ("funnel", "候選清單"),
+        ]
+        if statuses.get(key) in blocked_statuses
+    ]
+
+    if blocked:
+        return f"資料不足處理：{'、'.join(blocked)}不足時採 fail-closed，不把缺證據項目輸出為行動建議。"
+
+    if not holding_items and not watch_items:
+        return "資料不足處理：本輪無持倉與候選，未產生行動建議。"
+
+    return "資料不足處理：資料可讀項目以前兩則清單呈現；缺證據項目不升級為行動建議。"
+
+
+def _natural_evidence_conclusion(holding_items, watch_items, report_context, market_mode=None):
+
+    funnel = build_unheld_funnel(watch_items, market_mode=market_mode, report_context=report_context) if watch_items else {"可買": []}
+    actionable = len(funnel["可買"])
+    holding_blocked = []
+    for name, data in holding_items:
+        if position_summary_action(name, data) in {"停利記憶不足", "停利記憶待確認"}:
+            holding_blocked.append(name)
+
+    if actionable:
+        new_position = f"新倉可行動候選 {actionable} 檔，以未持倉清單為準"
+    else:
+        new_position = "新倉無有效進場"
+
+    if holding_blocked:
+        holding_text = f"{'、'.join(holding_blocked)} 需先補足持倉執行紀錄"
+    elif holding_items:
+        holding_text = "持倉依風控清單處理"
+    else:
+        holding_text = "持倉無優先處理項"
+
+    return f"結論：{new_position}；{holding_text}。資料不足的項目已關閉行動建議，避免把缺證據誤讀成推薦。"
 
 
 def format_evidence_compact_message(results_map, report_context, holding_items, watch_items, market_mode=None):
 
     lines = [
-        "【Evidence Compact】",
-        (
-            f"Report：as_of {report_context['report_context'].get('as_of_date')}"
-            f"｜trade_date {report_context['report_context'].get('trade_date')}"
-        ),
-        f"Source：{report_context.get('source_status_text')}",
+        f"{VERSION} 簡短證據摘要",
+        "",
+        "本次證據摘要：",
+        f"- {_natural_holding_evidence_line(holding_items, report_context)}",
+        f"- {_natural_unheld_evidence_line(watch_items, report_context, market_mode=market_mode)}",
+        f"- {_natural_fail_closed_line(report_context, holding_items, watch_items)}",
+        "",
+        _natural_evidence_conclusion(holding_items, watch_items, report_context, market_mode=market_mode),
     ]
 
-    for name, data in holding_items:
-        position = _stock_field(report_context, name, "position").get("source_status", "missing-source")
-        as_of = report_context["report_context"].get("as_of_date") or "-"
-        lines.append(f"{name} holdings：positions {position}，as_of {as_of}")
-        lines.append(_execution_memory_evidence_text(name, data))
-
-    if watch_items:
-        funnel = build_unheld_funnel(watch_items, market_mode=market_mode, report_context=report_context)
-        actionable = len(funnel["可買"])
-        blocked = [
-            name for name, _data in watch_items
-            if _stock_decision_source_status(report_context, name) != "available"
-        ]
-        candidate_status = "available" if not blocked else "insufficient-data"
-        lines.append(
-            f"候選：price/source {candidate_status}；可買 {actionable}；"
-            f"source gaps fail closed {len(blocked)}"
-        )
-
-    strategy = _field_by_key(report_context, "evidence.strategy_sample")
-    market = _field_by_key(report_context, "evidence.market_theme")
-    lines.append(
-        "Evidence noise："
-        f"strategy_sample {strategy.get('source_status', 'missing-source')}；"
-        f"market/theme {market.get('source_status', 'missing-source')}；"
-        "backtest/source 長句移至 details 或壓成狀態行"
-    )
-
     return "\n".join(lines)
+
+
+def format_telegram_short_report_message(summary_message):
+
+    noisy_prefixes = (
+        "Source：核心價格",
+        "證據日期：",
+        "來源：",
+        "趨勢：",
+    )
+    noisy_contains = (
+        "latest_trade_date",
+        "lookback_range",
+        "source_of_truth",
+        "db_table",
+    )
+    filtered = []
+    for line in summary_message.splitlines():
+        if any(line.startswith(prefix) for prefix in noisy_prefixes):
+            continue
+        if any(term in line for term in noisy_contains):
+            continue
+        filtered.append(line)
+
+    while filtered and filtered[-1] == "":
+        filtered.pop()
+
+    return "\n".join(filtered)
 
 
 def format_details_backup_messages(full_msg):
@@ -6145,12 +6196,13 @@ def formatTelegramMessages(results_map, full_msg, best, score, market_summary, n
         ],
         market_mode=market_mode,
     )
+    short_report_message = format_telegram_short_report_message(summary_message)
 
     messages = []
 
     messages.append(holdings_message)
     messages.append(unheld_message)
-    messages.append(f"{summary_message}\n\n{evidence_message}")
+    messages.append(f"{short_report_message}\n\n{evidence_message}")
 
     if include_detail:
         for chunk in format_details_backup_messages(full_msg):

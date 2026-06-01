@@ -15,6 +15,14 @@
 
 ## Completed
 
+- `tg-evidence-short-ux-v20.4.13`：
+  - 問題：Owner 貼出 v20.4.12 第三則報文，指出 evidence/short 像 debug 輸出，包含 raw source/date/table/key 與互相衝突的 0-count/source 行，手機上需要自然語言整理。
+  - 結果：PM -> Tech -> QA 完成，QA `通過`；收口需 commit / push 並跑 Git completion gate。
+  - 關鍵修正：第三則保留決策短訊但過濾 raw/debug evidence；舊 `Evidence Compact` 改為 `v20.4.13 簡短證據摘要`，用自然語言說明持倉依據、未持倉依據、資料不足 fail-closed 與結論。
+  - QA 反證：sector-only market/theme probe 確認 raw summary 原本會有 `來源：sector_index/latest_trade_date`，第三則 formatter 後禁止詞命中為空；策略樣本 unavailable 不升級為可買或推薦；message order 仍持倉、未持倉、short/evidence。
+  - 規則治理：`repeated_pattern` + `evidence_chain` + `mobile_reading`。證據鏈不是把 source raw dump 給 Owner；應把 source-of-truth 翻成可讀結論，同時保留 fail-closed 邊界。
+  - 流程優化：QA probe 必須覆蓋 raw evidence filter 的負面樣本，尤其是單一 source 行如 `來源：sector_index...`，不能只驗常見 `watchlist_breadth` 組合。
+  - 邊界：不改策略 decision、DB schema/write、live Telegram；前兩則卡片既有 card-level Source 行非本輪目標。
 - `tg-message-order-v20.4.12`：
   - 問題：Owner 貼出 v20.4.11 盤中 Telegram output，指出 TG 發送順序應為 `1.持倉 2.非持倉 3.報文短訊`，而不是 summary first。
   - 結果：PM -> Tech -> QA 完成，QA `通過`；收口需 commit / push 並跑 Git completion gate。

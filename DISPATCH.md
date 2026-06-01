@@ -4,11 +4,11 @@
 
 ## Current Task
 
-- task_id: `tg-message-order-v20.4.12`
-- task_name: `Telegram Message Order: Holdings / Unheld / Short Report`
+- task_id: `tg-evidence-short-ux-v20.4.13`
+- task_name: `Telegram Short Evidence Noise Reduction`
 - task_type: `tiny_patch`
-- owner_status: `rejected_v20_4_11_summary_first_tg_order`
-- architect_status: `absorbed_agent_diff_and_reviewed`
+- owner_status: `rejected_v20_4_12_raw_debug_evidence`
+- architect_status: `qa_passed_pending_git_close`
 - pm_status: `done`
 - tech_status: `done`
 - qa_status: `passed`
@@ -19,19 +19,18 @@
 - 本輪已完成 QA，收口時必須 commit / push 到 `origin/main`。
 - Git completion gate：final 前必須以 `tools/cao_agent/check_git_completion_gate.sh` 驗證 `main` matches `origin/main` 且 worktree clean。
 - 已吸收 PM -> Tech -> QA 交付到主 repo 工作樹：
-  - 報文版本升至 `v20.4.12`。
-  - `formatTelegramMessages()` 固定 TG message list：messages[0] 持倉、messages[1] 未持倉 / 非持倉、messages[2] summary + Evidence Compact；`include_detail=True` 時 Details Backup 仍追加在最後。
-  - 持倉與未持倉 message 都加上 v20.4.12 header，符合 Owner 指定手機順序：`1.持仓 2.非持仓 3.报文短讯`。
+  - 報文版本升至 `v20.4.13`。
+  - TG message list 順序維持：messages[0] 持倉、messages[1] 未持倉 / 非持倉、messages[2] short/evidence；`include_detail=True` 時 Details Backup 仍追加在最後。
+  - 第三則保留決策短訊，但過濾 raw/debug evidence 行，例如 `Source：核心價格`、`Source：漏斗 count`、`證據日期`、`來源：watchlist_breadth/sector_index`、`latest_trade_date`、`lookback_range`、`position_events`、`db_table`、`source_of_truth`、舊 `Evidence Compact`。
+  - 第三則追加自然語言「簡短證據摘要」：持倉依據、未持倉依據、資料不足 fail-closed、最終結論。
+  - 策略樣本 `missing-source` 仍 fail closed；不把 unavailable 樣本包裝成可買或推薦。
   - 不改策略 decision、持倉/未持倉判斷、DB schema、write path、live Telegram。
-- Runner gap 已修：
-  - `tools/cao_agent/run_qa_code.sh` 會在 QA 啟動前同步主 repo handoff files 到可重用 tech worktree，避免 QA 驗到 stale `TASK.md / CHANGELOG.md / QA_REPORT.md`。
-  - 保留既有 `CAO_QA_USE_REPO_CONFIG=1` 與 safe read-only artifact 路徑；QA sandbox DNS 失敗時可核對 Architect sanitized production-read evidence。
 - 驗證：
   - QA 結論：`通過`。
   - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py services/notifier.py`：passed。
-  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py`：118 passed，165 warnings（第三方 deprecation 類）。
+  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py`：119 passed，169 warnings（第三方 deprecation 類）。
   - `git diff --check`：passed。
-  - QA 補充反證：`services/notifier.py` / mock `send_many()` 確認 sender 依 list order 逐則送出，不會把 summary 排回第一則。
+  - QA 補充反證：手造 market/theme 只有 `sector_index` 的 sample，確認 raw summary 可能產生的 `來源：sector_index/latest_trade_date` 在第三則已被過濾；message order 仍為持倉、未持倉、short/evidence。
   - scoped 可吸收 diff：`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`、`core/generator.py`、`tests/test_generator_report.py`、`tests/test_market_theme_evidence.py`。
 
 ## Next Action

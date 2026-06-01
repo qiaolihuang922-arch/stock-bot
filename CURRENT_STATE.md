@@ -6,7 +6,7 @@
 
 - 專案：台股策略 Telegram 報文機器人。
 - 正式結果以 git / runner 產生報文為準。
-- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前收口目標為 `v20.4.12`。
+- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前收口目標為 `v20.4.13`。
 - 固定 8 份 Markdown 不刪：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 - Architect 是總控；產品 / 策略 / 報文 bug 或 feature 預設走 PM -> Tech -> QA。
 - 跨日狀態、已執行交易、歷史 evidence 必須來自 production DB 或 Owner 指定持久來源；local/runtime/worktree 不能當跨日記憶。
@@ -28,27 +28,23 @@
 
 ## Current Worktree
 
-- task_id：`tg-message-order-v20.4.12`
+- task_id：`tg-evidence-short-ux-v20.4.13`
 - 狀態：PM done / Tech done / QA `通過`；final 前必須已 commit / push 並通過 Git completion gate。
 - commit：見 `git log -1`。
 - 關鍵行為：
-  - 報文版本升到 `v20.4.12`。
-  - Telegram 完整輸出順序為持倉 message -> 未持倉 / 非持倉 message -> summary + Evidence Compact；`include_detail=True` 時 Details Backup 追加最後。
-  - 持倉與未持倉 message 都有 v20.4.12 header，符合 Owner 指定：`1.持仓 2.非持仓 3.报文短讯`。
-  - `build_report_context()` 產生共用 `evidence_manifest`，每個使用者可見資料欄位需標出 source_status、source_of_truth、db_table、trade/as_of date、decision_eligible 與 fallback_rule。
-  - `evidence_manifest` 補 `stock.<name>.execution_memory`，讓 positions / position_events source truth 可被 evidence 消費。
-  - 未持倉 BUY-like candidate 若 price / OHLCV / RR source 不足，Summary、漏斗、交易執行 / 明日計畫、卡片一致 fail closed。
-  - Summary `🔥 最強` 已接 source eligibility gate；source-ineligible candidate 不顯示候選名、排序分、評級分，改為 `無有效進場標的`。
-  - 混合候選已補強：source-valid BUY 與 runtime/local BUY-like 同報文時，有效 BUY 正常進 Summary / 漏斗 / execution / tomorrow；缺源候選只作不可行動診斷，且不顯示精確 RR / S / V / 價格。
-  - 2356 第二段停利 stale guard：未從 position_events 確認「第二」/ `SECOND` / `TP2` 或至少兩筆 sell deltas 時，fail closed 為 `停利記憶不足`，不得說成第二段已執行。
-  - verbose source/backtest/detail 噪音移到 compact evidence / details backup，主體保留決策和必要 source truth。
+  - 報文版本升到 `v20.4.13`。
+  - Telegram 完整輸出順序維持持倉 message -> 未持倉 / 非持倉 message -> short/evidence message；`include_detail=True` 時 Details Backup 追加最後。
+  - 第三則保留決策短訊，但過濾 raw/debug evidence：`Source：核心價格`、`Source：漏斗 count`、`證據日期`、`來源：watchlist_breadth/sector_index`、`latest_trade_date`、`lookback_range`、`position_events`、`db_table`、`source_of_truth`、舊 `Evidence Compact`。
+  - 第三則追加自然語言「簡短證據摘要」：持倉判斷依據、未持倉判斷依據、資料不足處理、最終結論。
+  - 策略樣本 `missing-source` 仍 fail closed，不包裝成可買、可準備或推薦。
+  - 前兩則持倉 / 未持倉卡主結構與策略語意不變。
   - market/theme production evidence、strategy sample evidence、stock decision 三層保持分離；market/theme confirmed 不會變 BUY。
   - 不改 BUY/SELL、加減碼、停利停損、DB schema、write path、live Telegram。
 - 驗證：
   - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py services/notifier.py`：passed。
-  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py`：118 passed，165 warnings。
+  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py`：119 passed，169 warnings。
   - `git diff --check`：passed。
-  - QA 補充反證：完整 TG message list 順序 passed；`services/notifier.py` / mock `send_many()` 確認 sender 依 list order 逐則送出；v20.4.11 只剩負向斷言。
+  - QA 補充反證：完整 TG message list 順序 passed；sector-only market/theme probe 證明 raw `來源：sector_index/latest_trade_date` 被第三則 formatter 過濾；missing-source strategy sample 不升級成推薦。
   - 先前 production read-only strategy evidence artifact 仍顯示缺 `classification backtest source-of-truth`，報文正確 fail closed，不回到舊式 `樣本 0｜樣本不足，不判讀`。
 - 2356 production read-only artifact：
   - path：`.qa_tmp/production_readonly_2356_positions_events.json`。

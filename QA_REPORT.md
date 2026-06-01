@@ -1,56 +1,53 @@
-# QA_REPORT: tg-message-order-v20.4.12
+# QA_REPORT:
 
-  ## 測試範圍
+## 測試範圍
 
-  - 任務尺寸 / QA level：tiny_patch / L1；驗證範圍維持在 Telegram message list order、版本字串、直接 sender 消費順序，不擴大到 full replay / backfill / production evidence 矩陣。
-  - 讀取文件：`TASK.md`、`CHANGELOG.md`。
-  - 檢查 diff：`core/generator.py`、`tests/test_generator_report.py`、`tests/test_market_theme_evidence.py`；另只讀 `services/notifier.py` 作直接 consumer list-order 風險檢查。
-  - Worktree 狀態：目前 modified 只有 `CHANGELOG.md` 與 scoped 三個檔案；未見 unrelated residual。可吸收 diff 為 scoped code/test order/version 變更，`CHANGELOG.md` 為一致交付摘要；未建議整包合併。
-  - QA 未修改任何 tracked file，未做 live Telegram 或 DB write。
+- 任務：`tg-evidence-short-ux-v20.4.13`
+- 任務尺寸 / QA：`tiny_patch / L1`，驗證範圍限於第三則 Telegram short/evidence、三則訊息順序、版本字串、missing-source fail-closed；未擴成 full replay / backfill / production write。
+- 讀取：`TASK.md`、`CHANGELOG.md`、git diff、`core/generator.py`、相關測試檔。
+- 可吸收 diff：`core/generator.py`、`tests/test_generator_report.py`、`tests/test_market_theme_evidence.py`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`；均與本任務範圍相關。
 
-  ## 風險預算與停止條件
+## 風險預算與停止條件
 
-  - 風險 1：手機閱讀順序仍 summary first 或 summary 插在 action body 中間。驗證：diff 與測試確認 messages[0] 持倉、messages[1] 未持倉、messages[2] summary + Evidence Compact。
-  - 風險 2：sender / consumer 端重新排序或 reply markup 影響 list delivery。驗證：只讀 `services/notifier.py` 與 mock `send_many()`，確認 enumerate 原 list 逐則送出。
-  - 風險 3：排序修正順手改到策略、假 evidence、DB/write/live delivery。驗證：scoped diff 未碰策略 / DB / sender；既有相關測試與 integrity assertions 通過。
-  - 停止條件：完成 L1 scoped tests、版本殘留掃描、直接 consumer order 反證；不進行 live Telegram、production write、DB schema 檢查或 full replay。
+- 風險 1：第三則仍洩漏 raw/debug evidence。驗證：掃 diff、跑禁止詞測試、補 sector-only market/theme probe。停止條件：第三則不含指定 raw terms。
+- 風險 2：第三則順序或手機閱讀路徑被改壞。驗證：完整三則 messages index 檢查。停止條件：持倉 first、未持倉 second、簡短證據摘要 third。
+- 風險 3：missing-source 被自然語言包裝成推薦。驗證：策略樣本 unavailable / price missing cases、sector-only WAIT sample。停止條件：仍 fail-closed、無可買文案、策略 decision 不被升級。
 
-  ## 關聯風險掃描
+## 關聯風險掃描
 
-  - `core/generator.py`：VERSION 已由 v20.4.11 升為 v20.4.12；`formatTelegramMessages()` 改為 append holdings、unheld、summary+evidence。未改回傳型別，仍為 string list。
-  - `services/notifier.py`：`send_many()` 以 `for index, message in enumerate(messages)` 原序送出，未看到 consumer 端把 summary 移到第一則；reply markup 仍掛最後一則，屬 CHANGELOG 已列旁支風險，不阻塞本輪 order 修正。
-  - `rg -n "v20\\.4\\.11|v20\\.4\\.12" core tests services -g '*.py'`：使用者可見版本已是 v20.4.12；v20.4.11 僅作負向斷言出現。
-  - `git diff --check -- core/generator.py tests/test_generator_report.py tests/test_market_theme_evidence.py`：通過。
-  - 未見 DB schema、DB write path、production writer、live Telegram delivery 相關 diff。
+- `TASK.md`、`CHANGELOG.md`、diff 口徑一致：版本升 `v20.4.13`，只改第三則 short/evidence 與必要測試；未見 DB schema/write、策略 decision、payload shape 擴大。
+- `core/generator.py` 主要改動：`VERSION = "v20.4.13"`；第三則 Evidence Compact 改為自然語言「簡短證據摘要」；`format_telegram_short_report_message()` 過濾 `Source：核心價格`、`證據日期：`、`來源：`、`趨勢：` 與 `latest_trade_date/lookback_range/source_of_truth/db_table`。
+- `formatTelegramMessages()` 仍 append：持倉、未持倉、short/evidence；`include_detail=True` 時 Details Backup 仍在最後。
+- `git diff --check`：passed。
+- `py_compile core/generator.py services/notifier.py`：passed。
 
-  ## 跨區塊語意一致性
+## 跨區塊語意一致性
 
-  - TASK 要求：持倉 -> 非持倉 -> summary/evidence/report short last group；CHANGELOG 描述與 scoped diff 基本一致。
-  - 測試 fixture 同時含持倉 智原 與未持倉 建準，驗證 智原/續抱 只在 messages[0]，建準 只在 messages[1]，summary/evidence 在 messages[2]。
-  - 策略 / 顯示語意未因排序改變：測試保留持倉 action、未持倉狀態、fail-closed、market theme evidence 等既有斷言；本輪 diff 未改 strategy engine。
-  - 質疑點：`include_detail=True` 時 Details Backup 會追加在 summary/evidence 後方。實際 `generateReport()` 呼叫未傳 `include_detail=True`，預設為 false；因此 Owner 手機主要 delivery path 仍是三則訊息，summary/evidence 為最後一則。此點列為旁支風險，不阻塞本輪。
+- 主倉測試：`PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py`：119 passed，169 warnings。
+- QA 獨立測試：`arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py`：116 passed，169 warnings。
+- QA 補充反證 probe：手造 market/theme 只有 `sector_index` 的 sample；raw summary 原本可產生 `證據日期`、`來源：sector_index`、`latest_trade_date`、`Source：核心價格`，第三則輸出禁止詞命中為空。
+- 順序：第 1 則 `【持倉標的】`、第 2 則 `【未持倉標的】`、第 3 則含 `簡短證據摘要`。
+- 原 sample decision 維持 WAIT/action 0，未出現可買、建議買入或立即進場。
 
-  ## 使用者誤讀風險
+## 使用者誤讀風險
 
-  - 手機端第一則已變成持倉、第二則未持倉，降低先看到 summary 而誤以為已有可執行推薦的風險。
-  - summary/evidence 合併為第三則，仍保留「新倉：無有效進場」、production source insufficient 等 fail-closed 文案；未看到用假 evidence 補過測試。
-  - 非阻塞殘留：若未來啟用 `include_detail=True` 送 live Telegram，Details Backup 會在 summary/evidence 後方，可能讓「最後一則」語意變成 debug backup；建議另開任務定義 detail delivery contract。
+- 手機閱讀順序符合 TASK：持倉 first、未持倉 second、short/evidence third。
+- 第三則保留決策短訊與自然語言證據摘要，不要求 Owner 從 table/file/key/date 流水自行推理。
+- 前兩則卡片內既有 `Source：price/OHLCV/RR...` 屬 card-level source 契約，本輪非目標；QA 未把它當第三則 raw evidence 洩漏。
 
-  ## 質疑與反證
+## 質疑與反證
 
-  - 主動反證 1：不只重跑 Tech 自檢，補跑直接 consumer mock：`send_many(["【持倉標的】...", "【未持倉標的】...", "summary/evidence"], reply_markup=...)`。結果確認 sender 保留 list order，reply markup 只掛最後一則。
-  - 主動反證 2：第一次未指定 `arch -arm64` 跑 pytest 時遇到 `pydantic_core` native wheel 架構錯誤；改用 Tech 同口徑 `arch -arm64` 後測試正常，環境問題未被當作豁免。
-  - 執行測試：
-    - `arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py`：115 passed，165 warnings。
-    - `arch -arm64 .venv/bin/python -m pytest -q tests/test_notifier.py`：3 passed。
+- 質疑：只移除 Evidence Compact heading，但 summary 前半仍可能帶 raw market/theme 來源行。反證：sector-only probe 證明 raw summary 有 `來源：sector_index/latest_trade_date`，第三則經 formatter 後無命中。
+- 質疑：策略樣本 unavailable 但 payload 內仍是 BUY/action 0.1，formatter 可能造假成可買。反證：測試與 probe 均顯示第三則 `新倉無有效進場`，rendered messages 無可買推薦文案。
+- 質疑：改第三則時影響前兩則或 message list。反證：完整三則與 detail 模式測試均檢查 messages index；前兩則仍各自為持倉 / 未持倉。
 
-  ## 未測項目
+## 未測項目
 
-  - 未做 live Telegram delivery。
-  - 未做 production DB write / schema / RLS / grant / policy / role / index / constraint 驗證；本輪 diff 不涉及。
-  - 未做 full pytest、replay、backfill、全 evidence 矩陣；依 tiny_patch / L1 風險預算停止。
-  - 未驗證 Telegram reply markup 在新 order 下的產品落點；CHANGELOG 已列旁支待辦。
+- 未做 live Telegram delivery。
+- 未做 production DB write、backfill、全量 replay。
+- 未跑 full repo pytest；依 `tiny_patch / L1` 只跑 task 直接相關 tests 與補充 formatter probe。
+- 未驗證 Telegram 實機渲染；本輪以 message text 順序與內容契約驗收。
 
-  ## QA 結論
+## QA 結論
 
-  通過
+通過
