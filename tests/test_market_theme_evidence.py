@@ -400,7 +400,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             "【持倉標的】\n\n【2330】📌 續抱觀察",
             "【未持倉標的】\n\n【2317】👀 等冷卻｜不可買",
             "\n".join([
-                "【05/29 盤中｜v20.4.14】",
+                "【05/29 盤中｜v20.4.15】",
                 "🧭 今日結論：R3 進攻偏熱；交易執行：無新增下單；未持倉 1 檔僅追蹤",
                 "✅ 今日盤中交易執行",
                 "無新增下單",
@@ -420,7 +420,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         self.assertFalse(report["schema_change"])
         self.assertFalse(report["data_write"])
         self.assertFalse(report["live_telegram"])
-        self.assertEqual(report["telegram_header_version"], "v20.4.14")
+        self.assertEqual(report["telegram_header_version"], "v20.4.15")
         self.assertEqual(report["source_integrity"]["production_db_readonly"], "passed")
         self.assertEqual(report["source_integrity"]["may_data_available"], "passed")
         self.assertEqual(
@@ -443,7 +443,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             "【持倉標的】\n\n無持倉",
             "【未持倉標的】\n\n【2317】👀 等冷卻｜不可買",
             "\n".join([
-                "【05/29 盤中｜v20.4.14】",
+                "【05/29 盤中｜v20.4.15】",
                 "🧭 今日結論：新倉：2317 可買",
                 "✅ 今日盤中交易執行",
                 "未持倉漏斗（非執行）：",
@@ -474,7 +474,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             "【持倉標的】\n\n無持倉",
             "【未持倉標的】\n\n【2317】👀 等冷卻｜不可買",
             "\n".join([
-                "【05/29 盤中｜v20.4.14】",
+                "【05/29 盤中｜v20.4.15】",
                 "🧭 今日結論：交易執行：無新增下單；未持倉 1 檔僅追蹤",
                 "✅ 今日盤中交易執行",
                 "未持倉漏斗（非執行）：",
@@ -535,7 +535,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         self.assertFalse(artifact["data_write"])
         self.assertFalse(artifact["live_telegram"])
         self.assertFalse(artifact["credential_values_included"])
-        self.assertEqual(artifact["generator_version"], "v20.4.14")
+        self.assertEqual(artifact["generator_version"], "v20.4.15")
         self.assertEqual(artifact["load_status"], "confirmed")
         self.assertEqual(artifact["loaded_rows_count"], 1)
         self.assertTrue(artifact["provider_confirmed"])
@@ -556,7 +556,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             "【持倉標的】\n\n無持倉",
             "【未持倉標的】\n\n【2317】👀 等冷卻｜不可買",
             "\n".join([
-                "【05/29 盤中｜v20.4.14】",
+                "【05/29 盤中｜v20.4.15】",
                 "🧭 今日結論：交易執行：無新增下單；未持倉 1 檔僅追蹤",
                 "✅ 今日盤中交易執行",
                 "未持倉漏斗（非執行）：",
@@ -972,16 +972,17 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             )
 
         summary = summary_message(messages)
-        self.assertIn("【05/28 盤中｜v20.4.14】", summary)
-        self.assertIn("證據：production 來源不足，不作確認。", summary)
-        self.assertIn("詳情：runtime 觀察僅供診斷，非確認來源。", summary)
-        self.assertIn("🧭 主線：市場偏多但買點未成立。", summary)
+        self.assertIn("【05/28 盤中｜v20.4.15】", summary)
+        self.assertIn("🧾 v20.4.15 簡報＋資料依據", summary)
+        self.assertIn("新倉：無有效進場。", summary)
+        self.assertIn("market/theme：missing-source", summary)
+        self.assertIn("production 來源不足時只顯示限制，不構成買點", summary)
         self.assertNotIn("confirmed", summary)
         self.assertNotIn("AI/電子供應鏈偏多", summary)
         self.assertNotIn("今日可買：台積電", summary)
         self.assertLess(
-            summary.index("🧭 新倉：無有效進場。"),
-            summary.index("證據：production 來源不足，不作確認。"),
+            summary.index("新倉：無有效進場。"),
+            summary.index("market/theme：missing-source"),
         )
 
     def test_confirmed_theme_without_stock_entry_stays_track_only(self):
@@ -1020,16 +1021,14 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         )
 
         summary = summary_message(messages)
-        self.assertIn("證據：production confirmed，市場/題材支持成立。", summary)
-        self.assertIn("限制：題材只能追蹤，不代表可買", summary)
-        self.assertNotIn("來源：watchlist_breadth same_trade_date; sector_index same_trade_date", summary)
-        self.assertIn("本次證據摘要：", summary)
-        self.assertIn("市場/題材輔助：資料不足", summary)
-        self.assertIn("🧭 新倉：無有效進場。", summary)
-        self.assertIn("未持倉 1 檔僅追蹤", summary)
+        self.assertIn("🧾 v20.4.15 簡報＋資料依據", summary)
+        self.assertIn("market/theme：production DB 已有可用 confirmed evidence", summary)
+        self.assertIn("用途限市場/題材背景", summary)
+        self.assertIn("市場/題材資料已確認只能說明環境，不構成買點", summary)
+        self.assertIn("新倉：無有效進場。", summary)
         self.assertLess(
-            summary.index("🧭 新倉：無有效進場。"),
-            summary.index("證據：production confirmed，市場/題材支持成立。"),
+            summary.index("新倉：無有效進場。"),
+            summary.index("market/theme：production DB 已有可用 confirmed evidence"),
         )
         self.assertNotIn("今日可買：台積電", summary)
         self.assertNotIn("台積電｜可買", summary)
@@ -1076,15 +1075,14 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             )
 
         summary = summary_message(messages)
-        auxiliary = summary[summary.index("市場/題材輔助"):]
-        self.assertIn("【05/29 盤中｜v20.4.14】", summary)
-        self.assertIn("- 題材：AI infrastructure", summary)
-        self.assertIn("背景：延續順風；觀察區間 2026-05-27 至 2026-05-29；連續支持 3 天。", summary)
-        self.assertIn("不等於個股買點", summary)
-        self.assertIn("🧭 新倉：無有效進場。", summary)
-        self.assertIn("可買 0", summary)
-        self.assertNotIn("建議買入", auxiliary)
-        self.assertNotIn("立即進場", auxiliary)
+        self.assertIn("【05/29 盤中｜v20.4.15】", summary)
+        self.assertIn("market/theme：production DB 已有可用 confirmed evidence", summary)
+        self.assertIn("as_of 2026-05-29", summary)
+        self.assertIn("3 個觀察日", summary)
+        self.assertIn("用途限市場/題材背景", summary)
+        self.assertIn("新倉：無有效進場。", summary)
+        self.assertNotIn("建議買入", summary)
+        self.assertNotIn("立即進場", summary)
         self.assertNotIn("台積電｜可買", summary)
 
     def test_formatter_does_not_trust_existing_malformed_evidence_dict(self):
@@ -1123,10 +1121,10 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         )
 
         summary = summary_message(messages)
-        self.assertIn("市場 / 題材證據：weak", summary)
-        self.assertIn("限制：內部題材證據未達確認，仍依量價 / 風控判斷", summary)
-        self.assertNotIn("市場 / 題材證據：confirmed", summary)
-        self.assertNotIn("🧭 主線：AI / 電子供應鏈仍偏多。", summary)
+        self.assertIn("市場/題材來源不足時只顯示限制", summary)
+        self.assertIn("market/theme：missing-source", summary)
+        self.assertIn("不構成買點", summary)
+        self.assertNotIn("production confirmed", summary)
 
 
 if __name__ == "__main__":

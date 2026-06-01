@@ -4,10 +4,10 @@
 
 ## Current Task
 
-- task_id: `telegram-evidence-entry-dedupe-v20.4.14`
-- task_name: `Telegram Evidence Entry Dedupe`
-- task_type: `tiny_patch`
-- owner_status: `rejected_v20_4_13_duplicate_evidence_entries`
+- task_id: `telegram-brief-data-evidence-v20.4.15`
+- task_name: `Telegram Brief Plus Data Evidence`
+- task_type: `normal_patch`
+- owner_status: `rejected_fragmented_third_message`
 - architect_status: `qa_passed_pending_git_close`
 - pm_status: `done`
 - tech_status: `done`
@@ -19,24 +19,26 @@
 - 本輪已完成 QA，收口時必須 commit / push 到 `origin/main`。
 - Git completion gate：final 前必須以 `tools/cao_agent/check_git_completion_gate.sh` 驗證 `main` matches `origin/main` 且 worktree clean。
 - 已吸收 PM -> Tech -> QA 交付到主 repo 工作樹：
-  - 報文版本升至 `v20.4.14`。
+  - 報文版本升至 `v20.4.15`。
   - TG message list 順序維持：messages[0] 持倉、messages[1] 未持倉 / 非持倉、messages[2] short/evidence；`include_detail=True` 時 Details Backup 仍追加在最後。
-  - 第三則只保留一個 evidence entry：`v20.4.14 簡短證據摘要`。
-  - 第三則會跳過 legacy `📊 策略證據 v20.0` 長段，避免與簡短證據摘要同時出現。
-  - 策略樣本 `missing-source / insufficient-data` 仍在唯一摘要內 fail closed；不把 unavailable 樣本包裝成可買或推薦。
+  - 第三則改為單一 `🧾 v20.4.15 簡報＋資料依據`。
+  - 第三則只有兩個主要入口：`決策簡報` 與 `資料依據`；不再拆成策略證據、簡短證據、來源狀態、漏斗證據等多入口。
+  - `決策簡報` 保留原第三則直接消費者需要的今日結論、交易執行、持倉風控檢查、未持倉漏斗、詳情索引等摘要內容。
+  - `資料依據` 集中呈現 market/theme production 狀態、strategy sample source status/fail-closed、持倉/候選 source-of-truth 狀態與限制。
+  - source-missing / position warning early return 也產出三則 Telegram message，不再只回單一 summary。
   - 不改策略 decision、持倉/未持倉判斷、DB schema、write path、live Telegram。
 - 驗證：
   - QA 結論：`通過`。
   - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py services/notifier.py`：passed。
   - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py`：119 passed，169 warnings（第三方 deprecation 類）。
   - `git diff --check`：passed。
-  - QA 補充反證：注入 legacy `📊 策略證據 v20.0 ... 狀態碼：missing-source`，第三則 `簡短證據摘要` count = 1，legacy heading count = 0，且仍含 `missing-source` 與 `fail-closed`。
+  - QA 補充反證：source-missing early return 仍回三則；第三則 `決策簡報` count = 1、`資料依據` count = 1，無 `簡短證據摘要 / 策略證據 / 來源狀態 / 漏斗證據 / 風險證據` 等分裂入口。
   - scoped 可吸收 diff：`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`、`core/generator.py`、`tests/test_generator_report.py`、`tests/test_market_theme_evidence.py`。
 
 ## Next Action
 
 - 若 `git status --branch --short` 顯示未推送或 dirty，先完成 commit / push 並跑 `tools/cao_agent/check_git_completion_gate.sh`，不得開新產品任務。
-- 下一張產品任務：Owner 進一步指出第三則整體仍像多段拼接；應整理成單一「簡報 + 資料依據」結構，讓 market/theme、strategy sample、持倉 / 候選 source 在同一處用資料庫狀態說清楚，而不是分散成多個片段。
+- 收口：commit / push 後跑 `tools/cao_agent/check_git_completion_gate.sh`。
 - 旁支另開：Telegram reply markup 仍附在最後一則 message，新 message order 下可能需要 delivery consumer 任務評估按鈕落點。
 - 旁支另開：如果 Owner 認定 2356 英業達實際未賣，需查 production ledger/source truth 為何目前為 `shares=0 / CLOSED`；本輪未寫 DB、不校正 ledger。
 

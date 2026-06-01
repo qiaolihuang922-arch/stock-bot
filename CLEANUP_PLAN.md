@@ -15,6 +15,14 @@
 
 ## Completed
 
+- `telegram-brief-data-evidence-v20.4.15`：
+  - 問題：Owner 指出 v20.4.14 第三則雖已去重，但仍像 market/theme、strategy sample、source、漏斗/風險多片段拼接，不像一份「簡報＋資料」。
+  - 結果：PM -> Tech -> QA 完成，QA `通過`；收口需 commit / push 並跑 Git completion gate。
+  - 關鍵修正：第三則改為單一 `🧾 v20.4.15 簡報＋資料依據`，只有 `決策簡報` 與 `資料依據` 兩個主要入口；資料依據集中說明 market/theme production、strategy sample、持倉/候選 source-of-truth 狀態與限制。
+  - 重要退回：第一版 Tech 過度壓縮第三則，刪掉既有 summary 消費者需要的今日結論、交易執行、漏斗等內容，且 source-missing early return 仍只回單訊息；QA 阻塞後已修正。
+  - QA 反證：L2 scoped tests 119 passed；source-missing early return 仍回三則；第三則 `決策簡報` count = 1、`資料依據` count = 1，無 `簡短證據摘要 / 策略證據 / 來源狀態 / 漏斗證據 / 風險證據` 多入口。
+  - 規則治理：`repeated_pattern` + `mobile_reading` + `evidence_chain`。收斂第三則不能刪掉直接決策摘要；資料依據必須集中，但行動結論仍要完整可讀。
+  - 邊界：不改策略 decision、DB schema/write、live Telegram；不處理 reply markup、2356 ledger、全報文文案盤點。
 - `telegram-evidence-entry-dedupe-v20.4.14`：
   - 問題：Owner 指出 v20.4.13 第三則同時顯示 `📊 策略證據 v20.0` 與 `簡短證據摘要`，兩個證據入口語意重複。
   - 結果：PM -> Tech -> QA 完成，QA `通過`；收口需 commit / push 並跑 Git completion gate。
