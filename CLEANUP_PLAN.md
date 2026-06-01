@@ -15,6 +15,12 @@
 
 ## Completed
 
+- `normal_patch_unheld_overheat_rr_zero_display`:
+  - 問題：Owner 指出技嘉同為 `可準備｜過熱降溫`，卻顯示 `RR 0.00（不足）`，和聯電 / 華邦電 `RR -（過熱）` 不一致。
+  - 結果：未持倉 RR 顯示新增窄條件：過熱 blocker 且 `rr=0` 時顯示 `-（過熱）`；非過熱 `rr=0` 仍顯示 `0.00（不足）`，持倉路徑不變。
+  - 可重跑補強：新增技嘉類未持倉卡 regression。
+  - QA 反證：Re-QA `通過`；手機順序確認標題過熱降溫 / 買點待降溫 / RR 過熱一致；非過熱與持倉反證通過。
+  - 邊界：不改 strategy decision、calc_rr、DB write、live Telegram、VERSION。
 - `risk_patch_20260601_2301_today_buy_after_close_reading`:
   - 問題：Owner 指出光寶科 2301 今日買入，但盤後盤面弱勢 / 遠離突破 5.43%，手機上會誤讀為策略在當前不應買位置仍推薦 BUY。
   - 結果：報文版本升 `v20.4.22`；盤後今日買入持倉若當前不滿足買點，持倉卡新增說明，區分 `strategy_intraday`、`manual_or_ledger`、`unknown`，並明確不代表可繼續買。

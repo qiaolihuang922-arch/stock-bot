@@ -1688,6 +1688,42 @@ class GeneratorReportTest(unittest.TestCase):
             "0.00（不足）"
         )
 
+    def test_unheld_overheat_prepare_rr_zero_uses_overheat_blocker(self):
+        payload = {
+            "stock_code": "2376",
+            "price": 336.25,
+            "change": -0.07,
+            "price_source": "realtime",
+            "daily_source": "yahoo",
+            "result": {
+                "decision": "WAIT",
+                "action": 0,
+                "rr": 0,
+                "calc_rr": 0,
+                "heat_state": "HOT",
+                "trade_state": "EXTENDED",
+                "structure_phase": "BREAKOUT_CONFIRM",
+                "price_behavior": "NORMAL",
+                "market_grade": "A",
+                "volume_state": "NORMAL",
+                "volume_price_state": "NORMAL",
+                "structure_state": "STRONG",
+                "entry_quality": "A",
+                "confidence_score": 72,
+                "breakout_distance": 0,
+            },
+            "holding": None,
+            "structure_score": 4,
+            "volume_ratio": 1.2,
+        }
+
+        card = generator.formatTelegramUnheldCard("技嘉", payload, market_mode="進攻偏熱")
+
+        self.assertIn("【技嘉 2376】👀 可準備｜過熱降溫", card)
+        self.assertIn("買點：不可買，待降溫後重評", card)
+        self.assertIn("數據：RR -（過熱）", card)
+        self.assertNotIn("RR 0.00（不足）", card)
+
     def test_v19_3_3_valid_buy_is_summary_buy_group_not_watch_group(self):
         payload = {
             "stock_code": "2421",

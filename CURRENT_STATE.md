@@ -28,15 +28,15 @@
 
 ## Current Worktree
 
-- task_id：`risk_patch_20260601_2301_today_buy_after_close_reading`
+- task_id：`normal_patch_unheld_overheat_rr_zero_display`
 - 狀態：PM done / Tech done / QA `通過`；主 repo 已吸收可吸收 diff，等待 commit / push / Git completion gate。
 - commit：任務二 blocked 文件已在 `9120672 mark support stop task blocked` 推送到 `origin/main`。
-- 已完成前置任務：盤後第三則今日新倉矛盾已在 `7928ecb fix afterhours today buy summary conflict` 推送。
-- 問題：光寶科 2301 今日買入，但盤後盤面弱勢 / 遠離突破，手機上可能誤讀成「現在仍可買」。
-- 修正：`core/generator.py` VERSION 升 `v20.4.22`；新增今日買入來源 / current can buy / context line helper；`presentation/report.py` 在盤後持倉卡盤面行後插入說明；tests 同步 2301 三來源 fixture 與 can_buy distance probe。
-- 驗證：Re-QA output `.cao_agent_context/outputs/20260601_213156_18119_stock_qa_code_readonly.answer.txt`，結論 `通過`；主 repo 待跑 targeted tests / py_compile / diff check。
-- 邊界：未改 DB write、live Telegram、holding state；策略層只補 can_buy 負面 probe，未改 can_buy 實作。
-- 後續：Owner 同批剩餘問題需拆分處理：技嘉 RR 0.00、縮量漲停風險、智原 observation_days。
+- 已完成前置任務：光寶科今日買入盤後不可續買說明已在 `2bd0a48 explain today buy non-current entry` 推送。
+- 問題：技嘉類未持倉卡是 `可準備｜過熱降溫`，但 RR 顯示 `0.00（不足）`，與其他過熱股 `-（過熱）` 不一致。
+- 修正：`core/generator.py` 新增 `should_show_overheat_rr_blocker()`；未持倉過熱 blocker 且 `rr=0` 時 `rr_display_text()` 顯示 `-（過熱）`。
+- 驗證：Re-QA output `.cao_agent_context/outputs/20260601_214641_26360_stock_qa_code_readonly.answer.txt`，結論 `通過`；主 repo 待跑 targeted tests / py_compile / diff check。
+- 邊界：未改 strategy decision、calc_rr、DB write、live Telegram、VERSION。
+- 後續：Owner 同批剩餘問題需拆分處理：縮量漲停風險、智原 observation_days。
 - 上一輪 v20.4.21 行為摘要保留如下，供重開對話辨識已落地內容：
 - 關鍵行為：
   - 不升 VERSION，仍為 `v20.4.21`。

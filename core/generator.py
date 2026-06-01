@@ -1169,7 +1169,31 @@ def hidden_rr_reason(result, holding=False):
     return "不可用"
 
 
+def should_show_overheat_rr_blocker(result, holding=False):
+
+    if holding:
+        return False
+
+    try:
+        rr = float(result.get("rr"))
+    except (TypeError, ValueError):
+        rr = None
+
+    if rr is None or round(rr, 2) != 0:
+        return False
+
+    blockers = entry_blockers(result)
+    return (
+        result.get("heat_state") in ["HOT", "EXTREME"]
+        or result.get("trade_state") in ["EXTENDED", "AVOID"]
+        or any(item.startswith("過熱") for item in blockers)
+    )
+
+
 def rr_display_text(result, holding=False):
+
+    if should_show_overheat_rr_blocker(result, holding=holding):
+        return "-（過熱）"
 
     if should_hide_rr(result):
         return f"-（{hidden_rr_reason(result, holding)}）"
