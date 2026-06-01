@@ -2,63 +2,70 @@
 
 ## 測試範圍
 
-- 任務：`report_v20_4_21_mobile_readability_remaining_fixes`，normal_patch，QA L2。
-- 驗證聚焦 Telegram 報文 formatter、手機閱讀 message list、三日短期背景命名、非加碼持倉 RR、盤後下一步、卡片資料來源降噪與第三則資料依據。
-- 未擴大到 full replay、backfill、production DB write 或 live Telegram。
+- 任務：`report_v20_4_21_holding_rr_conflict_followup`，normal_patch，QA L2。
+- 驗證範圍限於 `TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`、`presentation/report.py`、`tests/test_generator_report.py`。
+- 未擴大到 full repo pytest、production replay、backfill、DB write 或 live Telegram。
 
 ## 風險預算與停止條件
 
-1. 手機閱讀仍把三日背景或 strategy sample 誤讀成策略證據 / 勝率。
-   - 驗證：全文掃描與 rendered message list 檢查 `交易證據日` / `策略勝率` / `勝率證據` 不出現在盤後輸出。
-   - 停止條件：盤後可見報文仍出現禁止詞，或三日資料與買點 / 勝率綁定。
-2. 非加碼持倉仍露出新倉 RR 數字。
-   - 驗證：建準非加碼 fixture 保留 payload rr=2.73，但持倉卡只顯示新倉 RR 不適用。
-   - 停止條件：持倉卡、索引、詳情或下一步出現新倉 RR 數字。
-3. 文件與 diff 對齊。
-   - 驗證：比對 CHANGELOG 修改檔案 / 測試名稱 / 實際 diff。
-   - 停止條件：交付摘要宣稱不存在的 diff，或漏列實際 diff。
+1. 今日買入持倉主行動已是 `新倉風控觀察`，但底層 `ADD_10 / allow_add=True` 仍讓卡片露出 `RR 2.73`。
+   - 驗證：檢查 fixture、artifact、手機閱讀卡片順序與 scoped tests。
+   - 停止條件：持倉卡主行動為 `新倉風控觀察` 時仍出現 `數據：RR 2.73`。
+2. presentation 顯示層暗中接 DB writer、evidence writer、schema alter 或 fake production path。
+   - 驗證：AST/boundary test、rg 掃描與 artifact 安全旗標。
+   - 停止條件：presentation 新增 DB client / writer / schema alter 依賴，或 artifact 標示 write/live/schema。
+3. TASK / CHANGELOG / diff 口徑不一致。
+   - 驗證：`git diff --name-only`、`git diff --check`、文件內容與實際 diff 對照。
+   - 停止條件：實際 tracked diff 超出指定檔案，或 CHANGELOG 漏列/誤列產品 diff。
 
 ## 關聯風險掃描
 
-- `presentation/report.py` 只改顯示文案與盤後輸出，未改策略 decision、RR 計算或 DB path。
-- `tests/test_generator_report.py` 更新手機閱讀 probe。
-- `tests/test_market_theme_evidence.py` 同步短期背景命名預期。
-- `core/generator.py` 無本輪 diff；VERSION 仍為 `v20.4.21`。
+- `git diff --name-only` 只有 5 個 tracked 檔案：`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`、`presentation/report.py`、`tests/test_generator_report.py`。
+- `core/generator.py` 無 diff，VERSION 仍為 `v20.4.21`。
+- `presentation/report.py` 無 import；未發現 DB writer / evidence writer / schema alter 入口。
+- AST 額外掃描只命中 `lines.insert(...)` 這種 list method，不是 DB insert writer。
 
 ## 跨區塊語意一致性
 
-- 手機順序：持倉卡、未持倉卡、第三則資料依據。
-- 持倉卡：建準非加碼顯示新倉 RR 不適用，且下一步為明日語境。
-- 未持倉卡：新倉候選 RR 保留，未逐檔重複長資料來源句。
-- 第三則：集中表達持倉與價格支持風控、未持倉只支持分類觀察、不支持直接進場。
+- fixture 保留 `holding_decision.level=ADD_10`、`allow_add=True`、`position_events.bought_shares=50`。
+- 手機持倉卡同時顯示：
+  - `決策：新倉風控觀察，暫不加碼`
+  - `數據：新倉 RR：不適用（既有持倉）｜S 5/5｜V 0.9x`
+- 未持倉候選仍保留新倉 RR 顯示，測試確認 `數據：RR 2.4` 仍存在。
+- 第三則資料依據仍和持倉卡一致。
 
 ## 使用者誤讀風險
 
-- 已降低三日資料被誤讀成策略證據 / 勝率的風險。
-- 已降低非加碼持倉被誤讀成新倉 RR 可進場的風險。
-- 已降低未持倉卡片資料來源重複造成的手機噪音。
+- 已反證 Owner 指出的主誤讀路徑：同一卡片不再同時出現 `新倉風控觀察，暫不加碼` 與 `數據：RR 2.73`。
+- `.qa_tmp/v20_4_21_holding_rr_dry_run_card.json` 驗證：
+  - `credential_values_included=false`
+  - `schema_change=false`
+  - `data_write=false`
+  - `live_telegram=false`
+  - `card_found=true`
+  - card 含 `新倉 RR：不適用（既有持倉）`
+  - card 不含 `數據：RR 2.73`
 
 ## 質疑與反證
 
-- QA 補 source-error 盤後 fixture：第三則顯示來源讀取異常，不混用 missing-source / 樣本不足主狀態。
-- QA generated output 掃描未命中本輪禁止詞。
-- QA scoped tests：
-  - `arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py`：128 passed，181 warnings。
-- `git diff --check`：passed。
+- 底層 `ADD_10 / allow_add=True` 是否會繞過修正：不會，fixture probe 通過。
+- 顯示層是否引入 DB/schema/evidence writer：未發現，boundary test 通過。
+- CHANGELOG 是否還宣稱上一輪大範圍修正：已收斂到持倉 RR 衝突補修，修改檔案與 diff 對齊。
 
 ## 已跑命令
 
-- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile presentation/report.py tests/test_generator_report.py tests/test_market_theme_evidence.py`：passed。
-- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py`：128 passed，181 warnings。
+- `git diff --name-only`
 - `git diff --check`：passed。
-- `rg -n "交易證據日|策略勝率|勝率證據" presentation/report.py -S`：no matches。
-- Re-QA output：`.cao_agent_context/outputs/20260601_181248_1516_stock_qa_code_readonly.answer.txt`，結論 `通過`；補驗 source-error、confirmed trend 不升格買點、手機順序與第三則資料邊界。
+- artifact JSON 安全旗標與卡片內容檢查：passed。
+- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py::GeneratorReportTest::test_presentation_report_module_has_no_storage_or_evidence_write_imports tests/test_generator_report.py::GeneratorReportTest::test_v20_4_21_afterhours_mobile_readability_probe`：2 passed，17 warnings。
+- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py`：92 passed，181 warnings。
+- Re-QA output：`.cao_agent_context/outputs/20260601_183214_25279_stock_qa_code_readonly.answer.txt`，結論 `通過`。
 
 ## 未測項目
 
 - 未執行 live Telegram delivery。
-- 未做 production DB write、backfill、DML、schema / RLS / grant / policy 檢查。
-- 未做 full repo pytest、歷史 replay 或 evidence 全矩陣。
+- 未做 production DB write、backfill、DML、schema / RLS / grant / policy 實機檢查。
+- 未跑 full repo pytest、歷史 replay 或 evidence 全矩陣。
 - 未驗 Telegram reply markup 附著位置。
 
 ## QA 結論

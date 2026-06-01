@@ -31,6 +31,7 @@
 - task_id：`report_v20_4_21_mobile_readability_remaining_fixes`
 - 狀態：PM done / Tech diff manually absorbed / QA `通過` after handoff fix；final 前必須已 commit / push 並通過 Git completion gate。
 - commit：見 `git log -1`。
+- follow-up：`report_v20_4_21_holding_rr_conflict_followup`，QA `通過`，等待 commit / push / gate。
 - 關鍵行為：
   - 不升 VERSION，仍為 `v20.4.21`。
   - 三日資料改稱短期背景 / 短期背景資料，不再使用交易證據日語感。
@@ -38,11 +39,15 @@
   - 盤後未持倉卡片移除逐檔長資料來源句。
   - 第三則資料依據改成人話：持倉與價格支持風控；未持倉只支持分類觀察，不支持直接進場。
   - 非加碼持倉不顯示新倉 RR 數字；新倉候選 RR 保留。
+  - 今日買入且主行動為 `新倉風控觀察` 時，即使底層 signal 是 `ADD_10 / allow_add=True`，也不顯示具體新倉 RR 數字。
   - 不改 strategy decision、RR 計算、holding_status、DB schema/write、live Telegram。
 - 驗證：
   - Re-QA output：`.cao_agent_context/outputs/20260601_181248_1516_stock_qa_code_readonly.answer.txt`，結論 `通過`。
+  - Follow-up Re-QA output：`.cao_agent_context/outputs/20260601_183214_25279_stock_qa_code_readonly.answer.txt`，結論 `通過`。
   - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile presentation/report.py tests/test_generator_report.py tests/test_market_theme_evidence.py`：passed。
   - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py`：128 passed，181 warnings。
+  - Follow-up `tests/test_generator_report.py`：92 passed，181 warnings。
+  - `.qa_tmp/v20_4_21_holding_rr_dry_run_card.json`：`credential_values_included=false`、`schema_change=false`、`data_write=false`、`live_telegram=false`，card 含 `新倉 RR：不適用（既有持倉）`，不含 `數據：RR 2.73`。
   - QA source-error phone-order probe：passed。
   - `git diff --check`：passed。
   - QA 額外反證：按手機閱讀順序掃描三則訊息，禁止詞不出現在 rendered output，資料邊界集中在第三則。

@@ -168,6 +168,7 @@ def _strategy_sample_status_line(report_context, deps):
 def formatTelegramPositionCard(name, data, *, deps, report_context=None):
     holding = data["holding"]
     decision = deps["ensure_holding_decision"](name, data)
+    summary_action = deps["position_summary_action"](name, data)
     stock_result = data["result"]
     today_text = deps["holding_today_trade_text"](data, decision) or "無"
     dist = deps["card_breakout_distance"](data)
@@ -176,11 +177,16 @@ def formatTelegramPositionCard(name, data, *, deps, report_context=None):
     next_step = deps["holding_next_step_line"](name, data)
     rr_text = deps["rr_display_text"](stock_result, holding=True)
     add_levels = {"ADD_10", "ADD_20", "ADD_30"}
-    is_add_context = bool(decision and decision.get("level") in add_levels and decision.get("allow_add") is not False)
+    is_add_context = bool(
+        decision
+        and decision.get("level") in add_levels
+        and decision.get("allow_add") is not False
+        and summary_action != "新倉風控觀察"
+    )
     rr_line = "數據：新倉 RR：不適用（既有持倉）" if decision and not is_add_context else f"數據：RR {rr_text}"
 
     lines = [
-        f"【{deps['stock_title'](name, data)}】📌 {deps['position_summary_action'](name, data)}｜{deps['signed_pct'](deps['stock_pnl'](data))}",
+        f"【{deps['stock_title'](name, data)}】📌 {summary_action}｜{deps['signed_pct'](deps['stock_pnl'](data))}",
         f"倉位：{holding['shares']}股｜均價 {deps['price_text'](holding.get('avg_price'))}｜今日 {today_text}",
         f"風控：{deps['holding_risk_text'](decision)}",
         f"盤面：{deps['plain_label'](deps['compact_market_line'](stock_result, dist))}",

@@ -15,6 +15,14 @@
 
 ## Completed
 
+- `report_v20_4_21_holding_rr_conflict_followup`:
+  - 問題：Owner 實際跑出建準卡片仍顯示 `新倉風控觀察，暫不加碼` 但數據列露出 `RR 2.73`，和第三則「持倉 RR 不適用」衝突。
+  - 根因：RR 顯示只看底層 `ADD_10 / allow_add=True`，沒有以最終使用者可見主行動為準；今日買入會把主行動降為 `新倉風控觀察`，但 RR 行仍沿用 ADD 訊號。
+  - 結果：持倉卡 RR 顯示改以最終 `position_summary_action` 為準；主行動是 `新倉風控觀察` 時，一律顯示 `新倉 RR：不適用（既有持倉）`。
+  - 可重跑補強：`test_v20_4_21_afterhours_mobile_readability_probe` 保留 `ADD_10 / allow_add=True / 今日買入`，確認建準類卡片不顯示 `RR 2.73`。
+  - QA 反證：Re-QA `通過`；artifact `.qa_tmp/v20_4_21_holding_rr_dry_run_card.json` 標示無 credential、無 schema change、無 data write、無 live Telegram，且 card 不含 `數據：RR 2.73`。
+  - 規則治理：`repeated_pattern` + `mobile_reading`。報文衝突要以使用者可見主行動為準驗證，不只驗底層 strategy signal。
+  - 邊界：不改 strategy decision、RR 計算、holding_status、DB schema/write、live Telegram。
 - `report_v20_4_21_mobile_readability_remaining_fixes`:
   - 問題：Owner 要修剩餘手機閱讀問題：三日背景誤像策略證據、建準非加碼 RR 衝突、盤後下一步語境、未持倉卡片資料句噪音、第三則資料依據工程化。
   - 結果：`交易證據日` 可見語感改為短期背景；盤後下一步改明日語境；盤後未持倉卡片移除逐檔長資料來源句；第三則改為持倉與價格支持風控、未持倉只支持分類觀察且不支持直接進場。

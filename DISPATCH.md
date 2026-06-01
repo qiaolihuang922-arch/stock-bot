@@ -14,6 +14,14 @@
 - qa_status: `passed`
 - latest_commit: see `git log -1`
 
+## Current Follow-up
+
+- task_id: `report_v20_4_21_holding_rr_conflict_followup`
+- task_name: `V20.4.21 Holding RR Conflict Follow-up`
+- task_type: `normal_patch`
+- architect_status: `qa_passed_pending_git_close`
+- qa_status: `passed`
+
 ## Current Result
 
 - 本輪目標是修 v20.4.21 剩餘手機閱讀問題：三日資料只稱短期背景、非加碼持倉 RR 一致、盤後下一步用明日語境、未持倉卡片資料來源降噪、第三則資料依據人話化。
@@ -32,6 +40,11 @@
   - QA source-error phone-order probe：passed。
   - `git diff --check`：passed。
   - scoped diff：`presentation/report.py`、`tests/test_generator_report.py`、`tests/test_market_theme_evidence.py`、固定 handoff Markdown。
+- Follow-up 驗證：
+  - 建準 dry-run 卡片已顯示 `數據：新倉 RR：不適用（既有持倉）`，不再顯示 `數據：RR 2.73`。
+  - Re-QA output：`.cao_agent_context/outputs/20260601_183214_25279_stock_qa_code_readonly.answer.txt`，結論 `通過`。
+  - `tests/test_generator_report.py`：92 passed，181 warnings。
+  - presentation boundary gate：未新增 DB writer、evidence writer、schema alter 或 fake production path。
 
 ## Next Action
 

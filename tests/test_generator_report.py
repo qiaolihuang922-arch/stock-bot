@@ -310,6 +310,9 @@ class GeneratorReportTest(unittest.TestCase):
             "record_strategy_evidence",
             "get_supabase_client",
             "record_daily_snapshots",
+            "create_table",
+            "alter_table",
+            "add_column",
         }
         imported_names = set()
         called_names = set()
@@ -3907,12 +3910,13 @@ class GeneratorReportTest(unittest.TestCase):
         holding_payload["stock_code"] = "3035"
         holding_payload["result"]["rr"] = 2.73
         holding_payload["holding_decision"] = {
-            "action": "新倉風控觀察",
-            "level": "NEW_POSITION_RISK_WATCH",
+            "action": "加碼 10%",
+            "level": "ADD_10",
             "warning_price": 113,
             "hard_stop_price": 109,
-            "allow_add": False,
+            "allow_add": True,
         }
+        holding_payload["position_events"] = {"bought_shares": 50, "action": "BUY"}
         candidate_payload = render_payload(
             [50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 70],
             None,
@@ -3974,6 +3978,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("盤中先觀察", rendered)
         self.assertNotIn("盤中觀察修復狀況", rendered)
         self.assertIn("下一步：明日觀察是否守住警戒，未修復再降級", position)
+        self.assertIn("新倉風控觀察，暫不加碼", position)
         self.assertIn("新倉 RR：不適用（既有持倉）", position)
         self.assertNotRegex(position, r"數據：RR 2\.73")
         self.assertIn("數據：RR 2.4", unheld)

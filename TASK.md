@@ -1,8 +1,8 @@
-# TASK: v20.4.21 報文剩餘手機閱讀修正
+# TASK: v20.4.21 持倉 RR 衝突補修
 
 ## 任務狀態
 
-- task_id: report_v20_4_21_mobile_readability_remaining_fixes
+- task_id: report_v20_4_21_holding_rr_conflict_followup
 - 任務類型: normal_patch
 - 狀態: qa_passed_pending_git_close
 - 版本建議: 不回退，維持 `v20.4.21`
@@ -10,35 +10,32 @@
 
 ## Owner 問題
 
-目前 v20.4.21 報文仍有手機閱讀誤讀與跨區塊衝突：
+Owner 貼出實際 `generate()` 報文後，建準卡片仍出現跨區塊衝突：
 
-1. 近 3 個交易證據日容易被理解成策略證據或策略勝率，實際只能稱為短期背景 / 短期市場溫度。
-2. 非加碼持倉 RR 顯示不一致；建準這類非加碼持倉不得顯示 RR 2.73。
-3. 盤後下一步仍像盤中文案，應改為明日語境。
-4. 未持倉卡片重複長資料來源句，手機閱讀噪音過高。
-5. 第三則資料依據需要人話化：持倉與價格可支持風控；未持倉只支持分類觀察，不支持直接進場。
+- 卡片主行動：`新倉風控觀察，暫不加碼`
+- 同一卡片數據：`RR 2.73`
+- 第三則資料依據：既有持倉若不是加碼情境，只顯示新倉 RR 不適用。
+
+此外，Owner 要確認本輪沒有暗中擴建表 / 欄位，沒有把 derived / fixture 當 production 證據。
 
 ## 使用者可見結果
 
-- 三日資料只被描述為短期背景或短期市場溫度，不出現策略證據 / 策略勝率 / 勝率證據等暗示。
-- 非加碼持倉卡片顯示新倉 RR 不適用，不顯示具體新倉 RR 數字。
-- 盤後下一步使用明日語境，例如明日觀察是否守住警戒。
-- 未持倉卡片不再每張重複長資料來源句；資料來源說明集中放到第三則。
-- 第三則用白話說明資料能支持什麼、不能支持什麼。
+- 若最終使用者可見主行動是 `新倉風控觀察`，持倉卡片不得顯示具體新倉 RR 數字，即使底層策略 signal 暫時有 ADD level。
+- 建準同類卡片應顯示：`數據：新倉 RR：不適用（既有持倉）｜S ...｜V ...`
+- presentation 顯示層不得新增 schema / DB writer / evidence writer 依賴。
 
 ## 非目標
 
 - 不改策略邏輯、選股規則、RR 計算公式或進出場決策。
 - 不變更 DB schema、RLS、grant、policy、role、index、constraint。
 - 不做 DB write、backfill、production DML 或 live Telegram delivery。
-- 不修復本輪五項以外的文案偏好、排序、策略分數或資料完整性問題。
-- 不把三日短期背景升格為策略驗證、勝率統計或回測結論。
+- 不處理 `generate()` 預設 dry-run / write 行為；Owner 已說該點是複製錯誤。
+- 不修復本輪以外的文案偏好、排序、策略分數或資料完整性問題。
 
 ## 影響模組
 
 - `presentation/report.py`
 - `tests/test_generator_report.py`
-- `tests/test_market_theme_evidence.py`
 - 固定 handoff Markdown
 
 不得改動策略核心、DB 寫入路徑、交易狀態機或 live delivery runner。
@@ -52,55 +49,17 @@
 
 ## 輸出契約
 
-### 三日短期背景命名
-
-使用者可見文案中，近 3 個交易日相關段落只能使用短期背景語意。
-
-允許：
-
-- 近 3 個交易日短期背景
-- 短期市場溫度
-- 短期背景資料
-
-禁止：
-
-- 策略證據
-- 策略勝率
-- 勝率證據
-- 任何讓使用者以為三日資料可證明策略有效或可直接進場的文字。
-
-### 非加碼持倉 RR
-
-- 非加碼持倉不得顯示具體新倉 RR 數字。
-- 非加碼持倉 RR 欄位顯示為新倉 RR 不適用或等價短句。
+- 使用者可見主行動是 `新倉風控觀察` 時，不得顯示具體新倉 RR 數字。
+- RR 顯示以最終報文主行動為準，不能只看底層 strategy ADD level。
 - 加碼候選可沿用既有加碼 RR 顯示契約。
-
-### 盤後下一步
-
-盤後報文的下一步文案需改為明日語境，例如：
-
-- 明日觀察是否守住警戒
-- 明日確認是否修復
-
-### 卡片資料來源降噪
-
-- 未持倉卡片不得每張重複長資料來源句。
-- 資料來源說明集中到第三則資料依據。
-
-### 第三則資料依據人話化
-
-第三則需同時表達：
-
-- 持倉與價格可支持風控。
-- 未持倉只支持分類觀察。
-- 未持倉不支持直接進場。
+- presentation 顯示層不得 import / call DB writer、strategy evidence writer、schema alter 類入口。
 
 ## 驗收條件
 
-- 可重跑手機閱讀 probe 覆蓋三日短期背景命名、非加碼 RR、盤後下一步、卡片資料說明降噪與第三則人話化。
+- 可重跑手機閱讀 probe 覆蓋「今日買入 + 底層 ADD level」仍顯示 `新倉 RR：不適用（既有持倉）`。
+- 可用 dry-run 反證建準卡片不再顯示 `RR 2.73`。
 - `tests/test_generator_report.py` 通過。
-- `tests/test_market_theme_evidence.py` 通過。
-- QA 補一個 source-error 或等價負面路徑，確認策略樣本狀態不混用且手機順序無誤讀。
+- presentation boundary gate 通過，確認未新增 schema / DB writer / evidence writer 依賴。
 - 不做 DB write、live Telegram、DB schema。
 
 ## 明確禁止事項
@@ -113,4 +72,4 @@
 
 ## 本輪停止條件
 
-完成以上五項使用者可見修正與可重跑驗證後停止；其他文案偏好、reply markup、2356 ledger 稽核另開任務。
+完成建準 RR 衝突補修與可重跑驗證後停止；其他文案偏好、reply markup、2356 ledger 稽核另開任務。
