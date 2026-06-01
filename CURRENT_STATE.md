@@ -28,13 +28,15 @@
 
 ## Current Worktree
 
-- task_id：`architect_pre_edit_scope_gate`
-- 狀態：流程補丁已完成 scope gate 檢查，等待 commit / push / Git completion gate；只改流程文件與 `tools/cao_agent/` gate，不碰產品 / 顯示 / 策略 / 測試代碼。
-- commit：上一輪產品修正已在 `b177345 restore afterhours control summary` 推送到 `origin/main`；本輪將另收口。
-- 問題：Owner 指出 Architect 又自行寫產品代碼，要求檢查流程問題並補全；已動的產品 diff 不再處理。
-- 根因：角色邊界文字已存在，但缺少可重跑的 pre-edit scope gate；broad command 或 follow-up 容易在操作層被誤當成直改授權。
-- 修補：新增 `tools/cao_agent/check_architect_edit_scope_gate.sh`，流程治理任務 commit 前必跑；若工作樹含 `core/`、`presentation/`、`services/`、`tests/` 等產品 / 測試 diff 且無 `ARCHITECT_DIRECT_CODE_AUTH=1`，直接 fail 並要求走 PM -> Tech -> QA。
-- 驗證：`bash -n tools/cao_agent/check_architect_edit_scope_gate.sh` passed；`tools/cao_agent/check_architect_edit_scope_gate.sh` passed；臨時 `tests/` 未追蹤檔負面探針 exit 2 passed；`git diff --check` passed；commit/push 後仍需跑 `tools/cao_agent/check_git_completion_gate.sh`。
+- task_id：`risk_patch_wait_breakout_low_rr_gap_20260601`
+- 狀態：PM done / Tech done / QA `conditional pass`，條件是 `tests/test_condition_engine.py` 必須納入 commit；主 repo 已吸收可吸收 diff，等待 stage / commit / push / Git completion gate。
+- commit：上一輪流程 gate 已在 `7ec978a add architect edit scope gate` 推送到 `origin/main`；本輪將另收口。
+- 問題：`condition_engine.py` 尾端 `rr >= 1.0` 兜底覆蓋 `wait_breakout_low_rr` 的 breakout RR 門檻，造成 WAIT 缺口空白。
+- 修正：`decision_type="wait_breakout_low_rr"` 跳過通用 RR 兜底；`rr=1.2` 時 `conditions["rr"] == False`，`summarize_conditions(..., "WAIT")` 含 `rr`，`_reason_labels` 含 `RR不足`。
+- 新增 probe：`tests/test_condition_engine.py`。
+- 驗證：Re-QA output `.cao_agent_context/outputs/20260601_193237_24364_stock_qa_code_readonly.answer.txt`，結論 `conditional pass`；主 repo 已跑 `py_compile` passed、`tests/test_condition_engine.py tests/test_analysis_engine.py` 34 passed、`git diff --check` passed。
+- 邊界：未改 strategy decision、decision_type 產生邏輯、DB write、live Telegram。
+- 流程事件：第一次 auto 因 Tech worktree stale diff blocked；舊 diff 已存到 `.cao_agent_context/artifacts/tech_write_stale_diff_before_wait_rr_task_20260601_192018.patch` 後以 runner 顯式丟棄開關重跑。
 - 上一輪 v20.4.21 行為摘要保留如下，供重開對話辨識已落地內容：
 - 關鍵行為：
   - 不升 VERSION，仍為 `v20.4.21`。

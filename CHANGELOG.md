@@ -2,78 +2,57 @@
 
 ## 任務尺寸與風險
 
-- 任務尺寸：normal_patch。
-- 風險判斷：只改 Telegram 盤後第三則顯示內容、presentation deps bridge 與可重跑 probe；不改 strategy decision、RR 計算、持倉狀態機、DB schema/write、VERSION 或 live delivery。
+- 任務尺寸：risk_patch。
+- 風險：修正 WAIT breakout RR 缺口判斷，影響使用者可見等待原因。
+- 邊界：未改策略 decision、decision_type 產生邏輯、DB write path、live Telegram delivery。
 
 ## 修改內容
 
-- `presentation/report.py`
-  - 盤後第三則恢復 `持倉風控檢查` 清單。
-  - 盤後第三則恢復 `未持倉漏斗（非執行）` 摘要。
-  - `資料依據` 從空泛四句改為合併證據摘要：市場短期背景、持倉數、未持倉分類數、執行記憶邊界、持倉 RR 邊界。
-  - 持倉 RR 顯示仍以最終使用者可見主行動為準；主行動是 `新倉風控觀察` 時顯示 `新倉 RR：不適用（既有持倉）`。
-- `core/generator.py`
-  - 將既有 `unheld_tracking_only_count` 傳入 presentation deps，供第三則資料依據統計未持倉分類。
-- `tests/test_generator_report.py`
-  - 更新 `test_v20_4_21_afterhours_mobile_readability_probe`，覆蓋盤後第三則清單、漏斗、資料依據合併摘要、執行記憶與 RR 邊界。
+- `core/condition_engine.py`
+  - 修正尾端 `rr >= 1.0` 通用兜底，避免 `decision_type="wait_breakout_low_rr"` 在 `rr=1.2` 時被覆蓋成 RR 通過。
+- `tests/test_condition_engine.py`
+  - 新增可重跑 probe，驗證 `wait_breakout_low_rr + WAIT + rr=1.2` 會保留 RR 缺口。
+  - 同步驗證直接原因標籤包含 `RR不足`。
 
 ## 修改檔案
 
-產品 / 測試 diff：
-
-- `presentation/report.py`
-- `core/generator.py`
-- `tests/test_generator_report.py`
-
-Architect handoff：
-
-- `TASK.md`
-- `CHANGELOG.md`
-- `QA_REPORT.md`
-- `DISPATCH.md`
-- `CURRENT_STATE.md`
-- `CLEANUP_PLAN.md`
+- `core/condition_engine.py`
+- `tests/test_condition_engine.py`
 
 ## 契約影響
 
-- 使用者可見報文文案有變更：
-  - 盤後第三則重新包含持倉風控檢查與未持倉漏斗。
-  - 資料依據包含持倉 / 未持倉數量與證據用途邊界。
-  - 今日買入且主行動為 `新倉風控觀察` 的持倉卡不顯示具體新倉 RR 數字。
-- Message list 數量、payload shape、DB contract、版本常量均未變更。
-- 報文版本維持 `v20.4.21`，未回退。
+- `condition_engine(result)["rr"]`：當 `decision_type="wait_breakout_low_rr"` 且 `rr < 1.5` 時維持 `False`。
+- `summarize_conditions(..., "WAIT")`：上述情境回傳非空缺口，且包含 `rr`。
+- 既有 `rr -> RR不足` 標籤映射未改。
+- 函式回傳結構、payload shape、message list 順序、DB contract、CLI 輸出未變更。
 
 ## 直接消費者同步
 
-- Telegram message renderer：同步盤後第三則清單與資料依據。
-- Owner 手機閱讀路徑：probe 檢查持倉卡、未持倉卡、第三則簡報與資料依據。
-- v20.4.x report tests 已同步。
+- `core.signal_snapshot._reason_labels` 透過既有 `condition_engine -> summarize_conditions` 路徑取得 `RR不足`。
+- `core.generator` 仍使用既有 condition / summarize / label 路徑；本輪未改報文格式或排序。
 
 ## 未影響模組
 
-- 策略核心與買賣決策。
-- RR 計算公式與加碼 RR 顯示契約。
-- 持倉狀態機。
-- DB schema / RLS / grant / policy / role / index / constraint。
-- DB write、backfill、live Telegram delivery。
-- Telegram reply markup / delivery consumer。
+- `services/analysis.py` strategy decision / decision_type 產生邏輯。
+- DB schema、RLS、grant、policy、role、index / constraint。
+- DB write path、backfill、live Telegram delivery。
+- 報文版面、版本字串、分組排序。
 
 ## 已跑自檢命令
 
-- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py::GeneratorReportTest::test_v20_4_21_afterhours_mobile_readability_probe tests/test_generator_report.py::GeneratorReportTest::test_presentation_report_module_has_no_storage_or_evidence_write_imports`：2 passed，17 warnings。
-- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py`：92 passed，181 warnings。
-- `.venv/bin/python - <<'PY' ... generate_report(dry_run=True) ... PY`：第三則含持倉風控檢查、未持倉漏斗與合併資料依據。
+- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m py_compile core/condition_engine.py core/signal_snapshot.py tests/test_condition_engine.py`：passed。
+- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_condition_engine.py`：1 passed。
+- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_analysis_engine.py`：33 passed。
+- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_condition_engine.py tests/test_analysis_engine.py`：34 passed。
 - `git diff --check`：passed。
-
-## QA 反證
-
-- Re-QA output：`.cao_agent_context/outputs/20260601_185800_22905_stock_qa_code_readonly.answer.txt`，結論 `通過`。
-- QA 補四持倉 probe，確認旺宏 / 光寶科 / 建準 / 智原風控行保留在第三則。
-- QA 確認資料依據包含市場短期背景、持倉數、未持倉分類數、執行記憶邊界與持倉 RR 邊界，且未回到 raw source/status/table dump。
-- QA 確認 presentation / deps bridge 未新增 DB writer、schema alter、evidence writer 或 live delivery path。
 
 ## 殘留風險
 
-- 本輪未處理 Telegram reply markup 附著最後一則 message 的旁支風險。
-- 本輪未做 production replay / backfill / live delivery / DB write。
-- 其他非本輪指定文案美化、排序、策略分數與資料完整性問題未處理。
+- 本輪只覆蓋 `wait_breakout_low_rr + rr=1.2` 的 condition gap 與直接原因標籤。
+- 未審計所有 WAIT 類型 RR 門檻，避免擴大任務。
+
+## 旁支待辦
+
+- 全部 WAIT 類型 RR 門檻審計另開任務。
+- 報文整體版面與手機閱讀降噪另開任務。
+- production ledger / Telegram delivery consumer 檢查不在本輪範圍。

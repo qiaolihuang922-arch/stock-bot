@@ -2,69 +2,69 @@
 
 ## 測試範圍
 
-- 任務：`report_v20_4_21_afterhours_brief_evidence_merge`，normal_patch，QA L2。
-- 驗證範圍匹配 TASK：`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`、`core/generator.py`、`presentation/report.py`、`tests/test_generator_report.py`。
-- 未擴大到 production replay、backfill、DB write、live Telegram 或 git completion gate。
+- 任務：`risk_patch_wait_breakout_low_rr_gap_20260601`，QA L2。
+- 驗證範圍限於 WAIT breakout 低 RR 缺口，不擴成 full replay、backfill 或 live Telegram。
+- 讀取範圍：`TASK.md`、`CHANGELOG.md`、`core/condition_engine.py`、`tests/test_condition_engine.py`、`core/signal_snapshot.py`、`core/generator.py` 的直接消費入口。
 
 ## 風險預算與停止條件
 
-1. 盤後第三則手機閱讀順序或持倉風控清單回歸。
-   - 驗證：第三則順序為 `盤後簡報 -> 持倉風控檢查 -> 未持倉漏斗（非執行） -> 資料依據`，並補四持倉 probe。
-   - 停止條件：第三則缺清單、順序錯、或有資料時未列出指定持倉風控行。
-2. 資料依據變成空泛句或 raw source/status/table dump。
-   - 驗證：資料依據包含市場短期背景、持倉數、未持倉分類數、執行記憶邊界、持倉 RR 邊界；同時掃 forbidden raw terms。
-   - 停止條件：缺任一核心邊界，或出現 `source_status / source_of_truth / db_table / position_events` 類 raw dump。
-3. RR 衝突保護或顯示層邊界回退。
-   - 驗證：今日買入 / 底層 ADD 情境仍顯示 `新倉 RR：不適用（既有持倉）`，不顯示 `數據：RR 2.73`；presentation 未新增 DB writer / schema alter / evidence writer 依賴。
-   - 停止條件：新倉風控觀察持倉露出具體新倉 RR，或 presentation 新增 write/schema/live delivery path。
+1. WAIT breakout 低 RR 被尾端 `rr >= 1.0` 兜底吃掉，手機看到 WAIT 但沒有等待原因。
+   - 驗證：`condition_engine -> summarize_conditions -> _reason_labels` 直接路徑確認 `RR不足`。
+   - 停止條件：`rr=1.2` 時 gap 非空且含 `rr / RR不足`。
+2. 修復過度擴散，讓非 breakout WAIT 或 breakout 達標 RR 誤顯 `RR不足`。
+   - 驗證：補跑 `wait_pre_breakout_low_rr + rr=1.2` 與 `wait_breakout_low_rr + rr=1.5`。
+   - 停止條件：兩者都不產生 `RR不足`。
+3. 測試 probe 未納入交付。
+   - 驗證：確認 `tests/test_condition_engine.py` 會納入本輪 commit。
+   - 停止條件：若漏掉此檔，本輪 TASK 要求的可重跑 probe 不成立。
 
 ## 關聯風險掃描
 
-- `git diff --name-only`：`CHANGELOG.md`、`QA_REPORT.md`、`TASK.md`、`core/generator.py`、`presentation/report.py`、`tests/test_generator_report.py`。
-- `git diff --check`：passed。
-- `core/generator.py` 只新增 `unheld_tracking_only_count` 到 presentation deps，未新增 DB write/schema/live delivery。
-- `presentation/report.py` 無 import；未命中 DB client、writer、schema alter 或 table write path。
-- TASK / CHANGELOG / diff 口徑一致：normal_patch、v20.4.21 不回退、無 DB schema/write/live Telegram。
+- 可吸收 diff：
+  - `core/condition_engine.py`：只將尾端兜底從 `rr >= 1.0` 改為排除 `decision_type != "wait_breakout_low_rr"`。
+  - `tests/test_condition_engine.py`：新增 direct probe，覆蓋 `wait_breakout_low_rr + WAIT + rr=1.2` 與 `_reason_labels` 的 `RR不足`。
+- 未看到 strategy decision、decision_type 產生邏輯、DB write、live Telegram path 變更。
+- 包裝條件：QA 原始結論為 `conditional pass`，條件是 `tests/test_condition_engine.py` 必須納入 commit；Architect 收口時已將該檔列入待 stage 檔案。
 
 ## 跨區塊語意一致性
 
-- `tests/test_generator_report.py`：92 passed，181 warnings。
-- Targeted tests：afterhours mobile probe、manifest visible fields、presentation boundary 共 3 passed，17 warnings。
-- QA 自訂四持倉 probe 通過：第三則 message count 為 3；章節定位順序為 `盤後簡報 -> 持倉風控檢查 -> 未持倉漏斗 -> 資料依據`。
-- QA 自訂 probe 確認有：
-  - 旺宏 / 光寶科 / 建準：`新倉風控觀察｜明日未修復降級`
-  - 智原：`續抱觀察｜無法接近買點則降級`
-  - `持倉與價格資料可支持風控檢查（持倉 4 檔）`
-  - `未持倉 1 檔已分類`
-  - 執行記憶與持倉 RR 邊界文案
+- `TASK.md` 要求 `wait_breakout_low_rr + rr=1.2` 不得被 `rr >= 1.0` 兜底覆蓋。
+- `CHANGELOG.md` 宣告該情境下 `condition_engine(result)["rr"]` 維持 `False`。
+- 實作讓 `decision_type="wait_breakout_low_rr"` 跳過通用兜底。
+- 直接消費者 `_reason_labels` 維持既有 `rr -> RR不足` 文案，未新增平行文案層。
+- `core.generator` 仍讀既有 condition / summarize / label 路徑，未改報文格式或排序。
 
 ## 使用者誤讀風險
 
-- 手機閱讀順序已按第三則整體檢查，不只檢查單一 helper。
-- `未持倉漏斗（非執行）` 保留非執行標記，降低把追蹤名單誤讀成下單建議的風險。
-- 持倉 RR 文案保留「既有持倉若不是加碼情境，只顯示新倉 RR 不適用」，並補「持倉主行動以風控為準」。
-- 未發現回到 raw source/status/table dump。
+- WAIT / `wait_breakout_low_rr` / `rr=1.2` 會產生 `RR不足`，不再是空等待原因。
+- WAIT / `wait_breakout_low_rr` / `rr=1.5` 不會誤顯 `RR不足`。
+- WAIT / `wait_pre_breakout_low_rr` / `rr=1.2` 不會因本修復被誤標 `RR不足`。
+- 本輪未做 live Telegram delivery，也未做完整報文截圖；依 TASK 停止條件，本輪只驗指定的直接 WAIT reason path。
 
 ## 質疑與反證
 
-- Tech probe 可能只覆蓋建準單一持倉：QA 補四持倉 probe，旺宏 / 光寶科 / 建準 / 智原行為符合 TASK。
-- 資料依據合併可能只保留數量、缺使用邊界：測試與 probe 覆蓋市場短期背景、持倉數、未持倉分類數、執行記憶邊界、持倉 RR 邊界。
-- presentation deps bridge 可能引入寫入能力：diff 與 boundary test 未發現新增 DB writer/schema/evidence writer 依賴。
+- 質疑：排除通用兜底可能讓所有 WAIT breakout 都變成 RR 不足。
+  - 反證：`wait_breakout_low_rr + rr=1.5` 通過，gap 為空，label 為空。
+- 質疑：修復可能污染非 breakout WAIT 的原本 `rr >= 1.0` 語意。
+  - 反證：`wait_pre_breakout_low_rr + rr=1.2` 仍 `rr=True`，沒有 `RR不足`。
+- 質疑：只是 condition 層過了，使用者可見中文原因未必出現。
+  - 反證：`_reason_labels(result)` 直接回傳 `["RR不足"]`。
 
 ## 已跑命令
 
+- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile core/condition_engine.py core/signal_snapshot.py tests/test_condition_engine.py`：passed。
+- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_condition_engine.py tests/test_analysis_engine.py`：34 passed。
 - `git diff --check`：passed。
-- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py`：92 passed，181 warnings。
-- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py::GeneratorReportTest::test_v20_4_21_afterhours_mobile_readability_probe tests/test_generator_report.py::GeneratorReportTest::test_presentation_report_module_has_no_storage_or_evidence_write_imports`：2 passed，17 warnings。
-- Re-QA output：`.cao_agent_context/outputs/20260601_185800_22905_stock_qa_code_readonly.answer.txt`，結論 `通過`。
+- Re-QA output：`.cao_agent_context/outputs/20260601_193237_24364_stock_qa_code_readonly.answer.txt`，結論 `conditional pass`；條件為新增測試檔需納入 commit。
 
 ## 未測項目
 
-- 未執行 live Telegram delivery。
-- 未做 production DB write、backfill、DML、schema / RLS / grant / policy 實機檢查。
-- 未跑 production replay 或 evidence 全矩陣。
-- 未驗 Telegram reply markup 附著位置。
+- 未跑 full pytest、production replay、backfill。
+- 未做 live Telegram delivery。
+- 未查 production DB，也未執行 DB write。
+- 未審計全部 WAIT 類型 RR 門檻。
+- 未驗證完整 Telegram 版面，只驗證本輪指定的直接 WAIT reason path。
 
 ## QA 結論
 
-通過
+conditional pass

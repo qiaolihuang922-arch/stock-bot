@@ -15,6 +15,14 @@
 
 ## Completed
 
+- `risk_patch_wait_breakout_low_rr_gap_20260601`:
+  - 問題：`condition_engine.py` 的 `wait_breakout_low_rr + rr=1.2` 被尾端 `rr >= 1.0` 通用兜底覆蓋，導致 WAIT 缺口空白，報文無等待原因。
+  - 結果：`decision_type="wait_breakout_low_rr"` 跳過通用 RR 兜底；低於 breakout 門檻時 `rr` gap 保留，直接原因標籤顯示 `RR不足`。
+  - 可重跑補強：新增 `tests/test_condition_engine.py`，覆蓋 `condition_engine -> summarize_conditions -> _reason_labels` 的 WAIT RR 不足路徑。
+  - QA 反證：Re-QA `conditional pass`；補 `rr=1.5` breakout 達標與 `wait_pre_breakout_low_rr + rr=1.2` 非 breakout 邊界，確認未誤標 `RR不足`。
+  - 條件處理：QA 條件是新增測試檔不可漏 commit；Architect 收口需明確 stage `tests/test_condition_engine.py`。
+  - 流程治理：第一次 PM 未保留 Owner 的 `risk_patch` 口徑，已重跑；第一次 auto 被 Tech worktree stale diff 擋下，舊 diff 已 artifact 化後以 runner 顯式丟棄開關重跑。
+  - 邊界：不改 strategy decision、decision_type 產生邏輯、DB write、live Telegram。
 - `architect_pre_edit_scope_gate`:
   - 問題：Owner 指出 Architect 在「檢查 / 修復流程」語境下仍開始自行寫產品代碼，違反 Architect 只總控、產品改動走 PM -> Tech -> QA 的邊界。
   - 根因：`AGENTS.md` 已有角色規則，但缺動手前的可重跑 gate；broad command / follow-up 在操作層仍可能被誤解成直改授權。
