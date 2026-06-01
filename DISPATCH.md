@@ -4,10 +4,10 @@
 
 ## Current Task
 
-- task_id: `tiny_patch_cleanup_unused_variables_analysis_py_20260601`
-- task_name: `Cleanup Unused Variables In Analysis`
+- task_id: `presentation_report_structured_noise_flags_tiny_patch_20260601`
+- task_name: `Presentation Structured Noise Flags`
 - task_type: `tiny_patch`
-- owner_status: `requested_batch_task_3_after_task_1`
+- owner_status: `requested_batch_task_4_after_task_3`
 - architect_status: `qa_passed_pending_git_close`
 - pm_status: `done`
 - tech_status: `done`
@@ -25,11 +25,12 @@
 ## Current Result
 
 - 任務一已完成並推送：commit `1f9601d fix wait breakout rr gap reason`，Git completion gate passed。
-- 本輪目標是任務三：清理 `services/analysis.py` 三處指定 unused / redundant dead code。
-- 修正：刪除 `detect_entry_stage()` unused `breakout_lv`、`holding_signal()` unused `profile`、`pick_best_stock()` redundant C/D filter；保留 A+/A allowlist。
-- QA：Re-QA `通過`；確認 scoped diff 只刪 8 行，沒有策略 / 輸出 / DB / Telegram / VERSION 變更。
-- 靜態檢查：pyflakes / ruff / flake8 環境缺失；Tech/QA 改用 AST targeted static check 與 direct consumer probe，符合 tiny_patch L1 範圍。
-- 流程事件：第一次 QA 因 main `CHANGELOG.md` stale 成任務一內容而 blocked；已同步任務三 CHANGELOG 後 Re-QA 通過。
+- 任務三已完成並推送：commit `dcc0cd5 cleanup unused analysis locals`，Git completion gate passed。
+- 本輪目標是任務四：移除 presentation brief 兩處 brittle rendered-string 判斷。
+- 修正：`_decision_brief_lines()` 改用 `summary_excluded_lines / summary_excluded_sections` 結構化排除；`_afterhours_brief_lines()` 改由 `daily_write_warning` 結構化參數顯示資料寫入警告。
+- Bridge：`core.generator.format_brief_data_evidence_message()` 新增 optional kwargs；既有呼叫向後相容。
+- QA：Re-QA `通過`；確認合法 production summary 保留、每日快照警告不靠固定中文字串偵測、message order / VERSION / strategy / DB / live Telegram 未改。
+- 流程事件：第一次 QA 因 main `CHANGELOG.md` stale 成任務三內容而 blocked；已同步任務四 CHANGELOG 後 Re-QA 通過。
 - Git completion gate：final 前必須以 `tools/cao_agent/check_git_completion_gate.sh` 驗證 `main` matches `origin/main` 且 worktree clean。
 - 上一輪 v20.4.21 報文修正已在 commit `b177345 restore afterhours control summary` 推送，本輪不再改動該產品 diff。
 - 已吸收內容：

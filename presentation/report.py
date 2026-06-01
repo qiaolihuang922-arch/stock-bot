@@ -367,7 +367,7 @@ def _brief_background_line(report_context, deps):
     return f"背景：{market_text}；策略樣本只作輔助，不新增進場理由。"
 
 
-def _afterhours_brief_lines(holding_items, watch_items, report_context, deps, market_mode=None, summary_message=None):
+def _afterhours_brief_lines(holding_items, watch_items, report_context, deps, market_mode=None, daily_write_warning=None):
     funnel = deps["build_unheld_funnel"](watch_items, market_mode=market_mode, report_context=report_context) if watch_items else {"可買": []}
     actionable = len(funnel.get("可買") or [])
     has_holding = bool(holding_items)
@@ -406,10 +406,8 @@ def _afterhours_brief_lines(holding_items, watch_items, report_context, deps, ma
             "未持倉漏斗（非執行）：",
             deps["format_unheld_funnel"](watch_items, market_mode=market_mode, report_context=report_context),
         ])
-    for source_line in (summary_message or "").splitlines():
-        if source_line.startswith("⚠ ") and "每日快照未寫入" in source_line:
-            lines.append(f"資料寫入：{source_line[2:]}，明日前確認補寫狀態。")
-            break
+    if daily_write_warning:
+        lines.append(f"資料寫入：{daily_write_warning}，明日前確認補寫狀態。")
     return lines
 
 
@@ -556,43 +554,22 @@ def _evidence_human_status_lines(report_context, deps):
     return lines
 
 
-def _decision_brief_lines(summary_message, version):
-    noisy_prefixes = (
-        "報告日：",
-        "Source：",
-        "證據日期：",
-        "來源：",
-        "趨勢：",
-    )
-    noisy_contains = (
-        "latest_trade_date",
-        "lookback_range",
-        "source_of_truth",
-        "db_table",
-        "missing-source",
-        "source-missing",
-        "source-error",
-        "insufficient-data",
-        "unavailable",
-        "fail-closed",
-        "production",
-        "runtime",
-    )
+def _decision_brief_lines(summary_message, version, excluded_summary_lines=None, excluded_summary_sections=None):
+    excluded_summary_lines = set(excluded_summary_lines or [])
+    excluded_summary_sections = set(excluded_summary_sections or [])
     lines = []
-    skip_strategy_evidence = False
+    skip_excluded_section = False
     for line in (summary_message or "").splitlines():
-        if line.startswith("📊 策略證據 v20.0"):
-            skip_strategy_evidence = True
+        if line in excluded_summary_sections:
+            skip_excluded_section = True
             continue
-        if skip_strategy_evidence:
+        if skip_excluded_section:
             if line == "":
-                skip_strategy_evidence = False
+                skip_excluded_section = False
+            continue
+        if line in excluded_summary_lines:
             continue
         if line.startswith("【") and f"｜{version}】" in line:
-            continue
-        if any(line.startswith(prefix) for prefix in noisy_prefixes):
-            continue
-        if any(term in line for term in noisy_contains):
             continue
         lines.append(line)
 
@@ -612,6 +589,9 @@ def format_brief_data_evidence_message(
     deps,
     market_mode=None,
     summary_message=None,
+    summary_excluded_lines=None,
+    summary_excluded_sections=None,
+    daily_write_warning=None,
 ):
     if _report_phase(report_context) == "盤後":
         decision_lines = _afterhours_brief_lines(
@@ -620,10 +600,15 @@ def format_brief_data_evidence_message(
             report_context,
             deps,
             market_mode=market_mode,
-            summary_message=summary_message,
+            daily_write_warning=daily_write_warning,
         )
     else:
-        decision_lines = _decision_brief_lines(summary_message, version)
+        decision_lines = _decision_brief_lines(
+            summary_message,
+            version,
+            excluded_summary_lines=summary_excluded_lines,
+            excluded_summary_sections=summary_excluded_sections,
+        )
         brief_lines = [
             _brief_holding_line(holding_items, deps),
             _brief_new_position_line(watch_items, report_context, deps, market_mode=market_mode),
@@ -690,6 +675,11 @@ def render_telegram_messages(
         for name, data in ordered_items
         if data.get("holding")
     ])
+    watch_items = [
+        (name, data)
+        for name, data in ordered_items
+        if not data.get("holding")
+    ]
     position_cards = [
         deps["formatTelegramPositionCard"](name, data, report_context=report_context)
         for name, data in holding_items
@@ -732,16 +722,51 @@ def render_telegram_messages(
         report_phase=report_phase,
         report_context=report_context,
     )
+    summary_excluded_lines = {
+        telegram_header,
+        f"報告日：{report_context['report_context'].get('as_of_date')}｜資料交易日：{report_context['report_context'].get('trade_date')}",
+        f"Source：{report_context.get('source_status_text')}",
+    }
+    if position_warning:
+        summary_excluded_lines.add(f"⚠ {position_warning}，持倉狀態不可信")
+    summary_excluded_lines.update(deps["format_market_theme_summary_lines"](
+        report_context.get("market_theme_evidence") or deps["market_theme_summary_evidence"](results_map, market_summary)
+    ))
+    if any(
+        data.get("price_source") == "runtime-cache" or data.get("daily_source") == "runtime-cache"
+        for _name, data in ordered_items
+    ):
+        summary_excluded_lines.add(deps["source_summary_text"](results_map))
+    technical_executed_names = {
+        name
+        for name, data in holding_items
+        if data.get("cross_day_context")
+    }
+    if technical_executed_names:
+        for executed_line in deps["format_executed_checklist"](holding_items, watch_items):
+            if any(f". {name}｜" in executed_line for name in technical_executed_names):
+                summary_excluded_lines.add(executed_line)
+    blocked_holding_names = {
+        name
+        for name, data in holding_items
+        if deps["position_summary_action"](name, data) in {"停利記憶不足", "停利記憶待確認"}
+    }
+    if blocked_holding_names:
+        for control_line in deps["format_holding_control_checklist"](holding_items, report_phase=report_phase):
+            if any(f". {name}｜" in control_line for name in blocked_holding_names):
+                summary_excluded_lines.add(control_line)
+    summary_excluded_sections = []
+    if strategy_evidence_summary:
+        summary_excluded_sections.append(strategy_evidence_summary.splitlines()[0])
     evidence_message = deps["format_brief_data_evidence_message"](
         report_context,
         holding_items,
-        [
-            (name, data)
-            for name, data in ordered_items
-            if not data.get("holding")
-        ],
+        watch_items,
         market_mode=market_mode,
         summary_message=summary_message,
+        summary_excluded_lines=summary_excluded_lines,
+        summary_excluded_sections=summary_excluded_sections,
+        daily_write_warning=daily_write_warning,
     )
 
     messages = [

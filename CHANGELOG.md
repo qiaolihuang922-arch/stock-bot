@@ -2,67 +2,74 @@
 
 ## 任務尺寸與風險
 
-- 任務類型：tiny_patch。
-- 風險判斷：只刪除 `services/analysis.py` 三處已指定 dead / redundant code。
-- 邊界：不改策略條件、輸出契約、DB、Telegram 或版本。
+- 任務尺寸：tiny_patch。
+- 風險判斷：顯示層 / generator bridge 小範圍契約修正。
+- 邊界：不碰策略 decision、RR、DB write、live Telegram、VERSION。
 
 ## 修改內容
 
-- 刪除 `detect_entry_stage()` 內未使用的 `breakout_lv` 計算。
-- 刪除 `holding_signal()` 內未使用的 `profile = result.get("entry_profile", "NONE")`。
-- 刪除 `pick_best_stock()` 內被下一行 `entry_quality not in ["A+", "A"]` 覆蓋的冗餘 C/D 過濾。
+- 移除 `presentation/report.py` 中 `_decision_brief_lines()` 對 `summary_message` 的 `noisy_contains` 硬編碼文字詞表過濾，避免合法 production summary 行被誤刪。
+- 改由 generator / caller 傳入 `summary_excluded_lines`、`summary_excluded_sections` 結構化排除集合。
+- 移除 `_afterhours_brief_lines()` 透過 rendered summary 文案比對 `每日快照未寫入` 的判斷。
+- 改由 `daily_write_warning` 結構化參數控制盤後 brief 是否顯示資料寫入警告。
+- 補兩個最小 probe：
+  - 合法 summary 行含 `production` 時仍保留。
+  - 盤後 brief 由 `daily_write_warning` 顯示每日快照警告。
 
 ## 修改檔案
 
-- `services/analysis.py`
+- `presentation/report.py`
+- `core/generator.py`
+- `tests/test_generator_report.py`
 
-## 清理證據表
+## 最小改動策略
 
-| path | claim | evidence | risk | action |
-| --- | --- | --- | --- | --- |
-| `services/analysis.py::detect_entry_stage()` | `breakout_lv` 賦值後未在該函式使用 | AST targeted check 確認函式內不再有 `breakout_lv` assignment；`py_compile` passed | 誤刪可能影響 stage 判斷 | 僅刪 unused assignment，保留 `breakout_hold_days()` 與後續判斷 |
-| `services/analysis.py::holding_signal()` | `profile` 賦值後未在該函式使用 | AST targeted check 確認函式內不再有 `profile` assignment；`py_compile` passed | 誤刪可能影響持倉訊號輸出 | 僅刪 unused local，未改 signal / action / reason 邏輯 |
-| `services/analysis.py::pick_best_stock()` | C/D 過濾被下一行 A+/A allowlist 覆蓋 | AST targeted check 確認 C/D-specific redundant filter removed；行為 probe 確認 B/C/D 不會被選中，A 仍可被選中 | 誤刪可能放行非 A+/A | 保留 `entry_quality not in ["A+", "A"]` allowlist |
+- 只擴充既有 presentation formatter 與 generator bridge 的 optional kwargs。
+- 不新增大型 fixture、不重構 presentation 分層、不改報文 message list 順序。
+- 保留既有 same-day 已執行人話明細；只用結構化狀態排除 cross-day technical memory / source missing / runtime-cache 類短 brief 噪音。
 
 ## 契約影響
 
-- 函式回傳契約：不變。
-- payload / dict key：不變。
-- message list / Telegram 報文排序：不變。
-- CLI 輸出：不變。
-- DB 讀寫契約：不變。
-- 版本契約：不升 VERSION，未改報文 header 或版本字串。
-- Public helper / 呼叫方：未改 public helper contract，無需同步呼叫參數或回傳解析。
+- `format_brief_data_evidence_message()` 新增 optional 參數：
+  - `summary_excluded_lines`
+  - `summary_excluded_sections`
+  - `daily_write_warning`
+- 既有呼叫可不傳，向後相容。
+- message list 順序不變。
+- 盤後分組不變。
+- VERSION 不變，仍為 `v20.4.21`。
+- DB write path、schema、RLS、grant、policy、index / constraint 不變。
+- live Telegram delivery 不變。
 
 ## 直接消費者同步
 
-- `detect_entry_stage()` 消費者：輸入與回傳不變。
-- `holding_signal()` 消費者：signal / action / reason / entry profile 相關輸出不變。
-- `pick_best_stock()` 消費者：仍只接受 `entry_quality` 為 A+ 或 A 的候選；C、D、B 與其他非 A+/A 仍排除。
-- 驗收消費者：因 `.venv` 無 pyflakes / ruff / flake8，改用 AST targeted static check 覆蓋本任務三處指定 dead code。
+- `presentation.render_telegram_messages()` 已同步建立並傳入 brief 排除集合與 `daily_write_warning`。
+- `core.generator.format_brief_data_evidence_message()` bridge 已同步 optional kwargs。
+- `_source_missing_report_messages()` 已同步使用結構化排除集合，避免 source missing 技術行回到短 brief。
 
 ## 未影響模組
 
-- 未改 `presentation/`、`core/`、DB schema/write path、Telegram delivery、runner、測試 fixture。
-- 未改 RR、entry quality scoring、買賣 / 加減碼、停損停利、持倉狀態機或報文內容。
+- strategy decision / 持倉建議 / 買賣加減碼 / 停損停利邏輯：未改。
+- RR 計算：未改。
+- holding_status / position ledger：未改。
+- Supabase write / daily snapshot write / strategy evidence write：未改。
+- Telegram live delivery / reply markup：未改。
+- VERSION：未升版。
 
 ## 已跑自檢命令
 
-- `git diff --check -- services/analysis.py`：passed。
-- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache .venv/bin/python -m py_compile services/analysis.py`：passed。
-- `.venv/bin/python -m pyflakes services/analysis.py`：failed，實際錯誤 `No module named pyflakes`。
-- `.venv/bin/python -m ruff check services/analysis.py --select F841,F601,F821`：failed，實際錯誤 `No module named ruff`。
-- `.venv/bin/python -m flake8 services/analysis.py --select=F841,F821,F601`：failed，實際錯誤 `No module named flake8`。
-- AST targeted static check for the three TASK-specified dead/redundant code sites：passed。
-- `pick_best_stock_non_A_quality_excluded` inline behavior probe：passed。
-- `git diff --stat`：`services/analysis.py | 8 --------`。
+- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_write_pycache arch -arm64 .venv/bin/python -m py_compile presentation/report.py core/generator.py tests/test_generator_report.py`：passed。
+- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_write_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py -k 'daily_write_warning or legal_production or structured_daily_write_warning'`：3 passed, 91 deselected。
+- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_write_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py`：94 passed, 185 warnings。
+- `git diff --check`：passed。
+- `rg -n "noisy_contains|latest_trade_date|source_of_truth|db_table|production|runtime" presentation/report.py`：只剩 `runtime-cache` 結構化 source field 判斷，沒有 brittle summary keyword 詞表。
 
 ## 殘留風險
 
-- 未跑 full pytest，符合本輪 tiny scoped cleanup。
-- 環境缺 pyflakes / ruff / flake8，因此沒有一般 linter 的全檔 unused report；已用 AST targeted check 覆蓋 TASK 指定三處，不擴大到全 repo lint cleanup。
+- 本輪只收斂 TASK 指定兩處 brittle rendered-string 判斷；全報文其他字串匹配未盤點。
+- 新增 optional kwargs 屬 public helper 擴充，但既有呼叫路徑保持相容。
 
 ## 旁支待辦
 
-- 若團隊需要固定 pyflakes 證據，後續可由 runner / 環境任務補齊 lint dependency 或標準 lint command。
-- 其他 lint warning 或 dead code cleanup 不納入本輪。
+- Telegram reply markup 附著最後一則 message 的落點風險仍需另開 delivery consumer 任務評估。
+- 全報文其他字串匹配盤點、presentation 分層重構、production ledger/source-of-truth 稽核均未納入本輪。

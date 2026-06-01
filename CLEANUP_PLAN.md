@@ -15,6 +15,14 @@
 
 ## Completed
 
+- `presentation_report_structured_noise_flags_tiny_patch_20260601`:
+  - 問題：`presentation/report.py` 用 rendered summary 字串做反向判斷，合法 `production` summary 可能被詞表誤濾，盤後每日快照警告也依賴固定中文文案偵測。
+  - 結果：`_decision_brief_lines()` 改用 `summary_excluded_lines / summary_excluded_sections` 結構化排除；`_afterhours_brief_lines()` 改用 `daily_write_warning` 結構化參數。
+  - Bridge：`core.generator.format_brief_data_evidence_message()` 新增 optional kwargs，`_source_missing_report_messages()` 改傳結構化排除集合。
+  - 可重跑補強：新增合法 production summary 保留 probe 與 structured daily write warning probe。
+  - QA 反證：Re-QA `通過`；summary 文字單獨含 `每日快照未寫入` 但未傳 `daily_write_warning` 時不觸發資料寫入警告；custom warning 文案可顯示，證明不是固定中文字串偵測。
+  - 流程治理：第一次 Re-QA 因 main `CHANGELOG.md` stale 成任務三內容而 blocked；同步任務四 CHANGELOG 後通過。這是連續 handoff sync gap，後續需補 auto wrapper 將 Tech answer 寫回主 repo 的可靠流程。
+  - 邊界：不改 strategy decision、DB write、live Telegram、VERSION。
 - `tiny_patch_cleanup_unused_variables_analysis_py_20260601`:
   - 問題：Owner 指定 `services/analysis.py` 三處 unused / redundant dead code：`detect_entry_stage()` unused `breakout_lv`、`holding_signal()` unused `profile`、`pick_best_stock()` redundant C/D filter。
   - 結果：刪除三處指定 dead code，共 8 行；保留 `pick_best_stock()` A+/A allowlist。

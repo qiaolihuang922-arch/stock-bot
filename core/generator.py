@@ -6050,7 +6050,16 @@ def _strategy_sample_unavailable_card_line(report_context):
     return None
 
 
-def format_brief_data_evidence_message(report_context, holding_items, watch_items, market_mode=None, summary_message=None):
+def format_brief_data_evidence_message(
+    report_context,
+    holding_items,
+    watch_items,
+    market_mode=None,
+    summary_message=None,
+    summary_excluded_lines=None,
+    summary_excluded_sections=None,
+    daily_write_warning=None,
+):
     return presentation_format_brief_data_evidence_message(
         report_context,
         holding_items,
@@ -6059,6 +6068,9 @@ def format_brief_data_evidence_message(report_context, holding_items, watch_item
         deps=_telegram_presentation_deps(),
         market_mode=market_mode,
         summary_message=summary_message,
+        summary_excluded_lines=summary_excluded_lines,
+        summary_excluded_sections=summary_excluded_sections,
+        daily_write_warning=daily_write_warning,
     )
 
 
@@ -7108,20 +7120,26 @@ def _source_missing_report_context(now, position_warning):
 
 def _source_missing_report_messages(now, report_phase, position_warning):
     telegram_header = f"【{now.strftime('%m/%d')} {report_phase}｜{VERSION}】"
+    report_date_line = f"報告日：{now.date().isoformat()}｜資料交易日：unknown"
+    source_line = "Source：核心價格 missing-source；持倉 missing-source；策略樣本 missing-source；market/theme missing-source"
+    position_warning_line = f"⚠ {position_warning}，持倉 / 今日交易狀態不可信"
+    market_line = "📊 市場：source-missing｜fail-closed"
+    conclusion_line = "🧭 今日結論：source-missing；交易執行：無新增下單；持倉風控檢查 0 檔；未持倉無追蹤"
+    unavailable_line = "unavailable：持倉或今日交易來源缺失，不產生交易建議"
     summary_message = "\n".join([
         telegram_header,
-        f"報告日：{now.date().isoformat()}｜資料交易日：unknown",
-        "Source：核心價格 missing-source；持倉 missing-source；策略樣本 missing-source；market/theme missing-source",
-        f"⚠ {position_warning}，持倉 / 今日交易狀態不可信",
-        "📊 市場：source-missing｜fail-closed",
-        "🧭 今日結論：source-missing；交易執行：無新增下單；持倉風控檢查 0 檔；未持倉無追蹤",
+        report_date_line,
+        source_line,
+        position_warning_line,
+        market_line,
+        conclusion_line,
         "🧭 新倉：無有效進場。",
         "",
         "✅ 今日盤中交易執行",
         "無新增下單",
         "",
         "持倉風控檢查",
-        "unavailable：持倉或今日交易來源缺失，不產生交易建議",
+        unavailable_line,
         "",
         "未持倉漏斗（非執行）：",
         "未持倉總數 0 檔",
@@ -7133,6 +7151,15 @@ def _source_missing_report_messages(now, report_phase, position_warning):
         [],
         [],
         summary_message=summary_message,
+        summary_excluded_lines={
+            telegram_header,
+            report_date_line,
+            source_line,
+            position_warning_line,
+            market_line,
+            conclusion_line,
+            unavailable_line,
+        },
     )
     return [
         f"{telegram_header}\n【持倉標的】\n\n無持倉",

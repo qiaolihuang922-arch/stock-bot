@@ -1432,6 +1432,55 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("每日快照未寫入", position_message(messages))
         self.assertNotIn("每日快照未寫入", unheld_message(messages))
 
+    def test_decision_brief_keeps_legal_production_summary_line(self):
+        header = f"【05/25 盤中｜{generator.VERSION}】"
+        source_line = "Source：production runtime metadata"
+        legal_summary_line = "🧭 今日結論：production 資料來源正常，今日仍無有效進場"
+        brief = generator.format_brief_data_evidence_message(
+            {
+                "report_context": {
+                    "report_phase": "盤中",
+                    "as_of_date": "2026-05-25",
+                    "trade_date": "2026-05-25",
+                },
+                "source_status_summary": {},
+                "evidence_manifest": [],
+                "market_theme_evidence": {"confirmed": False, "source_status": "missing-source"},
+            },
+            [],
+            [],
+            summary_message="\n".join([header, source_line, legal_summary_line]),
+            summary_excluded_lines={header, source_line},
+        )
+
+        self.assertIn(legal_summary_line, brief)
+        self.assertNotIn(source_line, brief)
+
+    def test_afterhours_brief_uses_structured_daily_write_warning(self):
+        payload = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119],
+            None,
+            price=119,
+            change=1.4,
+        )
+        payload["stock_code"] = "2344"
+        warning = "每日快照未寫入：請檢查寫入來源"
+
+        messages = generator.formatTelegramMessages(
+            {"華邦電": payload},
+            "FULL DETAIL",
+            None,
+            None,
+            "⏳ 觀望",
+            datetime(2026, 5, 25),
+            daily_write_warning=warning,
+            report_phase="盤後",
+        )
+
+        self.assertIn(f"資料寫入：{warning}，明日前確認補寫狀態。", summary_message(messages))
+        self.assertNotIn("每日快照未寫入", position_message(messages))
+        self.assertNotIn("每日快照未寫入", unheld_message(messages))
+
     def test_v19_3_2_intraday_summary_classifies_0526_cases(self):
         def payload(code, price, change, result, holding=None, decision=None):
             return {
