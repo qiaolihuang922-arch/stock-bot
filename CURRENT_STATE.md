@@ -6,7 +6,7 @@
 
 - 專案：台股策略 Telegram 報文機器人。
 - 正式結果以 git / runner 產生報文為準。
-- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前收口目標為 `v20.4.13`。
+- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前收口目標為 `v20.4.14`。
 - 固定 8 份 Markdown 不刪：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 - Architect 是總控；產品 / 策略 / 報文 bug 或 feature 預設走 PM -> Tech -> QA。
 - 跨日狀態、已執行交易、歷史 evidence 必須來自 production DB 或 Owner 指定持久來源；local/runtime/worktree 不能當跨日記憶。
@@ -28,15 +28,15 @@
 
 ## Current Worktree
 
-- task_id：`tg-evidence-short-ux-v20.4.13`
+- task_id：`telegram-evidence-entry-dedupe-v20.4.14`
 - 狀態：PM done / Tech done / QA `通過`；final 前必須已 commit / push 並通過 Git completion gate。
 - commit：見 `git log -1`。
 - 關鍵行為：
-  - 報文版本升到 `v20.4.13`。
+  - 報文版本升到 `v20.4.14`。
   - Telegram 完整輸出順序維持持倉 message -> 未持倉 / 非持倉 message -> short/evidence message；`include_detail=True` 時 Details Backup 追加最後。
-  - 第三則保留決策短訊，但過濾 raw/debug evidence：`Source：核心價格`、`Source：漏斗 count`、`證據日期`、`來源：watchlist_breadth/sector_index`、`latest_trade_date`、`lookback_range`、`position_events`、`db_table`、`source_of_truth`、舊 `Evidence Compact`。
-  - 第三則追加自然語言「簡短證據摘要」：持倉判斷依據、未持倉判斷依據、資料不足處理、最終結論。
-  - 策略樣本 `missing-source` 仍 fail closed，不包裝成可買、可準備或推薦。
+  - 第三則只保留單一 evidence entry：`v20.4.14 簡短證據摘要`。
+  - 第三則會跳過 legacy `📊 策略證據 v20.0` 長段，不再與簡短證據摘要重複出現。
+  - 策略樣本 `missing-source / insufficient-data` 仍在唯一摘要內 fail closed，不包裝成可買、可準備或推薦。
   - 前兩則持倉 / 未持倉卡主結構與策略語意不變。
   - market/theme production evidence、strategy sample evidence、stock decision 三層保持分離；market/theme confirmed 不會變 BUY。
   - 不改 BUY/SELL、加減碼、停利停損、DB schema、write path、live Telegram。
@@ -44,7 +44,7 @@
   - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py services/notifier.py`：passed。
   - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py`：119 passed，169 warnings。
   - `git diff --check`：passed。
-  - QA 補充反證：完整 TG message list 順序 passed；sector-only market/theme probe 證明 raw `來源：sector_index/latest_trade_date` 被第三則 formatter 過濾；missing-source strategy sample 不升級成推薦。
+  - QA 補充反證：完整 TG message list 順序 passed；legacy `📊 策略證據 v20.0 ... 狀態碼：missing-source` 注入後，第三則只有一個 `簡短證據摘要`，且仍含 `missing-source` 與 `fail-closed`。
   - 先前 production read-only strategy evidence artifact 仍顯示缺 `classification backtest source-of-truth`，報文正確 fail closed，不回到舊式 `樣本 0｜樣本不足，不判讀`。
 - 2356 production read-only artifact：
   - path：`.qa_tmp/production_readonly_2356_positions_events.json`。
@@ -68,6 +68,7 @@
 
 - 重開對話後先以 `git status --branch --short` 與 `tools/cao_agent/check_git_completion_gate.sh` 確認 commit/push 狀態，不再依賴對話記憶。
 - 只把 `CHANGELOG.md` 所列 scoped diff 當成本輪驗收範圍；工作樹其他旁支 dirty files 不能因本輪 QA 通過而整包吸收。
+- 下一張產品任務：Owner 指出第三則整體仍像多段拼接；需把 summary/market-theme/strategy sample/source status 收斂成單一「簡報 + 資料依據」區塊，讓資料庫 / source-of-truth 狀態與策略判斷在同一處說清楚。
 - 另開旁支：若 Owner 認定 2356 英業達實際未賣，查 production positions / position_events 為何目前 artifact 顯示 CLOSED / shares 0。
 - 另開旁支：盤點全報文 `追高 / 追蹤` 相關文案。
 - 另開旁支：Telegram reply markup 附著最後一則 message 的 delivery consumer 風險。

@@ -15,6 +15,13 @@
 
 ## Completed
 
+- `telegram-evidence-entry-dedupe-v20.4.14`：
+  - 問題：Owner 指出 v20.4.13 第三則同時顯示 `📊 策略證據 v20.0` 與 `簡短證據摘要`，兩個證據入口語意重複。
+  - 結果：PM -> Tech -> QA 完成，QA `通過`；收口需 commit / push 並跑 Git completion gate。
+  - 關鍵修正：第三則只保留 `v20.4.14 簡短證據摘要`；legacy `📊 策略證據 v20.0` 長段在 Telegram 第三則被跳過；`missing-source / insufficient-data` 保留在唯一摘要內 fail closed。
+  - QA 反證：注入 legacy strategy evidence block 後，三則順序仍為持倉、未持倉、short/evidence；第三則 `簡短證據摘要` count = 1，legacy heading count = 0，且仍含 `missing-source` 與 `fail-closed`。
+  - 規則治理：`repeated_pattern` + `mobile_reading` + `evidence_chain`。同一第三則不能同時用兩種 evidence entrance 說同一件事；證據狀態要集中呈現。
+  - 邊界：不改策略 decision、DB schema/write、live Telegram；`formatTelegramSummary()` standalone 仍可保留原始 strategy evidence，因本輪只約束 TG 第三則。
 - `tg-evidence-short-ux-v20.4.13`：
   - 問題：Owner 貼出 v20.4.12 第三則報文，指出 evidence/short 像 debug 輸出，包含 raw source/date/table/key 與互相衝突的 0-count/source 行，手機上需要自然語言整理。
   - 結果：PM -> Tech -> QA 完成，QA `通過`；收口需 commit / push 並跑 Git completion gate。

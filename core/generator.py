@@ -57,7 +57,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.13"
+VERSION = "v20.4.14"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -6025,14 +6025,15 @@ def _natural_fail_closed_line(report_context, holding_items, watch_items):
 
     statuses = report_context.get("source_status_summary") or {}
     blocked_statuses = {"missing-source", "source-error", "insufficient-data"}
-    blocked = [
-        label for key, label in [
-            ("position", "持倉紀錄"),
-            ("strategy_sample", "策略樣本"),
-            ("funnel", "候選清單"),
-        ]
-        if statuses.get(key) in blocked_statuses
-    ]
+    blocked = []
+    for key, label in [
+        ("position", "持倉紀錄"),
+        ("strategy_sample", "策略樣本"),
+        ("funnel", "候選清單"),
+    ]:
+        status = statuses.get(key)
+        if status in blocked_statuses:
+            blocked.append(f"{label}（{status}）")
 
     if blocked:
         return f"資料不足處理：{'、'.join(blocked)}不足時採 fail-closed，不把缺證據項目輸出為行動建議。"
@@ -6098,7 +6099,15 @@ def format_telegram_short_report_message(summary_message):
         "db_table",
     )
     filtered = []
+    skip_strategy_evidence = False
     for line in summary_message.splitlines():
+        if line.startswith("📊 策略證據 v20.0"):
+            skip_strategy_evidence = True
+            continue
+        if skip_strategy_evidence:
+            if line == "":
+                skip_strategy_evidence = False
+            continue
         if any(line.startswith(prefix) for prefix in noisy_prefixes):
             continue
         if any(term in line for term in noisy_contains):
