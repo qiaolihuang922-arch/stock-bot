@@ -6,7 +6,7 @@
 
 - 專案：台股策略 Telegram 報文機器人。
 - 正式結果以 git / runner 產生報文為準。
-- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前工作樹為 `v20.4.11`（未 commit / 未 push）。
+- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前 `origin/main` 為 `v20.4.11`。
 - 固定 8 份 Markdown 不刪：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 - Architect 是總控；產品 / 策略 / 報文 bug 或 feature 預設走 PM -> Tech -> QA。
 - 跨日狀態、已執行交易、歷史 evidence 必須來自 production DB 或 Owner 指定持久來源；local/runtime/worktree 不能當跨日記憶。
@@ -29,7 +29,8 @@
 ## Current Worktree
 
 - task_id：`intraday_20260601_report_sequence_execution_memory_noise_v20_4_11`
-- 狀態：PM done / Tech done / QA `通過`，diff 已吸收到主 repo 工作樹，未 commit / 未 push。
+- 狀態：PM done / Tech done / QA `通過`，已 commit / push 到 `origin/main`。
+- commit：見 `git log -1`。
 - 關鍵行為：
   - 報文版本升到 `v20.4.11`。
   - Telegram 完整輸出順序為 Summary -> action body（持倉/未持倉）-> Evidence Compact -> optional Details Backup。
@@ -68,7 +69,7 @@
 
 ## Next Development
 
-- 下一步可 commit / push 本輪 diff。
+- 本輪已 commit / push；重開對話後先以 `git status --branch --short` 與 `tools/cao_agent/check_git_completion_gate.sh` 確認狀態，不再依賴對話記憶。
 - 只把 `CHANGELOG.md` 所列 scoped diff 當成本輪驗收範圍；工作樹其他旁支 dirty files 不能因本輪 QA 通過而整包吸收。
 - 另開旁支：若 Owner 認定 2356 英業達實際未賣，查 production positions / position_events 為何目前 artifact 顯示 CLOSED / shares 0。
 - 另開旁支：盤點全報文 `追高 / 追蹤` 相關文案。
@@ -81,3 +82,4 @@
 - QA production-read 任務已可用 `CAO_QA_USE_REPO_CONFIG=1` 避免 dummy config；QA sandbox DNS 仍可能失敗，可用 `scripts/smoke_market_theme_evidence_readonly.py --auxiliary-render-artifact-json` 生成 safe read-only artifact。
 - QA worktree handoff sync 已補：每次 QA runner 啟動前從主 repo 同步固定 handoff Markdown，避免 stale TASK/CHANGELOG/QA_REPORT 造成反覆 conditional。
 - 流程強化：完整報文任務的 QA probe 必須覆蓋 Summary 首屏、卡片、漏斗、交易執行 / 明日計畫，不只驗單一 formatter 或 manifest。
+- Git completion gate 已補：repo 落地任務 final 前必須確認 worktree clean、branch 有 upstream、local HEAD 等於 upstream HEAD；標準命令為 `tools/cao_agent/check_git_completion_gate.sh`。

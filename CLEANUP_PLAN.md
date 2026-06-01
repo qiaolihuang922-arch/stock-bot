@@ -62,6 +62,10 @@
 
 ## Active Follow-ups
 
+- `runner_gap: git_completion_gate`
+  - 問題：QA 通過後若只寫「可 commit / push」，重開對話會依文件誤判為仍未推送或忘記 push；完成定義沒有硬性 git gate。
+  - 已做：新增 `tools/cao_agent/check_git_completion_gate.sh`，檢查 worktree clean、branch upstream、local HEAD 等於 upstream HEAD；`AGENTS.md` 新增 Git Completion Gate 規則。
+  - 修法方向：未來若改 `run_auto_dev_cycle.sh`，可在 auto wrapper 結尾輸出 gate 狀態，但 commit/push 仍由 Architect 控制。
 - `runner_gap: tech_worktree_hygiene`
   - 問題：Tech worktree stale diff 會阻塞新任務。
   - 修法方向：新任務前自動檢查、歸檔或要求 Architect 明確處理。

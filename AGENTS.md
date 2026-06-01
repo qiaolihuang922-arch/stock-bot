@@ -77,6 +77,16 @@ tools/cao_agent/run_architect_task.sh auto "<Owner 任務>"
 - 禁止繞過既有接口直接手寫 production DML。若沒有接口，Tech 必須先補 interface / script 或 blocked。
 - live Telegram delivery 需要 Owner 對該動作單獨批准。
 
+## Git Completion Gate
+
+對需要落地到 repo 的任務，QA `通過` 不是完成；Architect 收口必須把 git 狀態納入完成定義。
+
+- 若 Owner 任務目標包含修復、實作、流程補丁、文件收口或 runner 補丁，Architect 在 final 前必須完成並回報：`git status --short`、最新 commit hash、push 目標分支、`HEAD` 是否等於 upstream。
+- 未 commit / 未 push 時，不得寫「完成」；只能寫 `QA passed, pending commit/push`，並在 `DISPATCH.md` / `CURRENT_STATE.md` 的 Next Action 首行標明。
+- commit / push 後必須跑 `tools/cao_agent/check_git_completion_gate.sh` 或等價命令，確認 worktree clean、branch 有 upstream、local HEAD 等於 upstream HEAD。
+- 若 push 失敗、缺 git author、無 upstream 或 worktree 仍 dirty，Architect 必須立即處理或明確標成 blocked；不得把問題留給重開對話後的記憶。
+- 不需要 commit / push 的純研究、問答或只讀取證任務，也必須在 final 明確說明沒有 repo 落地需求。
+
 ## 角色卡
 
 每個正式 agent 規則必須包含：

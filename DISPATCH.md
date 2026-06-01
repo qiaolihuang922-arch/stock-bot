@@ -16,7 +16,8 @@
 
 ## Current Result
 
-- 本輪未 commit / 未 push。
+- 本輪已 commit / push 到 `origin/main`。
+- Git completion gate：push 後必須以 `tools/cao_agent/check_git_completion_gate.sh` 驗證 `main` matches `origin/main` 且 worktree clean。
 - 已吸收 PM -> Tech -> QA 交付到主 repo 工作樹：
   - 報文版本升至 `v20.4.11`。
   - `formatTelegramMessages()` 固定輸出：Summary -> action body（持倉/未持倉）-> Evidence Compact -> optional Details Backup。
@@ -42,7 +43,7 @@
 
 ## Next Action
 
-- 本輪可 commit / push；commit 前建議再跑一次 targeted tests 與 `git diff --check`。
+- 本輪已推送完成；下一輪若有 repo 落地變更，收口必跑 `tools/cao_agent/check_git_completion_gate.sh`。
 - 旁支另開：Telegram reply markup 仍附在最後一則 message，message order 改為 summary first 後可能需要 delivery consumer 任務評估按鈕落點。
 - 旁支另開：如果 Owner 認定 2356 英業達實際未賣，需查 production ledger/source truth 為何目前為 `shares=0 / CLOSED`；本輪未寫 DB、不校正 ledger。
 
