@@ -57,7 +57,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.11"
+VERSION = "v20.4.12"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -6123,10 +6123,15 @@ def formatTelegramMessages(results_map, full_msg, best, score, market_summary, n
         report_phase=report_phase,
         report_context=report_context
     )
-    action_body_message = (
+    telegram_header = f"【{now.strftime('%m/%d')} {report_phase}｜{VERSION}】"
+    holdings_message = (
+        f"{telegram_header}\n"
         "【持倉標的】\n\n"
         + ("\n\n".join(position_cards) if position_cards else "無持倉")
-        + "\n\n【未持倉標的】\n\n"
+    )
+    unheld_message = (
+        f"{telegram_header}\n"
+        "【未持倉標的】\n\n"
         + ("\n\n".join(unheld_cards) if unheld_cards else "無")
     )
     evidence_message = format_evidence_compact_message(
@@ -6143,9 +6148,9 @@ def formatTelegramMessages(results_map, full_msg, best, score, market_summary, n
 
     messages = []
 
-    messages.append(summary_message)
-    messages.append(action_body_message)
-    messages.append(evidence_message)
+    messages.append(holdings_message)
+    messages.append(unheld_message)
+    messages.append(f"{summary_message}\n\n{evidence_message}")
 
     if include_detail:
         for chunk in format_details_backup_messages(full_msg):

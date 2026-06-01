@@ -6,7 +6,7 @@
 
 - 專案：台股策略 Telegram 報文機器人。
 - 正式結果以 git / runner 產生報文為準。
-- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前 `origin/main` 為 `v20.4.11`。
+- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前收口目標為 `v20.4.12`。
 - 固定 8 份 Markdown 不刪：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 - Architect 是總控；產品 / 策略 / 報文 bug 或 feature 預設走 PM -> Tech -> QA。
 - 跨日狀態、已執行交易、歷史 evidence 必須來自 production DB 或 Owner 指定持久來源；local/runtime/worktree 不能當跨日記憶。
@@ -28,12 +28,13 @@
 
 ## Current Worktree
 
-- task_id：`intraday_20260601_report_sequence_execution_memory_noise_v20_4_11`
-- 狀態：PM done / Tech done / QA `通過`，已 commit / push 到 `origin/main`。
+- task_id：`tg-message-order-v20.4.12`
+- 狀態：PM done / Tech done / QA `通過`；final 前必須已 commit / push 並通過 Git completion gate。
 - commit：見 `git log -1`。
 - 關鍵行為：
-  - 報文版本升到 `v20.4.11`。
-  - Telegram 完整輸出順序為 Summary -> action body（持倉/未持倉）-> Evidence Compact -> optional Details Backup。
+  - 報文版本升到 `v20.4.12`。
+  - Telegram 完整輸出順序為持倉 message -> 未持倉 / 非持倉 message -> summary + Evidence Compact；`include_detail=True` 時 Details Backup 追加最後。
+  - 持倉與未持倉 message 都有 v20.4.12 header，符合 Owner 指定：`1.持仓 2.非持仓 3.报文短讯`。
   - `build_report_context()` 產生共用 `evidence_manifest`，每個使用者可見資料欄位需標出 source_status、source_of_truth、db_table、trade/as_of date、decision_eligible 與 fallback_rule。
   - `evidence_manifest` 補 `stock.<name>.execution_memory`，讓 positions / position_events source truth 可被 evidence 消費。
   - 未持倉 BUY-like candidate 若 price / OHLCV / RR source 不足，Summary、漏斗、交易執行 / 明日計畫、卡片一致 fail closed。
@@ -44,10 +45,10 @@
   - market/theme production evidence、strategy sample evidence、stock decision 三層保持分離；market/theme confirmed 不會變 BUY。
   - 不改 BUY/SELL、加減碼、停利停損、DB schema、write path、live Telegram。
 - 驗證：
-  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py services/strategy_evidence.py`：passed。
-  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_strategy_evidence.py tests/test_market_theme_evidence.py tests/test_notifier.py tests/test_cross_day_context.py tests/test_analysis_engine.py`：167 passed，165 warnings。
+  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py services/notifier.py`：passed。
+  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py`：118 passed，165 warnings。
   - `git diff --check`：passed。
-  - QA 補充反證：完整 message list 順序、2356 stale second-stage guard、噪音壓縮、production artifact schema/content 均 passed。
+  - QA 補充反證：完整 TG message list 順序 passed；`services/notifier.py` / mock `send_many()` 確認 sender 依 list order 逐則送出；v20.4.11 只剩負向斷言。
   - 先前 production read-only strategy evidence artifact 仍顯示缺 `classification backtest source-of-truth`，報文正確 fail closed，不回到舊式 `樣本 0｜樣本不足，不判讀`。
 - 2356 production read-only artifact：
   - path：`.qa_tmp/production_readonly_2356_positions_events.json`。
@@ -69,7 +70,7 @@
 
 ## Next Development
 
-- 本輪已 commit / push；重開對話後先以 `git status --branch --short` 與 `tools/cao_agent/check_git_completion_gate.sh` 確認狀態，不再依賴對話記憶。
+- 重開對話後先以 `git status --branch --short` 與 `tools/cao_agent/check_git_completion_gate.sh` 確認 commit/push 狀態，不再依賴對話記憶。
 - 只把 `CHANGELOG.md` 所列 scoped diff 當成本輪驗收範圍；工作樹其他旁支 dirty files 不能因本輪 QA 通過而整包吸收。
 - 另開旁支：若 Owner 認定 2356 英業達實際未賣，查 production positions / position_events 為何目前 artifact 顯示 CLOSED / shares 0。
 - 另開旁支：盤點全報文 `追高 / 追蹤` 相關文案。

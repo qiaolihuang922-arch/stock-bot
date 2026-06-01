@@ -4,10 +4,10 @@
 
 ## Current Task
 
-- task_id: `intraday_20260601_report_sequence_execution_memory_noise_v20_4_11`
-- task_name: `Intraday Report Sequence / Execution Memory / Noise Compression`
-- task_type: `risk_patch`
-- owner_status: `reported_0601_intraday_report_order_2356_noise_gap`
+- task_id: `tg-message-order-v20.4.12`
+- task_name: `Telegram Message Order: Holdings / Unheld / Short Report`
+- task_type: `tiny_patch`
+- owner_status: `rejected_v20_4_11_summary_first_tg_order`
 - architect_status: `absorbed_agent_diff_and_reviewed`
 - pm_status: `done`
 - tech_status: `done`
@@ -16,35 +16,28 @@
 
 ## Current Result
 
-- 本輪已 commit / push 到 `origin/main`。
-- Git completion gate：push 後必須以 `tools/cao_agent/check_git_completion_gate.sh` 驗證 `main` matches `origin/main` 且 worktree clean。
+- 本輪已完成 QA，收口時必須 commit / push 到 `origin/main`。
+- Git completion gate：final 前必須以 `tools/cao_agent/check_git_completion_gate.sh` 驗證 `main` matches `origin/main` 且 worktree clean。
 - 已吸收 PM -> Tech -> QA 交付到主 repo 工作樹：
-  - 報文版本升至 `v20.4.11`。
-  - `formatTelegramMessages()` 固定輸出：Summary -> action body（持倉/未持倉）-> Evidence Compact -> optional Details Backup。
-  - 主體行動不再被 verbose source/backtest/detail 噪音插在前面；長證據移到 compact evidence / details backup。
-  - 2356 第二段停利 execution memory 補 stale guard：position_events 未明確確認「第二」/ `SECOND` / `TP2` 或至少兩筆 sell deltas 時，fail closed 為 `停利記憶不足`，不得顯示第二段已執行或重複賣出股數。
-  - `evidence_manifest` 補 `stock.<name>.execution_memory`，把 positions / position_events source truth 暴露給 report evidence。
-  - 不改 BUY/SELL、加減碼、停利停損策略 engine、DB schema、write path、live Telegram。
-- Production read-only artifact：
-  - `.qa_tmp/production_readonly_2356_positions_events.json` 已生成並由 QA 驗證。
-  - artifact 安全旗標：無 credential、無 write、無 schema change、無 live Telegram。
-  - artifact 顯示 production `positions` 目前 2356 英業達為 `shares=0`、`status=CLOSED`；`position_events` 有 4 筆 sell summary，但無 second-stage-like labels。
-  - 因此報文不得把一般 `賣出` 事件升格成「已確認第二段停利 event」；若使用者認知仍為未賣，下一步是查 production ledger/source truth，不是讓報文猜。
+  - 報文版本升至 `v20.4.12`。
+  - `formatTelegramMessages()` 固定 TG message list：messages[0] 持倉、messages[1] 未持倉 / 非持倉、messages[2] summary + Evidence Compact；`include_detail=True` 時 Details Backup 仍追加在最後。
+  - 持倉與未持倉 message 都加上 v20.4.12 header，符合 Owner 指定手機順序：`1.持仓 2.非持仓 3.报文短讯`。
+  - 不改策略 decision、持倉/未持倉判斷、DB schema、write path、live Telegram。
 - Runner gap 已修：
   - `tools/cao_agent/run_qa_code.sh` 會在 QA 啟動前同步主 repo handoff files 到可重用 tech worktree，避免 QA 驗到 stale `TASK.md / CHANGELOG.md / QA_REPORT.md`。
   - 保留既有 `CAO_QA_USE_REPO_CONFIG=1` 與 safe read-only artifact 路徑；QA sandbox DNS 失敗時可核對 Architect sanitized production-read evidence。
 - 驗證：
   - QA 結論：`通過`。
-  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py services/strategy_evidence.py`：passed。
-  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_strategy_evidence.py tests/test_market_theme_evidence.py tests/test_notifier.py tests/test_cross_day_context.py tests/test_analysis_engine.py`：167 passed，165 warnings（第三方 deprecation 類）。
+  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py services/notifier.py`：passed。
+  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py`：118 passed，165 warnings（第三方 deprecation 類）。
   - `git diff --check`：passed。
-  - QA 補充反證：完整 message list 順序、2356 stale second-stage guard、噪音壓縮、production artifact schema/content 均 passed。
-  - scoped 可吸收 diff：`core/generator.py`、`tests/test_generator_report.py`、`tests/test_market_theme_evidence.py`、`CHANGELOG.md`、`QA_REPORT.md`；其他既存 dirty files 不得用本輪結論整包吸收。
+  - QA 補充反證：`services/notifier.py` / mock `send_many()` 確認 sender 依 list order 逐則送出，不會把 summary 排回第一則。
+  - scoped 可吸收 diff：`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`、`core/generator.py`、`tests/test_generator_report.py`、`tests/test_market_theme_evidence.py`。
 
 ## Next Action
 
-- 本輪已推送完成；下一輪若有 repo 落地變更，收口必跑 `tools/cao_agent/check_git_completion_gate.sh`。
-- 旁支另開：Telegram reply markup 仍附在最後一則 message，message order 改為 summary first 後可能需要 delivery consumer 任務評估按鈕落點。
+- 若 `git status --branch --short` 顯示未推送或 dirty，先完成 commit / push 並跑 `tools/cao_agent/check_git_completion_gate.sh`，不得開新產品任務。
+- 旁支另開：Telegram reply markup 仍附在最後一則 message，新 message order 下可能需要 delivery consumer 任務評估按鈕落點。
 - 旁支另開：如果 Owner 認定 2356 英業達實際未賣，需查 production ledger/source truth 為何目前為 `shares=0 / CLOSED`；本輪未寫 DB、不校正 ledger。
 
 ## Fixed Commands

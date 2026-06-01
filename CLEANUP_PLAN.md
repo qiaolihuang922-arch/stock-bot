@@ -15,6 +15,14 @@
 
 ## Completed
 
+- `tg-message-order-v20.4.12`：
+  - 問題：Owner 貼出 v20.4.11 盤中 Telegram output，指出 TG 發送順序應為 `1.持倉 2.非持倉 3.報文短訊`，而不是 summary first。
+  - 結果：PM -> Tech -> QA 完成，QA `通過`；收口需 commit / push 並跑 Git completion gate。
+  - 關鍵修正：`formatTelegramMessages()` 改為 messages[0] 持倉、messages[1] 未持倉、messages[2] summary + Evidence Compact；`include_detail=True` 時 Details Backup 仍最後；版本升至 v20.4.12。
+  - QA 反證：完整 fixture 同時含持倉與未持倉；確認持倉 action 只在第一則、未持倉 candidate 只在第二則、summary/evidence 在第三則；`services/notifier.py` / mock `send_many()` 確認 sender 不重排。
+  - 規則治理：`repeated_pattern` + `mobile_reading`。Summary first 對一般報告可讀，但 TG 實際 delivery 要 action-first；未來任務卡必須區分「報文內容順序」與「Telegram 多訊息送出順序」。
+  - 流程優化：Tech worktree stale diff 第一次產出不可吸收，已丟棄隔離 worktree 舊候選並從 current main clean baseline 重跑，避免舊 v20.4.7 diff 混入。
+  - 邊界：不改策略 decision、DB schema/write、live Telegram；reply markup 仍掛最後一則 message，另列旁支。
 - `intraday_20260601_report_sequence_execution_memory_noise_v20_4_11`：
   - 問題：Owner 貼出 2026-06-01 盤中完整報文，指出主體/詳情順序不符合手機閱讀、英業達 2356 第二段停利仍像沿用上週操作、報文 source/backtest/detail 噪音過多。
   - 結果：PM -> Tech -> QA 完成，QA `通過`；主 repo 工作樹已吸收 scoped diff，未 commit / 未 push。
