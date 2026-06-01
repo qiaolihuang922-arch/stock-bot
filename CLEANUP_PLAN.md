@@ -15,6 +15,14 @@
 
 ## Completed
 
+- `pm-20260601-afterhours-telegram-brief-dedupe`:
+  - 問題：Owner 指出 v20.4.21 盤後報文仍有第三則過長、策略樣本狀態重複衝突、卡片噪音、盤後/盤中語境錯位、持倉 RR 誤導，並要求做今日復盤與流程補強。
+  - 結果：盤後第三則改為短版 `📌 盤後簡報`；策略樣本不可用集中顯示一次；卡片不逐檔重複策略樣本不可用；盤後卡片替換被測盤中詞；非加碼持倉不顯示新倉 RR 數字。
+  - 可重跑補強：新增 `test_v20_4_21_afterhours_brief_is_concise_and_cards_do_not_repeat_strategy_sample`，覆蓋第三則複製 summary、策略樣本重複、盤中詞、非加碼 RR、新倉 RR 保留。
+  - 復盤：今天的主要錯誤不是缺更多文字規則，而是缺手機閱讀 probe；後續同類報文修正要先讓誤讀場景進測試，再改 formatter。
+  - QA 攔住：QA conditional pass 攔到 CHANGELOG 仍寫成舊 refactor / 無文案變更口徑；已改成交付文件與可見輸出變更一致。
+  - Runner gap：Tech worktree 殘留上一輪 diff 阻塞新任務；本輪已清理隔離 worktree 舊候選，後續應補 runner hygiene automation。
+  - 邊界：不改 strategy decision、RR 計算、holding_status、DB schema/write、live Telegram、VERSION。
 - `pm-20260601-telegram-helper-split`:
   - 問題：Owner 要繼續明確拆分，策略就是策略、顯示就是顯示，且拆完要做完整邏輯測試。
   - 結果：純 Telegram formatter helper 已從 `core/generator.py` 移到既有 `presentation/report.py`；未新增業務模組或架構文檔。

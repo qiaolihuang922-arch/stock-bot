@@ -4,10 +4,10 @@
 
 ## Current Task
 
-- task_id: `pm-20260601-telegram-helper-split`
-- task_name: `Pure Telegram Formatter Helpers Presentation Split`
+- task_id: `pm-20260601-afterhours-telegram-brief-dedupe`
+- task_name: `Afterhours Telegram Brief Dedup And Noise Reduction`
 - task_type: `normal_patch`
-- owner_status: `requested_continue_split_and_complete_logic_tests`
+- owner_status: `requested_optimize_and_review_process`
 - architect_status: `qa_passed_pending_git_close`
 - pm_status: `done`
 - tech_status: `manual_absorb_from_tech_worktree`
@@ -16,26 +16,26 @@
 
 ## Current Result
 
-- 本輪目標是繼續明確拆分：把純 Telegram formatter helper 從 `core/generator.py` 移到既有 `presentation/report.py`，不新增業務模組或架構文檔。
+- 本輪目標是修 v20.4.21 盤後 Telegram 可讀性：第三則摘要化、策略樣本狀態單一化、卡片去除逐檔策略樣本不可用噪音、盤後語境正確、非加碼持倉 RR 不誤導。
 - Git completion gate：final 前必須以 `tools/cao_agent/check_git_completion_gate.sh` 驗證 `main` matches `origin/main` 且 worktree clean。
 - 已吸收內容：
-  - `presentation/report.py` 承接 `formatTelegramSummary`、`formatTelegramPositionCard`、`formatTelegramUnheldCard`、`format_brief_data_evidence_message` 與 brief evidence 顯示 helper。
-  - `core/generator.py` 保留 public wrapper 與 orchestration，透過 `_telegram_presentation_deps()` 注入既有 helper。
-  - `presentation/report.py` 沒有 import；不直接 mutate `result/results_map/holding_decision` roots。
-  - Telegram 文案、message order、VERSION、strategy decision、RR、holding_status、DB write path 無變更。
+  - `presentation/report.py` 盤後第三則改為 `📌 盤後簡報`，不再複製完整 summary / 交易細節。
+  - 策略樣本不可用只在盤後第三則集中顯示一次，原因單一化。
+  - 盤後卡片不再逐檔重複策略樣本不可用，並替換盤中語境詞。
+  - 非加碼持倉仍顯示 `新倉 RR：不適用（既有持倉）`，新倉候選 RR 保留。
+  - VERSION 仍為 `v20.4.21`；strategy decision、holding_status、DB write path 無變更。
 - 驗證：
   - QA 結論：`通過`。
-  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py presentation/report.py presentation/__init__.py tests/test_generator_report.py`：passed。
-  - 完整邏輯矩陣：187 passed，177 warnings。
-  - 追加旁路：`tests/test_daily_snapshot_store.py tests/test_dry_run_replay.py`：12 passed，13 warnings。
-  - Re-QA runner：通過；追加手機順序 smoke confirmed。
+  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py presentation/report.py tests/test_generator_report.py`：passed。
+  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py`：92 passed，181 warnings。
+  - QA independent source-error fixture：all checks true。
   - `git diff --check`：passed。
-  - scoped diff：`core/generator.py`、`presentation/report.py`、固定 handoff Markdown。
+  - scoped diff：`core/generator.py`、`presentation/report.py`、`tests/test_generator_report.py`、固定 handoff Markdown。
 
 ## Next Action
 
 - 收口：commit / push 後跑 `tools/cao_agent/check_git_completion_gate.sh`。
-- 下一刀拆分：只搬 remaining pure display helper；不可把策略、DB、ledger、holding status 帶進 presentation。
+- 後續同類報文任務：先補或更新手機閱讀 probe，再改 formatter；不要只寫規則。
 - 旁支另開：Telegram reply markup 仍附在最後一則 message，新 message order 下可能需要 delivery consumer 任務評估按鈕落點。
 - 旁支另開：如果 Owner 認定 2356 英業達實際未賣，需查 production ledger/source truth 為何目前為 `shares=0 / CLOSED`；本輪未寫 DB、不校正 ledger。
 

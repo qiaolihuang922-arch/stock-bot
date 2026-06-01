@@ -130,6 +130,41 @@ def formatTelegramSummary(
     return "\n".join(lines)
 
 
+def _report_phase(report_context):
+    return (report_context or {}).get("report_context", {}).get("report_phase")
+
+
+def _afterhours_card_text(line, report_context):
+    if _report_phase(report_context) != "盤後" or line is None:
+        return line
+    replacements = {
+        "盤中留意": "盤後觀察",
+        "盤中觸發": "明日開盤前確認",
+        "盤中可追": "等待下一交易日訊號",
+        "即時進場": "等待下一交易日訊號",
+        "盤中先觀察": "收盤後風控觀察",
+        "盤中觀察修復狀況": "收盤後觀察修復狀況",
+    }
+    text = line
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+    return text
+
+
+def _strategy_sample_status_line(report_context, deps):
+    strategy = deps["_field_by_key"](report_context, "evidence.strategy_sample")
+    status = strategy.get("source_status", "missing-source")
+    reason_by_status = {
+        "missing-source": "來源缺失",
+        "insufficient-data": "樣本不足",
+        "source-error": "來源讀取異常",
+    }
+    reason = reason_by_status.get(status)
+    if reason:
+        return f"策略樣本：本次不可用（原因：{reason}），單檔卡片不重複列示。"
+    return "策略樣本：來源可驗證，只作輔助參考，不新增買點。"
+
+
 def formatTelegramPositionCard(name, data, *, deps, report_context=None):
     holding = data["holding"]
     decision = deps["ensure_holding_decision"](name, data)
@@ -154,10 +189,15 @@ def formatTelegramPositionCard(name, data, *, deps, report_context=None):
         f"下一步：{next_step}",
         deps["_source_status_line"](report_context, name, holding=True) if report_context else None,
         f"{rr_line}｜S {data.get('structure_score', '-')}/5｜V {data.get('volume_ratio', '-')}x",
-        deps["_strategy_sample_unavailable_card_line"](report_context) or deps["compact_backtest_line"](data.get("backtest_context")),
+        (
+            None
+            if _report_phase(report_context) == "盤後" and deps["_strategy_sample_unavailable"](report_context)
+            else deps["_strategy_sample_unavailable_card_line"](report_context) or deps["compact_backtest_line"](data.get("backtest_context"))
+        ),
         deps["price_change_line"](data.get("price"), data.get("change")),
     ]
     lines = [line for line in lines if line is not None]
+    lines = [_afterhours_card_text(line, report_context) for line in lines]
 
     if reason_line:
         lines.insert(6, f"原因：{reason_line}")
@@ -267,10 +307,15 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         tomorrow_line,
         deps["_source_status_line"](report_context, name, holding=False) if report_context else None,
         data_line,
-        deps["_strategy_sample_unavailable_card_line"](report_context) or deps["compact_backtest_line"](data.get("backtest_context")),
+        (
+            None
+            if _report_phase(report_context) == "盤後" and deps["_strategy_sample_unavailable"](report_context)
+            else deps["_strategy_sample_unavailable_card_line"](report_context) or deps["compact_backtest_line"](data.get("backtest_context"))
+        ),
         price_line,
     ])
     lines = [line for line in lines if line is not None]
+    lines = [_afterhours_card_text(line, report_context) for line in lines]
     history_line = deps["cross_day_detail_line"](data)
     if history_line:
         lines.insert(-1, history_line)
@@ -314,6 +359,40 @@ def _brief_background_line(report_context, deps):
     return f"背景：{market_text}；策略樣本只作輔助，不新增進場理由。"
 
 
+def _afterhours_brief_lines(holding_items, watch_items, report_context, deps, market_mode=None, summary_message=None):
+    funnel = deps["build_unheld_funnel"](watch_items, market_mode=market_mode, report_context=report_context) if watch_items else {"可買": []}
+    actionable = len(funnel.get("可買") or [])
+    has_holding = bool(holding_items)
+    if actionable:
+        conclusion = f"結論：新倉候選 {actionable} 檔需明日開盤前確認；既有持倉以收盤後風控觀察為主。"
+    elif has_holding:
+        conclusion = "結論：今日無有效新倉；既有持倉以收盤後風控觀察為主。"
+    else:
+        conclusion = "結論：今日無有效新倉；未持倉標的等待下一交易日訊號。"
+
+    checks = []
+    if holding_items:
+        checks.append("觀察持倉是否跌破警戒")
+    if actionable:
+        checks.append("新倉候選需開盤後重新確認有效進場")
+    elif watch_items:
+        checks.append("未持倉標的重新等待有效進場")
+    if not checks:
+        checks.append("等下一交易日資料更新")
+
+    lines = [
+        "📌 盤後簡報",
+        conclusion,
+        _strategy_sample_status_line(report_context, deps),
+        f"明日前確認：{'；'.join(checks[:3])}。",
+    ]
+    for source_line in (summary_message or "").splitlines():
+        if source_line.startswith("⚠ ") and "每日快照未寫入" in source_line:
+            lines.append(f"資料寫入：{source_line[2:]}，明日前確認補寫狀態。")
+            break
+    return lines
+
+
 def _market_theme_data_basis_line(report_context, deps):
     evidence = report_context.get("market_theme_evidence") or {}
     field = deps["_field_by_key"](report_context, "evidence.market_theme")
@@ -340,6 +419,8 @@ def _market_theme_data_basis_line(report_context, deps):
 
 
 def _strategy_sample_data_basis_line(report_context, deps):
+    if _report_phase(report_context) == "盤後":
+        return None
     strategy = deps["_field_by_key"](report_context, "evidence.strategy_sample")
     status = strategy.get("source_status", "missing-source")
     if status in {"missing-source", "source-error", "insufficient-data"}:
@@ -395,14 +476,15 @@ def _evidence_human_status_lines(report_context, deps):
     statuses = report_context.get("source_status_summary") or {}
     lines = []
 
-    strategy = deps["_field_by_key"](report_context, "evidence.strategy_sample")
-    strategy_status = strategy.get("source_status", "missing-source")
-    if strategy_status == "missing-source":
-        lines.append("策略樣本：缺少可驗證來源，本次不納入買賣判斷。")
-    elif strategy_status == "insufficient-data":
-        lines.append("策略樣本：樣本不足，本次不納入買賣判斷。")
-    elif strategy_status == "source-error":
-        lines.append("策略樣本：來源讀取異常，本次不納入買賣判斷。")
+    if _report_phase(report_context) != "盤後":
+        strategy = deps["_field_by_key"](report_context, "evidence.strategy_sample")
+        strategy_status = strategy.get("source_status", "missing-source")
+        if strategy_status == "missing-source":
+            lines.append("策略樣本：缺少可驗證來源，本次不納入買賣判斷。")
+        elif strategy_status == "insufficient-data":
+            lines.append("策略樣本：樣本不足，本次不納入買賣判斷。")
+        elif strategy_status == "source-error":
+            lines.append("策略樣本：來源讀取異常，本次不納入買賣判斷。")
 
     ledger_status = _layer_status(report_context, "ledger")
     conflict_status = _layer_status(report_context, "conflict")
@@ -488,13 +570,23 @@ def format_brief_data_evidence_message(
     market_mode=None,
     summary_message=None,
 ):
-    decision_lines = _decision_brief_lines(summary_message, version)
-    brief_lines = [
-        _brief_holding_line(holding_items, deps),
-        _brief_new_position_line(watch_items, report_context, deps, market_mode=market_mode),
-        _brief_background_line(report_context, deps),
-    ]
-    decision_lines = brief_lines + decision_lines
+    if _report_phase(report_context) == "盤後":
+        decision_lines = _afterhours_brief_lines(
+            holding_items,
+            watch_items,
+            report_context,
+            deps,
+            market_mode=market_mode,
+            summary_message=summary_message,
+        )
+    else:
+        decision_lines = _decision_brief_lines(summary_message, version)
+        brief_lines = [
+            _brief_holding_line(holding_items, deps),
+            _brief_new_position_line(watch_items, report_context, deps, market_mode=market_mode),
+            _brief_background_line(report_context, deps),
+        ]
+        decision_lines = brief_lines + decision_lines
 
     lines = [
         f"🧾 {version} 簡報＋資料依據",
@@ -508,7 +600,7 @@ def format_brief_data_evidence_message(
         _position_candidate_data_basis_line(report_context),
         *_evidence_human_status_lines(report_context, deps),
     ]
-    return "\n".join(lines)
+    return "\n".join(line for line in lines if line is not None)
 
 
 def render_telegram_messages(

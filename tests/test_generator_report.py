@@ -1239,7 +1239,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("📊 策略證據 v20.0", summary)
         self.assertNotIn("策略樣本 / 分類回測", summary)
         self.assertIn("v20.4.21 簡報＋資料依據", evidence)
-        self.assertIn("策略樣本：本輪缺少可驗證樣本，可靠度低，未納入買賣判斷。", evidence)
+        self.assertIn("策略樣本：本次不可用（原因：樣本不足），單檔卡片不重複列示。", evidence)
         self.assertEqual(payload["result"]["decision"], "BUY")
         self.assertEqual(payload["result"]["action"], 0.1)
 
@@ -2187,9 +2187,9 @@ class GeneratorReportTest(unittest.TestCase):
 
         summary = summary_message(messages)
         self.assertIn("【05/28 盤後｜v20.4.21】", summary)
-        self.assertIn("明日計畫 1\n1. 技嘉｜待觸發加碼10", summary)
-        self.assertIn("持倉風控檢查\n1. 技嘉｜風控：守警戒線，不追價", summary)
-        self.assertLess(summary.index("持倉風控檢查"), summary.index("明日計畫 1"))
+        self.assertIn("📌 盤後簡報", summary)
+        self.assertIn("結論：今日無有效新倉；既有持倉以收盤後風控觀察為主。", summary)
+        self.assertIn("明日前確認：觀察持倉是否跌破警戒。", summary)
         self.assertNotIn("技嘉｜明日風控｜加碼10", summary)
         self.assertNotIn("加碼後守警戒價，量價未延續則停止加碼", summary)
 
@@ -2231,11 +2231,9 @@ class GeneratorReportTest(unittest.TestCase):
 
         summary = summary_message(messages)
         self.assertIn("【05/28 盤後｜v20.4.21】", summary)
-        self.assertLess(summary.index("持倉風控檢查"), summary.index("明日計畫 1"))
-        self.assertIn("智原｜", summary)
-        self.assertIn("緯創｜", summary)
-        self.assertIn("明日未修復降級", summary)
-        self.assertIn("明日計畫 1\n1. 技嘉｜待觸發加碼10", summary)
+        self.assertIn("📌 盤後簡報", summary)
+        self.assertIn("結論：今日無有效新倉；既有持倉以收盤後風控觀察為主。", summary)
+        self.assertIn("明日前確認：觀察持倉是否跌破警戒。", summary)
         self.assertNotIn("隔日計畫", summary)
         self.assertNotIn("收盤未修復，列入明日降級檢查：智原", summary)
         self.assertNotIn("收盤未修復，列入明日降級檢查：緯創", summary)
@@ -2275,8 +2273,8 @@ class GeneratorReportTest(unittest.TestCase):
         )
 
         summary = summary_message(messages)
-        self.assertIn("持倉風控檢查", summary)
-        self.assertIn("明日未修復降級", summary)
+        self.assertIn("📌 盤後簡報", summary)
+        self.assertIn("明日前確認：觀察持倉是否跌破警戒。", summary)
         self.assertNotIn("明日計畫 0", summary)
         self.assertNotIn("明日計畫：無新增下單", summary)
         self.assertNotIn("明日計畫\n無新增下單", summary)
@@ -2326,7 +2324,8 @@ class GeneratorReportTest(unittest.TestCase):
         )
 
         summary_msg = summary_message(messages)
-        self.assertIn("淘汰 4 檔｜主因：弱反彈待確認｜詳情見未持倉卡", summary_msg)
+        self.assertIn("📌 盤後簡報", summary_msg)
+        self.assertIn("未持倉標的等待下一交易日訊號", summary_msg)
         self.assertIn("【旺宏 2337】⛔ 淘汰", unheld_message(messages))
         self.assertIn("【群創 3481】⛔ 淘汰", unheld_message(messages))
         self.assertNotIn("旺宏", summary_msg)
@@ -2370,7 +2369,8 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("今日 賣 40股", card)
         self.assertIn("決策：減碼後觀察，暫不加碼", card)
         self.assertIn("今日已減碼約27%", decision["note"])
-        self.assertIn("1. 緯創｜+5.00%｜減碼後觀察｜修復才恢復優先級", summary_message(messages))
+        self.assertIn("📌 盤後簡報", summary_message(messages))
+        self.assertIn("既有持倉以收盤後風控觀察為主", summary_message(messages))
         self.assertNotIn("📌 減碼｜", card)
         self.assertNotIn("決策：減碼 25%", card)
         self.assertNotIn("緯創｜+5.00%｜減碼｜", summary_message(messages))
@@ -2455,7 +2455,8 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【智原 3035】📌 停利後觀察", card)
         self.assertIn("決策：停利後觀察，暫不加碼", card)
         self.assertIn("同級停利已完成", card)
-        self.assertIn("1. 智原｜+30.00%｜停利後觀察｜等待新高、過熱升級或風控訊號", summary_message(messages))
+        self.assertIn("📌 盤後簡報", summary_message(messages))
+        self.assertIn("既有持倉以收盤後風控觀察為主", summary_message(messages))
         self.assertNotIn("決策：停利 25%", card)
 
     def test_v20_2_2_same_day_executed_take_profit_stays_observation_across_summary(self):
@@ -3440,12 +3441,9 @@ class GeneratorReportTest(unittest.TestCase):
         summary = summary_message(messages)
 
         self.assertIn("【05/29 盤後｜v20.4.21】", summary)
-        self.assertIn("今日交易\n新增交易建議：無", summary)
-        self.assertIn("已執行（不重複下單）", summary)
-        self.assertIn("英業達｜已執行｜今日已執行停利 187 股", summary)
-        self.assertIn("可買 0｜可準備 8（不可買）｜僅追蹤 0｜淘汰 2", summary)
-        self.assertIn("可準備 8 檔，不列入交易執行", summary)
-        self.assertIn("📎 詳情索引：持倉 1｜可準備 8｜淘汰 2", summary)
+        self.assertIn("📌 盤後簡報", summary)
+        self.assertIn("結論：今日無有效新倉；既有持倉以收盤後風控觀察為主。", summary)
+        self.assertIn("明日前確認：觀察持倉是否跌破警戒；未持倉標的重新等待有效進場。", summary)
         self.assertNotIn("今日交易紀錄：無新增", summary)
         self.assertNotIn("今日交易紀錄\n無新增", summary)
         self.assertNotIn("其中僅追蹤 0 檔拆分", summary)
@@ -3604,10 +3602,9 @@ class GeneratorReportTest(unittest.TestCase):
         unheld = unheld_message(messages)
 
         self.assertIn("【05/28 盤後｜v20.4.21】", summary)
-        self.assertIn("今日交易\n新增交易建議：無", summary)
-        self.assertIn("明日計畫 1", summary)
-        self.assertIn("光寶科｜明日追蹤｜開盤後確認，不追價", summary)
-        self.assertIn("📎 詳情索引：持倉 0｜明日計畫 1｜淘汰 0", summary)
+        self.assertIn("📌 盤後簡報", summary)
+        self.assertIn("結論：新倉候選 1 檔需明日開盤前確認", summary)
+        self.assertIn("明日前確認：新倉候選需開盤後重新確認有效進場。", summary)
         self.assertIn("【光寶科 2301】🟢 明日追蹤｜10%倉｜買點成立", unheld)
         self.assertIn("買點：盤後追蹤｜開盤後確認｜不追價", unheld)
         self.assertIn("明日觸發：", unheld)
@@ -3899,6 +3896,84 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("新倉 RR：不適用（既有持倉）", position)
         self.assertNotRegex(position, r"數據：RR 2\.73")
         self.assertEqual(payload["result"]["rr"], 2.73)
+
+    def test_v20_4_21_afterhours_brief_is_concise_and_cards_do_not_repeat_strategy_sample(self):
+        holding_payload = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119],
+            {"shares": 50, "avg_price": 118},
+            price=119,
+            change=1.4,
+        )
+        holding_payload["stock_code"] = "3035"
+        holding_payload["result"]["rr"] = 2.73
+        holding_payload["holding_decision"] = {
+            "action": "續抱",
+            "level": "HOLD",
+            "warning_price": 113,
+            "hard_stop_price": 109,
+            "allow_add": False,
+        }
+        candidate_payload = render_payload(
+            [50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 70],
+            None,
+            price=70,
+            change=2.0,
+        )
+        candidate_payload["stock_code"] = "2301"
+        candidate_payload["result"].update({
+            "decision": "BUY",
+            "action": 0.1,
+            "rr": 2.4,
+            "trade_state": "READY",
+            "market_grade": "A",
+        })
+        tracking_payload = render_payload(
+            [80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99],
+            None,
+            price=99,
+            change=0.8,
+        )
+        tracking_payload["stock_code"] = "2421"
+        tracking_payload["result"].update({
+            "decision": "WAIT",
+            "action": 0,
+            "rr": 1.2,
+            "trade_state": "WATCH",
+        })
+
+        messages = generator.formatTelegramMessages(
+            {
+                "智原": holding_payload,
+                "光寶科": candidate_payload,
+                "建準": tracking_payload,
+            },
+            "FULL DETAIL",
+            "光寶科",
+            88,
+            {"trade_date": "2026-06-01"},
+            datetime(2026, 6, 1),
+            strategy_evidence_summary="📊 策略證據 v20.0\n狀態：不可用\n原因：樣本不足（有效樣本 3）",
+            report_phase="盤後",
+        )
+
+        position = position_message(messages)
+        unheld = unheld_message(messages)
+        brief = evidence_message(messages)
+        rendered = "\n\n".join(messages)
+
+        self.assertIn("📌 盤後簡報", brief)
+        self.assertNotIn("今日交易\n新增交易建議：無", brief)
+        self.assertNotIn("持倉風控檢查\n1.", brief)
+        self.assertEqual(rendered.count("策略樣本：本次不可用（原因：樣本不足），單檔卡片不重複列示。"), 1)
+        self.assertNotIn("策略樣本：不可用，本次不納入判斷", position)
+        self.assertNotIn("策略樣本：不可用，本次不納入判斷", unheld)
+        self.assertNotIn("missing-source", brief)
+        self.assertNotIn("盤中留意", rendered)
+        self.assertNotIn("盤中觸發", rendered)
+        self.assertNotIn("即時進場", rendered)
+        self.assertIn("新倉 RR：不適用（既有持倉）", position)
+        self.assertNotRegex(position, r"數據：RR 2\.73")
+        self.assertIn("數據：RR 2.4", unheld)
 
     def test_v20_4_20_strategy_sample_unavailable_card_hides_backtest_numbers(self):
         payload = render_payload(

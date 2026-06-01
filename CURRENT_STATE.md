@@ -28,23 +28,22 @@
 
 ## Current Worktree
 
-- task_id：`pm-20260601-telegram-helper-split`
-- 狀態：PM done / Tech worktree change manually absorbed / QA `通過`；final 前必須已 commit / push 並通過 Git completion gate。
+- task_id：`pm-20260601-afterhours-telegram-brief-dedupe`
+- 狀態：PM done / Tech diff manually absorbed / QA `通過` after CHANGELOG fix；final 前必須已 commit / push 並通過 Git completion gate。
 - commit：見 `git log -1`。
 - 關鍵行為：
   - 不升 VERSION，仍為 `v20.4.21`。
-  - 不新增業務模組、不新增架構文檔。
-  - `presentation/report.py` 承接純 Telegram formatter：summary、持倉卡、未持倉卡、brief evidence。
-  - `core/generator.py` 保留 public wrapper 與 orchestration，透過 `_telegram_presentation_deps()` 注入既有 helper。
-  - `presentation/report.py` 無 import；不直接 mutate `result/results_map/holding_decision` roots。
-  - 不改 Telegram 報文、策略 decision、RR、holding_status、DB schema/write、live Telegram。
+  - 盤後第三則改為短版 `📌 盤後簡報`，不再複製完整 summary。
+  - 策略樣本不可用狀態在盤後第三則集中顯示一次，卡片不逐檔重複。
+  - 盤後卡片替換被測盤中語境詞。
+  - 非加碼持倉不顯示新倉 RR 數字；新倉候選 RR 保留。
+  - 不改 strategy decision、RR 計算、holding_status、DB schema/write、live Telegram。
 - 驗證：
-  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py presentation/report.py presentation/__init__.py tests/test_generator_report.py`：passed。
-  - 完整邏輯矩陣：187 passed，177 warnings。
-  - 追加旁路：12 passed，13 warnings。
-  - Re-QA runner：通過；追加手機順序 smoke confirmed。
+  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py presentation/report.py tests/test_generator_report.py`：passed。
+  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py`：92 passed，181 warnings。
+  - QA independent source-error fixture：all checks true。
   - `git diff --check`：passed。
-  - QA 額外反證：presentation 無 import、無 direct assigned roots；import boundary gate 仍通過。
+  - QA 額外反證：按手機閱讀順序掃描三則訊息，策略樣本狀態不衝突、卡片不重複、盤後無被測盤中詞。
   - 先前 production read-only strategy evidence artifact 仍顯示缺 `classification backtest source-of-truth`，報文正確 fail closed，不回到舊式 `樣本 0｜樣本不足，不判讀`。
 - 2356 production read-only artifact：
   - path：`.qa_tmp/production_readonly_2356_positions_events.json`。
@@ -70,7 +69,8 @@
 - 只把 `CHANGELOG.md` 所列 scoped diff 當成本輪驗收範圍；工作樹其他旁支 dirty files 不能因本輪 QA 通過而整包吸收。
 - 已處理 Owner 指出的「是 72/100 那個 maturity 到 100%」：目前五維 maturity report 可重跑為 100。
 - 已處理本輪「先解合理度跟衝突」的第一層：使用者可見報文不再把無有效進場和推薦感最強同時輸出；raw evidence slot 改成人話，衝突/缺資料保守揭露。
-- 已處理 Owner 指出的「繼續明確拆分」第二刀：純 Telegram formatter helper 已移入 `presentation/report.py`；尚未完成所有純顯示 helper 與策略 helper 分離。
+- 已處理 Owner 指出的 v20.4.21 盤後噪音問題：第三則摘要化、策略樣本狀態單一化、卡片去重、盤後語境與持倉 RR 一致。
+- 流程強化不是新增死規則：已新增 `tests/test_generator_report.py` probe，讓同類錯誤可重跑失敗。
 - import boundary gate 仍保護後續拆分：presentation 不能反向依賴 writer/DB，core/services 不能依賴 presentation，`core/generator.py` bridge 只是 transitional。
 - 另開旁支：若 Owner 認定 2356 英業達實際未賣，查 production positions / position_events 為何目前 artifact 顯示 CLOSED / shares 0。
 - 另開旁支：盤點全報文 `追高 / 追蹤` 相關文案。

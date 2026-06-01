@@ -3,80 +3,83 @@
 ## 任務尺寸與風險
 
 - 任務尺寸：normal_patch。
-- 風險判斷：拆純 Telegram 顯示 helper，碰多輸出區塊 formatter，但不改 strategy decision、RR、holding_status、DB write path、VERSION 或 live Telegram。
+- 風險判斷：調整盤後 Telegram 使用者可見報文與測試 probe；不改 strategy decision、RR 計算、holding_status、DB write path、schema、VERSION 或 live delivery。
 
 ## 修改內容
 
-- `presentation/report.py` 承接純 Telegram 顯示 helper：
-  - `formatTelegramSummary`
-  - `formatTelegramPositionCard`
-  - `formatTelegramUnheldCard`
-  - `format_brief_data_evidence_message`
-  - brief evidence 的人話資料依據 helper
-- `core/generator.py` 保留既有 public wrapper 與 orchestration，只透過 `_telegram_presentation_deps()` 把既有計算/helper 注入 presentation。
-- `formatTelegramMessages()` 改用同一份 presentation deps，避免 message assembly 與單卡 formatter 使用兩套依賴字典。
-- 沒有新增業務模組或架構文件；沿用既有 `presentation/report.py`。
+- `presentation/report.py`：盤後第三則改為高密度「盤後簡報」，不再把第一則 summary 的交易段落、持倉風控清單、漏斗與索引整段搬進第三則。
+- `presentation/report.py`：策略樣本不可用狀態改為盤後第三則集中顯示一次，原因單一化為來源缺失 / 樣本不足 / 來源讀取異常之一。
+- `presentation/report.py`：盤後持倉 / 未持倉卡片不再逐檔重複 `策略樣本：不可用，本次不納入判斷`。
+- `presentation/report.py`：盤後卡片輸出時把盤中語境詞替換為盤後 / 下一交易日語境。
+- `core/generator.py`：在 presentation deps 中注入 `_strategy_sample_unavailable`，供卡片決定是否省略逐檔策略樣本不可用行。
+- `tests/test_generator_report.py`：新增可重跑 probe，覆蓋本輪 Owner 指出的主要誤讀風險。
 
 ## 修改檔案
 
-產品 / 程式 diff：
+產品 / 測試 diff：
 
 - `core/generator.py`
 - `presentation/report.py`
-- `CHANGELOG.md`
+- `tests/test_generator_report.py`
 
-Architect 收口 handoff（主 repo final diff 會一併提交；QA worktree 若只同步 handoff 摘要，可能不列入產品 diff）：
+Architect handoff / 復盤：
 
 - `TASK.md`
+- `CHANGELOG.md`
 - `QA_REPORT.md`
 - `DISPATCH.md`
 - `CURRENT_STATE.md`
 - `CLEANUP_PLAN.md`
 
-## Refactor Evidence Table
-
-| path | claim | evidence | risk | action |
-| --- | --- | --- | --- | --- |
-| `presentation/report.py` | 承接純 Telegram formatter 與 brief evidence 顯示 helper | 定義 `formatTelegramSummary`、`formatTelegramPositionCard`、`formatTelegramUnheldCard`、`format_brief_data_evidence_message`；AST imports 為 `[]` | presentation 可能誤帶 DB/strategy 依賴 | 只透過 deps 注入既有 helper，保留 import boundary gate |
-| `core/generator.py` | 只保留 public wrapper、orchestration、transitional deps bridge | 四個 public formatter wrapper 委派到 `presentation.report`；原 brief private helper 已移除 | wrapper deps 過寬可能讓下一刀拆分不清 | 後續小步收斂 deps，禁止把 strategy/DB 移入 presentation |
-| `tests/test_generator_report.py` | 既有 import boundary gate 繼續保護分層 | 完整邏輯矩陣含此檔，91 report tests 在 187 passed 中通過 | gate 不等於全量架構完成 | 每次拆分都跑此檔與完整邏輯矩陣 |
-| 固定 handoff Markdown | 記錄本輪範圍、測試、殘留風險 | 主 repo final diff 包含 `TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`、`DISPATCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`；QA worktree 產品 diff 至少包含 `CHANGELOG.md` | 文件過量或與產品 diff 口徑混淆 | 分開列產品 diff 與 Architect handoff，final 前以主 repo `git diff --name-only` 對齊 |
-
 ## 契約影響
 
-- 函式回傳 / payload / message list / 報文排序：無預期變更。
-- Telegram 可見文案：無預期變更，既有測試覆蓋 summary、持倉卡、未持倉卡、brief evidence。
-- DB 寫入 / Supabase client / production write：無變更。
-- VERSION：不變，仍為 `v20.4.21`。
-- 架構邊界：presentation 沒有 import；formatter 透過 deps 使用既有計算，不直接依賴 DB writer / strategy writer。
+- Message list 順序不變：持倉卡、未持倉卡、第三則簡報＋資料依據，Details Backup 仍只在 `include_detail=True` 時追加。
+- 盤後第三則可見文案有變更：從近似完整 summary 改為短摘要，集中回答新倉、持倉、策略樣本資料狀態與明日前確認事項。
+- 盤後卡片可見文案有變更：不再逐檔重複策略樣本不可用；盤後不再顯示盤中語境詞。
+- 非加碼持倉仍顯示 `新倉 RR：不適用（既有持倉）`，不顯示新倉 RR 數字；新倉候選 RR 保留。
+- DB 寫入、payload shape、策略 decision、持倉狀態機、VERSION、live Telegram delivery 無變更。
+
+## 可重跑檢查 / QA Probe
+
+- 新增測試：`test_v20_4_21_afterhours_brief_is_concise_and_cards_do_not_repeat_strategy_sample`。
+- 覆蓋錯誤：
+  - 第三則複製完整 summary / 交易細節。
+  - 策略樣本不可用在整份盤後報文重複出現。
+  - 單檔卡片重複策略樣本不可用。
+  - 盤後報文出現盤中語境。
+  - 非加碼持倉顯示新倉 RR 數字。
+  - 新倉候選 RR 被誤刪。
+- QA 另補 source-error 負面路徑，確認同一份報文不混用 missing-source / 樣本不足 / source-error 主狀態。
 
 ## 直接消費者同步
 
-- `core/generator.py` 的既有 public formatter wrapper 保留，外部呼叫不需要改。
-- `render_telegram_messages()` 仍由 presentation 組裝 Telegram 多訊息。
-- import boundary gate 繼續 allowlist `core/generator.py -> presentation.report` 作 transitional bridge。
+- `formatTelegramMessages()` 直接消費者會看到盤後第三則摘要化，但 message order 不變。
+- GitHub runner / dry-run 仍消費同一 list of messages。
+- Telegram live delivery 未執行。
 
 ## 未影響模組
 
-- strategy decision、RR、holding_status、買賣 / 加減碼 / 停損停利。
-- DB schema、RLS、grant、policy、role、index / constraint。
-- production write、backfill、live Telegram delivery。
-- Telegram reply markup 與 notifier delivery consumer。
+- DB schema / RLS / grant / policy / role / index / constraint。
+- production DB write、backfill、live Telegram。
+- 策略選股、買賣、加碼、減碼、停損、停利決策。
+- `core/generator.VERSION`，仍為 `v20.4.21`。
+- notifier / Telegram delivery consumer。
 
 ## 已跑自檢命令
 
-- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py presentation/report.py presentation/__init__.py tests/test_generator_report.py`：passed。
-- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_analysis_engine.py tests/test_strategy_evidence.py tests/test_position_store.py tests/test_cross_day_context.py tests/test_signal_validator.py`：187 passed，177 warnings。
-- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_daily_snapshot_store.py tests/test_dry_run_replay.py`：12 passed，13 warnings。
+- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py presentation/report.py tests/test_generator_report.py`：passed。
+- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py`：92 passed，181 warnings。
 - `git diff --check`：passed。
-- AST spot check：`presentation/report.py` imports `[]`，direct assigned roots `result/results_map/holding_decision` 為 `[]`。
 
 ## 殘留風險
 
-- `core/generator.py` 仍保留大量策略與資料 helper；本輪只移走優先 Telegram formatter。
-- `_telegram_presentation_deps()` 是 transitional bridge，後續可繼續小步把純顯示依賴搬進 presentation，但不可把策略/DB 反向帶入 presentation。
+- 盤後第三則摘要化會改變依賴第三則完整細節的舊閱讀習慣；本輪按 Owner 要求把細節留在前兩則卡片，第三則只留決策摘要與資料狀態。
+- 盤後語境替換目前是 formatter 層字串替換；未來若新增新的盤中詞，需同步擴充 probe。
+- 未驗 live Telegram reply markup 附著位置；這是既有旁支風險。
 
-## 旁支待辦
+## 今日錯誤復盤與流程補強
 
-- 另開任務繼續拆 remaining pure display helpers。
-- 另開任務評估 Telegram reply markup 目前附在最後一則 message 的 delivery consumer 風險。
+- 根因：今天多次把「輸出看起來有證據」誤當成「手機閱讀上有用」，導致第三則重複 summary、卡片逐檔重複狀態、策略樣本狀態互相打架。
+- QA 是否攔住：本輪 QA 攔住了 CHANGELOG 仍寫成舊 refactor 口徑的錯誤，避免把可見文案變更講成無變更。
+- 流程補強：不新增死規則，改用 `tests/test_generator_report.py` 的盤後手機閱讀 probe 固化檢查；以後同類錯誤會在測試中直接 fail。
+- Runner gap：Tech worktree 殘留上一輪 diff 阻塞新任務；本輪已用 discard 清掉隔離 worktree 舊候選，後續應把 worktree hygiene 自動化列為 runner follow-up。

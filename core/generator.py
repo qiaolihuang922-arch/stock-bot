@@ -5594,6 +5594,7 @@ def _telegram_presentation_deps():
         "plain_label": plain_label,
         "compact_market_line": compact_market_line,
         "_source_status_line": _source_status_line,
+        "_strategy_sample_unavailable": _strategy_sample_unavailable,
         "_strategy_sample_unavailable_card_line": _strategy_sample_unavailable_card_line,
         "compact_backtest_line": compact_backtest_line,
         "price_change_line": price_change_line,
