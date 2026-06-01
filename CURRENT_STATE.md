@@ -6,7 +6,7 @@
 
 - 專案：台股策略 Telegram 報文機器人。
 - 正式結果以 git / runner 產生報文為準。
-- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前收口目標為 `v20.4.15`。
+- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前收口目標為 `v20.4.16`。
 - 固定 8 份 Markdown 不刪：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 - Architect 是總控；產品 / 策略 / 報文 bug 或 feature 預設走 PM -> Tech -> QA。
 - 跨日狀態、已執行交易、歷史 evidence 必須來自 production DB 或 Owner 指定持久來源；local/runtime/worktree 不能當跨日記憶。
@@ -28,17 +28,16 @@
 
 ## Current Worktree
 
-- task_id：`telegram-brief-data-evidence-v20.4.15`
+- task_id：`telegram_card_source_humanize_v20_4_16`
 - 狀態：PM done / Tech done / QA `通過`；final 前必須已 commit / push 並通過 Git completion gate。
 - commit：見 `git log -1`。
 - 關鍵行為：
-  - 報文版本升到 `v20.4.15`。
+  - 報文版本升到 `v20.4.16`。
   - Telegram 完整輸出順序維持持倉 message -> 未持倉 / 非持倉 message -> short/evidence message；`include_detail=True` 時 Details Backup 追加最後。
-  - 第三則改為單一 `🧾 v20.4.15 簡報＋資料依據` message。
-  - 第三則只有兩個主要入口：`決策簡報` 與 `資料依據`；不再拆成策略證據、簡短證據、來源狀態、漏斗證據等多入口。
-  - `決策簡報` 保留原第三則直接消費者需要的今日結論、交易執行、持倉風控檢查、未持倉漏斗、詳情索引等摘要內容。
-  - `資料依據` 集中呈現 market/theme production 狀態、strategy sample source status/fail-closed、持倉/候選 source-of-truth 狀態與限制。
-  - source-missing / position warning early return 也產出三則 Telegram message，不再只回單一 summary。
+  - 第一則持倉卡 raw `Source：position available｜price available｜risk derived｜RR derived` 改為人話資料行：`資料：持倉與現價已確認；風控由持倉成本/停損推算`。
+  - 第二則未持倉卡 raw `Source：price available｜OHLCV available｜RR derived｜score derived｜volume derived` 改為人話資料行：`資料：現價與 OHLCV 已確認；RR/分數/量能為模型推算`。
+  - 缺 price / OHLCV 時顯示 `資料：缺...，停止新倉判斷` 並 fail-closed。
+  - 持倉卡非加碼情境顯示 `數據：新倉 RR：持倉不適用`，不再露出新倉 RR 數字。
   - 前兩則持倉 / 未持倉卡主結構與策略語意不變。
   - market/theme production evidence、strategy sample evidence、stock decision 三層保持分離；market/theme confirmed 不會變 BUY。
   - 不改 BUY/SELL、加減碼、停利停損、DB schema、write path、live Telegram。
@@ -46,7 +45,7 @@
   - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py services/notifier.py`：passed。
   - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py`：119 passed，169 warnings。
   - `git diff --check`：passed。
-  - QA 補充反證：完整 TG message list 順序 passed；source-missing early return 仍回三則；第三則 `決策簡報` count = 1、`資料依據` count = 1，且無多 evidence/status 入口。
+  - QA 補充反證：完整 TG message list 順序 passed；缺 price 且 strategy result 為 BUY 時仍 fail-closed，未出現可買 / 建議倉位 / 推薦語氣。
   - 先前 production read-only strategy evidence artifact 仍顯示缺 `classification backtest source-of-truth`，報文正確 fail closed，不回到舊式 `樣本 0｜樣本不足，不判讀`。
 - 2356 production read-only artifact：
   - path：`.qa_tmp/production_readonly_2356_positions_events.json`。
@@ -70,7 +69,7 @@
 
 - 重開對話後先以 `git status --branch --short` 與 `tools/cao_agent/check_git_completion_gate.sh` 確認 commit/push 狀態，不再依賴對話記憶。
 - 只把 `CHANGELOG.md` 所列 scoped diff 當成本輪驗收範圍；工作樹其他旁支 dirty files 不能因本輪 QA 通過而整包吸收。
-- 已處理 Owner 指出的第三則分裂問題：summary/market-theme/strategy sample/source status 已收斂為單一「簡報＋資料依據」第三則。
+- 已處理 Owner 指出的卡片 source 不可讀與持倉 RR 衝突：第一/第二則卡片 Source 改為人話資料行，持倉不再露出新倉 RR 數字。
 - 另開旁支：若 Owner 認定 2356 英業達實際未賣，查 production positions / position_events 為何目前 artifact 顯示 CLOSED / shares 0。
 - 另開旁支：盤點全報文 `追高 / 追蹤` 相關文案。
 - 另開旁支：Telegram reply markup 附著最後一則 message 的 delivery consumer 風險。

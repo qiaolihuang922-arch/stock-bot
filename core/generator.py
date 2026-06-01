@@ -57,7 +57,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.15"
+VERSION = "v20.4.16"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -3813,10 +3813,23 @@ def _source_status_line(report_context, name, holding=False):
     if holding:
         position = _stock_field(report_context, name, "position").get("source_status", "missing-source")
         risk = _stock_field(report_context, name, "risk").get("source_status", "missing-source")
-        return f"Source：position {position}｜price {price}｜risk {risk}｜RR {rr}"
+        if position != "available" or price != "available":
+            return "資料：缺持倉或現價，停止持倉建議"
+        if risk in {"available", "derived"}:
+            return "資料：持倉與現價已確認；風控由持倉成本/停損推算"
+        return "資料：持倉與現價已確認；風控推算不足，停止持倉建議"
     score = _stock_field(report_context, name, "score").get("source_status", "missing-source")
     volume = _stock_field(report_context, name, "volume").get("source_status", "missing-source")
-    return f"Source：price {price}｜OHLCV {daily}｜RR {rr}｜score {score}｜volume {volume}"
+    missing = []
+    if price != "available":
+        missing.append("現價")
+    if daily != "available":
+        missing.append("OHLCV")
+    if missing:
+        return f"資料：缺{'/'.join(missing)}，停止新倉判斷"
+    if all(status in {"available", "derived"} for status in [rr, score, volume]):
+        return "資料：現價與 OHLCV 已確認；RR/分數/量能為模型推算"
+    return "資料：現價與 OHLCV 已確認；模型推算不足，停止新倉判斷"
 
 
 def _stock_decision_source_status(report_context, name):
@@ -5447,10 +5460,11 @@ def formatTelegramPositionCard(name, data, report_context=None):
     decision_line, condition_line = holding_detail_decision_lines(name, data)
     reason_line = holding_reason_line(name, data)
     next_step = holding_next_step_line(name, data)
-    rr_text = (
-        "-（持倉不看新倉RR）"
+    rr_text = rr_display_text(result, holding=True)
+    rr_line = (
+        "數據：新倉 RR：持倉不適用"
         if decision and not decision.get("allow_add")
-        else rr_display_text(result, holding=True)
+        else f"數據：RR {rr_text}"
     )
 
     lines = [
@@ -5462,7 +5476,7 @@ def formatTelegramPositionCard(name, data, report_context=None):
         f"條件：{condition_line}",
         f"下一步：{next_step}",
         _source_status_line(report_context, name, holding=True) if report_context else None,
-        f"數據：RR {rr_text}｜S {data.get('structure_score', '-')}/5｜V {data.get('volume_ratio', '-')}x",
+        f"{rr_line}｜S {data.get('structure_score', '-')}/5｜V {data.get('volume_ratio', '-')}x",
         compact_backtest_line(data.get("backtest_context")),
         price_change_line(data.get("price"), data.get("change")),
     ]

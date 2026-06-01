@@ -15,6 +15,14 @@
 
 ## Completed
 
+- `telegram_card_source_humanize_v20_4_16`：
+  - 問題：Owner 指出第一則/第二則卡片 `Source：... available/derived` 完全看不懂，且持倉卡出現新倉 RR 數字，和「持倉不看新倉RR」衝突。
+  - 結果：PM -> Tech -> QA 完成，QA `通過`；收口需 commit / push 並跑 Git completion gate。
+  - 關鍵修正：持倉卡資料行改為 `資料：持倉與現價已確認；風控由持倉成本/停損推算`；未持倉卡資料行改為 `資料：現價與 OHLCV 已確認；RR/分數/量能為模型推算`；缺 price/OHLCV 時 fail-closed；持倉非加碼情境顯示 `新倉 RR：持倉不適用`。
+  - QA 反證：完整三則 sample 確認第一/第二則不再有 raw Source dump；缺 price 且 strategy result 為 BUY 時仍顯示 `資料：缺現價，停止新倉判斷` 與 `新倉：無有效進場`，無可買 / 推薦語氣。
+  - 流程問題：Tech 最終回答的 CHANGELOG 正確，但 runner 未寫入 worktree，QA 第一次讀到舊 v20.4.15 CHANGELOG 後阻塞；Architect 手動同步 scoped diff 與 CHANGELOG 後 Re-QA 通過。
+  - 規則治理：`runner_gap` + `mobile_reading` + `evidence_chain`。卡片 source 不能用工程狀態直出；交付文件必須和實際 diff 同步，否則 QA 要阻塞。
+  - 邊界：不改策略 decision、RR/score/volume 公式、DB schema/write、live Telegram。
 - `telegram-brief-data-evidence-v20.4.15`：
   - 問題：Owner 指出 v20.4.14 第三則雖已去重，但仍像 market/theme、strategy sample、source、漏斗/風險多片段拼接，不像一份「簡報＋資料」。
   - 結果：PM -> Tech -> QA 完成，QA `通過`；收口需 commit / push 並跑 Git completion gate。
