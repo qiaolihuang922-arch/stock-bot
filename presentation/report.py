@@ -190,6 +190,7 @@ def formatTelegramPositionCard(name, data, *, deps, report_context=None):
         f"倉位：{holding['shares']}股｜均價 {deps['price_text'](holding.get('avg_price'))}｜今日 {today_text}",
         f"風控：{deps['holding_risk_text'](decision)}",
         f"盤面：{deps['plain_label'](deps['compact_market_line'](stock_result, dist))}",
+        deps["today_buy_holding_context_line"](data) if _report_phase(report_context) == "盤後" else None,
         f"決策：{decision_line}",
         f"條件：{condition_line}",
         f"下一步：{next_step}",

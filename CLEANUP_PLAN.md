@@ -15,6 +15,12 @@
 
 ## Completed
 
+- `risk_patch_20260601_2301_today_buy_after_close_reading`:
+  - 問題：Owner 指出光寶科 2301 今日買入，但盤後盤面弱勢 / 遠離突破 5.43%，手機上會誤讀為策略在當前不應買位置仍推薦 BUY。
+  - 結果：報文版本升 `v20.4.22`；盤後今日買入持倉若當前不滿足買點，持倉卡新增說明，區分 `strategy_intraday`、`manual_or_ledger`、`unknown`，並明確不代表可繼續買。
+  - 可重跑補強：新增 2301 類三來源 fixture；新增 distance > 4 / weak / far-from-breakout can_buy 負面 probe。
+  - QA 反證：Re-QA `通過`；無 `buy_source` 但有 `position_events` 時 fail closed 為手動/ledger，未默認策略 BUY；未見 DB write/live Telegram/holding state diff。
+  - 邊界：不改 DB schema/write/live Telegram；未改 can_buy 實作，只補 probe。
 - `risk_patch-afterhours-brief-today-buy-holdings-20260601`:
   - 問題：Owner 指出 06/01 盤後第一則持倉卡有建準 / 光寶科 / 旺宏今日買入，第三則卻寫「今日無有效新倉」，手機閱讀直接矛盾。
   - 結果：盤後第三則納入 `holding_items` 中的 today buy holding；有今日買入持倉時顯示今日已建立新倉，並另行保留「新增有效進場：無」表示沒有額外可買標的。

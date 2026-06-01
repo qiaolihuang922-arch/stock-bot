@@ -2,70 +2,79 @@
 
 ## 任務尺寸與風險
 
-- task_type: risk_patch。
-- 風險判斷：修改盤後 Telegram 使用者可見交易摘要，涉及 message list 文字契約。
-- 邊界：未碰策略 decision、DB write、live delivery、VERSION。
+- 任務尺寸：risk_patch。
+- 風險判斷：使用者可見 Telegram 持倉卡與盤後簡報口徑修正，涉及 message list 文字契約與版本字串。
+- 邊界：不改 DB schema、不做 live Telegram、不改 production write/backfill、不重設策略方向。
 
 ## 修改內容
 
-- 修復盤後第三則簡報只看 `watch_items` 判斷新倉，漏掉已進入 `holding_items` 的今日買入標的。
-- 當 `holding_items` 有 today buy 時，第三則改顯示：
-  - `今日交易：已建立新倉 N 檔（...）`
-  - `新增有效進場：無` 或需明日確認的候選數
-- 無 today buy、無可買 watch 時，不誤報今日已有新倉，仍保留 `新增有效進場：無`。
-- 補手機閱讀 probe，覆蓋「持倉卡有今日買入、第三則不得出現今日無有效新倉」場景。
+- 對今日買入持倉且盤後當前不滿足買點的持倉卡，新增說明行，明確區分：
+  - `strategy_intraday`：今日已執行，盤後已不在買點，不代表可繼續買。
+  - `manual_or_ledger`：來源為手動/ledger，非當前策略買點。
+  - `unknown`：來源未確認，且盤後不在買點，不得視為當前可買。
+- 新增 formatter helper 判斷今日買入來源與 current can buy 狀態；來源不足時 fail closed 為 unknown。
+- 使用者可見報文版本由 `v20.4.21` 升為 `v20.4.22`，並同步測試期望。
+- 補上 2301 光寶科同型 fixture，覆蓋 50 股今日買入、弱勢、普通、遠離突破 5.43%、三種買入來源。
+- 補上策略 probe：distance > 4 且弱勢 / 遠離突破不可通過 can_buy。
 
 ## 修改檔案
 
-- `presentation/report.py`
-  - 新增 `_today_buy_holding_names()`。
-  - `_afterhours_brief_lines()` 納入 `holding_items` 的 today buy 判斷。
 - `core/generator.py`
-  - 將既有 `is_today_buy_holding()` 注入 presentation deps，避免重寫 today buy 判斷口徑。
+  - VERSION 升為 `v20.4.22`。
+  - 新增 today buy source / current can buy helper 並注入 presentation deps。
+- `presentation/report.py`
+  - 持倉卡盤後路徑消費今日買入說明 helper。
 - `tests/test_generator_report.py`
-  - 新增 afterhours today-buy holding probe。
-  - 同步既有盤後 today buy 測試預期。
+  - 覆蓋手機閱讀路徑：持倉卡、盤後簡報、禁止呈現為當前可買。
+- `tests/test_analysis_engine.py`
+  - 覆蓋 distance > 4 / weak / far-from-breakout 不可通過 can_buy。
+- `tests/test_market_theme_evidence.py`
+  - 同步版本契約。
 
 ## 最小改動策略
 
-- 只重用既有 `is_today_buy_holding()`，不新增資料來源、不改 holding / event 結構。
-- 只改盤後第三則簡報 formatter 與直接 deps。
-- 不改策略判斷、排序邏輯、DB、live Telegram、VERSION。
+- 只在既有 Telegram presentation deps 增加今日買入來源說明 helper。
+- 只在持倉卡盤後路徑插入一行說明，不重排 message list、不重構整體報文。
+- 策略層只補 probe，未修改 can_buy 實作，因現有邏輯已擋 distance > 4。
+- 測試版本字串為配合 VERSION 升版的直接同步。
 
 ## 契約影響
 
-- 使用者可見盤後第三則文字變更：
-  - today buy holding 存在時，不再輸出 `今日無有效新倉`。
-  - 額外可買機會仍以 `新增有效進場` 分開表達，避免把今日已買標的包裝成可追買推薦。
-- 回傳結構、payload shape、DB contract、CLI 輸出無變更。
-- VERSION 未變更，仍為 `v20.4.21`。
+- 使用者可見報文版本：`v20.4.21` -> `v20.4.22`。
+- 持倉卡輸出新增一行 `說明：...`，只限盤後、今日買入持倉、且當前不滿足買點。
+- 第三則盤後簡報已沿用前一任務修正：今日已買持倉不再被寫成「今日無有效新倉」。
+- message list 順序未改。
+- payload shape 未改。
+- DB schema / RLS / grant / policy / role / index / constraint 未改。
+- DB write path、live Telegram delivery、backfill 未改。
 
 ## 直接消費者同步
 
-- `format_brief_data_evidence_message()` 的 presentation deps 已同步新增 `is_today_buy_holding`。
+- `presentation/report.py` 的持倉卡 renderer 已消費新的說明 helper。
 - `formatTelegramMessages()` 盤後 message list 透過既有 deps 自動消費新行為。
-- 測試同步覆蓋 Owner 手機閱讀路徑。
+- `tests/test_generator_report.py` 覆蓋 Owner 手機閱讀路徑。
+- `tests/test_analysis_engine.py` 覆蓋策略 distance gate 不回退。
 
 ## 未影響模組
 
-- 策略 decision / RR 計算 / holding status：未改。
-- DB schema / RLS / grant / policy / role / index / constraint：未改。
-- DB write / backfill / replay：未改。
-- live Telegram delivery：未執行、未改。
-- VERSION：未改。
+- 未改交易策略 ranking。
+- 未改停損 / 停利 / 加減碼狀態機。
+- 未改持倉資料讀取、production ledger 寫入或 DB 結構。
+- 未改 Telegram delivery consumer。
+- 未改未持倉漏斗分組邏輯。
 
 ## 已跑自檢命令
 
-- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py`：95 passed，189 warnings。
-- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m py_compile presentation/report.py core/generator.py tests/test_generator_report.py`：passed。
+- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py presentation/report.py tests/test_generator_report.py tests/test_analysis_engine.py tests/test_market_theme_evidence.py`：passed。
+- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_analysis_engine.py tests/test_market_theme_evidence.py`：166 passed, 201 warnings。
 - `git diff --check`：passed。
 
 ## 殘留風險
 
-- 今日買入名稱順序沿用既有持倉排序，不另改成輸入 fixture 順序；本輪不改排序契約。
-- 只跑了相關報文測試檔，未跑 full pytest。
+- 今日買入來源若上游未提供明確 buy_source，formatter 只能用既有 today_action 與 position_events 保守判斷；不足時會顯示 unknown fail closed。
+- 未做 production read 或 live Telegram 驗證；本輪僅提供可重跑 fixture/probe 自檢。
 
 ## 旁支待辦
 
-- 光寶科買入解釋、技嘉 RR 0.00、縮量漲停風險、智原 observation_days 均未處理，依 TASK.md 留待後續任務。
-- Telegram reply markup 附著最後一則 message 的 delivery consumer 風險未處理。
+- 若需要更精準區分 runner strategy order 與手動 ledger order，需另開任務補上游持久 source-of-truth 欄位或 read-only artifact。
+- 其他股票同型今日買入來源缺口未全量盤點，本輪只覆蓋 TASK 指定的 2301 類誤讀路徑。

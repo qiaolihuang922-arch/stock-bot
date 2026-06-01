@@ -4,10 +4,10 @@
 
 ## Current Task
 
-- task_id: `risk_patch-afterhours-brief-today-buy-holdings-20260601`
-- task_name: `Afterhours Today Buy Summary Conflict`
+- task_id: `risk_patch_20260601_2301_today_buy_after_close_reading`
+- task_name: `2301 Today Buy After Close Reading`
 - task_type: `risk_patch`
-- owner_status: `reported_afterhours_new_position_summary_conflict`
+- owner_status: `reported_2301_today_buy_after_close_conflict`
 - architect_status: `qa_passed_pending_git_close`
 - pm_status: `done`
 - tech_status: `done`
@@ -33,6 +33,9 @@
 - 本輪修最新報文衝突第一優先級：盤後第三則「今日無有效新倉」與第一則今日買入持倉矛盾。
 - 修正：盤後第三則納入 holding_items 中 today buy holding；有今日買入持倉時顯示「今日交易：已建立新倉 N 檔」並保留「新增有效進場：無」。
 - QA：Re-QA `通過`；按手機閱讀順序確認第一則今日買入、第三則不再否定今日新倉；負面案例無 today buy 不誤報。
+- 本輪修最新報文衝突第二優先級：光寶科今日買入但盤後盤面弱勢 / 遠離突破，容易被誤讀成當前仍可買。
+- 修正：報文版本升 `v20.4.22`；盤後今日買入持倉若當前不滿足買點，持倉卡新增來源 / 限制說明，區分策略盤中已執行、手動/ledger、unknown fail-closed。
+- QA：Re-QA `通過`；確認無 buy_source 但有 ledger event 時不默認策略 BUY，distance > 4 弱勢 can_buy probe passed，message order / DB / live Telegram / holding state 未改。
 - Git completion gate：final 前必須以 `tools/cao_agent/check_git_completion_gate.sh` 驗證 `main` matches `origin/main` 且 worktree clean。
 - 上一輪 v20.4.21 報文修正已在 commit `b177345 restore afterhours control summary` 推送，本輪不再改動該產品 diff。
 - 已吸收內容：
@@ -59,7 +62,7 @@
 ## Next Action
 
 - 收口：commit / push 後跑 `tools/cao_agent/check_git_completion_gate.sh`。
-- 後續 PM 任務按 Owner 最新問題拆分：光寶科買入解釋、技嘉 RR 0.00、縮量漲停風險、智原 observation_days。
+- 後續 PM 任務按 Owner 最新問題拆分：技嘉 RR 0.00、縮量漲停風險、智原 observation_days。
 - 後續同類報文任務：先補或更新手機閱讀 probe，再改 formatter；不要只寫規則。
 - 旁支另開：Telegram reply markup 仍附在最後一則 message，新 message order 下可能需要 delivery consumer 任務評估按鈕落點。
 - 旁支另開：如果 Owner 認定 2356 英業達實際未賣，需查 production ledger/source truth 為何目前為 `shares=0 / CLOSED`；本輪未寫 DB、不校正 ledger。

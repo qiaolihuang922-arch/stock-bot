@@ -6,7 +6,7 @@ from core.signal_snapshot import (
     is_tradeable_result,
     mark_best_candidate
 )
-from services.analysis import calc_rr, extended_level, holding_signal
+from services.analysis import calc_rr, can_buy, extended_level, holding_signal
 
 
 VOL_NORMAL = [1000] * 20
@@ -45,6 +45,17 @@ class AnalysisEngineTest(unittest.TestCase):
         self.assertEqual(item["market_state"], "D")
         self.assertEqual(item["action"], "NO_TRADE")
         self.assertFalse(item["is_tradeable"])
+
+    def test_can_buy_rejects_weak_far_from_breakout(self):
+        self.assertFalse(can_buy(
+            "BASE",
+            "NORMAL",
+            "WAIT",
+            "READY",
+            5.43,
+            price_behavior="NORMAL",
+            entry_quality="B",
+        ))
 
     def test_limit_up_locked_is_not_tradeable(self):
         item = snap("limit_lock", [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 130], VOL_ATTACK)

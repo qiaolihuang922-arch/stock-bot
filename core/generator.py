@@ -68,7 +68,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.21"
+VERSION = "v20.4.22"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -3451,6 +3451,52 @@ def is_today_buy_holding(data):
     return today_action in ["BUY", "買", "買入", "今日買入"]
 
 
+def today_buy_holding_source(data):
+
+    if not is_today_buy_holding(data):
+        return None
+
+    events = data.get("position_events") or {}
+    explicit = (
+        data.get("buy_source")
+        or (data.get("holding") or {}).get("buy_source")
+        or events.get("buy_source")
+    )
+    if explicit in {"strategy_intraday", "manual_or_ledger", "unknown"}:
+        return explicit
+
+    today_action = str(data.get("today_action") or "").upper()
+    has_strategy_buy = today_action in ["BUY", "買", "買入", "今日買入"]
+    has_confirmed_buy = events.get("bought_shares", 0) > 0 and events.get("event_count", 0) > 0
+
+    if has_strategy_buy and has_confirmed_buy:
+        return "strategy_intraday"
+
+    if has_confirmed_buy:
+        return "manual_or_ledger"
+
+    return "unknown"
+
+
+def today_buy_holding_current_can_buy(data):
+
+    result = data.get("result") or {}
+    return is_valid_entry(result)
+
+
+def today_buy_holding_context_line(data):
+
+    if not is_today_buy_holding(data) or today_buy_holding_current_can_buy(data):
+        return None
+
+    source = today_buy_holding_source(data)
+    if source == "strategy_intraday":
+        return "說明：今日已執行；盤後已不在買點，現在不代表可繼續買。"
+    if source == "manual_or_ledger":
+        return "說明：今日買入來源為手動/ledger，非當前策略買點；現在不代表可繼續買。"
+    return "說明：今日買入來源未確認，且盤後不在買點；不得視為當前可買。"
+
+
 def is_reduce_after_observation(data):
 
     events = data.get("position_events") or {}
@@ -5576,6 +5622,7 @@ def _telegram_presentation_deps():
         "format_holding_control_checklist": format_holding_control_checklist,
         "pending_trade_items": pending_trade_items,
         "is_today_buy_holding": is_today_buy_holding,
+        "today_buy_holding_context_line": today_buy_holding_context_line,
         "format_unheld_funnel": format_unheld_funnel,
         "detail_index_text": detail_index_text,
         "rejected_trace_line": rejected_trace_line,
