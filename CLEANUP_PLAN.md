@@ -15,6 +15,14 @@
 
 ## Completed
 
+- `report_v20_4_21_afterhours_brief_evidence_merge`:
+  - 問題：Owner 要保留盤後第三則的持倉風控檢查，同時指出資料依據不能無腦砍短；應合併數據證據與使用邊界。
+  - 結果：盤後第三則順序固定為 `盤後簡報 -> 持倉風控檢查 -> 未持倉漏斗（非執行） -> 資料依據`。
+  - 資料依據：保留市場短期背景、持倉數、未持倉分類數、執行記憶邊界與持倉 RR 邊界；不回到 raw source/status/table dump。
+  - 可重跑補強：`test_v20_4_21_afterhours_mobile_readability_probe` 覆蓋清單、漏斗、資料依據合併摘要與 RR 保護。
+  - QA 反證：QA 補四持倉 probe，確認旺宏 / 光寶科 / 建準 / 智原行為符合 Owner 指定清單；`tests/test_generator_report.py` 92 passed。
+  - 規則治理：`mobile_reading` + `evidence_chain`。降噪不是砍證據；要把 raw 證據翻譯成數量、用途與限制，並保留可執行清單。
+  - 邊界：不改 strategy decision、RR 計算、holding_status、DB schema/write、live Telegram。
 - `report_v20_4_21_holding_rr_conflict_followup`:
   - 問題：Owner 實際跑出建準卡片仍顯示 `新倉風控觀察，暫不加碼` 但數據列露出 `RR 2.73`，和第三則「持倉 RR 不適用」衝突。
   - 根因：RR 顯示只看底層 `ADD_10 / allow_add=True`，沒有以最終使用者可見主行動為準；今日買入會把主行動降為 `新倉風控觀察`，但 RR 行仍沿用 ADD 訊號。

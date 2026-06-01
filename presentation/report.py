@@ -394,6 +394,18 @@ def _afterhours_brief_lines(holding_items, watch_items, report_context, deps, ma
         _strategy_sample_status_line(report_context, deps),
         f"明日前確認：{'；'.join(checks[:3])}。",
     ]
+    if holding_items:
+        lines.extend([
+            "",
+            "持倉風控檢查",
+            *deps["format_holding_control_checklist"](holding_items, report_phase="盤後"),
+        ])
+    if watch_items:
+        lines.extend([
+            "",
+            "未持倉漏斗（非執行）：",
+            deps["format_unheld_funnel"](watch_items, market_mode=market_mode, report_context=report_context),
+        ])
     for source_line in (summary_message or "").splitlines():
         if source_line.startswith("⚠ ") and "每日快照未寫入" in source_line:
             lines.append(f"資料寫入：{source_line[2:]}，明日前確認補寫狀態。")
@@ -436,21 +448,42 @@ def _strategy_sample_data_basis_line(report_context, deps):
     return "策略樣本：樣本來源可驗證，只作輔助參考，不新增買點。"
 
 
-def _position_candidate_data_basis_line(report_context):
+def _position_candidate_data_basis_line(report_context, holding_items=None, watch_items=None, deps=None, market_mode=None):
     statuses = report_context.get("source_status_summary") or {}
     position_status = statuses.get("position", "missing-source")
     candidate_status = statuses.get("funnel", "missing-source")
     position_ready = position_status == "available"
     candidate_ready = candidate_status in {"available", "derived"}
+    holding_count = len(holding_items or [])
+    watch_count = len(watch_items or [])
+    funnel_text = ""
+    if deps and watch_items:
+        funnel = deps["build_unheld_funnel"](watch_items, market_mode=market_mode, report_context=report_context)
+        buy_count = len(funnel.get("可買") or [])
+        prepare_count = len(funnel.get("可準備") or [])
+        tracking_count = deps["unheld_tracking_only_count"](funnel)
+        rejected_count = len(funnel.get("淘汰") or [])
+        funnel_text = (
+            f"未持倉 {watch_count} 檔已分類：可買 {buy_count}、"
+            f"可準備 {prepare_count}、僅追蹤 {tracking_count}、淘汰 {rejected_count}；"
+        )
+    elif watch_count:
+        funnel_text = f"未持倉 {watch_count} 檔已分類；"
+
+    position_text = (
+        f"持倉與價格資料可支持風控檢查（持倉 {holding_count} 檔）；"
+        if holding_count
+        else "持倉與價格資料可支持風控檢查；"
+    )
 
     if position_ready and candidate_ready:
         return (
-            "持倉 / 價格 / 候選資料：持倉與價格資料可支持風控檢查；"
+            f"持倉 / 價格 / 候選資料：{position_text}{funnel_text}"
             "未持倉資料只支持分類觀察，不支持直接進場。"
         )
     if position_ready:
         return (
-            "持倉 / 價格 / 候選資料：持倉與價格資料可支持風控檢查；"
+            f"持倉 / 價格 / 候選資料：{position_text}"
             "未持倉資料不足時只支持分類觀察，不支持直接進場。"
         )
     return (
@@ -505,9 +538,11 @@ def _evidence_human_status_lines(report_context, deps):
         )
     )
     if ledger_status == "insufficient-data":
-        lines.append("執行記憶：資料不足，涉及已賣、停利或剩餘股數時採保守顯示。")
+        lines.append("執行記憶：資料不足，涉及已賣、停利、今日買賣或剩餘股數時採保守顯示，不補推已執行結論。")
     elif has_conflict:
         lines.append("執行記憶：紀錄仍有待釐清的差異，未確認部分不輸出確定結論。")
+    elif ledger_status == "available" and _report_phase(report_context) == "盤後":
+        lines.append("執行記憶：今日買賣、停利與剩餘股數依可驗證紀錄處理；無確認紀錄時不補推已執行結論。")
 
     position_status = statuses.get("position")
     if position_status in {"missing-source", "source-error"}:
@@ -517,7 +552,7 @@ def _evidence_human_status_lines(report_context, deps):
     if candidate_status in {"missing-source", "source-error", "insufficient-data", "unresolved-conflict"}:
         lines.append("未持倉候選：來源不足或有疑義的標的不輸出有效進場。")
 
-    lines.append("持倉 RR：既有持倉若不是加碼情境，只顯示新倉 RR 不適用。")
+    lines.append("持倉 RR：既有持倉若不是加碼情境，只顯示新倉 RR 不適用。持倉主行動以風控為準，避免把持倉誤讀成新買點。")
     return lines
 
 
@@ -605,7 +640,13 @@ def format_brief_data_evidence_message(
         "資料依據",
         _market_theme_data_basis_line(report_context, deps),
         _strategy_sample_data_basis_line(report_context, deps),
-        _position_candidate_data_basis_line(report_context),
+        _position_candidate_data_basis_line(
+            report_context,
+            holding_items=holding_items,
+            watch_items=watch_items,
+            deps=deps,
+            market_mode=market_mode,
+        ),
         *_evidence_human_status_lines(report_context, deps),
     ]
     return "\n".join(line for line in lines if line is not None)

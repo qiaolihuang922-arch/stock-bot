@@ -5613,6 +5613,7 @@ def _telegram_presentation_deps():
         "tomorrow_trigger_text": tomorrow_trigger_text,
         "rejected_transition_reason_line": rejected_transition_reason_line,
         "build_unheld_funnel": build_unheld_funnel,
+        "unheld_tracking_only_count": unheld_tracking_only_count,
         "_field_by_key": _field_by_key,
         "_manifest_status": _manifest_status,
     }
