@@ -4,14 +4,14 @@
 
 ## Current Task
 
-- task_id: `report_v20_4_21_mobile_readability_remaining_fixes`
-- task_name: `V20.4.21 Mobile Readability Remaining Fixes`
-- task_type: `normal_patch`
-- owner_status: `requested_start_repair_current_issues`
-- architect_status: `qa_passed_pending_git_close`
-- pm_status: `done`
-- tech_status: `manual_absorb_from_tech_worktree`
-- qa_status: `passed`
+- task_id: `architect_pre_edit_scope_gate`
+- task_name: `Architect Pre-edit Scope Gate`
+- task_type: `process_patch`
+- owner_status: `requested_process_repair_and_check`
+- architect_status: `scope_gate_passed_pending_git_close`
+- pm_status: `not_used_process_only`
+- tech_status: `not_used_process_only`
+- qa_status: `not_used_process_only_gate_checked`
 - latest_commit: see `git log -1`
 
 ## Current Follow-up
@@ -24,8 +24,11 @@
 
 ## Current Result
 
-- 本輪目標是修 v20.4.21 剩餘手機閱讀問題：三日資料只稱短期背景、非加碼持倉 RR 一致、盤後下一步用明日語境、未持倉卡片資料來源降噪、第三則資料依據人話化。
+- 本輪目標是修流程：Owner 指出 Architect 又自行寫產品代碼，要求檢查流程哪裡有問題並補全；本輪只碰流程 / runner gate，不碰產品代碼。
+- 根因：`AGENTS.md` 已有角色邊界，但缺可重跑的 pre-edit gate，導致 broad command / follow-up 容易被誤當成直改授權。
+- 修補方向：新增 `tools/cao_agent/check_architect_edit_scope_gate.sh`，commit 前檢查工作樹是否出現產品 / 測試 diff；若沒有明確直改授權就失敗並要求走 PM -> Tech -> QA。
 - Git completion gate：final 前必須以 `tools/cao_agent/check_git_completion_gate.sh` 驗證 `main` matches `origin/main` 且 worktree clean。
+- 上一輪 v20.4.21 報文修正已在 commit `b177345 restore afterhours control summary` 推送，本輪不再改動該產品 diff。
 - 已吸收內容：
   - `presentation/report.py` 將 `交易證據日` 改為短期背景 / 短期背景資料。
   - 盤後 `盤中先觀察` / `盤中觀察修復狀況` 改為明日語境。

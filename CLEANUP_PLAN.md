@@ -15,6 +15,13 @@
 
 ## Completed
 
+- `architect_pre_edit_scope_gate`:
+  - 問題：Owner 指出 Architect 在「檢查 / 修復流程」語境下仍開始自行寫產品代碼，違反 Architect 只總控、產品改動走 PM -> Tech -> QA 的邊界。
+  - 根因：`AGENTS.md` 已有角色規則，但缺動手前的可重跑 gate；broad command / follow-up 在操作層仍可能被誤解成直改授權。
+  - 結果：新增 `tools/cao_agent/check_architect_edit_scope_gate.sh`，把 dirty worktree 分成流程治理、handoff、產品 / 測試與未分類；沒有明確 `ARCHITECT_DIRECT_CODE_AUTH=1` 時，產品 / 測試 diff 直接 fail。
+  - 流程補強：`AGENTS.md` 明確要求 Architect 先分類 scope；流程治理任務 commit 前必跑 pre-edit gate；若 gate 發現產品 / 測試 diff，停止並改走 PM -> Tech -> QA 或取得當輪明確直改授權。
+  - 規則治理：`runner_gap` + `repeated_pattern` + `high_risk_invariant`。這不是新增死規則，而是把既有角色邊界變成可檢查的操作節點。
+  - 邊界：本輪不修改產品代碼、不重寫上一輪已落地報文修正、不改 DB schema/write/live Telegram。
 - `report_v20_4_21_afterhours_brief_evidence_merge`:
   - 問題：Owner 要保留盤後第三則的持倉風控檢查，同時指出資料依據不能無腦砍短；應合併數據證據與使用邊界。
   - 結果：盤後第三則順序固定為 `盤後簡報 -> 持倉風控檢查 -> 未持倉漏斗（非執行） -> 資料依據`。

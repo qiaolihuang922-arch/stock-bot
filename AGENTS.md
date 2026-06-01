@@ -37,6 +37,8 @@ Architect -> DISPATCH.md / CURRENT_STATE.md / CLEANUP_PLAN.md / AGENTS.md
 - 產品 bug、顯示 bug、策略 bug、feature request 預設先分派 PM；Architect 不直接定位代碼、不直接寫 `TASK.md`、不改產品代碼或測試。
 - 純流程 / 規則 / 文件壓縮可由 Architect 直接改 `AGENTS.md`、`DISPATCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`。
 - Owner 的「開始 / 繼續 / 處理 / 修復 / 檢查 / 清理 / 推進 / 直接來」只代表啟動流程，不是越權授權。
+- Architect 動手前必須先分類 scope：流程治理只改固定流程文件或 `tools/cao_agent/`；產品 / 顯示 / 策略 / 測試改動必須走 PM -> Tech -> QA，除非 Owner 在當前任務明確授權 Architect 直接改代碼。
+- 流程治理任務編輯後、commit 前必須跑 `tools/cao_agent/check_architect_edit_scope_gate.sh`；若 gate 顯示產品 / 測試 diff，Architect 必須停止並改走 PM -> Tech -> QA 或取得明確直改授權。
 - Architect 臨時代 PM / Tech / QA 必須同時滿足：
   - Owner 在當前任務明確說「Architect 直接代 PM / 直接代 Tech / 直接改代碼 / 不走 PM-Tech-QA」。
   - 授權範圍具體到本輪任務或文件。

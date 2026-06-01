@@ -28,10 +28,14 @@
 
 ## Current Worktree
 
-- task_id：`report_v20_4_21_mobile_readability_remaining_fixes`
-- 狀態：PM done / Tech diff manually absorbed / QA `通過` after handoff fix；final 前必須已 commit / push 並通過 Git completion gate。
-- commit：見 `git log -1`。
-- follow-up：`report_v20_4_21_afterhours_brief_evidence_merge`，QA `通過`，等待 commit / push / gate。
+- task_id：`architect_pre_edit_scope_gate`
+- 狀態：流程補丁已完成 scope gate 檢查，等待 commit / push / Git completion gate；只改流程文件與 `tools/cao_agent/` gate，不碰產品 / 顯示 / 策略 / 測試代碼。
+- commit：上一輪產品修正已在 `b177345 restore afterhours control summary` 推送到 `origin/main`；本輪將另收口。
+- 問題：Owner 指出 Architect 又自行寫產品代碼，要求檢查流程問題並補全；已動的產品 diff 不再處理。
+- 根因：角色邊界文字已存在，但缺少可重跑的 pre-edit scope gate；broad command 或 follow-up 容易在操作層被誤當成直改授權。
+- 修補：新增 `tools/cao_agent/check_architect_edit_scope_gate.sh`，流程治理任務 commit 前必跑；若工作樹含 `core/`、`presentation/`、`services/`、`tests/` 等產品 / 測試 diff 且無 `ARCHITECT_DIRECT_CODE_AUTH=1`，直接 fail 並要求走 PM -> Tech -> QA。
+- 驗證：`bash -n tools/cao_agent/check_architect_edit_scope_gate.sh` passed；`tools/cao_agent/check_architect_edit_scope_gate.sh` passed；臨時 `tests/` 未追蹤檔負面探針 exit 2 passed；`git diff --check` passed；commit/push 後仍需跑 `tools/cao_agent/check_git_completion_gate.sh`。
+- 上一輪 v20.4.21 行為摘要保留如下，供重開對話辨識已落地內容：
 - 關鍵行為：
   - 不升 VERSION，仍為 `v20.4.21`。
   - 三日資料改稱短期背景 / 短期背景資料，不再使用交易證據日語感。
