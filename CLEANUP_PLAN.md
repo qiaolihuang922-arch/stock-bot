@@ -15,6 +15,15 @@
 
 ## Completed
 
+- `evidence-chain-structural-coverage-100`:
+  - 問題：Owner 要先把 evidence chain completeness 推到 100%，暫不處理資料合理度與衝突本身，但不得造假。
+  - 結果：PM -> Tech -> QA 完成，QA `通過`；收口需 commit / push 並跑 Git completion gate。
+  - 關鍵修正：報文版本升 v20.4.18；evidence_manifest 補 `layer / target / source / status / use / limit / conflict / visible_refs`；必要層 market-theme、strategy-sample、positions、ledger、price-ohlcv、rr-score-volume、funnel-classification、execution-plan、next-day-plan、missing-data、conflict 皆有 slot。
+  - 新增 verifier / artifact：`scripts/generate_structural_evidence_artifact.py --case <case>` 支援 all_sources_available、missing_strategy_sample_source、ledger_position_conflict；三組 coverage_pct / coverage_percent 均 100.0。
+  - QA 反證：ledger conflict 外顯為 unresolved-conflict / position-vs-event；missing-source artifact 注入 `通過` 或 `有效進場` 後 verifier pass=false 且 fail_closed_violations 非空。
+  - 流程問題：第一次 QA 擋下 verifier 只攔 `可買`、未攔 TASK 明列的 `通過 / 有效進場`；已補 pattern 與測試，避免 structural coverage 100% 高估保護範圍。
+  - 規則治理：`evidence_chain` + `high_risk_invariant` + `mobile_reading`。100% 只代表結構覆蓋完整，不能代表資料合理、無衝突或 production ledger 已修。
+  - 邊界：不改策略 decision、DB schema/write、live Telegram；不修 production ledger conflict、不驗 production 真實合理度。
 - `telegram-evidence-human-readable-v20.4.17`:
   - 問題：Owner 指出第三則 `資料依據` 又出現 `production DB`、`classification backtest`、`source-of-truth`、`available/derived/as_of` 等工程語，且沒有用人話說明證據源是否可靠、策略是否有用。
   - 結果：PM -> Tech -> QA 完成，QA `通過`；收口需 commit / push 並跑 Git completion gate。

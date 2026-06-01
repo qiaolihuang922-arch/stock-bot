@@ -2,44 +2,46 @@
 
 ## 測試範圍
 
-- 任務：`telegram-evidence-human-readable-v20.4.17`
-- 任務尺寸 / QA：`normal_patch / L2`
-- 驗證範圍：Telegram 第三則「簡報＋資料依據」人話化、版本 `v20.4.17`、完整三則 message list、formatter / sample 測試。
-- 未做 DB write、live Telegram、replay、backfill、full pytest。
+- 任務：`evidence-chain-structural-coverage-100`
+- 任務尺寸 / QA：`risk_patch / L3`
+- 驗證範圍：structural evidence coverage、verifier、三則 Telegram artifact、fail-closed 文案、read-only artifact CLI。
+- 未擴成 production replay、backfill、production read-only audit、全 repo pytest 或 live Telegram。
 
 ## 關聯風險掃描
 
-- `TASK.md / CHANGELOG.md / diff` 一致：只改第三則資料依據、版本與測試；未見策略 decision、候選分類、DB schema/write path、live delivery 修改。
-- `formatTelegramMessages` 仍輸出三則主體順序：持倉 -> 未持倉 -> 簡報＋資料依據；`include_detail=True` 才追加備份訊息。
-- 第三則資料依據三段成立：市場 / 題材背景、策略樣本、持倉 / 價格 / 候選資料。
+- `TASK.md / CHANGELOG.md / diff` 一致：版本升 `v20.4.18`，三則 message order 保持，第三則補 source/status/use/limit/conflict，manifest 補 required keys。
+- 可吸收 diff：`core/generator.py`、`tests/test_generator_report.py`、`tests/test_market_theme_evidence.py`、`CHANGELOG.md`、`scripts/generate_structural_evidence_artifact.py`。
+- Artifact safety flags 均為 `schema_change=false`、`data_write=false`、`live_telegram=false`、`credential_values_included=false`。
 - `git diff --check`：passed。
-- `py_compile core/generator.py services/notifier.py`：passed。
-- Scoped tests：`tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py`：120 passed，169 warnings。
+- Targeted tests：`tests/test_generator_report.py tests/test_market_theme_evidence.py`：119 passed，169 warnings。
 
 ## 跨區塊語意一致性
 
-- 第一、二則仍保留持倉 / 未持倉主體；第三則承擔資料依據用途。
-- 第三則 market/theme 文案包含可靠度與限制，例如資料不足時「只作觀察，不作買點」，有支持時覆蓋「不等於買點」。
-- strategy sample 不可用時，第三則使用人話「可靠度低，未納入買賣判斷」，不再輸出 raw status 或 backtest source。
-- 持倉 / 候選資料文案說明可支持風控 / 分類，以及缺資料標的保守處理，不輸出 raw source/status。
+- 三則手機閱讀順序已驗：messages[0] 持倉、messages[1] 未持倉、messages[2] 簡報＋資料依據。
+- 三個 CLI artifact case 重跑結果：
+  - `all_sources_available`：coverage 100%，pass=true，missing_slots=[]，fail_closed_violations=[]，conflict_slots=[]。
+  - `missing_strategy_sample_source`：coverage 100%，pass=true，missing_slots=[]，fail_closed_violations=[]，顯示 missing-source 與「新倉：無有效進場」。
+  - `ledger_position_conflict`：coverage 100%，pass=true，missing_slots=[]，fail_closed_violations=[]，conflict_slots 顯示 `position-vs-event` 與 `unresolved-conflict`。
+- 必要 structural layers 已驗，三個 artifact 均無 missing required layer，manifest slots 無 required key 空值。
 
 ## 使用者誤讀風險
 
-- 已按手機閱讀順序檢查完整三則：持倉 -> 未持倉 -> 簡報＋資料依據。
-- 第三則沒有把市場 / 題材背景寫成「推薦理由」或「有效進場」；決策簡報仍可出現「新倉：無有效進場」。
-- QA 自補負面樣本把 full_msg 與 market/strategy input 塞入 raw 工程語、ISO timestamp、不可用 strategy sample；第三則仍通過 forbidden-term / ISO scan，且未出現可買。
+- missing-source case 不會被 `通過 / 有效進場 / 可買` 誤導。
+- ledger conflict case 會顯示 `unresolved-conflict` 與 `position-vs-event`，未顯示已確認停利或有效執行結論。
+- v20.4.17 人話資料依據未回退成 raw dump；第三則仍可讀，但保留本任務要求的標準 status token。
 
 ## 質疑與反證
 
-- 反證：完整三則 sample 中，第三則不含 `production`、`runtime`、`production DB`、`classification backtest`、`source-of-truth`、`available`、`derived`、`as_of`、`source_status`、`missing-source`、`source-error`、`insufficient-data`、`fail-closed` 或 ISO timestamp。
-- 反證：strategy sample 明確不可用時，第三則只顯示未納入買賣判斷，不顯示 backtest/source-of-truth/fail-closed raw 語。
-- 反證：market/theme 缺可靠來源時第三則顯示背景不足與不作買點，未生成新倉可買語意。
+- QA 補充反證：對 missing-source artifact 注入 `建準｜通過｜來源不足仍升格`，verifier 回傳 `pass=false` 且 `fail_closed_violations` 非空。
+- QA 補充反證：對 missing-source artifact 注入 `建準｜有效進場｜來源不足仍升格`，verifier 回傳 `pass=false` 且 `fail_closed_violations` 非空。
+- QA 確認 `coverage_pct` 與 `coverage_percent` 均為 100.0，避免 artifact 消費者欄位名不一致。
+- diff 掃描未見 DB schema / migration / production write / live Telegram send path 變更。
 
 ## 未測項目
 
-- 未做 production DB read-only smoke，因本輪驗收可由 formatter sample / fixtures 覆蓋，且不需要 DB/write/live Telegram。
-- 未跑 full pytest、replay、backfill；依 `normal_patch / L2` 不擴大。
-- 未檢查其他非第三則區塊是否仍有既有工程診斷文字；本輪只約束第三則。
+- 未驗 production 真實資料合理度、ledger 衝突修復、策略門檻正確性、production read-only audit。
+- 未跑 full repo pytest、未做 live Telegram、未做 DB write/backfill/schema 操作。
+- 未驗 runner 實際發報，只驗 read-only artifact 與 generator/verifier 行為。
 
 ## QA 結論
 

@@ -4,10 +4,10 @@
 
 ## Current Task
 
-- task_id: `telegram-evidence-human-readable-v20.4.17`
-- task_name: `Telegram Third Message Data Basis Humanization`
-- task_type: `normal_patch`
-- owner_status: `rejected_raw_engineering_data_basis`
+- task_id: `evidence-chain-structural-coverage-100`
+- task_name: `Structural Evidence Coverage 100`
+- task_type: `risk_patch`
+- owner_status: `requested_structural_coverage_100_before_reasonableness`
 - architect_status: `qa_passed_pending_git_close`
 - pm_status: `done`
 - tech_status: `done`
@@ -19,18 +19,21 @@
 - 本輪已完成 QA，收口時必須 commit / push 到 `origin/main`。
 - Git completion gate：final 前必須以 `tools/cao_agent/check_git_completion_gate.sh` 驗證 `main` matches `origin/main` 且 worktree clean。
 - 已吸收 PM -> Tech -> QA 交付到主 repo 工作樹：
-  - 報文版本升至 `v20.4.17`。
+  - 報文版本升至 `v20.4.18`。
   - TG message list 順序維持：messages[0] 持倉、messages[1] 未持倉 / 非持倉、messages[2] short/evidence；`include_detail=True` 時 Details Backup 仍追加在最後。
-  - 第三則 `資料依據` 改為人話可靠度 / 用途 / 限制：市場題材只作背景，不等於買點；策略樣本不可用時不納入買賣判斷；持倉 / 價格 / 候選資料說明可支持風控 / 分類與缺資料保守處理。
-  - 第三則不再顯示 `production`、`runtime`、`production DB`、`classification backtest`、`source-of-truth`、`available`、`derived`、`as_of`、`source_status`、`missing-source`、`source-error`、`insufficient-data`、`fail-closed` 或 ISO timestamp。
-  - 不改策略 decision、持倉/未持倉判斷、DB schema、write path、live Telegram。
+  - structural evidence coverage 達 100%：每個必要層都有 `layer / target / source / status / use / limit / conflict / visible_refs` slot。
+  - 必要層包含 market-theme、strategy-sample、positions、ledger、price-ohlcv、rr-score-volume、funnel-classification、execution-plan、next-day-plan、missing-data、conflict。
+  - 新增 read-only artifact CLI：`scripts/generate_structural_evidence_artifact.py --case <case>`，支援 `all_sources_available`、`missing_strategy_sample_source`、`ledger_position_conflict`。
+  - Verifier 覆蓋率 100% 時仍會保留 missing-source / unresolved-conflict 狀態；若 blocking source status 下出現 `可買 / 通過 / 有效進場`，verifier 會 fail。
+  - 不改資料合理度、不修 production ledger conflict、不改策略 decision、DB schema、write path、live Telegram。
 - 驗證：
   - QA 結論：`通過`。
-  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py services/notifier.py`：passed。
-  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_notifier.py`：120 passed，169 warnings（第三方 deprecation 類）。
+  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py scripts/generate_structural_evidence_artifact.py`：passed。
+  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py`：119 passed，169 warnings（第三方 deprecation 類）。
   - `git diff --check`：passed。
-  - QA 補充反證：完整第三則 sample 注入 raw 工程語、ISO timestamp、不可用 strategy sample 後，第三則仍只顯示人話可靠度 / 用途 / 限制；market/theme 未升格買點，strategy sample 未進入買賣判斷。
-  - scoped 可吸收 diff：`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`、`core/generator.py`、`tests/test_generator_report.py`、`tests/test_market_theme_evidence.py`。
+  - 三個 artifact case：coverage_pct=100.0、coverage_percent=100.0、missing_slots=[]、fail_closed_violations=[]。
+  - QA 補充反證：在 missing-source artifact 注入 `通過 / 有效進場` 後 verifier 回傳 pass=false 且 fail_closed_violations 非空。
+  - scoped 可吸收 diff：`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`、`core/generator.py`、`tests/test_generator_report.py`、`tests/test_market_theme_evidence.py`、`scripts/generate_structural_evidence_artifact.py`。
 
 ## Next Action
 

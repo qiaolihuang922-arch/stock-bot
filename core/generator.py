@@ -57,7 +57,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.17"
+VERSION = "v20.4.18"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -3695,11 +3695,67 @@ def source_summary_text(results_map):
 def _manifest_status(status):
     if status in ["ready", "ok", "confirmed", "consumed"]:
         return "available"
-    if status in ["missing-source", "source-error", "insufficient-data", "not-applicable"]:
+    if status in ["missing-source", "source-error", "insufficient-data", "unresolved-conflict", "not-used", "not-applicable"]:
         return status
     if status in ["available", "derived"]:
         return status
     return "insufficient-data"
+
+
+def _evidence_layer_from_field(field_name):
+    if field_name == "evidence.market_theme":
+        return "market-theme"
+    if field_name == "evidence.strategy_sample":
+        return "strategy-sample"
+    if field_name in {"evidence.missing_data", "source.missing_data"}:
+        return "missing-data"
+    if field_name in {"evidence.conflict", "source.conflict"}:
+        return "conflict"
+    if field_name == "funnel.unheld_counts":
+        return "funnel-classification"
+    if field_name == "execution.plan":
+        return "execution-plan"
+    if field_name == "tomorrow.plan":
+        return "next-day-plan"
+    if ".position" in field_name:
+        return "positions"
+    if ".execution_memory" in field_name:
+        return "ledger"
+    if ".price" in field_name or ".daily_ohlcv" in field_name:
+        return "price-ohlcv"
+    if ".rr" in field_name or ".score" in field_name or ".volume" in field_name:
+        return "rr-score-volume"
+    return "report-metadata"
+
+
+def _evidence_target_from_field(field_name, visible_section):
+    if field_name.startswith("stock."):
+        parts = field_name.split(".")
+        if len(parts) >= 3:
+            return parts[1]
+    return visible_section or "report"
+
+
+def _evidence_source_id(source_of_truth, status):
+    status = _manifest_status(status)
+    if status == "missing-source" or not source_of_truth or source_of_truth in {"none", "unknown"}:
+        return "missing-source"
+    if status == "unresolved-conflict":
+        return str(source_of_truth or "unresolved-conflict")
+    source = str(source_of_truth)
+    aliases = {
+        "production.market_theme_confirmed_evidence": "production-market-theme",
+        "classification backtest source-of-truth": "classification-sample",
+        "production DB position source": "production-positions",
+        "production DB position_events": "production-ledger",
+        "existing stock decision / risk logic": "strategy-decision",
+        "report evidence manifest aggregate": "evidence-manifest",
+        "derived-from fields": "derived-from-fields",
+        "core.generator.VERSION": "report-generator-version",
+        "runtime report clock": "report-clock",
+        "production report context or market data calendar source": "report-trade-date",
+    }
+    return aliases.get(source, source.replace(" ", "-").replace("_", "-"))
 
 
 def _manifest_field(
@@ -3715,9 +3771,29 @@ def _manifest_field(
     decision_eligible=False,
     fallback_rule="fail closed",
     input_fields=None,
+    layer=None,
+    target=None,
+    use=None,
+    limit=None,
+    conflict="none",
+    visible_refs=None,
 ):
     status = _manifest_status(source_status)
+    layer = layer or _evidence_layer_from_field(field_name)
+    target = target or _evidence_target_from_field(field_name, visible_section)
+    source = _evidence_source_id(source_of_truth, status)
+    use = use or fallback_rule
+    limit = limit or fallback_rule
+    conflict = conflict or "none"
     return {
+        "layer": layer,
+        "target": target,
+        "source": source,
+        "status": status,
+        "use": use,
+        "limit": limit,
+        "conflict": conflict,
+        "visible_refs": visible_refs or [visible_section or field_name],
         "field_name": field_name,
         "visible_section": visible_section,
         "value": value,
@@ -3760,6 +3836,8 @@ def _daily_source_status(data):
 def _derived_status(*statuses):
     if all(status == "available" for status in statuses):
         return "derived"
+    if any(status == "unresolved-conflict" for status in statuses):
+        return "unresolved-conflict"
     if any(status == "source-error" for status in statuses):
         return "source-error"
     if any(status == "missing-source" for status in statuses):
@@ -3790,9 +3868,24 @@ def _position_events_source_status(data):
     events = data.get("position_events") or {}
     if not data.get("holding"):
         return "not-applicable"
+    if _position_ledger_conflict(data) != "none":
+        return "unresolved-conflict"
     if events.get("_source_status") == "unavailable" or events.get("available") is False:
         return "source-error"
     return "available"
+
+
+def _position_ledger_conflict(data):
+    explicit = data.get("evidence_conflict") or data.get("conflict")
+    if explicit:
+        return str(explicit)
+    events = data.get("position_events") or {}
+    for key in ["conflict", "_conflict", "conflict_id"]:
+        if events.get(key):
+            return str(events.get(key))
+    if events.get("_source_status") == "unresolved-conflict" or events.get("source_status") == "unresolved-conflict":
+        return "position-vs-event"
+    return "none"
 
 
 def _field_by_key(report_context, key):
@@ -3842,6 +3935,8 @@ def _stock_decision_source_status(report_context, name):
     ]
     if all(status in {"available", "derived"} for status in statuses):
         return "available"
+    if "unresolved-conflict" in statuses:
+        return "unresolved-conflict"
     if "source-error" in statuses:
         return "source-error"
     if "missing-source" in statuses:
@@ -3857,6 +3952,8 @@ def _unheld_source_status_from_fields(price_status, daily_status, rr_status):
     statuses = [price_status, daily_status, rr_status]
     if all(status in {"available", "derived"} for status in statuses):
         return "available"
+    if "unresolved-conflict" in statuses:
+        return "unresolved-conflict"
     if "source-error" in statuses:
         return "source-error"
     if "missing-source" in statuses:
@@ -3952,6 +4049,8 @@ def build_report_context(
     funnel_inputs = []
     unheld_source_statuses = []
     unheld_source_eligible_count = 0
+    missing_slots = []
+    conflict_slots = []
     for name, data in ordered_result_items(results_map):
         section = "持倉" if data.get("holding") else "新倉"
         holding_count += 1 if data.get("holding") else 0
@@ -3964,11 +4063,14 @@ def build_report_context(
         volume_status = _derived_status(daily_status)
         position_status = _holding_source_status(data)
         event_status = _position_events_source_status(data)
+        position_conflict = _position_ledger_conflict(data)
         cross_day = cross_day_context(data)
         cross_day_sources = cross_day.get("source_of_truth") or []
         if isinstance(cross_day_sources, str):
             cross_day_sources = [cross_day_sources]
-        if cross_day.get("source_status") in ["source-error", "missing-source", "insufficient-data"]:
+        if position_conflict != "none":
+            execution_status = "unresolved-conflict"
+        elif cross_day.get("source_status") in ["source-error", "missing-source", "insufficient-data", "unresolved-conflict"]:
             execution_status = cross_day.get("source_status")
         elif cross_day.get("source_status") == "ready" and "position_events" in cross_day_sources:
             execution_status = "available"
@@ -3982,7 +4084,7 @@ def build_report_context(
         source_truth = _readonly_quote_source(data.get("price_source"))
         daily_truth = _readonly_quote_source(data.get("daily_source"))
         stock_key = f"stock.{name}"
-        manifest.extend([
+        stock_fields = [
             _manifest_field(
                 f"{stock_key}.price",
                 section,
@@ -3994,6 +4096,9 @@ def build_report_context(
                 trade_date=trade_date,
                 decision_eligible=price_status == "available",
                 fallback_rule="do not output precise entry/exit price when unavailable",
+                use="現價用於持倉風控與新倉進出場判斷",
+                limit="價格來源不可用時不輸出有效進場或精準執行價",
+                visible_refs=[f"message:{0 if data.get('holding') else 1}:card:{name}", "message:2:資料依據"],
             ),
             _manifest_field(
                 f"{stock_key}.volume",
@@ -4007,6 +4112,9 @@ def build_report_context(
                 decision_eligible=volume_status == "derived",
                 fallback_rule="volume judgment is not decision eligible when daily source is incomplete",
                 input_fields=[f"{stock_key}.daily_ohlcv"],
+                use="量能用於候選分類與風險判斷",
+                limit="由 OHLCV 推算，OHLCV 不足時不可作買點理由",
+                visible_refs=[f"message:{0 if data.get('holding') else 1}:card:{name}", "message:2:資料依據"],
             ),
             _manifest_field(
                 f"{stock_key}.rr",
@@ -4020,6 +4128,9 @@ def build_report_context(
                 decision_eligible=rr_status == "derived",
                 fallback_rule="do not show RR as buy reason unless price and daily inputs are available",
                 input_fields=[f"{stock_key}.price", f"{stock_key}.daily_ohlcv"],
+                use="RR 用於新倉是否可行動與持倉加碼判斷",
+                limit="價格或 OHLCV 不足時 RR 不可升格為買點",
+                visible_refs=[f"message:{0 if data.get('holding') else 1}:card:{name}", "message:2:資料依據"],
             ),
             _manifest_field(
                 f"{stock_key}.score",
@@ -4033,6 +4144,9 @@ def build_report_context(
                 decision_eligible=score_status == "derived",
                 fallback_rule="score cannot upgrade stock action by itself",
                 input_fields=[f"{stock_key}.daily_ohlcv"],
+                use="分數用於排序與分類輔助",
+                limit="分數不能單獨把標的升格成可買",
+                visible_refs=[f"message:{0 if data.get('holding') else 1}:card:{name}", "message:2:資料依據"],
             ),
             _manifest_field(
                 f"{stock_key}.daily_ohlcv",
@@ -4045,6 +4159,9 @@ def build_report_context(
                 trade_date=trade_date,
                 decision_eligible=daily_status == "available",
                 fallback_rule="stock is not decision eligible when OHLCV is unavailable",
+                use="OHLCV 用於趨勢、RR、分數與量能推算",
+                limit="OHLCV 不足時停止新倉判斷",
+                visible_refs=[f"message:{0 if data.get('holding') else 1}:card:{name}", "message:2:資料依據"],
             ),
             _manifest_field(
                 f"{stock_key}.position",
@@ -4057,6 +4174,9 @@ def build_report_context(
                 trade_date=trade_date,
                 decision_eligible=position_status == "available",
                 fallback_rule="do not output sell/reduce shares without position source",
+                use="持倉股數與成本用於持倉主行動與風控",
+                limit="持倉來源缺失時不輸出賣出股數或有效持倉建議",
+                visible_refs=["message:0:持倉標的", f"message:0:card:{name}", "message:2:資料依據"],
             ),
             _manifest_field(
                 f"{stock_key}.execution_memory",
@@ -4069,6 +4189,10 @@ def build_report_context(
                 trade_date=trade_date,
                 decision_eligible=execution_status == "available",
                 fallback_rule="fail closed for second take-profit when position_events cannot confirm execution",
+                use="ledger / execution memory 用於判斷已執行、停利與不重複下單",
+                limit="ledger 缺失或衝突時暫停升格，不輸出確認執行結論",
+                conflict=position_conflict,
+                visible_refs=["message:0:持倉標的", f"message:0:card:{name}", "message:2:資料依據"],
             ),
             _manifest_field(
                 f"{stock_key}.risk",
@@ -4082,8 +4206,18 @@ def build_report_context(
                 decision_eligible=(risk_status == "derived" if data.get("holding") else rr_status == "derived"),
                 fallback_rule="source gaps downgrade to observation or not actionable; never override BUY/SELL",
                 input_fields=[f"{stock_key}.position", f"{stock_key}.execution_memory", f"{stock_key}.price", f"{stock_key}.rr"],
+                use="決策層用於持倉主行動或未持倉分類",
+                limit="必要來源不足或衝突時保守處理，不升格可買 / 通過 / 有效進場",
+                conflict=position_conflict,
+                visible_refs=[f"message:{0 if data.get('holding') else 1}:card:{name}", "message:2:資料依據"],
             ),
-        ])
+        ]
+        manifest.extend(stock_fields)
+        for field in stock_fields:
+            if field["status"] in {"missing-source", "source-error", "insufficient-data"}:
+                missing_slots.append(field["field_name"])
+            if field["status"] == "unresolved-conflict" or field["conflict"] != "none":
+                conflict_slots.append(field["field_name"])
         if not data.get("holding"):
             funnel_inputs.append(f"{stock_key}.risk")
             unheld_source_statuses.append(unheld_source_status)
@@ -4092,7 +4226,9 @@ def build_report_context(
 
     funnel_status = "derived"
     if unheld_source_statuses and not unheld_source_eligible_count:
-        if "source-error" in unheld_source_statuses:
+        if "unresolved-conflict" in unheld_source_statuses:
+            funnel_status = "unresolved-conflict"
+        elif "source-error" in unheld_source_statuses:
             funnel_status = "source-error"
         elif "missing-source" in unheld_source_statuses:
             funnel_status = "missing-source"
@@ -4110,6 +4246,27 @@ def build_report_context(
         decision_eligible=funnel_status == "derived",
         fallback_rule="do not show fake 0-count conclusion when source is missing",
         input_fields=funnel_inputs,
+        use="漏斗分類用於第二則未持倉分組與第三則摘要",
+        limit="候選來源不足時顯示不可行動或資料不足，不顯示有效進場",
+        conflict="unheld-source-conflict" if funnel_status == "unresolved-conflict" else "none",
+        visible_refs=["message:1:未持倉標的", "message:2:未持倉漏斗", "message:2:資料依據"],
+    ))
+    manifest.append(_manifest_field(
+        "execution.plan",
+        "交易執行",
+        "derived from pending trade items",
+        funnel_status,
+        "derived-from fields",
+        db_table="none",
+        as_of_date=as_of_date,
+        trade_date=trade_date,
+        decision_eligible=funnel_status == "derived",
+        fallback_rule="do not include source-missing or conflicted items in execution plan",
+        input_fields=["funnel.unheld_counts"],
+        use="交易執行層用於今日新增下單、持倉風控與可行動項目",
+        limit="來源不足或衝突時只能列無新增下單、觀察或不可行動",
+        conflict="execution-source-conflict" if funnel_status == "unresolved-conflict" else "none",
+        visible_refs=["message:2:交易執行", "message:2:資料依據"],
     ))
     manifest.append(_manifest_field(
         "tomorrow.plan",
@@ -4123,6 +4280,43 @@ def build_report_context(
         decision_eligible=funnel_status == "derived",
         fallback_rule="items with source gaps stay out of tomorrow execution plan",
         input_fields=["funnel.unheld_counts"],
+        use="明日計畫層用於盤後追蹤與隔日行動摘要",
+        limit="來源不足或衝突時不列入明日有效執行計畫",
+        conflict="next-day-source-conflict" if funnel_status == "unresolved-conflict" else "none",
+        visible_refs=["message:2:明日計畫", "message:2:資料依據"],
+    ))
+    manifest.append(_manifest_field(
+        "source.missing_data",
+        "資料依據",
+        missing_slots or "none",
+        "not-used" if not missing_slots else "missing-source",
+        "missing-source" if missing_slots else "none",
+        db_table="none",
+        as_of_date=as_of_date,
+        trade_date=trade_date,
+        decision_eligible=False,
+        fallback_rule="missing sources are represented explicitly and fail closed",
+        input_fields=missing_slots,
+        use="缺資料層用於說明哪些可見決策因來源不足而保守處理",
+        limit="只描述結構狀態，不補資料合理度",
+        visible_refs=["message:2:資料依據"],
+    ))
+    manifest.append(_manifest_field(
+        "source.conflict",
+        "資料依據",
+        conflict_slots or "none",
+        "not-used" if not conflict_slots else "unresolved-conflict",
+        "unresolved-conflict" if conflict_slots else "none",
+        db_table="none",
+        as_of_date=as_of_date,
+        trade_date=trade_date,
+        decision_eligible=False,
+        fallback_rule="unresolved conflicts are represented explicitly and fail closed",
+        input_fields=conflict_slots,
+        use="衝突層用於說明持倉 / ledger 等來源矛盾時暫停升格",
+        limit="只揭露 unresolved-conflict，不修復資料本身",
+        conflict="unresolved-conflict" if conflict_slots else "none",
+        visible_refs=["message:2:資料依據"],
     ))
 
     if position_warning:
@@ -6074,6 +6268,68 @@ def _position_candidate_data_basis_line(report_context):
     )
 
 
+def _slot_by_layer(report_context, layer):
+    for field in report_context.get("evidence_manifest") or []:
+        if field.get("layer") == layer:
+            return field
+    return {}
+
+
+def _layer_status(report_context, layer):
+    slots = [
+        field for field in report_context.get("evidence_manifest") or []
+        if field.get("layer") == layer
+    ]
+    if not slots:
+        return "missing-source"
+    statuses = {slot.get("status") for slot in slots}
+    if "unresolved-conflict" in statuses:
+        return "unresolved-conflict"
+    if "source-error" in statuses:
+        return "source-error"
+    if "missing-source" in statuses:
+        return "missing-source"
+    if "insufficient-data" in statuses:
+        return "insufficient-data"
+    if statuses == {"not-used"}:
+        return "not-used"
+    return "available"
+
+
+def _evidence_slot_status_block(report_context):
+    layer_labels = [
+        ("market-theme", "市場題材"),
+        ("strategy-sample", "策略樣本"),
+        ("positions", "持倉"),
+        ("ledger", "ledger"),
+        ("price-ohlcv", "價格 / OHLCV"),
+        ("rr-score-volume", "RR / score / volume"),
+        ("funnel-classification", "漏斗分類"),
+        ("execution-plan", "交易執行"),
+        ("next-day-plan", "明日計畫"),
+        ("missing-data", "缺資料"),
+        ("conflict", "衝突"),
+    ]
+    lines = []
+    for layer, label in layer_labels:
+        slot = _slot_by_layer(report_context, layer)
+        status = _layer_status(report_context, layer)
+        source = slot.get("source") or ("missing-source" if status == "missing-source" else layer)
+        use = slot.get("use") or "不納入買賣判斷"
+        limit = slot.get("limit") or "來源不足時 fail closed"
+        conflict = slot.get("conflict") or "none"
+        lines.extend([
+            "",
+            f"{label}:",
+            f"source: {source}",
+            f"status: {status}",
+            f"use: {use}",
+            f"limit: {limit}",
+            f"conflict: {conflict}",
+        ])
+    return lines
+
+
 def _decision_brief_lines(summary_message):
     noisy_prefixes = (
         "報告日：",
@@ -6140,6 +6396,7 @@ def format_brief_data_evidence_message(report_context, holding_items, watch_item
         _market_theme_data_basis_line(report_context),
         _strategy_sample_data_basis_line(report_context),
         _position_candidate_data_basis_line(report_context),
+        *_evidence_slot_status_block(report_context),
     ]
     return "\n".join(lines)
 
@@ -6151,6 +6408,280 @@ def format_evidence_compact_message(results_map, report_context, holding_items, 
         watch_items,
         market_mode=market_mode,
     )
+
+
+STRUCTURAL_EVIDENCE_LAYERS = [
+    "market-theme",
+    "strategy-sample",
+    "positions",
+    "ledger",
+    "price-ohlcv",
+    "rr-score-volume",
+    "funnel-classification",
+    "execution-plan",
+    "next-day-plan",
+    "missing-data",
+    "conflict",
+]
+
+STRUCTURAL_EVIDENCE_REQUIRED_KEYS = [
+    "layer",
+    "target",
+    "source",
+    "status",
+    "use",
+    "limit",
+    "conflict",
+    "visible_refs",
+]
+
+STRUCTURAL_EVIDENCE_BLOCKING_STATUSES = {
+    "missing-source",
+    "source-error",
+    "insufficient-data",
+    "unresolved-conflict",
+}
+
+
+def verify_structural_evidence_coverage(messages, evidence_manifest):
+    messages = _extract_messages_from_report(messages)
+    manifest = evidence_manifest or []
+    missing_slots = []
+    covered_layers = []
+    conflict_slots = []
+    status_by_layer = {}
+
+    for layer in STRUCTURAL_EVIDENCE_LAYERS:
+        slots = [slot for slot in manifest if slot.get("layer") == layer]
+        if not slots:
+            missing_slots.append({"layer": layer, "reason": "missing evidence slot"})
+            status_by_layer[layer] = "missing-source"
+            continue
+        layer_covered = False
+        layer_statuses = set()
+        for slot in slots:
+            missing_keys = [
+                key for key in STRUCTURAL_EVIDENCE_REQUIRED_KEYS
+                if key not in slot or slot.get(key) in [None, "", []]
+            ]
+            if missing_keys:
+                missing_slots.append({
+                    "layer": layer,
+                    "field_name": slot.get("field_name"),
+                    "reason": "missing required keys",
+                    "missing_keys": missing_keys,
+                })
+                continue
+            layer_covered = True
+            status = slot.get("status")
+            layer_statuses.add(status)
+            if status == "unresolved-conflict" or slot.get("conflict") not in [None, "", "none"]:
+                conflict_slots.append({
+                    "layer": layer,
+                    "field_name": slot.get("field_name"),
+                    "conflict": slot.get("conflict"),
+                    "status": status,
+                })
+        if layer_covered:
+            covered_layers.append(layer)
+        status_by_layer[layer] = (
+            "unresolved-conflict" if "unresolved-conflict" in layer_statuses
+            else "source-error" if "source-error" in layer_statuses
+            else "missing-source" if "missing-source" in layer_statuses
+            else "insufficient-data" if "insufficient-data" in layer_statuses
+            else "not-used" if layer_statuses == {"not-used"}
+            else "available"
+        )
+
+    joined = "\n\n".join(messages)
+    fail_closed_violations = []
+    blocking_present = any(
+        status in STRUCTURAL_EVIDENCE_BLOCKING_STATUSES
+        for status in status_by_layer.values()
+    )
+    actionable_patterns = [
+        r"｜可買｜",
+        r"買點：可買",
+        r"｜通過(?:｜|$)",
+        r"買點[:：]通過",
+        r"新倉[:：][^\n]*(?<!未)(?<!不)通過",
+        r"｜有效進場(?:｜|$)",
+        r"新倉[:：](?!無有效進場)[^\n]*有效進場",
+    ]
+    if blocking_present and any(re.search(pattern, joined) for pattern in actionable_patterns):
+        fail_closed_violations.append("blocking source status is present but Telegram still shows actionable wording")
+
+    total_layers = len(STRUCTURAL_EVIDENCE_LAYERS)
+    coverage_pct = round((len(set(covered_layers)) / total_layers) * 100, 2) if total_layers else 100.0
+    passed = coverage_pct == 100.0 and not missing_slots and not fail_closed_violations
+    return {
+        "total_visible_decision_data_layers": total_layers,
+        "covered_layers": len(set(covered_layers)),
+        "covered_layer_ids": sorted(set(covered_layers)),
+        "missing_slots": missing_slots,
+        "conflict_slots": conflict_slots,
+        "coverage_pct": coverage_pct,
+        "coverage_percent": coverage_pct,
+        "fail_closed_violations": fail_closed_violations,
+        "pass": passed,
+    }
+
+
+def _structural_fixture_payload(
+    code,
+    *,
+    holding=None,
+    price=120,
+    decision="BUY",
+    rr=1.8,
+    position_events=None,
+):
+    return {
+        "stock_code": code,
+        "price": price,
+        "change": 1.2,
+        "price_source": "realtime" if price is not None else None,
+        "daily_source": "yahoo" if price is not None else None,
+        "result": {
+            "decision": decision,
+            "action": 0.1 if decision == "BUY" else 0,
+            "rr": rr,
+            "heat_state": "NORMAL",
+            "trade_state": "READY" if decision == "BUY" else "WAIT",
+            "structure_phase": "BREAKOUT_CONFIRM",
+            "price_behavior": "NORMAL",
+            "market_grade": "A",
+            "volume_state": "STRONG",
+            "volume_price_state": "EXPANSION",
+            "structure_state": "STRONG",
+            "entry_quality": "A",
+            "confidence_score": 86,
+            "breakout_distance": 0.5,
+        },
+        "holding": holding,
+        "position_events": position_events or {},
+        "holding_decision": {
+            "action": "續抱",
+            "level": "HOLD",
+            "warning_price": 113,
+            "hard_stop_price": 109,
+        } if holding else None,
+        "structure_score": 5,
+        "volume_ratio": 1.4,
+        "closes": [100 + index for index in range(20)],
+        "volumes": [1000] * 20,
+    }
+
+
+def build_structural_evidence_artifact(case="all_sources_available", now=None):
+    now = now or datetime(2026, 6, 1, tzinfo=tz)
+    market_summary = {
+        "trade_date": "2026-06-01",
+        "as_of": "2026-06-01",
+        "market_theme_evidence": {
+            "status": "confirmed",
+            "source_status": "ready",
+            "theme_status": "confirmed",
+            "level": "confirmed",
+            "source_of_truth": "production_db",
+            "as_of": "2026-06-01",
+            "sources": [{
+                "source_family": "production_db",
+                "source_type": "watchlist_breadth",
+                "source_name": "market_theme_confirmed_evidence",
+                "as_of": "2026-06-01",
+                "freshness": "same_day",
+                "freshness_reason": "same_trade_date",
+                "level": "confirmed",
+                "supports_claims": ["結構證據 fixture"],
+                "limitations": [],
+            }, {
+                "source_family": "production_db",
+                "source_type": "market_index",
+                "source_name": "market_theme_index_daily_bars",
+                "as_of": "2026-06-01",
+                "freshness": "same_day",
+                "freshness_reason": "same_trade_date",
+                "level": "confirmed",
+                "supports_claims": ["結構證據 fixture"],
+                "limitations": [],
+            }],
+            "evidence_trend": {"observed_days": 20, "recent_supporting_days": 5},
+        },
+    }
+    strategy_summary = (
+        "📊 策略證據 v20.0\n"
+        "策略樣本 / 分類回測\n"
+        "狀態：可用\n"
+        "樣本 35 筆"
+    )
+    results_map = {
+        "智原": _structural_fixture_payload(
+            "3035",
+            holding={"shares": 50, "avg_price": 118},
+            decision="WAIT",
+            rr=1.2,
+        ),
+        "建準": _structural_fixture_payload("2421"),
+    }
+
+    if case == "missing_strategy_sample_source":
+        strategy_summary = None
+        results_map["建準"] = _structural_fixture_payload("2421", decision="WAIT", rr=0.8)
+    elif case == "ledger_position_conflict":
+        strategy_summary = (
+            "📊 策略證據 v20.0\n"
+            "策略樣本 / 分類回測\n"
+            "狀態：可用\n"
+            "樣本 35 筆"
+        )
+        results_map = {
+            "智原": _structural_fixture_payload(
+                "3035",
+                holding={"shares": 50, "avg_price": 118},
+                decision="WAIT",
+                rr=1.2,
+                position_events={
+                    "_source_status": "unresolved-conflict",
+                    "conflict_id": "position-vs-event",
+                    "available": False,
+                },
+            ),
+            "建準": _structural_fixture_payload("2421", decision="WAIT"),
+        }
+    elif case != "all_sources_available":
+        raise ValueError(f"unknown structural evidence artifact case: {case}")
+
+    report_context = build_report_context(
+        results_map,
+        market_summary,
+        now,
+        strategy_evidence_summary=strategy_summary,
+        report_phase="盤中",
+    )
+    messages = formatTelegramMessages(
+        results_map,
+        "STRUCTURAL EVIDENCE ARTIFACT",
+        "建準",
+        88,
+        market_summary,
+        now,
+        strategy_evidence_summary=strategy_summary,
+        report_phase="盤中",
+    )
+    verifier = verify_structural_evidence_coverage(messages, report_context["evidence_manifest"])
+    return {
+        "artifact_type": "telegram_structural_evidence_coverage",
+        "case": case,
+        "generator_version": VERSION,
+        "schema_change": False,
+        "data_write": False,
+        "live_telegram": False,
+        "credential_values_included": False,
+        "messages": messages,
+        "evidence_manifest": report_context["evidence_manifest"],
+        "verifier": verifier,
+    }
 
 
 def format_details_backup_messages(full_msg):
