@@ -164,7 +164,7 @@ import sys
 from pathlib import Path
 
 text = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
-matches = list(re.finditer(r"^#+\s*QA 結論\b|^QA 結論\b", text, re.M))
+matches = list(re.finditer(r"^(?:#+\s*)?QA 結論(?:\s*$|[：:])", text, re.M))
 if not matches:
     raise SystemExit(1)
 tail = text[matches[-1].end():]

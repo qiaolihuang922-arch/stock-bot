@@ -151,6 +151,82 @@ def _missing_source_consumption_report(trade_date=None):
     }
 
 
+def build_market_theme_auxiliary_render_artifact(load_result, trade_date=None):
+    from core.generator import VERSION, market_theme_summary_evidence
+    from core.market_theme_evidence import format_market_theme_summary_lines
+
+    provider = market_theme_summary_evidence(
+        {},
+        {
+            "trade_date": trade_date,
+            "as_of": trade_date,
+            "market_theme_evidence": load_result,
+        },
+    )
+    lines = format_market_theme_summary_lines(provider)
+    rendered = "\n".join(lines)
+    checks = {
+        "has_auxiliary_block": "市場/題材輔助" in rendered,
+        "has_lookback_range": "觀察區間" in rendered,
+        "has_support_streak_days": "連續支持" in rendered,
+        "has_no_buy_warning": "不等於個股買點" in rendered and "不追高" in rendered,
+        "forbidden_buy_terms_present": any(
+            term in rendered
+            for term in ["建議買入", "立即進場", "可追"]
+        ),
+    }
+    return {
+        "artifact_type": "production_readonly_market_theme_auxiliary_render",
+        "generated_by": (
+            "scripts/smoke_market_theme_evidence_readonly.py "
+            "--auxiliary-render-artifact-json"
+        ),
+        "schema_change": False,
+        "data_write": False,
+        "live_telegram": False,
+        "credential_values_included": False,
+        "trade_date": trade_date,
+        "generator_version": VERSION,
+        "load_status": load_result.get("status"),
+        "loaded_confirmed": bool(load_result.get("confirmed")),
+        "loaded_rows_count": len(load_result.get("rows") or []),
+        "provider_confirmed": bool(provider.get("confirmed")),
+        "source_status": provider.get("source_status"),
+        "theme_label": provider.get("theme_label"),
+        "evidence_trend": {
+            key: (provider.get("evidence_trend") or {}).get(key)
+            for key in [
+                "status",
+                "observed_days",
+                "recent_supporting_days",
+                "support_streak_days",
+                "lookback_range",
+                "latest_trade_date",
+                "earliest_trade_date",
+                "forbidden_effects",
+                "allowed_effects",
+            ]
+        },
+        "rendered_lines": lines,
+        "checks": checks,
+    }
+
+
+def _auxiliary_artifact_passed(artifact):
+    checks = artifact.get("checks") or {}
+    return all([
+        artifact.get("load_status") == "confirmed",
+        artifact.get("loaded_confirmed"),
+        artifact.get("loaded_rows_count", 0) > 0,
+        artifact.get("provider_confirmed"),
+        checks.get("has_auxiliary_block"),
+        checks.get("has_lookback_range"),
+        checks.get("has_support_streak_days"),
+        checks.get("has_no_buy_warning"),
+        not checks.get("forbidden_buy_terms_present"),
+    ])
+
+
 def _missing_source_correction_audit_report(source_reason="missing required Supabase read credentials"):
     try:
         version = _load_current_generator_version()
@@ -311,6 +387,11 @@ def main(argv=None):
         action="store_true",
         help="Output read-only production correction audit JSON for market/theme table coverage and duplicates.",
     )
+    parser.add_argument(
+        "--auxiliary-render-artifact-json",
+        action="store_true",
+        help="Output read-only artifact proving market/theme evidence auxiliary rendering.",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -376,6 +457,13 @@ def main(argv=None):
             "reason": "missing required Supabase read credentials",
             "rows": [],
         }
+        if args.auxiliary_render_artifact_json:
+            artifact = build_market_theme_auxiliary_render_artifact(
+                load_result,
+                trade_date=args.trade_date,
+            )
+            print(json.dumps(artifact, ensure_ascii=False, indent=2, sort_keys=True))
+            return 0 if _auxiliary_artifact_passed(artifact) else 2
     else:
         if args.correction_audit_json:
             report = build_market_theme_production_correction_audit(
@@ -418,6 +506,13 @@ def main(argv=None):
             trade_date=args.trade_date,
             limit=args.limit,
         )
+        if args.auxiliary_render_artifact_json:
+            artifact = build_market_theme_auxiliary_render_artifact(
+                load_result,
+                trade_date=args.trade_date,
+            )
+            print(json.dumps(artifact, ensure_ascii=False, indent=2, sort_keys=True))
+            return 0 if _auxiliary_artifact_passed(artifact) else 2
     smoke = build_market_theme_evidence_readonly_smoke(load_result)
     print(_render(smoke))
     return 0 if smoke["status"] == "ok" else 2

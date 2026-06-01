@@ -520,36 +520,84 @@ def build_audit_rows(feature_rows):
     return rows
 
 
-def format_strategy_evidence_summary(report=None, audits=None, error=None):
+def _strategy_sample_unavailable_lines(status, reason):
+    return [
+        "策略樣本 / 分類回測",
+        "狀態：不可用",
+        f"原因：{reason}",
+        "解讀：本次不把策略樣本納入判斷；個股決策只看既有買點與風控。",
+        f"狀態碼：{status}",
+    ]
+
+
+def format_strategy_evidence_summary(
+    report=None,
+    audits=None,
+    error=None,
+    source_status=None,
+    source_reason=None,
+):
     lines = [
         "📊 策略證據 v20.0",
         "說明：以下為 strategy sample 層，不影響 market/theme production confirmed evidence。",
     ]
     if error:
-        lines.append(format_strategy_evidence_error(error))
+        if strategy_evidence_error_kind(error) == "schema_missing":
+            reason = "缺 classification backtest source-of-truth"
+            status = "missing-source"
+        else:
+            reason = "classification backtest 讀取失敗"
+            status = "source-error"
+        lines.extend(_strategy_sample_unavailable_lines(status, reason))
+        return "\n".join(lines)
+
+    if source_status:
+        reason = source_reason or "classification backtest source-of-truth 不可用"
+        lines.extend(_strategy_sample_unavailable_lines(source_status, reason))
         return "\n".join(lines)
 
     report = report or {}
     audits = audits or []
 
     if not report:
-        lines.append("樣本不足：需累積策略證據後啟用分類績效判讀")
+        lines.extend(_strategy_sample_unavailable_lines(
+            "missing-source",
+            "缺 classification backtest source-of-truth",
+        ))
     else:
+        ready_items = []
+        max_sample = 0
         for category in REPORT_CATEGORIES:
             item = report.get(category) or {"sample": 0, "sample_ready": False}
             sample = item.get("sample") or 0
+            max_sample = max(max_sample, sample)
             if not item.get("sample_ready"):
-                lines.append(f"{category}｜樣本 {sample}｜樣本不足，不判讀")
                 continue
-            win_rate = item.get("win_rate")
-            mfe = item.get("median_mfe")
-            mfe_text = "-" if mfe is None else f"{mfe:+.1f}%"
-            return_horizon = item.get("return_horizon") or 3
-            mfe_horizon = item.get("mfe_horizon") or 5
-            missed = item.get("missed_rally_count")
+            ready_items.append((category, item))
+
+        if not ready_items:
+            lines.extend(_strategy_sample_unavailable_lines(
+                "insufficient-sample",
+                f"classification backtest 樣本不足（有效樣本 {max_sample}）",
+            ))
+        else:
+            lines.append("策略樣本 / 分類回測")
+            for category, item in ready_items:
+                sample = item.get("sample") or 0
+                win_rate = item.get("win_rate")
+                mfe = item.get("median_mfe")
+                mfe_text = "-" if mfe is None else f"{mfe:+.1f}%"
+                return_horizon = item.get("return_horizon") or 3
+                mfe_horizon = item.get("mfe_horizon") or 5
+                missed = item.get("missed_rally_count")
+                lines.append(
+                    f"分類：{category}｜樣本：{sample} 筆｜"
+                    f"觀察口徑：v20.0 classification backtest｜"
+                    f"{return_horizon}日勝率 {win_rate}%｜"
+                    f"{mfe_horizon}日MFE中位 {mfe_text}｜漏失 {missed}"
+                )
             lines.append(
-                f"{category}｜樣本 {sample}｜{return_horizon}日勝率 {win_rate}%｜"
-                f"{mfe_horizon}日MFE中位 {mfe_text}｜漏失 {missed}"
+                "解讀：歷史樣本只作分類參考；是否進場仍看個股買點與風控。"
             )
 
     if audits:
@@ -610,6 +658,16 @@ def load_strategy_evidence_summary(client, version, limit=240):
         or []
     )
     feature_rows = feature_rows_from_signal_rows(signal_rows)
+    if not feature_rows:
+        return format_strategy_evidence_summary(
+            source_status="missing-source",
+            source_reason="缺 classification backtest source-of-truth",
+        )
+    if not price_rows:
+        return format_strategy_evidence_summary(
+            source_status="insufficient-data",
+            source_reason="classification backtest 欄位不足（daily_price 無可用資料）",
+        )
     outcome_rows = calculate_outcome_metrics(feature_rows, price_rows)
     return report_from_rows(feature_rows, outcome_rows, [])
 

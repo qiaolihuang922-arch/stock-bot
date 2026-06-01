@@ -15,6 +15,33 @@ LOG_DIR="$CAO_LOG_DIR"
 PROFILE="stock_qa_code_readonly"
 QA_TMP="$WORKTREE/.qa_tmp"
 READONLY_HANDOFF_FILES=(AGENTS.md DISPATCH.md RESEARCH.md CURRENT_STATE.md CLEANUP_PLAN.md TASK.md CHANGELOG.md QA_REPORT.md)
+SERVER_STARTED=0
+
+cleanup() {
+  if [[ "${CAO_QA_USE_REPO_CONFIG:-0}" == "1" ]]; then
+    if [[ -f "$QA_TMP/config.py.worktree-backup" ]]; then
+      cp "$QA_TMP/config.py.worktree-backup" "$WORKTREE/config.py" 2>/dev/null || true
+      chmod 600 "$WORKTREE/config.py" 2>/dev/null || true
+    else
+      rm -f "$WORKTREE/config.py" 2>/dev/null || true
+    fi
+  fi
+  if [[ "${KEEP_CAO_SESSIONS:-0}" != "1" && -n "${SESSION_NAME:-}" ]]; then
+    "$CAO" shutdown --session "$SESSION_NAME" >/dev/null 2>&1 || true
+  fi
+  if [[ "${KEEP_CAO_SESSIONS:-0}" != "1" && "${SERVER_STARTED:-0}" == "1" ]]; then
+    pids="$(lsof -ti tcp:9889 2>/dev/null || true)"
+    [[ -n "$pids" ]] && kill $pids >/dev/null 2>&1 || true
+  fi
+  if [[ "${KEEP_CAO_SESSIONS:-0}" != "1" ]]; then
+    sleep 0.5
+    rm -f "$LOG_DIR"/terminal/*.log 2>/dev/null || true
+    for f in "$LOG_DIR"/*.log; do
+      [[ -f "$f" ]] && : > "$f"
+    done
+  fi
+}
+trap cleanup EXIT
 
 mkdir -p "$OUT_DIR"
 chmod 700 "$CAO_AGENT_CONTEXT" "$OUT_DIR"
@@ -27,6 +54,7 @@ mkdir -p "$(dirname "$exclude_file")"
 touch "$exclude_file"
 grep -qxF ".qa_tmp" "$exclude_file" || echo ".qa_tmp" >> "$exclude_file"
 
+if [[ "${CAO_QA_USE_REPO_CONFIG:-0}" != "1" ]]; then
 cat > "$QA_TMP/config.py" <<'EOF'
 SUPABASE_URL = "http://localhost"
 SUPABASE_KEY = "test"
@@ -40,6 +68,20 @@ GITHUB_REPO = "test/test"
 GITHUB_WORKFLOW_FILE = "test.yml"
 EOF
 chmod 600 "$QA_TMP/config.py"
+else
+  if [[ ! -f "$REPO/config.py" ]]; then
+    echo "CAO_QA_USE_REPO_CONFIG=1 requested but repo config.py is missing" >&2
+    exit 1
+  fi
+  cp "$REPO/config.py" "$QA_TMP/config.py"
+  if [[ -f "$WORKTREE/config.py" ]]; then
+    cp "$WORKTREE/config.py" "$QA_TMP/config.py.worktree-backup"
+    chmod 600 "$QA_TMP/config.py.worktree-backup"
+  fi
+  cp "$REPO/config.py" "$WORKTREE/config.py"
+  chmod 600 "$QA_TMP/config.py"
+  chmod 600 "$WORKTREE/config.py"
+fi
 
 ensure_worktree_venv() {
   local target_python="$WORKTREE/.venv/bin/python"
@@ -72,7 +114,14 @@ ensure_worktree_venv() {
 
 ensure_worktree_venv
 
-SERVER_STARTED=0
+# QA must validate the latest Architect/Tech handoff from the main repo, not a
+# stale copy left in the reusable agent worktree.
+for f in "${READONLY_HANDOFF_FILES[@]}"; do
+  if [[ -f "$REPO/$f" ]]; then
+    cp "$REPO/$f" "$WORKTREE/$f"
+  fi
+done
+
 if ! lsof -ti tcp:9889 >/dev/null 2>&1; then
   "$CAO_SERVER" > "$LOG_DIR/cao_runner_server.log" 2>&1 &
   SERVER_PID="$!"
@@ -97,24 +146,6 @@ readonly_hashes() {
   done
 }
 READONLY_BEFORE="$(readonly_hashes)"
-
-cleanup() {
-  if [[ "${KEEP_CAO_SESSIONS:-0}" != "1" && -n "${SESSION_NAME:-}" ]]; then
-    "$CAO" shutdown --session "$SESSION_NAME" >/dev/null 2>&1 || true
-  fi
-  if [[ "${KEEP_CAO_SESSIONS:-0}" != "1" && "$SERVER_STARTED" == "1" ]]; then
-    pids="$(lsof -ti tcp:9889 2>/dev/null || true)"
-    [[ -n "$pids" ]] && kill $pids >/dev/null 2>&1 || true
-  fi
-  if [[ "${KEEP_CAO_SESSIONS:-0}" != "1" ]]; then
-    sleep 0.5
-    rm -f "$LOG_DIR"/terminal/*.log 2>/dev/null || true
-    for f in "$LOG_DIR"/*.log; do
-      [[ -f "$f" ]] && : > "$f"
-    done
-  fi
-}
-trap cleanup EXIT
 
 LAUNCH_OUT="$(TMPDIR="$QA_TMP" PYTHONPATH="$QA_TMP:$WORKTREE" "$CAO" launch \
   --agents "$PROFILE" \
@@ -147,7 +178,7 @@ $PROMPT
 10. 對 Telegram / summary / dashboard 等使用者可見輸出，必須按 Owner 手機閱讀順序檢查。
 11. 旁支問題除非阻塞本輪驗收，否則列為後續風險，不得擴大本輪驗證。
 12. 若沒有主動質疑或反證，不能給通過，只能 conditional pass 或 blocked。
-13. 不得修改任何 tracked file；runner 只允許你使用 .qa_tmp/ 作為測試暫存。可用環境：TMPDIR=${QA_TMP}，PYTHONPATH=${QA_TMP}:${WORKTREE}。
+13. 不得修改任何 tracked file；runner 只允許你使用 .qa_tmp/ 作為測試暫存。可用環境：TMPDIR=${QA_TMP}，PYTHONPATH=${QA_TMP}:${WORKTREE}。若 Architect 已用 CAO_QA_USE_REPO_CONFIG=1 啟動本 runner，可執行 read-only production smoke；不得輸出 credential 值。
 
 End your final answer with this marker on its own line:
 $SENTINEL"

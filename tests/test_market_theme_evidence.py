@@ -14,7 +14,7 @@ from core.market_theme_evidence import (
 )
 from services import market_theme_evidence_store
 from services.market_theme_evidence_store import load_confirmed_market_theme_evidence
-from tests.test_generator_report import render_payload
+from tests.test_generator_report import render_payload, summary_message
 
 
 def source(source_type, level="supportive", freshness="fresh", freshness_reason="same_trade_date", **overrides):
@@ -175,6 +175,13 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         self.assertIn("證據日期：latest_trade_date=2026-05-29", lines)
         self.assertIn(
             "趨勢：連續支持｜近3個證據日｜連續3日支持｜lookback_range=2026-05-27~2026-05-29",
+            lines,
+        )
+        self.assertIn("市場/題材輔助", lines)
+        self.assertIn("- 題材：semiconductor", lines)
+        self.assertIn("背景：延續順風；觀察區間 2026-05-27 至 2026-05-29；連續支持 3 天。", lines)
+        self.assertIn(
+            "解讀：背景有支持，但不等於個股買點，不追高；仍看個股進場與風控條件。",
             lines,
         )
 
@@ -393,7 +400,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             "【持倉標的】\n\n【2330】📌 續抱觀察",
             "【未持倉標的】\n\n【2317】👀 等冷卻｜不可買",
             "\n".join([
-                "【05/29 盤中｜v20.4.7】",
+                "【05/29 盤中｜v20.4.11】",
                 "🧭 今日結論：R3 進攻偏熱；交易執行：無新增下單；未持倉 1 檔僅追蹤",
                 "✅ 今日盤中交易執行",
                 "無新增下單",
@@ -413,7 +420,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         self.assertFalse(report["schema_change"])
         self.assertFalse(report["data_write"])
         self.assertFalse(report["live_telegram"])
-        self.assertEqual(report["telegram_header_version"], "v20.4.7")
+        self.assertEqual(report["telegram_header_version"], "v20.4.11")
         self.assertEqual(report["source_integrity"]["production_db_readonly"], "passed")
         self.assertEqual(report["source_integrity"]["may_data_available"], "passed")
         self.assertEqual(
@@ -436,7 +443,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             "【持倉標的】\n\n無持倉",
             "【未持倉標的】\n\n【2317】👀 等冷卻｜不可買",
             "\n".join([
-                "【05/29 盤中｜v20.4.7】",
+                "【05/29 盤中｜v20.4.11】",
                 "🧭 今日結論：新倉：2317 可買",
                 "✅ 今日盤中交易執行",
                 "未持倉漏斗（非執行）：",
@@ -467,7 +474,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             "【持倉標的】\n\n無持倉",
             "【未持倉標的】\n\n【2317】👀 等冷卻｜不可買",
             "\n".join([
-                "【05/29 盤中｜v20.4.7】",
+                "【05/29 盤中｜v20.4.11】",
                 "🧭 今日結論：交易執行：無新增下單；未持倉 1 檔僅追蹤",
                 "✅ 今日盤中交易執行",
                 "未持倉漏斗（非執行）：",
@@ -497,12 +504,59 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         self.assertEqual(report["fresh_runner_dry_run"]["report_generated"], "passed")
         self.assertEqual(report["report_cross_section_consistency"]["version"], "passed")
 
+    def test_readonly_smoke_cli_outputs_auxiliary_render_artifact(self):
+        client = MultiTableEvidenceClient({
+            "market_theme_confirmed_evidence": [
+                confirmed_row(trade_date="2026-05-29"),
+                confirmed_row(trade_date="2026-05-28"),
+                confirmed_row(trade_date="2026-05-27"),
+            ],
+        })
+        output = io.StringIO()
+
+        with patch.object(
+            smoke_market_theme_evidence_readonly,
+            "_build_readonly_client",
+            return_value=client,
+        ), redirect_stdout(output):
+            exit_code = smoke_market_theme_evidence_readonly.main([
+                "--trade-date",
+                "2026-05-29",
+                "--auxiliary-render-artifact-json",
+            ])
+
+        self.assertEqual(exit_code, 0)
+        artifact = json.loads(output.getvalue())
+        self.assertEqual(
+            artifact["artifact_type"],
+            "production_readonly_market_theme_auxiliary_render",
+        )
+        self.assertFalse(artifact["schema_change"])
+        self.assertFalse(artifact["data_write"])
+        self.assertFalse(artifact["live_telegram"])
+        self.assertFalse(artifact["credential_values_included"])
+        self.assertEqual(artifact["generator_version"], "v20.4.11")
+        self.assertEqual(artifact["load_status"], "confirmed")
+        self.assertEqual(artifact["loaded_rows_count"], 1)
+        self.assertTrue(artifact["provider_confirmed"])
+        self.assertTrue(artifact["checks"]["has_auxiliary_block"])
+        self.assertTrue(artifact["checks"]["has_lookback_range"])
+        self.assertTrue(artifact["checks"]["has_support_streak_days"])
+        self.assertTrue(artifact["checks"]["has_no_buy_warning"])
+        self.assertFalse(artifact["checks"]["forbidden_buy_terms_present"])
+        rendered = "\n".join(artifact["rendered_lines"])
+        self.assertIn("市場/題材輔助", rendered)
+        self.assertIn("觀察區間", rendered)
+        self.assertIn("連續支持", rendered)
+        self.assertIn("不等於個股買點", rendered)
+        self.assertIn("不追高", rendered)
+
     def test_readonly_smoke_cli_full_integrity_json_captures_report_stdout_warning(self):
         messages = [
             "【持倉標的】\n\n無持倉",
             "【未持倉標的】\n\n【2317】👀 等冷卻｜不可買",
             "\n".join([
-                "【05/29 盤中｜v20.4.7】",
+                "【05/29 盤中｜v20.4.11】",
                 "🧭 今日結論：交易執行：無新增下單；未持倉 1 檔僅追蹤",
                 "✅ 今日盤中交易執行",
                 "未持倉漏斗（非執行）：",
@@ -826,6 +880,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             [
                 "證據：production 來源不足，不作確認。",
                 "詳情：runtime 觀察僅供診斷，非確認來源。",
+                "市場/題材輔助：資料不足",
             ],
         )
 
@@ -848,6 +903,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             [
                 "證據：production 來源不足，不作確認。",
                 "詳情：缺結構化 market/theme production source。",
+                "市場/題材輔助：資料不足",
             ],
         )
 
@@ -915,8 +971,8 @@ class MarketThemeEvidenceTest(unittest.TestCase):
                 report_phase="盤中",
             )
 
-        summary = messages[-1]
-        self.assertIn("【05/28 盤中｜v20.4.7】", summary)
+        summary = summary_message(messages)
+        self.assertIn("【05/28 盤中｜v20.4.11】", summary)
         self.assertIn("證據：production 來源不足，不作確認。", summary)
         self.assertIn("詳情：runtime 觀察僅供診斷，非確認來源。", summary)
         self.assertIn("🧭 主線：市場偏多但買點未成立。", summary)
@@ -963,10 +1019,11 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             report_phase="盤中",
         )
 
-        summary = messages[-1]
+        summary = summary_message(messages)
         self.assertIn("證據：production confirmed，市場/題材支持成立。", summary)
-        self.assertIn("限制：題材可追蹤，不代表可買", summary)
+        self.assertIn("限制：題材只能追蹤，不代表可買", summary)
         self.assertIn("來源：watchlist_breadth same_trade_date; sector_index same_trade_date", summary)
+        self.assertIn("市場/題材輔助：資料不足", summary)
         self.assertIn("🧭 新倉：無有效進場。", summary)
         self.assertIn("未持倉 1 檔僅追蹤", summary)
         self.assertLess(
@@ -974,6 +1031,59 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             summary.index("證據：production confirmed，市場/題材支持成立。"),
         )
         self.assertNotIn("今日可買：台積電", summary)
+        self.assertNotIn("台積電｜可買", summary)
+
+    def test_confirmed_trend_auxiliary_layer_does_not_create_buy_signal(self):
+        payload = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 126],
+            None,
+            price=126,
+            change=3.1,
+        )
+        payload["stock_code"] = "2330"
+        payload["result"].update({
+            "decision": "WAIT",
+            "action": 0,
+            "breakout_distance": 7.5,
+            "rr": 1.8,
+            "market_grade": "A",
+            "heat_state": "NORMAL",
+            "trade_state": "WAIT",
+        })
+        loaded = load_confirmed_market_theme_evidence(
+            client=EvidenceClient([
+                confirmed_row(trade_date="2026-05-29", sector_theme_key="AI infrastructure"),
+                confirmed_row(trade_date="2026-05-28", sector_theme_key="AI infrastructure"),
+                confirmed_row(trade_date="2026-05-27", sector_theme_key="AI infrastructure"),
+            ]),
+            trade_date="2026-05-29",
+        )
+
+        with patch.object(
+            generator,
+            "load_confirmed_market_theme_evidence",
+            return_value=loaded,
+        ):
+            messages = generator.formatTelegramMessages(
+                {"台積電": payload},
+                "FULL DETAIL",
+                None,
+                None,
+                {"trade_date": "2026-05-29", "as_of": "2026-05-29"},
+                datetime(2026, 5, 29),
+                report_phase="盤中",
+            )
+
+        summary = summary_message(messages)
+        auxiliary = summary[summary.index("市場/題材輔助"):]
+        self.assertIn("【05/29 盤中｜v20.4.11】", summary)
+        self.assertIn("- 題材：AI infrastructure", summary)
+        self.assertIn("背景：延續順風；觀察區間 2026-05-27 至 2026-05-29；連續支持 3 天。", summary)
+        self.assertIn("不等於個股買點", summary)
+        self.assertIn("🧭 新倉：無有效進場。", summary)
+        self.assertIn("可買 0", summary)
+        self.assertNotIn("建議買入", auxiliary)
+        self.assertNotIn("立即進場", auxiliary)
         self.assertNotIn("台積電｜可買", summary)
 
     def test_formatter_does_not_trust_existing_malformed_evidence_dict(self):
@@ -1011,7 +1121,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             report_phase="盤中",
         )
 
-        summary = messages[-1]
+        summary = summary_message(messages)
         self.assertIn("市場 / 題材證據：weak", summary)
         self.assertIn("限制：內部題材證據未達確認，仍依量價 / 風控判斷", summary)
         self.assertNotIn("市場 / 題材證據：confirmed", summary)

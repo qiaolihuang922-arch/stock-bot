@@ -196,5 +196,7 @@ Architect 發現以下情況一律退回：
 - 根因分類：需求、PM 契約、Tech 同步、QA 反證、runner / worktree、版本、手機閱讀、證據鏈、文件不足。
 - 判斷 QA 是否攔住風險、Tech 是否回退既有契約、是否需要 runner / agent prompt 補丁。
 - 規則治理先分類：`one_off`、`repeated_pattern`、`high_risk_invariant`、`runner_gap`、`doc_bloat`。
+- `runner_gap` / `證據鏈` / `文件不足` 類問題不能只記事故；Architect 必須優先補強可重跑流程，例如 runner gate、標準 artifact 產生命令、agent prompt 或驗收腳本，讓下一輪自然走對路。
+- 若 QA 因 sandbox / network / permission 無法直接讀 production，但 Architect 本地能 read-only 取證，必須改走標準 safe read-only artifact 流程；artifact 需標明 source、版本、無 credential、無 write、無 live delivery，並由 QA 獨立驗證 artifact schema/content。
 - 不把每次事故直接塞進 `AGENTS.md`；優先合併既有規則，具體事故留在 `CURRENT_STATE.md` 或 `CLEANUP_PLAN.md`。
 - `DISPATCH.md` 記當前結果與下一步；`CURRENT_STATE.md` 留高信號狀態；`CLEANUP_PLAN.md` 留待補與已完成壓縮摘要。

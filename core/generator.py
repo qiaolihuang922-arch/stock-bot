@@ -57,7 +57,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.7"
+VERSION = "v20.4.11"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -1850,7 +1850,11 @@ def render_backtest_context(context):
     win_rate = context.get("win_rate")
 
     if sample < 10:
-        reading = "樣本少，僅參考"
+        return (
+            "├─ 策略樣本 / 分類回測：不可用\n"
+            f"├─ 原因：classification backtest 樣本不足（有效樣本 {sample}）\n"
+            "├─ 解讀：本次不把策略樣本納入判斷；個股決策只看既有買點與風控。\n"
+        )
     elif verdict == "歷史偏強，但今日阻斷仍有效" and win_rate is not None and win_rate < 50:
         reading = "報酬偏正但勝率不足"
     elif verdict == "歷史偏強，但今日阻斷仍有效":
@@ -1869,13 +1873,15 @@ def render_backtest_context(context):
         reading = verdict or action or ""
 
     return (
-        f"├─ 回測："
+        f"├─ 策略樣本 / 分類回測："
         f"{condition}"
-        f"｜樣本 {sample}\n"
-        f"├─ 統計："
+        f"\n"
+        f"├─ 樣本："
+        f"{sample} 筆；觀察口徑：{context.get('version') or VERSION} classification backtest\n"
+        f"├─ 解讀："
         f"3日勝率 {win_rate}%"
         f"｜相對 {relative_text}"
-        f"｜{reading}\n"
+        f"｜{reading}；只作歷史分類參考\n"
     )
 
 
@@ -2435,10 +2441,22 @@ def ensure_holding_decision(name, data, signal_date=None):
     return decision
 
 
-def best_stock_text(results_map, best, score=None):
+def best_stock_text(results_map, best, score=None, report_context=None):
 
     if not best:
         return "無有效進場標的"
+
+    if not _unheld_decision_source_eligible(report_context, best):
+        eligible_results = {
+            name: data["result"]
+            for name, data in results_map.items()
+            if not data.get("holding")
+            and is_valid_entry(data.get("result") or {})
+            and _unheld_decision_source_eligible(report_context, name)
+        }
+        best, score = pick_best_stock(eligible_results)
+        if not best:
+            return "無有效進場標的"
 
     result = results_map[best]["result"]
     return (
@@ -3181,6 +3199,14 @@ def second_take_profit_execution_state(data, decision=None):
     is_second_stage = is_take_profit and realized_ratio > 0
     context = cross_day_context(data)
     execution_memory = context.get("execution_memory") or {}
+    memory_labels = " ".join(str(item) for item in execution_memory.get("labels") or [])
+    sell_deltas = execution_memory.get("sell_deltas") or []
+    confirmed_second_stage_memory = (
+        "第二" in memory_labels
+        or "SECOND" in memory_labels.upper()
+        or "TP2" in memory_labels.upper()
+        or len(sell_deltas) >= 2
+    )
     historical_take_profit_completed = (
         is_second_stage
         and context.get("source_status") == "ready"
@@ -3189,6 +3215,7 @@ def second_take_profit_execution_state(data, decision=None):
             or context.get("previous_action") == "take_profit"
         )
         and execution_memory.get("sold_shares", 0) > 0
+        and confirmed_second_stage_memory
     )
     historical_take_profit_memory_insufficient = (
         is_second_stage
@@ -3197,7 +3224,10 @@ def second_take_profit_execution_state(data, decision=None):
             context.get("dedupe_guard") in ["prior_take_profit_completed", "same_day_executed"]
             or context.get("previous_action") == "take_profit"
         )
-        and execution_memory.get("sold_shares", 0) <= 0
+        and (
+            execution_memory.get("sold_shares", 0) <= 0
+            or not confirmed_second_stage_memory
+        )
     )
     execution_memory_blocked = (
         is_second_stage
@@ -3230,6 +3260,7 @@ def second_take_profit_execution_state(data, decision=None):
         "is_second_stage": is_second_stage,
         "execution_memory": execution_memory,
         "realized_profit_taken_ratio": realized_ratio,
+        "confirmed_second_stage_memory": confirmed_second_stage_memory,
     }
 
 
@@ -3661,6 +3692,462 @@ def source_summary_text(results_map):
     return f"📡 資料：即時價 {price_source}｜日線 {daily_source}"
 
 
+def _manifest_status(status):
+    if status in ["ready", "ok", "confirmed", "consumed"]:
+        return "available"
+    if status in ["missing-source", "source-error", "insufficient-data", "not-applicable"]:
+        return status
+    if status in ["available", "derived"]:
+        return status
+    return "insufficient-data"
+
+
+def _manifest_field(
+    field_name,
+    visible_section,
+    value,
+    source_status,
+    source_of_truth,
+    *,
+    db_table="unknown",
+    as_of_date=None,
+    trade_date=None,
+    decision_eligible=False,
+    fallback_rule="fail closed",
+    input_fields=None,
+):
+    status = _manifest_status(source_status)
+    return {
+        "field_name": field_name,
+        "visible_section": visible_section,
+        "value": value,
+        "source_status": status,
+        "source_of_truth": source_of_truth,
+        "db_table": db_table,
+        "as_of_date": as_of_date,
+        "trade_date": trade_date,
+        "decision_eligible": bool(decision_eligible and status in ["available", "derived"]),
+        "fallback_rule": fallback_rule,
+        "input_fields": input_fields or [],
+    }
+
+
+def _readonly_quote_source(source):
+    source = source or "unknown"
+    if source in {"realtime", "yahoo", "twse"}:
+        return f"approved readonly service: services.stock_api.{source}"
+    return "none"
+
+
+def _price_source_status(data):
+    if data.get("price") is None:
+        return "insufficient-data"
+    if data.get("price_source") in {"realtime", "yahoo", "twse"}:
+        return "available"
+    return "missing-source"
+
+
+def _daily_source_status(data):
+    if data.get("daily_source") in {"yahoo", "twse"}:
+        if data.get("closes") == [] or data.get("volumes") == []:
+            return "insufficient-data"
+        return "available"
+    if not data.get("closes") or not data.get("volumes"):
+        return "insufficient-data"
+    return "missing-source"
+
+
+def _derived_status(*statuses):
+    if all(status == "available" for status in statuses):
+        return "derived"
+    if any(status == "source-error" for status in statuses):
+        return "source-error"
+    if any(status == "missing-source" for status in statuses):
+        return "missing-source"
+    return "insufficient-data"
+
+
+def _strategy_sample_status(strategy_evidence_summary):
+    text = strategy_evidence_summary or ""
+    if not text:
+        return "missing-source", "缺 classification backtest source-of-truth"
+    if "讀取失敗" in text or "source-error" in text:
+        return "source-error", "classification backtest 讀取失敗"
+    if "樣本不足" in text or "insufficient" in text:
+        return "insufficient-data", "classification backtest 樣本不足或欄位不足"
+    if "缺 classification backtest source-of-truth" in text or "狀態：不可用" in text:
+        return "missing-source", "缺 classification backtest source-of-truth"
+    return "available", "classification backtest source 可用"
+
+
+def _holding_source_status(data):
+    if data.get("holding"):
+        return "available"
+    return "not-applicable"
+
+
+def _position_events_source_status(data):
+    events = data.get("position_events") or {}
+    if not data.get("holding"):
+        return "not-applicable"
+    if events.get("_source_status") == "unavailable" or events.get("available") is False:
+        return "source-error"
+    return "available"
+
+
+def _field_by_key(report_context, key):
+    for field in report_context.get("evidence_manifest") or []:
+        if field.get("field_name") == key:
+            return field
+    return {}
+
+
+def _stock_field(report_context, name, suffix):
+    return _field_by_key(report_context, f"stock.{name}.{suffix}")
+
+
+def _source_status_line(report_context, name, holding=False):
+    price = _stock_field(report_context, name, "price").get("source_status", "missing-source")
+    rr = _stock_field(report_context, name, "rr").get("source_status", "missing-source")
+    daily = _stock_field(report_context, name, "daily_ohlcv").get("source_status", "missing-source")
+    if holding:
+        position = _stock_field(report_context, name, "position").get("source_status", "missing-source")
+        risk = _stock_field(report_context, name, "risk").get("source_status", "missing-source")
+        return f"Source：position {position}｜price {price}｜risk {risk}｜RR {rr}"
+    score = _stock_field(report_context, name, "score").get("source_status", "missing-source")
+    volume = _stock_field(report_context, name, "volume").get("source_status", "missing-source")
+    return f"Source：price {price}｜OHLCV {daily}｜RR {rr}｜score {score}｜volume {volume}"
+
+
+def _stock_decision_source_status(report_context, name):
+    if not report_context:
+        return "available"
+    statuses = [
+        _stock_field(report_context, name, "price").get("source_status", "missing-source"),
+        _stock_field(report_context, name, "daily_ohlcv").get("source_status", "missing-source"),
+        _stock_field(report_context, name, "rr").get("source_status", "missing-source"),
+    ]
+    if all(status in {"available", "derived"} for status in statuses):
+        return "available"
+    if "source-error" in statuses:
+        return "source-error"
+    if "missing-source" in statuses:
+        return "missing-source"
+    return "insufficient-data"
+
+
+def _unheld_decision_source_eligible(report_context, name):
+    return _stock_decision_source_status(report_context, name) == "available"
+
+
+def _unheld_source_status_from_fields(price_status, daily_status, rr_status):
+    statuses = [price_status, daily_status, rr_status]
+    if all(status in {"available", "derived"} for status in statuses):
+        return "available"
+    if "source-error" in statuses:
+        return "source-error"
+    if "missing-source" in statuses:
+        return "missing-source"
+    return "insufficient-data"
+
+
+def build_report_context(
+    results_map,
+    market_summary,
+    now,
+    *,
+    strategy_evidence_summary=None,
+    report_phase=None,
+    position_warning=None,
+):
+    report_phase = report_phase or get_market_phase()
+    as_of_date = now.date().isoformat() if hasattr(now, "date") else None
+    trade_date = as_of_date
+    if isinstance(market_summary, dict):
+        trade_date = market_summary.get("trade_date") or market_summary.get("as_of") or trade_date
+
+    manifest = [
+        _manifest_field(
+            "report.version",
+            "header",
+            VERSION,
+            "available",
+            "core.generator.VERSION",
+            db_table="none",
+            as_of_date=as_of_date,
+            trade_date=trade_date,
+            decision_eligible=False,
+            fallback_rule="block report if version is absent",
+        ),
+        _manifest_field(
+            "report.report_date",
+            "header",
+            as_of_date,
+            "available" if as_of_date else "insufficient-data",
+            "runtime report clock",
+            db_table="none",
+            as_of_date=as_of_date,
+            trade_date=trade_date,
+            decision_eligible=False,
+            fallback_rule="header shows date unavailable",
+        ),
+        _manifest_field(
+            "report.trade_date",
+            "header",
+            trade_date,
+            "available" if trade_date else "insufficient-data",
+            "production report context or market data calendar source",
+            db_table="unknown",
+            as_of_date=as_of_date,
+            trade_date=trade_date,
+            decision_eligible=False,
+            fallback_rule="fail closed when trade date cannot be confirmed",
+        ),
+    ]
+
+    market_evidence = market_theme_summary_evidence(results_map, market_summary)
+    market_status = _manifest_status(market_evidence.get("source_status"))
+    manifest.append(_manifest_field(
+        "evidence.market_theme",
+        "Evidence",
+        market_evidence.get("theme_status") or market_evidence.get("level"),
+        market_status,
+        "production.market_theme_confirmed_evidence",
+        db_table="market_theme_confirmed_evidence",
+        as_of_date=market_evidence.get("as_of") or as_of_date,
+        trade_date=trade_date,
+        decision_eligible=False,
+        fallback_rule="market/theme is background only and never upgrades stock action to BUY",
+    ))
+
+    strategy_status, strategy_reason = _strategy_sample_status(strategy_evidence_summary)
+    manifest.append(_manifest_field(
+        "evidence.strategy_sample",
+        "Evidence",
+        strategy_reason,
+        strategy_status,
+        "classification backtest source-of-truth" if strategy_status == "available" else "none",
+        db_table="daily_signal_snapshot" if strategy_status == "available" else "unknown",
+        as_of_date=as_of_date,
+        trade_date=trade_date,
+        decision_eligible=False,
+        fallback_rule="not included in stock decisions when unavailable, insufficient, or source-error",
+    ))
+
+    holding_count = 0
+    unheld_count = 0
+    funnel_inputs = []
+    unheld_source_statuses = []
+    unheld_source_eligible_count = 0
+    for name, data in ordered_result_items(results_map):
+        section = "持倉" if data.get("holding") else "新倉"
+        holding_count += 1 if data.get("holding") else 0
+        unheld_count += 0 if data.get("holding") else 1
+        price_status = _price_source_status(data)
+        daily_status = _daily_source_status(data)
+        rr_status = _derived_status(price_status, daily_status)
+        unheld_source_status = _unheld_source_status_from_fields(price_status, daily_status, rr_status)
+        score_status = _derived_status(daily_status)
+        volume_status = _derived_status(daily_status)
+        position_status = _holding_source_status(data)
+        event_status = _position_events_source_status(data)
+        cross_day = cross_day_context(data)
+        cross_day_sources = cross_day.get("source_of_truth") or []
+        if isinstance(cross_day_sources, str):
+            cross_day_sources = [cross_day_sources]
+        if cross_day.get("source_status") in ["source-error", "missing-source", "insufficient-data"]:
+            execution_status = cross_day.get("source_status")
+        elif cross_day.get("source_status") == "ready" and "position_events" in cross_day_sources:
+            execution_status = "available"
+        else:
+            execution_status = event_status
+        risk_status = _derived_status(
+            position_status if position_status != "not-applicable" else "available",
+            price_status,
+            event_status if event_status != "not-applicable" else "available",
+        )
+        source_truth = _readonly_quote_source(data.get("price_source"))
+        daily_truth = _readonly_quote_source(data.get("daily_source"))
+        stock_key = f"stock.{name}"
+        manifest.extend([
+            _manifest_field(
+                f"{stock_key}.price",
+                section,
+                data.get("price"),
+                price_status,
+                source_truth,
+                db_table="unknown",
+                as_of_date=as_of_date,
+                trade_date=trade_date,
+                decision_eligible=price_status == "available",
+                fallback_rule="do not output precise entry/exit price when unavailable",
+            ),
+            _manifest_field(
+                f"{stock_key}.volume",
+                section,
+                data.get("volume_ratio"),
+                volume_status,
+                "derived-from fields",
+                db_table="unknown",
+                as_of_date=as_of_date,
+                trade_date=trade_date,
+                decision_eligible=volume_status == "derived",
+                fallback_rule="volume judgment is not decision eligible when daily source is incomplete",
+                input_fields=[f"{stock_key}.daily_ohlcv"],
+            ),
+            _manifest_field(
+                f"{stock_key}.rr",
+                section,
+                (data.get("result") or {}).get("rr"),
+                rr_status,
+                "derived-from fields",
+                db_table="none",
+                as_of_date=as_of_date,
+                trade_date=trade_date,
+                decision_eligible=rr_status == "derived",
+                fallback_rule="do not show RR as buy reason unless price and daily inputs are available",
+                input_fields=[f"{stock_key}.price", f"{stock_key}.daily_ohlcv"],
+            ),
+            _manifest_field(
+                f"{stock_key}.score",
+                section,
+                data.get("structure_score") or (data.get("result") or {}).get("strength"),
+                score_status,
+                "derived-from fields",
+                db_table="none",
+                as_of_date=as_of_date,
+                trade_date=trade_date,
+                decision_eligible=score_status == "derived",
+                fallback_rule="score cannot upgrade stock action by itself",
+                input_fields=[f"{stock_key}.daily_ohlcv"],
+            ),
+            _manifest_field(
+                f"{stock_key}.daily_ohlcv",
+                section,
+                data.get("daily_source"),
+                daily_status,
+                daily_truth,
+                db_table="unknown",
+                as_of_date=as_of_date,
+                trade_date=trade_date,
+                decision_eligible=daily_status == "available",
+                fallback_rule="stock is not decision eligible when OHLCV is unavailable",
+            ),
+            _manifest_field(
+                f"{stock_key}.position",
+                "持倉",
+                data.get("holding"),
+                position_status,
+                "production DB position source" if data.get("holding") else "none",
+                db_table="positions" if data.get("holding") else "none",
+                as_of_date=as_of_date,
+                trade_date=trade_date,
+                decision_eligible=position_status == "available",
+                fallback_rule="do not output sell/reduce shares without position source",
+            ),
+            _manifest_field(
+                f"{stock_key}.execution_memory",
+                "持倉",
+                cross_day.get("execution_memory") or data.get("position_events"),
+                execution_status,
+                "production DB position_events",
+                db_table="position_events",
+                as_of_date=as_of_date,
+                trade_date=trade_date,
+                decision_eligible=execution_status == "available",
+                fallback_rule="fail closed for second take-profit when position_events cannot confirm execution",
+            ),
+            _manifest_field(
+                f"{stock_key}.risk",
+                "持倉" if data.get("holding") else section,
+                position_summary_action(name, data) if data.get("holding") else unheld_funnel_state(name, data),
+                risk_status if data.get("holding") else rr_status,
+                "existing stock decision / risk logic",
+                db_table="none",
+                as_of_date=as_of_date,
+                trade_date=trade_date,
+                decision_eligible=(risk_status == "derived" if data.get("holding") else rr_status == "derived"),
+                fallback_rule="source gaps downgrade to observation or not actionable; never override BUY/SELL",
+                input_fields=[f"{stock_key}.position", f"{stock_key}.execution_memory", f"{stock_key}.price", f"{stock_key}.rr"],
+            ),
+        ])
+        if not data.get("holding"):
+            funnel_inputs.append(f"{stock_key}.risk")
+            unheld_source_statuses.append(unheld_source_status)
+            if unheld_source_status == "available":
+                unheld_source_eligible_count += 1
+
+    funnel_status = "derived"
+    if unheld_source_statuses and not unheld_source_eligible_count:
+        if "source-error" in unheld_source_statuses:
+            funnel_status = "source-error"
+        elif "missing-source" in unheld_source_statuses:
+            funnel_status = "missing-source"
+        else:
+            funnel_status = "insufficient-data"
+    manifest.append(_manifest_field(
+        "funnel.unheld_counts",
+        "漏斗",
+        {"holding_count": holding_count, "unheld_count": unheld_count},
+        funnel_status,
+        "report evidence manifest aggregate",
+        db_table="none",
+        as_of_date=as_of_date,
+        trade_date=trade_date,
+        decision_eligible=funnel_status == "derived",
+        fallback_rule="do not show fake 0-count conclusion when source is missing",
+        input_fields=funnel_inputs,
+    ))
+    manifest.append(_manifest_field(
+        "tomorrow.plan",
+        "明日計畫",
+        "derived from final report decisions",
+        funnel_status,
+        "derived-from fields",
+        db_table="none",
+        as_of_date=as_of_date,
+        trade_date=trade_date,
+        decision_eligible=funnel_status == "derived",
+        fallback_rule="items with source gaps stay out of tomorrow execution plan",
+        input_fields=["funnel.unheld_counts"],
+    ))
+
+    if position_warning:
+        position_status = "missing-source" if "missing" in str(position_warning).lower() else "source-error"
+    elif holding_count:
+        position_status = "available"
+    else:
+        position_status = "not-applicable"
+
+    context = {
+        "report_context": {
+            "version": VERSION,
+            "report_phase": report_phase,
+            "as_of_date": as_of_date,
+            "trade_date": trade_date,
+        },
+        "evidence_manifest": manifest,
+        "market_theme_evidence": market_evidence,
+        "source_status_summary": {
+            "price": "available" if any(
+                _price_source_status(data) == "available"
+                for data in results_map.values()
+            ) else "insufficient-data",
+            "position": position_status,
+            "strategy_sample": strategy_status,
+            "market_theme": market_status,
+            "funnel": funnel_status,
+        },
+    }
+    context["source_status_text"] = (
+        f"核心價格 {context['source_status_summary']['price']}；"
+        f"持倉 {context['source_status_summary']['position']}；"
+        f"策略樣本 {context['source_status_summary']['strategy_sample']}；"
+        f"market/theme {context['source_status_summary']['market_theme']}"
+    )
+    return context
+
+
 def holding_tomorrow_trigger(name, data):
 
     decision = ensure_holding_decision(name, data)
@@ -3936,11 +4423,14 @@ def strong_prepare_bucket(data):
     return None, None
 
 
-def unheld_funnel_state(name, data, market_mode=None):
+def unheld_funnel_state(name, data, market_mode=None, report_context=None):
 
     result = data.get("result") or {}
     state = tomorrow_watch_state(name, data)
     blockers = entry_blockers(result)
+
+    if is_valid_entry(result) and not _unheld_decision_source_eligible(report_context, name):
+        return "淘汰"
 
     if is_valid_entry(result):
         return "可買"
@@ -4014,9 +4504,9 @@ def unheld_execution_trigger(funnel_state, data):
     return trigger or "重新轉強前不列優先"
 
 
-def unheld_execution_priority(index, name, data, market_mode=None):
+def unheld_execution_priority(index, name, data, market_mode=None, report_context=None):
 
-    funnel_state = unheld_funnel_state(name, data, market_mode=market_mode)
+    funnel_state = unheld_funnel_state(name, data, market_mode=market_mode, report_context=report_context)
     rank = {
         "可買": 0,
         "可準備": 3,
@@ -4036,9 +4526,9 @@ def unheld_execution_priority(index, name, data, market_mode=None):
     )
 
 
-def unheld_execution_item(index, name, data, market_mode=None):
+def unheld_execution_item(index, name, data, market_mode=None, report_context=None):
 
-    state = unheld_funnel_state(name, data, market_mode=market_mode)
+    state = unheld_funnel_state(name, data, market_mode=market_mode, report_context=report_context)
 
     if state != "可買":
         return None
@@ -4057,7 +4547,7 @@ def unheld_execution_item(index, name, data, market_mode=None):
     }
 
 
-def build_unheld_funnel(watch_items, market_mode=None):
+def build_unheld_funnel(watch_items, market_mode=None, report_context=None):
 
     groups = {
         "可買": [],
@@ -4070,20 +4560,21 @@ def build_unheld_funnel(watch_items, market_mode=None):
     }
 
     for name, data in watch_items:
-        groups[unheld_funnel_state(name, data, market_mode=market_mode)].append(name)
+        groups[unheld_funnel_state(name, data, market_mode=market_mode, report_context=report_context)].append(name)
 
     return groups
 
 
-def dominant_reject_reasons(watch_items, market_mode=None):
+def dominant_reject_reasons(watch_items, market_mode=None, report_context=None):
 
     reason_counts = {}
 
     for name, data in watch_items:
-        if unheld_funnel_state(name, data, market_mode=market_mode) != "淘汰":
+        if unheld_funnel_state(name, data, market_mode=market_mode, report_context=report_context) != "淘汰":
             continue
 
-        reason = rejected_primary_reason(data.get("result") or {})
+        source_status = _stock_decision_source_status(report_context, name)
+        reason = "source missing" if source_status != "available" else rejected_primary_reason(data.get("result") or {})
         if not reason:
             reason = "條件不足"
         reason_counts[reason] = reason_counts.get(reason, 0) + 1
@@ -4138,11 +4629,11 @@ def unheld_tracking_only_count(funnel):
     )
 
 
-def today_conclusion_text(holding_items, watch_items, market_mode, risk_level, report_phase=None):
+def today_conclusion_text(holding_items, watch_items, market_mode, risk_level, report_phase=None, report_context=None):
 
-    funnel = build_unheld_funnel(watch_items, market_mode=market_mode)
-    pending_count = len(pending_trade_items(holding_items, watch_items, market_mode=market_mode))
-    executed_count = len(executed_trade_items(holding_items, watch_items, market_mode=market_mode))
+    funnel = build_unheld_funnel(watch_items, market_mode=market_mode, report_context=report_context)
+    pending_count = len(pending_trade_items(holding_items, watch_items, market_mode=market_mode, report_context=report_context))
+    executed_count = len(executed_trade_items(holding_items, watch_items, market_mode=market_mode, report_context=report_context))
     tracking_count = unheld_tracking_count(funnel)
     prepare_count = len(funnel["可準備"])
     tracking_only_count = unheld_tracking_only_count(funnel)
@@ -4193,9 +4684,9 @@ def today_conclusion_text(holding_items, watch_items, market_mode, risk_level, r
     return f"{risk_level} {market_mode}；{no_new_entry_text}；未持倉無追蹤"
 
 
-def today_reason_text(watch_items, market_mode, report_phase=None):
+def today_reason_text(watch_items, market_mode, report_phase=None, report_context=None):
 
-    funnel = build_unheld_funnel(watch_items, market_mode=market_mode)
+    funnel = build_unheld_funnel(watch_items, market_mode=market_mode, report_context=report_context)
 
     if funnel["可買"]:
         if report_phase not in (None, "盤中"):
@@ -4222,12 +4713,14 @@ def today_reason_text(watch_items, market_mode, report_phase=None):
     return "依今日條件排序，未觸發不新增"
 
 
-def build_execution_items(holding_items, watch_items, market_mode=None):
+def build_execution_items(holding_items, watch_items, market_mode=None, report_context=None):
 
     holding_items = sorted(holding_items, key=lambda item: holding_execution_priority(item[0], item[1]))
     watch_items = sorted(
         enumerate(watch_items),
-        key=lambda item: unheld_execution_priority(item[0], item[1][0], item[1][1], market_mode=market_mode)
+        key=lambda item: unheld_execution_priority(
+            item[0], item[1][0], item[1][1], market_mode=market_mode, report_context=report_context
+        )
     )
 
     items = [
@@ -4236,14 +4729,14 @@ def build_execution_items(holding_items, watch_items, market_mode=None):
     ]
 
     for index, (name, data) in watch_items:
-        item = unheld_execution_item(index, name, data, market_mode=market_mode)
+        item = unheld_execution_item(index, name, data, market_mode=market_mode, report_context=report_context)
         if item:
             items.append(item)
 
     return items
 
 
-def pending_trade_items(holding_items, watch_items, market_mode=None):
+def pending_trade_items(holding_items, watch_items, market_mode=None, report_context=None):
 
     pending_states = {
         "可買",
@@ -4259,15 +4752,19 @@ def pending_trade_items(holding_items, watch_items, market_mode=None):
         "加碼30",
     }
     return [
-        item for item in build_execution_items(holding_items, watch_items, market_mode=market_mode)
+        item for item in build_execution_items(
+            holding_items, watch_items, market_mode=market_mode, report_context=report_context
+        )
         if item.get("state") in pending_states
     ]
 
 
-def executed_trade_items(holding_items, watch_items, market_mode=None):
+def executed_trade_items(holding_items, watch_items, market_mode=None, report_context=None):
 
     return [
-        item for item in build_execution_items(holding_items, watch_items, market_mode=market_mode)
+        item for item in build_execution_items(
+            holding_items, watch_items, market_mode=market_mode, report_context=report_context
+        )
         if item.get("state") == "已執行"
     ]
 
@@ -4291,10 +4788,10 @@ def post_market_plan_line(item):
     return f"{item['name']}｜明日風控｜{item.get('state') or '待確認'}"
 
 
-def format_execution_checklist(holding_items, watch_items, limit=5, report_phase=None, market_mode=None):
+def format_execution_checklist(holding_items, watch_items, limit=5, report_phase=None, market_mode=None, report_context=None):
 
-    items = pending_trade_items(holding_items, watch_items, market_mode=market_mode)
-    funnel = build_unheld_funnel(watch_items, market_mode=market_mode)
+    items = pending_trade_items(holding_items, watch_items, market_mode=market_mode, report_context=report_context)
+    funnel = build_unheld_funnel(watch_items, market_mode=market_mode, report_context=report_context)
     tracking_count = unheld_tracking_count(funnel)
     prepare_count = len(funnel["可準備"])
     tracking_only_count = unheld_tracking_only_count(funnel)
@@ -4396,9 +4893,8 @@ def format_holding_control_checklist(holding_items, limit=5, report_phase=None):
     return lines
 
 
-def format_unheld_funnel(watch_items, market_mode=None):
-
-    funnel = build_unheld_funnel(watch_items, market_mode=market_mode)
+def format_unheld_funnel(watch_items, market_mode=None, report_context=None):
+    funnel = build_unheld_funnel(watch_items, market_mode=market_mode, report_context=report_context)
     tracking_count = unheld_tracking_count(funnel)
     tracking_only_count = unheld_tracking_only_count(funnel)
     prepare_count = len(funnel["可準備"])
@@ -4427,13 +4923,21 @@ def format_unheld_funnel(watch_items, market_mode=None):
     elif tracking_only_count:
         lines.append(f"僅追蹤 {tracking_only_count} 檔，不列入交易執行")
 
+    if report_context:
+        funnel_field = _field_by_key(report_context, "funnel.unheld_counts")
+        lines.append(
+            f"Source：漏斗 count {funnel_field.get('source_status', 'missing-source')}｜{funnel_field.get('fallback_rule', 'fail closed')}"
+        )
+
     return "\n".join(lines)
 
 
-def detail_index_text(holding_items, watch_items, report_phase=None, market_mode=None):
+def detail_index_text(holding_items, watch_items, report_phase=None, market_mode=None, report_context=None):
 
-    funnel = build_unheld_funnel(watch_items, market_mode=market_mode)
-    execution_count = len(pending_trade_items(holding_items, watch_items, market_mode=market_mode))
+    funnel = build_unheld_funnel(watch_items, market_mode=market_mode, report_context=report_context)
+    execution_count = len(pending_trade_items(
+        holding_items, watch_items, market_mode=market_mode, report_context=report_context
+    ))
     prepare_count = len(funnel["可準備"])
     tracking_only_count = unheld_tracking_only_count(funnel)
     rejected = funnel["淘汰"]
@@ -4452,15 +4956,19 @@ def detail_index_text(holding_items, watch_items, report_phase=None, market_mode
     return "｜".join(parts)
 
 
-def rejected_trace_line(watch_items, market_mode=None):
+def rejected_trace_line(watch_items, market_mode=None, report_context=None):
 
-    funnel = build_unheld_funnel(watch_items, market_mode=market_mode)
+    funnel = build_unheld_funnel(watch_items, market_mode=market_mode, report_context=report_context)
     rejected = funnel["淘汰"]
 
     if not rejected:
         return None
 
-    return f"淘汰 {len(rejected)} 檔｜主因：{dominant_reject_reasons(watch_items, market_mode=market_mode)}｜詳情見未持倉卡"
+    return (
+        f"淘汰 {len(rejected)} 檔｜主因："
+        f"{dominant_reject_reasons(watch_items, market_mode=market_mode, report_context=report_context)}"
+        "｜詳情見未持倉卡"
+    )
 
 
 def ai_supply_chain_mainline_supported(market_summary):
@@ -4824,10 +5332,19 @@ def format_cross_day_tracking_summary(watch_items, limit=3):
     return lines
 
 
-def formatTelegramSummary(results_map, best, score, market_summary, now, position_warning=None, daily_write_warning=None, strategy_evidence_summary=None, report_phase=None):
+def formatTelegramSummary(results_map, best, score, market_summary, now, position_warning=None, daily_write_warning=None, strategy_evidence_summary=None, report_phase=None, report_context=None):
 
     if report_phase is None:
         report_phase = get_market_phase()
+    if report_context is None:
+        report_context = build_report_context(
+            results_map,
+            market_summary,
+            now,
+            strategy_evidence_summary=strategy_evidence_summary,
+            report_phase=report_phase,
+            position_warning=position_warning,
+        )
 
     holding_items = [
         (name, data)
@@ -4844,6 +5361,8 @@ def formatTelegramSummary(results_map, best, score, market_summary, now, positio
 
     lines = [
         f"【{now.strftime('%m/%d')} {report_phase}｜{VERSION}】",
+        f"報告日：{report_context['report_context'].get('as_of_date')}｜資料交易日：{report_context['report_context'].get('trade_date')}",
+        f"Source：{report_context.get('source_status_text')}",
     ]
 
     if position_warning:
@@ -4861,22 +5380,30 @@ def formatTelegramSummary(results_map, best, score, market_summary, now, positio
         lines.append(source_summary_text(results_map))
 
     lines.extend([
-        f"🧭 今日結論：{today_conclusion_text(holding_items, watch_items, market_mode, risk_level, report_phase=report_phase)}",
-        f"🧭 原因：{today_reason_text(watch_items, market_mode, report_phase=report_phase)}",
+        f"🧭 今日結論：{today_conclusion_text(holding_items, watch_items, market_mode, risk_level, report_phase=report_phase, report_context=report_context)}",
+        f"🧭 原因：{today_reason_text(watch_items, market_mode, report_phase=report_phase, report_context=report_context)}",
+    ])
+
+    if report_context.get("source_status_summary", {}).get("funnel") not in {"derived", "available"}:
+        lines.append("🧭 新倉：無有效進場。")
+
+    lines.extend([
         *market_execution_bridge_lines(holding_items, watch_items, market_mode, market_summary),
         *format_cross_day_tracking_summary(watch_items),
         *format_strong_prepare_summary(watch_items, market_mode),
         *format_market_theme_summary_lines(
-            market_theme_summary_evidence(results_map, market_summary)
+            report_context.get("market_theme_evidence") or market_theme_summary_evidence(results_map, market_summary)
         ),
-        f"🔥 最強：{best_stock_text(results_map, best, score)}",
+        f"🔥 最強：{best_stock_text(results_map, best, score, report_context=report_context)}",
         f"🚨 風險：{compact_risk_text(results_map)}",
         f"📌 持倉：{holding_names}",
     ])
 
     if report_phase == "盤中":
         lines.extend(["", "✅ 今日盤中交易執行"])
-        lines.extend(format_execution_checklist(holding_items, watch_items, report_phase=report_phase, market_mode=market_mode))
+        lines.extend(format_execution_checklist(
+            holding_items, watch_items, report_phase=report_phase, market_mode=market_mode, report_context=report_context
+        ))
     else:
         lines.extend(["", "今日交易"])
         lines.append("新增交易建議：無")
@@ -4890,17 +5417,23 @@ def formatTelegramSummary(results_map, best, score, market_summary, now, positio
     lines.extend(format_holding_control_checklist(holding_items, report_phase=report_phase))
 
     if report_phase != "盤中":
-        plan_count = len(pending_trade_items(holding_items, watch_items, market_mode=market_mode))
+        plan_count = len(pending_trade_items(
+            holding_items, watch_items, market_mode=market_mode, report_context=report_context
+        ))
         if plan_count:
             lines.extend(["", f"明日計畫 {plan_count}"])
-            lines.extend(format_execution_checklist(holding_items, watch_items, report_phase=report_phase, market_mode=market_mode))
+            lines.extend(format_execution_checklist(
+                holding_items, watch_items, report_phase=report_phase, market_mode=market_mode, report_context=report_context
+            ))
 
     lines.extend(["", "未持倉漏斗（非執行）："])
-    lines.append(format_unheld_funnel(watch_items, market_mode=market_mode))
+    lines.append(format_unheld_funnel(watch_items, market_mode=market_mode, report_context=report_context))
 
-    lines.extend(["", detail_index_text(holding_items, watch_items, report_phase=report_phase, market_mode=market_mode)])
+    lines.extend(["", detail_index_text(
+        holding_items, watch_items, report_phase=report_phase, market_mode=market_mode, report_context=report_context
+    )])
 
-    rejected_line = rejected_trace_line(watch_items, market_mode=market_mode)
+    rejected_line = rejected_trace_line(watch_items, market_mode=market_mode, report_context=report_context)
     if rejected_line:
         lines.append(rejected_line)
 
@@ -4910,7 +5443,7 @@ def formatTelegramSummary(results_map, best, score, market_summary, now, positio
     return "\n".join(lines)
 
 
-def formatTelegramPositionCard(name, data):
+def formatTelegramPositionCard(name, data, report_context=None):
 
     holding = data["holding"]
     decision = ensure_holding_decision(name, data)
@@ -4934,10 +5467,12 @@ def formatTelegramPositionCard(name, data):
         f"決策：{decision_line}",
         f"條件：{condition_line}",
         f"下一步：{next_step}",
+        _source_status_line(report_context, name, holding=True) if report_context else None,
         f"數據：RR {rr_text}｜S {data.get('structure_score', '-')}/5｜V {data.get('volume_ratio', '-')}x",
         compact_backtest_line(data.get("backtest_context")),
         price_change_line(data.get("price"), data.get("change")),
     ]
+    lines = [line for line in lines if line is not None]
 
     if reason_line:
         lines.insert(6, f"原因：{reason_line}")
@@ -5215,7 +5750,7 @@ def compact_backtest_line(context):
         return "回測：-"
 
     if sample < 10:
-        confidence = "參考度低"
+        return f"回測：不可用｜樣本不足（有效樣本{sample}）｜不納入判斷"
     elif sample < 30:
         confidence = "參考度中"
     else:
@@ -5239,17 +5774,21 @@ def compact_backtest_line(context):
     )
 
 
-def formatTelegramUnheldCard(name, data, report_phase=None, market_mode=None):
+def formatTelegramUnheldCard(name, data, report_phase=None, market_mode=None, report_context=None):
 
     result = data["result"]
     dist = card_breakout_distance(data)
     blockers = entry_blockers(result)
-    valid_entry = is_valid_entry(result)
+    source_status = _stock_decision_source_status(report_context, name)
+    source_eligible = source_status == "available"
+    valid_entry = is_valid_entry(result) and source_eligible
     title_label = "買點成立" if valid_entry else (blockers[0] if blockers else final_label(result))
     state = tomorrow_watch_state(name, data)
-    funnel_state = unheld_funnel_state(name, data, market_mode=market_mode)
+    funnel_state = unheld_funnel_state(name, data, market_mode=market_mode, report_context=report_context)
     prepare_label, prepare_action = strong_prepare_bucket(data)
-    if state == "弱勢淘汰":
+    if is_valid_entry(result) and not source_eligible:
+        title_label = "source missing" if source_status in {"missing-source", "insufficient-data"} else source_status
+    elif state == "弱勢淘汰":
         title_label = rejected_primary_reason(result)
     elif funnel_state == "可準備" and prepare_label:
         title_label = prepare_label
@@ -5260,6 +5799,9 @@ def formatTelegramUnheldCard(name, data, report_phase=None, market_mode=None):
             title_action = f"明日追蹤｜{unheld_entry_size_detail_text(result)}"
         else:
             title_action = f"可買｜{unheld_entry_size_detail_text(result)}"
+    elif is_valid_entry(result) and not source_eligible:
+        title_icon = "⛔"
+        title_action = "不可行動"
     elif funnel_state == "可準備":
         title_icon = "👀"
         title_action = "可準備"
@@ -5281,23 +5823,45 @@ def formatTelegramUnheldCard(name, data, report_phase=None, market_mode=None):
     wait_text = unheld_entry_wait_text(result, state, funnel_state)
     detail_size_text = unheld_entry_size_detail_text(result)
     raw_size_text = entry_size_text(result)
-    if valid_entry and report_phase not in (None, "盤中"):
+    if is_valid_entry(result) and not source_eligible:
+        buy_line = f"買點：不可買，source {source_status}"
+        data_line = "數據：RR 不可用｜S 不可用｜V 不可用"
+        price_line = "價格：不可用（source missing）"
+    elif valid_entry and report_phase not in (None, "盤中"):
         buy_line = "買點：盤後追蹤｜開盤後確認｜不追價"
+        data_line = f"數據：RR {rr_text}｜S {data.get('structure_score', '-')}/5｜V {data.get('volume_ratio', '-')}x"
+        price_line = price_change_line(data.get("price"), data.get("change"))
     elif valid_entry and detail_size_text != raw_size_text:
         buy_line = f"買點：可買｜{detail_size_text}｜分批，不追價"
+        data_line = f"數據：RR {rr_text}｜S {data.get('structure_score', '-')}/5｜V {data.get('volume_ratio', '-')}x"
+        price_line = price_change_line(data.get("price"), data.get("change"))
     elif valid_entry:
         buy_line = f"買點：可買｜建議 {raw_size_text}｜{wait_text}"
+        data_line = f"數據：RR {rr_text}｜S {data.get('structure_score', '-')}/5｜V {data.get('volume_ratio', '-')}x"
+        price_line = price_change_line(data.get("price"), data.get("change"))
     elif funnel_state == "可準備" and prepare_action:
         buy_line = f"買點：{prepare_action}"
+        data_line = f"數據：RR {rr_text}｜S {data.get('structure_score', '-')}/5｜V {data.get('volume_ratio', '-')}x"
+        price_line = price_change_line(data.get("price"), data.get("change"))
     elif funnel_state == "等回測":
         buy_line = "買點：不買，等回測"
+        data_line = f"數據：RR {rr_text}｜S {data.get('structure_score', '-')}/5｜V {data.get('volume_ratio', '-')}x"
+        price_line = price_change_line(data.get("price"), data.get("change"))
     elif funnel_state == "淘汰":
         buy_line = f"買點：不可買，{wait_text}"
+        data_line = f"數據：RR {rr_text}｜S {data.get('structure_score', '-')}/5｜V {data.get('volume_ratio', '-')}x"
+        price_line = price_change_line(data.get("price"), data.get("change"))
     else:
         buy_line = f"買點：不買，{wait_text}"
+        data_line = f"數據：RR {rr_text}｜S {data.get('structure_score', '-')}/5｜V {data.get('volume_ratio', '-')}x"
+        price_line = price_change_line(data.get("price"), data.get("change"))
     trigger_label = "盤中觸發" if report_phase == "盤中" else "明日觸發"
     tomorrow_line = f"{trigger_label}：{tomorrow_trigger_text(state, data)}"
-    reason_line = rejected_transition_reason_line(result) if funnel_state == "淘汰" else None
+    reason_line = (
+        f"原因：price/OHLCV/RR source {source_status}，不作新倉決策"
+        if is_valid_entry(result) and not source_eligible
+        else rejected_transition_reason_line(result) if funnel_state == "淘汰" else None
+    )
     lines = [
         f"【{stock_title(name, data)}】{title_icon} {title_action}｜{title_label}",
         f"盤面：{plain_label(compact_market_line(result, dist))}",
@@ -5309,10 +5873,12 @@ def formatTelegramUnheldCard(name, data, report_phase=None, market_mode=None):
 
     lines.extend([
         tomorrow_line,
-        f"數據：RR {rr_text}｜S {data.get('structure_score', '-')}/5｜V {data.get('volume_ratio', '-')}x",
+        _source_status_line(report_context, name, holding=False) if report_context else None,
+        data_line,
         compact_backtest_line(data.get("backtest_context")),
-        price_change_line(data.get("price"), data.get("change")),
+        price_line,
     ])
+    lines = [line for line in lines if line is not None]
     history_line = cross_day_detail_line(data)
     if history_line:
         lines.insert(-1, history_line)
@@ -5408,6 +5974,106 @@ def split_message(text, limit=3400):
     return chunks
 
 
+def _holding_execution_source_status(data):
+
+    context = cross_day_context(data)
+    sources = context.get("source_of_truth") or []
+    if isinstance(sources, str):
+        sources = [sources]
+    if context.get("source_status") in ["source-error", "missing-source", "insufficient-data"]:
+        return context.get("source_status")
+    if context.get("source_status") == "ready" and "position_events" in sources:
+        return "available"
+    events = data.get("position_events") or {}
+    if events.get("_source_status") == "unavailable" or events.get("available") is False:
+        return "source-error"
+    if events:
+        return "available"
+    return "available" if data.get("holding") else "not-applicable"
+
+
+def _execution_memory_evidence_text(name, data):
+
+    status = _holding_execution_source_status(data)
+    context = cross_day_context(data)
+    state = second_take_profit_execution_state(data, ensure_holding_decision(name, data))
+    memory = state.get("execution_memory") or {}
+    as_of = (
+        memory.get("latest_trade_date")
+        or context.get("previous_action_date")
+        or context.get("same_run_action_date")
+        or "-"
+    )
+    suffix = ""
+    if state.get("is_second_stage"):
+        if state.get("status") == "completed":
+            suffix = "，已確認第二段停利 event"
+        elif state.get("status") == "partial":
+            suffix = "，今日部分執行；剩餘建議需扣除已賣"
+        else:
+            suffix = "，未確認第二段停利 event"
+    elif status in {"missing-source", "source-error", "insufficient-data"}:
+        suffix = "，execution memory 不足時 fail closed"
+
+    return f"{name} execution：position_events {status}，as_of {as_of}{suffix}"
+
+
+def format_evidence_compact_message(results_map, report_context, holding_items, watch_items, market_mode=None):
+
+    lines = [
+        "【Evidence Compact】",
+        (
+            f"Report：as_of {report_context['report_context'].get('as_of_date')}"
+            f"｜trade_date {report_context['report_context'].get('trade_date')}"
+        ),
+        f"Source：{report_context.get('source_status_text')}",
+    ]
+
+    for name, data in holding_items:
+        position = _stock_field(report_context, name, "position").get("source_status", "missing-source")
+        as_of = report_context["report_context"].get("as_of_date") or "-"
+        lines.append(f"{name} holdings：positions {position}，as_of {as_of}")
+        lines.append(_execution_memory_evidence_text(name, data))
+
+    if watch_items:
+        funnel = build_unheld_funnel(watch_items, market_mode=market_mode, report_context=report_context)
+        actionable = len(funnel["可買"])
+        blocked = [
+            name for name, _data in watch_items
+            if _stock_decision_source_status(report_context, name) != "available"
+        ]
+        candidate_status = "available" if not blocked else "insufficient-data"
+        lines.append(
+            f"候選：price/source {candidate_status}；可買 {actionable}；"
+            f"source gaps fail closed {len(blocked)}"
+        )
+
+    strategy = _field_by_key(report_context, "evidence.strategy_sample")
+    market = _field_by_key(report_context, "evidence.market_theme")
+    lines.append(
+        "Evidence noise："
+        f"strategy_sample {strategy.get('source_status', 'missing-source')}；"
+        f"market/theme {market.get('source_status', 'missing-source')}；"
+        "backtest/source 長句移至 details 或壓成狀態行"
+    )
+
+    return "\n".join(lines)
+
+
+def format_details_backup_messages(full_msg):
+
+    if not full_msg:
+        return []
+
+    detail_text = (
+        "【Details Backup】\n"
+        "已壓縮 source/backtest/detail 長句；完整備查如下。\n\n"
+        "【完整詳情備份】\n"
+        f"{full_msg}"
+    )
+    return split_message(detail_text)
+
+
 def formatTelegramMessages(results_map, full_msg, best, score, market_summary, now, position_warning=None, include_detail=False, daily_write_warning=None, strategy_evidence_summary=None, report_phase=None):
 
     ordered_items = ordered_result_items(results_map)
@@ -5419,17 +6085,25 @@ def formatTelegramMessages(results_map, full_msg, best, score, market_summary, n
         if not data.get("holding")
     ]
     market_mode, _risk_level = derive_market_state(watch_items_for_mode)
+    report_context = build_report_context(
+        results_map,
+        market_summary,
+        now,
+        strategy_evidence_summary=strategy_evidence_summary,
+        report_phase=report_phase,
+        position_warning=position_warning,
+    )
     holding_items = sort_position_summary([
         (name, data)
         for name, data in ordered_items
         if data.get("holding")
     ])
     position_cards = [
-        formatTelegramPositionCard(name, data)
+        formatTelegramPositionCard(name, data, report_context=report_context)
         for name, data in holding_items
     ]
     unheld_cards = [
-        formatTelegramUnheldCard(name, data, report_phase=report_phase, market_mode=market_mode)
+        formatTelegramUnheldCard(name, data, report_phase=report_phase, market_mode=market_mode, report_context=report_context)
         for _index, (name, data) in sort_watchlist_grouped([
             (name, data)
             for name, data in ordered_items
@@ -5446,22 +6120,36 @@ def formatTelegramMessages(results_map, full_msg, best, score, market_summary, n
         position_warning,
         daily_write_warning,
         strategy_evidence_summary,
-        report_phase=report_phase
+        report_phase=report_phase,
+        report_context=report_context
     )
-    position_message = "【持倉標的】\n\n" + ("\n\n".join(position_cards) if position_cards else "無持倉")
-    unheld_message = "【未持倉標的】\n\n" + ("\n\n".join(unheld_cards) if unheld_cards else "無")
+    action_body_message = (
+        "【持倉標的】\n\n"
+        + ("\n\n".join(position_cards) if position_cards else "無持倉")
+        + "\n\n【未持倉標的】\n\n"
+        + ("\n\n".join(unheld_cards) if unheld_cards else "無")
+    )
+    evidence_message = format_evidence_compact_message(
+        results_map,
+        report_context,
+        holding_items,
+        [
+            (name, data)
+            for name, data in ordered_items
+            if not data.get("holding")
+        ],
+        market_mode=market_mode,
+    )
 
     messages = []
 
-    if include_detail:
-        for chunk in split_message("【完整詳情備份】\n" + full_msg):
-            messages.append(chunk)
+    messages.append(summary_message)
+    messages.append(action_body_message)
+    messages.append(evidence_message)
 
-    messages.extend([
-        position_message,
-        unheld_message,
-        summary_message,
-    ])
+    if include_detail:
+        for chunk in format_details_backup_messages(full_msg):
+            messages.append(chunk)
 
     return messages
 
@@ -5613,6 +6301,8 @@ def generate_report(dry_run=False):
     if position_warning:
         summary = "\n".join([
             f"【{now.strftime('%m/%d')} {report_phase}｜{VERSION}】",
+            f"報告日：{now.date().isoformat()}｜資料交易日：unknown",
+            "Source：核心價格 missing-source；持倉 missing-source；策略樣本 missing-source；market/theme missing-source",
             f"⚠ {position_warning}，持倉 / 今日交易狀態不可信",
             "今日結論",
             "新倉：無有效進場",

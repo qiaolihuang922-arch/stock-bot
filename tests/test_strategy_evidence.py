@@ -123,7 +123,11 @@ class StrategyEvidenceTest(unittest.TestCase):
         report = strategy_evidence.build_classification_report(feature_rows, outcome_rows, min_sample=10)
         text = strategy_evidence.format_strategy_evidence_summary(report)
 
-        self.assertIn("RR不足｜樣本 3｜樣本不足，不判讀", text)
+        self.assertIn("策略樣本 / 分類回測", text)
+        self.assertIn("狀態：不可用", text)
+        self.assertIn("原因：classification backtest 樣本不足（有效樣本 3）", text)
+        self.assertIn("狀態碼：insufficient-sample", text)
+        self.assertNotIn("RR不足｜樣本 3｜樣本不足，不判讀", text)
 
     def test_schema_missing_error_uses_readiness_message(self):
         error = {
@@ -133,7 +137,9 @@ class StrategyEvidenceTest(unittest.TestCase):
 
         text = strategy_evidence.format_strategy_evidence_summary(error=error)
 
-        self.assertIn("策略證據尚未啟用：資料表未建立，主報文不受影響", text)
+        self.assertIn("狀態：不可用", text)
+        self.assertIn("原因：缺 classification backtest source-of-truth", text)
+        self.assertIn("狀態碼：missing-source", text)
         self.assertNotIn("Could not find the table", text)
         self.assertNotIn("schema cache", text)
         self.assertNotIn("{'message'", text)
@@ -143,7 +149,9 @@ class StrategyEvidenceTest(unittest.TestCase):
             error=RuntimeError("timeout while connecting to db.example.internal")
         )
 
-        self.assertIn("證據層暫時略過：資料更新失敗，主報文不受影響", text)
+        self.assertIn("狀態：不可用", text)
+        self.assertIn("原因：classification backtest 讀取失敗", text)
+        self.assertIn("狀態碼：source-error", text)
         self.assertNotIn("timeout while connecting", text)
         self.assertNotIn("db.example", text)
 
@@ -254,7 +262,9 @@ class StrategyEvidenceTest(unittest.TestCase):
             signal_calls.index(("daily_signal_snapshot", "limit", 25)),
             signal_calls.index(("daily_signal_snapshot", "execute")),
         )
-        self.assertIn("RR不足｜樣本 0｜樣本不足，不判讀", text)
+        self.assertIn("狀態：不可用", text)
+        self.assertIn("原因：classification backtest 欄位不足（daily_price 無可用資料）", text)
+        self.assertIn("狀態碼：insufficient-data", text)
 
     def test_record_strategy_evidence_reuses_injected_client(self):
         payload = {
@@ -340,7 +350,13 @@ class StrategyEvidenceTest(unittest.TestCase):
 
         self.assertEqual(report["RR不足"]["win_rate"], 60)
         self.assertEqual(report["RR不足"]["mfe_horizon"], 5)
-        self.assertIn("RR不足｜樣本 10｜3日勝率 60%｜5日MFE中位 +8.0%｜漏失 10", text)
+        self.assertIn("策略樣本 / 分類回測", text)
+        self.assertIn(
+            "分類：RR不足｜樣本：10 筆｜觀察口徑：v20.0 classification backtest｜"
+            "3日勝率 60%｜5日MFE中位 +8.0%｜漏失 10",
+            text,
+        )
+        self.assertIn("只作分類參考", text)
 
     def test_audit_flags_high_momentum_weak_rebound(self):
         data = {

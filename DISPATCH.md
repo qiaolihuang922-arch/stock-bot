@@ -4,44 +4,47 @@
 
 ## Current Task
 
-- task_id: `next_evidence_chain_development`
-- task_name: `Continue Evidence Chain Development`
+- task_id: `intraday_20260601_report_sequence_execution_memory_noise_v20_4_11`
+- task_name: `Intraday Report Sequence / Execution Memory / Noise Compression`
 - task_type: `risk_patch`
-- owner_status: `requested`
-- architect_status: `ready`
-- pm_status: `todo`
-- tech_status: `todo`
-- qa_status: `todo`
+- owner_status: `reported_0601_intraday_report_order_2356_noise_gap`
+- architect_status: `absorbed_agent_diff_and_reviewed`
+- pm_status: `done`
+- tech_status: `done`
+- qa_status: `passed`
 - latest_commit: see `git log -1`
 
 ## Current Result
 
-- 已推送：
-  - `6367d78 fix holiday execution memory report`
-  - `4f19e16 docs mark holiday fix pushed`
-- 05/31 假日报文主 bug 已修：
-  - 英業達 2356 若 production cross-day execution memory 顯示 2026-05-29 已賣 `-112`、`-75`，報文不再輸出「第二段停利，本次建議 56 股」，也不進明日計畫。
-  - 若 production source 可讀但 prior take-profit 的 execution memory 缺失或 `sold_shares <= 0`，報文 fail closed：`停利記憶不足`，不輸出明確賣出股數。
-  - market/theme evidence 顯示 latest/evidence trade date、holiday report 使用最近交易日 evidence、trend `lookback_range`。
-  - `策略證據 v20.0` 已標示為 strategy sample 層，不否定 market/theme production evidence。
+- 本輪未 commit / 未 push。
+- 已吸收 PM -> Tech -> QA 交付到主 repo 工作樹：
+  - 報文版本升至 `v20.4.11`。
+  - `formatTelegramMessages()` 固定輸出：Summary -> action body（持倉/未持倉）-> Evidence Compact -> optional Details Backup。
+  - 主體行動不再被 verbose source/backtest/detail 噪音插在前面；長證據移到 compact evidence / details backup。
+  - 2356 第二段停利 execution memory 補 stale guard：position_events 未明確確認「第二」/ `SECOND` / `TP2` 或至少兩筆 sell deltas 時，fail closed 為 `停利記憶不足`，不得顯示第二段已執行或重複賣出股數。
+  - `evidence_manifest` 補 `stock.<name>.execution_memory`，把 positions / position_events source truth 暴露給 report evidence。
+  - 不改 BUY/SELL、加減碼、停利停損策略 engine、DB schema、write path、live Telegram。
+- Production read-only artifact：
+  - `.qa_tmp/production_readonly_2356_positions_events.json` 已生成並由 QA 驗證。
+  - artifact 安全旗標：無 credential、無 write、無 schema change、無 live Telegram。
+  - artifact 顯示 production `positions` 目前 2356 英業達為 `shares=0`、`status=CLOSED`；`position_events` 有 4 筆 sell summary，但無 second-stage-like labels。
+  - 因此報文不得把一般 `賣出` 事件升格成「已確認第二段停利 event」；若使用者認知仍為未賣，下一步是查 production ledger/source truth，不是讓報文猜。
+- Runner gap 已修：
+  - `tools/cao_agent/run_qa_code.sh` 會在 QA 啟動前同步主 repo handoff files 到可重用 tech worktree，避免 QA 驗到 stale `TASK.md / CHANGELOG.md / QA_REPORT.md`。
+  - 保留既有 `CAO_QA_USE_REPO_CONFIG=1` 與 safe read-only artifact 路徑；QA sandbox DNS 失敗時可核對 Architect sanitized production-read evidence。
 - 驗證：
   - QA 結論：`通過`。
-  - `PYTHONPATH=. arch -arm64 .venv/bin/python -m pytest -q`：264 passed，153 warnings（第三方 deprecation 類）。
+  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py services/strategy_evidence.py`：passed。
+  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_strategy_evidence.py tests/test_market_theme_evidence.py tests/test_notifier.py tests/test_cross_day_context.py tests/test_analysis_engine.py`：167 passed，165 warnings（第三方 deprecation 類）。
   - `git diff --check`：passed。
+  - QA 補充反證：完整 message list 順序、2356 stale second-stage guard、噪音壓縮、production artifact schema/content 均 passed。
+  - scoped 可吸收 diff：`core/generator.py`、`tests/test_generator_report.py`、`tests/test_market_theme_evidence.py`、`CHANGELOG.md`、`QA_REPORT.md`；其他既存 dirty files 不得用本輪結論整包吸收。
 
 ## Next Action
 
-下一個新對話要繼續「證據鏈開發」，不是回頭修 05/31 重複停利。
-
-建議第一張 PM 任務：
-
-```text
-讓 production market/theme evidence 從「已確認背景」進一步成為可讀的策略輔助層：
-1. 不放寬買點、不直接改 BUY/SELL。
-2. 把 market/theme trend、lookback_range、support_streak_days 轉成報文中清楚的題材/市場輔助說明。
-3. 明確區分：市場/題材 evidence、分類回測 strategy sample、個股買點/風控。
-4. 手機閱讀時不得再讓使用者以為 evidence confirmed 等於可以追高。
-```
+- 本輪可 commit / push；commit 前建議再跑一次 targeted tests 與 `git diff --check`。
+- 旁支另開：Telegram reply markup 仍附在最後一則 message，message order 改為 summary first 後可能需要 delivery consumer 任務評估按鈕落點。
+- 旁支另開：如果 Owner 認定 2356 英業達實際未賣，需查 production ledger/source truth 為何目前為 `shares=0 / CLOSED`；本輪未寫 DB、不校正 ledger。
 
 ## Fixed Commands
 
