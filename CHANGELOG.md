@@ -1,169 +1,128 @@
-# CHANGELOG: v20.4.18 structural evidence coverage 100%
+# CHANGELOG:
 
   ## 任務尺寸與風險
 
-  - task_id: evidence-chain-structural-coverage-100
-  - 任務類型: risk_patch
-  - Tech 結論: implemented
-  - 阻塞狀態: none
+  - 任務類型：risk_patch
+  - 風險判斷：碰 evidence chain verifier、Telegram evidence 版本、artifact / runner gate 契約；不碰策略門檻、DB schema/write path、live Telegram。
 
   ## 修改內容
 
-  - 將 Telegram 報文版本升至 v20.4.18。
-  - 在 report_context["evidence_manifest"] 補齊 structural evidence slot 欄位：
-      - layer
-      - target
-      - source
-      - status
-      - use
-      - limit
-      - conflict
-      - visible_refs
-  - 補齊必要 evidence layers：
-      - market-theme
-      - strategy-sample
-      - positions
-      - ledger
-      - price-ohlcv
-      - rr-score-volume
-      - funnel-classification
-      - execution-plan
-      - next-day-plan
-      - missing-data
-      - conflict
-  - 第三則 Telegram 資料依據 新增每層 source/status/use/limit/conflict 摘要，保留 v20.4.17 人話資料依據，不回退成 raw debug dump。
-  - 新增 structural coverage verifier：
-      - 計算 total visible decision/data layers
-      - 計算 covered layers
-      - 列出 missing slots
-      - 列出 conflict slots
-      - 檢查 fail-closed violation，阻擋 missing-source / unresolved-conflict 下的可買、通過、有效進場升格詞
-      - coverage 必須 100% 才 pass
-  - 新增 read-only artifact helper 與 CLI script，支援三組 fixture：
-      - all_sources_available
-      - missing_strategy_sample_source
-      - ledger_position_conflict
-  - 補 missing-source / unresolved-conflict fail-closed 測試，確認不可升格為可買 / 通過 / 有效進場。
-  - QA blocker 修正：verifier 不只攔 `可買`，也攔 `通過`、`有效進場`；保守文案 `無有效進場` 不誤擋。
+  - 將報文版本升至 v20.4.19。
+  - 新增五維 evidence maturity report：
+      - data_source_anti_fake
+      - telegram_evidence_expression
+      - strategy_sample_evidence
+      - execution_memory_ledger_evidence
+      - repeatable_runner_process
+  - 新增 strategy sample read-only artifact / verifier：
+      - production read-only artifact 需含 source artifact path/hash proof。
+      - missing-source 可被明確揭露且 fail closed。
+      - synthetic-only 不得通過 production maturity gate。
+  - 新增 positions / position_events / ledger read-only audit artifact / verifier：
+      - 揭露 shares/status/event/date/label 摘要。
+      - ledger conflict 輸出 unresolved-conflict，且 Telegram 不輸出已確認停利 / 可賣股數 / 有效執行結論。
+  - 擴充 scripts/generate_structural_evidence_artifact.py：
+      - 保留既有 structural artifact。
+      - 新增 --maturity-report 標準命令。
+      - blocked case 以 exit code 2 fail closed。
+  - 新增 runner/process gate：
+      - tools/cao_agent/check_evidence_handoff_gate.sh
+      - 檢查 handoff files、maturity artifact、版本、100 分、五維 dimensions、三則 messages、artifacts、source hash、repo/worktree binding、blocking findings 與 read-only safety flags。
+  - 新增測試覆蓋：
+      - 100 分正例：production all sources、strategy missing-source fail-closed、ledger conflict fail-closed。
+      - 負例：synthetic strategy sample、runner stale artifact blocked。
+      - 同步既有 v20.4.19 版本預期。
 
   ## 修改檔案
 
   - core/generator.py
-      - VERSION 升至 v20.4.18
-      - evidence manifest slot 結構補齊
-      - third message evidence layer block 補齊
-      - 新增 verify_structural_evidence_coverage
-      - 新增 build_structural_evidence_artifact
-      - 新增 structural fixture helper
   - scripts/generate_structural_evidence_artifact.py
-      - 新增 read-only artifact CLI
-      - 不連 live Telegram
-      - 不寫 DB
-      - 不改 schema
-      - 不輸出 credential values
+  - tools/cao_agent/check_evidence_handoff_gate.sh
   - tests/test_generator_report.py
-      - 更新版本斷言至 v20.4.18
-      - 增加 manifest required key 檢查
-      - 增加三組 structural artifact coverage/fail-closed 測試
   - tests/test_market_theme_evidence.py
-      - 更新版本斷言至 v20.4.18
 
   ## 最小改動策略
 
-  - 只在既有 Telegram generator / report_context / evidence_manifest / artifact 測試範圍內補 structural coverage。
-  - 未重寫策略核心。
-  - 未改買賣門檻。
-  - 未改 DB schema / migration。
-  - 未改 live Telegram delivery path。
-  - 未改 production write path。
-  - 未做 backfill。
-  - 未清理或重構旁支模組。
+  - 沿用既有 structural evidence artifact / manifest / Telegram evidence renderer。
+  - 只在同一 evidence artifact command 上增加 maturity report，不新增策略分支或重寫報文生成流程。
+  - runner gate 以獨立 shell verifier 補齊，不改 CAO 主流程語意。
+  - 測試只更新相關 evidence / version assertions，未擴成 full repo cleanup。
 
   ## 契約影響
 
-  - 使用者可見版本: v20.4.17 -> v20.4.18。
-  - Telegram message list 順序維持：
-      - messages[0]: 持倉
-      - messages[1]: 未持倉 / 非持倉
-      - messages[2]: short / evidence
+  - 使用者可見報文版本：v20.4.18 -> v20.4.19。
+  - Telegram message order 不變：
+      - messages[0] 持倉
+      - messages[1] 未持倉 / 非持倉
+      - messages[2] short/evidence
       - include_detail=True 時 Details Backup 仍追加最後
-  - 第三則 Telegram 新增標準 evidence layer 摘要，包含 source/status/use/limit/conflict。
-  - report_context["evidence_manifest"] 每個可見決策 / 資料層 slot 新增 structural keys。
-  - 新增 public helper:
-      - verify_structural_evidence_coverage(messages, evidence_manifest)
-      - build_structural_evidence_artifact(case="all_sources_available", now=None)
-  - Verifier payload 保留 `coverage_pct`，並新增等價 alias `coverage_percent`。
-  - 新增 artifact CLI:
-      - scripts/generate_structural_evidence_artifact.py --case <case>
-  - Artifact safety contract:
+  - 新增 public helper：
+      - build_evidence_maturity_report(case="production_all_sources_available", now=None)
+  - CLI contract 擴充：
+      - python scripts/generate_structural_evidence_artifact.py --maturity-report --case production_all_sources_available
+      - pass 時 exit 0；synthetic-only / stale runner 等 blocked case exit 2。
+  - 新 maturity artifact 輸出包含：
+      - maturity_score
+      - dimensions
+      - blocking_findings
+      - artifacts
+      - structural_artifact
+      - telegram_messages
+      - repo_head
+      - worktree_status_sha256
+      - worktree_diff_sha256
+  - Read-only artifact safety flags 維持：
       - schema_change=false
       - data_write=false
       - live_telegram=false
       - credential_values_included=false
-  - DB contract:
-      - 無 schema change
-      - 無 DB write
-      - 無 production DML
-      - 無 live Telegram
 
   ## 直接消費者同步
 
-  - Owner 手機 Telegram 閱讀者:
-      - 第三則可直接看到每層資料依據狀態、用途、限制與衝突。
-  - QA verifier:
-      - 可用 scripts/generate_structural_evidence_artifact.py 重跑三則 messages + evidence manifest + verifier。
-      - blocking source status 存在時，可反證 `可買 / 通過 / 有效進場` 會讓 verifier fail。
-  - 內部 report_context consumer:
-      - evidence_manifest slot 保留既有欄位，新增 structural keys。
-  - 內部 evidence_manifest consumer:
-      - 可依 layer/target/source/status/use/limit/conflict/visible_refs 追溯可見層。
-  - runner / CI coverage tests:
-      - 新增 targeted tests 覆蓋三組 artifact case。
+  - Owner 手機 Telegram：第三則 evidence 仍呈現 source/status/use/limit/conflict，且 v20.4.19 可見。
+  - QA evidence maturity verifier：新增單一標準 maturity report command 與正負 case。
+  - Architect / runner：新增 check_evidence_handoff_gate.sh 可檢查 stale / missing artifact。
+  - report_context / evidence_manifest consumer：既有 structural coverage helper 未移除，新增 maturity helper 不改既有 manifest key。
+  - future production read-only audit consumer：artifact contract 統一為 artifact_id/generated_at/source_type/source_name/source_version_or_query_id/status/use/limit/conflict/records_summary/visible_refs/
+    verifier_result。
 
   ## 未影響模組
 
-  - DB schema / migration / RLS / grant / policy / role / index / constraint 未改。
-  - production write path 未改。
-  - live Telegram send path 未改。
-  - strategy decision core 未重寫。
-  - market/theme 仍只作背景，不等於買點。
-  - strategy sample 不可用時仍不納入買賣判斷。
-  - 第一則 / 第二則持倉與未持倉卡片主結構未做無關改動。
+  - 未改 DB schema / migration / RLS / grant / policy / role。
+  - 未做 production DML、backfill 或 ledger 修復。
+  - 未改 production write path。
+  - 未執行 live Telegram delivery。
+  - 未改買賣策略門檻、持倉狀態機、RR / score / volume 演算法。
+  - 未處理 Telegram reply markup 附著最後一則 message 的旁支風險。
 
   ## 已跑自檢命令
 
-  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_write_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py scripts/generate_structural_evidence_artifact.py
-      - result: passed
-  - git diff --check
-      - result: passed
-  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_write_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py
-      - result: 119 passed, 169 warnings
-      - warnings: third-party deprecation warnings from pyiceberg / pydantic / supabase
-  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_write_pycache arch -arm64 .venv/bin/python scripts/generate_structural_evidence_artifact.py --case all_sources_available >/private/tmp/
-    structural_all_sources_available.json
-      - result: passed
-      - verifier: messages=3 coverage=100.0 pass=True missing=[] fail_closed=[] conflicts=0
-  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_write_pycache arch -arm64 .venv/bin/python scripts/generate_structural_evidence_artifact.py --case missing_strategy_sample_source >/private/tmp/
-    structural_missing_strategy_sample_source.json
-      - result: passed
-      - verifier: messages=3 coverage=100.0 pass=True missing=[] fail_closed=[] conflicts=0
-  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_write_pycache arch -arm64 .venv/bin/python scripts/generate_structural_evidence_artifact.py --case ledger_position_conflict >/private/tmp/
-    structural_ledger_position_conflict.json
-      - result: passed
-      - verifier: messages=3 coverage=100.0 pass=True missing=[] fail_closed=[] conflicts=2
-  - QA blocker targeted self-check:
-      - injected `建準｜通過｜來源不足仍升格` => verifier pass=False, fail_closed_violations non-empty
-      - injected `建準｜有效進場｜來源不足仍升格` => verifier pass=False, fail_closed_violations non-empty
+  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py scripts/generate_structural_evidence_artifact.py：passed
+  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python scripts/generate_structural_evidence_artifact.py --maturity-report --case production_all_sources_available：
+    maturity_score=100，blocking_findings=[]
+  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python scripts/generate_structural_evidence_artifact.py --maturity-report --case strategy_sample_synthetic_only：exit=2，
+    strategy_sample_evidence blocked
+  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python scripts/generate_structural_evidence_artifact.py --maturity-report --case ledger_position_conflict：maturity_score=100，
+    ledger status=unresolved-conflict
+  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python scripts/generate_structural_evidence_artifact.py --maturity-report --case runner_stale_artifact_blocked：exit=2，
+    repeatable_runner_process blocked
+  - tools/cao_agent/check_evidence_handoff_gate.sh . /private/tmp/evidence_maturity_report.json：passed
+  - forged minimal 100 artifact：gate blocked
+  - artifact with removed production source hash：gate blocked
+  - stale repo/worktree binding artifact：gate blocked
+  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py：121 passed，169 warnings
+  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_strategy_evidence.py tests/test_position_store.py tests/test_cross_day_context.py：21 passed，12
+    warnings
+  - git diff --check：passed
+  - bash -n tools/cao_agent/check_evidence_handoff_gate.sh：passed
 
   ## 殘留風險
 
-  - 本輪只驗 structural coverage 100%，不驗資料合理度、不修 production ledger conflict。
-  - Verifier 只針對 structural slot / fail-closed wording 做檢查，不等同 QA 完整驗收；目前已覆蓋 TASK 明列的可買 / 通過 / 有效進場。
-  - Artifact fixture 是 read-only synthetic fixture，不代表 production data 已完整或無衝突。
-  - 第三則顯示標準 status token 是本輪契約要求；v20.4.17 禁 raw engineering dump 的契約仍以不輸出 raw table/field/timestamp 為準。
+  - Tech 未執行 live Supabase read 或 live Telegram；production online read-only artifact 仍需 QA/Architect 在允許 repo config 的 read-only 環境重跑確認。
+  - 新 runner gate 是可重跑 verifier script；Architect final 仍需另外跑 git completion gate。
+  - runner_stale_artifact_blocked 已能 fail closed，QA 也反證 forged/stale artifacts 會被 gate 擋下。
 
   ## 旁支待辦
 
-  - 若 Owner 要驗 production 真實資料合理度，需另開 production read-only evidence audit。
-  - 若 Owner 要修 ledger / position_events 衝突，需另開 source-of-truth / ledger 稽核任務。
-  - 若 QA 要擴大到 live runner 報文，需由 Architect 另行安排，不在 Tech 本輪自檢內。
+  - Telegram reply markup 仍附著最後一則 message 的 delivery consumer 風險，另開任務評估。
+  - 若 Owner 認定 2356 production ledger 與實際持倉不一致，需另開 source-of-truth 稽核任務；本輪不修資料、不 backfill。

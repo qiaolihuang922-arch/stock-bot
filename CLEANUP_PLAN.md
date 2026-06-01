@@ -15,6 +15,15 @@
 
 ## Completed
 
+- `evidence-chain-maturity-100`:
+  - 問題：Owner 指正要完成的是先前評估的 evidence chain maturity 72/100 -> 100/100，不是 structural coverage 100%。
+  - 結果：PM -> Tech -> QA 完成，QA `通過`；收口需 commit / push 並跑 Git completion gate。
+  - 關鍵修正：報文版本升 v20.4.19；新增五維 maturity report：data source / anti-fake、Telegram evidence expression、strategy sample evidence、execution memory / ledger evidence、repeatable runner / process，標準正例五維皆 100。
+  - Read-only proof：strategy sample 與 ledger production-readonly artifacts 都帶 source artifact path/hash proof；synthetic-only strategy sample exit 2，runner stale artifact exit 2。
+  - Runner/gate：`tools/cao_agent/check_evidence_handoff_gate.sh` 擋 forged minimal 100、缺 source hash、stale repo/worktree binding；仍需 final 另跑 git completion gate。
+  - QA 反證：ledger conflict 保留 unresolved-conflict / position-vs-events 且不輸出已確認停利 / 可賣股數 / 有效執行結論；Telegram 三則順序與 v20.4.19 evidence 可讀性未回退。
+  - 規則治理：`evidence_chain` + `runner_gap` + `high_risk_invariant`。maturity 100 代表可追溯、可重跑、防偽、fail-closed 成熟；不代表策略合理、資料本身無衝突或 ledger 已修。
+  - 邊界：不改策略 decision、DB schema/write、live Telegram；不修 production ledger conflict。
 - `evidence-chain-structural-coverage-100`:
   - 問題：Owner 要先把 evidence chain completeness 推到 100%，暫不處理資料合理度與衝突本身，但不得造假。
   - 結果：PM -> Tech -> QA 完成，QA `通過`；收口需 commit / push 並跑 Git completion gate。

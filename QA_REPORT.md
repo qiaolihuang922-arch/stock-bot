@@ -2,46 +2,46 @@
 
 ## 測試範圍
 
-- 任務：`evidence-chain-structural-coverage-100`
+- 任務：`evidence-chain-maturity-100`
 - 任務尺寸 / QA：`risk_patch / L3`
-- 驗證範圍：structural evidence coverage、verifier、三則 Telegram artifact、fail-closed 文案、read-only artifact CLI。
-- 未擴成 production replay、backfill、production read-only audit、全 repo pytest 或 live Telegram。
+- 驗證範圍：五維 evidence maturity verifier、production-readonly artifact proof、handoff gate、Telegram v20.4.19 三則順序與 evidence 可讀性。
+- 未擴成 full pytest、正式 replay、backfill、live Telegram 或 production write。
 
 ## 關聯風險掃描
 
-- `TASK.md / CHANGELOG.md / diff` 一致：版本升 `v20.4.18`，三則 message order 保持，第三則補 source/status/use/limit/conflict，manifest 補 required keys。
-- 可吸收 diff：`core/generator.py`、`tests/test_generator_report.py`、`tests/test_market_theme_evidence.py`、`CHANGELOG.md`、`scripts/generate_structural_evidence_artifact.py`。
-- Artifact safety flags 均為 `schema_change=false`、`data_write=false`、`live_telegram=false`、`credential_values_included=false`。
-- `git diff --check`：passed。
-- Targeted tests：`tests/test_generator_report.py tests/test_market_theme_evidence.py`：119 passed，169 warnings。
+- `production_all_sources_available`：exit 0，`maturity_score=100`，五維皆 `{score:100,status:pass}`，`blocking_findings=[]`。
+- `strategy_sample_synthetic_only`：exit 2，`strategy_sample_evidence` blocked。
+- `runner_stale_artifact_blocked`：exit 2，`repeatable_runner_process` blocked。
+- `ledger_position_conflict`：exit 0，ledger artifact 保留 `status=unresolved-conflict`、`conflict=position-vs-events`。
+- strategy / ledger production-readonly artifact 均包含 `source_artifact_exists=true` 與 `source_artifact_sha256`，QA 已比對實際 hash。
+- diff 掃描未見 DB schema/migration、production DML/write path、live Telegram send path 變更。
 
 ## 跨區塊語意一致性
 
-- 三則手機閱讀順序已驗：messages[0] 持倉、messages[1] 未持倉、messages[2] 簡報＋資料依據。
-- 三個 CLI artifact case 重跑結果：
-  - `all_sources_available`：coverage 100%，pass=true，missing_slots=[]，fail_closed_violations=[]，conflict_slots=[]。
-  - `missing_strategy_sample_source`：coverage 100%，pass=true，missing_slots=[]，fail_closed_violations=[]，顯示 missing-source 與「新倉：無有效進場」。
-  - `ledger_position_conflict`：coverage 100%，pass=true，missing_slots=[]，fail_closed_violations=[]，conflict_slots 顯示 `position-vs-event` 與 `unresolved-conflict`。
-- 必要 structural layers 已驗，三個 artifact 均無 missing required layer，manifest slots 無 required key 空值。
+- TASK / CHANGELOG / diff 一致：版本 `v20.4.19`、五維 maturity、read-only flags、synthetic/stale fail closed、ledger conflict fail closed。
+- Telegram message order 維持：messages[0] 持倉、messages[1] 未持倉、messages[2] evidence。
+- 第三則 evidence 保留 source/status/use/limit/conflict 並維持人話可讀。
+- Handoff gate 可重跑，會檢查 artifact type/version/score、五維 dimensions、telegram_messages、artifacts、source proof/hash、safety flags、repo/worktree binding。
 
 ## 使用者誤讀風險
 
-- missing-source case 不會被 `通過 / 有效進場 / 可買` 誤導。
-- ledger conflict case 會顯示 `unresolved-conflict` 與 `position-vs-event`，未顯示已確認停利或有效執行結論。
-- v20.4.17 人話資料依據未回退成 raw dump；第三則仍可讀，但保留本任務要求的標準 status token。
+- `maturity_score=100` 代表 evidence chain 可追溯、缺資料與衝突會被揭露並 fail closed；不代表策略樣本 source 本身已可用，也不代表 ledger conflict 已修復。
+- `production_all_sources_available` case 中 strategy sample 仍可能是 `missing-source`，但會以 production-readonly source artifact 明確揭露並顯示「不納入買賣判斷」。
+- ledger conflict case 未輸出「已確認停利 / 可賣股數 / 有效執行結論」。
 
 ## 質疑與反證
 
-- QA 補充反證：對 missing-source artifact 注入 `建準｜通過｜來源不足仍升格`，verifier 回傳 `pass=false` 且 `fail_closed_violations` 非空。
-- QA 補充反證：對 missing-source artifact 注入 `建準｜有效進場｜來源不足仍升格`，verifier 回傳 `pass=false` 且 `fail_closed_violations` 非空。
-- QA 確認 `coverage_pct` 與 `coverage_percent` 均為 100.0，避免 artifact 消費者欄位名不一致。
-- diff 掃描未見 DB schema / migration / production write / live Telegram send path 變更。
+- forged minimal 100 artifact 被 `check_evidence_handoff_gate.sh` 擋下。
+- 移除 production source hash 的 artifact 被 gate 擋下。
+- 舊 repo/worktree binding artifact 被 gate 擋下。
+- synthetic-only strategy sample 被 maturity CLI 以 exit 2 擋下。
+- stale runner artifact 被 maturity CLI 以 exit 2 擋下。
 
 ## 未測項目
 
-- 未驗 production 真實資料合理度、ledger 衝突修復、策略門檻正確性、production read-only audit。
-- 未跑 full repo pytest、未做 live Telegram、未做 DB write/backfill/schema 操作。
-- 未驗 runner 實際發報，只驗 read-only artifact 與 generator/verifier 行為。
+- 未做 live Supabase write、production DML、backfill、live Telegram delivery。
+- 未處理 Telegram reply markup 附著最後一則 message 的旁支風險。
+- 未修 2356 / ledger production 資料本身；本輪只完成 maturity evidence chain 與 fail-closed gate。
 
 ## QA 結論
 

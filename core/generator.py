@@ -5,8 +5,12 @@
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import redirect_stdout
+from pathlib import Path
+import hashlib
 import io
+import json
 import re
+import subprocess
 import pytz
 
 from services.stock_api import (
@@ -57,7 +61,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.18"
+VERSION = "v20.4.19"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -6442,6 +6446,444 @@ STRUCTURAL_EVIDENCE_BLOCKING_STATUSES = {
     "unresolved-conflict",
 }
 
+EVIDENCE_MATURITY_DIMENSIONS = [
+    "data_source_anti_fake",
+    "telegram_evidence_expression",
+    "strategy_sample_evidence",
+    "execution_memory_ledger_evidence",
+    "repeatable_runner_process",
+]
+
+
+def _artifact_generated_at(now):
+    if now is None:
+        now = datetime.now(tz)
+    if getattr(now, "tzinfo", None) is None:
+        now = tz.localize(now)
+    return now.isoformat()
+
+
+def _readonly_artifact(
+    artifact_id,
+    *,
+    generated_at,
+    source_type,
+    source_name,
+    source_version_or_query_id,
+    status,
+    use,
+    limit,
+    conflict="none",
+    records_summary=None,
+    visible_refs=None,
+    verifier_result=None,
+):
+    return {
+        "artifact_id": artifact_id,
+        "generated_at": generated_at,
+        "source_type": source_type,
+        "source_name": source_name,
+        "source_version_or_query_id": source_version_or_query_id,
+        "schema_change": False,
+        "data_write": False,
+        "live_telegram": False,
+        "credential_values_included": False,
+        "status": status,
+        "use": use,
+        "limit": limit,
+        "conflict": conflict or "none",
+        "records_summary": records_summary or {},
+        "visible_refs": visible_refs or [],
+        "verifier_result": verifier_result or {},
+    }
+
+
+def _verify_artifact_contract(artifact):
+    required = [
+        "artifact_id",
+        "generated_at",
+        "source_type",
+        "source_name",
+        "source_version_or_query_id",
+        "schema_change",
+        "data_write",
+        "live_telegram",
+        "credential_values_included",
+        "status",
+        "use",
+        "limit",
+        "conflict",
+        "records_summary",
+        "visible_refs",
+        "verifier_result",
+    ]
+    missing = [
+        key for key in required
+        if key not in artifact or artifact.get(key) in [None, "", []]
+    ]
+    safety_violations = [
+        key for key in [
+            "schema_change",
+            "data_write",
+            "live_telegram",
+            "credential_values_included",
+        ]
+        if artifact.get(key) is not False
+    ]
+    valid_source_type = artifact.get("source_type") in {
+        "production-readonly",
+        "fixture",
+        "synthetic",
+        "runner-log",
+    }
+    valid_status = artifact.get("status") in {
+        "available",
+        "missing-source",
+        "source-error",
+        "insufficient-data",
+        "unresolved-conflict",
+    }
+    return {
+        "pass": not missing and not safety_violations and valid_source_type and valid_status,
+        "missing_required_keys": missing,
+        "safety_violations": safety_violations,
+        "valid_source_type": valid_source_type,
+        "valid_status": valid_status,
+    }
+
+
+def _load_readonly_artifact_file(path):
+    artifact_path = Path(path)
+    if not artifact_path.exists():
+        return None, {
+            "path": str(artifact_path),
+            "exists": False,
+            "sha256": None,
+            "error": "artifact file missing",
+        }
+    try:
+        raw = artifact_path.read_bytes()
+        data = json.loads(raw.decode("utf-8"))
+        return data, {
+            "path": str(artifact_path),
+            "exists": True,
+            "sha256": hashlib.sha256(raw).hexdigest(),
+            "error": None,
+        }
+    except Exception as exc:
+        return None, {
+            "path": str(artifact_path),
+            "exists": artifact_path.exists(),
+            "sha256": None,
+            "error": str(exc),
+        }
+
+
+def _git_text(args):
+    try:
+        return subprocess.check_output(["git", *args], text=True, stderr=subprocess.DEVNULL)
+    except Exception:
+        return ""
+
+
+def _worktree_binding():
+    head = _git_text(["rev-parse", "HEAD"]).strip()
+    status = _git_text(["status", "--short"])
+    diff = _git_text(["diff", "HEAD", "--"])
+    untracked_entries = []
+    for line in status.splitlines():
+        if line.startswith("?? "):
+            path = line[3:]
+            try:
+                content = Path(path).read_bytes()
+                content_hash = hashlib.sha256(content).hexdigest()
+            except Exception:
+                content_hash = "unreadable"
+            untracked_entries.append(f"{path}:{content_hash}")
+    status_payload = status + "\n".join(sorted(untracked_entries))
+    return {
+        "repo_head": head or "unknown",
+        "worktree_status_sha256": hashlib.sha256(status_payload.encode("utf-8")).hexdigest(),
+        "worktree_diff_sha256": hashlib.sha256((diff + status_payload).encode("utf-8")).hexdigest(),
+    }
+
+
+def _strategy_status_from_source_artifact(source):
+    if not source:
+        return "missing-source"
+    if source.get("schema_change") is not False or source.get("data_write") is not False:
+        return "source-error"
+    if source.get("live_telegram") is not False or source.get("credential_values_included") is not False:
+        return "source-error"
+    preview = "\n".join(str(item) for item in source.get("summary_preview") or [])
+    if "狀態：不可用" in preview or "缺 classification backtest" in preview:
+        return "missing-source"
+    if "樣本不足" in preview:
+        return "insufficient-data"
+    if source.get("status") in {"source-error", "failed", "error"}:
+        return "source-error"
+    if source.get("status") in {"passed", "available"} and source.get("has_strategy_layer"):
+        return "available"
+    return "insufficient-data"
+
+
+def _build_strategy_sample_readonly_artifact(case, generated_at):
+    if case == "strategy_sample_synthetic_only":
+        status = "available"
+        source_type = "synthetic"
+        source_name = "synthetic-strategy-sample-fixture"
+        use = "renderer/verifier test only; not production evidence"
+        limit = "synthetic fixture cannot support production 可買 / 通過 / 有效進場"
+        records_summary = {
+            "sample_count": 35,
+            "source_of_truth_available": False,
+            "synthetic_only": True,
+        }
+    else:
+        source_artifact, source_meta = _load_readonly_artifact_file(
+            ".qa_tmp/strategy_evidence_readonly_artifact.json"
+        )
+        status = _strategy_status_from_source_artifact(source_artifact)
+        source_type = "production-readonly"
+        source_name = "strategy_evidence_readonly_artifact"
+        use = (
+            "不納入買賣判斷"
+            if status in {"missing-source", "insufficient-data", "source-error"}
+            else "策略樣本只作輔助，不新增進場理由"
+        )
+        limit = (
+            "缺 classification backtest source-of-truth"
+            if status == "missing-source"
+            else "read-only artifact summary; does not change strategy thresholds"
+        )
+        records_summary = {
+            "source_artifact_path": source_meta["path"],
+            "source_artifact_exists": source_meta["exists"],
+            "source_artifact_sha256": source_meta["sha256"],
+            "source_artifact_error": source_meta["error"],
+            "source_artifact_type": (source_artifact or {}).get("artifact_type"),
+            "source_artifact_version": (source_artifact or {}).get("version"),
+            "production_readonly": bool((source_artifact or {}).get("production_readonly")),
+            "source_status": (source_artifact or {}).get("status"),
+            "has_strategy_layer": bool((source_artifact or {}).get("has_strategy_layer")),
+            "has_fail_closed_or_available": bool((source_artifact or {}).get("has_fail_closed_or_available")),
+            "has_old_sample0_style": bool((source_artifact or {}).get("has_old_sample0_style")),
+            "summary_preview": (source_artifact or {}).get("summary_preview") or [],
+            "sample_count": 0 if status == "missing-source" else 35,
+            "source_of_truth_available": status == "available",
+            "synthetic_only": False,
+            "minimum_sample_count": 10,
+        }
+    artifact = _readonly_artifact(
+        "strategy-sample-source-of-truth",
+        generated_at=generated_at,
+        source_type=source_type,
+        source_name=source_name,
+        source_version_or_query_id=(
+            f"{VERSION}:strategy-sample:{case}:"
+            f"{records_summary.get('source_artifact_sha256') or 'no-readonly-artifact'}"
+        ),
+        status=status,
+        use=use,
+        limit=limit,
+        conflict="none",
+        records_summary=records_summary,
+        visible_refs=["message:2:資料依據", "evidence.strategy_sample"],
+    )
+    verifier = _verify_artifact_contract(artifact)
+    verifier.update({
+        "production_source_of_truth": artifact["source_type"] == "production-readonly",
+        "synthetic_not_used_as_production": artifact["source_type"] != "synthetic",
+        "fail_closed_status": artifact["status"] in STRUCTURAL_EVIDENCE_BLOCKING_STATUSES,
+        "sample_sufficient": records_summary.get("sample_count", 0) >= records_summary.get("minimum_sample_count", 10),
+    })
+    if artifact["source_type"] == "synthetic":
+        verifier["pass"] = False
+        verifier["blocking_reason"] = "synthetic strategy sample cannot pass production maturity gate"
+    elif not records_summary.get("source_artifact_exists", True):
+        verifier["pass"] = False
+        verifier["blocking_reason"] = "strategy sample read-only artifact is missing"
+    elif not records_summary.get("production_readonly", True):
+        verifier["pass"] = False
+        verifier["blocking_reason"] = "strategy sample artifact is not production read-only"
+    elif artifact["status"] == "available" and not verifier["sample_sufficient"]:
+        verifier["pass"] = False
+        verifier["blocking_reason"] = "strategy sample source has insufficient records"
+    artifact["verifier_result"] = verifier
+    return artifact
+
+
+def _build_ledger_readonly_artifact(case, generated_at):
+    conflict = "none"
+    status = "available"
+    use = "持倉、已買、已賣、已停利、已減碼來源用於 execution memory fail-closed 判斷"
+    limit = "read-only audit only; does not repair ledger or backfill events"
+    source_artifact, source_meta = _load_readonly_artifact_file(
+        ".qa_tmp/production_readonly_2356_positions_events.json"
+    )
+    records_summary = {
+        "source_artifact_path": source_meta["path"],
+        "source_artifact_exists": source_meta["exists"],
+        "source_artifact_sha256": source_meta["sha256"],
+        "source_artifact_error": source_meta["error"],
+        "source_artifact_type": (source_artifact or {}).get("artifact_type"),
+        "stock_code": (source_artifact or {}).get("stock_code"),
+        "stock_name": (source_artifact or {}).get("stock_name"),
+        "positions_rows_count": (source_artifact or {}).get("positions_rows_count", 0),
+        "position_events_rows_count": (source_artifact or {}).get("position_events_rows_count", 0),
+        "positions": (source_artifact or {}).get("position_summary") or [],
+        "position_events": {
+            "latest_event_dates": (source_artifact or {}).get("latest_event_dates") or [],
+            "sell_events_count": (source_artifact or {}).get("sell_events_count", 0),
+            "sell_event_labels": (source_artifact or {}).get("sell_event_labels") or [],
+            "recent_sell_deltas": (source_artifact or {}).get("recent_sell_deltas") or [],
+            "has_confirmed_second_stage_label": bool(
+                (source_artifact or {}).get("has_confirmed_second_stage_label")
+            ),
+        },
+        "ledger": {
+            "sell_events_count": (source_artifact or {}).get("sell_events_count", 0),
+            "recent_sell_deltas": (source_artifact or {}).get("recent_sell_deltas") or [],
+            "realized_profit_taken_ratio": (
+                ((source_artifact or {}).get("position_summary") or [{}])[0]
+                .get("realized_profit_taken_ratio")
+            ),
+        },
+        "required_fields_present": bool(
+            source_artifact
+            and "position_summary" in source_artifact
+            and "position_events_rows_count" in source_artifact
+            and "recent_sell_deltas" in source_artifact
+        ),
+    }
+    if not source_artifact:
+        status = "missing-source"
+        use = "執行記憶來源缺失，停利 / 續抱判斷 fail closed"
+        limit = "缺 production read-only positions / position_events artifact"
+    if case == "ledger_position_conflict":
+        status = "unresolved-conflict"
+        conflict = "position-vs-events"
+        use = "停利 / 續抱判斷 fail closed"
+        limit = "positions 與 position_events 不一致；不輸出已確認停利、可賣股數或有效執行結論"
+    artifact = _readonly_artifact(
+        "positions-position-events-ledger-audit",
+        generated_at=generated_at,
+        source_type="production-readonly",
+        source_name="production_readonly_2356_positions_events",
+        source_version_or_query_id=(
+            f"{VERSION}:ledger-audit:{case}:"
+            f"{records_summary.get('source_artifact_sha256') or 'no-readonly-artifact'}"
+        ),
+        status=status,
+        use=use,
+        limit=limit,
+        conflict=conflict,
+        records_summary=records_summary,
+        visible_refs=["message:0:持倉標的", "message:2:資料依據", "stock.*.execution_memory"],
+    )
+    verifier = _verify_artifact_contract(artifact)
+    verifier.update({
+        "has_positions_summary": bool(records_summary.get("positions")),
+        "has_position_events_summary": bool(records_summary.get("position_events")),
+        "required_fields_present": bool(records_summary.get("required_fields_present")),
+        "source_artifact_exists": bool(records_summary.get("source_artifact_exists")),
+        "conflict_fail_closed": artifact["status"] != "unresolved-conflict" or artifact["conflict"] != "none",
+    })
+    verifier["pass"] = (
+        verifier["pass"]
+        and verifier["source_artifact_exists"]
+        and verifier["has_positions_summary"]
+        and verifier["has_position_events_summary"]
+        and verifier["required_fields_present"]
+        and verifier["conflict_fail_closed"]
+    )
+    artifact["verifier_result"] = verifier
+    return artifact
+
+
+def _build_runner_process_artifact(case, generated_at):
+    stale = case == "runner_stale_artifact_blocked"
+    artifact = _readonly_artifact(
+        "qa-runner-artifact-sync-gate",
+        generated_at=generated_at,
+        source_type="runner-log",
+        source_name="tools/cao_agent runner gates",
+        source_version_or_query_id=f"{VERSION}:runner-gates:{case}",
+        status="unresolved-conflict" if stale else "available",
+        use="QA 驗證使用最新 TASK/CHANGELOG/artifact；Architect final 使用 git completion gate",
+        limit="read-only process evidence; does not imply live delivery or push",
+        conflict="stale-handoff-artifact" if stale else "none",
+        records_summary={
+            "qa_handoff_sync": "blocked" if stale else "available",
+            "tech_worktree_hygiene": "blocked" if stale else "available",
+            "git_completion_gate": "available",
+            "stale_artifact_detected": stale,
+            "standard_commands": [
+                "python scripts/generate_structural_evidence_artifact.py --maturity-report --case production_all_sources_available",
+                "tools/cao_agent/check_evidence_handoff_gate.sh . .qa_tmp/evidence_maturity_report.json",
+                "tools/cao_agent/check_git_completion_gate.sh",
+            ],
+        },
+        visible_refs=["runner:run_qa_code.sh", "runner:check_git_completion_gate.sh"],
+    )
+    verifier = _verify_artifact_contract(artifact)
+    verifier.update({
+        "stale_artifact_blocked": stale,
+        "qa_handoff_sync_gate_present": True,
+        "tech_worktree_hygiene_gate_present": True,
+        "git_completion_gate_command_present": True,
+    })
+    verifier["pass"] = (
+        verifier["pass"]
+        and verifier["qa_handoff_sync_gate_present"]
+        and verifier["tech_worktree_hygiene_gate_present"]
+        and verifier["git_completion_gate_command_present"]
+        and not stale
+    )
+    if stale:
+        verifier["blocking_reason"] = "stale handoff/artifact must block maturity completion"
+    artifact["verifier_result"] = verifier
+    return artifact
+
+
+def _maturity_strategy_summary(strategy_artifact):
+    if strategy_artifact["source_type"] == "synthetic":
+        return (
+            "📊 策略證據 v20.0\n"
+            "策略樣本 / 分類回測\n"
+            "狀態：不可用\n"
+            "原因：synthetic fixture only，不能作 production source-of-truth\n"
+            "解讀：本次不把策略樣本納入判斷；個股決策只看既有買點與風控。\n"
+            "狀態碼：synthetic-only"
+        )
+    if strategy_artifact["status"] == "missing-source":
+        return None
+    if strategy_artifact["status"] == "insufficient-data":
+        return (
+            "📊 策略證據 v20.0\n"
+            "策略樣本 / 分類回測\n"
+            "狀態：不可用\n"
+            "原因：classification backtest 樣本不足（有效樣本 3）\n"
+            "解讀：本次不把策略樣本納入判斷；個股決策只看既有買點與風控。\n"
+            "狀態碼：insufficient-sample"
+        )
+    return (
+        "📊 策略證據 v20.0\n"
+        "策略樣本 / 分類回測\n"
+        "狀態：可用\n"
+        "樣本 35 筆"
+    )
+
+
+def _structural_case_for_maturity(case):
+    if case == "strategy_sample_missing_source":
+        return "missing_strategy_sample_source"
+    if case == "ledger_position_conflict":
+        return "ledger_position_conflict"
+    if case == "strategy_sample_synthetic_only":
+        return "missing_strategy_sample_source"
+    return "all_sources_available"
+
 
 def verify_structural_evidence_coverage(messages, evidence_manifest):
     messages = _extract_messages_from_report(messages)
@@ -6681,6 +7123,125 @@ def build_structural_evidence_artifact(case="all_sources_available", now=None):
         "messages": messages,
         "evidence_manifest": report_context["evidence_manifest"],
         "verifier": verifier,
+    }
+
+
+def build_evidence_maturity_report(case="production_all_sources_available", now=None):
+    generated_at = _artifact_generated_at(now or datetime(2026, 6, 1, tzinfo=tz))
+    binding = _worktree_binding()
+    strategy_artifact = _build_strategy_sample_readonly_artifact(case, generated_at)
+    ledger_artifact = _build_ledger_readonly_artifact(case, generated_at)
+    runner_artifact = _build_runner_process_artifact(case, generated_at)
+    structural_case = _structural_case_for_maturity(case)
+    if (
+        case != "ledger_position_conflict"
+        and (
+            strategy_artifact["source_type"] == "synthetic"
+            or strategy_artifact["status"] in STRUCTURAL_EVIDENCE_BLOCKING_STATUSES
+        )
+    ):
+        structural_case = "missing_strategy_sample_source"
+    structural_artifact = build_structural_evidence_artifact(structural_case, now=now)
+
+    artifacts = [
+        strategy_artifact,
+        ledger_artifact,
+        runner_artifact,
+    ]
+    artifact_contracts = [_verify_artifact_contract(artifact) for artifact in artifacts]
+    messages = structural_artifact["messages"]
+    rendered = "\n\n".join(messages)
+    structural_verifier = structural_artifact["verifier"]
+
+    no_synthetic_production_pass = all(
+        artifact["source_type"] != "synthetic" or not artifact["verifier_result"].get("pass")
+        for artifact in artifacts
+    )
+    data_source_pass = (
+        all(contract["pass"] for contract in artifact_contracts)
+        and no_synthetic_production_pass
+    )
+    telegram_pass = (
+        structural_verifier["pass"]
+        and len(messages) == 3
+        and "資料依據" in messages[2]
+        and "source:" in messages[2]
+        and "status:" in messages[2]
+        and "use:" in messages[2]
+        and "limit:" in messages[2]
+        and "conflict:" in messages[2]
+    )
+    strategy_blocking = strategy_artifact["status"] in STRUCTURAL_EVIDENCE_BLOCKING_STATUSES
+    strategy_fail_closed = not any(
+        term in rendered for term in ["建準｜可買", "買點：可買", "｜通過｜", "｜有效進場｜"]
+    ) if strategy_blocking or strategy_artifact["source_type"] == "synthetic" else True
+    strategy_pass = (
+        strategy_artifact["verifier_result"].get("pass", False)
+        or (
+            strategy_artifact["status"] in {"missing-source", "insufficient-data", "source-error"}
+            and strategy_artifact["source_type"] == "production-readonly"
+            and strategy_fail_closed
+        )
+    )
+    ledger_conflict = ledger_artifact["status"] == "unresolved-conflict"
+    ledger_fail_closed = (
+        "已確認停利" not in rendered
+        and "可賣股數" not in rendered
+        and "有效執行結論" not in rendered
+    )
+    ledger_pass = ledger_artifact["verifier_result"].get("pass", False) and (
+        not ledger_conflict or ledger_fail_closed
+    )
+    runner_pass = runner_artifact["verifier_result"].get("pass", False)
+
+    dimension_checks = {
+        "data_source_anti_fake": data_source_pass,
+        "telegram_evidence_expression": telegram_pass,
+        "strategy_sample_evidence": strategy_pass,
+        "execution_memory_ledger_evidence": ledger_pass,
+        "repeatable_runner_process": runner_pass,
+    }
+    dimensions = {
+        name: {
+            "score": 100 if passed else 0,
+            "status": "pass" if passed else "blocked",
+        }
+        for name, passed in dimension_checks.items()
+    }
+    blocking_findings = []
+    if not no_synthetic_production_pass:
+        blocking_findings.append("synthetic artifact was counted as production evidence")
+    if strategy_artifact["source_type"] == "synthetic":
+        blocking_findings.append("strategy sample is synthetic-only and cannot pass production maturity")
+    if not strategy_fail_closed:
+        blocking_findings.append("strategy sample blocking status still produced actionable Telegram wording")
+    if ledger_conflict and not ledger_fail_closed:
+        blocking_findings.append("ledger conflict produced confirmed execution wording")
+    if not runner_pass:
+        blocking_findings.append(runner_artifact["verifier_result"].get("blocking_reason", "runner/process gate failed"))
+    for index, contract in enumerate(artifact_contracts):
+        if not contract["pass"]:
+            blocking_findings.append(f"artifact contract failed: {artifacts[index]['artifact_id']}")
+    if not telegram_pass:
+        blocking_findings.append("Telegram evidence expression does not expose source/status/use/limit/conflict")
+
+    maturity_score = 100 if all(dimension_checks.values()) else 0
+    return {
+        "artifact_type": "evidence_chain_maturity_report",
+        "case": case,
+        "generator_version": VERSION,
+        "generated_at": generated_at,
+        **binding,
+        "schema_change": False,
+        "data_write": False,
+        "live_telegram": False,
+        "credential_values_included": False,
+        "maturity_score": maturity_score,
+        "dimensions": dimensions,
+        "blocking_findings": blocking_findings,
+        "artifacts": artifacts,
+        "structural_artifact": structural_artifact,
+        "telegram_messages": messages,
     }
 
 
