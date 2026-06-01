@@ -2,50 +2,51 @@
 
 ## 測試範圍
 
-- 任務：`import-boundary-gate-20260601`，process，QA L2。
-- 驗證聚焦：import boundary gate、失敗訊息可定位、無新增檔案、無 runtime 行為變更、VERSION 不變。
-- 未擴大到 full pytest、replay、backfill、production smoke、production DB write 或 live Telegram。
+- 任務：`pm-20260601-telegram-helper-split`，normal_patch，QA L2。
+- 驗證聚焦：純 Telegram formatter 是否已從 `core/generator.py` 拆到 `presentation/report.py`、報文輸出契約不變、import boundary gate 仍有效、完整邏輯測試通過。
+- 未做 production write、DB schema、backfill 或 live Telegram。
 
 ## 關聯風險掃描
 
-- Gate 規則位於 `tests/test_generator_report.py`：
-  - 掃描 `presentation/`、`services/`、`core/`、`main.py`、`app.py`。
-  - `presentation` 禁止 import `services.signal_store`、`services.daily_snapshot_store.record_daily_snapshots`、`services.strategy_evidence`。
-  - `services/`、`core/` 禁止 import `presentation`，但 allowlist `core/generator.py -> presentation.report` transitional bridge。
-  - integration allowlist `services/notifier.py`，符合 TASK 的 runner edge。
-- Runtime code 無變更：`core/generator.py`、`presentation/report.py`、`services/*`、`main.py`、`app.py` 未改。
+- `presentation/report.py` 無任何 import；透過 deps 使用既有 helper，未直接依賴 DB writer / signal writer / strategy evidence writer。
+- AST spot check 未發現 presentation 直接賦值 `result`、`results_map`、`holding_decision` roots。
+- `core/generator.py` 仍保留 public wrapper，避免外部消費者因搬移破裂。
+- `core/generator.py` 已移除搬到 presentation 的 brief evidence private helper，避免顯示 helper 雙宿主。
 - `core.generator.VERSION` 仍為 `v20.4.21`。
-- 無新增業務模組、無新增架構文檔。
 
 ## 跨區塊語意一致性
 
-- TASK 要求不新增 test file：符合，gate 加在既有 `tests/test_generator_report.py`。
-- TASK 要求失敗輸出含 offending file/import/rule：符合，formatter 為三行格式。
-- TASK 要求不升 VERSION：符合。
-- TASK 要求無 DB write / live Telegram / runtime diff：符合。
-- CHANGELOG 的修改檔案口徑已和主 repo 最終 staged diff 對齊，固定文件摘要會納入本輪 commit。
+- Telegram 多訊息順序沿用既有契約：持倉、未持倉、brief evidence / summary 短訊，Details Backup 只在 `include_detail=True` 時追加。
+- Summary、持倉卡、未持倉卡、brief data evidence 的 formatter 已搬移，但 strategy decision、RR、holding_status、DB read/write 未改。
+- CHANGELOG、TASK 與實際 diff 對齊：本輪只改 `core/generator.py`、`presentation/report.py` 與固定 handoff 文件。
 
 ## 使用者誤讀風險
 
-- 本輪無 Telegram / summary / dashboard 可見輸出變更；手機閱讀順序不變。
-- 主要改善是後續拆分不靠對話記憶：違規 import 會在測試中直接指出 rule/file/import。
+- 本輪不改 Telegram 文案，不新增 raw source/table dump，不新增推薦語。
+- 拆分後 presentation 層仍是顯示層；策略/資料來源判斷仍在既有 core/service 流程，不因 formatter 搬移而升級或降級任何標的。
 
 ## 質疑與反證
 
-- QA 額外反證：直接餵入 `from services.signal_store import record_daily_signals`、`from services.daily_snapshot_store import record_daily_snapshots`、`from services.strategy_evidence import record_strategy_evidence/get_supabase_client`、`from presentation import report`、`import presentation.report`，回傳 6 筆違規，且每筆都有 rule/file/import。
-- Allowlist 不過寬：`core/generator.py -> presentation.report` 是唯一 core bridge；`services/fake_service.py` 與 `core/fake_strategy.py` 仍會被抓。
-- 無 production side effect：未執行 live Telegram、DB write、backfill；測試只跑本地 unit test 與靜態 helper。
+- import boundary gate 已在 `tests/test_generator_report.py` 中通過，仍覆蓋 presentation 禁止 DB/signal/strategy writer import，以及 core/services 禁止新增 presentation import。
+- 完整邏輯測試矩陣通過，覆蓋 report rendering、market/theme evidence、analysis engine、strategy evidence、position store、cross-day context、signal validator。
+- 追加 dry-run replay / daily snapshot store tests 通過，降低 formatter 搬移對 runner/replay 旁路的風險。
+- Refactor evidence table 已補在 `CHANGELOG.md`，列 path / claim / evidence / risk / action。
+- Re-QA runner 追加手機順序 smoke 通過：持倉卡 -> 未持倉卡 -> brief evidence / summary -> Details Backup。
 
 ## 已跑命令
 
-- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile tests/test_generator_report.py`：passed。
-- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py`：91 passed，177 warnings。
+- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py presentation/report.py presentation/__init__.py tests/test_generator_report.py`：passed。
+- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_analysis_engine.py tests/test_strategy_evidence.py tests/test_position_store.py tests/test_cross_day_context.py tests/test_signal_validator.py`：187 passed，177 warnings。
+- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_daily_snapshot_store.py tests/test_dry_run_replay.py`：12 passed，13 warnings。
 - `git diff --check`：passed。
+- AST spot check：presentation imports `[]`；direct assigned roots `[]`。
+- `tools/cao_agent/run_qa_code.sh ...` Re-QA：通過；QA output `.cao_agent_context/outputs/20260601_172241_30673_stock_qa_code_readonly.answer.txt`。
 
 ## 未測項目
 
-- 未跑 full pytest、replay、backfill、production read/write smoke；TASK L2/process 不要求。
-- 未移除 `core/generator.py -> presentation.report` bridge；這是後續待辦。
+- 未跑 live Telegram。
+- 未做 production DB read/write smoke。
+- 未做 full pytest；本輪按 Owner 要求跑完整邏輯矩陣與兩個追加旁路測試。
 
 ## QA 結論
 

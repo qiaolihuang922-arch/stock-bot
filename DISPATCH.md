@@ -4,39 +4,38 @@
 
 ## Current Task
 
-- task_id: `import-boundary-gate-20260601`
-- task_name: `Strategy Presentation Import Boundary Gate`
-- task_type: `process`
-- owner_status: `requested_layer_map_without_new_files`
+- task_id: `pm-20260601-telegram-helper-split`
+- task_name: `Pure Telegram Formatter Helpers Presentation Split`
+- task_type: `normal_patch`
+- owner_status: `requested_continue_split_and_complete_logic_tests`
 - architect_status: `qa_passed_pending_git_close`
 - pm_status: `done`
-- tech_status: `manual_absorb_from_rejected_runner`
+- tech_status: `manual_absorb_from_tech_worktree`
 - qa_status: `passed`
 - latest_commit: see `git log -1`
 
 ## Current Result
 
-- 本輪目標是防止後續拆分靠記憶：不新增業務模組、不新增架構文檔，只在既有測試檔加入可重跑 import boundary gate，並在固定文件寫高信號分層地圖。
+- 本輪目標是繼續明確拆分：把純 Telegram formatter helper 從 `core/generator.py` 移到既有 `presentation/report.py`，不新增業務模組或架構文檔。
 - Git completion gate：final 前必須以 `tools/cao_agent/check_git_completion_gate.sh` 驗證 `main` matches `origin/main` 且 worktree clean。
 - 已吸收內容：
-  - `tests/test_generator_report.py` 新增 AST import gate。
-  - Gate 掃描 `presentation/`、`services/`、`core/`、`main.py`、`app.py`。
-  - 禁止 `presentation` import DB writer / signal writer / strategy evidence writer。
-  - 禁止 `services/` 與 `core/` import `presentation`。
-  - 唯一 transitional allowlist：`core/generator.py -> presentation.report`。
-  - Fake import fixture 反證 gate 會輸出 offending rule/file/import。
-  - Telegram / VERSION / DB write path 無變更。
+  - `presentation/report.py` 承接 `formatTelegramSummary`、`formatTelegramPositionCard`、`formatTelegramUnheldCard`、`format_brief_data_evidence_message` 與 brief evidence 顯示 helper。
+  - `core/generator.py` 保留 public wrapper 與 orchestration，透過 `_telegram_presentation_deps()` 注入既有 helper。
+  - `presentation/report.py` 沒有 import；不直接 mutate `result/results_map/holding_decision` roots。
+  - Telegram 文案、message order、VERSION、strategy decision、RR、holding_status、DB write path 無變更。
 - 驗證：
   - QA 結論：`通過`。
-  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile tests/test_generator_report.py`：passed。
-  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py`：91 passed，177 warnings。
+  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py presentation/report.py presentation/__init__.py tests/test_generator_report.py`：passed。
+  - 完整邏輯矩陣：187 passed，177 warnings。
+  - 追加旁路：`tests/test_daily_snapshot_store.py tests/test_dry_run_replay.py`：12 passed，13 warnings。
+  - Re-QA runner：通過；追加手機順序 smoke confirmed。
   - `git diff --check`：passed。
-  - scoped diff：`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`、`DISPATCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`tests/test_generator_report.py`。
+  - scoped diff：`core/generator.py`、`presentation/report.py`、固定 handoff Markdown。
 
 ## Next Action
 
-- 若 `git status --branch --short` 顯示未推送或 dirty，先完成 commit / push 並跑 `tools/cao_agent/check_git_completion_gate.sh`，不得開新產品任務。
 - 收口：commit / push 後跑 `tools/cao_agent/check_git_completion_gate.sh`。
+- 下一刀拆分：只搬 remaining pure display helper；不可把策略、DB、ledger、holding status 帶進 presentation。
 - 旁支另開：Telegram reply markup 仍附在最後一則 message，新 message order 下可能需要 delivery consumer 任務評估按鈕落點。
 - 旁支另開：如果 Owner 認定 2356 英業達實際未賣，需查 production ledger/source truth 為何目前為 `shares=0 / CLOSED`；本輪未寫 DB、不校正 ledger。
 

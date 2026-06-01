@@ -1,223 +1,187 @@
-# TASK: 建立策略層 / 顯示層 / 服務層 import gate
+# TASK: 拆分純 Telegram 顯示 helper 到 presentation
 
 ## 任務狀態
 
-- task_id: import-boundary-gate-20260601
-- 任務類型: process
+- task_id: pm-20260601-telegram-helper-split
+- 任務類型: normal_patch
 - 狀態: qa_passed
-- 版本建議: 不升 VERSION
+- 版本建議: 不升版，不修改 VERSION
 - QA 分級建議: L2
-- 本輪主問題: 只建立可重跑的靜態 import 邊界檢查與高信號模組地圖摘要，不做架構重設或全量清理。
+- 本輪主 bug: 上一輪 PM 契約誤把 Tech worktree 的 detached HEAD / git completion gate 納入 Tech blocked 條件；本輪修正為 git completion gate 只由 Architect 在主 repo 收口執行。
 
 ## Owner 問題
 
-Owner 認為文件與模組邊界已失控，本輪要防止繼續亂新增檔案與反向依賴：
-
-- presentation / 顯示層不得反向 import strategy writer / DB write 相關服務。
-- strategy / core / services 不得 import presentation。
-- 既有 main / notifier runner 可照舊。
-- core/generator 作為過渡 bridge 可 import presentation.report，但必須在模組地圖標成 transitional bridge。
+core/generator.py 內仍混有一組純 Telegram 顯示 helper，需小步拆分到 presentation/report.py 或 presentation 內既有文件，降低 generator 的顯示責任；同時不得把任務擴大成策略、DB、狀態機或架構重做。
 
 ## 使用者可見結果
 
-本輪沒有 Telegram / UI / 報文可見變更。
+Telegram 報文內容、順序、文案、版本字串、策略判斷與資料語意不可改變。使用者在手機上看到的報文應與拆分前一致，只是內部 helper 所在模組改為 presentation 層。
 
-使用者可見結果是 repo 內新增可重跑 gate：
+手機閱讀路徑：
 
-- 測試失敗時能指出 offending file 與 offending import。
-- 固定文件中有簡短分層地圖摘要，讓後續任務知道哪些 import 是禁止、哪些是暫時允許。
-- 不新增新的業務模組，不新增新的架構文檔。
+- GitHub runner / dry-run 產出的 Telegram report message list
+- Owner 手機 Telegram 內看到的 summary、持倉卡、未持倉卡、brief data evidence 區塊
+- 本輪不得 live delivery，只驗 dry-run / 測試 fixture 的輸出形狀與內容一致性
+
+Telegram 多訊息順序沿用既有契約，不要求改文案：
+
+1. 持倉卡
+2. 未持倉卡
+3. brief data evidence / summary 短訊
+4. Details Backup 僅在 include_detail=True 時追加最後
+
+單一 message 內的 summary、持倉卡、未持倉卡、brief data evidence 文案與欄位不可因搬移而改變。
 
 ## 非目標
 
-- 不改 Telegram 報文內容、排序、標題、emoji、文案或手機閱讀形狀。
-- 不升 VERSION，除非現有測試機制強制要求；若需要升版需先 blocked 交回 Architect。
-- 不做 DB schema / RLS / grant / policy / role / index / constraint 變更。
-- 不新增 production write、backfill、live Telegram delivery。
-- 不重構 strategy / presentation / services 實作。
-- 不新增新的架構文檔。
-- 不新增新的業務模組。
-- 不做全 repo 清理或刪檔分類；旁支清理問題只記入既有固定文件待辦。
+- 不改 strategy decision、RR、holding_status、買賣 / 加減碼 / 停損停利判斷。
+- 不改 DB read/write、DB schema、RLS、grant、policy、role、index / constraint。
+- 不改 Telegram 文案、分組語意、排序、空區塊顯示規則或 VERSION。
+- 不新增新的業務模組，不新增架構文檔。
+- 不清理 unrelated helper，不做全量 presentation 重構。
+- 不修復測試中暴露的旁支產品問題，除非直接阻塞本輪 helper 搬移；旁支只記 follow-up。
 
 ## 影響模組
 
-優先影響：
+允許影響：
 
-- tests/test_generator_report.py
-- 或 tests/test_workflow_runtime_config.py
+- core/generator.py
+- presentation/report.py
+- presentation 內既有純顯示文件
+- 對應既有測試或 import boundary gate 測試
 
-文件摘要可影響：
+優先搬移 helper：
 
-- CURRENT_STATE.md
-- CLEANUP_PLAN.md
-- DISPATCH.md
+- formatTelegramPositionCard
+- formatTelegramUnheldCard
+- formatTelegramSummary
+- format_brief_data_evidence_message
+- 上述 helper 的直接純顯示依賴
 
-被 gate 掃描但不應被功能性改寫的模組：
+不得牽動：
 
-- presentation / report 相關 Python files
-- services 相關 Python files
-- core / strategy 相關 Python files
-- main / notifier runner 相關 Python files
+- DB writer / signal writer / strategy evidence writer
+- strategy / validator / holding status / position store 的業務決策邏輯
+- result mutation、results_map mutation、holding_decision mutation
+- core/services 新增 presentation import
 
 ## 直接消費者
 
-- Tech: 依本卡在既有 test file 中加 AST / import graph gate。
-- QA: 用靜態 fixture 或臨時偽造違規 import 反證 gate 會失敗。
-- Architect: 用測試結果與 git 狀態收口，不依賴聊天紀錄。
-- 後續開發者: 在 PR / runner 測試中立即看到 import 邊界違規。
-
-## 已存在且不得回退的契約
-
-- main / notifier runner 既有 import path 與 runtime 行為不得因 gate 被禁止。
-- core/generator 可過渡 import presentation.report，但文件摘要必須明確標為 transitional bridge。
-- Telegram / report 使用者可見輸出不得變更。
-- DB write / Supabase client 既有 production 行為不得被本輪觸碰。
-- 既有固定文件 8 份不得刪除；本輪只允許在既有固定文件加入高信號摘要。
-- 若 Tech 發現上述契約與實際 repo 衝突，必須 blocked，不得自行擴大規則或重構。
+- core/generator.py 產生 Telegram report 的既有流程
+- Telegram message list / report rendering tests
+- import boundary gate
+- Owner 手機閱讀 Telegram 報文的 summary、持倉卡、未持倉卡與 evidence 區塊
 
 ## 輸出契約
 
-### Import gate 掃描範圍
+### 模組契約
 
-- 掃描 repo 內 relevant Python files。
-- 可排除 .venv、cache、build artifact、generated artifact。
-- 測試必須使用 AST 或明確 import graph parser，不得只用脆弱全文 grep 作最終判斷。
+- 純 Telegram 顯示 helper 搬到 presentation/report.py 或 presentation 內既有文件。
+- core/generator.py 可作為 transitional bridge import presentation helper。
+- core/services 不得新增任何 presentation import。
+- presentation 不得 import DB writer、signal writer、strategy evidence writer。
+- presentation helper 不得直接 mutate results_map、result、holding_decision。
 
-### 禁止規則
+### 報文契約
 
-1. presentation 層不得 import：
-- services.signal_store
-- services.strategy_evidence.get_supabase_client
-- services.strategy_evidence.record_daily_signals
-- services.strategy_evidence.record_strategy_evidence
-- services.strategy_evidence.record_daily_snapshots
-2. services 與 core 策略模組不得 import presentation：
-- 禁止 import presentation...
-- 禁止 from presentation... import ...
-3. 允許例外：
-- main / notifier runner 可照舊。
-- core/generator 可 import presentation.report，但此例外必須集中列在 gate allowlist，並在模組地圖摘要標成 transitional bridge。
+- Telegram message list 內容不變。
+- Summary、position card、unheld card、brief data evidence 的可見文案不變。
+- 分組、排序、狀態標籤、漏斗語意不變。
+- 空區塊 / 0-count / 無新增下單占位規則不變。
+- VERSION 不變。
 
-### 失敗輸出契約
+### Git / runner 契約
 
-測試失敗時至少包含：
+- Tech 不執行也不以 git completion gate 作為 blocked 條件。
+- Tech worktree 若為 detached HEAD，不得因此 blocked。
+- git completion gate 僅由 Architect 在主 repo 收口執行。
 
-- offending file path
-- offending import module 或 imported symbol
-- violated boundary rule name
+## 已存在且不得回退的契約
 
-示例形狀：
-
-Import boundary violation: presentation_db_write_import
-file=presentation/report.py
-import=services.strategy_evidence.record_strategy_evidence
-
-### 文件摘要契約
-
-只在既有固定文件寫高信號摘要，不新增架構文檔：
-
-- strategy/core/services -> 不得 import presentation
-- presentation -> 不得 import DB writer / signal_store / strategy_evidence writer
-- main/notifier runner -> allowed integration edge
-- core/generator -> transitional bridge to presentation.report
+- core/generator.py 仍是既有 Telegram report orchestration 的直接消費者入口。
+- presentation 層不得依賴 DB writer、signal writer、strategy evidence writer。
+- core/services 不得新增 presentation import。
+- 不得改變任何策略輸出、RR、holding_status、DB read/write 或 Telegram 可見文案。
+- 若現有 import boundary gate 已覆蓋上述規則，必須保留並確認仍會抓違規。
+- 若某 helper 的直接依賴不是純顯示，而會牽動策略、DB、holding_status 或 result mutation，本輪不得硬搬，必須縮小範圍或 blocked。
 
 ## 驗收條件
 
-1. Tech 開工前記錄 git clean baseline：
-- git status --short
-- 若 baseline dirty 且與本任務無關，需在交付中標明，不得覆蓋或回退。
-2. Gate 可重跑：
-- 使用既有 test file 增加測試，優先 tests/test_generator_report.py 或 tests/test_workflow_runtime_config.py。
-- 不新增新的 test file，除非既有兩個檔案技術上不可用；若不可用需 blocked 說明。
-3. Gate 覆蓋禁止 import：
-- presentation import services.signal_store 會 fail。
-- presentation import listed services.strategy_evidence writer/client symbols 會 fail。
-- services/core strategy import presentation 會 fail。
-- main/notifier runner 不被誤殺。
-- core/generator -> presentation.report 只作 allowlisted transitional bridge。
-4. 失敗訊息可定位：
-- QA 或開發者可從 failure output 看到 offending file/import/rule。
-5. 文件摘要完成：
-- 只更新 CURRENT_STATE.md / CLEANUP_PLAN.md / DISPATCH.md 中必要高信號摘要。
-- 不新增新的架構文檔。
-6. 無產品可見變更：
-- Telegram / UI / report message snapshot 不應因本輪變更改變。
-- VERSION 不變。
-7. QA 需補反證：
-- 使用靜態 fixture、tmp module、monkeypatch 掃描集合，或等價方式偽造至少一個違規 import。
-- 證明 gate 能抓到違規並輸出 offending file/import。
-- QA 不得做 production write 或 live Telegram。
+1. Helper 搬移完成後，Telegram 相關輸出與搬移前一致；至少覆蓋 summary、持倉卡、未持倉卡、brief data evidence 的既有 fixture / snapshot / 等價斷言。
+2. import boundary gate 仍能阻止 presentation import DB writer / signal writer / strategy evidence writer，並阻止 core/services 新增 presentation import。
+3. presentation helper 不直接 mutate results_map、result、holding_decision。
+4. 必跑完整邏輯測試並記錄結果：
+- tests/test_generator_report.py
+- tests/test_market_theme_evidence.py
+- tests/test_analysis_engine.py
+- tests/test_strategy_evidence.py
+- tests/test_position_store.py
+- tests/test_cross_day_context.py
+- tests/test_signal_validator.py
+5. 如時間可接受，追加：
+- tests/test_daily_snapshot_store.py
+- tests/test_dry_run_replay.py
+6. QA 需額外反證：
+- 輸出未改變。
+- import gate 仍抓違規。
+- 完整邏輯測試通過，或因明確環境 / 依賴問題 blocked。
+- Tech 沒有把 detached HEAD / git completion gate 當 blocked 條件。
 
 ## 範例或 fixture
 
-可接受 QA / test fixture 形狀：
+使用既有 Telegram report 測試 fixture，不新增產品文案。
 
-# fake file path: presentation/fake_report.py
-from services.strategy_evidence import record_strategy_evidence
+最小驗收案例：
 
-預期：
+case A: 有持倉 + 有未持倉追蹤
+expect:
+- summary 文案不變
+- position card 文案、順序、主行動不變
+- unheld card 文案、狀態不變
+- brief data evidence 文案不變
 
-Import boundary violation: presentation_db_write_import
-file=presentation/fake_report.py
-import=services.strategy_evidence.record_strategy_evidence
-
-另一個 fixture：
-
-# fake file path: services/fake_service.py
-from presentation import report
-
-預期：
-
-Import boundary violation: strategy_or_service_imports_presentation
-file=services/fake_service.py
-import=presentation.report
-
-允許例外 fixture：
-
-# real or fake bridge path: core/generator.py
-from presentation import report
-
-預期：
-
-allowed transitional bridge: core/generator -> presentation.report
+case B: import boundary negative case
+expect:
+- presentation -> DB writer / signal writer / strategy evidence writer 依賴被 gate 擋下
+- core/services -> presentation 依賴被 gate 擋下
 
 ## 明確禁止事項
 
-- 禁止新增新的業務模組。
-- 禁止新增新的架構文檔。
-- 禁止把本輪擴成全量依賴重構。
-- 禁止改 Telegram 可見報文。
-- 禁止升 VERSION，除非 blocked 回報後另行確認。
-- 禁止 production DB write / backfill / schema 變更。
+- 禁止 DB write。
 - 禁止 live Telegram delivery。
-- 禁止用 local cache、聊天紀錄或 runtime dict 當跨日 source-of-truth。
-- 禁止為了讓 gate 通過而移除既有 main / notifier runner 合法路徑。
-- 禁止把 core/generator bridge 靜默視為永久合法；必須標 transitional bridge。
+- 禁止修改 VERSION。
+- 禁止修改 Telegram 文案。
+- 禁止修改策略 decision、RR、holding_status、DB read/write。
+- 禁止新增新的業務模組或架構文檔。
+- 禁止把 pure display helper 搬移擴大成 generator 全量重構。
+- 禁止 presentation 直接 mutate results_map、result、holding_decision。
+- 禁止 presentation import DB writer / signal writer / strategy evidence writer。
+- 禁止 core/services 新增 presentation import。
+- 禁止 Tech 因 detached HEAD 或 git completion gate blocked；該 gate 只由 Architect 在主 repo 收口。
 
 ## 阻塞條件
 
-- 找不到可穩定辨識 presentation / services / core strategy Python files 的 repo 結構。
-- 既有 test file 無法承載 gate，且新增 test file 又違反 Owner 限制。
-- 現有合法 import 已違反本卡禁止規則，且無法判斷應 allowlist 還是重構。
-- 需要改 DB schema、production write path、Telegram live delivery 才能驗收。
-- 需要新增架構文檔或業務模組才可完成。
-- 測試環境缺 pytest / dependency 且無法補足。
+- 目標 helper 的直接依賴必須搬入策略 / DB / holding_status / result mutation 才能運作，且無法只搬純顯示部分。
+- 既有測試或 fixture 不足以證明 Telegram 輸出未變，且無法在本輪建立等價輸出驗證。
+- import boundary gate 不存在或不可執行，且無法用本輪測試補足。
+- 測試環境缺依賴且無法補齊，需列出實際錯誤，不得宣告通過。
+- 發現搬移會要求 DB schema / live delivery / production write，立即 blocked。
 
 ## 本輪停止條件
 
-完成以下即停止：
+完成到以下範圍即停止：
 
-- 既有 test file 中有可重跑 import boundary gate。
-- Gate 對指定禁止 import 能 fail，對 main/notifier 與 core/generator transitional bridge 不誤殺。
-- 失敗輸出含 offending file/import/rule。
-- 固定文件中有簡短模組地圖摘要。
-- QA 用偽造違規 import 或靜態 fixture 反證 gate 有效。
-- 無 Telegram / VERSION / production write 變更。
+- 優先 helper 與其純顯示直接依賴已搬到 presentation 既有文件。
+- core/generator.py 只保留必要 transitional bridge / orchestration。
+- Telegram 輸出等價驗證通過。
+- import boundary gate 驗證通過。
+- 指定完整邏輯測試通過，或清楚 blocked。
 
-不納入本輪、只記待辦：
+以下旁支不納入本輪：
 
-- 清理所有歷史亂檔。
-- 移除 core/generator -> presentation.report bridge。
-- 重畫完整架構圖。
-- 拆分 strategy / services / presentation 模組。
-- 修復 gate 掃描外發現的其他架構味道。
+- 其他 generator helper 清理。
+- 報文文案優化。
+- 策略判斷修正。
+- DB / replay / backfill 流程改善。
+- 全量 presentation 架構整理。
+- git completion gate 的 runner 實作修改；本輪只修正 Tech 任務契約，不要求 Tech 跑 gate。

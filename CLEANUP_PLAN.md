@@ -15,6 +15,14 @@
 
 ## Completed
 
+- `pm-20260601-telegram-helper-split`:
+  - 問題：Owner 要繼續明確拆分，策略就是策略、顯示就是顯示，且拆完要做完整邏輯測試。
+  - 結果：純 Telegram formatter helper 已從 `core/generator.py` 移到既有 `presentation/report.py`；未新增業務模組或架構文檔。
+  - 關鍵修正：`formatTelegramSummary`、`formatTelegramPositionCard`、`formatTelegramUnheldCard`、`format_brief_data_evidence_message` 與 brief evidence 顯示 helper 由 presentation 承接；`core/generator.py` 移除已搬走的 brief private helper，只保留 public wrapper / orchestration / transitional deps bridge。
+  - 邊界保護：`presentation/report.py` 沒有 import，沒有直接 mutate `result/results_map/holding_decision` roots；import boundary gate 仍通過。
+  - 驗證：完整邏輯矩陣 187 passed；追加 daily snapshot / dry-run replay 12 passed；`git diff --check` passed。
+  - 規則治理：`architecture_boundary` + `repeated_pattern`。拆分可以繼續小步做，但不得把 strategy / DB / ledger / holding status 帶進 presentation。
+  - 邊界：不改 Telegram 文案 / message order / VERSION / strategy decision / RR / holding_status / DB schema/write / live Telegram。
 - `import-boundary-gate-20260601`:
   - 問題：Owner 擔心拆分後文件/模組變多，靠記憶無法搞清楚，要求先建立分層地圖與 import gate。
   - 結果：本輪不新增業務模組、不新增架構文檔；在既有 `tests/test_generator_report.py` 增加可重跑 AST import boundary gate。

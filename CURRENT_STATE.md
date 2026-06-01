@@ -28,24 +28,23 @@
 
 ## Current Worktree
 
-- task_id：`import-boundary-gate-20260601`
-- 狀態：PM done / Tech rejected by runner for handoff-file issue / Architect manually absorbed scoped test gate / QA `通過`；final 前必須已 commit / push 並通過 Git completion gate。
+- task_id：`pm-20260601-telegram-helper-split`
+- 狀態：PM done / Tech worktree change manually absorbed / QA `通過`；final 前必須已 commit / push 並通過 Git completion gate。
 - commit：見 `git log -1`。
 - 關鍵行為：
   - 不升 VERSION，仍為 `v20.4.21`。
   - 不新增業務模組、不新增架構文檔。
-  - `tests/test_generator_report.py` 新增 AST import boundary gate。
-  - Gate 掃描 `presentation/`、`services/`、`core/`、`main.py`、`app.py`。
-  - 禁止 `presentation` import DB writer / signal writer / strategy evidence writer。
-  - 禁止 `services/` 與 `core/` import `presentation`。
-  - 唯一 transitional allowlist：`core/generator.py -> presentation.report`。
-  - Fake import fixture 反證 gate 會輸出 offending rule/file/import。
+  - `presentation/report.py` 承接純 Telegram formatter：summary、持倉卡、未持倉卡、brief evidence。
+  - `core/generator.py` 保留 public wrapper 與 orchestration，透過 `_telegram_presentation_deps()` 注入既有 helper。
+  - `presentation/report.py` 無 import；不直接 mutate `result/results_map/holding_decision` roots。
   - 不改 Telegram 報文、策略 decision、RR、holding_status、DB schema/write、live Telegram。
 - 驗證：
-  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile tests/test_generator_report.py`：passed。
-  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py`：91 passed，177 warnings。
+  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py presentation/report.py presentation/__init__.py tests/test_generator_report.py`：passed。
+  - 完整邏輯矩陣：187 passed，177 warnings。
+  - 追加旁路：12 passed，13 warnings。
+  - Re-QA runner：通過；追加手機順序 smoke confirmed。
   - `git diff --check`：passed。
-  - QA 額外反證：fake imports for signal writer、snapshot writer、strategy evidence writer/client、services/core -> presentation all produce rule/file/import violations；allowlist only preserves transitional bridge and notifier integration edge.
+  - QA 額外反證：presentation 無 import、無 direct assigned roots；import boundary gate 仍通過。
   - 先前 production read-only strategy evidence artifact 仍顯示缺 `classification backtest source-of-truth`，報文正確 fail closed，不回到舊式 `樣本 0｜樣本不足，不判讀`。
 - 2356 production read-only artifact：
   - path：`.qa_tmp/production_readonly_2356_positions_events.json`。
@@ -71,8 +70,8 @@
 - 只把 `CHANGELOG.md` 所列 scoped diff 當成本輪驗收範圍；工作樹其他旁支 dirty files 不能因本輪 QA 通過而整包吸收。
 - 已處理 Owner 指出的「是 72/100 那個 maturity 到 100%」：目前五維 maturity report 可重跑為 100。
 - 已處理本輪「先解合理度跟衝突」的第一層：使用者可見報文不再把無有效進場和推薦感最強同時輸出；raw evidence slot 改成人話，衝突/缺資料保守揭露。
-- 已開始處理 Owner 指出的「策略就是策略，不要混用」：第一刀把 Telegram message assembly 抽到 `presentation/report.py`；尚未完成所有 formatter helper 與策略 helper 分離。
-- 本輪補 import boundary gate，避免後續拆分靠記憶：presentation 不能反向依賴 writer/DB，core/services 不能依賴 presentation，`core/generator.py` bridge 只是 transitional。
+- 已處理 Owner 指出的「繼續明確拆分」第二刀：純 Telegram formatter helper 已移入 `presentation/report.py`；尚未完成所有純顯示 helper 與策略 helper 分離。
+- import boundary gate 仍保護後續拆分：presentation 不能反向依賴 writer/DB，core/services 不能依賴 presentation，`core/generator.py` bridge 只是 transitional。
 - 另開旁支：若 Owner 認定 2356 英業達實際未賣，查 production positions / position_events 為何目前 artifact 顯示 CLOSED / shares 0。
 - 另開旁支：盤點全報文 `追高 / 追蹤` 相關文案。
 - 另開旁支：Telegram reply markup 附著最後一則 message 的 delivery consumer 風險。
