@@ -377,14 +377,14 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("🧾 v20.4.21 簡報＋資料依據", summary)
         self.assertIn("新倉：無有效進場", summary)
         self.assertIn("資料依據", summary)
-        self.assertIn("市場 / 題材背景：近幾個交易證據日不足以形成可靠背景", summary)
+        self.assertIn("市場 / 題材背景：短期背景資料不足以形成可靠背景", summary)
         self.assertIn("策略樣本：本輪缺少可驗證樣本，可靠度低，未納入買賣判斷。", summary)
         self.assertIn("持倉 / 價格 / 候選資料：部分持倉或候選資料不足", summary)
         for term in FORBIDDEN_SHORT_EVIDENCE_TERMS:
             self.assertNotIn(term, summary)
         self.assertNotIn("今日可買", summary)
         self.assertNotIn("confirmed", summary)
-        self.assertIn("缺資料標的本輪不給進場結論", detail)
+        self.assertIn("未持倉資料只支持分類觀察，不支持直接進場", detail)
 
     def test_generate_report_fails_closed_when_position_events_source_errors(self):
         holdings = {
@@ -2643,7 +2643,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn(f"英業達｜已執行｜{context}", summary)
         self.assertIn("持倉：依第一則既有卡片處理，不新增第二個主行動。", summary)
         self.assertIn("持倉與價格資料可支持風控檢查", summary)
-        self.assertIn("候選資料可支持分類", summary)
+        self.assertIn("未持倉資料只支持分類觀察，不支持直接進場", summary)
         self.assertNotIn(f"1. 英業達｜已執行｜{context}", summary)
         self.assertNotIn("第二段停利 本次建議 56 股", summary + card)
         self.assertNotIn("本次建議 56 股", summary + card)
@@ -3051,7 +3051,7 @@ class GeneratorReportTest(unittest.TestCase):
         unheld = unheld_message(messages)
 
         self.assertIn("【05/28 盤中｜v20.4.21】", summary)
-        self.assertIn("市場 / 題材背景：近幾個交易證據日不足以形成可靠背景，只作觀察，不作買點。", summary)
+        self.assertIn("市場 / 題材背景：短期背景資料不足以形成可靠背景，只作觀察，不作買點。", summary)
         self.assertNotIn("證據：production 來源不足，不作確認。", summary)
         self.assertNotIn("詳情：runtime 觀察僅供診斷，非確認來源。", summary)
         self.assertIn("🧭 主線：市場偏多但買點未成立。", summary)
@@ -3059,7 +3059,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("🧭 新倉：無有效進場。", summary)
         self.assertLess(
             summary.index("🧭 新倉：無有效進場。"),
-            summary.index("市場 / 題材背景：近幾個交易證據日不足以形成可靠背景"),
+            summary.index("市場 / 題材背景：短期背景資料不足以形成可靠背景"),
         )
         self.assertNotIn("🧭 主線：AI / 電子供應鏈仍偏多。", summary)
         self.assertIn("交易執行：無新增下單", summary)
@@ -3254,7 +3254,7 @@ class GeneratorReportTest(unittest.TestCase):
 
         self.assertIn("【05/29 盤中｜v20.4.21】", summary)
         self.assertIn("🧭 今日結論：R3 進攻偏熱；交易執行：無新增下單；未持倉 3 檔可準備、1 檔僅追蹤", summary)
-        self.assertIn("市場 / 題材背景：近幾個交易證據日不足以形成可靠背景，只作觀察，不作買點。", summary)
+        self.assertIn("市場 / 題材背景：短期背景資料不足以形成可靠背景，只作觀察，不作買點。", summary)
         self.assertNotIn("證據：production 來源不足，不作確認。", summary)
         self.assertNotIn("詳情：runtime 觀察僅供診斷，非確認來源。", summary)
         self.assertIn("強勢準備：\n- 漲停鎖價：A 不可追高，待開板回測\n- 過熱降溫：B 不可買，待降溫後重評\n- 突破回測：C 待觸發，不追高", summary)
@@ -3749,7 +3749,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertEqual(generator.position_summary_action("英業達", payload), "停利記憶不足")
         self.assertIn("持倉：英業達 先補交易執行記憶", evidence_message(messages))
         self.assertIn("持倉與價格資料可支持風控檢查", evidence_message(messages))
-        self.assertIn("候選資料可支持分類", evidence_message(messages))
+        self.assertIn("未持倉資料只支持分類觀察，不支持直接進場", evidence_message(messages))
         for term in FORBIDDEN_SHORT_EVIDENCE_TERMS:
             self.assertNotIn(term, evidence_message(messages))
         self.assertIn("停利記憶不足", rendered)
@@ -3897,7 +3897,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotRegex(position, r"數據：RR 2\.73")
         self.assertEqual(payload["result"]["rr"], 2.73)
 
-    def test_v20_4_21_afterhours_brief_is_concise_and_cards_do_not_repeat_strategy_sample(self):
+    def test_v20_4_21_afterhours_mobile_readability_probe(self):
         holding_payload = render_payload(
             [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119],
             {"shares": 50, "avg_price": 118},
@@ -3907,8 +3907,8 @@ class GeneratorReportTest(unittest.TestCase):
         holding_payload["stock_code"] = "3035"
         holding_payload["result"]["rr"] = 2.73
         holding_payload["holding_decision"] = {
-            "action": "續抱",
-            "level": "HOLD",
+            "action": "新倉風控觀察",
+            "level": "NEW_POSITION_RISK_WATCH",
             "warning_price": 113,
             "hard_stop_price": 109,
             "allow_add": False,
@@ -3943,9 +3943,9 @@ class GeneratorReportTest(unittest.TestCase):
 
         messages = generator.formatTelegramMessages(
             {
-                "智原": holding_payload,
+                "建準": holding_payload,
                 "光寶科": candidate_payload,
-                "建準": tracking_payload,
+                "觀察股": tracking_payload,
             },
             "FULL DETAIL",
             "光寶科",
@@ -3971,9 +3971,18 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("盤中留意", rendered)
         self.assertNotIn("盤中觸發", rendered)
         self.assertNotIn("即時進場", rendered)
+        self.assertNotIn("盤中先觀察", rendered)
+        self.assertNotIn("盤中觀察修復狀況", rendered)
+        self.assertIn("下一步：明日觀察是否守住警戒，未修復再降級", position)
         self.assertIn("新倉 RR：不適用（既有持倉）", position)
         self.assertNotRegex(position, r"數據：RR 2\.73")
         self.assertIn("數據：RR 2.4", unheld)
+        self.assertNotIn("資料：現價與 OHLCV 已確認；RR/分數/量能為模型推算", unheld)
+        self.assertIn("未持倉資料只支持分類觀察，不支持直接進場。", brief)
+        self.assertIn("持倉與價格資料可支持風控檢查", brief)
+        self.assertNotIn("交易證據日", rendered)
+        self.assertNotIn("策略勝率", rendered)
+        self.assertNotIn("勝率證據", rendered)
 
     def test_v20_4_20_strategy_sample_unavailable_card_hides_backtest_numbers(self):
         payload = render_payload(
@@ -4140,7 +4149,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("資料：現價與 OHLCV 已確認；RR/分數/量能為模型推算", unheld_message(messages))
         self.assertNotIn("Source：price available｜OHLCV available｜RR derived｜score derived｜volume derived", unheld_message(messages))
         self.assertNotIn("Source：漏斗 count", summary_message(messages))
-        self.assertIn("市場 / 題材背景：近 20 個交易證據日，近期 5 日支持仍支持目前背景觀察", evidence_message(messages))
+        self.assertIn("市場 / 題材背景：近 20 個交易日短期背景，近期 5 日支持仍支持目前背景觀察", evidence_message(messages))
         self.assertIn("策略樣本：本輪缺少可驗證樣本，可靠度低，未納入買賣判斷。", evidence_message(messages))
         self.assertIn("策略樣本：缺少可驗證來源，本次不納入買賣判斷。", evidence_message(messages))
         self.assertIn("持倉 RR：既有持倉若不是加碼情境，只顯示新倉 RR 不適用。", evidence_message(messages))

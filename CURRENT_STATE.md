@@ -28,22 +28,24 @@
 
 ## Current Worktree
 
-- task_id：`pm-20260601-afterhours-telegram-brief-dedupe`
-- 狀態：PM done / Tech diff manually absorbed / QA `通過` after CHANGELOG fix；final 前必須已 commit / push 並通過 Git completion gate。
+- task_id：`report_v20_4_21_mobile_readability_remaining_fixes`
+- 狀態：PM done / Tech diff manually absorbed / QA `通過` after handoff fix；final 前必須已 commit / push 並通過 Git completion gate。
 - commit：見 `git log -1`。
 - 關鍵行為：
   - 不升 VERSION，仍為 `v20.4.21`。
-  - 盤後第三則改為短版 `📌 盤後簡報`，不再複製完整 summary。
-  - 策略樣本不可用狀態在盤後第三則集中顯示一次，卡片不逐檔重複。
-  - 盤後卡片替換被測盤中語境詞。
+  - 三日資料改稱短期背景 / 短期背景資料，不再使用交易證據日語感。
+  - 盤後下一步改為明日語境。
+  - 盤後未持倉卡片移除逐檔長資料來源句。
+  - 第三則資料依據改成人話：持倉與價格支持風控；未持倉只支持分類觀察，不支持直接進場。
   - 非加碼持倉不顯示新倉 RR 數字；新倉候選 RR 保留。
   - 不改 strategy decision、RR 計算、holding_status、DB schema/write、live Telegram。
 - 驗證：
-  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py presentation/report.py tests/test_generator_report.py`：passed。
-  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py`：92 passed，181 warnings。
-  - QA independent source-error fixture：all checks true。
+  - Re-QA output：`.cao_agent_context/outputs/20260601_181248_1516_stock_qa_code_readonly.answer.txt`，結論 `通過`。
+  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile presentation/report.py tests/test_generator_report.py tests/test_market_theme_evidence.py`：passed。
+  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py`：128 passed，181 warnings。
+  - QA source-error phone-order probe：passed。
   - `git diff --check`：passed。
-  - QA 額外反證：按手機閱讀順序掃描三則訊息，策略樣本狀態不衝突、卡片不重複、盤後無被測盤中詞。
+  - QA 額外反證：按手機閱讀順序掃描三則訊息，禁止詞不出現在 rendered output，資料邊界集中在第三則。
   - 先前 production read-only strategy evidence artifact 仍顯示缺 `classification backtest source-of-truth`，報文正確 fail closed，不回到舊式 `樣本 0｜樣本不足，不判讀`。
 - 2356 production read-only artifact：
   - path：`.qa_tmp/production_readonly_2356_positions_events.json`。
@@ -69,7 +71,7 @@
 - 只把 `CHANGELOG.md` 所列 scoped diff 當成本輪驗收範圍；工作樹其他旁支 dirty files 不能因本輪 QA 通過而整包吸收。
 - 已處理 Owner 指出的「是 72/100 那個 maturity 到 100%」：目前五維 maturity report 可重跑為 100。
 - 已處理本輪「先解合理度跟衝突」的第一層：使用者可見報文不再把無有效進場和推薦感最強同時輸出；raw evidence slot 改成人話，衝突/缺資料保守揭露。
-- 已處理 Owner 指出的 v20.4.21 盤後噪音問題：第三則摘要化、策略樣本狀態單一化、卡片去重、盤後語境與持倉 RR 一致。
+- 已處理 Owner 指出的 v20.4.21 剩餘手機閱讀問題：三日短期背景命名、非加碼 RR、盤後明日語境、卡片資料降噪、第三則資料依據人話化。
 - 流程強化不是新增死規則：已新增 `tests/test_generator_report.py` probe，讓同類錯誤可重跑失敗。
 - import boundary gate 仍保護後續拆分：presentation 不能反向依賴 writer/DB，core/services 不能依賴 presentation，`core/generator.py` bridge 只是 transitional。
 - 另開旁支：若 Owner 認定 2356 英業達實際未賣，查 production positions / position_events 為何目前 artifact 顯示 CLOSED / shares 0。

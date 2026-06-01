@@ -3,26 +3,30 @@
 ## 任務尺寸與風險
 
 - 任務尺寸：normal_patch。
-- 風險判斷：調整盤後 Telegram 使用者可見報文與測試 probe；不改 strategy decision、RR 計算、holding_status、DB write path、schema、VERSION 或 live delivery。
+- 風險判斷：只改 Telegram 報文顯示文案與可重跑 probe；不改 strategy decision、RR 計算、持倉狀態機、DB schema/write、VERSION 或 live delivery。
 
 ## 修改內容
 
-- `presentation/report.py`：盤後第三則改為高密度「盤後簡報」，不再把第一則 summary 的交易段落、持倉風控清單、漏斗與索引整段搬進第三則。
-- `presentation/report.py`：策略樣本不可用狀態改為盤後第三則集中顯示一次，原因單一化為來源缺失 / 樣本不足 / 來源讀取異常之一。
-- `presentation/report.py`：盤後持倉 / 未持倉卡片不再逐檔重複 `策略樣本：不可用，本次不納入判斷`。
-- `presentation/report.py`：盤後卡片輸出時把盤中語境詞替換為盤後 / 下一交易日語境。
-- `core/generator.py`：在 presentation deps 中注入 `_strategy_sample_unavailable`，供卡片決定是否省略逐檔策略樣本不可用行。
-- `tests/test_generator_report.py`：新增可重跑 probe，覆蓋本輪 Owner 指出的主要誤讀風險。
+- `presentation/report.py`
+  - 將市場 / 題材資料依據中的「交易證據日」改為「交易日短期背景」或「短期背景資料」。
+  - 盤後卡片下一步改為明日語境：`盤中先觀察` -> `明日觀察是否守住警戒`，`盤中觀察修復狀況` -> `明日確認是否修復`。
+  - 盤後未持倉卡片不再逐張輸出長資料來源句。
+  - 第三則資料依據改為白話邊界：持倉與價格支持風控；未持倉資料只支持分類觀察，不支持直接進場。
+- `tests/test_generator_report.py`
+  - 更新既有文案預期。
+  - 將本輪手機閱讀 probe 更新為 `test_v20_4_21_afterhours_mobile_readability_probe`，覆蓋建準非加碼 RR、盤後下一步、資料降噪、第三則資料邊界和禁止詞。
+- `tests/test_market_theme_evidence.py`
+  - 同步市場 / 題材背景命名預期，避免三日資料被誤稱為交易證據日。
 
 ## 修改檔案
 
 產品 / 測試 diff：
 
-- `core/generator.py`
 - `presentation/report.py`
 - `tests/test_generator_report.py`
+- `tests/test_market_theme_evidence.py`
 
-Architect handoff / 復盤：
+Architect handoff：
 
 - `TASK.md`
 - `CHANGELOG.md`
@@ -33,53 +37,44 @@ Architect handoff / 復盤：
 
 ## 契約影響
 
-- Message list 順序不變：持倉卡、未持倉卡、第三則簡報＋資料依據，Details Backup 仍只在 `include_detail=True` 時追加。
-- 盤後第三則可見文案有變更：從近似完整 summary 改為短摘要，集中回答新倉、持倉、策略樣本資料狀態與明日前確認事項。
-- 盤後卡片可見文案有變更：不再逐檔重複策略樣本不可用；盤後不再顯示盤中語境詞。
-- 非加碼持倉仍顯示 `新倉 RR：不適用（既有持倉）`，不顯示新倉 RR 數字；新倉候選 RR 保留。
-- DB 寫入、payload shape、策略 decision、持倉狀態機、VERSION、live Telegram delivery 無變更。
-
-## 可重跑檢查 / QA Probe
-
-- 新增測試：`test_v20_4_21_afterhours_brief_is_concise_and_cards_do_not_repeat_strategy_sample`。
-- 覆蓋錯誤：
-  - 第三則複製完整 summary / 交易細節。
-  - 策略樣本不可用在整份盤後報文重複出現。
-  - 單檔卡片重複策略樣本不可用。
-  - 盤後報文出現盤中語境。
-  - 非加碼持倉顯示新倉 RR 數字。
-  - 新倉候選 RR 被誤刪。
-- QA 另補 source-error 負面路徑，確認同一份報文不混用 missing-source / 樣本不足 / source-error 主狀態。
+- 使用者可見報文文案有變更：
+  - 三日市場資料改稱短期背景 / 市場溫度。
+  - 盤後下一步改為明日語境。
+  - 盤後未持倉卡片移除逐檔長資料來源句。
+  - 第三則資料依據明確說明未持倉不支持直接進場。
+- Message list 結構、payload shape、DB contract、版本常量均未變更。
+- 報文版本維持 `v20.4.21`，未回退。
 
 ## 直接消費者同步
 
-- `formatTelegramMessages()` 直接消費者會看到盤後第三則摘要化，但 message order 不變。
-- GitHub runner / dry-run 仍消費同一 list of messages。
-- Telegram live delivery 未執行。
+- Telegram message renderer：同步盤後卡片文案與第三則資料依據。
+- Owner 手機閱讀路徑：新增/更新 probe 檢查持倉卡、未持倉卡、第三則資料依據。
+- v20.4.x report tests 與 market/theme tests 已同步。
 
 ## 未影響模組
 
+- 策略核心與買賣決策。
+- RR 計算公式與加碼 RR 顯示契約。
+- 持倉狀態機。
 - DB schema / RLS / grant / policy / role / index / constraint。
-- production DB write、backfill、live Telegram。
-- 策略選股、買賣、加碼、減碼、停損、停利決策。
-- `core/generator.VERSION`，仍為 `v20.4.21`。
-- notifier / Telegram delivery consumer。
+- DB write、backfill、live Telegram delivery。
+- Telegram reply markup / delivery consumer。
 
 ## 已跑自檢命令
 
-- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py presentation/report.py tests/test_generator_report.py`：passed。
-- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py`：92 passed，181 warnings。
+- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile presentation/report.py tests/test_generator_report.py tests/test_market_theme_evidence.py`：passed。
+- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py`：128 passed，181 warnings。
 - `git diff --check`：passed。
+- `rg -n "交易證據日|策略勝率|勝率證據" presentation/report.py -S`：no matches。
+
+## QA 反證
+
+- QA 補 source-error 盤後 fixture，確認第三則顯示來源讀取異常，不混用 missing-source / 樣本不足主狀態。
+- QA 按手機閱讀順序掃描，確認建準在持倉卡、新倉候選在未持倉卡、第三則在卡片後。
+- QA 確認 generated output 不含本輪禁止詞，且建準非加碼持倉不顯示 RR 2.73。
 
 ## 殘留風險
 
-- 盤後第三則摘要化會改變依賴第三則完整細節的舊閱讀習慣；本輪按 Owner 要求把細節留在前兩則卡片，第三則只留決策摘要與資料狀態。
-- 盤後語境替換目前是 formatter 層字串替換；未來若新增新的盤中詞，需同步擴充 probe。
-- 未驗 live Telegram reply markup 附著位置；這是既有旁支風險。
-
-## 今日錯誤復盤與流程補強
-
-- 根因：今天多次把「輸出看起來有證據」誤當成「手機閱讀上有用」，導致第三則重複 summary、卡片逐檔重複狀態、策略樣本狀態互相打架。
-- QA 是否攔住：本輪 QA 攔住了 CHANGELOG 仍寫成舊 refactor 口徑的錯誤，避免把可見文案變更講成無變更。
-- 流程補強：不新增死規則，改用 `tests/test_generator_report.py` 的盤後手機閱讀 probe 固化檢查；以後同類錯誤會在測試中直接 fail。
-- Runner gap：Tech worktree 殘留上一輪 diff 阻塞新任務；本輪已用 discard 清掉隔離 worktree 舊候選，後續應把 worktree hygiene 自動化列為 runner follow-up。
+- 本輪未處理 Telegram reply markup 附著最後一則 message 的旁支風險。
+- 本輪未做 production replay / backfill / live delivery。
+- 其他非本輪指定文案美化、排序、策略分數與資料完整性問題未處理。

@@ -4,10 +4,10 @@
 
 ## Current Task
 
-- task_id: `pm-20260601-afterhours-telegram-brief-dedupe`
-- task_name: `Afterhours Telegram Brief Dedup And Noise Reduction`
+- task_id: `report_v20_4_21_mobile_readability_remaining_fixes`
+- task_name: `V20.4.21 Mobile Readability Remaining Fixes`
 - task_type: `normal_patch`
-- owner_status: `requested_optimize_and_review_process`
+- owner_status: `requested_start_repair_current_issues`
 - architect_status: `qa_passed_pending_git_close`
 - pm_status: `done`
 - tech_status: `manual_absorb_from_tech_worktree`
@@ -16,21 +16,22 @@
 
 ## Current Result
 
-- 本輪目標是修 v20.4.21 盤後 Telegram 可讀性：第三則摘要化、策略樣本狀態單一化、卡片去除逐檔策略樣本不可用噪音、盤後語境正確、非加碼持倉 RR 不誤導。
+- 本輪目標是修 v20.4.21 剩餘手機閱讀問題：三日資料只稱短期背景、非加碼持倉 RR 一致、盤後下一步用明日語境、未持倉卡片資料來源降噪、第三則資料依據人話化。
 - Git completion gate：final 前必須以 `tools/cao_agent/check_git_completion_gate.sh` 驗證 `main` matches `origin/main` 且 worktree clean。
 - 已吸收內容：
-  - `presentation/report.py` 盤後第三則改為 `📌 盤後簡報`，不再複製完整 summary / 交易細節。
-  - 策略樣本不可用只在盤後第三則集中顯示一次，原因單一化。
-  - 盤後卡片不再逐檔重複策略樣本不可用，並替換盤中語境詞。
-  - 非加碼持倉仍顯示 `新倉 RR：不適用（既有持倉）`，新倉候選 RR 保留。
-  - VERSION 仍為 `v20.4.21`；strategy decision、holding_status、DB write path 無變更。
+  - `presentation/report.py` 將 `交易證據日` 改為短期背景 / 短期背景資料。
+  - 盤後 `盤中先觀察` / `盤中觀察修復狀況` 改為明日語境。
+  - 盤後未持倉卡片不再逐張輸出長資料來源句。
+  - 第三則資料依據改為：持倉與價格支持風控；未持倉只支持分類觀察，不支持直接進場。
+  - VERSION 仍為 `v20.4.21`；strategy decision、RR 計算、holding_status、DB write path 無變更。
 - 驗證：
   - QA 結論：`通過`。
-  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py presentation/report.py tests/test_generator_report.py`：passed。
-  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py`：92 passed，181 warnings。
-  - QA independent source-error fixture：all checks true。
+  - Re-QA output：`.cao_agent_context/outputs/20260601_181248_1516_stock_qa_code_readonly.answer.txt`，結論 `通過`。
+  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile presentation/report.py tests/test_generator_report.py tests/test_market_theme_evidence.py`：passed。
+  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py`：128 passed，181 warnings。
+  - QA source-error phone-order probe：passed。
   - `git diff --check`：passed。
-  - scoped diff：`core/generator.py`、`presentation/report.py`、`tests/test_generator_report.py`、固定 handoff Markdown。
+  - scoped diff：`presentation/report.py`、`tests/test_generator_report.py`、`tests/test_market_theme_evidence.py`、固定 handoff Markdown。
 
 ## Next Action
 

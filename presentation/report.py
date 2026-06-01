@@ -142,8 +142,8 @@ def _afterhours_card_text(line, report_context):
         "盤中觸發": "明日開盤前確認",
         "盤中可追": "等待下一交易日訊號",
         "即時進場": "等待下一交易日訊號",
-        "盤中先觀察": "收盤後風控觀察",
-        "盤中觀察修復狀況": "收盤後觀察修復狀況",
+        "盤中先觀察": "明日觀察是否守住警戒",
+        "盤中觀察修復狀況": "明日確認是否修復",
     }
     text = line
     for old, new in replacements.items():
@@ -305,7 +305,9 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
 
     lines.extend([
         tomorrow_line,
-        deps["_source_status_line"](report_context, name, holding=False) if report_context else None,
+        None if _report_phase(report_context) == "盤後" else (
+            deps["_source_status_line"](report_context, name, holding=False) if report_context else None
+        ),
         data_line,
         (
             None
@@ -400,10 +402,10 @@ def _market_theme_data_basis_line(report_context, deps):
     trend = evidence.get("evidence_trend") or {}
     trend_parts = []
     if trend.get("observed_days"):
-        trend_parts.append(f"近 {trend.get('observed_days')} 個交易證據日")
+        trend_parts.append(f"近 {trend.get('observed_days')} 個交易日短期背景")
     if trend.get("recent_supporting_days") is not None:
         trend_parts.append(f"近期 {trend.get('recent_supporting_days')} 日支持")
-    trend_text = "，".join(trend_parts) if trend_parts else "近幾個交易證據日"
+    trend_text = "，".join(trend_parts) if trend_parts else "短期背景資料"
 
     if evidence.get("confirmed") and status == "available":
         return (
@@ -412,7 +414,7 @@ def _market_theme_data_basis_line(report_context, deps):
         )
     if status in {"missing-source", "source-error", "insufficient-data"}:
         return (
-            "市場 / 題材背景：近幾個交易證據日不足以形成可靠背景，"
+            "市場 / 題材背景：短期背景資料不足以形成可靠背景，"
             "只作觀察，不作買點。"
         )
     return f"市場 / 題材背景：{trend_text}只作背景觀察，可靠度有限，不等於買點。"
@@ -438,16 +440,16 @@ def _position_candidate_data_basis_line(report_context):
     if position_ready and candidate_ready:
         return (
             "持倉 / 價格 / 候選資料：持倉與價格資料可支持風控檢查；"
-            "候選資料可支持分類，缺資料的標的會保守處理，不作有效進場。"
+            "未持倉資料只支持分類觀察，不支持直接進場。"
         )
     if position_ready:
         return (
             "持倉 / 價格 / 候選資料：持倉與價格資料可支持風控檢查；"
-            "候選資料不足，本輪不給缺資料標的進場結論。"
+            "未持倉資料不足時只支持分類觀察，不支持直接進場。"
         )
     return (
         "持倉 / 價格 / 候選資料：部分持倉或候選資料不足，只能支持有限風控檢查；"
-        "缺資料標的本輪不給進場結論。"
+        "未持倉資料只支持分類觀察，不支持直接進場。"
     )
 
 

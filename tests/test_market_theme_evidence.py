@@ -975,14 +975,14 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         self.assertIn("【05/28 盤中｜v20.4.21】", summary)
         self.assertIn("🧾 v20.4.21 簡報＋資料依據", summary)
         self.assertIn("新倉：無有效進場。", summary)
-        self.assertIn("市場 / 題材背景：近幾個交易證據日不足以形成可靠背景", summary)
+        self.assertIn("市場 / 題材背景：短期背景資料不足以形成可靠背景", summary)
         self.assertIn("只作觀察，不作買點", summary)
         self.assertNotIn("confirmed", summary)
         self.assertNotIn("AI/電子供應鏈偏多", summary)
         self.assertNotIn("今日可買：台積電", summary)
         self.assertLess(
             summary.index("新倉：無有效進場。"),
-            summary.index("市場 / 題材背景：近幾個交易證據日不足以形成可靠背景"),
+            summary.index("市場 / 題材背景：短期背景資料不足以形成可靠背景"),
         )
 
     def test_confirmed_theme_without_stock_entry_stays_track_only(self):
@@ -1022,13 +1022,13 @@ class MarketThemeEvidenceTest(unittest.TestCase):
 
         summary = summary_message(messages)
         self.assertIn("🧾 v20.4.21 簡報＋資料依據", summary)
-        self.assertIn("市場 / 題材背景：近幾個交易證據日仍支持目前背景觀察", summary)
+        self.assertIn("市場 / 題材背景：短期背景資料仍支持目前背景觀察", summary)
         self.assertIn("這只用來理解環境，不等於買點", summary)
         self.assertIn("市場/題材背景只用來理解環境，不構成買點", summary)
         self.assertIn("新倉：無有效進場。", summary)
         self.assertLess(
             summary.index("新倉：無有效進場。"),
-            summary.index("市場 / 題材背景：近幾個交易證據日仍支持目前背景觀察"),
+            summary.index("市場 / 題材背景：短期背景資料仍支持目前背景觀察"),
         )
         self.assertNotIn("今日可買：台積電", summary)
         self.assertNotIn("台積電｜可買", summary)
@@ -1076,7 +1076,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
 
         summary = summary_message(messages)
         self.assertIn("【05/29 盤中｜v20.4.21】", summary)
-        self.assertIn("市場 / 題材背景：近 3 個交易證據日", summary)
+        self.assertIn("市場 / 題材背景：近 3 個交易日短期背景", summary)
         self.assertIn("這只用來理解環境，不等於買點", summary)
         self.assertIn("新倉：無有效進場。", summary)
         self.assertNotIn("建議買入", summary)
@@ -1120,7 +1120,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
 
         summary = summary_message(messages)
         self.assertIn("市場/題材背景可靠度不足，只作觀察", summary)
-        self.assertIn("市場 / 題材背景：近幾個交易證據日不足以形成可靠背景", summary)
+        self.assertIn("市場 / 題材背景：短期背景資料不足以形成可靠背景", summary)
         self.assertIn("只作觀察，不作買點", summary)
         self.assertNotIn("production confirmed", summary)
 

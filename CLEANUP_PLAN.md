@@ -15,6 +15,12 @@
 
 ## Completed
 
+- `report_v20_4_21_mobile_readability_remaining_fixes`:
+  - 問題：Owner 要修剩餘手機閱讀問題：三日背景誤像策略證據、建準非加碼 RR 衝突、盤後下一步語境、未持倉卡片資料句噪音、第三則資料依據工程化。
+  - 結果：`交易證據日` 可見語感改為短期背景；盤後下一步改明日語境；盤後未持倉卡片移除逐檔長資料來源句；第三則改為持倉與價格支持風控、未持倉只支持分類觀察且不支持直接進場。
+  - 可重跑補強：更新 `test_v20_4_21_afterhours_mobile_readability_probe`，同步 `tests/test_market_theme_evidence.py` 短期背景命名預期。
+  - QA 反證：source-error 手機順序 probe passed；scoped tests `tests/test_generator_report.py tests/test_market_theme_evidence.py` 128 passed。
+  - 邊界：不改 strategy decision、RR 計算、holding_status、DB schema/write、live Telegram、VERSION。
 - `pm-20260601-afterhours-telegram-brief-dedupe`:
   - 問題：Owner 指出 v20.4.21 盤後報文仍有第三則過長、策略樣本狀態重複衝突、卡片噪音、盤後/盤中語境錯位、持倉 RR 誤導，並要求做今日復盤與流程補強。
   - 結果：盤後第三則改為短版 `📌 盤後簡報`；策略樣本不可用集中顯示一次；卡片不逐檔重複策略樣本不可用；盤後卡片替換被測盤中詞；非加碼持倉不顯示新倉 RR 數字。
