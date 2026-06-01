@@ -353,6 +353,13 @@ def _brief_new_position_line(watch_items, report_context, deps, market_mode=None
     return "新倉：無有效進場。"
 
 
+def _today_buy_holding_names(holding_items, deps):
+    return [
+        name for name, data in holding_items
+        if deps["is_today_buy_holding"](data)
+    ]
+
+
 def _brief_background_line(report_context, deps):
     market = deps["_field_by_key"](report_context, "evidence.market_theme")
     strategy = deps["_field_by_key"](report_context, "evidence.strategy_sample")
@@ -371,8 +378,13 @@ def _afterhours_brief_lines(holding_items, watch_items, report_context, deps, ma
     funnel = deps["build_unheld_funnel"](watch_items, market_mode=market_mode, report_context=report_context) if watch_items else {"可買": []}
     actionable = len(funnel.get("可買") or [])
     has_holding = bool(holding_items)
-    if actionable:
+    today_buy_names = _today_buy_holding_names(holding_items, deps)
+    if actionable and today_buy_names:
+        conclusion = f"結論：今日交易已建立新倉 {len(today_buy_names)} 檔；新增有效進場 {actionable} 檔需明日開盤前確認。"
+    elif actionable:
         conclusion = f"結論：新倉候選 {actionable} 檔需明日開盤前確認；既有持倉以收盤後風控觀察為主。"
+    elif today_buy_names:
+        conclusion = f"結論：今日交易已建立新倉 {len(today_buy_names)} 檔；新增有效進場：無。"
     elif has_holding:
         conclusion = "結論：今日無有效新倉；既有持倉以收盤後風控觀察為主。"
     else:
@@ -391,9 +403,18 @@ def _afterhours_brief_lines(holding_items, watch_items, report_context, deps, ma
     lines = [
         "📌 盤後簡報",
         conclusion,
+    ]
+    if today_buy_names:
+        lines.extend([
+            f"今日交易：已建立新倉 {len(today_buy_names)} 檔（{'、'.join(today_buy_names)}）",
+            f"新增有效進場：{actionable} 檔需明日開盤前確認" if actionable else "新增有效進場：無",
+        ])
+    elif not actionable:
+        lines.append("新增有效進場：無")
+    lines.extend([
         _strategy_sample_status_line(report_context, deps),
         f"明日前確認：{'；'.join(checks[:3])}。",
-    ]
+    ])
     if holding_items:
         lines.extend([
             "",

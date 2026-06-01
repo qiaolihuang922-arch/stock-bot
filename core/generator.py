@@ -5575,6 +5575,7 @@ def _telegram_presentation_deps():
         "format_executed_checklist": format_executed_checklist,
         "format_holding_control_checklist": format_holding_control_checklist,
         "pending_trade_items": pending_trade_items,
+        "is_today_buy_holding": is_today_buy_holding,
         "format_unheld_funnel": format_unheld_funnel,
         "detail_index_text": detail_index_text,
         "rejected_trace_line": rejected_trace_line,

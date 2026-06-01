@@ -2,77 +2,70 @@
 
 ## 任務尺寸與風險
 
-- 任務尺寸：normal_patch。
-- 風險判斷：影響 `strategy()` 內部止損候選，會改變衍生 stop / risk / rr 數值。
-- 邊界：未改 public return shape、message list、DB write、持倉狀態機或 Telegram delivery。
+- task_type: risk_patch。
+- 風險判斷：修改盤後 Telegram 使用者可見交易摘要，涉及 message list 文字契約。
+- 邊界：未碰策略 decision、DB write、live delivery、VERSION。
 
 ## 修改內容
 
-- `strategy()` 先保留既有短線基準：
-  - `baseline_stop = min(ma5, avg(closes[-3:]))`
-- 新增私有 helper `_stop_candidate_with_support()`：
-  - support 為有效 numeric、正數，且低於 price 時，使用 `max(baseline_stop, support)`。
-  - support 無效、非正數，或 `support >= price` 時 fallback 到 `baseline_stop`。
-- 補 focused tests：
-  - support 高於 baseline 時 stop 上移，risk 下降，rr 依既有公式上升。
-  - support 低於 baseline 時不下移 stop。
-  - support 無效時 fallback baseline 且 strategy 不 crash。
+- 修復盤後第三則簡報只看 `watch_items` 判斷新倉，漏掉已進入 `holding_items` 的今日買入標的。
+- 當 `holding_items` 有 today buy 時，第三則改顯示：
+  - `今日交易：已建立新倉 N 檔（...）`
+  - `新增有效進場：無` 或需明日確認的候選數
+- 無 today buy、無可買 watch 時，不誤報今日已有新倉，仍保留 `新增有效進場：無`。
+- 補手機閱讀 probe，覆蓋「持倉卡有今日買入、第三則不得出現今日無有效新倉」場景。
 
 ## 修改檔案
 
-- `services/analysis.py`
-- `tests/test_analysis_engine.py`
+- `presentation/report.py`
+  - 新增 `_today_buy_holding_names()`。
+  - `_afterhours_brief_lines()` 納入 `holding_items` 的 today buy 判斷。
+- `core/generator.py`
+  - 將既有 `is_today_buy_holding()` 注入 presentation deps，避免重寫 today buy 判斷口徑。
+- `tests/test_generator_report.py`
+  - 新增 afterhours today-buy holding probe。
+  - 同步既有盤後 today buy 測試預期。
 
 ## 最小改動策略
 
-- 只改 `strategy()` 的 stop candidate 計算路徑。
-- 不改 `support_resistance()` 演算法與輸出契約。
-- 不改 `calc_rr()` / `calc_risk()` 公式。
-- 不改報文 formatter、CLI、DB、Telegram 或持倉狀態機。
+- 只重用既有 `is_today_buy_holding()`，不新增資料來源、不改 holding / event 結構。
+- 只改盤後第三則簡報 formatter 與直接 deps。
+- 不改策略判斷、排序邏輯、DB、live Telegram、VERSION。
 
 ## 契約影響
 
-- `strategy()` 輸入參數不變。
-- `strategy()` 回傳 shape 不變，未新增、移除或重新命名欄位。
-- 既有 `rr / risk / stop` 欄位語意不變，但會因 stop candidate 納入有效 support 而改變數值。
-- 實際公式：
-  - `baseline_stop = min(ma5, avg(closes[-3:]))`
-  - `stop_candidate = max(baseline_stop, support)`，僅限 support numeric、`support > 0`、`support < price`
-  - 否則 `stop_candidate = baseline_stop`
-
-## 版本同步
-
-- 本輪未修改 `core/generator.py` 的 VERSION。
-- 風險說明：若 Owner 將 stop / risk / rr 數值變化視為使用者可見策略版本變更，需另補版本升級或由本輪 QA 阻塞後重開；本輪 Tech 僅交付公式與測試。
+- 使用者可見盤後第三則文字變更：
+  - today buy holding 存在時，不再輸出 `今日無有效新倉`。
+  - 額外可買機會仍以 `新增有效進場` 分開表達，避免把今日已買標的包裝成可追買推薦。
+- 回傳結構、payload shape、DB contract、CLI 輸出無變更。
+- VERSION 未變更，仍為 `v20.4.21`。
 
 ## 直接消費者同步
 
-- `core.signal_snapshot.analyze_ohlcv_snapshot()` 透過既有 `strategy()` return shape 消費，無需改 caller。
-- `core.condition_engine` 仍消費既有 `risk / rr` 欄位，無需改 payload。
-- 報文 / Telegram message builder 未改，message list shape 未變。
+- `format_brief_data_evidence_message()` 的 presentation deps 已同步新增 `is_today_buy_holding`。
+- `formatTelegramMessages()` 盤後 message list 透過既有 deps 自動消費新行為。
+- 測試同步覆蓋 Owner 手機閱讀路徑。
 
 ## 未影響模組
 
-- DB schema / RLS / grant / policy / role / index。
-- production DB write / backfill。
-- live Telegram delivery。
-- holding signal state machine。
-- `support_resistance()` 本身。
-- 報文 formatter。
+- 策略 decision / RR 計算 / holding status：未改。
+- DB schema / RLS / grant / policy / role / index / constraint：未改。
+- DB write / backfill / replay：未改。
+- live Telegram delivery：未執行、未改。
+- VERSION：未改。
 
 ## 已跑自檢命令
 
-- `PYTHONPATH=. .venv/bin/python -m pytest -q tests/test_analysis_engine.py`：36 passed。
-- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache .venv/bin/python -m py_compile services/analysis.py tests/test_analysis_engine.py`：passed。
-- `PYTHONPATH=. .venv/bin/python -m pytest -q tests/test_analysis_engine.py tests/test_condition_engine.py`：37 passed。
-- `git diff --check -- services/analysis.py tests/test_analysis_engine.py`：passed。
+- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py`：95 passed，189 warnings。
+- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m py_compile presentation/report.py core/generator.py tests/test_generator_report.py`：passed。
+- `git diff --check`：passed。
 
 ## 殘留風險
 
-- 既有 `support_resistance()` 目前以 `min(closes[-20:])` 產生 support，真實資料中 support 高於 baseline 的頻率取決於上游 support 定義；本輪依 TASK 不調整該演算法。
-- 本輪未跑 full pytest，僅跑 strategy / condition 相關 focused tests。
+- 今日買入名稱順序沿用既有持倉排序，不另改成輸入 fixture 順序；本輪不改排序契約。
+- 只跑了相關報文測試檔，未跑 full pytest。
 
 ## 旁支待辦
 
-- RR 命名重構、策略參數重新校準、報文文案優化、production replay、DB 回填均未納入本輪。
-- 若後續 Owner 要讓 support 更常進入止損候選，需另開任務評估 `support_resistance()` 的支撐位演算法。
+- 光寶科買入解釋、技嘉 RR 0.00、縮量漲停風險、智原 observation_days 均未處理，依 TASK.md 留待後續任務。
+- Telegram reply markup 附著最後一則 message 的 delivery consumer 風險未處理。

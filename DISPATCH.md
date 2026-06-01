@@ -4,14 +4,14 @@
 
 ## Current Task
 
-- task_id: `strategy-support-stop-candidate-20260601`
-- task_name: `Support Stop Candidate`
-- task_type: `normal_patch`
-- owner_status: `requested_batch_task_2_after_task_4`
-- architect_status: `blocked_no_product_absorb`
+- task_id: `risk_patch-afterhours-brief-today-buy-holdings-20260601`
+- task_name: `Afterhours Today Buy Summary Conflict`
+- task_type: `risk_patch`
+- owner_status: `reported_afterhours_new_position_summary_conflict`
+- architect_status: `qa_passed_pending_git_close`
 - pm_status: `done`
 - tech_status: `done`
-- qa_status: `blocked_timeout_and_version_contract`
+- qa_status: `passed`
 - latest_commit: see `git log -1`
 
 ## Current Follow-up
@@ -30,7 +30,9 @@
 - 任務二目前 blocked，未吸收產品 diff。
 - 阻塞原因：QA runner timeout / stream disconnected before final sentinel；捕獲輸出已指出版本契約風險：support stop candidate 會改變使用者可見 `stop / risk / rr`，但 VERSION 未升且沒有 Owner 放行。
 - Tech candidate 留在 tech worktree：`services/analysis.py`、`tests/test_analysis_engine.py`；主 repo 未吸收該產品 diff。
-- 下一個 Owner 新問題：報文一致性 / 策略顯示衝突組，第一優先級是盤後第三則「今日無有效新倉」與第一則今日買入持倉矛盾。
+- 本輪修最新報文衝突第一優先級：盤後第三則「今日無有效新倉」與第一則今日買入持倉矛盾。
+- 修正：盤後第三則納入 holding_items 中 today buy holding；有今日買入持倉時顯示「今日交易：已建立新倉 N 檔」並保留「新增有效進場：無」。
+- QA：Re-QA `通過`；按手機閱讀順序確認第一則今日買入、第三則不再否定今日新倉；負面案例無 today buy 不誤報。
 - Git completion gate：final 前必須以 `tools/cao_agent/check_git_completion_gate.sh` 驗證 `main` matches `origin/main` 且 worktree clean。
 - 上一輪 v20.4.21 報文修正已在 commit `b177345 restore afterhours control summary` 推送，本輪不再改動該產品 diff。
 - 已吸收內容：
@@ -56,7 +58,8 @@
 
 ## Next Action
 
-- 收口任務二 blocked 文件後，另開新 PM 任務處理 Owner 最新報文衝突組；不得把任務二 candidate diff 混入。
+- 收口：commit / push 後跑 `tools/cao_agent/check_git_completion_gate.sh`。
+- 後續 PM 任務按 Owner 最新問題拆分：光寶科買入解釋、技嘉 RR 0.00、縮量漲停風險、智原 observation_days。
 - 後續同類報文任務：先補或更新手機閱讀 probe，再改 formatter；不要只寫規則。
 - 旁支另開：Telegram reply markup 仍附在最後一則 message，新 message order 下可能需要 delivery consumer 任務評估按鈕落點。
 - 旁支另開：如果 Owner 認定 2356 英業達實際未賣，需查 production ledger/source truth 為何目前為 `shares=0 / CLOSED`；本輪未寫 DB、不校正 ledger。

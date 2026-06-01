@@ -2241,9 +2241,59 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【05/28 盤後｜v20.4.21】", summary)
         self.assertIn("📌 盤後簡報", summary)
         self.assertIn("結論：今日無有效新倉；既有持倉以收盤後風控觀察為主。", summary)
+        self.assertIn("新增有效進場：無", summary)
+        self.assertNotIn("今日交易：已建立新倉", summary)
         self.assertIn("明日前確認：觀察持倉是否跌破警戒。", summary)
         self.assertNotIn("技嘉｜明日風控｜加碼10", summary)
         self.assertNotIn("加碼後守警戒價，量價未延續則停止加碼", summary)
+
+    def test_afterhours_brief_counts_today_buy_holdings_as_executed_new_positions(self):
+        def today_buy_payload(code, qty, price):
+            payload = render_payload(
+                [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, price],
+                {"shares": qty, "avg_price": price - 2},
+                price=price,
+                change=1.5,
+            )
+            payload["stock_code"] = code
+            payload["holding_decision"] = {
+                "action": "風控觀察",
+                "level": "NEW_POSITION_RISK_WATCH",
+                "note": "今日剛買入",
+                "warning_price": price - 4,
+                "hard_stop_price": price - 8,
+                "allow_add": False,
+            }
+            payload["position_events"] = {"event_count": 1, "bought_shares": qty}
+            payload["today_action"] = "BUY"
+            return payload
+
+        messages = generator.formatTelegramMessages(
+            {
+                "建準": today_buy_payload("2421", 1000, 120),
+                "光寶科": today_buy_payload("2301", 1000, 118),
+                "旺宏": today_buy_payload("2337", 2000, 116),
+            },
+            "FULL DETAIL",
+            None,
+            None,
+            "⏳ 觀望",
+            datetime(2026, 6, 1),
+            report_phase="盤後",
+        )
+
+        card = position_message(messages)
+        summary = summary_message(messages)
+
+        self.assertIn("今日 買 1000股", card)
+        self.assertIn("📌 盤後簡報", summary)
+        self.assertIn("結論：今日交易已建立新倉 3 檔；新增有效進場：無。", summary)
+        self.assertIn("今日交易：已建立新倉 3 檔（", summary)
+        self.assertIn("建準", summary)
+        self.assertIn("光寶科", summary)
+        self.assertIn("旺宏", summary)
+        self.assertIn("新增有效進場：無", summary)
+        self.assertNotIn("今日無有效新倉", summary)
 
     def test_post_market_holding_risk_precedes_tomorrow_plan_without_duplicate_downgrade(self):
         def holding_payload(code, level, action, avg_price=124, price=122):
@@ -2284,7 +2334,9 @@ class GeneratorReportTest(unittest.TestCase):
         summary = summary_message(messages)
         self.assertIn("【05/28 盤後｜v20.4.21】", summary)
         self.assertIn("📌 盤後簡報", summary)
-        self.assertIn("結論：今日無有效新倉；既有持倉以收盤後風控觀察為主。", summary)
+        self.assertIn("結論：今日交易已建立新倉 2 檔；新增有效進場：無。", summary)
+        self.assertIn("今日交易：已建立新倉 2 檔（智原、緯創）", summary)
+        self.assertNotIn("今日無有效新倉", summary)
         self.assertIn("明日前確認：觀察持倉是否跌破警戒。", summary)
         self.assertNotIn("隔日計畫", summary)
         self.assertNotIn("收盤未修復，列入明日降級檢查：智原", summary)

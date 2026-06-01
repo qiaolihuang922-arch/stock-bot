@@ -28,13 +28,14 @@
 
 ## Current Worktree
 
-- task_id：`strategy-support-stop-candidate-20260601`
-- 狀態：PM done / Tech candidate done / QA `阻塞`；主 repo 未吸收產品 diff，僅記 blocked handoff。
-- commit：任務四已在 `bc73f7f use structured brief warning flags` 推送到 `origin/main`。
-- 問題：`support` 納入 `strategy()` stop candidate 會改變使用者可見 `stop / risk / rr`，但 VERSION 未升且沒有 Owner 放行；QA runner 也在輸出 final sentinel 前 timeout / stream disconnected。
-- 捕獲輸出：`.cao_agent_context/outputs/20260601_203135_9901_stock_qa_code_readonly.txt`。
-- 結論：任務二 blocked，不吸收 `services/analysis.py` / `tests/test_analysis_engine.py` candidate diff。
-- 下一步：Owner 最新貼出報文一致性 / 策略顯示衝突組；先另開 PM 任務，優先處理盤後第三則「今日無有效新倉」與第一則今日買入持倉矛盾。
+- task_id：`risk_patch-afterhours-brief-today-buy-holdings-20260601`
+- 狀態：PM done / Tech done / QA `通過`；主 repo 已吸收可吸收 diff，等待 commit / push / Git completion gate。
+- commit：任務二 blocked 文件已在 `9120672 mark support stop task blocked` 推送到 `origin/main`。
+- 問題：06/01 盤後第一則持倉卡有今日買入，但第三則盤後簡報寫「今日無有效新倉」，手機閱讀直接矛盾。
+- 修正：`presentation/report.py` 新增 `_today_buy_holding_names()`；`_afterhours_brief_lines()` 納入 holding_items 的 today buy 判斷；`core/generator.py` deps 注入既有 `is_today_buy_holding`。
+- 驗證：Re-QA output `.cao_agent_context/outputs/20260601_211153_16853_stock_qa_code_readonly.answer.txt`，結論 `通過`；主 repo 待跑 targeted tests / py_compile / diff check。
+- 邊界：未改 strategy decision、DB write、live Telegram、VERSION。
+- 後續：Owner 同批剩餘問題需拆分處理：光寶科買入解釋、技嘉 RR 0.00、縮量漲停風險、智原 observation_days。
 - 上一輪 v20.4.21 行為摘要保留如下，供重開對話辨識已落地內容：
 - 關鍵行為：
   - 不升 VERSION，仍為 `v20.4.21`。

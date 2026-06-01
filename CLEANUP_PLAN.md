@@ -15,6 +15,12 @@
 
 ## Completed
 
+- `risk_patch-afterhours-brief-today-buy-holdings-20260601`:
+  - 問題：Owner 指出 06/01 盤後第一則持倉卡有建準 / 光寶科 / 旺宏今日買入，第三則卻寫「今日無有效新倉」，手機閱讀直接矛盾。
+  - 結果：盤後第三則納入 `holding_items` 中的 today buy holding；有今日買入持倉時顯示今日已建立新倉，並另行保留「新增有效進場：無」表示沒有額外可買標的。
+  - 可重跑補強：新增 afterhours today-buy holding 手機閱讀 probe，覆蓋第一則今日買入與第三則不再否定今日新倉。
+  - QA 反證：Re-QA `通過`；負面案例無 today buy / 無 watch 可買時不誤報今日新倉。
+  - 邊界：不改 strategy decision、DB write、live Telegram、VERSION；光寶科買入解釋、技嘉 RR 0.00、縮量漲停風險、智原 observation_days 另開。
 - `strategy-support-stop-candidate-20260601`:
   - 問題：Owner 要評估並修復 `strategy()` 未使用 `support` 導致 stop / RR 偏差。
   - 狀態：blocked，未吸收產品 diff。
