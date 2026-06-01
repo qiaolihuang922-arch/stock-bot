@@ -4,10 +4,10 @@
 
 ## Current Task
 
-- task_id: `evidence-chain-maturity-100`
-- task_name: `Evidence Chain Maturity 100`
-- task_type: `risk_patch`
-- owner_status: `requested_maturity_72_to_100`
+- task_id: `telegram-evidence-human-readable-v20-4-20`
+- task_name: `Telegram evidence readable and conflict-consistent`
+- task_type: `normal_patch`
+- owner_status: `requested_reasonableness_and_conflict_fix`
 - architect_status: `qa_passed_pending_git_close`
 - pm_status: `done`
 - tech_status: `done`
@@ -19,21 +19,22 @@
 - 本輪已完成 QA，收口時必須 commit / push 到 `origin/main`。
 - Git completion gate：final 前必須以 `tools/cao_agent/check_git_completion_gate.sh` 驗證 `main` matches `origin/main` 且 worktree clean。
 - 已吸收 PM -> Tech -> QA 交付到主 repo 工作樹：
-  - 報文版本升至 `v20.4.19`。
+  - 報文版本升至 `v20.4.20`。
   - TG message list 順序維持：messages[0] 持倉、messages[1] 未持倉 / 非持倉、messages[2] short/evidence；`include_detail=True` 時 Details Backup 仍追加在最後。
-  - 五維 evidence maturity 達 100：data source / anti-fake、Telegram evidence expression、strategy sample evidence、execution memory / ledger evidence、repeatable runner / process。
-  - `scripts/generate_structural_evidence_artifact.py --maturity-report --case production_all_sources_available` 產生標準 maturity report；五維 100 且 blocking_findings=[]。
-  - strategy sample / ledger production-readonly artifact 均含 source artifact path/hash proof；synthetic-only、stale runner、缺 source hash、偽造 minimal 100 artifact 均 fail closed。
-  - `tools/cao_agent/check_evidence_handoff_gate.sh` 檢查五維、三則 messages、artifacts、source hash、safety flags、repo/worktree binding。
-  - 不改資料合理度、不修 production ledger conflict、不改策略 decision、DB schema、write path、live Telegram。
+  - 第三則改為人話 `簡報＋資料依據`，不再顯示 `source:/status:/use:/limit:/conflict:` raw slot dump。
+  - 內部 evidence_manifest / maturity artifact / gate 保留 machine-readable 欄位與 maturity 100。
+  - `🔥 最強` 只允許有效進場標的；新倉無有效進場或候選只是追蹤/不可行動時，顯示 `無有效進場標的`，不顯示排序/評級。
+  - 持倉非加碼卡片顯示 `新倉 RR：不適用（既有持倉）`，不顯示新倉 RR 數字。
+  - strategy sample 不可用時，卡片顯示不可用/不納入判斷，不顯示樣本、勝率、相對報酬等回測數字。
+  - 不改策略 decision、DB schema、write path、live Telegram。
 - 驗證：
   - QA 結論：`通過`。
   - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py scripts/generate_structural_evidence_artifact.py`：passed。
-  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py`：121 passed，169 warnings（第三方 deprecation 類）。
-  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_strategy_evidence.py tests/test_position_store.py tests/test_cross_day_context.py`：21 passed，12 warnings。
+  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py`：124 passed，177 warnings（第三方 deprecation 類）。
+  - `scripts/generate_structural_evidence_artifact.py --maturity-report --case production_all_sources_available` + `tools/cao_agent/check_evidence_handoff_gate.sh`：passed，maturity_score=100。
   - `git diff --check`：passed。
-  - QA 補充反證：synthetic-only exit 2、stale runner exit 2、forged minimal 100 被 gate 擋下、移除 source hash 被 gate 擋下、舊 repo/worktree binding 被 gate 擋下。
-  - scoped 可吸收 diff：`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`、`core/generator.py`、`scripts/generate_structural_evidence_artifact.py`、`tools/cao_agent/check_evidence_handoff_gate.sh`、`tests/test_generator_report.py`、`tests/test_market_theme_evidence.py`。
+  - QA 補充反證：WAIT / HOT blocker 候選即使傳入 best/score，也不會在無有效進場摘要顯示推薦感最強；ledger conflict 仍以人話揭露差異且內部 slot 保留。
+  - scoped 可吸收 diff：`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`、`core/generator.py`、`tools/cao_agent/check_evidence_handoff_gate.sh`、`tests/test_generator_report.py`、`tests/test_market_theme_evidence.py`。
 
 ## Next Action
 

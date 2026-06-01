@@ -13,8 +13,8 @@ for file in "${required_files[@]}"; do
   fi
 done
 
-if ! rg -q '^# TASK:.*evidence chain maturity|task_id: evidence-chain-maturity-100' TASK.md; then
-  echo "Evidence handoff gate failed: TASK.md is not the evidence-chain-maturity-100 task." >&2
+if ! rg -q 'task_id: (evidence-chain-maturity-100|telegram-evidence-human-readable-v20-4-20)' TASK.md; then
+  echo "Evidence handoff gate failed: TASK.md is not a supported evidence handoff task." >&2
   exit 1
 fi
 
@@ -34,7 +34,7 @@ path = Path(sys.argv[1])
 artifact = json.loads(path.read_text(encoding="utf-8"))
 if artifact.get("artifact_type") != "evidence_chain_maturity_report":
     raise SystemExit("Evidence handoff gate failed: artifact_type is not evidence_chain_maturity_report.")
-if artifact.get("generator_version") != "v20.4.19":
+if artifact.get("generator_version") != "v20.4.20":
     raise SystemExit("Evidence handoff gate failed: artifact generator_version is stale.")
 
 def git_text(args):
@@ -91,6 +91,9 @@ if not isinstance(messages, list) or len(messages) != 3:
     raise SystemExit("Evidence handoff gate failed: telegram_messages must contain exactly three messages.")
 if "【持倉標的】" not in messages[0] or "【未持倉標的】" not in messages[1] or "資料依據" not in messages[2]:
     raise SystemExit("Evidence handoff gate failed: telegram_messages order/content is invalid.")
+for raw in ["source:", "status:", "use:", "limit:", "conflict:"]:
+    if raw in messages[2]:
+        raise SystemExit("Evidence handoff gate failed: telegram third message exposes raw evidence slot fields.")
 
 artifacts = artifact.get("artifacts")
 if not isinstance(artifacts, list) or len(artifacts) < 3:

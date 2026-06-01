@@ -61,7 +61,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.19"
+VERSION = "v20.4.20"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -2447,16 +2447,20 @@ def ensure_holding_decision(name, data, signal_date=None):
 
 def best_stock_text(results_map, best, score=None, report_context=None):
 
-    if not best:
-        return "無有效進場標的"
+    def _is_strongest_eligible(name):
+        data = results_map.get(name) or {}
+        return (
+            bool(data)
+            and not data.get("holding")
+            and is_valid_entry(data.get("result") or {})
+            and _unheld_decision_source_eligible(report_context, name)
+        )
 
-    if not _unheld_decision_source_eligible(report_context, best):
+    if not best or not _is_strongest_eligible(best):
         eligible_results = {
             name: data["result"]
             for name, data in results_map.items()
-            if not data.get("holding")
-            and is_valid_entry(data.get("result") or {})
-            and _unheld_decision_source_eligible(report_context, name)
+            if _is_strongest_eligible(name)
         }
         best, score = pick_best_stock(eligible_results)
         if not best:
@@ -5659,11 +5663,9 @@ def formatTelegramPositionCard(name, data, report_context=None):
     reason_line = holding_reason_line(name, data)
     next_step = holding_next_step_line(name, data)
     rr_text = rr_display_text(result, holding=True)
-    rr_line = (
-        "數據：新倉 RR：持倉不適用"
-        if decision and not decision.get("allow_add")
-        else f"數據：RR {rr_text}"
-    )
+    add_levels = {"ADD_10", "ADD_20", "ADD_30"}
+    is_add_context = bool(decision and decision.get("level") in add_levels and decision.get("allow_add") is not False)
+    rr_line = "數據：新倉 RR：不適用（既有持倉）" if decision and not is_add_context else f"數據：RR {rr_text}"
 
     lines = [
         f"【{stock_title(name, data)}】📌 {position_summary_action(name, data)}｜{signed_pct(stock_pnl(data))}",
@@ -5675,7 +5677,7 @@ def formatTelegramPositionCard(name, data, report_context=None):
         f"下一步：{next_step}",
         _source_status_line(report_context, name, holding=True) if report_context else None,
         f"{rr_line}｜S {data.get('structure_score', '-')}/5｜V {data.get('volume_ratio', '-')}x",
-        compact_backtest_line(data.get("backtest_context")),
+        _strategy_sample_unavailable_card_line(report_context) or compact_backtest_line(data.get("backtest_context")),
         price_change_line(data.get("price"), data.get("change")),
     ]
     lines = [line for line in lines if line is not None]
@@ -6081,7 +6083,7 @@ def formatTelegramUnheldCard(name, data, report_phase=None, market_mode=None, re
         tomorrow_line,
         _source_status_line(report_context, name, holding=False) if report_context else None,
         data_line,
-        compact_backtest_line(data.get("backtest_context")),
+        _strategy_sample_unavailable_card_line(report_context) or compact_backtest_line(data.get("backtest_context")),
         price_line,
     ])
     lines = [line for line in lines if line is not None]
@@ -6300,37 +6302,58 @@ def _layer_status(report_context, layer):
     return "available"
 
 
-def _evidence_slot_status_block(report_context):
-    layer_labels = [
-        ("market-theme", "市場題材"),
-        ("strategy-sample", "策略樣本"),
-        ("positions", "持倉"),
-        ("ledger", "ledger"),
-        ("price-ohlcv", "價格 / OHLCV"),
-        ("rr-score-volume", "RR / score / volume"),
-        ("funnel-classification", "漏斗分類"),
-        ("execution-plan", "交易執行"),
-        ("next-day-plan", "明日計畫"),
-        ("missing-data", "缺資料"),
-        ("conflict", "衝突"),
-    ]
+def _strategy_sample_unavailable(report_context):
+    strategy = _field_by_key(report_context or {}, "evidence.strategy_sample")
+    return strategy.get("source_status", "missing-source") in {
+        "missing-source",
+        "source-error",
+        "insufficient-data",
+    }
+
+
+def _strategy_sample_unavailable_card_line(report_context):
+    if _strategy_sample_unavailable(report_context):
+        return "策略樣本：不可用，本次不納入判斷"
+    return None
+
+
+def _evidence_human_status_lines(report_context):
+    statuses = report_context.get("source_status_summary") or {}
     lines = []
-    for layer, label in layer_labels:
-        slot = _slot_by_layer(report_context, layer)
-        status = _layer_status(report_context, layer)
-        source = slot.get("source") or ("missing-source" if status == "missing-source" else layer)
-        use = slot.get("use") or "不納入買賣判斷"
-        limit = slot.get("limit") or "來源不足時 fail closed"
-        conflict = slot.get("conflict") or "none"
-        lines.extend([
-            "",
-            f"{label}:",
-            f"source: {source}",
-            f"status: {status}",
-            f"use: {use}",
-            f"limit: {limit}",
-            f"conflict: {conflict}",
-        ])
+
+    strategy = _field_by_key(report_context, "evidence.strategy_sample")
+    strategy_status = strategy.get("source_status", "missing-source")
+    if strategy_status == "missing-source":
+        lines.append("策略樣本：缺少可驗證來源，本次不納入買賣判斷。")
+    elif strategy_status == "insufficient-data":
+        lines.append("策略樣本：樣本不足，本次不納入買賣判斷。")
+    elif strategy_status == "source-error":
+        lines.append("策略樣本：來源讀取異常，本次不納入買賣判斷。")
+
+    ledger_status = _layer_status(report_context, "ledger")
+    conflict_status = _layer_status(report_context, "conflict")
+    has_conflict = (
+        ledger_status == "unresolved-conflict"
+        or conflict_status == "unresolved-conflict"
+        or any(
+            field.get("conflict") not in [None, "", "none"]
+            for field in report_context.get("evidence_manifest") or []
+        )
+    )
+    if ledger_status == "insufficient-data":
+        lines.append("執行記憶：資料不足，涉及已賣、停利或剩餘股數時採保守顯示。")
+    elif has_conflict:
+        lines.append("執行記憶：紀錄仍有待釐清的差異，未確認部分不輸出確定結論。")
+
+    position_status = statuses.get("position")
+    if position_status in {"missing-source", "source-error"}:
+        lines.append("持倉來源：讀取不足，持倉風控只保留可確認資訊。")
+
+    candidate_status = statuses.get("funnel")
+    if candidate_status in {"missing-source", "source-error", "insufficient-data", "unresolved-conflict"}:
+        lines.append("未持倉候選：來源不足或有疑義的標的不輸出有效進場。")
+
+    lines.append("持倉 RR：既有持倉若不是加碼情境，只顯示新倉 RR 不適用。")
     return lines
 
 
@@ -6400,7 +6423,7 @@ def format_brief_data_evidence_message(report_context, holding_items, watch_item
         _market_theme_data_basis_line(report_context),
         _strategy_sample_data_basis_line(report_context),
         _position_candidate_data_basis_line(report_context),
-        *_evidence_slot_status_block(report_context),
+        *_evidence_human_status_lines(report_context),
     ]
     return "\n".join(lines)
 
@@ -7165,11 +7188,16 @@ def build_evidence_maturity_report(case="production_all_sources_available", now=
         structural_verifier["pass"]
         and len(messages) == 3
         and "資料依據" in messages[2]
-        and "source:" in messages[2]
-        and "status:" in messages[2]
-        and "use:" in messages[2]
-        and "limit:" in messages[2]
-        and "conflict:" in messages[2]
+        and "策略樣本" in messages[2]
+        and "持倉 RR" in messages[2]
+        and not any(
+            term in messages[2]
+            for term in ["source:", "status:", "use:", "limit:", "conflict:"]
+        )
+        and all(
+            key in structural_artifact["evidence_manifest"][0]
+            for key in STRUCTURAL_EVIDENCE_REQUIRED_KEYS
+        )
     )
     strategy_blocking = strategy_artifact["status"] in STRUCTURAL_EVIDENCE_BLOCKING_STATUSES
     strategy_fail_closed = not any(

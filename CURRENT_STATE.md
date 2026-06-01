@@ -6,7 +6,7 @@
 
 - 專案：台股策略 Telegram 報文機器人。
 - 正式結果以 git / runner 產生報文為準。
-- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前收口目標為 `v20.4.19`。
+- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前收口目標為 `v20.4.20`。
 - 固定 8 份 Markdown 不刪：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 - Architect 是總控；產品 / 策略 / 報文 bug 或 feature 預設走 PM -> Tech -> QA。
 - 跨日狀態、已執行交易、歷史 evidence 必須來自 production DB 或 Owner 指定持久來源；local/runtime/worktree 不能當跨日記憶。
@@ -28,24 +28,23 @@
 
 ## Current Worktree
 
-- task_id：`evidence-chain-maturity-100`
+- task_id：`telegram-evidence-human-readable-v20-4-20`
 - 狀態：PM done / Tech done / QA `通過`；final 前必須已 commit / push 並通過 Git completion gate。
 - commit：見 `git log -1`。
 - 關鍵行為：
-  - 報文版本升到 `v20.4.19`。
+  - 報文版本升到 `v20.4.20`。
   - Telegram 完整輸出順序維持持倉 message -> 未持倉 / 非持倉 message -> short/evidence message；`include_detail=True` 時 Details Backup 追加最後。
-  - 五維 evidence maturity 達 100：data source / anti-fake、Telegram evidence expression、strategy sample evidence、execution memory / ledger evidence、repeatable runner / process。
-  - 標準命令：`scripts/generate_structural_evidence_artifact.py --maturity-report --case production_all_sources_available`。
-  - strategy sample / ledger production-readonly artifact 均含 source artifact path/hash proof；synthetic-only、stale runner、缺 source hash、偽造 minimal 100 artifact 均 fail closed。
-  - `tools/cao_agent/check_evidence_handoff_gate.sh` 檢查五維、三則 messages、artifacts、source hash、safety flags、repo/worktree binding。
-  - maturity 100 不代表資料合理或無衝突；missing-source / unresolved-conflict 會被保留並 fail closed。
+  - 第三則 `簡報＋資料依據` 改為人話摘要，不再外顯 raw slot dump；內部 evidence_manifest / maturity artifact / gate 保留 source/status/use/limit/conflict。
+  - `🔥 最強` 只從有效進場候選挑選；無有效進場或僅追蹤/不可行動時顯示 `無有效進場標的`，避免和「新倉：無有效進場」衝突。
+  - 持倉非加碼顯示 `新倉 RR：不適用（既有持倉）`；strategy sample 不可用時卡片不顯示回測樣本、勝率、相對報酬。
+  - maturity report 仍可重跑為 100；maturity 100 不代表資料合理或無衝突，missing-source / unresolved-conflict 仍 fail closed。
   - 不改 BUY/SELL、加減碼、停利停損、DB schema、write path、live Telegram；不修 production ledger conflict。
 - 驗證：
   - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py scripts/generate_structural_evidence_artifact.py`：passed。
-  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py`：121 passed，169 warnings。
-  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_strategy_evidence.py tests/test_position_store.py tests/test_cross_day_context.py`：21 passed，12 warnings。
+  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_main_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py`：124 passed，177 warnings。
+  - `scripts/generate_structural_evidence_artifact.py --maturity-report --case production_all_sources_available` + `tools/cao_agent/check_evidence_handoff_gate.sh`：passed，maturity_score=100。
   - `git diff --check`：passed。
-  - QA 補充反證：synthetic-only exit 2、stale runner exit 2、forged minimal 100 被 gate 擋下、移除 source hash 被 gate 擋下、舊 repo/worktree binding 被 gate 擋下。
+  - QA 補充反證：WAIT / HOT blocker 候選即使傳入 best/score，也不會在無有效進場摘要顯示推薦感最強；ledger conflict 仍以人話揭露差異且內部 slot 保留。
   - 先前 production read-only strategy evidence artifact 仍顯示缺 `classification backtest source-of-truth`，報文正確 fail closed，不回到舊式 `樣本 0｜樣本不足，不判讀`。
 - 2356 production read-only artifact：
   - path：`.qa_tmp/production_readonly_2356_positions_events.json`。
@@ -69,7 +68,8 @@
 
 - 重開對話後先以 `git status --branch --short` 與 `tools/cao_agent/check_git_completion_gate.sh` 確認 commit/push 狀態，不再依賴對話記憶。
 - 只把 `CHANGELOG.md` 所列 scoped diff 當成本輪驗收範圍；工作樹其他旁支 dirty files 不能因本輪 QA 通過而整包吸收。
-- 已處理 Owner 指出的「是 72/100 那個 maturity 到 100%」：目前五維 maturity report 可重跑為 100，資料合理度與衝突修復另開。
+- 已處理 Owner 指出的「是 72/100 那個 maturity 到 100%」：目前五維 maturity report 可重跑為 100。
+- 已處理本輪「先解合理度跟衝突」的第一層：使用者可見報文不再把無有效進場和推薦感最強同時輸出；raw evidence slot 改成人話，衝突/缺資料保守揭露。
 - 另開旁支：若 Owner 認定 2356 英業達實際未賣，查 production positions / position_events 為何目前 artifact 顯示 CLOSED / shares 0。
 - 另開旁支：盤點全報文 `追高 / 追蹤` 相關文案。
 - 另開旁支：Telegram reply markup 附著最後一則 message 的 delivery consumer 風險。

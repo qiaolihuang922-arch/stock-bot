@@ -15,6 +15,16 @@
 
 ## Completed
 
+- `telegram-evidence-human-readable-v20-4-20`:
+  - 問題：Owner 指出 v20.4.19 報文仍糟糕，第三則 evidence 末尾又出現 raw `source/status/use/limit/conflict` slot dump，且摘要可能同時說「新倉：無有效進場」又顯示 `🔥 最強：<標的>`，手機閱讀上像推薦衝突。
+  - 結果：PM -> Tech -> QA 完成，QA `通過`；收口需 commit / push 並跑 Git completion gate。
+  - 關鍵修正：報文版本升 v20.4.20；第三則改為人話 `簡報＋資料依據`，不外顯 raw slot dump；內部 evidence_manifest / maturity artifact / gate 保留 machine-readable 欄位。
+  - 合理度修正：`🔥 最強` 僅允許有效進場候選；若新倉無有效進場或候選只是追蹤/不可行動，一律顯示 `無有效進場標的`，不顯示排序/評級。
+  - 衝突修正：ledger / conflict 類狀態以人話揭露「紀錄仍有待釐清的差異」，不輸出確認停利、可賣股數或有效執行結論。
+  - 卡片修正：持倉非加碼顯示 `新倉 RR：不適用（既有持倉）`；strategy sample 不可用時不顯示樣本、勝率、相對報酬等回測數字。
+  - QA 反證：WAIT / HOT blocker 候選即使傳入 best/score，第三則仍不出現推薦感最強；structural artifact 仍保留 source/status/use/limit/conflict 且 maturity_score=100。
+  - 規則治理：`repeated_pattern` + `mobile_reading` + `evidence_chain`。證據鏈的使用者可見層要回答「能不能用、用在哪、限制是什麼」，不能把內部 slot 當報文；摘要的推薦語必須和有效進場狀態同源。
+  - 邊界：不改策略 decision、DB schema/write、live Telegram；不修 production ledger 資料本身。
 - `evidence-chain-maturity-100`:
   - 問題：Owner 指正要完成的是先前評估的 evidence chain maturity 72/100 -> 100/100，不是 structural coverage 100%。
   - 結果：PM -> Tech -> QA 完成，QA `通過`；收口需 commit / push 並跑 Git completion gate。
