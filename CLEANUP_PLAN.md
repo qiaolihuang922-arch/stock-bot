@@ -15,6 +15,13 @@
 
 ## Completed
 
+- `phase3-evidence-automation-20260602`:
+  - 問題：Owner 要證據進決策分數，但先決條件是 evidence 常態可用；否則 Phase 1/2/2b 只會讓加權長期空轉。
+  - 結果：新增 Phase 3 evidence automation runner；GitHub Actions `daily_evidence` schedule 不送 Telegram；daily snapshot 有 read-after-write；market/theme confirmed evidence 走既有 approved write CLI；TWSE 無法確認交易日則 fail closed skip；stale alert 只按 confirmed trading day 累積。
+  - 可重跑補強：`tests/test_phase3_evidence_automation.py`、`tests/test_daily_snapshot_store.py`、`tests/test_workflow_runtime_config.py` 覆蓋 13:20 gate、confirmed trading day、unknown / holiday skip、approved CLI failure、read-after-write、stale alert 與 scheduled bot skip；主 repo 29 passed。
+  - QA 反證：第一輪 QA 擋下 weekday 假交易日風險；Re-Tech 改為 TWSE readonly source 確認交易日，unknown calendar 不寫、不累積 stale；Re-QA `通過`。
+  - 規則治理：`evidence_chain` + `runner_gap` + `QA反證`。自動化證據生產不能用 weekday 冒充交易日；source 不可確認時必須 skip/fail closed，而不是寫空證據或累積 stale。
+  - 邊界：未進 evidence_score / final_confidence / decision_eligible / funnel modifier；未改 RR、策略 decision、DB schema/write、live Telegram；未執行 production write。
 - `phase0-bugs-pre-evidence-score-20260602`:
   - 問題：Owner 已確認 major 方向要讓證據進決策分數與 funnel 邊界；前置要求先修 Phase 0 顯示門控與 B1-B5 手機閱讀 bug，避免後續 evidence_score 建在矛盾報文上。
   - 結果：報文版本升 `v20.4.29`；score source insufficient / missing 不顯示 S5/5；弱勢遠離持倉條件不再有 `觀察：觀察`；弱勢 / 遠離突破不顯示 `極強`；B3/B4 持倉全列與排序一致回歸；`隔日確認` 成為獨立漏斗 bucket。

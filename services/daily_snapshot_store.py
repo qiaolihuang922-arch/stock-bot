@@ -209,3 +209,30 @@ def record_daily_snapshots(version, phase, results_map, now=None):
         "price_rows": len(price_rows),
         "signal_rows": len(signal_rows)
     }
+
+
+def read_daily_signal_snapshot_status(client, trade_date, version, expected_stock_ids=None):
+    expected = {str(item) for item in (expected_stock_ids or WATCHLIST_CODES)}
+    result = (
+        client.table("daily_signal_snapshot")
+        .select("stock_id,trade_date,version")
+        .eq("trade_date", trade_date)
+        .eq("version", version)
+        .execute()
+    )
+    rows = result.data or []
+    seen = {
+        str(row.get("stock_id"))
+        for row in rows
+        if isinstance(row, dict)
+    }
+    missing = sorted(expected - seen)
+    return {
+        "source": "daily_signal_snapshot",
+        "trade_date": trade_date,
+        "version": version,
+        "row_count": len(rows),
+        "expected_rows": len(expected),
+        "read_after_write": "ok" if not missing and len(rows) >= len(expected) else "fail",
+        "missing_stock_ids": missing,
+    }

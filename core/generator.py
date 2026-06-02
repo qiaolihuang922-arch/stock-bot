@@ -7515,9 +7515,16 @@ def _source_missing_report_messages(now, report_phase, position_warning):
 # ================================
 # 🔥 generate
 # ================================
-def generate_report(dry_run=False):
+def _generate_report_output(messages, reply_markup, return_write_results, write_results=None):
+    if return_write_results:
+        return messages, reply_markup, write_results or {}
+    return messages, reply_markup
+
+
+def generate_report(dry_run=False, return_write_results=False):
     global holdings
     global position_events
+    write_results = {}
     holdings = load_positions()
     position_events = load_today_position_events()
 
@@ -7534,7 +7541,12 @@ def generate_report(dry_run=False):
 
     position_warning = get_position_store_warning()
     if position_warning:
-        return _source_missing_report_messages(now, report_phase, position_warning), None
+        return _generate_report_output(
+            _source_missing_report_messages(now, report_phase, position_warning),
+            None,
+            return_write_results,
+            write_results,
+        )
 
     results_map = {}
     decisions = []
@@ -7572,9 +7584,9 @@ def generate_report(dry_run=False):
                 msg += f"└─ 其餘 {len(data_errors) - 6} 檔同樣無資料\n"
             else:
                 msg = msg.rstrip("\n") + "\n"
-            return msg, None
+            return _generate_report_output(msg, None, return_write_results, write_results)
 
-        return msg + "\n⚠ 無有效數據", None
+        return _generate_report_output(msg + "\n⚠ 無有效數據", None, return_write_results, write_results)
 
     position_warning = get_position_store_warning()
 
@@ -7796,6 +7808,8 @@ def generate_report(dry_run=False):
                 report_phase,
                 results_map
             )
+            write_results["daily_signal"] = signal_result
+            write_results["daily_signal_snapshot"] = snapshot_result
 
             daily_write_warning = daily_write_warning_text(signal_result, snapshot_result)
 
@@ -7840,7 +7854,12 @@ def generate_report(dry_run=False):
         report_phase=report_phase
     )
 
-    return messages, execution_reply_markup(results_map)
+    return _generate_report_output(
+        messages,
+        execution_reply_markup(results_map),
+        return_write_results,
+        write_results,
+    )
 
 
 def generate():

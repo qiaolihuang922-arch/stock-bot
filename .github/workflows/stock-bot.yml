@@ -1,15 +1,18 @@
 name: Stock Bot Pro
 
 "on":
+  schedule:
+    - cron: "25 5 * * 1-5"
   workflow_dispatch:
     inputs:
       run_mode:
-        description: "bot, backfill_may, or backfill_and_bot"
+        description: "bot, daily_evidence, backfill_may, or backfill_and_bot"
         required: false
         default: "bot"
         type: choice
         options:
           - bot
+          - daily_evidence
           - backfill_may
           - backfill_and_bot
       start_date:
@@ -46,6 +49,7 @@ jobs:
 
       - name: Create runtime config
         env:
+          RUN_MODE: ${{ github.event.inputs.run_mode || (github.event_name == 'schedule' && 'daily_evidence') || 'bot' }}
           STOCK_CONFIG: ${{ secrets.STOCK }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -53,7 +57,16 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
-          if [ -n "$TELEGRAM_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ] && [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_KEY" ]; then
+          if [ "$RUN_MODE" = "daily_evidence" ] && [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_KEY" ]; then
+            cat > config.py <<PY
+          TOKEN = ""
+          CHAT_ID = ""
+          SUPABASE_URL = "$SUPABASE_URL"
+          SUPABASE_KEY = "$SUPABASE_KEY"
+          SUPABASE_SERVICE_ROLE_KEY = "$SUPABASE_SERVICE_ROLE_KEY"
+          SERVICE_ROLE_KEY = SUPABASE_SERVICE_ROLE_KEY
+          PY
+          elif [ -n "$TELEGRAM_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ] && [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_KEY" ]; then
             cat > config.py <<PY
           TOKEN = "$TELEGRAM_TOKEN"
           CHAT_ID = "$TELEGRAM_CHAT_ID"
@@ -77,12 +90,14 @@ jobs:
           fi
 
           python - <<'PY'
+          import os
           import config
 
+          run_mode = os.environ.get("RUN_MODE", "bot")
+          needs_telegram = run_mode not in {"daily_evidence"}
           required = [
               name for name, value in {
-                  "TOKEN": getattr(config, "TOKEN", ""),
-                  "CHAT_ID": getattr(config, "CHAT_ID", ""),
+                  **({"TOKEN": getattr(config, "TOKEN", ""), "CHAT_ID": getattr(config, "CHAT_ID", "")} if needs_telegram else {}),
                   "SUPABASE_URL": getattr(config, "SUPABASE_URL", ""),
                   "SUPABASE_KEY": getattr(config, "SUPABASE_KEY", "")
               }.items()
@@ -145,9 +160,25 @@ jobs:
             --write \
             --confirm-write
 
+      - name: Run Phase 3 evidence automation
+        env:
+          RUN_MODE: ${{ github.event.inputs.run_mode || (github.event_name == 'schedule' && 'daily_evidence') || 'bot' }}
+          MARKET_THEME_APPROVED_PAYLOAD: ${{ secrets.MARKET_THEME_APPROVED_PAYLOAD }}
+        run: |
+          if [ "$RUN_MODE" != "daily_evidence" ] && [ "$RUN_MODE" != "backfill_and_bot" ]; then
+            echo "Phase 3 evidence automation skipped for run_mode=$RUN_MODE"
+            exit 0
+          fi
+          payload_arg=""
+          if [ -n "$MARKET_THEME_APPROVED_PAYLOAD" ]; then
+            printf '%s\n' "$MARKET_THEME_APPROVED_PAYLOAD" > market_theme_approved_payload.json
+            payload_arg="--market-theme-payload market_theme_approved_payload.json"
+          fi
+          python scripts/run_phase3_evidence_automation.py $payload_arg
+
       - name: Run bot (retry 3 times)
         env:
-          RUN_MODE: ${{ github.event.inputs.run_mode || 'bot' }}
+          RUN_MODE: ${{ github.event.inputs.run_mode || (github.event_name == 'schedule' && 'daily_evidence') || 'bot' }}
         run: |
           if [ "$RUN_MODE" != "bot" ] && [ "$RUN_MODE" != "backfill_and_bot" ]; then
             echo "Run bot skipped for run_mode=$RUN_MODE"

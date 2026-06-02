@@ -3,7 +3,7 @@ from datetime import datetime
 
 from core.watchlist import WATCHLIST_CODES
 from services.analysis import strategy
-from services.daily_snapshot_store import build_daily_snapshot_payloads
+from services.daily_snapshot_store import build_daily_snapshot_payloads, read_daily_signal_snapshot_status
 from services.signal_store import record_daily_signals
 
 
@@ -234,6 +234,54 @@ class DailySnapshotStoreTest(unittest.TestCase):
         self.assertFalse(payloads["recorded"])
         self.assertEqual(payloads["reason"], "incomplete_watchlist")
         self.assertEqual(payloads["missing_stock_ids"], [missing_code])
+
+    def test_daily_signal_snapshot_read_after_write_status_detects_missing_rows(self):
+        class Query:
+            def __init__(self, rows):
+                self.rows = rows
+
+            def select(self, fields):
+                return self
+
+            def eq(self, key, value):
+                self.rows = [row for row in self.rows if row.get(key) == value]
+                return self
+
+            def execute(self):
+                return type("Result", (), {"data": self.rows})()
+
+        class Client:
+            def __init__(self, rows):
+                self.rows = rows
+
+            def table(self, name):
+                self.table_name = name
+                return Query(list(self.rows))
+
+        status = read_daily_signal_snapshot_status(
+            Client([
+                {"stock_id": "2330", "trade_date": "2026-06-02", "version": "v20.4.29"},
+            ]),
+            "2026-06-02",
+            "v20.4.29",
+            expected_stock_ids=["2330", "2317"],
+        )
+
+        self.assertEqual(status["source"], "daily_signal_snapshot")
+        self.assertEqual(status["read_after_write"], "fail")
+        self.assertEqual(status["missing_stock_ids"], ["2317"])
+
+        ok_status = read_daily_signal_snapshot_status(
+            Client([
+                {"stock_id": "2330", "trade_date": "2026-06-02", "version": "v20.4.29"},
+                {"stock_id": "2317", "trade_date": "2026-06-02", "version": "v20.4.29"},
+            ]),
+            "2026-06-02",
+            "v20.4.29",
+            expected_stock_ids=["2330", "2317"],
+        )
+
+        self.assertEqual(ok_status["read_after_write"], "ok")
 
 
 if __name__ == "__main__":

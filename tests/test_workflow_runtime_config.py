@@ -20,8 +20,11 @@ def _workflow_run_script(step_name):
     step = lines.index(f"      - name: {step_name}")
     start = lines.index("        run: |", step) + 1
     end = next(
-        index for index in range(start, len(lines))
-        if lines[index].startswith("      - name:")
+        (
+            index for index in range(start, len(lines))
+            if lines[index].startswith("      - name:")
+        ),
+        len(lines),
     )
     return "\n".join(line[10:] if line.startswith("          ") else line for line in lines[start:end])
 
@@ -110,6 +113,24 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
         self.assertIn("runtime config: SERVICE_ROLE_KEY alias missing", completed.stdout)
         self.assertNotIn("legacy-read-key-secret", completed.stdout)
 
+    def test_daily_evidence_runtime_config_does_not_require_telegram_secrets(self):
+        completed, config_text = self._run_create_runtime_config(
+            {
+                "RUN_MODE": "daily_evidence",
+                "SUPABASE_URL": "https://daily.supabase.co",
+                "SUPABASE_KEY": "daily-read-key-secret",
+                "SUPABASE_SERVICE_ROLE_KEY": "daily-service-role-secret",
+            }
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn('TOKEN = ""', config_text)
+        self.assertIn('CHAT_ID = ""', config_text)
+        self.assertIn('SUPABASE_KEY = "daily-read-key-secret"', config_text)
+        self.assertIn("runtime config: SUPABASE_SERVICE_ROLE_KEY present", completed.stdout)
+        self.assertNotIn("daily-read-key-secret", completed.stdout)
+        self.assertNotIn("daily-service-role-secret", completed.stdout)
+
     def test_workflow_does_not_echo_service_role_secret_value(self):
         workflow_text = WORKFLOW.read_text(encoding="utf-8")
 
@@ -121,7 +142,10 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
     def test_workflow_dispatch_supports_git_runner_may_backfill(self):
         workflow_text = WORKFLOW.read_text(encoding="utf-8")
 
+        self.assertIn("schedule:", workflow_text)
+        self.assertIn('cron: "25 5 * * 1-5"', workflow_text)
         self.assertIn("run_mode:", workflow_text)
+        self.assertIn("- daily_evidence", workflow_text)
         self.assertIn("- backfill_may", workflow_text)
         self.assertIn("- backfill_and_bot", workflow_text)
         self.assertIn('default: "2026-05-01"', workflow_text)
@@ -134,6 +158,9 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
         self.assertIn("--write", workflow_text)
         self.assertIn("--confirm-write", workflow_text)
         self.assertIn('Run bot skipped for run_mode=$RUN_MODE', workflow_text)
+        self.assertIn("Run Phase 3 evidence automation", workflow_text)
+        self.assertIn("python scripts/run_phase3_evidence_automation.py $payload_arg", workflow_text)
+        self.assertIn("github.event_name == 'schedule' && 'daily_evidence'", workflow_text)
 
     def _run_market_theme_backfill_step(self, run_mode, fake_python_exit=0):
         script = _workflow_run_script("Backfill official market/theme evidence (retry 3 times)")
@@ -193,6 +220,51 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
                 self.assertEqual(calls.count("scripts/backfill_market_theme_sources.py"), 3)
                 self.assertIn("--write --confirm-write", calls)
                 self.assertIn("source date outside requested May range", completed.stderr)
+
+    def test_scheduled_daily_evidence_mode_skips_live_bot_delivery(self):
+        script = _workflow_run_script("Run bot (retry 3 times)")
+        runtime_env = os.environ.copy()
+        runtime_env["RUN_MODE"] = "daily_evidence"
+        completed = subprocess.run(
+            ["bash", "-e", "-c", script],
+            text=True,
+            capture_output=True,
+            check=False,
+            env=runtime_env,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("Run bot skipped for run_mode=daily_evidence", completed.stdout)
+
+    def test_phase3_evidence_step_preserves_market_theme_write_cli_path(self):
+        script = _workflow_run_script("Run Phase 3 evidence automation")
+        runtime_env = os.environ.copy()
+        runtime_env["RUN_MODE"] = "daily_evidence"
+        runtime_env["MARKET_THEME_APPROVED_PAYLOAD"] = '{"payloads":[]}'
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bin_path = Path(tmpdir) / "bin"
+            bin_path.mkdir()
+            calls_path = Path(tmpdir) / "python_calls.txt"
+            fake_python = bin_path / "python"
+            fake_python.write_text(
+                f"#!/usr/bin/env bash\necho \"$@\" >> \"{calls_path}\"\nexit 0\n",
+                encoding="utf-8",
+            )
+            fake_python.chmod(0o755)
+            runtime_env["PATH"] = f"{bin_path}{os.pathsep}{runtime_env.get('PATH', '')}"
+            completed = subprocess.run(
+                ["bash", "-e", "-c", script],
+                cwd=tmpdir,
+                text=True,
+                capture_output=True,
+                check=False,
+                env=runtime_env,
+            )
+            calls = calls_path.read_text(encoding="utf-8")
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("scripts/run_phase3_evidence_automation.py", calls)
+        self.assertIn("--market-theme-payload market_theme_approved_payload.json", calls)
 
 
 if __name__ == "__main__":

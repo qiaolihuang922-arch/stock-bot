@@ -28,8 +28,25 @@
 
 ## Latest Completed Handoff
 
-- task_id：`phase0-bugs-pre-evidence-score-20260602`
+- task_id：`phase3-evidence-automation-20260602`
 - 狀態：done / QA passed；commit / push 與 Git completion gate 待 final 收口。
+- 問題：Owner 要在 evidence_score / final_confidence major 前，先讓 evidence 常態可用，避免加權空轉。
+- 修正：
+  - 新增 `scripts/run_phase3_evidence_automation.py`，作為 scheduled evidence runner。
+  - GitHub Actions 新增 `daily_evidence` mode 與 weekday 13:25 台北時間 schedule；scheduled path 不要求 Telegram secrets、不跑 live bot delivery。
+  - daily_signal_snapshot 透過 `generate_report(return_write_results=True)` 取得寫入結果，並用 `read_daily_signal_snapshot_status()` read-after-write。
+  - market/theme confirmed evidence 仍呼叫既有 `scripts/write_market_theme_confirmed_evidence.py --execute` approved write CLI，不繞過 guard。
+  - runner 不再用 weekday 當交易日真值；以既有 TWSE official readonly source 確認交易日。無法確認、休市、source-error 或 13:20 前皆 fail closed skip，不寫、不累積 stale。
+  - stale/unavailable alert 只按 `trading_day_confirmed=True` 或已確認交易日累積。
+- 驗證：QA `通過`；主 repo `tests/test_phase3_evidence_automation.py tests/test_daily_snapshot_store.py tests/test_workflow_runtime_config.py` 29 passed，13 warnings；`py_compile` passed；`git diff --check` passed。
+- QA 反證：daily_evidence schedule 不送 Telegram；13:19 不進 write path；unknown calendar 不累積 stale；approved CLI read-after-write failure nonzero 且輸出 fail_closed。
+- 邊界：未改 evidence_score / final_confidence / decision_eligible / funnel modifier、RR、策略 decision、DB schema/RLS/grant/policy、live Telegram；未執行 production write。
+- 下一步：Phase 1/2/2b major，讓 evidence_score 進 final_confidence 與 funnel 邊界，保留 fail-closed / 透明拆分 / 不單獨造 BUY / 不放寬追高。
+
+## Previous Completed Handoff
+
+- task_id：`phase0-bugs-pre-evidence-score-20260602`
+- 狀態：done / committed / pushed。
 - 問題：Owner 已拍板 major 方向：證據要進決策分數並影響 funnel 邊界；但落地順序要求先修 Phase 0 顯示門控與 B1-B5 手機閱讀 bug，不提前進入 evidence_score / final_confidence / Phase 3。
 - 修正：
   - Phase 0-1：score source status 支援 insufficient / missing alias，缺來源時保守顯示 `S 證據不足`，不出現 `證據不足｜S5/5`。
@@ -43,7 +60,7 @@
 - 邊界：未改 RR 公式、DB schema/write、live Telegram；未進入 evidence_score / final_confidence / decision_eligible / funnel evidence modifier major；未做 Phase 3 自動化生產。
 - 下一步：依 Owner 指令，先做 Phase 3 自動化證據生產，讓 evidence 常態可用，再開 Phase 1/2/2b major。
 
-## Previous Completed Handoff
+## Earlier Completed Handoff
 
 - task_id：`holdings-risk-list-no-truncation-20260602`
 - 狀態：done / committed / pushed。
