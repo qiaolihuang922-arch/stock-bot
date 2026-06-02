@@ -15,6 +15,13 @@
 
 ## Completed
 
+- `risk_patch_score_source_status_display_gate_20260602`:
+  - 問題：Owner 清單第 1 項指出 S 分數 / 強弱文字缺 source gate，score 不足時仍可能在卡片顯示 `S 5/5`、`極強`、`突破確認`。
+  - 結果：`presentation/report.py` 新增 score source gate；持倉 / 未持倉卡在顯示 S 分數與高置信盤面文字前讀 `stock.<name>.score.source_status`。非 available / derived 時顯示 `S 證據不足` 或 `S 不可用`，盤面降為 `強弱證據不足｜待確認`。
+  - 可重跑補強：新增持倉 insufficient-data、未持倉 source-error、score manifest missing 與 available/derived 正常案例 probes；主 repo `tests/test_generator_report.py` 111 passed。
+  - QA 反證：缺 `stock.TEST.score` manifest 時 fail closed，但 price/RR/volume 仍保留，不把 score 不足誤寫成 price source missing；正常 available/derived 不降級。
+  - 邊界：不改 strategy decision、RR 公式、DB schema/write、production DML/backfill、live Telegram；清單其他項未處理。
+  - 流程治理：`evidence_chain` + `mobile_reading`。顯示 gate 必須直接驗手機卡片，不能只看 manifest 生成。
 - `evidence_gate_p1_p2_p4_20260602`:
   - 問題：Owner 指出 evidence_manifest / 資料依據說 strategy_sample、ledger 等不足，但卡片仍輸出 S 5/5、極強、突破確認、精確今日買賣 / 股數 / 均價與可行動 funnel，形成「滿分結論 vs 不足證據」。
   - 結果：P1/P2/P4 第一批硬衝突已修。strategy_sample 不足時阻斷未持倉高置信行動標籤與進場觸發；ledger / positions 不足時持倉卡隱藏精確 execution 欄位；RR / 過熱 / 證據不足不進可買 / 可準備 / 進場觸發。
