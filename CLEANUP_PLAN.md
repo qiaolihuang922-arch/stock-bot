@@ -15,6 +15,13 @@
 
 ## Completed
 
+- `holdings-risk-list-no-truncation-20260602`:
+  - 問題：Owner 指出第三則 `持倉風控檢查` 用前 5 筆 + `另有 N 項持倉風控見詳情` 截斷，手機上不直觀；要求有幾檔持倉就列幾檔。
+  - 結果：報文版本升 `v20.4.28`；持倉風控檢查預設完整列出全部持倉，預設不顯示 `另有 / 見詳情`；持倉卡、風控檢查、detail index 同序。
+  - 可重跑補強：更新 6 檔持倉手機閱讀 probe；直接 helper 反證預設 6 檔全列、顯式 `limit=5` 仍保留相容截斷行為；主 repo `tests/test_generator_report.py` 116 passed。
+  - QA 反證：第一次 QA blocked 因 `CHANGELOG.md` stale 指向上一輪 source-missing 任務，非代碼失敗；同步本輪 CHANGELOG 後 Re-QA `通過`。
+  - 規則治理：`runner_gap` + `mobile_reading`。這不是新增規則，而是再次確認 handoff sync 必須可重跑；持倉列表類報文變更要驗 card/control/index 三方同序。
+  - 邊界：不改 strategy decision、主行動判斷、RR、DB schema/write、live Telegram、未持倉漏斗。
 - `20260602-risk-codex-fixlist-closeout-4-12`:
   - 問題：Owner 要將 Codex 修復清單剩餘可直接修項一次收口，不再單點拆分；範圍含 strategy_sample 結構化狀態、資料依據去重 / 可靠度、cross_day 記憶門控、LAST_OHLCV stale、簡報降噪、0-count 隱藏、持倉排序 / 主行動、已突破負百分比格式。
   - 結果：報文版本升 `v20.4.27`；legacy strategy text fail closed，不再用中文 summary 反推；market/theme reliability 由 evidence_trend 派生；cross_day source 不足不產生確認結論；LAST_OHLCV fallback 明示 stale/date；source-missing / 全 0 場景不再輸出空交易區塊或全 0 漏斗；已突破負百分比改成人話。

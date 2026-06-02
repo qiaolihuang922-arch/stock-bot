@@ -1,70 +1,63 @@
-# CHANGELOG:
+# CHANGELOG: 持倉風控檢查完整列出全部持倉
 
   ## 任務尺寸與風險
 
-  - 任務尺寸：risk_patch
-  - 風險判斷：使用者可見 Telegram summary / fail-closed 報文分組契約修正；不改策略 decision、RR、DB、live delivery。
+  normal_patch。使用者可見 Telegram 報文第三則渲染變更；不碰策略 decision、RR、DB write path、未持倉漏斗。
 
   ## 修改內容
 
-  - 最小修復 Final Re-QA blocked 點：source-missing / fail-closed 第三則 summary 不再輸出空執行占位：
-      - 移除 ✅ 今日盤中交易執行
-      - 移除 無新增下單
-      - 移除結論行中的 交易執行：無新增下單
-  - 補強 QA 指出的 source_missing_no_empty_execution_placeholder probe，確認 source-missing 第三則 brief 與全訊息都不含空執行占位。
-  - 保留現有候選 diff 的既有契約：主要 Telegram summary path 不顯示 無新增下單、交易執行 0、僅追蹤 0、淘汰 0；全 0 未持倉漏斗仍隱藏。
+  - 持倉風控檢查 預設改為列出全部持倉，不再固定只顯示前 5 筆。
+  - 移除預設截斷提示 另有 N 項持倉風控見詳情。
+  - 風控列表排序改為沿用既有 holding_items 順序，與持倉卡 / detail index 同源。
+  - 報文版本升為 v20.4.28。
+  - 擴充手機閱讀 probe：6 檔持倉完整列出、無 另有 / 見詳情、排序與持倉卡 / detail index 一致。
 
   ## 修改檔案
 
   - core/generator.py
   - tests/test_generator_report.py
-  - 既有候選 diff 仍包含：presentation/report.py、services/stock_api.py、tests/test_stock_api_history.py
-  - CHANGELOG.md 進場前已 dirty；依本輪指令未直接編輯。
 
   ## 最小改動策略
 
-  - 只改 source-missing 專用 summary 手寫文案與對應測試斷言。
-  - 不重構 formatter，不改 message list 整體順序，不擴大第 4/5/6/7/9/11/12 已通過反證範圍。
-  - 不新增 production 讀寫、不 backfill、不 live Telegram。
+  只修改第三則持倉風控 checklist 的預設上限與排序來源，保留 format_holding_control_checklist(..., limit=...) 顯式參數相容性。測試只同步報文版本與本輪直接相關 probe。
 
   ## 契約影響
 
-  - source-missing fail-closed summary path：不再輸出空的「今日盤中交易執行 / 無新增下單」區塊。
-  - 一般盤中 summary：仍可在有實際 execution lines 時顯示 ✅ 今日盤中交易執行。
-  - payload、DB contract、public helper 回傳結構未新增變更。
+  - 使用者可見報文：第三則 持倉風控檢查 筆數改為等於持倉數。
+  - 訊息順序：未改。
+  - payload / DB contract：未改。
+  - public helper：format_holding_control_checklist 參數形狀保留；預設行為由 5 筆截斷改為完整列出。
+  - 報文版本：v20.4.27 -> v20.4.28。
 
   ## 直接消費者同步
 
-  - format_brief_data_evidence_message() 消費的 source-missing summary input 已同步移除空占位。
-  - tests/test_generator_report.py 已補 source-missing 手機閱讀 probe，防止第三則 summary 回退。
-  - Telegram Owner 手機閱讀路徑同步：fail-closed 只表達來源不足與不產生交易建議，不再像執行區塊。
+  - presentation/report.py 既有呼叫透過 deps 使用 format_holding_control_checklist，不需改呼叫點；預設即套用完整列表。
+  - tests/test_generator_report.py 同步版本期望與手機閱讀排序 / 不截斷 probe。
 
   ## 未影響模組
 
-  - 未改 strategy decision。
-  - 未改 RR 公式。
-  - 未改 DB schema / RLS / grant / policy / role / index / constraint。
-  - 未改 DB write path。
-  - 未執行 production DML / backfill。
-  - 未執行 live Telegram delivery。
-  - 未 commit / push。
+  - strategy decision / 主行動判斷未改。
+  - RR 計算與顯示語意未改。
+  - DB schema / write path 未改。
+  - live Telegram delivery 未執行。
+  - 未持倉漏斗、可買 / 可準備 / 僅追蹤 / 淘汰邏輯未改。
+  - 交易執行與已執行 checklist 的既有截斷行為未改。
 
   ## 已跑自檢命令
 
-  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_stock_api_history.py
-      - 結果：collection failed，原因為 x86_64 Python 載入 arm64 pydantic_core 架構不相容。
-  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_stock_api_history.py
-      - 結果：125 passed，225 warnings。
-  - git diff --check
-      - 結果：passed。
+  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m pytest -q tests/
+    test_generator_report.py::GeneratorReportTest::test_intraday_mobile_a3_holding_order_matches_cards_control_and_index：1 passed。
+  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py：116 passed，225 warnings。
+  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py tests/test_generator_report.py：passed。
+  - git diff --check：passed。
+  - 另有一次未加 arch -arm64 的單測收集失敗，原因是 x86_64 Python 載入 arm64 pydantic_core binary 不相容；已用 arm64 重跑通過。
 
   ## 殘留風險
 
-  - 本輪只代表 Tech 自檢通過，不宣告 QA 通過。
-  - warnings 為既有第三方 deprecation / Python 版本提示，未在本輪處理。
-  - worktree 仍有進場前已存在的 CHANGELOG.md dirty 狀態，未由本輪直接編輯。
+  - 未跑 full pytest；本輪只跑 Telegram 報文相關測試。
+  - 完整列出全部持倉會增加第三則長度；TASK 明確要求不截斷，本輪未另做 Telegram 長訊息切分治理。
 
   ## 旁支待辦
 
-  - 無本輪新增旁支。
-  - 既有清單外報文文案盤點、production source-of-truth 治理仍應另開任務。
+  - 其他 Telegram 區塊若也有 另有 / 見詳情 截斷文案，不屬本輪。
+  - Telegram 單則長度與多持倉極端情境可另開治理任務。

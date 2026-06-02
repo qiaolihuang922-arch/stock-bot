@@ -69,7 +69,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.27"
+VERSION = "v20.4.28"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -5178,7 +5178,7 @@ def holding_control_items(holding_items):
 
     return [
         holding_execution_item(name, data)
-        for name, data in sorted(holding_items, key=lambda item: holding_execution_priority(item[0], item[1]))
+        for name, data in holding_items
     ]
 
 
@@ -5280,7 +5280,7 @@ def intraday_holding_control_line(item, report_phase):
     return line
 
 
-def format_holding_control_checklist(holding_items, limit=5, report_phase=None):
+def format_holding_control_checklist(holding_items, limit=None, report_phase=None):
 
     items = holding_control_items(holding_items)
 
@@ -5289,10 +5289,10 @@ def format_holding_control_checklist(holding_items, limit=5, report_phase=None):
 
     lines = [
         f"{index}. {intraday_holding_control_line(item, report_phase)}"
-        for index, item in enumerate(items[:limit], start=1)
+        for index, item in enumerate(items if limit is None else items[:limit], start=1)
     ]
 
-    if len(items) > limit:
+    if limit is not None and len(items) > limit:
         lines.append(f"另有 {len(items) - limit} 項持倉風控見詳情")
 
     return lines
