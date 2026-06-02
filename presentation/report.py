@@ -209,6 +209,30 @@ def _score_data_text(report_context, name, data, deps):
     return "S 不可用"
 
 
+def _confidence_data_text(report_context, name, data, deps):
+    stock_result = data.get("result") or {}
+    if "final_confidence" not in stock_result or "technical_confidence" not in stock_result:
+        return _score_data_text(report_context, name, data, deps)
+
+    try:
+        final = round(float(stock_result.get("final_confidence") or 0))
+        technical = round(float(stock_result.get("technical_confidence") or 0))
+    except (TypeError, ValueError):
+        return _score_data_text(report_context, name, data, deps)
+
+    evidence_score = stock_result.get("evidence_score")
+    status = stock_result.get("evidence_status") or "unavailable"
+    if evidence_score is None or status == "unavailable":
+        return f"綜合 {final}｜技術 {technical}｜證據：不適用（資料不足）"
+
+    try:
+        pct = round((float(stock_result.get("evidence_modifier") or 1.0) - 1.0) * 100)
+    except (TypeError, ValueError):
+        pct = 0
+    sign = "+" if pct >= 0 else ""
+    return f"綜合 {final}｜技術 {technical}｜證據 {sign}{pct}%（{status}）"
+
+
 def _score_gated_market_line(report_context, name, stock_result, dist, deps):
     if _score_source_available(report_context, name, deps):
         market_text = deps["plain_label"](deps["compact_market_line"](stock_result, dist))
@@ -244,7 +268,7 @@ def formatTelegramPositionCard(name, data, *, deps, report_context=None):
         and summary_action != "新倉風控觀察"
     )
     rr_line = "數據：新倉 RR：不適用（既有持倉）" if decision and not is_add_context else f"數據：RR {rr_text}"
-    score_text = _score_data_text(report_context, name, data, deps)
+    score_text = _confidence_data_text(report_context, name, data, deps)
 
     lines = [
         f"【{deps['stock_title'](name, data)}】📌 {summary_action}｜{deps['signed_pct'](deps['stock_pnl'](data))}",
@@ -312,7 +336,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         title_action = "不可行動"
     elif funnel_state == "可準備":
         title_icon = "👀"
-        title_action = deps["unheld_non_actionable_prepare_label"](data)
+        title_action = "可準備" if data.get("evidence_adjustment_reason") else deps["unheld_non_actionable_prepare_label"](data)
     elif state in ["等冷卻", "等回測"]:
         title_icon = "⏳"
         title_action = state
@@ -330,7 +354,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     wait_text = deps["unheld_entry_wait_text"](stock_result, state, funnel_state)
     detail_size_text = deps["unheld_entry_size_detail_text"](stock_result)
     raw_size_text = deps["entry_size_text"](stock_result)
-    score_text = _score_data_text(report_context, name, data, deps)
+    score_text = _confidence_data_text(report_context, name, data, deps)
     if deps["is_valid_entry"](stock_result) and strategy_source_blocked:
         strategy_reason = {
             "missing-source": "策略樣本來源缺失",
@@ -384,7 +408,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
             else f"原因：price/OHLCV/RR source {source_status}，不作新倉決策"
         )
         if deps["is_valid_entry"](stock_result) and not source_eligible
-        else deps["rejected_transition_reason_line"](stock_result) if funnel_state == "淘汰" else None
+        else f"理由：{data.get('evidence_adjustment_reason')}" if data.get("evidence_adjustment_reason") else deps["rejected_transition_reason_line"](stock_result) if funnel_state == "淘汰" else None
     )
     low_volume_limit_up_risk = deps["low_volume_limit_up_risk_text"](data)
     lines = [
@@ -583,13 +607,20 @@ def _position_candidate_data_basis_line(report_context, holding_items=None, watc
     funnel_text = ""
     if deps and watch_items:
         funnel = deps["build_unheld_funnel"](watch_items, market_mode=market_mode, report_context=report_context)
+        prepare_counts = deps["unheld_prepare_bucket_counts"](
+            watch_items,
+            funnel=funnel,
+            market_mode=market_mode,
+            report_context=report_context,
+        )
         buy_count = len(funnel.get("可買") or [])
         prepare_count = len(funnel.get("可準備") or [])
+        prepare_text = deps["unheld_prepare_funnel_text"](prepare_counts) or "不可追高觀察 0"
         tracking_count = deps["unheld_tracking_only_count"](funnel)
         rejected_count = len(funnel.get("淘汰") or [])
         funnel_text = (
             f"未持倉 {watch_count} 檔已分類：可買 {buy_count}、"
-            f"不可追高觀察 {prepare_count}、僅追蹤 {tracking_count}、淘汰 {rejected_count}；"
+            f"{prepare_text}、僅追蹤 {tracking_count}、淘汰 {rejected_count}；"
         )
     elif watch_count:
         funnel_text = f"未持倉 {watch_count} 檔已分類；"

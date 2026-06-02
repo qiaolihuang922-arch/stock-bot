@@ -3471,7 +3471,10 @@ def pick_best_stock(results_dict):
             0
         )
 
-        score += result.get("confidence_score", 0) / 20
+        score += result.get(
+            "final_confidence",
+            result.get("confidence_score", 0)
+        ) / 20
 
         lifecycle = result.get(
             "lifecycle"

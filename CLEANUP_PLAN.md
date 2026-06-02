@@ -15,6 +15,19 @@
 
 ## Completed
 
+- `evidence-score-decision-funnel-phase1-2-2b`:
+  - 問題：Owner 已拍板 evidence chain 要進決策分數，並可影響排序與 funnel 邊界；但必須保留 fail-closed、透明拆分、不單獨造 BUY、不放寬追高 / 過熱 / RR hard blockers。
+  - 結果：報文版本升 `v20.4.30`；新增 evidence score / modifier / final confidence；pick/sort 使用 final confidence；卡片分數行拆成 `綜合 / 技術 / 證據`；Phase 2b 只允許 near-boundary technical setup + strong confirmed evidence 調整到可準備。
+  - 可重跑補強：`tests/test_generator_report.py` 新增 / 更新 129-case report suite 與 focused evidence probes，覆蓋 missing evidence、confirmed no setup、supporting_trend、single_day、sample<10、RR/overheat/chase hard blockers、mixed adjusted + ordinary prepare、pick/sort final confidence、score split、manifest reason。
+  - QA 反證：QA 多輪 blocked 有效攔截：
+    - manifest 最初缺 boundary adjustment reason。
+    - Summary / 漏斗 / card / manifest mixed bucket 一度不同口徑。
+    - market_theme `supporting_trend` 一度被誤升級成 confirmed strong evidence。
+    - LIMIT_LOCK / 漲停不追 chase blocker 一度被 evidence 放寬。
+    - ordinary prepare card 一度顯示 `待回測`，與 summary / manifest `不可追高觀察` 分裂。
+  - 最終 QA：`通過`；主 repo focused tests 24 passed；`tests/test_generator_report.py` 129 passed；`py_compile` / `git diff --check` passed。
+  - 規則治理：`evidence_chain` + `mobile_reading` + `QA反證` + `runner_gap`。本輪證明 evidence 入分不能只驗公式；必須同時驗 source eligibility、hard blocker、手機閱讀順序、manifest artifact、混合桶與副作用清理。
+  - 邊界：未改 RR 公式、DB schema/write、production backfill/live Telegram、Phase 3 automation；supporting evidence 仍可保守參與 final confidence，但不能觸發 strong boundary adjustment。
 - `phase3-evidence-automation-20260602`:
   - 問題：Owner 要證據進決策分數，但先決條件是 evidence 常態可用；否則 Phase 1/2/2b 只會讓加權長期空轉。
   - 結果：新增 Phase 3 evidence automation runner；GitHub Actions `daily_evidence` schedule 不送 Telegram；daily snapshot 有 read-after-write；market/theme confirmed evidence 走既有 approved write CLI；TWSE 無法確認交易日則 fail closed skip；stale alert 只按 confirmed trading day 累積。

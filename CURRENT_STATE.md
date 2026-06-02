@@ -6,7 +6,7 @@
 
 - 專案：台股策略 Telegram 報文機器人。
 - 正式結果以 git / runner 產生報文為準。
-- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.29`。
+- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.30`。
 - 固定 8 份 Markdown 不刪：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 - Architect 是總控；產品 / 策略 / 報文 bug 或 feature 預設走 PM -> Tech -> QA。
 - 跨日狀態、已執行交易、歷史 evidence 必須來自 production DB 或 Owner 指定持久來源；local/runtime/worktree 不能當跨日記憶。
@@ -28,8 +28,28 @@
 
 ## Latest Completed Handoff
 
-- task_id：`phase3-evidence-automation-20260602`
+- task_id：`evidence-score-decision-funnel-phase1-2-2b`
 - 狀態：done / QA passed；commit / push 與 Git completion gate 待 final 收口。
+- 問題：Owner 已拍板 evidence chain 要成為決策分數的一部分，並可影響排序與 funnel 邊界；同時必須保留 fail-closed、透明拆分、不單獨造 BUY、不放寬 chase / overheat / RR hard blockers。
+- 修正：
+  - 新增 `compute_evidence_score(report_context, name)`、evidence modifier 與 final confidence。
+  - 契約公式：`evidence_modifier = clamp(1 + 0.3 * (evidence_score - 0.5), [0.85, 1.15])`；evidence 不足時 modifier = 1.0，final = technical。
+  - `pick_best_stock`、watchlist sort 與 execution ordering 使用 final confidence；報文 score line 顯示 `綜合 / 技術 / 證據`。
+  - market/theme 只有 `confirmed_trend` 可作 strong boundary evidence；`supporting_trend` 只作 supporting score，`single_day` 不 decision eligible。
+  - Phase 2b 只在 existing technical setup near-boundary + strong confirmed evidence 時調整到可準備；不得變可買。
+  - RR / overheat / chase / LIMIT_LOCK hard blockers 不被 evidence 放寬。
+  - mixed adjusted + ordinary prepare 在 Summary / 漏斗 / card / detail index / manifest 同步拆分；ordinary prepare 主顯示態為 `不可追高觀察`，內部策略態以 `strategy_funnel_state=可準備` 保留。
+  - `stock.<name>.risk.value` artifact 同時保留主顯示態、strategy funnel state 與 evidence adjustment reason。
+- 版本：`core/generator.py` 升為 `v20.4.30`。
+- 驗證：QA `通過`；主 repo `tests/test_generator_report.py` 129 passed，225 warnings；focused evidence/mixed tests 24 passed；`py_compile` passed；`git diff --check` passed。
+- QA 反證：supporting trend 不升 strong boundary；single_day 不 decision eligible；missing evidence modifier=1.0；no setup 不 BUY / 不可準備；RR / overheat / chase blocker 不放寬；mixed adjusted + ordinary prepare 手機與 manifest 一致；pick/sort 使用 final confidence。
+- 邊界：未改 RR 公式、DB schema/RLS/grant/policy、production write/backfill、live Telegram、Phase 3 automation。
+- 下一步：若 Owner 要繼續 evidence chain，優先驗 production evidence 資料品質與 per-stock evidence granularity；不要再用單純文案修補替代證據契約。
+
+## Previous Completed Handoff
+
+- task_id：`phase3-evidence-automation-20260602`
+- 狀態：done / committed / pushed。
 - 問題：Owner 要在 evidence_score / final_confidence major 前，先讓 evidence 常態可用，避免加權空轉。
 - 修正：
   - 新增 `scripts/run_phase3_evidence_automation.py`，作為 scheduled evidence runner。
@@ -41,7 +61,6 @@
 - 驗證：QA `通過`；主 repo `tests/test_phase3_evidence_automation.py tests/test_daily_snapshot_store.py tests/test_workflow_runtime_config.py` 29 passed，13 warnings；`py_compile` passed；`git diff --check` passed。
 - QA 反證：daily_evidence schedule 不送 Telegram；13:19 不進 write path；unknown calendar 不累積 stale；approved CLI read-after-write failure nonzero 且輸出 fail_closed。
 - 邊界：未改 evidence_score / final_confidence / decision_eligible / funnel modifier、RR、策略 decision、DB schema/RLS/grant/policy、live Telegram；未執行 production write。
-- 下一步：Phase 1/2/2b major，讓 evidence_score 進 final_confidence 與 funnel 邊界，保留 fail-closed / 透明拆分 / 不單獨造 BUY / 不放寬追高。
 
 ## Previous Completed Handoff
 

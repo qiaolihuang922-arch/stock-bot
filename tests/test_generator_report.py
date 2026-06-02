@@ -409,8 +409,8 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertEqual(len(messages), 3)
         self.assertIn("【持倉標的】", messages[0])
         self.assertIn("【未持倉標的】", messages[1])
-        self.assertIn("｜v20.4.29】", summary)
-        self.assertIn("🧾 v20.4.29 簡報＋資料依據", summary)
+        self.assertIn("｜v20.4.30】", summary)
+        self.assertIn("🧾 v20.4.30 簡報＋資料依據", summary)
         self.assertIn("新倉：無有效進場", summary)
         self.assertIn("資料依據", summary)
         self.assertIn("市場 / 題材背景：短期背景資料不足以形成可靠背景", summary)
@@ -1499,7 +1499,7 @@ class GeneratorReportTest(unittest.TestCase):
         evidence = evidence_message(messages)
         self.assertNotIn("📊 策略證據 v20.0", summary)
         self.assertNotIn("策略樣本 / 分類回測", summary)
-        self.assertIn("v20.4.29 簡報＋資料依據", evidence)
+        self.assertIn("v20.4.30 簡報＋資料依據", evidence)
         self.assertIn("策略樣本：本次不可用（原因：樣本不足），單檔卡片不重複列示。", evidence)
         self.assertEqual(payload["result"]["decision"], "BUY")
         self.assertEqual(payload["result"]["action"], 0.1)
@@ -1795,7 +1795,7 @@ class GeneratorReportTest(unittest.TestCase):
                 datetime(2026, 5, 26),
             )
 
-        self.assertIn("v20.4.29", summary_message(messages))
+        self.assertIn("v20.4.30", summary_message(messages))
         self.assertIn("📡 資料：即時價 realtime｜日線 yahoo", summary_message(messages))
         self.assertIn("🧭 今日結論：R3 進攻偏熱；新倉：無有效進場；持倉風控檢查 5 檔；未持倉 6 檔僅追蹤", summary_message(messages))
         self.assertIn("🧭 原因：強勢股多過熱，RR不足，不追高", summary_message(messages))
@@ -2307,10 +2307,10 @@ class GeneratorReportTest(unittest.TestCase):
 
         summary = summary_message(messages)
         unheld = unheld_message(messages)
-        self.assertIn("【05/29 盤中｜v20.4.29】", summary)
+        self.assertIn("【05/29 盤中｜v20.4.30】", summary)
         self.assertIn("追蹤最強：\n- 旺宏 修復中｜連續觀察 4 天，不可買，待觸發", summary)
         self.assertIn("可買 0｜不可追高觀察 1（不可買）｜僅追蹤 0｜淘汰 0", summary)
-        self.assertIn("【旺宏 2337】👀 待回測", unheld)
+        self.assertIn("【旺宏 2337】👀 不可追高觀察", unheld)
         self.assertIn("歷史：前次 eliminated｜修復中｜連續觀察 4 天｜權重 +1", unheld)
         self.assertNotIn("旺宏｜可買", summary + unheld)
 
@@ -2535,7 +2535,7 @@ class GeneratorReportTest(unittest.TestCase):
         )
 
         summary = summary_message(messages)
-        self.assertIn("【05/28 盤後｜v20.4.29】", summary)
+        self.assertIn("【05/28 盤後｜v20.4.30】", summary)
         self.assertIn("📌 盤後簡報", summary)
         self.assertIn("結論：今日無有效新倉；既有持倉以收盤後風控觀察為主。", summary)
         self.assertIn("新增有效進場：無", summary)
@@ -2699,7 +2699,7 @@ class GeneratorReportTest(unittest.TestCase):
         )
 
         summary = summary_message(messages)
-        self.assertIn("【05/28 盤後｜v20.4.29】", summary)
+        self.assertIn("【05/28 盤後｜v20.4.30】", summary)
         self.assertIn("📌 盤後簡報", summary)
         self.assertIn("結論：今日交易已建立新倉 2 檔；新增有效進場：無。", summary)
         self.assertIn("今日交易：已建立新倉 2 檔（智原、緯創）", summary)
@@ -2924,7 +2924,7 @@ class GeneratorReportTest(unittest.TestCase):
             report_phase="盤後",
         )
 
-        self.assertIn("v20.4.29", summary_message(messages))
+        self.assertIn("v20.4.30", summary_message(messages))
         self.assertEqual(payload["holding_decision"]["level"], "POST_PROFIT_WATCH")
         self.assertIn("【智原 3035】📌 停利後觀察", card)
         self.assertIn("決策：停利後觀察，暫不加碼", card)
@@ -2961,7 +2961,7 @@ class GeneratorReportTest(unittest.TestCase):
         card = position_message(messages)
         summary = summary_message(messages)
 
-        self.assertIn("【05/29 盤中｜v20.4.29】", summary)
+        self.assertIn("【05/29 盤中｜v20.4.30】", summary)
         self.assertEqual(payload["holding_decision"]["level"], "POST_PROFIT_WATCH")
         self.assertIn("【英業達 2356】📌 停利後觀察", card)
         self.assertIn("倉位：188股", card)
@@ -3043,7 +3043,7 @@ class GeneratorReportTest(unittest.TestCase):
         executed_context = "今日已賣 75 股｜剩餘 225 股｜第二段已執行"
 
         self.assertEqual(generator.position_summary_action("英業達", payload), "第二段停利後觀察")
-        self.assertIn("【05/29 盤中｜v20.4.29】", summary)
+        self.assertIn("【05/29 盤中｜v20.4.30】", summary)
         self.assertIn("【英業達 2356】📌 第二段停利後觀察", card)
         self.assertIn("今日 賣 75股", card)
         self.assertIn(f"決策：第二段停利後觀察，{executed_context}", card)
@@ -3110,7 +3110,7 @@ class GeneratorReportTest(unittest.TestCase):
         )
 
         self.assertEqual(generator.position_summary_action("英業達", payload), "第二段停利後觀察")
-        self.assertIn("【05/31 假日｜v20.4.29】", summary)
+        self.assertIn("【05/31 假日｜v20.4.30】", summary)
         self.assertIn("【英業達 2356】📌 第二段停利後觀察", card)
         self.assertIn("今日 最近交易日賣 187股", card)
         self.assertIn(context, card)
@@ -3299,7 +3299,7 @@ class GeneratorReportTest(unittest.TestCase):
         position = position_message(messages)
         unheld = unheld_message(messages)
 
-        self.assertIn("【05/28 盤中｜v20.4.29】", summary)
+        self.assertIn("【05/28 盤中｜v20.4.30】", summary)
         self.assertIn("✅ 今日盤中交易執行", summary)
         self.assertNotIn("明日執行", summary)
         self.assertIn("交易執行 1 項；持倉風控檢查 1 檔；已執行 1 項不重複", summary)
@@ -3395,7 +3395,7 @@ class GeneratorReportTest(unittest.TestCase):
         position = position_message(messages)
         unheld = unheld_message(messages)
 
-        self.assertIn("【05/28 盤中｜v20.4.29】", summary)
+        self.assertIn("【05/28 盤中｜v20.4.30】", summary)
         self.assertIn("🧭 今日結論：", summary)
         self.assertIn("新倉：無有效進場", summary)
         self.assertNotIn("無新增下單", summary)
@@ -3525,7 +3525,7 @@ class GeneratorReportTest(unittest.TestCase):
         position = position_message(messages)
         unheld = unheld_message(messages)
 
-        self.assertIn("【05/28 盤中｜v20.4.29】", summary)
+        self.assertIn("【05/28 盤中｜v20.4.30】", summary)
         self.assertIn("市場 / 題材背景：短期背景資料不足以形成可靠背景，只作觀察，不作買點。", summary)
         self.assertNotIn("證據：production 來源不足，不作確認。", summary)
         self.assertNotIn("詳情：runtime 觀察僅供診斷，非確認來源。", summary)
@@ -3727,7 +3727,7 @@ class GeneratorReportTest(unittest.TestCase):
         summary = summary_message(messages)
         unheld = unheld_message(messages)
 
-        self.assertIn("【05/29 盤中｜v20.4.29】", summary)
+        self.assertIn("【05/29 盤中｜v20.4.30】", summary)
         self.assertIn("🧭 今日結論：R3 進攻偏熱；新倉：無有效進場；未持倉 1 檔不可追高觀察、3 檔僅追蹤", summary)
         self.assertIn("市場 / 題材背景：短期背景資料不足以形成可靠背景，只作觀察，不作買點。", summary)
         self.assertNotIn("證據：production 來源不足，不作確認。", summary)
@@ -3741,7 +3741,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("買點：不買，等回測", unheld)
         self.assertIn("【B 0002】⏳ 等冷卻｜過熱觀察", unheld)
         self.assertIn("買點：不買，等冷卻", unheld)
-        self.assertIn("【C 0003】👀 待回測｜突破回測", unheld)
+        self.assertIn("【C 0003】👀 不可追高觀察｜突破回測", unheld)
         self.assertIn("買點：待觸發，不追高", unheld)
         self.assertNotIn("市場 / 題材證據：absent", summary)
         self.assertNotIn("市場沒有證據", summary)
@@ -3839,7 +3839,7 @@ class GeneratorReportTest(unittest.TestCase):
         attack_volume_card = "【緯創 3231】" + unheld.split("【緯創 3231】", 1)[1].split("\n\n", 1)[0]
 
         self.assertIn("【群創 3481】⏳ 等回測｜漲停不追", low_volume_card)
-        self.assertIn("數據：RR -（過熱）｜S 4/5｜V 0.62x", low_volume_card)
+        self.assertIn("數據：RR -（過熱）｜綜合 49｜技術 49｜證據：不適用（資料不足）｜V 0.62x", low_volume_card)
         self.assertIn("V 0.62x", low_volume_card)
         self.assertIn("買點：不買，等回測", low_volume_card)
         self.assertIn("【緯創 3231】⏳ 等回測｜漲停不追", attack_volume_card)
@@ -3922,7 +3922,7 @@ class GeneratorReportTest(unittest.TestCase):
         summary = summary_message(messages)
         unheld = unheld_message(messages)
 
-        self.assertIn("【05/29 盤中｜v20.4.29】", summary)
+        self.assertIn("【05/29 盤中｜v20.4.30】", summary)
         self.assertIn("🧭 今日結論：R3 進攻偏熱；新倉：無有效進場；未持倉 2 檔不可追高觀察、5 檔僅追蹤", summary)
         self.assertIn(
             "強勢準備：\n"
@@ -3942,10 +3942,10 @@ class GeneratorReportTest(unittest.TestCase):
         for name, code, action, label in [
             ("A", "0001", "等回測", "漲停不追"),
             ("B", "0002", "等冷卻", "過熱觀察"),
-            ("C", "0003", "待回測", "突破回測"),
+            ("C", "0003", "不可追高觀察", "突破回測"),
             ("D", "0004", "等冷卻", "過熱觀察"),
             ("E", "0005", "等冷卻", "過熱觀察"),
-            ("F", "0006", "待回測", "突破回測"),
+            ("F", "0006", "不可追高觀察", "突破回測"),
         ]:
             icon = "⏳" if action in ["等冷卻", "等回測"] else "👀"
             self.assertIn(f"【{name} {code}】{icon} {action}｜{label}", unheld)
@@ -4173,7 +4173,7 @@ class GeneratorReportTest(unittest.TestCase):
 
         summary = summary_message(messages)
 
-        self.assertIn("【05/29 盤後｜v20.4.29】", summary)
+        self.assertIn("【05/29 盤後｜v20.4.30】", summary)
         self.assertIn("📌 盤後簡報", summary)
         self.assertIn("結論：今日無有效新倉；既有持倉以收盤後風控觀察為主。", summary)
         self.assertIn("明日前確認：觀察持倉是否跌破警戒；未持倉標的重新等待有效進場。", summary)
@@ -4218,7 +4218,7 @@ class GeneratorReportTest(unittest.TestCase):
 
         summary = summary_message(messages)
 
-        self.assertIn("【05/28 盤中｜v20.4.29】", summary)
+        self.assertIn("【05/28 盤中｜v20.4.30】", summary)
         self.assertIn("🧭 主線：市場偏多但買點未成立。", summary)
         self.assertIn("新倉：無有效進場", summary)
         self.assertIn("買點未成立", summary)
@@ -4296,7 +4296,7 @@ class GeneratorReportTest(unittest.TestCase):
         unheld = unheld_message(messages)
 
         self.assertEqual(phase_mock.call_count, 1)
-        self.assertIn("【05/28 盤中｜v20.4.29】", summary)
+        self.assertIn("【05/28 盤中｜v20.4.30】", summary)
         self.assertIn("✅ 今日盤中交易執行", summary)
         self.assertIn("光寶科｜可買｜分批，不追價", summary)
         self.assertIn("【光寶科 2301】🟢 可買｜10%倉｜買點成立", unheld)
@@ -4336,7 +4336,7 @@ class GeneratorReportTest(unittest.TestCase):
         summary = summary_message(messages)
         unheld = unheld_message(messages)
 
-        self.assertIn("【05/28 盤後｜v20.4.29】", summary)
+        self.assertIn("【05/28 盤後｜v20.4.30】", summary)
         self.assertIn("📌 盤後簡報", summary)
         self.assertIn("結論：新倉候選 1 檔需明日開盤前確認", summary)
         self.assertIn("明日前確認：新倉候選需開盤後重新確認有效進場。", summary)
@@ -4371,7 +4371,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("FULL DETAIL", detail_message(messages))
         self.assertIn("【持倉標的】", position_message(messages))
         self.assertIn("【未持倉標的】", unheld_message(messages))
-        self.assertIn("｜v20.4.29】", summary_message(messages))
+        self.assertIn("｜v20.4.30】", summary_message(messages))
         self.assertIs(messages[0], position_message(messages))
         self.assertIs(messages[1], unheld_message(messages))
         self.assertIs(messages[2], summary_message(messages))
@@ -4420,16 +4420,16 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【持倉標的】", messages[0])
         self.assertIn("【未持倉標的】", messages[1])
         self.assertTrue(messages[3].startswith("【Details Backup】"))
-        self.assertIn("【06/01 盤中｜v20.4.29】", messages[0])
-        self.assertIn("【06/01 盤中｜v20.4.29】", messages[1])
-        self.assertIn("【06/01 盤中｜v20.4.29】", messages[2])
+        self.assertIn("【06/01 盤中｜v20.4.30】", messages[0])
+        self.assertIn("【06/01 盤中｜v20.4.30】", messages[1])
+        self.assertIn("【06/01 盤中｜v20.4.30】", messages[2])
         self.assertNotIn("v20.4.11", "\n\n".join(messages))
         self.assertIn("智原", messages[0])
         self.assertIn("續抱", messages[0])
         self.assertIn("建準", messages[1])
         self.assertNotIn("智原", messages[1])
         self.assertNotIn("建準", messages[0])
-        self.assertIn("🧾 v20.4.29 簡報＋資料依據", messages[2])
+        self.assertIn("🧾 v20.4.30 簡報＋資料依據", messages[2])
         self.assertEqual(messages[2].count("\n決策簡報\n"), 1)
         self.assertEqual(messages[2].count("\n資料依據\n"), 1)
         self.assertIn("持倉：依第一則既有卡片處理，不新增第二個主行動。", messages[2])
@@ -5042,7 +5042,7 @@ class GeneratorReportTest(unittest.TestCase):
         )
         fields = {item["field_name"]: item for item in context["evidence_manifest"]}
 
-        self.assertEqual(context["report_context"]["version"], "v20.4.29")
+        self.assertEqual(context["report_context"]["version"], "v20.4.30")
         self.assertEqual(context["report_context"]["trade_date"], "2026-05-29")
         for key in [
             "report.version",
@@ -5088,7 +5088,7 @@ class GeneratorReportTest(unittest.TestCase):
             report_phase="盤中",
         )
 
-        self.assertIn("🧾 v20.4.29 簡報＋資料依據", summary_message(messages))
+        self.assertIn("🧾 v20.4.30 簡報＋資料依據", summary_message(messages))
         self.assertNotIn("Source：核心價格 available；持倉 available；策略樣本 missing-source；market/theme available", summary_message(messages))
         self.assertNotIn("📊 策略證據 v20.0", summary_message(messages))
         self.assertIn("資料：持倉與現價已確認；風控由持倉成本/停損推算", position_message(messages))
@@ -5173,7 +5173,7 @@ class GeneratorReportTest(unittest.TestCase):
                 rendered = "\n\n".join(report["telegram_messages"])
 
                 self.assertEqual(report["artifact_type"], "evidence_chain_maturity_report")
-                self.assertEqual(report["generator_version"], "v20.4.29")
+                self.assertEqual(report["generator_version"], "v20.4.30")
                 self.assertFalse(report["schema_change"])
                 self.assertFalse(report["data_write"])
                 self.assertFalse(report["live_telegram"])
@@ -5313,7 +5313,7 @@ class GeneratorReportTest(unittest.TestCase):
         unheld = unheld_message(messages)
 
         self.assertIs(messages[2], summary)
-        self.assertIn("【05/31 盤中｜v20.4.29】", summary)
+        self.assertIn("【05/31 盤中｜v20.4.30】", summary)
         self.assertNotIn("Source：核心價格 insufficient-data", summary)
         self.assertIn("新倉：無有效進場", summary)
         self.assertIn("🔥 最強：無有效進場標的", summary)
@@ -5785,6 +5785,380 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("未持倉總數 0 檔", rendered)
         self.assertNotIn("可買 0｜不可追高觀察 0（不可買）｜僅追蹤 0｜淘汰 0", rendered)
         self.assertNotIn("僅追蹤 0", rendered)
+
+    def evidence_payload(self, *, confidence=78, decision="WAIT", action=0, rr=1.4, distance=2, heat="NORMAL"):
+        return {
+            "stock_code": "9999",
+            "price": 100,
+            "change": 0,
+            "price_source": "realtime",
+            "daily_source": "yahoo",
+            "result": {
+                "decision": decision,
+                "action": action,
+                "rr": rr,
+                "heat_state": heat,
+                "trade_state": "READY",
+                "structure_phase": "BREAKOUT_NEAR",
+                "price_behavior": "NORMAL",
+                "market_grade": "A",
+                "volume_state": "STRONG",
+                "volume_price_state": "EXPANSION",
+                "structure_state": "STRONG",
+                "entry_quality": "A",
+                "confidence_score": confidence,
+                "breakout_distance": distance,
+            },
+            "holding": None,
+            "structure_score": 4,
+            "volume_ratio": 1.4,
+            "closes": [90, 91, 92],
+            "volumes": [1000, 1100, 1200],
+        }
+
+    def confirmed_market_evidence(self, trend_status="confirmed_trend"):
+        return {
+            "confirmed": True,
+            "source_status": "ready",
+            "theme_status": "confirmed",
+            "level": "confirmed",
+            "theme": "AI",
+            "evidence_trend": {
+                "status": trend_status,
+                "observed_days": 20,
+                "recent_supporting_days": 5,
+                "support_streak_days": 3,
+            },
+        }
+
+    def missing_market_evidence(self):
+        return {
+            "confirmed": False,
+            "source_status": "missing-source",
+            "theme_status": "absent",
+            "level": "absent",
+            "evidence_trend": {},
+        }
+
+    def test_evidence_score_missing_keeps_technical_confidence_and_no_adjustment(self):
+        payload = self.evidence_payload(confidence=80)
+        with patch.object(generator, "market_theme_summary_evidence", return_value=self.missing_market_evidence()):
+            context = generator.build_report_context(
+                {"缺證據": payload},
+                {"trade_date": "2026-06-02"},
+                datetime(2026, 6, 2),
+                strategy_evidence_summary=structured_strategy_evidence("insufficient-data", row_count=0),
+                report_phase="盤中",
+            )
+
+        result = payload["result"]
+        self.assertEqual(generator.compute_evidence_score(context, "缺證據"), (None, "unavailable"))
+        self.assertEqual(result["evidence_modifier"], 1.0)
+        self.assertEqual(result["final_confidence"], result["technical_confidence"])
+        self.assertEqual(generator.unheld_funnel_state("缺證據", payload, report_context=context), "可準備")
+        self.assertIsNone(payload.get("evidence_adjustment_reason"))
+
+    def test_confirmed_evidence_no_technical_setup_does_not_become_buy_or_prepare(self):
+        payload = self.evidence_payload(confidence=70, decision="WAIT", action=0, distance=9)
+        payload["result"]["structure_phase"] = "BASE"
+        payload["result"]["price_behavior"] = "NORMAL"
+        with patch.object(generator, "market_theme_summary_evidence", return_value=self.confirmed_market_evidence()):
+            context = generator.build_report_context(
+                {"無setup": payload},
+                {"trade_date": "2026-06-02"},
+                datetime(2026, 6, 2),
+                strategy_evidence_summary=structured_strategy_evidence("available", row_count=30),
+                report_phase="盤中",
+            )
+
+        self.assertEqual(generator.compute_evidence_score(context, "無setup")[1], "confirmed")
+        self.assertNotEqual(generator.unheld_funnel_state("無setup", payload, report_context=context), "可買")
+        self.assertNotEqual(generator.unheld_funnel_state("無setup", payload, report_context=context), "可準備")
+        self.assertIsNone(payload.get("evidence_adjustment_reason"))
+        self.assertEqual(context["evidence"]["market_theme"]["forbidden_effects"], generator.EVIDENCE_FORBIDDEN_EFFECTS)
+
+    def test_confirmed_evidence_near_boundary_adjusts_prepare_and_report_reason(self):
+        payload = self.evidence_payload(confidence=78, decision="WAIT", action=0, rr=1.4, distance=2)
+        with patch.object(generator, "market_theme_summary_evidence", return_value=self.confirmed_market_evidence()):
+            messages = generator.formatTelegramMessages(
+                {"近門檻": payload},
+                "",
+                None,
+                None,
+                {"trade_date": "2026-06-02"},
+                datetime(2026, 6, 2),
+                strategy_evidence_summary=structured_strategy_evidence("available", row_count=30),
+                report_phase="盤中",
+            )
+
+        artifact_payload = self.evidence_payload(confidence=78, decision="WAIT", action=0, rr=1.4, distance=2)
+        with patch.object(generator, "market_theme_summary_evidence", return_value=self.confirmed_market_evidence()):
+            context = generator.build_report_context(
+                {"近門檻": artifact_payload},
+                {"trade_date": "2026-06-02"},
+                datetime(2026, 6, 2),
+                strategy_evidence_summary=structured_strategy_evidence("available", row_count=30),
+                report_phase="盤中",
+            )
+
+        result = payload["result"]
+        summary = summary_message(messages)
+        rendered = "\n\n".join(messages)
+        card = card_block(unheld_message(messages), "【近門檻")
+        fields = {field["field_name"]: field for field in context["evidence_manifest"]}
+        risk_value = fields["stock.近門檻.risk"]["value"]
+        manifest_mentions_adjustment_reason = (
+            "證據僅調整邊界，不放寬RR/過熱限制"
+            in str(risk_value.get("evidence_adjustment_reason"))
+        )
+        self.assertEqual(generator.unheld_funnel_state("近門檻", payload, report_context={
+            "evidence": {
+                "market_theme": {"score": 1.0, "decision_eligible": True},
+                "strategy_sample": {"score": 1.0, "decision_eligible": True},
+            },
+            "evidence_manifest": [],
+        }), "可準備")
+        self.assertLessEqual(result["evidence_modifier"], 1.15)
+        self.assertIn("未持倉 1 檔可準備", summary)
+        self.assertIn("可準備 1（不可買）", summary)
+        self.assertIn("1 檔可準備，不列入交易執行", summary)
+        self.assertIn("📎 詳情索引：持倉 無｜可準備 1", summary)
+        self.assertIn("【近門檻 9999】👀 可準備｜突破回測", card)
+        self.assertIn("綜合 90｜技術 78｜證據 +15%（confirmed）", card)
+        self.assertIn("證據僅調整邊界，不放寬RR/過熱限制", card)
+        self.assertEqual(risk_value["funnel_state"], "可準備")
+        self.assertTrue(manifest_mentions_adjustment_reason)
+        self.assertNotIn("不可追高觀察 1", rendered)
+        self.assertNotIn("【近門檻 9999】👀 待回測", rendered)
+        self.assertNotIn("可買｜建議", unheld_message(messages))
+
+    def test_mixed_evidence_adjusted_and_ordinary_prepare_split_counts_and_labels(self):
+        adjusted = self.evidence_payload(confidence=78, decision="WAIT", action=0, rr=1.4, distance=2)
+        ordinary = self.evidence_payload(confidence=82, decision="WAIT", action=0, rr=1.4, distance=9)
+        ordinary["result"]["structure_phase"] = "BASE"
+        ordinary["result"]["price_behavior"] = "NORMAL"
+        ordinary["cross_day_context"] = {
+            "source_status": "ready",
+            "source_of_truth": ["position_events"],
+            "previous_state": "eliminated",
+            "repair_status": "repaired",
+            "historical_evidence_weight": 1,
+        }
+        payloads = {
+            "證據調整": adjusted,
+            "普通準備": ordinary,
+        }
+        with patch.object(generator, "market_theme_summary_evidence", return_value=self.confirmed_market_evidence()):
+            messages = generator.formatTelegramMessages(
+                payloads,
+                "",
+                None,
+                None,
+                {"trade_date": "2026-06-02"},
+                datetime(2026, 6, 2),
+                strategy_evidence_summary=structured_strategy_evidence("available", row_count=30),
+                report_phase="盤中",
+            )
+
+        with patch.object(generator, "market_theme_summary_evidence", return_value=self.confirmed_market_evidence()):
+            context = generator.build_report_context(
+                payloads,
+                {"trade_date": "2026-06-02"},
+                datetime(2026, 6, 2),
+                strategy_evidence_summary=structured_strategy_evidence("available", row_count=30),
+                report_phase="盤中",
+            )
+
+        summary = summary_message(messages)
+        rendered = "\n\n".join(messages)
+        unheld = unheld_message(messages)
+        adjusted_card = card_block(unheld, "【證據調整")
+        ordinary_card = card_block(unheld, "【普通準備")
+        fields = {field["field_name"]: field for field in context["evidence_manifest"]}
+        adjusted_risk = fields["stock.證據調整.risk"]["value"]
+        ordinary_risk = fields["stock.普通準備.risk"]["value"]
+
+        self.assertIn("未持倉 1 檔可準備、1 檔不可追高觀察", summary)
+        self.assertIn("可準備 1（不可買）｜不可追高觀察 1（不可買）", summary)
+        self.assertIn("📎 詳情索引：持倉 無｜可準備 1｜不可追高觀察 1", summary)
+        self.assertNotIn("未持倉 2 檔可準備", summary)
+        self.assertNotIn("可準備 2（不可買）", summary)
+        self.assertIn("【證據調整 9999】👀 可準備｜突破回測", adjusted_card)
+        self.assertIn("證據僅調整邊界，不放寬RR/過熱限制", adjusted_card)
+        self.assertIn("【普通準備 9999】👀 不可追高觀察", ordinary_card)
+        self.assertNotIn("【普通準備 9999】👀 待回測", ordinary_card)
+        self.assertNotIn("證據僅調整邊界，不放寬RR/過熱限制", ordinary_card)
+        self.assertEqual(adjusted_risk["funnel_state"], "可準備")
+        self.assertEqual(adjusted_risk["strategy_funnel_state"], "可準備")
+        self.assertEqual(ordinary_risk["funnel_state"], "不可追高觀察")
+        self.assertEqual(ordinary_risk["strategy_funnel_state"], "可準備")
+        self.assertIsNotNone(adjusted_risk.get("evidence_adjustment_reason"))
+        self.assertIsNone(ordinary_risk.get("evidence_adjustment_reason"))
+        self.assertEqual(generator.unheld_prepare_bucket_counts(list(payloads.items()), report_context=context), {
+            "可準備": 1,
+            "不可追高觀察": 1,
+        })
+
+    def test_confirmed_evidence_preserves_overheat_and_rr_hard_blockers(self):
+        rr_blocked = self.evidence_payload(confidence=78, decision="WAIT", action=0, rr=0.8, distance=2)
+        hot_blocked = self.evidence_payload(confidence=78, decision="WAIT", action=0, rr=1.4, distance=2, heat="HOT")
+        with patch.object(generator, "market_theme_summary_evidence", return_value=self.confirmed_market_evidence()):
+            context = generator.build_report_context(
+                {"RR": rr_blocked, "HOT": hot_blocked},
+                {"trade_date": "2026-06-02"},
+                datetime(2026, 6, 2),
+                strategy_evidence_summary=structured_strategy_evidence("available", row_count=30),
+                report_phase="盤中",
+            )
+
+        self.assertEqual(generator.unheld_funnel_state("RR", rr_blocked, report_context=context), "等RR修復")
+        self.assertEqual(generator.unheld_funnel_state("HOT", hot_blocked, report_context=context), "等冷卻")
+        self.assertIsNone(rr_blocked.get("evidence_adjustment_reason"))
+        self.assertIsNone(hot_blocked.get("evidence_adjustment_reason"))
+
+    def test_confirmed_evidence_preserves_limit_lock_chase_hard_blocker(self):
+        payload = self.evidence_payload(confidence=78, decision="WAIT", action=0, rr=1.4, distance=2)
+        payload["result"]["price_behavior"] = "LIMIT_LOCK"
+        with patch.object(generator, "market_theme_summary_evidence", return_value=self.confirmed_market_evidence()):
+            messages = generator.formatTelegramMessages(
+                {"追高": payload},
+                "",
+                None,
+                None,
+                {"trade_date": "2026-06-02"},
+                datetime(2026, 6, 2),
+                strategy_evidence_summary=structured_strategy_evidence("available", row_count=30),
+                report_phase="盤中",
+            )
+
+        artifact_payload = self.evidence_payload(confidence=78, decision="WAIT", action=0, rr=1.4, distance=2)
+        artifact_payload["result"]["price_behavior"] = "LIMIT_LOCK"
+        with patch.object(generator, "market_theme_summary_evidence", return_value=self.confirmed_market_evidence()):
+            context = generator.build_report_context(
+                {"追高": artifact_payload},
+                {"trade_date": "2026-06-02"},
+                datetime(2026, 6, 2),
+                strategy_evidence_summary=structured_strategy_evidence("available", row_count=30),
+                report_phase="盤中",
+            )
+
+        summary = summary_message(messages)
+        rendered = "\n\n".join(messages)
+        card = card_block(unheld_message(messages), "【追高")
+        fields = {field["field_name"]: field for field in context["evidence_manifest"]}
+        risk_value = fields["stock.追高.risk"]["value"]
+
+        self.assertEqual(generator.unheld_funnel_state("追高", artifact_payload, report_context=context), "等回測")
+        self.assertEqual(risk_value["funnel_state"], "等回測")
+        self.assertEqual(risk_value["strategy_funnel_state"], "等回測")
+        self.assertIsNone(risk_value.get("evidence_adjustment_reason"))
+        self.assertIsNone(artifact_payload.get("evidence_adjustment_reason"))
+        self.assertIn("未持倉 1 檔不可追高觀察", summary)
+        self.assertNotIn("未持倉 1 檔可準備", summary)
+        self.assertNotIn("可準備 1（不可買）", summary)
+        self.assertIn("【追高 9999】👀 不可追高觀察｜漲停鎖價", card)
+        self.assertIn("買點：不可追高，待開板回測", card)
+        self.assertIn("綜合 90｜技術 78｜證據 +15%（confirmed）", card)
+        self.assertNotIn("證據僅調整邊界，不放寬RR/過熱限制", rendered)
+        self.assertNotIn("【追高 9999】👀 可準備", rendered)
+
+    def test_strategy_sample_below_threshold_is_partial_not_decision_eligible(self):
+        payload = self.evidence_payload(confidence=80)
+        with patch.object(generator, "market_theme_summary_evidence", return_value=self.missing_market_evidence()):
+            context = generator.build_report_context(
+                {"低樣本": payload},
+                {"trade_date": "2026-06-02"},
+                datetime(2026, 6, 2),
+                strategy_evidence_summary=structured_strategy_evidence("available", row_count=9),
+                report_phase="盤中",
+            )
+
+        self.assertEqual(context["evidence"]["strategy_sample"]["status"], "partial")
+        self.assertFalse(context["evidence"]["strategy_sample"]["decision_eligible"])
+        self.assertEqual(generator.compute_evidence_score(context, "低樣本")[1], "partial")
+        self.assertIsNone(payload.get("evidence_adjustment_reason"))
+
+    def test_pick_best_stock_and_watchlist_sort_use_final_confidence(self):
+        higher_technical = self.evidence_payload(confidence=90, decision="BUY", action=0.2)
+        lower_technical = self.evidence_payload(confidence=80, decision="BUY", action=0.2)
+        higher_technical["result"]["final_confidence"] = 81
+        lower_technical["result"]["final_confidence"] = 92
+
+        best, _score = generator.pick_best_stock({
+            "技術高": higher_technical["result"],
+            "綜合高": lower_technical["result"],
+        })
+        ordered = generator.sort_watchlist_grouped([
+            ("技術高", higher_technical),
+            ("綜合高", lower_technical),
+        ])
+
+        self.assertEqual(best, "綜合高")
+        self.assertEqual(ordered[0][1][0], "綜合高")
+
+    def test_market_theme_single_day_does_not_become_decision_eligible_or_relax_chase(self):
+        payload = self.evidence_payload(confidence=78, decision="WAIT", action=0, distance=9)
+        with patch.object(generator, "market_theme_summary_evidence", return_value=self.confirmed_market_evidence("single_day")):
+            context = generator.build_report_context(
+                {"單日": payload},
+                {"trade_date": "2026-06-02"},
+                datetime(2026, 6, 2),
+                strategy_evidence_summary=structured_strategy_evidence("available", row_count=30),
+                report_phase="盤中",
+            )
+
+        self.assertFalse(context["evidence"]["market_theme"]["decision_eligible"])
+        self.assertNotEqual(generator.compute_evidence_score(context, "單日")[1], "confirmed")
+        self.assertEqual(generator.unheld_funnel_state("單日", payload, report_context=context), "等回測")
+
+    def test_market_theme_supporting_trend_is_not_strong_boundary_evidence(self):
+        payload = self.evidence_payload(confidence=78, decision="WAIT", action=0, rr=1.4, distance=2)
+        payload["result"]["market_grade"] = "C"
+        payload["result"]["entry_quality"] = "C"
+        with patch.object(generator, "market_theme_summary_evidence", return_value=self.confirmed_market_evidence("supporting_trend")):
+            messages = generator.formatTelegramMessages(
+                {"支持趨勢": payload},
+                "",
+                None,
+                None,
+                {"trade_date": "2026-06-02"},
+                datetime(2026, 6, 2),
+                strategy_evidence_summary=structured_strategy_evidence("available", row_count=30),
+                report_phase="盤中",
+            )
+
+        artifact_payload = self.evidence_payload(confidence=78, decision="WAIT", action=0, rr=1.4, distance=2)
+        artifact_payload["result"]["market_grade"] = "C"
+        artifact_payload["result"]["entry_quality"] = "C"
+        with patch.object(generator, "market_theme_summary_evidence", return_value=self.confirmed_market_evidence("supporting_trend")):
+            context = generator.build_report_context(
+                {"支持趨勢": artifact_payload},
+                {"trade_date": "2026-06-02"},
+                datetime(2026, 6, 2),
+                strategy_evidence_summary=structured_strategy_evidence("available", row_count=30),
+                report_phase="盤中",
+            )
+
+        score, status = generator.compute_evidence_score(context, "支持趨勢")
+        fields = {field["field_name"]: field for field in context["evidence_manifest"]}
+        risk_value = fields["stock.支持趨勢.risk"]["value"]
+        rendered = "\n\n".join(messages)
+
+        self.assertEqual(context["evidence"]["market_theme"]["status"], "supporting")
+        self.assertFalse(context["evidence"]["market_theme"]["decision_eligible"])
+        self.assertFalse(fields["evidence.market_theme"]["decision_eligible"])
+        self.assertEqual(status, "supporting")
+        self.assertIsNotNone(score)
+        self.assertLess(context["evidence"]["market_theme"]["score"], 1.0)
+        self.assertLess(artifact_payload["result"]["evidence_modifier"], 1.15)
+        self.assertNotEqual(generator.unheld_funnel_state("支持趨勢", artifact_payload, report_context=context), "可準備")
+        self.assertNotEqual(risk_value["funnel_state"], "可準備")
+        self.assertNotEqual(risk_value["strategy_funnel_state"], "可準備")
+        self.assertIsNone(risk_value.get("evidence_adjustment_reason"))
+        self.assertIsNone(artifact_payload.get("evidence_adjustment_reason"))
+        self.assertNotIn("證據僅調整邊界，不放寬RR/過熱限制", rendered)
+        self.assertNotIn("產業主題 confirmed", rendered)
+        self.assertNotIn("【支持趨勢 9999】👀 可準備", rendered)
 
 
 if __name__ == "__main__":
