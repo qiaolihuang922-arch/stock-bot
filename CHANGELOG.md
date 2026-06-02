@@ -1,86 +1,83 @@
-# CHANGELOG: 修復證據 wiring 與 D2/B5 漏斗一致性
+# CHANGELOG: 修復 market/theme evidence gate 與 report-level fallback
 
   ## 任務尺寸與風險
 
-  - 任務尺寸：risk_patch
-  - 風險原因：影響正式報文 evidence 消費路徑、strategy evidence 歷史讀取、D2/B5 使用者可見漏斗 / 卡片一致性。
-  - 本輪 continuation 僅補正 handoff 內容；未再修改產品或測試程式碼。
+  - 任務尺寸：normal_patch
+  - QA 分級：L2
+  - 風險判斷：本輪只修正 market/theme evidence payload gate、report-level fallback 與對應 regression tests；未改策略 decision、DB write path、報文分組、message list 或 VERSION。
+  - 本輪為 handoff-only continuation：未再修改產品或測試程式碼，只修正交付摘要口徑。
 
   ## 修改內容
 
-  - services/strategy_evidence.py
-      - load_strategy_evidence_summary() 移除 daily_signal_snapshot.version == version filter。
-      - 改為可讀取近期 trade_date 歷史中的跨版本 outcomes，避免 evidence 因版本散落長期空轉。
-      - 保留原本不足資料時 fail closed 的語意。
   - core/generator.py
-      - build_report_context() 呼叫 market_theme_summary_evidence() 時傳入 trade_date。
-      - market_theme_summary_evidence() 在 market_summary 是字串時，也會用 trade_date 呼叫 load_confirmed_market_theme_evidence()。
-      - market_summary 是 dict 且缺內嵌 evidence 時，loader 使用 market_summary.trade_date / as_of / 外部 trade_date。
-      - 官方 report path 可消費 confirmed evidence 與 evidence_trend。
-  - 測試
-      - 新增 strategy evidence 跨版本 outcome history probe，確認樣本數可進入 summary 且不走 version filter。
-      - 新增 official report string market_summary trade_date loader 與 consumption check。
-      - 新增 D2/B5 rendered message probe，覆蓋 等冷卻 / 隔日確認 卡片與漏斗計數一致。
+      - 新增 _market_theme_confirmed_trend_eligible()，以 loader 已產出的 confirmed + source_status=available + evidence_trend.status=confirmed_trend 作為 confirmed market/theme 可消費判斷。
+      - _market_theme_evidence_payload() 不再用 observed_days >= 15 作為 8 天 confirmed evidence 的 gate。
+      - per-stock 缺 market_theme 時 fallback 到 report-level market_theme_evidence，因 market/theme 屬市場級證據，不因單一股票缺 per-stock market_theme 而直接 unavailable。
+      - build_report_context() 的 market/theme manifest eligibility 與 payload 使用同一個 confirmed_trend 判斷 helper，讓 basis line 與 score path 對齊。
+  - tests
+      - 補 8 天 confirmed_trend 可 decision_eligible 的 regression。
+      - 補 per-stock 缺 market_theme 時 fallback report-level evidence 的 regression。
+      - 補 production trend consumption check 在 8 天 history 下仍 uses_market_theme_confirmed_evidence_history=True 的 regression。
+      - 保留 strategy evidence 跨版本 outcome history regression，確認 current VERSION filter 未回歸。
 
   ## 修改檔案
 
-  - services/strategy_evidence.py
   - core/generator.py
-  - tests/test_strategy_evidence.py
-  - tests/test_market_theme_evidence.py
   - tests/test_generator_report.py
+  - tests/test_market_theme_evidence.py
+  - tests/test_strategy_evidence.py
 
   ## 最小改動策略
 
-  - 只移除造成跨版本 evidence 空轉的 version filter。
-  - 只補 trade_date wiring 到既有 confirmed market theme evidence loader。
-  - 只補針對 TASK 驗收條件的最小 regression probes。
-  - 未重構 formatter、未改策略方向、未新增資料來源、未改 DB schema / write path。
-  - 未 bump 版本；VERSION 保持 v20.4.31。
+  - 只動 TASK 指定的 generator evidence gate / fallback 路徑與必要 tests。
+  - 未重構 formatter、未調整 RR、未改買賣 / 加減碼 / 停損停利決策。
+  - 未修改 services/strategy_evidence.py；該檔本輪只有檢查與 regression 測試覆蓋，沒有 current diff。
+  - services/strategy_evidence.py 的 VERSION filter 移除狀態沿用前一 commit，本輪未重新加入 .eq("version", VERSION)。
+  - D2/B5 不屬於本 continuation 的實際 diff；若相關測試已存在，只視為既有 regression，不宣告本輪修復 rendered message。
 
   ## 契約影響
 
-  - load_strategy_evidence_summary() 回傳 payload / 文字 shape 保持既有格式；讀取範圍改為跨版本近期歷史。
-  - market_theme_summary_evidence() public helper 增加可選 trade_date=None 參數；既有呼叫方不傳仍相容。
-  - 正式 generate_report / formatTelegramMessages 路徑可透過 trade_date 消費 confirmed market theme evidence 與 evidence_trend。
-  - Telegram / 報文 message list、欄位名稱、分組名稱與版本字串不變。
-  - D2/B5 漏斗與卡片分類維持既有使用者可見名稱，只修正同份 rendered message 內的計數 / 卡片一致性。
+  - _market_theme_evidence_payload() 行為變更：confirmed_trend market/theme evidence 不再被 15-day gate 擋成 unavailable。
+  - confirmed_trend 的可消費性改為沿用 loader eligibility 語意。
+  - per-stock 缺 market_theme 時會 fallback report-level market/theme evidence；payload shape 不變。
+  - VERSION 保持 v20.4.31。
+  - Telegram / 報文 message list、分組順序、欄位名稱、DB contract、CLI 輸出 contract 未變。
 
   ## 直接消費者同步
 
-  - build_report_context() 已同步傳入 trade_date。
-  - 官方報文市場題材 evidence 消費路徑已由新增測試覆蓋。
-  - build_market_theme_production_trend_consumption_check 相關 consumption check 已覆蓋 uses_history=True。
-  - D2/B5 summary / funnel / unheld card 手機閱讀路徑已由 rendered message 測試覆蓋。
+  - Telegram / 報文卡片 market/theme evidence 顯示路徑已同步到新的 payload gate 與 fallback。
+  - build_report_context() manifest decision eligibility 已同步使用同一 helper。
+  - build_market_theme_production_trend_consumption_check 已由 regression 覆蓋 8 天 confirmed history consumption。
+  - strategy evidence summary 直接消費者以 regression 確認 current VERSION filter 未回歸；本輪無 service 檔案 diff。
 
   ## 未影響模組
 
-  - 未改 RR 公式。
-  - 未改買賣 / 加減碼 / 停損停利核心決策規則。
+  - 未改 services/strategy_evidence.py current diff。
   - 未改 DB schema、RLS、grant、policy、role、index、constraint。
   - 未改 production write / backfill / live Telegram delivery。
-  - 未觸碰 scripts/diagnose_evidence_sources.py。
-  - 未改 VERSION；仍為 v20.4.31。
+  - 未改策略核心、RR 公式、買賣 / 加減碼 / 停損停利 decision。
+  - 未 bump version；core/generator.py 仍為 VERSION = "v20.4.31"。
+  - 未納入 D2/B5 rendered message 修復。
 
   ## 已跑自檢命令
 
   - git diff --check：passed
-  - rg -n "VERSION\\s*=|v20\\.4\\.31|v20\\.4\\.32" core/generator.py tests：確認 core/generator.py 仍為 VERSION = "v20.4.31"，未見新版本 bump。
+  - rg -n "VERSION\\s*=|v20\\.4\\.31|v20\\.4\\.32" core/generator.py tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_strategy_evidence.py：確認 VERSION = "v20.4.31"，未 bump。
   - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_write_pycache arch -arm64 .venv/bin/python -m pytest -q tests/
-    test_strategy_evidence.py::StrategyEvidenceTest::test_load_summary_consumes_cross_version_outcome_history tests/
-    test_market_theme_evidence.py::MarketThemeEvidenceTest::test_official_report_string_market_summary_passes_trade_date_to_confirmed_loader tests/
-    test_market_theme_evidence.py::MarketThemeEvidenceTest::test_readonly_smoke_cli_outputs_consumption_check_json_with_mocked_persistent_rows tests/
-    test_generator_report.py::GeneratorReportTest::test_unheld_cooling_and_next_day_rendered_counts_match_cards：4 passed，13 warnings。
-  - 另有一次未加 arch -arm64 的 pytest 嘗試失敗，原因是 x86_64 Python 載入 arm64 pydantic_core wheel 架構不相容；已用 runner 既有 arm64 口徑重跑通過。
+    test_generator_report.py::GeneratorReportTest::test_eight_day_confirmed_market_theme_is_decision_eligible tests/
+    test_generator_report.py::GeneratorReportTest::test_per_stock_market_theme_missing_fallbacks_to_report_level_confirmed tests/
+    test_market_theme_evidence.py::MarketThemeEvidenceTest::test_generator_consumes_eight_day_confirmed_trend_history tests/
+    test_strategy_evidence.py::StrategyEvidenceTest::test_load_summary_consumes_cross_version_outcome_history：4 passed，13 warnings。
+  - 直接 card probe：英業達 per-stock 缺 market_theme、report-level 8 天 confirmed market/theme fallback 時，卡片包含 證據 +8%（supporting），且不包含 證據：不適用。
 
   ## 殘留風險
 
   - 自檢只覆蓋 TASK 指定 targeted tests，未跑 full pytest。
-  - production evidence 實際資料品質、逐股 mapping、長期樣本分布不在本輪修補範圍。
-  - Tech 自檢不代表 QA 通過；QA 仍需依 L3 反證 official path 與手機閱讀一致性。
+  - production 實際 market/theme 資料品質、逐股 mapping 完整度與長期樣本分布不在本輪範圍。
+  - Tech 自檢不代表 QA 通過；仍需 QA 依 L2 做獨立反證。
 
   ## 旁支待辦
 
-  - 若 production evidence 缺逐股 theme / setup payload，需另開資料品質或 source-of-truth 任務。
-  - 若要治理版本散落造成的歷史資料長期可讀性，需另開版本 / evidence retention 任務。
-  - 若要擴大檢查所有 D2/B5 邊界分類，需另開 formatter / classifier regression suite 擴充任務。
+  - 若 production evidence 缺市場級 source-of-truth 或歷史資料不足，需另開資料品質 / source-of-truth 任務。
+  - 若要擴大 D2/B5 或其他 formatter consistency，需另開獨立 formatter regression 任務。
+  - 若要治理跨版本 evidence retention policy，需另開版本資料策略任務。

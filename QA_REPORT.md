@@ -1,48 +1,46 @@
-# QA_REPORT: 修復證據 wiring 與 D2/B5 漏斗一致性
+# QA_REPORT: fix_market_theme_evidence_gate_v20_4_31
 
 ## 測試範圍
 
-- 任務：`evidence-wiring-and-funnel-consistency-20260602`
-- 任務尺寸 / QA：risk_patch / L3。
-- 驗證範圍：strategy evidence 跨版本 outcomes、market/theme confirmed evidence trade_date wiring、official `generate_report(dry_run=True)` path、D2/B5 等冷卻 / 隔日確認 rendered message、VERSION 不升級。
-- 未執行：production DB read-only smoke、full pytest、replay、backfill、live Telegram、production write。
+- 任務尺寸 / QA：normal_patch / L2。
+- 驗證範圍：8 日 confirmed_trend 不再被 15 日 gate 阻擋；per-stock 缺 market_theme 時 fallback report-level evidence；英業達卡片證據不再顯示不適用；strategy evidence version filter 未回歸；VERSION 不 bump。
+- 未執行：full pytest、production read-only smoke、live Telegram、DB write、backfill。
 
 ## 關聯風險掃描
 
-- `services/strategy_evidence.py` 移除 `daily_signal_snapshot.eq("version", version)` filter；未改 payload shape、DB write、schema / policy。
-- `core/generator.py` 在 `build_report_context()` 傳入 `trade_date`，`market_theme_summary_evidence()` 對 string market_summary 也會以 `trade_date` 呼叫 confirmed evidence loader。
-- `build_market_theme_production_trend_consumption_check()` fixture 顯示 `fresh_runner_rebuild=passed`、`uses_market_theme_confirmed_evidence_history=True`。
-- `core/generator.py` 仍為 `VERSION = "v20.4.31"`；未升 `v20.4.32`。
-- 未觸碰 `scripts/diagnose_evidence_sources.py`。
+- `core/generator.py` 新增 `_market_theme_confirmed_trend_eligible()`，使用 confirmed + source_status available + `evidence_trend.status == confirmed_trend`，未再使用 `observed_days >= 15` gate。
+- `_manifest_status("ready")` 正規化為 available，測試 fixture 的 `source_status: ready` 可被消費。
+- per-stock market_theme 缺失時 fallback `report_context["market_theme_evidence"]`；source-error / missing-source 仍 fail closed。
+- `services/strategy_evidence.py::load_strategy_evidence_summary()` 無 current VERSION filter；未見 `daily_signal_snapshot.eq("version", "v20.4.31")`。
+- `core/generator.py` 仍為 `VERSION = "v20.4.31"`，未見 `v20.4.32`。
 
 ## 跨區塊語意一致性
 
-- TASK / CHANGELOG / diff 同輪一致，修改檔案為 `core/generator.py`、`services/strategy_evidence.py`、`tests/test_strategy_evidence.py`、`tests/test_market_theme_evidence.py`、`tests/test_generator_report.py`。
-- Strategy evidence 跨版本 fixture 可產生 `分類：RR不足｜樣本：10 筆`，不再因版本散落變 0 樣本。
-- Market/theme official formatter path 消費 confirmed evidence trend，不只是 helper path。
-- D2/B5 rendered message 內 `隔日確認 1、等冷卻 1` 與卡片 `智原=隔日確認`、`光寶科=等冷卻` 一致。
+- 8 日 confirmed_trend 可 decision eligible：通過。
+- per-stock 缺 market_theme fallback report-level：通過。
+- 英業達卡片顯示 +X evidence，不是 `不適用`：通過。
+- strategy version filter remains removed：通過。
+- VERSION remains v20.4.31：通過。
 
 ## 使用者誤讀風險
 
-- QA official probe header：`【06/02 盤中｜v20.4.31】`。
-- market/theme 顯示 `近 20 個交易日短期背景` 與 `近期 5 日支持仍支持目前背景觀察`，不再顯示 `短期背景資料不足，僅供觀察`。
-- summary 顯示 `其中僅追蹤 2 檔拆分：隔日確認 1、等冷卻 1`。
-- 未持倉卡片顯示 `【智原 3035】👀 隔日確認｜漲停反彈待確認` 與 `【光寶科 2301】⏳ 等冷卻｜過熱觀察`，未互換。
+- QA 補直接消費者 card probe：英業達持倉、per-stock 缺 market_theme、report-level 8 日 confirmed evidence。
+- 產出卡片包含：`數據：新倉 RR：不適用（既有持倉）｜綜合 53｜技術 49｜證據 +8%（supporting）｜V 1x`。
+- 卡片不包含 `證據：不適用`。
 
 ## 質疑與反證
 
-- QA 不只重跑 Tech 自檢，另補 official `generate_report(dry_run=True)` probe，mock 正式入口依賴，驗證 loader `trade_date`、confirmed trend rendering、VERSION 與 D2/B5 手機閱讀一致性。
-- `pytest targeted 4 tests`：4 passed，13 warnings。
-- QA official generate_report probe：passed，`loader_calls=['2026-06-02']`。
-- `build_market_theme_production_trend_consumption_check` fixture：`fresh_runner_rebuild=passed`、`uses_market_theme_confirmed_evidence_history=True`。
+- Targeted L2 tests：4 passed，13 warnings。
 - `git diff --check`：passed。
+- Direct card probe：passed。
+- Strategy summary mock calls 不含 `("daily_signal_snapshot", "eq", ("version", "v20.4.31"), {})`，且 v20.4.5 fixture 可進入 summary。
+- VERSION scan：未 bump。
 
 ## 未測項目
 
 - 未跑 full pytest。
-- 未做 production DB read-only smoke；production 資料品質與長期樣本分布仍需另開資料品質 / source-of-truth 任務。
-- 未做 replay/backfill/live Telegram。
-- 未驗所有 D2/B5 邊界分類，只驗 Owner 指定 `等冷卻 / 隔日確認` 混淆路徑。
+- 未做 production read-only smoke、live Telegram、DB write、backfill。
+- 未驗全量 market/theme cleanup、逐股 mapping 品質、D2/B5 rendered message；不在本 TASK/diff 範圍。
 
 ## QA 結論
 

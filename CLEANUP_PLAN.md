@@ -15,6 +15,14 @@
 
 ## Completed
 
+- `fix_market_theme_evidence_gate_v20_4_31`:
+  - 問題：Owner 指出 evidence source 已接通後，market/theme score path 又被兩個顯示/分數閘門擋住：8 日 confirmed_trend 被 15 日二次門檻降級，market 級 evidence 因 per-stock 缺 market_theme 被誤判 unavailable。
+  - 結果：`_market_theme_evidence_payload()` 改為 confirmed_trend 直接 decision eligible，不再疊 15 日門檻；per-stock 缺 market_theme fallback report-level market/theme evidence；`ready` source status 正規化 available；VERSION 保持 `v20.4.31`。
+  - 可重跑補強：新增 / 更新 8 日 confirmed decision eligible、per-stock missing market fallback、英業達持倉卡片 evidence +8%、strategy 跨版本 history 未回歸 probes。
+  - QA 反證：第一次 QA blocked 有效攔住 CHANGELOG overclaim，行為層已通過；同步 handoff 後 Re-QA 通過。直接消費者 probe 證明英業達卡片不再顯示 `證據：不適用`。
+  - 主 repo 驗證：targeted tests 4 passed，13 warnings；`py_compile` / `git diff --check` passed。
+  - 規則治理：`evidence_chain` + `QA反證` + `runner_gap`。market/theme 是市場級 evidence，不能套 per-stock missing fail-closed；per-stock 差異應主要由 strategy/setup evidence 提供。Tech CHANGELOG 仍容易沿用上輪或過度宣告，後續需補 handoff sync/gate。
+  - 邊界：未改 RR、DB schema/write、production backfill、live Telegram；本輪不改 strategy_evidence 程式，只回歸防 filter 復發。
 - `evidence-wiring-and-funnel-consistency-20260602`:
   - 問題：前一輪 evidence weighting 框架已具備 fail-closed / 拆分顯示，但 strategy_sample 因 version filter、market/theme 因 trade_date wiring 缺失而沒有真正進入正式報文路徑，導致框架空轉。
   - 結果：`load_strategy_evidence_summary()` 移除 version filter，改吃近期 trade_date 跨版本 outcomes；`market_theme_summary_evidence()` string summary path 取得 trade_date 並消費 confirmed evidence_trend；本輪不 bump VERSION，維持 `v20.4.31`；D2/B5 `等冷卻 / 隔日確認` rendered message 補一致性反證。

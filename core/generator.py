@@ -4070,20 +4070,22 @@ def _per_stock_evidence_payload(report_context, name, source_name):
     return payload if isinstance(payload, dict) else {}
 
 
-def _market_theme_evidence_payload(report_context, name=None):
-    has_per_stock_map = (
-        name
-        and isinstance(report_context, dict)
-        and isinstance(report_context.get("per_stock_evidence"), dict)
+def _market_theme_confirmed_trend_eligible(evidence, source_status=None):
+    if not isinstance(evidence, dict):
+        return False
+    trend = evidence.get("evidence_trend") or {}
+    if not isinstance(trend, dict):
+        trend = {}
+    resolved_source_status = _manifest_status(source_status or evidence.get("source_status"))
+    return bool(
+        evidence.get("confirmed")
+        and resolved_source_status == "available"
+        and (trend.get("status") or evidence.get("trend_status")) == "confirmed_trend"
     )
+
+
+def _market_theme_evidence_payload(report_context, name=None):
     evidence = _per_stock_evidence_payload(report_context, name, "market_theme") if name else {}
-    if has_per_stock_map and not evidence:
-        return {
-            "status": "unavailable",
-            "score": None,
-            "decision_eligible": False,
-            "forbidden_effects": list(EVIDENCE_FORBIDDEN_EFFECTS),
-        }
     if not evidence:
         evidence = (report_context or {}).get("market_theme_evidence") or {}
     field = _field_by_key(report_context or {}, "evidence.market_theme")
@@ -4091,15 +4093,6 @@ def _market_theme_evidence_payload(report_context, name=None):
     source_status = _manifest_status(evidence.get("source_status") or source_status)
     trend = evidence.get("evidence_trend") or {}
     trend_status = trend.get("status") or evidence.get("trend_status")
-    observed_days = trend.get("observed_days")
-    if observed_days is None:
-        observed_days = evidence.get("observed")
-    supporting_days = trend.get("recent_supporting_days")
-    if supporting_days is None:
-        supporting_days = evidence.get("supporting_days")
-    support_streak = trend.get("support_streak_days")
-    if support_streak is None:
-        support_streak = evidence.get("streak")
     if source_status in {"missing-source", "source-error", "insufficient-data", "unresolved-conflict"}:
         return {
             "status": "unavailable",
@@ -4107,13 +4100,8 @@ def _market_theme_evidence_payload(report_context, name=None):
             "decision_eligible": False,
             "forbidden_effects": list(EVIDENCE_FORBIDDEN_EFFECTS),
         }
-    reliability_confirmed = (
-        (observed_days or 0) >= 15
-        and (supporting_days or 0) >= 3
-        and (support_streak or 0) >= 2
-    )
     confirmed = bool(evidence.get("confirmed") or evidence.get("label") == "confirmed") and source_status == "available"
-    decision_eligible = confirmed and trend_status == "confirmed_trend" and reliability_confirmed
+    decision_eligible = _market_theme_confirmed_trend_eligible(evidence, source_status)
     if decision_eligible:
         status = "confirmed"
         score = 1.0
@@ -4469,11 +4457,7 @@ def build_report_context(
 
     market_evidence = market_theme_summary_evidence(results_map, market_summary, trade_date=trade_date)
     market_status = _manifest_status(market_evidence.get("source_status"))
-    market_decision_eligible = bool(
-        market_evidence.get("confirmed")
-        and market_status == "available"
-        and (market_evidence.get("evidence_trend") or {}).get("status") == "confirmed_trend"
-    )
+    market_decision_eligible = _market_theme_confirmed_trend_eligible(market_evidence, market_status)
     manifest.append(_manifest_field(
         "evidence.market_theme",
         "Evidence",

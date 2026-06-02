@@ -28,6 +28,21 @@
 
 ## Latest Completed Handoff
 
+- task_id：`fix_market_theme_evidence_gate_v20_4_31`
+- 狀態：QA passed；commit / push 待 final 收口。
+- 問題：Owner 指出 market/theme evidence 仍被三個閘門擋住：8 日 confirmed_trend 又被 `observed_days >= 15` 二次門檻擋；per-stock 缺 market_theme 被誤判 unavailable；strategy 跨版本 history 需回歸確認。
+- 修正：
+  - `_market_theme_evidence_payload()` 不再用 15 日二次門檻；confirmed + source available + `evidence_trend.status == confirmed_trend` 即 decision eligible。
+  - market/theme 作為市場級 evidence，per-stock 缺 market_theme 時 fallback report-level `market_theme_evidence`。
+  - `_manifest_status("ready")` 正規化為 available，讓 loader ready payload 可被 score path 消費。
+  - strategy summary version filter 維持移除，跨版本 fixture 回歸通過。
+  - 本輪不升版，仍為 `v20.4.31`。
+- 驗證：QA `通過`；主 repo targeted tests 4 passed，13 warnings；`py_compile` passed；`git diff --check` passed；VERSION scan only `v20.4.31`。
+- QA 反證：英業達持倉卡片在 8 日 confirmed report-level evidence + per-stock 缺 market_theme 時，顯示 `證據 +8%（supporting）`，不再顯示 `證據：不適用`。
+- 邊界：未改 RR 公式、DB schema/write、production backfill、live Telegram；未改 `services/strategy_evidence.py` 本輪 diff，只做回歸確認。
+
+## Previous Completed Handoff
+
 - task_id：`evidence-wiring-and-funnel-consistency-20260602`
 - 狀態：QA passed；commit / push 待 final 收口。
 - 問題：Owner 指出前一輪只把 evidence 加權框架搭好，但兩個證據源沒有真正喂入：strategy_sample 被 version filter 切斷，market/theme string summary path 沒傳 trade_date，導致報文仍長期 `不適用 / 資料不足`。

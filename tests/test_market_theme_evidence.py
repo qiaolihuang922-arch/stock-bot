@@ -308,6 +308,24 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         self.assertIn("market_theme_confirmed_evidence", client.tables)
         self.assertNotIn("daily_signal_snapshot", client.tables)
 
+    def test_generator_consumes_eight_day_confirmed_trend_history(self):
+        client = EvidenceClient([
+            confirmed_row(trade_date=f"2026-05-{day:02d}", sector_theme_key=f"theme-{day}")
+            for day in range(22, 30)
+        ])
+
+        report = generator.build_market_theme_production_trend_consumption_check(
+            client=client,
+            trade_date="2026-05-29",
+        )
+
+        self.assertTrue(
+            report["generator_consumption"]["uses_market_theme_confirmed_evidence_history"]
+        )
+        self.assertEqual(report["generator_consumption"]["observed_days"], 8)
+        self.assertEqual(report["generator_consumption"]["recent_supporting_days"], 3)
+        self.assertEqual(report["table_status"]["market_theme_confirmed_evidence"], "consumed")
+
     def test_generator_consumption_check_fails_closed_without_production_rows(self):
         report = generator.build_market_theme_production_trend_consumption_check(
             client=EvidenceClient([]),

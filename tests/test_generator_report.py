@@ -5875,7 +5875,13 @@ class GeneratorReportTest(unittest.TestCase):
             "volumes": [1000, 1100, 1200],
         }
 
-    def confirmed_market_evidence(self, trend_status="confirmed_trend"):
+    def confirmed_market_evidence(
+        self,
+        trend_status="confirmed_trend",
+        observed_days=20,
+        recent_supporting_days=5,
+        support_streak_days=3,
+    ):
         return {
             "confirmed": True,
             "source_status": "ready",
@@ -5884,9 +5890,9 @@ class GeneratorReportTest(unittest.TestCase):
             "theme": "AI",
             "evidence_trend": {
                 "status": trend_status,
-                "observed_days": 20,
-                "recent_supporting_days": 5,
-                "support_streak_days": 3,
+                "observed_days": observed_days,
+                "recent_supporting_days": recent_supporting_days,
+                "support_streak_days": support_streak_days,
             },
         }
 
@@ -6003,7 +6009,26 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIsNone(payload["score"])
         self.assertFalse(payload["decision_eligible"])
 
-    def test_per_stock_market_theme_missing_does_not_fallback_to_report_level_confirmed(self):
+    def test_eight_day_confirmed_market_theme_is_decision_eligible(self):
+        context = {
+            "market_theme_evidence": self.confirmed_market_evidence(
+                observed_days=8,
+                recent_supporting_days=3,
+                support_streak_days=3,
+            ),
+            "evidence_manifest": [
+                {"field_name": "evidence.market_theme", "source_status": "available"},
+            ],
+        }
+
+        market = generator._market_theme_evidence_payload(context)
+
+        self.assertEqual(generator.VERSION, "v20.4.31")
+        self.assertEqual(market["status"], "confirmed")
+        self.assertEqual(market["score"], 1.0)
+        self.assertTrue(market["decision_eligible"])
+
+    def test_per_stock_market_theme_missing_fallbacks_to_report_level_confirmed(self):
         context = {
             "market_theme_evidence": self.confirmed_market_evidence(),
             "per_stock_evidence": {
@@ -6030,10 +6055,11 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertEqual(market_a["score"], 1.0)
         self.assertGreater(score_a, 0)
         self.assertEqual(status_a, "confirmed")
-        self.assertEqual(market_b["status"], "unavailable")
-        self.assertIsNone(market_b["score"])
-        self.assertEqual((score_b, status_b), (None, "unavailable"))
-        self.assertEqual(generator.evidence_modifier_for_score(score_b, status_b), 1.0)
+        self.assertEqual(market_b["status"], "confirmed")
+        self.assertEqual(market_b["score"], 1.0)
+        self.assertTrue(market_b["decision_eligible"])
+        self.assertEqual((score_b, status_b), (1.0, "supporting"))
+        self.assertGreater(generator.evidence_modifier_for_score(score_b, status_b), 1.0)
 
     def test_per_stock_strategy_sample_missing_does_not_fallback_to_report_level_ready(self):
         context = {

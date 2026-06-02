@@ -311,7 +311,7 @@ class StrategyEvidenceTest(unittest.TestCase):
                         {
                             "stock_id": f"24{i:02d}",
                             "trade_date": "2026-05-28",
-                            "version": "old_version",
+                            "version": "v20.4.5",
                             "close": 100,
                             "volume_ratio": 1.0,
                             "pattern": "BREAKOUT_NEAR",
