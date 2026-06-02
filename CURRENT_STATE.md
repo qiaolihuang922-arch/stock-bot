@@ -29,7 +29,8 @@
 ## Latest Completed Handoff
 
 - task_id：`evidence-score-decision-funnel-phase1-2-2b`
-- 狀態：done / QA passed；commit / push 與 Git completion gate 待 final 收口。
+- 狀態：done / committed；push 與 Git completion gate 待 final 收口。
+- commit：`c7dd94b Add evidence score decision weighting`。
 - 問題：Owner 已拍板 evidence chain 要成為決策分數的一部分，並可影響排序與 funnel 邊界；同時必須保留 fail-closed、透明拆分、不單獨造 BUY、不放寬 chase / overheat / RR hard blockers。
 - 修正：
   - 新增 `compute_evidence_score(report_context, name)`、evidence modifier 與 final confidence。

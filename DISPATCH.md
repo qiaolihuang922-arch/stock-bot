@@ -16,7 +16,7 @@
 
 ## Recently Done
 
-- `pending-commit`｜`evidence-score-decision-funnel-phase1-2-2b`｜major｜evidence_score 接入 final_confidence、pick/sort 與 Phase 2b funnel 邊界；報文分數拆為綜合 / 技術 / 證據；supporting/single_day 不作 strong boundary evidence；missing evidence fail closed；RR / overheat / chase hard blockers 不放寬；mixed adjusted + ordinary prepare 在 Summary / 漏斗 / card / detail / manifest 拆分一致；版本升 `v20.4.30`；QA passed；主 repo `tests/test_generator_report.py` 129 passed。
+- `c7dd94b`｜`evidence-score-decision-funnel-phase1-2-2b`｜major｜evidence_score 接入 final_confidence、pick/sort 與 Phase 2b funnel 邊界；報文分數拆為綜合 / 技術 / 證據；supporting/single_day 不作 strong boundary evidence；missing evidence fail closed；RR / overheat / chase hard blockers 不放寬；mixed adjusted + ordinary prepare 在 Summary / 漏斗 / card / detail / manifest 拆分一致；版本升 `v20.4.30`；QA passed；主 repo `tests/test_generator_report.py` 129 passed。
 - `281be20`｜`phase3-evidence-automation-20260602`｜risk_patch｜Phase 3 自動化證據生產：GitHub Actions 新增 `daily_evidence` schedule，不送 Telegram；Phase 3 runner 在 confirmed trading day + 13:20 後才跑 daily snapshot 與 market/theme approved write CLI；TWSE 無法確認交易日 fail closed skip；stale alert 只按 confirmed trading day 累積；QA passed；主 repo phase3 tests 29 passed。
 - `7f40d6c`｜`phase0-bugs-pre-evidence-score-20260602`｜risk_patch｜Owner major 指令前置：Phase 0 顯示門控回歸、B1 去除 `觀察：觀察`、B2 弱勢/遠離突破不得顯示 `極強`、B3/B4 持倉風控全列與排序一致回歸、B5 `隔日確認` 獨立漏斗 bucket；版本升 `v20.4.29`；QA passed；主 repo `tests/test_generator_report.py` 119 passed。
 - `7a02188`｜`holdings-risk-list-no-truncation-20260602`｜normal_patch｜持倉風控檢查不再預設截斷前 5 筆；有幾檔持倉就列幾檔，不顯示 `另有 N 項持倉風控見詳情`；排序與持倉卡 / detail index 同源；版本升 `v20.4.28`；QA passed；主 repo `tests/test_generator_report.py` 116 passed。
