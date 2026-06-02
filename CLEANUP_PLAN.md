@@ -15,6 +15,12 @@
 
 ## Completed
 
+- `fix-bot-workflow-may-backfill-guard-20260602`:
+  - 問題：GitHub Actions default `run_mode=bot` 仍執行 May-only market/theme evidence write；2026-06-02 時 source date 超出 May range，production guard 正確 fail closed，但正常 bot 被阻塞。
+  - 結果：workflow 的 May market/theme evidence backfill step 只在 `backfill_may` / `backfill_and_bot` 執行；`bot` 模式明確 log skipped，不呼叫 write script。
+  - 可重跑補強：`tests/test_workflow_runtime_config.py` 抽取 workflow shell block 模擬；覆蓋 bot skip、backfill failure 不吞錯、backfill success path 仍呼叫 write；`tests/test_market_theme_source_backfill.py` 保留 production guard。
+  - QA 反證：QA `通過`；補 fake python success path，確認 `backfill_may` / `backfill_and_bot` 各呼叫一次 `scripts/backfill_market_theme_sources.py --write --confirm-write` 且成功時 returncode 0。
+  - 邊界：未改 DB schema/write、未改 Telegram/live delivery、未改 `scripts/backfill_market_theme_sources.py` guard；Node.js 20 deprecation warning 是旁支。
 - `process-dispatch-state-machine-and-profile-boundaries-20260602`:
   - 問題：Owner 指出 `DISPATCH.md` 的 Current Task / Current Follow-up 雙槽造成狀態混淆，`TASK.md` rolling handoff 內部 `ready_for_tech` 容易被誤判成當前任務；角色卡也缺 Architect 卡、機讀 output schema、衝突優先級與共享邊界。
   - 結果：`DISPATCH.md` 改為 `Active / Queued / Recently Done` 三段狀態機，新增 `task_md_holds` 指針；`AGENTS.md` 固定啟動順序並說明 `TASK.md / CHANGELOG.md / QA_REPORT.md` 按輪覆蓋，跨輪不同任務不視為矛盾。

@@ -28,6 +28,15 @@
 
 ## Latest Completed Handoff
 
+- task_id：`fix-bot-workflow-may-backfill-guard-20260602`
+- 狀態：PM done / Tech done / QA `通過`；主 repo 已吸收 scoped diff，等待 commit / push / Git completion gate。
+- 問題：GitHub Actions `Stock Bot Pro / run-bot` 在 default `run_mode=bot` 時仍跑 May market/theme evidence write，2026-06-02 觸發 `source date outside requested May range` guard 後 exit 1。
+- 修正：`.github/workflows/stock-bot.yml` 的 May market/theme evidence backfill step 只在 `backfill_may` / `backfill_and_bot` 執行；default `bot` 明確 skip，不呼叫 `--write --confirm-write`。
+- 驗證：QA `通過`；`tests/test_workflow_runtime_config.py tests/test_market_theme_source_backfill.py` 21 passed；QA 補 fake python success path，確認 backfill modes 仍執行且 guard failure 不被吞。
+- 邊界：未改 `scripts/backfill_market_theme_sources.py` production guard、DB schema/write、Telegram 報文、live delivery；Node.js 20 deprecation warning 非本輪目標。
+
+## Previous Completed Handoff
+
 - task_id：`holding-weak-observation-clock-20260601`
 - 狀態：done / committed / pushed；Git completion gate passed。當前沒有 Active Tech/QA 任務，實際看板以 `DISPATCH.md` 為準。
 - commit：任務二 blocked 文件已在 `9120672 mark support stop task blocked` 推送到 `origin/main`。

@@ -3,43 +3,48 @@
 ## 測試範圍
 
 - 任務尺寸 / QA：normal_patch / L2。
-- 驗證範圍：Telegram 持倉 formatter、`position_events` guard、版本字串與相關 regression。
-- 已讀：`TASK.md`、`CHANGELOG.md`、`core/generator.py`、`tests/test_generator_report.py`、`tests/test_market_theme_evidence.py`。
-- 未做 production read-only smoke、replay、backfill、live Telegram；本輪為 formatter patch。
+- 驗證範圍：GitHub Actions `run_mode` 對 May market/theme evidence backfill step 的條件、對應測試、production guard 是否未被改動。
+- 已讀：`TASK.md`、`CHANGELOG.md`、`.github/workflows/stock-bot.yml`、`tests/test_workflow_runtime_config.py`、`tests/test_market_theme_source_backfill.py` 必要 guard 測試脈絡。
+- 未跑 live GitHub Actions workflow、production backfill、live Telegram 或 replay。
 
 ## 關聯風險掃描
 
-- `TASK.md` / `CHANGELOG.md` / diff 一致：`position_events_dict`、list fail-closed、完整 formatter regression、`v20.4.24`、不改 DB/live/strategy，均可在 diff 中對應。
-- `core/generator.py` 版本由 `v20.4.23` 升為 `v20.4.24`；測試中的 header / evidence version 同步。
-- `rg` 掃描未見未 guard 的 `position_events.get` 直接崩潰路徑；剩餘 `data.get("position_events")` 位於 helper 入口、manifest source 值與 loader 組 payload，不是本輪 `.get()` crash 消費點。
-- 未發現 DB schema、RLS、grant、policy、role、index、constraint、live Telegram 或 production write diff。
+- `TASK.md`、`CHANGELOG.md`、git diff 一致：任務是修正 default `run_mode=bot` 被 May market/theme backfill range guard 阻塞。
+- 實際 diff 只把 workflow 條件從包含 `bot` 收窄為只包含 `backfill_may` / `backfill_and_bot`，並新增 workflow shell 模擬測試。
+- `run_mode=bot`：workflow log 為 `May market/theme evidence backfill skipped for run_mode=$RUN_MODE`，並 exit 0，不進入 python write step。
+- `run_mode=backfill_may` / `backfill_and_bot`：仍進入 `scripts/backfill_market_theme_sources.py --write --confirm-write`。
+- Node.js 20 warning 未被處理，符合非目標。
+- 未見 DB schema、RLS、grant、policy、role、index、constraint diff。
+- 未見 Telegram 報文或 live delivery 路徑 diff。
 
 ## 跨區塊語意一致性
 
-- 持倉卡手機閱讀順序驗證：message 0 為持倉、message 1 為未持倉、message 2 為簡報＋資料依據。
-- dict-shaped `position_events` / holding source 可顯示 `弱勢觀察第 N 天`，且同份報文只出現一次。
-- list-shaped `position_events` 在完整 formatter 中不 crash、不顯示 `弱勢觀察第 7 天`，顯示 `觀察天數未確認`。
-- top-level / result / invalid observation values fail-closed，不輸出推測天數。
-- 主決策維持 `續抱觀察 / 決策：續抱觀察，暫不加碼`；未出現 `建議賣出`、`已降級`。
+- `bot` mode 不執行 May-only backfill write。
+- `backfill_may` 與 `backfill_and_bot` 保留 May guard 與 fail-closed。
+- workflow log 能區分 skipped / enabled / blocked。
+- 未處理 Node.js warning、不改 DB schema / live Telegram。
+- 未發現 `TASK.md` / `CHANGELOG.md` / diff 矛盾。
 
 ## 使用者誤讀風險
 
-- 觀察狀態位於持倉卡條件行，可直接回答「第幾天或未確認」。
-- fail-closed 文案仍是條件式：`若無法重新接近買點 / 突破區，降低優先級`，未把降級寫成已發生事實。
-- 殘留風險：若 production 長期沒有可信 dict / holding observation source，使用者會看到 `觀察天數未確認`；這符合本輪契約，資料治理需後續處理。
+- 本輪沒有 Telegram / summary / dashboard 使用者可見輸出改動，手機閱讀順序不適用。
+- workflow log 中 bot mode 明確顯示 May backfill skipped，不會誤讀為 May data 寫入成功。
+- backfill modes 明確顯示 May backfill enabled，和 bot skip 分開。
 
 ## 質疑與反證
 
-- Tech regression：`pytest -q tests/test_generator_report.py -k 'v20_4_24_weak_far_holding or observation_days_only_trusts_persistent_sources'`：5 passed，98 deselected。
-- 關聯測試：`pytest -q tests/test_generator_report.py tests/test_market_theme_evidence.py`：139 passed。
-- QA 自補反證：完整 formatter probe 驗證 dict `watch_days` 顯示 N、list fail-closed、top-level/result fail-closed、invalid fail-closed、手機順序、decision unchanged、`v20.4.24`，全部 PASS。
+- Tech 自檢重跑：`TMPDIR=.qa_tmp PYTHONPATH=.qa_tmp:. PYTHONPYCACHEPREFIX=.qa_tmp/pycache .venv/bin/python -m pytest -q tests/test_workflow_runtime_config.py tests/test_market_theme_source_backfill.py`：21 passed。
 - `git diff --check`：passed。
+- QA 補充反證：fake python exit 0 時，`backfill_may` / `backfill_and_bot` returncode 0，各呼叫 `scripts/backfill_market_theme_sources.py` 1 次，且包含 `--write --confirm-write`。
+- 負面案例：fake python exit 1 時，bot mode 不呼叫 python；backfill modes 非 0 exit，保留 `source date outside requested May range` failure。
 
 ## 未測項目
 
-- 未做 production read-only smoke、replay、backfill、live Telegram。
-- 未驗證 production 是否已有可信 observation source；TASK 已允許缺 source 時 fail-closed。
-- 未做全 repo pytest；本輪風險集中在 generator formatter 與相關 evidence/version tests。
+- 未跑 GitHub Actions live workflow。
+- 未使用 production secrets。
+- 未做 production DB write / live Telegram delivery。
+- 未跑 full repo pytest。
+- 未處理 Node.js 20 deprecation warning，符合非目標。
 
 ## QA 結論
 

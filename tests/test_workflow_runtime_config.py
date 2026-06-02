@@ -12,8 +12,12 @@ WORKFLOW = ROOT / ".github/workflows/stock-bot.yml"
 
 
 def _create_runtime_config_script():
+    return _workflow_run_script("Create runtime config")
+
+
+def _workflow_run_script(step_name):
     lines = WORKFLOW.read_text(encoding="utf-8").splitlines()
-    step = lines.index("      - name: Create runtime config")
+    step = lines.index(f"      - name: {step_name}")
     start = lines.index("        run: |", step) + 1
     end = next(
         index for index in range(start, len(lines))
@@ -130,6 +134,65 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
         self.assertIn("--write", workflow_text)
         self.assertIn("--confirm-write", workflow_text)
         self.assertIn('Run bot skipped for run_mode=$RUN_MODE', workflow_text)
+
+    def _run_market_theme_backfill_step(self, run_mode, fake_python_exit=0):
+        script = _workflow_run_script("Backfill official market/theme evidence (retry 3 times)")
+        runtime_env = os.environ.copy()
+        runtime_env["RUN_MODE"] = run_mode
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            bin_path = tmp_path / "bin"
+            bin_path.mkdir()
+            calls_path = tmp_path / "python_calls.txt"
+            fake_python = bin_path / "python"
+            fake_python.write_text(
+                textwrap.dedent(
+                    f"""\
+                    #!/usr/bin/env bash
+                    echo "$@" >> "{calls_path}"
+                    echo "ValueError: market_theme_confirmed_evidence blocked: source date outside requested May range" >&2
+                    exit {fake_python_exit}
+                    """
+                ),
+                encoding="utf-8",
+            )
+            fake_python.chmod(0o755)
+            fake_sleep = bin_path / "sleep"
+            fake_sleep.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+            fake_sleep.chmod(0o755)
+            runtime_env["PATH"] = f"{bin_path}{os.pathsep}{runtime_env.get('PATH', '')}"
+            completed = subprocess.run(
+                ["bash", "-e", "-c", script],
+                cwd=tmpdir,
+                text=True,
+                capture_output=True,
+                check=False,
+                env=runtime_env,
+            )
+            calls = calls_path.read_text(encoding="utf-8") if calls_path.exists() else ""
+        return completed, calls
+
+    def test_bot_mode_skips_may_market_theme_backfill_write_step(self):
+        completed, calls = self._run_market_theme_backfill_step("bot", fake_python_exit=1)
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("May market/theme evidence backfill skipped for run_mode=bot", completed.stdout)
+        self.assertEqual(calls, "")
+        self.assertNotIn("--write --confirm-write", calls)
+
+    def test_backfill_modes_execute_may_market_theme_backfill_and_preserve_guard_failure(self):
+        for run_mode in ("backfill_may", "backfill_and_bot"):
+            with self.subTest(run_mode=run_mode):
+                completed, calls = self._run_market_theme_backfill_step(run_mode, fake_python_exit=1)
+
+                self.assertNotEqual(completed.returncode, 0)
+                self.assertIn(
+                    f"May market/theme evidence backfill enabled for run_mode={run_mode}",
+                    completed.stdout,
+                )
+                self.assertEqual(calls.count("scripts/backfill_market_theme_sources.py"), 3)
+                self.assertIn("--write --confirm-write", calls)
+                self.assertIn("source date outside requested May range", completed.stderr)
 
 
 if __name__ == "__main__":

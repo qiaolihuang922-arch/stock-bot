@@ -107,10 +107,10 @@ jobs:
         env:
           RUN_MODE: ${{ github.event.inputs.run_mode || 'bot' }}
         run: |
-          if [ "$RUN_MODE" = "backfill_may" ] || [ "$RUN_MODE" = "backfill_and_bot" ] || [ "$RUN_MODE" = "bot" ]; then
-            echo "market/theme evidence latest backfill enabled for run_mode=$RUN_MODE"
+          if [ "$RUN_MODE" = "backfill_may" ] || [ "$RUN_MODE" = "backfill_and_bot" ]; then
+            echo "May market/theme evidence backfill enabled for run_mode=$RUN_MODE"
           else
-            echo "market/theme evidence latest backfill skipped for run_mode=$RUN_MODE"
+            echo "May market/theme evidence backfill skipped for run_mode=$RUN_MODE"
             exit 0
           fi
           success=0
