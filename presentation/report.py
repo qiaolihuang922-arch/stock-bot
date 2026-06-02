@@ -204,14 +204,17 @@ def _score_data_text(report_context, name, data, deps):
     if _score_source_available(report_context, name, deps):
         return f"S {data.get('structure_score', '-')}/5"
     status = _score_source_status(report_context, name, deps)
-    if status in {"insufficient-data", "missing-source"}:
+    if status in {"insufficient-data", "missing-source", "insufficient", "missing"}:
         return "S 證據不足"
     return "S 不可用"
 
 
 def _score_gated_market_line(report_context, name, stock_result, dist, deps):
     if _score_source_available(report_context, name, deps):
-        return f"盤面：{deps['plain_label'](deps['compact_market_line'](stock_result, dist))}"
+        market_text = deps["plain_label"](deps["compact_market_line"](stock_result, dist))
+        if ("弱勢" in market_text or "遠離突破" in market_text) and "極強" in market_text:
+            market_text = market_text.replace("極強", "待確認")
+        return f"盤面：{market_text}"
     return "盤面：強弱證據不足｜待確認"
 
 

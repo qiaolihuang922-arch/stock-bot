@@ -6,7 +6,7 @@
 
 - 專案：台股策略 Telegram 報文機器人。
 - 正式結果以 git / runner 產生報文為準。
-- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.28`。
+- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.29`。
 - 固定 8 份 Markdown 不刪：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 - Architect 是總控；產品 / 策略 / 報文 bug 或 feature 預設走 PM -> Tech -> QA。
 - 跨日狀態、已執行交易、歷史 evidence 必須來自 production DB 或 Owner 指定持久來源；local/runtime/worktree 不能當跨日記憶。
@@ -28,8 +28,25 @@
 
 ## Latest Completed Handoff
 
-- task_id：`holdings-risk-list-no-truncation-20260602`
+- task_id：`phase0-bugs-pre-evidence-score-20260602`
 - 狀態：done / QA passed；commit / push 與 Git completion gate 待 final 收口。
+- 問題：Owner 已拍板 major 方向：證據要進決策分數並影響 funnel 邊界；但落地順序要求先修 Phase 0 顯示門控與 B1-B5 手機閱讀 bug，不提前進入 evidence_score / final_confidence / Phase 3。
+- 修正：
+  - Phase 0-1：score source status 支援 insufficient / missing alias，缺來源時保守顯示 `S 證據不足`，不出現 `證據不足｜S5/5`。
+  - B1：弱勢遠離持倉條件行移除重複 `觀察：` 前綴。
+  - B2：score available 但盤面弱勢或遠離突破時，不再顯示 `極強`，改為 `待確認`。
+  - B3/B4：保留 v20.4.28 持倉風控完整列出與 card/control/index 同序契約，補回歸。
+  - B5：`弱反彈待確認 / 漲停反彈待確認` 進獨立 `隔日確認` bucket，summary / execution checklist / funnel formatter 同步。
+- 版本：`core/generator.py` 升為 `v20.4.29`。
+- 驗證：QA `通過`；主 repo `tests/test_generator_report.py` 119 passed，225 warnings；`py_compile` passed；`git diff --check` passed。
+- QA 反證：message list 同時含六檔持倉與隔日確認未持倉，確認持倉排序一致、`隔日確認 1` 不併入 `等冷卻`；insufficient / missing score 不顯示 S5/5 或極強；弱勢/遠離突破不顯示 `弱勢｜極強`。
+- 邊界：未改 RR 公式、DB schema/write、live Telegram；未進入 evidence_score / final_confidence / decision_eligible / funnel evidence modifier major；未做 Phase 3 自動化生產。
+- 下一步：依 Owner 指令，先做 Phase 3 自動化證據生產，讓 evidence 常態可用，再開 Phase 1/2/2b major。
+
+## Previous Completed Handoff
+
+- task_id：`holdings-risk-list-no-truncation-20260602`
+- 狀態：done / committed / pushed。
 - 問題：Owner 指出第三則 `持倉風控檢查` 不應只列前 5 筆再顯示 `另有 N 項持倉風控見詳情`；持倉有幾檔就要列幾檔。
 - 修正：
   - `format_holding_control_checklist()` 預設 `limit=None`，使用者可見路徑完整列出全部持倉。
@@ -40,7 +57,7 @@
 - QA 反證：6 檔持倉完整列到第 6 筆，不含 `另有` / `見詳情`；card_order == control_order == index_order；未改 strategy decision、RR、DB、未持倉漏斗。
 - 流程復盤：第一次 auto 被 stale Tech worktree 擋下；第一次 QA blocked 是 `CHANGELOG.md` stale 成上一輪任務。已保存 residual patch artifact 並同步正確 CHANGELOG 後 Re-QA 通過。這是既有 `runner_gap`，後續仍需修 Tech answer -> main handoff sync。
 
-## Previous Completed Handoff
+## Earlier Completed Handoff
 
 - task_id：`20260602-risk-codex-fixlist-closeout-4-12`
 - 狀態：done / committed / pushed。

@@ -69,7 +69,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.28"
+VERSION = "v20.4.29"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -4844,6 +4844,9 @@ def unheld_funnel_state(name, data, market_mode=None, report_context=None):
     ):
         return state if state in ["等冷卻", "等回測"] else "等冷卻"
 
+    if any(item in blockers for item in ["弱反彈待確認", "漲停反彈待確認"]):
+        return "隔日確認"
+
     if cross_day_prepare_promotion(data):
         return "可準備"
 
@@ -4862,12 +4865,7 @@ def unheld_funnel_state(name, data, market_mode=None, report_context=None):
     if state == "等量能":
         return "等量能"
 
-    if (
-        state == "隔日確認"
-        or result.get("market_grade") in ["A+", "A", "B"]
-        or result.get("entry_quality") in ["A+", "A", "B"]
-        or any(item in blockers for item in ["弱反彈待確認", "漲停反彈待確認"])
-    ):
+    if result.get("market_grade") in ["A+", "A", "B"] or result.get("entry_quality") in ["A+", "A", "B"]:
         return "可準備"
 
     return "淘汰"
@@ -4919,6 +4917,7 @@ def unheld_execution_priority(index, name, data, market_mode=None, report_contex
         "等回測": 5,
         "等RR修復": 6,
         "等量能": 7,
+        "隔日確認": 8,
         "淘汰": 9,
     }
     stock_order = list(STOCKS).index(name) if name in STOCKS else index
@@ -4961,6 +4960,7 @@ def build_unheld_funnel(watch_items, market_mode=None, report_context=None):
         "等回測": [],
         "等RR修復": [],
         "等量能": [],
+        "隔日確認": [],
         "淘汰": [],
     }
 
@@ -5022,7 +5022,7 @@ def unheld_tracking_count(funnel):
 
     return sum(
         len(funnel[label])
-        for label in ["可準備", "等冷卻", "等回測", "等RR修復", "等量能"]
+        for label in ["可準備", "等冷卻", "等回測", "等RR修復", "等量能", "隔日確認"]
     )
 
 
@@ -5034,6 +5034,11 @@ def unheld_tracking_only_count(funnel):
     )
 
 
+def unheld_next_day_count(funnel):
+
+    return len(funnel["隔日確認"])
+
+
 def today_conclusion_text(holding_items, watch_items, market_mode, risk_level, report_phase=None, report_context=None):
 
     funnel = build_unheld_funnel(watch_items, market_mode=market_mode, report_context=report_context)
@@ -5042,6 +5047,7 @@ def today_conclusion_text(holding_items, watch_items, market_mode, risk_level, r
     tracking_count = unheld_tracking_count(funnel)
     prepare_count = len(funnel["可準備"])
     tracking_only_count = unheld_tracking_only_count(funnel)
+    next_day_count = unheld_next_day_count(funnel)
     holding_count = len(holding_items)
     intraday = report_phase in (None, "盤中")
     execution_label = "交易執行" if intraday else "明日計畫"
@@ -5058,11 +5064,22 @@ def today_conclusion_text(holding_items, watch_items, market_mode, risk_level, r
         if executed_count:
             base += f"；已執行 {executed_count} 項不重複"
         if prepare_count and tracking_only_count:
-            return f"{base}；未持倉 {prepare_count} 檔不可追高觀察、{tracking_only_count} 檔僅追蹤"
+            tail = f"未持倉 {prepare_count} 檔不可追高觀察、{tracking_only_count} 檔僅追蹤"
+            if next_day_count:
+                tail += f"、{next_day_count} 檔隔日確認"
+            return f"{base}；{tail}"
         if prepare_count:
-            return f"{base}；未持倉 {prepare_count} 檔不可追高觀察"
+            tail = f"未持倉 {prepare_count} 檔不可追高觀察"
+            if next_day_count:
+                tail += f"、{next_day_count} 檔隔日確認"
+            return f"{base}；{tail}"
         if tracking_only_count:
-            return f"{base}；未持倉 {tracking_count} 檔僅追蹤"
+            tail = f"未持倉 {tracking_only_count} 檔僅追蹤"
+            if next_day_count:
+                tail += f"、{next_day_count} 檔隔日確認"
+            return f"{base}；{tail}"
+        if next_day_count:
+            return f"{base}；未持倉 {next_day_count} 檔隔日確認"
         return f"{base}；未持倉無追蹤"
 
     if holding_count:
@@ -5070,21 +5087,44 @@ def today_conclusion_text(holding_items, watch_items, market_mode, risk_level, r
         if executed_count:
             base += f"；已執行 {executed_count} 項不重複"
         if prepare_count and tracking_only_count:
-            return f"{base}；未持倉 {prepare_count} 檔不可追高觀察、{tracking_only_count} 檔僅追蹤"
+            tail = f"未持倉 {prepare_count} 檔不可追高觀察、{tracking_only_count} 檔僅追蹤"
+            if next_day_count:
+                tail += f"、{next_day_count} 檔隔日確認"
+            return f"{base}；{tail}"
         if prepare_count:
-            return f"{base}；未持倉 {prepare_count} 檔不可追高觀察"
+            tail = f"未持倉 {prepare_count} 檔不可追高觀察"
+            if next_day_count:
+                tail += f"、{next_day_count} 檔隔日確認"
+            return f"{base}；{tail}"
         if tracking_only_count:
-            return f"{base}；未持倉 {tracking_count} 檔僅追蹤"
+            tail = f"未持倉 {tracking_only_count} 檔僅追蹤"
+            if next_day_count:
+                tail += f"、{next_day_count} 檔隔日確認"
+            return f"{base}；{tail}"
+        if next_day_count:
+            return f"{base}；未持倉 {next_day_count} 檔隔日確認"
         return f"{base}；未持倉無追蹤"
 
     if prepare_count and tracking_only_count:
-        return f"{risk_level} {market_mode}；{no_new_entry_text}；未持倉 {prepare_count} 檔不可追高觀察、{tracking_only_count} 檔僅追蹤"
+        tail = f"未持倉 {prepare_count} 檔不可追高觀察、{tracking_only_count} 檔僅追蹤"
+        if next_day_count:
+            tail += f"、{next_day_count} 檔隔日確認"
+        return f"{risk_level} {market_mode}；{no_new_entry_text}；{tail}"
 
     if prepare_count:
-        return f"{risk_level} {market_mode}；{no_new_entry_text}；未持倉 {prepare_count} 檔不可追高觀察"
+        tail = f"未持倉 {prepare_count} 檔不可追高觀察"
+        if next_day_count:
+            tail += f"、{next_day_count} 檔隔日確認"
+        return f"{risk_level} {market_mode}；{no_new_entry_text}；{tail}"
 
     if tracking_only_count:
-        return f"{risk_level} {market_mode}；{no_new_entry_text}；未持倉 {tracking_count} 檔僅追蹤"
+        tail = f"未持倉 {tracking_only_count} 檔僅追蹤"
+        if next_day_count:
+            tail += f"、{next_day_count} 檔隔日確認"
+        return f"{risk_level} {market_mode}；{no_new_entry_text}；{tail}"
+
+    if next_day_count:
+        return f"{risk_level} {market_mode}；{no_new_entry_text}；未持倉 {next_day_count} 檔隔日確認"
 
     return f"{risk_level} {market_mode}；{no_new_entry_text}；未持倉無追蹤"
 
@@ -5200,6 +5240,7 @@ def format_execution_checklist(holding_items, watch_items, limit=5, report_phase
     tracking_count = unheld_tracking_count(funnel)
     prepare_count = len(funnel["可準備"])
     tracking_only_count = unheld_tracking_only_count(funnel)
+    next_day_count = unheld_next_day_count(funnel)
     intraday = report_phase in (None, "盤中")
     tracking_suffix = (
         "不列入今日盤中交易執行"
@@ -5210,11 +5251,22 @@ def format_execution_checklist(holding_items, watch_items, limit=5, report_phase
     if not items:
         lines = ["無新增下單"]
         if prepare_count and tracking_only_count:
-            lines.append(f"未持倉 {prepare_count} 檔不可追高觀察、{tracking_only_count} 檔僅追蹤，等觸發，{tracking_suffix}")
+            tail = f"未持倉 {prepare_count} 檔不可追高觀察、{tracking_only_count} 檔僅追蹤"
+            if next_day_count:
+                tail += f"、{next_day_count} 檔隔日確認"
+            lines.append(f"{tail}，等觸發，{tracking_suffix}")
         elif prepare_count:
-            lines.append(f"未持倉 {prepare_count} 檔不可追高觀察，等觸發，{tracking_suffix}")
+            tail = f"未持倉 {prepare_count} 檔不可追高觀察"
+            if next_day_count:
+                tail += f"、{next_day_count} 檔隔日確認"
+            lines.append(f"{tail}，等觸發，{tracking_suffix}")
         elif tracking_only_count:
-            lines.append(f"未持倉 {tracking_count} 檔僅追蹤，等觸發，{tracking_suffix}")
+            tail = f"未持倉 {tracking_only_count} 檔僅追蹤"
+            if next_day_count:
+                tail += f"、{next_day_count} 檔隔日確認"
+            lines.append(f"{tail}，等觸發，{tracking_suffix}")
+        elif next_day_count:
+            lines.append(f"未持倉 {next_day_count} 檔隔日確認，等觸發，{tracking_suffix}")
         return lines
 
     displayed = items[:limit]
@@ -5230,11 +5282,22 @@ def format_execution_checklist(holding_items, watch_items, limit=5, report_phase
             lines.append(f"另有 {len(items) - len(displayed)} 項明日計畫見詳情")
 
     if prepare_count and tracking_only_count:
-        lines.append(f"未持倉 {prepare_count} 檔不可追高觀察、{tracking_only_count} 檔只等觸發，{tracking_suffix}")
+        tail = f"未持倉 {prepare_count} 檔不可追高觀察、{tracking_only_count} 檔只等觸發"
+        if next_day_count:
+            tail += f"、{next_day_count} 檔隔日確認"
+        lines.append(f"{tail}，{tracking_suffix}")
     elif prepare_count:
-        lines.append(f"未持倉 {prepare_count} 檔不可追高觀察，{tracking_suffix}")
+        tail = f"未持倉 {prepare_count} 檔不可追高觀察"
+        if next_day_count:
+            tail += f"、{next_day_count} 檔隔日確認"
+        lines.append(f"{tail}，{tracking_suffix}")
     elif tracking_only_count:
-        lines.append(f"未持倉 {tracking_count} 檔只等觸發，{tracking_suffix}")
+        tail = f"未持倉 {tracking_only_count} 檔只等觸發"
+        if next_day_count:
+            tail += f"、{next_day_count} 檔隔日確認"
+        lines.append(f"{tail}，{tracking_suffix}")
+    elif next_day_count:
+        lines.append(f"未持倉 {next_day_count} 檔隔日確認，{tracking_suffix}")
 
     return lines
 
@@ -5306,30 +5369,42 @@ def format_unheld_funnel(watch_items, market_mode=None, report_context=None):
     tracking_count = unheld_tracking_count(funnel)
     tracking_only_count = unheld_tracking_only_count(funnel)
     prepare_count = len(funnel["可準備"])
+    next_day_count = unheld_next_day_count(funnel)
     split_parts = [
         f"{label} {len(funnel[label])}"
         for label in ["等冷卻", "等回測", "等RR修復", "等量能"]
         if funnel[label]
     ]
+    funnel_summary = (
+        f"可買 {len(funnel['可買'])}"
+        f"｜不可追高觀察 {prepare_count}（不可買）"
+    )
+    if next_day_count:
+        funnel_summary += f"｜隔日確認 {next_day_count}"
+    funnel_summary += f"｜僅追蹤 {tracking_only_count}｜淘汰 {len(funnel['淘汰'])}"
+
     lines = [
         f"未持倉總數 {total_count} 檔",
-        (
-            f"可買 {len(funnel['可買'])}"
-            f"｜不可追高觀察 {prepare_count}（不可買）"
-            f"｜僅追蹤 {tracking_only_count}"
-            f"｜淘汰 {len(funnel['淘汰'])}"
-        ),
+        funnel_summary,
     ]
 
     if split_parts:
         lines.append(f"其中僅追蹤 {tracking_only_count} 檔拆分：" + "、".join(split_parts))
 
-    if prepare_count and tracking_only_count:
-        lines.append(f"非執行準備/追蹤合計 {tracking_count} 檔（不可追高觀察 {prepare_count}｜僅追蹤 {tracking_only_count}）")
+    if (prepare_count or next_day_count) and tracking_only_count:
+        total_parts = []
+        if prepare_count:
+            total_parts.append(f"不可追高觀察 {prepare_count}")
+        if next_day_count:
+            total_parts.append(f"隔日確認 {next_day_count}")
+        total_parts.append(f"僅追蹤 {tracking_only_count}")
+        lines.append(f"非執行準備/追蹤合計 {tracking_count} 檔（{'｜'.join(total_parts)}）")
     elif prepare_count:
         lines.append(f"不可追高觀察 {prepare_count} 檔，不列入交易執行")
     elif tracking_only_count:
         lines.append(f"僅追蹤 {tracking_only_count} 檔，不列入交易執行")
+    elif next_day_count:
+        lines.append(f"隔日確認 {next_day_count} 檔，不列入交易執行")
 
     return "\n".join(lines)
 
@@ -6007,10 +6082,10 @@ def weak_far_observation_condition_line(data):
 
     days = positive_observation_days_from_holding(data)
     if days is None:
-        return "觀察：觀察天數未確認；若無法重新接近買點 / 突破區，降低優先級"
+        return "觀察天數未確認；若無法重新接近買點 / 突破區，降低優先級"
 
     return (
-        f"觀察：弱勢觀察第 {days} 天；"
+        f"弱勢觀察第 {days} 天；"
         f"若第 {days + 1} 天仍未重新接近買點 / 突破區，降低優先級"
     )
 

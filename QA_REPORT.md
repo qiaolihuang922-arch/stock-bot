@@ -1,79 +1,57 @@
-# QA_REPORT: 持倉風控檢查完整列出全部持倉
+# QA_REPORT: Phase 0 + B1-B5 前置修復與手機閱讀回歸
 
   ## 測試範圍
 
-  本輪 TASK 為 normal_patch、QA L2；驗證限於 Telegram 第三則「持倉風控檢查」使用者可見輸出、版本同步、直接 formatter 契約與相關報文測試，未擴成 full repo pytest / replay / backfill / production smoke。
-
-  已讀取並比對：
-
-  - TASK.md
-  - CHANGELOG.md
-  - git diff -- core/generator.py tests/test_generator_report.py CHANGELOG.md
-  - 直接呼叫點：presentation/report.py
-
-  執行驗證：
-
-  - git diff --check：passed
-  - arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py::GeneratorReportTest::test_intraday_mobile_a3_holding_order_matches_cards_control_and_index：1 passed
-  - arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py：116 passed，225 warnings
-  - QA 自補 helper probe：預設 6 檔完整列出、不含「另有」/「見詳情」；顯式 limit=5 仍維持 5 筆加截斷提示相容行為。
+  - 讀取並比對 TASK.md、CHANGELOG.md、git diff。本輪可吸收 diff：CHANGELOG.md、core/generator.py、presentation/report.py、tests/test_generator_report.py。
+  - worktree 殘留：同上 4 個 tracked modified，未看到無關 tracked diff；QA 未修改 tracked file。
+  - 任務尺寸為 risk_patch、QA level L3；驗證聚焦 Telegram formatter / message list / funnel count / 持倉排序，未擴成 full pytest、replay、backfill 或 production matrix。
 
   ## 風險預算與停止條件
 
   本輪最值得抓的風險：
 
-  1. 第三則仍只列前 5 檔，或第 6 檔以上靠「另有 / 見詳情」藏到 detail。
-      - 驗證：6 檔 fixture、第三則 control section、直接 helper probe。
-      - 停止條件：少於 6 筆或出現截斷提示即 blocked。
-  2. 持倉風控排序與第一則持倉卡 / 第三則 detail index 不一致，造成 Owner 手機閱讀交叉對照錯位。
-      - 驗證：測試抽出持倉卡順序、control 順序、detail index 順序並比對。
-      - 停止條件：任一順序不一致即 blocked。
-  3. CHANGELOG / TASK / diff 再次不同步，或 diff 擴到策略、RR、DB write、未持倉漏斗。
-      - 驗證：文件與 diff 對照、呼叫點掃描。
-      - 停止條件：跨文件或實作範圍不一致即 blocked / conditional pass。
+  1. Phase0 缺來源仍顯示強證據或正向行動語意。驗證：score gate tests + QA alias probe。停止條件：出現 證據不足｜S5/5、S 5/5、極強 或 insufficient/missing 仍支持行動。
+  2. B1/B2 手機卡片語意自撞。驗證：持倉 / 未持倉 card 與完整 message list 禁用字串掃描。停止條件：出現 條件：觀察：觀察天數未確認、弱勢｜極強、遠離突破｜極強。
+  3. B3/B4/B5 跨區塊 count / 排序不一致。驗證：summary、風控區、詳情索引、未持倉卡片同份 message list 交叉比對。停止條件：六檔少列、排序不一致、隔日確認 併入 等冷卻 或 funnel/card count 不一致。
 
   ## 關聯風險掃描
 
-  TASK、CHANGELOG、git diff 已一致指向「持倉風控檢查完整列出全部持倉」。可吸收 diff 為：
-
-  - CHANGELOG.md：本輪 handoff 同步。
-  - core/generator.py：版本 v20.4.28；format_holding_control_checklist 預設 limit=None；預設不再輸出持倉風控截斷提示；holding control 順序改沿用輸入 holding_items。
-  - tests/test_generator_report.py：版本期望同步；6 檔以上手機閱讀 probe 補強。
-
-  未發現 strategy decision、主行動判斷、RR、DB schema/write path、live delivery、未持倉漏斗邏輯 diff。git status --short 只有上述 3 個 tracked file dirty；.qa_tmp/ 為測試暫存/既有暫存，不屬可吸收產品 diff。
+  - CHANGELOG.md 已同步本輪 Phase 0 + B1-B5，與 TASK.md 主目標一致；不再是 stale 的上一輪六檔持倉任務。
+  - core/generator.py 版本由 v20.4.28 升為 v20.4.29，符合不得回退版本契約。
+  - presentation/report.py 的 score gate 只允許 available / derived 顯示 S 分數，insufficient / missing alias 走 S 證據不足。
+  - B5 新增 隔日確認 bucket，summary / execution checklist / funnel formatter 均有同步；未發現 DB schema、write path、live Telegram delivery 或策略核心公式變更。
+  - 清理 / 瘦身 / refactor 證據表要求不適用，本輪不是清理任務。
 
   ## 跨區塊語意一致性
 
-  使用者手機閱讀順序已檢查：
-
-  - 第一則「持倉標的」持倉卡順序由 sort_position_summary 產生。
-  - 第三則「持倉風控檢查」透過同一份 holding_items 產生，不再另用 holding_execution_priority 重排。
-  - 第三則 📎 詳情索引：持倉 ... 也沿用同一 holding_items。
-  - 測試驗證 6 檔時 card_order == control_order == index_order，且 control section 含第 6 筆。
-
-  版本字串已由 v20.4.27 升至 v20.4.28，測試同步覆蓋 header / evidence version / artifact generator_version。
+  - Tech 自檢重跑：tests/test_generator_report.py 119 passed，225 warnings；warnings 為既有依賴 deprecation 類。
+  - py_compile core/generator.py presentation/report.py tests/test_generator_report.py passed。
+  - git diff --check passed。
+  - QA 額外手機閱讀 probe passed：
+      - message order：持倉、未持倉、summary。
+      - 六檔持倉排序一致：英業達,緯創,技嘉,南亞科,智原,建準，summary 風控區與詳情索引一致。
+      - funnel line：可買 0｜不可追高觀察 0（不可買）｜隔日確認 1｜僅追蹤 0｜淘汰 0。
+      - 隔日確認 1 檔，不列入交易執行 存在，等冷卻 1 不存在。
+  - 注意：仍支持 仍可出現在市場 / 題材背景 available 的趨勢敘述；本輪禁止的是 insufficient / missing 狀態仍支持行動，未在驗證輸出中發現違反。
 
   ## 使用者誤讀風險
 
-  主要誤讀路徑是 Owner 在第三則看到 5 筆後，以為其餘持倉只能到詳情找，或「另有 N 項持倉風控見詳情」被理解為第三則沒有完整風控。現有 diff 已移除預設截斷，6 檔 fixture 第三則直接列出第 6 檔，且 control section 不含「另有」
-  與「見詳情」。
-
-  殘留風險：完整列出全部持倉會拉長第三則訊息；這是 TASK 明確要求的結果，Telegram 長訊息切分治理不屬本輪。
+  - Phase0：缺 score source 不再讓手機讀者看到 S 5/5 或 極強，降低「資料不足但看似滿分」誤讀。
+  - B1：弱勢觀察缺天數時，條件行為 條件：觀察天數未確認...，未見 觀察：觀察 雙詞。
+  - B2：弱勢 / 遠離突破時，強度降為 待確認，未見 弱勢｜極強 或 遠離突破｜極強。
+  - B5：隔日確認獨立呈現且標明不列入交易執行，手機閱讀不會被等冷卻 count 混淆。
 
   ## 質疑與反證
 
-  QA 未只重跑 Tech 自檢，另補直接 helper 反證：
-
-  - 預設呼叫 format_holding_control_checklist(holding_items, report_phase="盤中")：6 檔全部輸出，最後一筆為第 6 檔，無截斷提示。
-  - 顯式呼叫 format_holding_control_checklist(..., limit=5)：仍輸出 5 筆與「另有 1 項持倉風控見詳情」，證明 public helper 參數相容性保留，變更只影響預設使用者可見路徑。
-
-  質疑排序回退：diff 移除 holding_control_items 內的 execution priority 排序；呼叫點確認持倉卡、control、detail index 都吃排序後的同一份 holding_items，測試反證一致。
+  - 反證 Tech 未完全覆蓋的路徑：QA 自建混合 message list，同時包含六檔持倉與一檔隔日確認未持倉，直接檢查前三則手機報文整體，而非只測單一 helper。
+  - 另補 Phase0 alias 反證：source_status=insufficient / missing 直接渲染持倉 card，確認顯示 S 證據不足 且不顯示 S 5/5 / 極強。
+  - 另補 B2 持倉 card 反證：score available 但盤面弱勢 + 遠離突破時，顯示 盤面：弱勢｜待確認，未出現極強矛盾。
 
   ## 未測項目
 
-  未跑 full repo pytest、production read-only smoke、live Telegram、DB write/backfill、Telegram 極端長訊息切分。依 TASK 的 normal_patch / L2 與本輪停止條件，這些不是必要驗收範圍。
-
-  warnings 為既有第三方 deprecation / Python 版本提示；未在本輪處理。
+  - 未跑 full repo pytest；本輪 TASK 明確是 formatter / message list / funnel / 排序風險，已跑相關完整測試檔與 QA 額外 probe。
+  - 未做 production read smoke、DB write、backfill、live Telegram delivery；均屬本輪非目標或禁止事項。
+  - 未驗證 evidence_score / final_confidence / decision_eligible major 改造，依 TASK 屬旁支待辦。
 
   ## QA 結論
 

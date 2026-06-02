@@ -15,6 +15,13 @@
 
 ## Completed
 
+- `phase0-bugs-pre-evidence-score-20260602`:
+  - 問題：Owner 已確認 major 方向要讓證據進決策分數與 funnel 邊界；前置要求先修 Phase 0 顯示門控與 B1-B5 手機閱讀 bug，避免後續 evidence_score 建在矛盾報文上。
+  - 結果：報文版本升 `v20.4.29`；score source insufficient / missing 不顯示 S5/5；弱勢遠離持倉條件不再有 `觀察：觀察`；弱勢 / 遠離突破不顯示 `極強`；B3/B4 持倉全列與排序一致回歸；`隔日確認` 成為獨立漏斗 bucket。
+  - 可重跑補強：新增 / 更新 formatter 與 message-list probes，覆蓋 score missing aliases、弱勢/遠離突破強度、弱勢觀察條件行、六檔持倉排序、隔日確認 count 與卡片對齊；主 repo `tests/test_generator_report.py` 119 passed。
+  - QA 反證：QA 另建混合 message list，同時驗六檔持倉與一檔隔日確認；確認 `隔日確認 1` 不併入 `等冷卻`，且缺 score source 不出現 S5/5 / 極強。
+  - 流程治理：`mobile_reading` + `QA反證` + `runner_gap`。Tech 初版 B5 把所有 `tomorrow_watch_state == 隔日確認` 都改桶，測試擋下後收斂為明確 `弱反彈待確認 / 漲停反彈待確認` blocker；同類 funnel 改動必須補「不誤傷既有強勢準備 / cross-day repair」反證。
+  - 邊界：未進入 evidence_score / final_confidence / decision_eligible / funnel evidence modifier major；未改 RR、DB schema/write、live Telegram；Phase 3 自動化證據生產另開。
 - `holdings-risk-list-no-truncation-20260602`:
   - 問題：Owner 指出第三則 `持倉風控檢查` 用前 5 筆 + `另有 N 項持倉風控見詳情` 截斷，手機上不直觀；要求有幾檔持倉就列幾檔。
   - 結果：報文版本升 `v20.4.28`；持倉風控檢查預設完整列出全部持倉，預設不顯示 `另有 / 見詳情`；持倉卡、風控檢查、detail index 同序。
