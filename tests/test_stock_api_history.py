@@ -6,11 +6,14 @@ from services.stock_api import (
     clear_error,
     compact_error,
     get_last_error,
+    get_last_ohlcv,
     get_twse,
     get_yahoo_history,
+    last_ohlcv_fallback_payload,
     parse_twse_date,
     parse_twse_number,
-    record_error
+    record_error,
+    LAST_OHLCV
 )
 
 
@@ -126,6 +129,27 @@ class StockApiHistoryTest(unittest.TestCase):
         self.assertEqual(len(closes), 50)
         self.assertEqual(len(volumes), 50)
         self.assertEqual(ma5, sum(closes[-5:]) / 5)
+
+    def test_last_ohlcv_fallback_payload_marks_stale_and_data_date(self):
+        LAST_OHLCV["3231"] = {
+            "stock_id": "3231",
+            "trade_date": date(2026, 5, 29),
+            "open": 10.0,
+            "high": 11.0,
+            "low": 9.5,
+            "close": 10.5,
+            "volume": 1000,
+            "source": "twse",
+        }
+
+        payload = last_ohlcv_fallback_payload("3231")
+
+        self.assertTrue(payload["stale"])
+        self.assertEqual(payload["data_date"], "2026-05-29")
+        self.assertEqual(payload["fallback_source"], "LAST_OHLCV")
+        self.assertEqual(get_last_ohlcv("3231")["source"], "twse")
+
+        LAST_OHLCV.pop("3231", None)
 
 
 if __name__ == "__main__":

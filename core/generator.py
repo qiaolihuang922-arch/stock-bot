@@ -26,7 +26,8 @@ from services.stock_api import (
     get_yahoo,
     get_realtime_price,
     get_last_error,
-    get_last_ohlcv
+    get_last_ohlcv,
+    last_ohlcv_fallback_payload
 )
 
 from services.analysis import (
@@ -68,7 +69,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.26"
+VERSION = "v20.4.27"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -833,7 +834,7 @@ def semantic_position(dist):
         return None
 
     if dist < 0:
-        return f"🚀 已突破（{dist}%）"
+        return "🚀 已突破，位於突破區上方"
 
     if dist < 1:
         return f"🔥 臨界突破（{dist}%）"
@@ -3784,7 +3785,15 @@ def source_summary_text(results_map):
     price_source = next(iter(price_sources)) if len(price_sources) == 1 else "mixed"
     daily_source = next(iter(daily_sources)) if len(daily_sources) == 1 else "mixed"
 
-    return f"📡 資料：即時價 {price_source}｜日線 {daily_source}"
+    stale_items = []
+    for name, data in results_map.items():
+        ohlcv = data.get("ohlcv") or {}
+        if ohlcv.get("stale"):
+            data_date = ohlcv.get("data_date") or ohlcv.get("trade_date") or "日期不明"
+            stale_items.append(f"{name} 使用 LAST_OHLCV {data_date}，非當日資料")
+
+    stale_text = "｜" + "；".join(stale_items[:3]) if stale_items else ""
+    return f"📡 資料：即時價 {price_source}｜日線 {daily_source}{stale_text}"
 
 
 def _manifest_status(status):
@@ -3907,6 +3916,8 @@ def _readonly_quote_source(source):
     source = source or "unknown"
     if source in {"realtime", "yahoo", "twse"}:
         return f"approved readonly service: services.stock_api.{source}"
+    if source == "LAST_OHLCV":
+        return "approved readonly service: services.stock_api.LAST_OHLCV stale fallback"
     return "none"
 
 
@@ -3923,6 +3934,8 @@ def _daily_source_status(data):
         if data.get("closes") == [] or data.get("volumes") == []:
             return "insufficient-data"
         return "available"
+    if data.get("daily_source") == "LAST_OHLCV":
+        return "insufficient-data"
     if not data.get("closes") or not data.get("volumes"):
         return "insufficient-data"
     return "missing-source"
@@ -3941,16 +3954,39 @@ def _derived_status(*statuses):
 
 
 def _strategy_sample_status(strategy_evidence_summary):
-    text = strategy_evidence_summary or ""
-    if not text:
-        return "missing-source", "缺 classification backtest source-of-truth"
-    if "讀取失敗" in text or "source-error" in text:
-        return "source-error", "classification backtest 讀取失敗"
-    if "樣本不足" in text or "insufficient" in text:
-        return "insufficient-data", "classification backtest 樣本不足或欄位不足"
-    if "缺 classification backtest source-of-truth" in text or "狀態：不可用" in text:
-        return "missing-source", "缺 classification backtest source-of-truth"
-    return "available", "classification backtest source 可用"
+    if not strategy_evidence_summary:
+        return "missing-source", "缺 strategy_sample 結構化來源"
+
+    if not isinstance(strategy_evidence_summary, dict):
+        return "missing-source", "缺 strategy_sample structured_status，未用文字摘要反推"
+
+    structured = (
+        strategy_evidence_summary.get("structured_status")
+        or strategy_evidence_summary.get("strategy_sample")
+        or strategy_evidence_summary
+    )
+    if not isinstance(structured, dict):
+        return "missing-source", "缺 strategy_sample structured_status"
+
+    status = _manifest_status(structured.get("status") or structured.get("source_status"))
+    row_count = structured.get("row_count")
+    if row_count is None:
+        row_count = structured.get("sample_rows")
+    if row_count is None:
+        row_count = structured.get("evidence_count")
+    missing_fields = structured.get("missing_fields") or []
+    completeness = structured.get("completeness")
+    source = structured.get("source") or structured.get("source_of_truth") or "strategy_sample"
+
+    if status in {"source-error", "missing-source", "unresolved-conflict"}:
+        return status, f"{source} {status}"
+    if row_count is not None and row_count <= 0:
+        return "insufficient-data", f"{source} row_count {row_count}"
+    if missing_fields or completeness in {"incomplete", "insufficient"}:
+        return "insufficient-data", f"{source} 欄位不足"
+    if status in {"available", "derived"}:
+        return "available", f"{source} structured_status 可用"
+    return "insufficient-data", f"{source} 結構化狀態不足"
 
 
 def _holding_source_status(data):
@@ -5009,7 +5045,7 @@ def today_conclusion_text(holding_items, watch_items, market_mode, risk_level, r
     holding_count = len(holding_items)
     intraday = report_phase in (None, "盤中")
     execution_label = "交易執行" if intraday else "明日計畫"
-    no_new_entry_text = "交易執行：無新增下單" if intraday else "新倉：無有效進場"
+    no_new_entry_text = "新倉：無有效進場"
 
     if pending_count:
         base = f"{risk_level} {market_mode}"
@@ -5264,6 +5300,9 @@ def format_holding_control_checklist(holding_items, limit=5, report_phase=None):
 
 def format_unheld_funnel(watch_items, market_mode=None, report_context=None):
     funnel = build_unheld_funnel(watch_items, market_mode=market_mode, report_context=report_context)
+    total_count = sum(len(items) for items in funnel.values())
+    if not total_count:
+        return ""
     tracking_count = unheld_tracking_count(funnel)
     tracking_only_count = unheld_tracking_only_count(funnel)
     prepare_count = len(funnel["可準備"])
@@ -5273,7 +5312,7 @@ def format_unheld_funnel(watch_items, market_mode=None, report_context=None):
         if funnel[label]
     ]
     lines = [
-        f"未持倉總數 {sum(len(items) for items in funnel.values())} 檔",
+        f"未持倉總數 {total_count} 檔",
         (
             f"可買 {len(funnel['可買'])}"
             f"｜不可追高觀察 {prepare_count}（不可買）"
@@ -5308,14 +5347,15 @@ def detail_index_text(holding_items, watch_items, report_phase=None, market_mode
     holding_names = "、".join(name for name, _data in holding_items) if holding_items else "無"
     parts = [f"📎 詳情索引：持倉 {holding_names}"]
 
-    if report_phase in (None, "盤中") or execution_count:
+    if execution_count:
         parts.append(f"{execution_label} {execution_count}")
 
     if prepare_count:
         parts.append(f"不可追高觀察 {prepare_count}")
     if tracking_only_count:
         parts.append(f"僅追蹤 {tracking_only_count}")
-    parts.append(f"淘汰 {len(rejected)}")
+    if rejected:
+        parts.append(f"淘汰 {len(rejected)}")
 
     return "｜".join(parts)
 
@@ -5630,7 +5670,6 @@ def market_execution_bridge_lines(holding_items, watch_items, market_mode, marke
     return [
         f"🧭 {mainline}",
         f"🧭 {execution}",
-        "🧭 新倉：無有效進場。",
     ]
 
 
@@ -7214,6 +7253,25 @@ def load_report_daily_kline(code):
         return yahoo_retry, "yahoo", None
 
     retry_error = get_last_error(code) or "yahoo_daily: no data"
+    cached = last_ohlcv_fallback_payload(code)
+    if cached:
+        close = cached.get("close")
+        volume = cached.get("volume") or 0
+        if close is not None:
+            closes = [float(close)] * REPORT_DAILY_MIN_ROWS
+            volumes = [float(volume)] * REPORT_DAILY_MIN_ROWS
+            return (
+                (
+                    float(close),
+                    0,
+                    float(close),
+                    float(close),
+                    closes,
+                    volumes,
+                ),
+                "LAST_OHLCV",
+                f"{yahoo_error}；fallback {twse_error}；retry {retry_error}；LAST_OHLCV stale {cached.get('data_date')}",
+            )
     return None, None, f"{yahoo_error}；fallback {twse_error}；retry {retry_error}"
 
 
@@ -7284,7 +7342,7 @@ def load_stock_signal(name, code):
 
             "closes": display_closes,
             "volumes": volumes,
-            "ohlcv": get_last_ohlcv(code),
+            "ohlcv": last_ohlcv_fallback_payload(code) if daily_source == "LAST_OHLCV" else get_last_ohlcv(code),
 
             "holding": (
                 holdings.get(name)
@@ -7342,7 +7400,7 @@ def _source_missing_report_messages(now, report_phase, position_warning):
     source_line = "Source：核心價格 missing-source；持倉 missing-source；策略樣本 missing-source；market/theme missing-source"
     position_warning_line = f"⚠ {position_warning}，持倉 / 今日交易狀態不可信"
     market_line = "📊 市場：source-missing｜fail-closed"
-    conclusion_line = "🧭 今日結論：source-missing；交易執行：無新增下單；持倉風控檢查 0 檔；未持倉無追蹤"
+    conclusion_line = "🧭 今日結論：source-missing；不產生交易建議；持倉風控來源不足；未持倉無追蹤"
     unavailable_line = "unavailable：持倉或今日交易來源缺失，不產生交易建議"
     summary_message = "\n".join([
         telegram_header,
@@ -7353,15 +7411,8 @@ def _source_missing_report_messages(now, report_phase, position_warning):
         conclusion_line,
         "🧭 新倉：無有效進場。",
         "",
-        "✅ 今日盤中交易執行",
-        "無新增下單",
-        "",
         "持倉風控檢查",
         unavailable_line,
-        "",
-        "未持倉漏斗（非執行）：",
-        "未持倉總數 0 檔",
-        "可買 0｜不可追高觀察 0（不可買）｜僅追蹤 0｜淘汰 0",
     ])
     report_context = _source_missing_report_context(now, position_warning)
     brief = format_brief_data_evidence_message(

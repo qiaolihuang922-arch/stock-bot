@@ -1,71 +1,70 @@
-# CHANGELOG: risk_patch_unheld_funnel_overheat_prepare_fix
+# CHANGELOG:
 
   ## 任務尺寸與風險
 
   - 任務尺寸：risk_patch
-  - 風險：影響未持倉 funnel 分類、summary count、卡片狀態與使用者可見 Telegram 版本；未改策略 decision、RR 公式、DB 或 live delivery。
+  - 風險判斷：使用者可見 Telegram summary / fail-closed 報文分組契約修正；不改策略 decision、RR、DB、live delivery。
 
   ## 修改內容
 
-  - unheld_funnel_state() 新增過熱 prepare gate：
-      - should_show_overheat_rr_blocker(result, holding=False) 為 true 時，不再回傳 可準備。
-      - heat_state 為 HOT / EXTREME 時，不再回傳 可準備。
-      - strong_prepare_bucket() label 為 過熱降溫 時，不再回傳 可準備。
-      - 上述標的改走既有 等冷卻 / 等回測 僅追蹤分類。
-  - 保留非過熱普通強勢準備，例如 突破回測，仍可在 R3 進攻偏熱 下回傳 可準備。
-  - 報文版本由 v20.4.25 升為 v20.4.26。
-  - 補/更新可重跑 probe，覆蓋過熱 RR blocker、HOT、過熱降溫、EXTREME 漲停與普通強勢準備不誤降級。
+  - 最小修復 Final Re-QA blocked 點：source-missing / fail-closed 第三則 summary 不再輸出空執行占位：
+      - 移除 ✅ 今日盤中交易執行
+      - 移除 無新增下單
+      - 移除結論行中的 交易執行：無新增下單
+  - 補強 QA 指出的 source_missing_no_empty_execution_placeholder probe，確認 source-missing 第三則 brief 與全訊息都不含空執行占位。
+  - 保留現有候選 diff 的既有契約：主要 Telegram summary path 不顯示 無新增下單、交易執行 0、僅追蹤 0、淘汰 0；全 0 未持倉漏斗仍隱藏。
 
   ## 修改檔案
 
   - core/generator.py
   - tests/test_generator_report.py
+  - 既有候選 diff 仍包含：presentation/report.py、services/stock_api.py、tests/test_stock_api_history.py
+  - CHANGELOG.md 進場前已 dirty；依本輪指令未直接編輯。
 
   ## 最小改動策略
 
-  - 只在 unheld_funnel_state() 內調整分類 gate，沿用既有 tomorrow_watch_state()、should_show_overheat_rr_blocker()、strong_prepare_bucket() 與既有 funnel buckets。
-  - 未新增 funnel bucket，未重構 summary / card renderer。
-  - 測試只同步受分類與版本影響的既有報文斷言，並新增直接分類 probe。
+  - 只改 source-missing 專用 summary 手寫文案與對應測試斷言。
+  - 不重構 formatter，不改 message list 整體順序，不擴大第 4/5/6/7/9/11/12 已通過反證範圍。
+  - 不新增 production 讀寫、不 backfill、不 live Telegram。
 
   ## 契約影響
 
-  - unheld_funnel_state() public helper 行為變更：
-      - 過熱 / RR blocker / 過熱降溫 未持倉不再回傳 可準備。
-      - 這類標的會計入 等冷卻 或 等回測，因此 summary、漏斗 count、詳情索引、卡片排序會同步反映為僅追蹤。
-  - Telegram header / report context version 同步為 v20.4.26。
-  - 未改 payload shape、DB contract、message list 數量、RR 顯示公式或 strategy decision。
+  - source-missing fail-closed summary path：不再輸出空的「今日盤中交易執行 / 無新增下單」區塊。
+  - 一般盤中 summary：仍可在有實際 execution lines 時顯示 ✅ 今日盤中交易執行。
+  - payload、DB contract、public helper 回傳結構未新增變更。
 
   ## 直接消費者同步
 
-  - build_unheld_funnel()、today_conclusion_text()、format_execution_checklist()、format_unheld_funnel()、detail_index_text() 皆透過 unheld_funnel_state() 自動同步新分類。
-  - formatTelegramUnheldCard() 透過同一 helper 顯示 等冷卻 / 等回測 卡片主狀態，避免卡片過熱但漏斗仍算可準備。
-  - format_strong_prepare_summary() 只列仍屬 可準備 的普通準備標的，過熱標的不再列入強勢準備摘要。
+  - format_brief_data_evidence_message() 消費的 source-missing summary input 已同步移除空占位。
+  - tests/test_generator_report.py 已補 source-missing 手機閱讀 probe，防止第三則 summary 回退。
+  - Telegram Owner 手機閱讀路徑同步：fail-closed 只表達來源不足與不產生交易建議，不再像執行區塊。
 
   ## 未影響模組
 
-  - 未改 services/analysis.py
-  - 未改 strategy decision / action 產生邏輯
-  - 未改 RR 計算公式或 blocker 定義
-  - 未改 DB schema / write path / backfill
-  - 未執行 live Telegram 或 Supabase write
-  - 未處理其他清單項
+  - 未改 strategy decision。
+  - 未改 RR 公式。
+  - 未改 DB schema / RLS / grant / policy / role / index / constraint。
+  - 未改 DB write path。
+  - 未執行 production DML / backfill。
+  - 未執行 live Telegram delivery。
+  - 未 commit / push。
 
   ## 已跑自檢命令
 
-  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py -k "overheat_prepare or overheat_blocker or r3_hot_market_adds_prepare_layer
-    or low_volume_limit_up_prepare or r3_hot_prepare_overflow or mobile_a1_unheld or unheld_funnel_groups"：6 passed，13 warnings
-  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py：112 passed，221 warnings
-  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py tests/test_generator_report.py：passed
-  - git diff --check：passed
+  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_stock_api_history.py
+      - 結果：collection failed，原因為 x86_64 Python 載入 arm64 pydantic_core 架構不相容。
+  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py tests/test_stock_api_history.py
+      - 結果：125 passed，225 warnings。
+  - git diff --check
+      - 結果：passed。
 
   ## 殘留風險
 
-  - 本輪只修未持倉 funnel 過熱 prepare 分類；未審全報文所有「追高 / 追蹤」文案。
-  - warnings 皆為既有第三方 deprecation / Python 版本警告，非本輪新增。
-  - Tech 自檢不代表 QA 通過。
+  - 本輪只代表 Tech 自檢通過，不宣告 QA 通過。
+  - warnings 為既有第三方 deprecation / Python 版本提示，未在本輪處理。
+  - worktree 仍有進場前已存在的 CHANGELOG.md dirty 狀態，未由本輪直接編輯。
 
   ## 旁支待辦
 
-  - 其他 Owner 清單項另開任務處理。
-  - 若後續要統一「過熱待回測」與 等冷卻 / 等回測 的可見命名，可另開文案/漏斗命名任務。
-  - 若要完整驗 production 實際報文，需由 QA / Architect 依標準 read-only artifact 或 runner 流程處理，不在本輪 Tech 實作內。
+  - 無本輪新增旁支。
+  - 既有清單外報文文案盤點、production source-of-truth 治理仍應另開任務。

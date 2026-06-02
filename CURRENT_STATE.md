@@ -6,7 +6,7 @@
 
 - 專案：台股策略 Telegram 報文機器人。
 - 正式結果以 git / runner 產生報文為準。
-- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.25`。
+- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.27`。
 - 固定 8 份 Markdown 不刪：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 - Architect 是總控；產品 / 策略 / 報文 bug 或 feature 預設走 PM -> Tech -> QA。
 - 跨日狀態、已執行交易、歷史 evidence 必須來自 production DB 或 Owner 指定持久來源；local/runtime/worktree 不能當跨日記憶。
@@ -28,31 +28,47 @@
 
 ## Latest Completed Handoff
 
+- task_id：`20260602-risk-codex-fixlist-closeout-4-12`
+- 狀態：done / QA passed；commit / push 與 Git completion gate 待 final 收口。
+- 問題：Owner 要「直接全部完成，不要一直拆」，把 Codex 修復清單剩餘可直接修項第 4/5/6/7/9/12 與第 8/10/11 回歸一次收口。
+- 修正：
+  - strategy_sample 狀態改以結構化 `structured_status` 判定；legacy 中文文字 summary fail closed，不再靠 grep 反推。
+  - market/theme 可靠度由 `evidence_trend` 指標派生，不再硬寫「中等」；strategy sample 資料依據去重。
+  - cross_day source status 不足時，不用 previous_state / dedupe_guard 做確認結論。
+  - `LAST_OHLCV` fallback payload 帶 `stale / data_date / fallback_source`，報文提示非當日資料。
+  - Summary 降噪：同義新倉 / 無有效進場壓縮；空執行區塊、`無新增下單`、`交易執行 0`、全 0 未持倉漏斗不顯示。
+  - 持倉排序 / 主行動回歸；已突破負百分比改成人話 `已突破，位於突破區上方`。
+- 版本：`core/generator.py` 升為 `v20.4.27`。
+- 驗證：QA `通過`；主 repo `tests/test_generator_report.py tests/test_stock_api_history.py` 125 passed，225 warnings；`py_compile` passed；`git diff --check` passed。
+- QA 反證：legacy strategy text fail closed、cross_day insufficient 無確認語氣、LAST_OHLCV stale 可見、負突破百分比不出現、全 0 漏斗與 source-missing 空交易區塊不出現。
+- 流程復盤：第一輪 QA blocked 是 handoff stale `CHANGELOG.md`；第二、三輪 QA 連續抓到第 10 項殘留（全 0 漏斗、source-missing 空交易區塊）。這是 `runner_gap` + `mobile_reading` + `QA反證`，同類任務必須讓 QA 直接 probe source-missing / 全 0 場景，不能只看一般報文路徑。
+- 邊界：未改 strategy decision、RR 公式、DB schema/write path、production DML/backfill、live Telegram；B/C 類仍待研究 / PM 判定。
+
+## Previous Completed Handoff
+
 - task_id：`risk_patch_unheld_funnel_overheat_prepare_fix`
-- 狀態：done / committed；push 與 Git completion gate 待 final 收口。
+- 狀態：done / committed / pushed。
 - commit：`d432545 exclude overheated stocks from prepare funnel`。
 - 問題：Owner 清單第 3 項指出過熱 / RR blocker / `過熱降溫` 未持倉仍被漏斗算進 `可準備 / 不可追高觀察 N（不可買）`，卡片、漏斗、summary 容易自相矛盾。
 - 修正：`unheld_funnel_state()` 在 `should_show_overheat_rr_blocker(result, holding=False)`、`heat_state HOT/EXTREME` 或 `strong_prepare_bucket == 過熱降溫` 時，不再回傳 `可準備`；改入既有 `等冷卻 / 等回測` 僅追蹤。普通非過熱突破回測仍保留 `可準備`。
 - 版本：`core/generator.py` 升為 `v20.4.26`。
 - 驗證：QA `通過`；主 repo `tests/test_generator_report.py` 112 passed，221 warnings；`py_compile core/generator.py tests/test_generator_report.py` passed；`git diff --check` passed。QA 補同份報文手機閱讀反證：summary / 漏斗 count / 卡片標題 / 強勢準備同源。
-- 邊界：未改 strategy decision、RR 公式 / blocker 定義、DB schema/write、production DML/backfill、live Telegram；未處理清單其他項。
-- 清單狀態：第 1、2、3 已完成；第 4、5、6、7、9、12 未完成；第 8、10、11 有歷史部分修復但未作全量清單收口；B/C 類仍待研究 / PM 判定。
+- 邊界：未改 strategy decision、RR 公式 / blocker 定義、DB schema/write、production DML/backfill、live Telegram。
 
-## Previous Completed Handoff
+## Earlier Completed Handoff
 
 - task_id：`risk_patch_score_source_status_display_gate_20260602`
-- 狀態：done / committed；push 與 Git completion gate 待 final 收口。
+- 狀態：done / committed / pushed。
 - commit：`ffbaf70 gate score display by evidence status`。
 - 問題：Owner 清單第 1 項指出，卡片在 `stock.<name>.score.source_status` 非 available / derived 時仍可能顯示 `S 5/5`、`極強`、`突破確認` 等高置信文字。
 - 修正：`presentation/report.py` 新增 score source gate；持倉 / 未持倉卡顯示 S 分數或依賴 score/strength 的高置信盤面文字前讀 `stock.<name>.score.source_status`。score 不足時顯示 `S 證據不足` 或 `S 不可用`，盤面降級為 `強弱證據不足｜待確認`；price / RR / volume 可用時不被誤藏。
 - 驗證：QA `通過`；主 repo `tests/test_generator_report.py` 111 passed，221 warnings；`py_compile presentation/report.py tests/test_generator_report.py` passed；`git diff --check` passed。QA 額外反證缺 `stock.TEST.score` manifest 時 fail closed 且不誤傷 price/RR。
-- 邊界：未改 strategy decision、RR 公式、DB schema/write、production DML/backfill、live Telegram；未處理清單其他項。
-- 清單狀態：第 1 已完成；第 2 已完成；第 3 後續已由 `risk_patch_unheld_funnel_overheat_prepare_fix` 收口；第 4、5、6、7、9、12 未完成；第 8、10、11 有歷史部分修復但未作全量清單收口；B/C 類仍待研究 / PM 判定。
+- 邊界：未改 strategy decision、RR 公式、DB schema/write、production DML/backfill、live Telegram。
 
-## Earlier Completed Handoff
+## Older Completed Handoff
 
 - task_id：`evidence_gate_p1_p2_p4_20260602`
-- 狀態：done / committed；push 與 Git completion gate 待 final 收口。
+- 狀態：done / committed / pushed。
 - commit：`9b1e084 fix evidence gate report conflicts`。
 - 問題：Owner 指出 evidence_manifest / 資料依據已宣告 strategy_sample、ledger、market/theme 等證據不足或只作背景，但卡片仍顯示 S 5/5、極強、突破確認、精確今日買賣 / 股數 / 均價與可行動 funnel，形成「滿分結論 vs 不足證據」。
 - 修正範圍：只處理 P1/P2/P4。

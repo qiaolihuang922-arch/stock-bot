@@ -15,6 +15,13 @@
 
 ## Completed
 
+- `20260602-risk-codex-fixlist-closeout-4-12`:
+  - 問題：Owner 要將 Codex 修復清單剩餘可直接修項一次收口，不再單點拆分；範圍含 strategy_sample 結構化狀態、資料依據去重 / 可靠度、cross_day 記憶門控、LAST_OHLCV stale、簡報降噪、0-count 隱藏、持倉排序 / 主行動、已突破負百分比格式。
+  - 結果：報文版本升 `v20.4.27`；legacy strategy text fail closed，不再用中文 summary 反推；market/theme reliability 由 evidence_trend 派生；cross_day source 不足不產生確認結論；LAST_OHLCV fallback 明示 stale/date；source-missing / 全 0 場景不再輸出空交易區塊或全 0 漏斗；已突破負百分比改成人話。
+  - 可重跑補強：新增 / 更新 `tests/test_generator_report.py` 與 `tests/test_stock_api_history.py` probes，覆蓋 legacy strategy text、cross_day insufficient、LAST_OHLCV stale、source-missing 空占位、全 0 漏斗、負突破百分比與手機閱讀降噪；主 repo 125 passed。
+  - QA 反證：第一輪 QA blocked handoff stale `CHANGELOG.md`；第二輪 blocked 全 0 未持倉漏斗；第三輪 blocked source-missing 空交易區塊；Final Re-QA 通過。這證明 QA 反證有效，不能用一般路徑測試代替 source-missing / empty-state 手機閱讀 probe。
+  - 規則治理：`runner_gap` + `mobile_reading` + `evidence_chain` + `QA反證`。後續同類報文修復要把 empty-state、source-missing、legacy-text、stale-fallback 放進驗收矩陣；runner 仍需改善 Tech answer -> main `CHANGELOG.md` 同步，避免 stale handoff 重複阻塞。
+  - 邊界：不改 strategy decision、RR 公式、DB schema/write path、production DML/backfill、live Telegram；B/C 類研究項仍另開。
 - `risk_patch_unheld_funnel_overheat_prepare_fix`:
   - 問題：Owner 清單第 3 項指出過熱 / RR blocker / `過熱降溫` 未持倉仍被漏斗算進 `可準備`，造成 summary、漏斗 count、卡片標題與強勢準備摘要互相矛盾。
   - 結果：`unheld_funnel_state()` 新增過熱 prepare gate；RR overheat blocker、HOT/EXTREME、`過熱降溫` 未持倉不再回傳 `可準備`，改入既有 `等冷卻 / 等回測` 僅追蹤。普通非過熱突破回測仍保留 `可準備`。

@@ -54,6 +54,20 @@ def get_last_ohlcv(code):
     return LAST_OHLCV.get(str(code))
 
 
+def last_ohlcv_fallback_payload(code):
+    cached = LAST_OHLCV.get(str(code))
+    if not cached:
+        return None
+    payload = dict(cached)
+    trade_date = payload.get("trade_date")
+    payload.update({
+        "stale": True,
+        "data_date": trade_date.isoformat() if hasattr(trade_date, "isoformat") else trade_date,
+        "fallback_source": "LAST_OHLCV",
+    })
+    return payload
+
+
 def parse_twse_date(value):
     try:
         parts = str(value).split("/")
