@@ -16,7 +16,7 @@
 
 ## Recently Done
 
-- `pending`｜`per_stock_evidence_score_funnel_p0_p3_20260602`｜risk_patch｜不升版仍維持 `v20.4.31`：strategy setup sample 成為 per-stock 分量；缺 explicit setup fail closed；弱勢 / 失敗 / EXTREME / technical=0 不吃正向 boost；旺宏 / 聯電 modifier 不同；B5 Summary / 漏斗 / card 一致；QA passed；主 repo targeted tests 4 passed。
+- `0d20b35`｜`per_stock_evidence_score_funnel_p0_p3_20260602`｜risk_patch｜不升版仍維持 `v20.4.31`：strategy setup sample 成為 per-stock 分量；缺 explicit setup fail closed；弱勢 / 失敗 / EXTREME / technical=0 不吃正向 boost；旺宏 / 聯電 modifier 不同；B5 Summary / 漏斗 / card 一致；QA passed；主 repo targeted tests 4 passed。
 - `c4c8b0e`｜`fix_market_theme_evidence_gate_v20_4_31`｜normal_patch｜不升版仍維持 `v20.4.31`：market/theme confirmed_trend 不再疊 15 日二次門檻；per-stock 缺 market_theme fallback report-level market evidence；英業達卡片顯示 `證據 +8%（supporting）` 而非不適用；strategy 跨版本回測 filter 回歸通過；QA passed；主 repo targeted tests 4 passed。
 - `32d7422`｜`evidence-wiring-and-funnel-consistency-20260602`｜risk_patch｜不升版仍維持 `v20.4.31`：strategy evidence loader 移除 version filter，跨版本 outcomes 可進樣本；market/theme string summary path 傳入 trade_date 並消費 confirmed evidence_trend；D2/B5 `等冷卻 / 隔日確認` 漏斗與卡片 rendered message 一致；QA passed；主 repo targeted tests 4 passed。
 - `b83747a`｜`evidence-per-stock-reliability-funnel-phase3-closeout-20260602`｜major｜v20.4.31：evidence score 改為真正 per-stock；per-stock market/theme 與 strategy 缺 payload 時不 fallback report-level；可靠度 insufficient 不再輸出支持語氣；supporting/partial modifier cap；source-error fail closed；`隔日確認` 納入 `僅追蹤` aggregate；Phase 3 guard 回歸；QA passed；主 repo combined targeted suite 191 passed。
@@ -29,7 +29,7 @@
 
 ## Next Action
 
-- 本輪 per-stock evidence score / funnel closeout 已 QA passed，待 commit / push / completion gate 後把 `pending` hash 補上。
+- 本輪 per-stock evidence score / funnel closeout 已 QA passed 並 committed，待 push / completion gate。
 - 下一步若繼續，優先看 production evidence 實際資料品質 / 長期樣本分布，而不是再修框架或文案。
 - 開新任務前先看 `task_md_holds`，不要用 `TASK.md` 內部舊狀態反推當前看板。
 - 報文 / 策略 / 產品修復仍走 PM -> Tech -> QA；流程治理文件可由 Architect 直接改。
