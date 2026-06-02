@@ -244,7 +244,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         title_action = "不可行動"
     elif funnel_state == "可準備":
         title_icon = "👀"
-        title_action = "可準備"
+        title_action = deps["unheld_non_actionable_prepare_label"](data)
     elif state in ["等冷卻", "等回測"]:
         title_icon = "⏳"
         title_action = state
@@ -487,7 +487,7 @@ def _position_candidate_data_basis_line(report_context, holding_items=None, watc
         rejected_count = len(funnel.get("淘汰") or [])
         funnel_text = (
             f"未持倉 {watch_count} 檔已分類：可買 {buy_count}、"
-            f"可準備 {prepare_count}、僅追蹤 {tracking_count}、淘汰 {rejected_count}；"
+            f"不可追高觀察 {prepare_count}、僅追蹤 {tracking_count}、淘汰 {rejected_count}；"
         )
     elif watch_count:
         funnel_text = f"未持倉 {watch_count} 檔已分類；"

@@ -6,7 +6,7 @@
 
 - 專案：台股策略 Telegram 報文機器人。
 - 正式結果以 git / runner 產生報文為準。
-- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.24`。
+- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.25`。
 - 固定 8 份 Markdown 不刪：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 - Architect 是總控；產品 / 策略 / 報文 bug 或 feature 預設走 PM -> Tech -> QA。
 - 跨日狀態、已執行交易、歷史 evidence 必須來自 production DB 或 Owner 指定持久來源；local/runtime/worktree 不能當跨日記憶。
@@ -28,6 +28,16 @@
 
 ## Latest Completed Handoff
 
+- task_id：`20260602_intraday_v20_4_24_a1_a2_a3_hard_conflicts`
+- 狀態：QA `通過`；主 repo 已吸收 scoped diff，等待 commit / push / Git completion gate。
+- 問題：06/02 盤中 `v20.4.24` 報文有三個手機閱讀硬衝突：未持倉不可買 / 不可追高仍以推薦感 `可準備` 主標籤呈現；同一持倉主行動在卡片 / 決策 / 風控檢查混用；持倉排序在卡片 / 風控檢查 / 詳情索引不一致。
+- 修正：報文版本升 `v20.4.25`；不可買未持倉顯示為 `不可追高觀察` / `過熱待回測` / `待回測`；一般續抱持倉可見主行動收斂為 `續抱觀察`；詳情索引的持倉欄位改列 ordered holding names，與持倉卡片和風控檢查同序。
+- 驗證：QA `通過`；主 repo `tests/test_generator_report.py` 106 passed，217 warnings；`py_compile` / `git diff --check` passed；QA 額外 rendered-message probe 確認 3 則 message、未持倉 title 無 `可準備 / 可買 / 推薦`、持倉 card/control/index order 一致、同一持倉主行動三處一致。
+- 邊界：未改 `services/analysis.py`、strategy decision、RR 計算、holding_status、DB schema/write、live Telegram；降噪第二批未處理，另開。
+- 流程復盤：auto runner 第一次被 Tech worktree stale diff 阻塞，已保存 residual patch artifact；Tech agent 前兩次長時間停在分析階段，第三次以「先補紅測再最小實作」指令完成。這是 `runner_gap`，後續需強化 Tech runner 的進度/超時與 worktree hygiene。
+
+## Previous Completed Handoff
+
 - task_id：`fix-bot-workflow-may-backfill-guard-20260602`
 - 狀態：done / committed / pushed；Git completion gate passed。
 - commit：`c6da0bf skip may backfill in bot workflow`。
@@ -36,7 +46,7 @@
 - 驗證：QA `通過`；`tests/test_workflow_runtime_config.py tests/test_market_theme_source_backfill.py` 21 passed；QA 補 fake python success path，確認 backfill modes 仍執行且 guard failure 不被吞。
 - 邊界：未改 `scripts/backfill_market_theme_sources.py` production guard、DB schema/write、Telegram 報文、live delivery；Node.js 20 deprecation warning 非本輪目標。
 
-## Previous Completed Handoff
+## Earlier Completed Handoff
 
 - task_id：`holding-weak-observation-clock-20260601`
 - 狀態：done / committed / pushed；Git completion gate passed。當前沒有 Active Tech/QA 任務，實際看板以 `DISPATCH.md` 為準。

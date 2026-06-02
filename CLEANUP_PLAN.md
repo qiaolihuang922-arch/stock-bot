@@ -15,6 +15,12 @@
 
 ## Completed
 
+- `20260602_intraday_v20_4_24_a1_a2_a3_hard_conflicts`:
+  - 問題：Owner 指出 06/02 盤中 v20.4.24 報文三個硬衝突：不可買 / 不可追高未持倉仍用推薦感 `可準備` 主標籤；持倉主行動在卡片 / 決策 / 風控檢查混用；持倉排序在卡片 / 風控 / 索引不一致。
+  - 結果：報文版本升 `v20.4.25`；不可買未持倉改用 `不可追高觀察` / `過熱待回測` / `待回測`；一般續抱持倉主行動收斂為 `續抱觀察`；詳情索引持倉欄位改列 ordered holding names，和卡片 / 風控同序。
+  - 可重跑補強：新增 A1/A2/A3 mobile reading regression tests；主 repo `tests/test_generator_report.py` 106 passed；QA 補 rendered-message probe，按手機順序反證未持倉 title 無 `可準備 / 可買 / 推薦`，持倉 card/control/index order 與主行動一致。
+  - 邊界：未改 `services/analysis.py`、strategy decision、RR、holding_status、DB schema/write、live Telegram；Owner 的降噪第二批仍待另開。
+  - 流程治理：`runner_gap` + `mobile_reading`。auto runner 先被 stale Tech diff 阻塞，Tech agent 又兩次停在分析階段；本輪靠保存 residual artifact、明確丟棄 stale worktree、第三次改成「先紅測再最小實作」完成。後續需補 Tech runner progress/timeout 與 worktree hygiene，避免空轉。
 - `fix-bot-workflow-may-backfill-guard-20260602`:
   - 問題：GitHub Actions default `run_mode=bot` 仍執行 May-only market/theme evidence write；2026-06-02 時 source date 超出 May range，production guard 正確 fail closed，但正常 bot 被阻塞。
   - 結果：workflow 的 May market/theme evidence backfill step 只在 `backfill_may` / `backfill_and_bot` 執行；`bot` 模式明確 log skipped，不呼叫 write script。
