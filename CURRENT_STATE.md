@@ -28,6 +28,18 @@
 
 ## Latest Completed Handoff
 
+- task_id：`risk_patch_unheld_funnel_overheat_prepare_fix`
+- 狀態：done / committed；push 與 Git completion gate 待 final 收口。
+- commit：`d432545 exclude overheated stocks from prepare funnel`。
+- 問題：Owner 清單第 3 項指出過熱 / RR blocker / `過熱降溫` 未持倉仍被漏斗算進 `可準備 / 不可追高觀察 N（不可買）`，卡片、漏斗、summary 容易自相矛盾。
+- 修正：`unheld_funnel_state()` 在 `should_show_overheat_rr_blocker(result, holding=False)`、`heat_state HOT/EXTREME` 或 `strong_prepare_bucket == 過熱降溫` 時，不再回傳 `可準備`；改入既有 `等冷卻 / 等回測` 僅追蹤。普通非過熱突破回測仍保留 `可準備`。
+- 版本：`core/generator.py` 升為 `v20.4.26`。
+- 驗證：QA `通過`；主 repo `tests/test_generator_report.py` 112 passed，221 warnings；`py_compile core/generator.py tests/test_generator_report.py` passed；`git diff --check` passed。QA 補同份報文手機閱讀反證：summary / 漏斗 count / 卡片標題 / 強勢準備同源。
+- 邊界：未改 strategy decision、RR 公式 / blocker 定義、DB schema/write、production DML/backfill、live Telegram；未處理清單其他項。
+- 清單狀態：第 1、2、3 已完成；第 4、5、6、7、9、12 未完成；第 8、10、11 有歷史部分修復但未作全量清單收口；B/C 類仍待研究 / PM 判定。
+
+## Previous Completed Handoff
+
 - task_id：`risk_patch_score_source_status_display_gate_20260602`
 - 狀態：done / committed；push 與 Git completion gate 待 final 收口。
 - commit：`ffbaf70 gate score display by evidence status`。
@@ -35,9 +47,9 @@
 - 修正：`presentation/report.py` 新增 score source gate；持倉 / 未持倉卡顯示 S 分數或依賴 score/strength 的高置信盤面文字前讀 `stock.<name>.score.source_status`。score 不足時顯示 `S 證據不足` 或 `S 不可用`，盤面降級為 `強弱證據不足｜待確認`；price / RR / volume 可用時不被誤藏。
 - 驗證：QA `通過`；主 repo `tests/test_generator_report.py` 111 passed，221 warnings；`py_compile presentation/report.py tests/test_generator_report.py` passed；`git diff --check` passed。QA 額外反證缺 `stock.TEST.score` manifest 時 fail closed 且不誤傷 price/RR。
 - 邊界：未改 strategy decision、RR 公式、DB schema/write、production DML/backfill、live Telegram；未處理清單其他項。
-- 清單狀態：第 1 已完成；第 2 已完成；第 3 部分完成但「過熱 prepare 口徑」仍需單獨驗；第 4、5、6、7、9、12 未完成；第 8、10、11 有歷史部分修復但未作全量清單收口；B/C 類仍待研究 / PM 判定。
+- 清單狀態：第 1 已完成；第 2 已完成；第 3 後續已由 `risk_patch_unheld_funnel_overheat_prepare_fix` 收口；第 4、5、6、7、9、12 未完成；第 8、10、11 有歷史部分修復但未作全量清單收口；B/C 類仍待研究 / PM 判定。
 
-## Previous Completed Handoff
+## Earlier Completed Handoff
 
 - task_id：`evidence_gate_p1_p2_p4_20260602`
 - 狀態：done / committed；push 與 Git completion gate 待 final 收口。
@@ -52,7 +64,7 @@
 - 邊界：未改 `services/analysis.py`、strategy decision、RR 公式、DB schema/write、production DML/backfill、live Telegram；P3/P5/P6/P7/P8 未處理。
 - 流程復盤：第一輪 QA blocked 是有效攔截，抓到 strategy_sample source-error 被誤歸因為 price/OHLCV/RR failure 且價格被藏掉；第二輪 Tech 先漏 P2，Architect 未送 QA，改用 `CLEAN_TECH_WORKTREE=0` 在候選上補 P2。這是 `QA反證` + `Tech同步` + `runner_gap`，後續同類任務要把 P1/P2/P4 三條 probe 都列為 stop condition，不讓局部通過冒充整輪完成。
 
-## Earlier Completed Handoff
+## Older Completed Handoff
 
 - task_id：`20260602_intraday_v20_4_24_a1_a2_a3_hard_conflicts`
 - 狀態：done / committed / pushed；Git completion gate passed。
@@ -63,7 +75,7 @@
 - 邊界：未改 `services/analysis.py`、strategy decision、RR 計算、holding_status、DB schema/write、live Telegram；降噪第二批未處理，另開。
 - 流程復盤：auto runner 第一次被 Tech worktree stale diff 阻塞，已保存 residual patch artifact；Tech agent 前兩次長時間停在分析階段，第三次以「先補紅測再最小實作」指令完成。這是 `runner_gap`，後續需強化 Tech runner 的進度/超時與 worktree hygiene。
 
-## Older Completed Handoff
+## Archived Completed Handoff
 
 - task_id：`fix-bot-workflow-may-backfill-guard-20260602`
 - 狀態：done / committed / pushed；Git completion gate passed。
@@ -73,7 +85,7 @@
 - 驗證：QA `通過`；`tests/test_workflow_runtime_config.py tests/test_market_theme_source_backfill.py` 21 passed；QA 補 fake python success path，確認 backfill modes 仍執行且 guard failure 不被吞。
 - 邊界：未改 `scripts/backfill_market_theme_sources.py` production guard、DB schema/write、Telegram 報文、live delivery；Node.js 20 deprecation warning 非本輪目標。
 
-## Archived Completed Handoff
+## Legacy Completed Handoff
 
 - task_id：`holding-weak-observation-clock-20260601`
 - 狀態：done / committed / pushed；Git completion gate passed。當前沒有 Active Tech/QA 任務，實際看板以 `DISPATCH.md` 為準。

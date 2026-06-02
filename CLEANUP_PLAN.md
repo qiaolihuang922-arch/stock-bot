@@ -15,6 +15,13 @@
 
 ## Completed
 
+- `risk_patch_unheld_funnel_overheat_prepare_fix`:
+  - 問題：Owner 清單第 3 項指出過熱 / RR blocker / `過熱降溫` 未持倉仍被漏斗算進 `可準備`，造成 summary、漏斗 count、卡片標題與強勢準備摘要互相矛盾。
+  - 結果：`unheld_funnel_state()` 新增過熱 prepare gate；RR overheat blocker、HOT/EXTREME、`過熱降溫` 未持倉不再回傳 `可準備`，改入既有 `等冷卻 / 等回測` 僅追蹤。普通非過熱突破回測仍保留 `可準備`。
+  - 可重跑補強：新增 / 更新過熱 RR blocker、HOT、過熱降溫、EXTREME 漲停、普通強勢準備不誤降級 probes；主 repo `tests/test_generator_report.py` 112 passed。
+  - QA 反證：同份報文中熱RR / 熱標籤 均為 `等冷卻`，不在強勢準備摘要；普通強勢仍為 `可準備`；summary、漏斗、卡片同源。
+  - 邊界：不改 strategy decision、RR 公式 / blocker 定義、DB schema/write、production DML/backfill、live Telegram。
+  - 流程治理：`mobile_reading` + `evidence_chain`。漏斗修正要同時驗 summary count、強勢準備摘要、卡片標題，不能只驗 helper return。
 - `risk_patch_score_source_status_display_gate_20260602`:
   - 問題：Owner 清單第 1 項指出 S 分數 / 強弱文字缺 source gate，score 不足時仍可能在卡片顯示 `S 5/5`、`極強`、`突破確認`。
   - 結果：`presentation/report.py` 新增 score source gate；持倉 / 未持倉卡在顯示 S 分數與高置信盤面文字前讀 `stock.<name>.score.source_status`。非 available / derived 時顯示 `S 證據不足` 或 `S 不可用`，盤面降為 `強弱證據不足｜待確認`。
