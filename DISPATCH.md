@@ -16,7 +16,7 @@
 
 ## Recently Done
 
-- `4602ed1`｜`process-dispatch-state-machine-and-profile-boundaries-20260602`｜process_governance｜DISPATCH 三段狀態機、rolling handoff 指針、Architect 角色卡、角色卡機讀 sections / conflict priority / shared boundaries；scope gate passed。
+- `a1ea855`｜`process-dispatch-state-machine-and-profile-boundaries-20260602`｜process_governance｜DISPATCH 三段狀態機、rolling handoff 指針、Architect 角色卡、角色卡機讀 sections / conflict priority / shared boundaries；scope gate passed。
 - `254f909`｜`holding-weak-observation-clock-20260601`｜normal_patch｜弱勢遠離持倉觀察天數 / fail-closed；`v20.4.24`；QA passed；Git completion gate passed。
 - `d19fcdf`｜`pm-normal-limit-up-low-volume-risk`｜normal_patch｜縮量漲停風險提示；`v20.4.23`；QA passed；Git completion gate passed。
 - `2036415`｜`normal_patch_unheld_overheat_rr_zero_display`｜normal_patch｜未持倉過熱 RR `0.00` 顯示改為過熱 blocker；QA passed；Git completion gate passed。
