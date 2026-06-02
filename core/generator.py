@@ -4039,12 +4039,43 @@ def _stock_decision_source_status(report_context, name):
     return "insufficient-data"
 
 
+def _strategy_sample_decision_source_status(report_context):
+    if not report_context:
+        return "available"
+    status = _field_by_key(report_context, "evidence.strategy_sample").get("source_status", "missing-source")
+    if status in {"available", "derived", "not-applicable", "not-used"}:
+        return "available"
+    if status in {"missing-source", "source-error", "insufficient-data", "unresolved-conflict"}:
+        return status
+    return "insufficient-data"
+
+
+def _unheld_combined_source_status(stock_source_status, strategy_source_status):
+    statuses = [stock_source_status, strategy_source_status]
+    if all(status == "available" for status in statuses):
+        return "available"
+    if "unresolved-conflict" in statuses:
+        return "unresolved-conflict"
+    if "source-error" in statuses:
+        return "source-error"
+    if "missing-source" in statuses:
+        return "missing-source"
+    return "insufficient-data"
+
+
+def _unheld_decision_source_status(report_context, name):
+    return _unheld_combined_source_status(
+        _stock_decision_source_status(report_context, name),
+        _strategy_sample_decision_source_status(report_context),
+    )
+
+
 def _unheld_decision_source_eligible(report_context, name):
-    return _stock_decision_source_status(report_context, name) == "available"
+    return _unheld_decision_source_status(report_context, name) == "available"
 
 
-def _unheld_source_status_from_fields(price_status, daily_status, rr_status):
-    statuses = [price_status, daily_status, rr_status]
+def _unheld_source_status_from_fields(price_status, daily_status, rr_status, strategy_status="available"):
+    statuses = [price_status, daily_status, rr_status, strategy_status]
     if all(status in {"available", "derived"} for status in statuses):
         return "available"
     if "unresolved-conflict" in statuses:
@@ -4153,7 +4184,7 @@ def build_report_context(
         price_status = _price_source_status(data)
         daily_status = _daily_source_status(data)
         rr_status = _derived_status(price_status, daily_status)
-        unheld_source_status = _unheld_source_status_from_fields(price_status, daily_status, rr_status)
+        unheld_source_status = _unheld_source_status_from_fields(price_status, daily_status, rr_status, strategy_status)
         score_status = _derived_status(daily_status)
         volume_status = _derived_status(daily_status)
         position_status = _holding_source_status(data)
@@ -5709,6 +5740,7 @@ def _telegram_presentation_deps():
         "plain_label": plain_label,
         "compact_market_line": compact_market_line,
         "_source_status_line": _source_status_line,
+        "_stock_field": _stock_field,
         "_strategy_sample_unavailable": _strategy_sample_unavailable,
         "_strategy_sample_unavailable_card_line": _strategy_sample_unavailable_card_line,
         "compact_backtest_line": compact_backtest_line,
@@ -5716,6 +5748,8 @@ def _telegram_presentation_deps():
         "cross_day_detail_line": cross_day_detail_line,
         "entry_blockers": entry_blockers,
         "_stock_decision_source_status": _stock_decision_source_status,
+        "_strategy_sample_decision_source_status": _strategy_sample_decision_source_status,
+        "_unheld_decision_source_status": _unheld_decision_source_status,
         "is_valid_entry": is_valid_entry,
         "final_label": final_label,
         "tomorrow_watch_state": tomorrow_watch_state,

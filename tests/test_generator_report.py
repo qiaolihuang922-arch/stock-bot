@@ -11,6 +11,7 @@ from core.signal_snapshot import analyze_ohlcv_snapshot
 
 
 VOL_ATTACK = [1000] * 19 + [1800]
+AVAILABLE_STRATEGY_EVIDENCE = "策略樣本：來源可驗證｜樣本 30｜classification backtest source 可用"
 
 
 class FakeTable:
@@ -1186,6 +1187,7 @@ class GeneratorReportTest(unittest.TestCase):
             9.2,
             "🟢 市場偏強",
             datetime(2026, 5, 26),
+            strategy_evidence_summary=AVAILABLE_STRATEGY_EVIDENCE,
             report_phase="盤中",
         )
 
@@ -1198,6 +1200,40 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("📎 詳情索引：持倉 智原｜交易執行 2｜淘汰 0", summary_message(messages))
         self.assertNotIn("未持倉 0 檔僅追蹤", summary_message(messages))
         self.assertNotIn("其餘 0 檔僅追蹤", summary_message(messages))
+
+    def test_v20_4_25_holding_card_hides_precise_execution_when_ledger_insufficient(self):
+        holding_payload = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119],
+            {"shares": 70, "avg_price": 118},
+            price=119,
+            change=1.4,
+        )
+        holding_payload["stock_code"] = "3035"
+        holding_payload["position_events"] = {"event_count": 1, "bought_shares": 70}
+        holding_payload["cross_day_context"] = {
+            "source_status": "insufficient-data",
+            "source_of_truth": ["position_events"],
+            "execution_memory": {},
+        }
+
+        messages = generator.formatTelegramMessages(
+            {"智原": holding_payload},
+            "FULL DETAIL",
+            None,
+            None,
+            "⏳ 觀望",
+            datetime(2026, 5, 26),
+            strategy_evidence_summary=AVAILABLE_STRATEGY_EVIDENCE,
+            report_phase="盤中",
+        )
+        card = card_block(position_message(messages), "【智原 3035】")
+        evidence = evidence_message(messages)
+
+        self.assertIn("今日執行：執行記憶不足，暫不顯示精確執行欄位", card)
+        self.assertNotIn("倉位：70股", card)
+        self.assertNotIn("均價", card)
+        self.assertNotIn("今日 買", card)
+        self.assertIn("執行記憶：資料不足", evidence)
 
     def test_unheld_funnel_prepare_count_has_separate_tracking_parent(self):
         states = {
@@ -1768,6 +1804,7 @@ class GeneratorReportTest(unittest.TestCase):
             9.2,
             "🟢 市場偏強",
             datetime(2026, 5, 26),
+            strategy_evidence_summary=AVAILABLE_STRATEGY_EVIDENCE,
             report_phase="盤中",
         )
 
@@ -1826,6 +1863,7 @@ class GeneratorReportTest(unittest.TestCase):
             9.2,
             "🟢 市場偏強",
             datetime(2026, 5, 26),
+            strategy_evidence_summary=AVAILABLE_STRATEGY_EVIDENCE,
             report_phase="盤中",
         )
 
@@ -3039,6 +3077,7 @@ class GeneratorReportTest(unittest.TestCase):
                 88,
                 "🟡 局部機會",
                 datetime(2026, 5, 28),
+                strategy_evidence_summary=AVAILABLE_STRATEGY_EVIDENCE,
             )
 
         summary = summary_message(messages)
@@ -3978,6 +4017,7 @@ class GeneratorReportTest(unittest.TestCase):
                 88,
                 "🟡 局部機會",
                 datetime(2026, 5, 28),
+                strategy_evidence_summary=AVAILABLE_STRATEGY_EVIDENCE,
             )
 
         summary = summary_message(messages)
@@ -4018,6 +4058,7 @@ class GeneratorReportTest(unittest.TestCase):
                 88,
                 "🟡 局部機會",
                 datetime(2026, 5, 28),
+                strategy_evidence_summary=AVAILABLE_STRATEGY_EVIDENCE,
             )
 
         summary = summary_message(messages)
@@ -4403,9 +4444,9 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotRegex(position, r"數據：RR 2\.73")
         self.assertIn("數據：RR 2.4", unheld)
         self.assertNotIn("資料：現價與 OHLCV 已確認；RR/分數/量能為模型推算", unheld)
-        self.assertIn("未持倉資料只支持分類觀察，不支持直接進場。", brief)
+        self.assertIn("未持倉資料不足時只支持分類觀察，不支持直接進場。", brief)
         self.assertIn("持倉與價格資料可支持風控檢查（持倉 1 檔）", brief)
-        self.assertIn("未持倉 2 檔已分類", brief)
+        self.assertIn("不可追高觀察 2 檔，不列入交易執行", brief)
         self.assertIn("今日買賣、停利與剩餘股數依可驗證紀錄處理", brief)
         self.assertNotIn("交易證據日", rendered)
         self.assertNotIn("策略勝率", rendered)
@@ -4950,7 +4991,7 @@ class GeneratorReportTest(unittest.TestCase):
                 },
             },
             datetime(2026, 5, 31),
-            strategy_evidence_summary=None,
+            strategy_evidence_summary=AVAILABLE_STRATEGY_EVIDENCE,
             report_phase="盤中",
         )
         fields = {item["field_name"]: item for item in context["evidence_manifest"]}
@@ -4960,7 +5001,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertEqual(fields["stock.建準.rr"]["source_status"], "insufficient-data")
         self.assertFalse(fields["stock.建準.rr"]["decision_eligible"])
         self.assertEqual(fields["funnel.unheld_counts"]["source_status"], "insufficient-data")
-        self.assertEqual(fields["evidence.strategy_sample"]["source_status"], "missing-source")
+        self.assertEqual(fields["evidence.strategy_sample"]["source_status"], "available")
         self.assertFalse(fields["tomorrow.plan"]["decision_eligible"])
 
         messages = generator.formatTelegramMessages(
@@ -4976,7 +5017,7 @@ class GeneratorReportTest(unittest.TestCase):
                 },
             },
             datetime(2026, 5, 31),
-            strategy_evidence_summary=None,
+            strategy_evidence_summary=AVAILABLE_STRATEGY_EVIDENCE,
             report_phase="盤中",
         )
         joined = "\n\n".join(messages)
@@ -5244,7 +5285,7 @@ class GeneratorReportTest(unittest.TestCase):
                 },
             },
             datetime(2026, 5, 31),
-            strategy_evidence_summary=None,
+            strategy_evidence_summary=AVAILABLE_STRATEGY_EVIDENCE,
             report_phase="盤中",
         )
         summary = summary_message(messages)
@@ -5266,6 +5307,71 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("S 5/5", invalid_card)
         self.assertNotIn("V 1.5x", invalid_card)
         self.assertNotIn("價格：100", invalid_card)
+
+    def test_v20_4_25_strategy_sample_source_error_blocks_action_without_hiding_available_price(self):
+        payload = {
+            "stock_code": "2421",
+            "price": 100.0,
+            "change": 1.2,
+            "price_source": "realtime",
+            "daily_source": "yahoo",
+            "result": {
+                "decision": "BUY",
+                "action": 0.1,
+                "rr": 2.1,
+                "heat_state": "NORMAL",
+                "trade_state": "READY",
+                "structure_phase": "BREAKOUT_CONFIRM",
+                "price_behavior": "NORMAL",
+                "market_grade": "A",
+                "volume_state": "STRONG",
+                "volume_price_state": "EXPANSION",
+                "structure_state": "STRONG",
+                "entry_quality": "A",
+                "confidence_score": 88,
+                "strength": 95,
+            },
+            "holding": None,
+            "structure_score": 5,
+            "volume_ratio": 1.5,
+            "closes": [90, 91, 92, 93, 94, 95, 96, 97, 98, 100],
+            "volumes": [1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900],
+        }
+
+        messages = generator.formatTelegramMessages(
+            {"建準": payload},
+            "FULL DETAIL",
+            "建準",
+            95,
+            {
+                "market_theme_evidence": {
+                    "status": "confirmed",
+                    "theme_status": "confirmed",
+                    "source_of_truth": "production_db",
+                },
+            },
+            datetime(2026, 5, 31),
+            strategy_evidence_summary="策略樣本讀取失敗｜source-error",
+            report_phase="盤中",
+        )
+        rendered = "\n\n".join(messages)
+        summary = summary_message(messages)
+        card = card_block(unheld_message(messages), "【建準 2421】")
+
+        self.assertIn("新倉：無有效進場", summary)
+        self.assertIn("可買 0", summary)
+        self.assertNotIn("建準｜可買", rendered)
+        self.assertIn("【建準 2421】⛔ 不可行動｜策略樣本來源異常", card)
+        self.assertIn("盤面：證據不足｜待確認", card)
+        self.assertIn("買點：不可買，策略樣本來源讀取異常", card)
+        self.assertIn("原因：策略樣本不可用，高置信 S 分數 / 強弱分類暫不採用", card)
+        self.assertIn("盤中觸發：無有效進場，先補策略樣本證據", card)
+        self.assertIn("數據：RR 2.1｜S 證據不足｜V 1.5x", card)
+        self.assertIn("價格：100.0（+1.20%）", card)
+        self.assertNotIn("價格：不可用（source missing）", card)
+        self.assertNotIn("source missing", card)
+        self.assertNotIn("S 5/5", card)
+        self.assertNotIn("突破確認", card)
 
 
 if __name__ == "__main__":

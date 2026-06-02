@@ -165,12 +165,36 @@ def _strategy_sample_status_line(report_context, deps):
     return "策略樣本：來源可驗證，只作輔助參考，不新增買點。"
 
 
+def _holding_execution_memory_status(report_context, name, deps):
+    if not report_context:
+        return "available"
+    position_status = deps["_stock_field"](report_context, name, "position").get("source_status", "missing-source")
+    ledger_status = deps["_stock_field"](report_context, name, "execution_memory").get("source_status", "missing-source")
+    statuses = [position_status, ledger_status]
+    if all(status == "available" for status in statuses):
+        return "available"
+    if "unresolved-conflict" in statuses:
+        return "unresolved-conflict"
+    if "source-error" in statuses:
+        return "source-error"
+    if "missing-source" in statuses:
+        return "missing-source"
+    return "insufficient-data"
+
+
 def formatTelegramPositionCard(name, data, *, deps, report_context=None):
     holding = data["holding"]
     decision = deps["ensure_holding_decision"](name, data)
     summary_action = deps["position_summary_action"](name, data)
     stock_result = data["result"]
     today_text = deps["holding_today_trade_text"](data, decision) or "無"
+    execution_status = _holding_execution_memory_status(report_context, name, deps)
+    execution_ready = execution_status == "available"
+    execution_line = (
+        f"倉位：{holding['shares']}股｜均價 {deps['price_text'](holding.get('avg_price'))}｜今日 {today_text}"
+        if execution_ready
+        else "今日執行：執行記憶不足，暫不顯示精確執行欄位"
+    )
     dist = deps["card_breakout_distance"](data)
     decision_line, condition_line = deps["holding_detail_decision_lines"](name, data)
     reason_line = deps["holding_reason_line"](name, data)
@@ -187,7 +211,7 @@ def formatTelegramPositionCard(name, data, *, deps, report_context=None):
 
     lines = [
         f"【{deps['stock_title'](name, data)}】📌 {summary_action}｜{deps['signed_pct'](deps['stock_pnl'](data))}",
-        f"倉位：{holding['shares']}股｜均價 {deps['price_text'](holding.get('avg_price'))}｜今日 {today_text}",
+        execution_line,
         f"風控：{deps['holding_risk_text'](decision)}",
         f"盤面：{deps['plain_label'](deps['compact_market_line'](stock_result, dist))}",
         deps["today_buy_holding_context_line"](data) if _report_phase(report_context) == "盤後" else None,
@@ -219,14 +243,21 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     stock_result = data["result"]
     dist = deps["card_breakout_distance"](data)
     blockers = deps["entry_blockers"](stock_result)
-    source_status = deps["_stock_decision_source_status"](report_context, name)
+    stock_source_status = deps["_stock_decision_source_status"](report_context, name)
+    strategy_source_status = deps["_strategy_sample_decision_source_status"](report_context)
+    source_status = deps["_unheld_decision_source_status"](report_context, name)
+    stock_source_eligible = stock_source_status == "available"
+    strategy_source_eligible = strategy_source_status == "available"
+    strategy_source_blocked = stock_source_eligible and not strategy_source_eligible
     source_eligible = source_status == "available"
     valid_entry = deps["is_valid_entry"](stock_result) and source_eligible
     title_label = "買點成立" if valid_entry else (blockers[0] if blockers else deps["final_label"](stock_result))
     state = deps["tomorrow_watch_state"](name, data)
     funnel_state = deps["unheld_funnel_state"](name, data, market_mode=market_mode, report_context=report_context)
     prepare_label, prepare_action = deps["strong_prepare_bucket"](data)
-    if deps["is_valid_entry"](stock_result) and not source_eligible:
+    if deps["is_valid_entry"](stock_result) and strategy_source_blocked:
+        title_label = "策略樣本證據不足" if strategy_source_status != "source-error" else "策略樣本來源異常"
+    elif deps["is_valid_entry"](stock_result) and not source_eligible:
         title_label = "source missing" if source_status in {"missing-source", "insufficient-data"} else source_status
     elif state == "弱勢淘汰":
         title_label = deps["rejected_primary_reason"](stock_result)
@@ -262,7 +293,16 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     wait_text = deps["unheld_entry_wait_text"](stock_result, state, funnel_state)
     detail_size_text = deps["unheld_entry_size_detail_text"](stock_result)
     raw_size_text = deps["entry_size_text"](stock_result)
-    if deps["is_valid_entry"](stock_result) and not source_eligible:
+    if deps["is_valid_entry"](stock_result) and strategy_source_blocked:
+        strategy_reason = {
+            "missing-source": "策略樣本來源缺失",
+            "insufficient-data": "策略樣本樣本不足",
+            "source-error": "策略樣本來源讀取異常",
+        }.get(strategy_source_status, "策略樣本不可用")
+        buy_line = f"買點：不可買，{strategy_reason}"
+        data_line = f"數據：RR {rr_text}｜S 證據不足｜V {data.get('volume_ratio', '-')}x"
+        price_line = deps["price_change_line"](data.get("price"), data.get("change"))
+    elif deps["is_valid_entry"](stock_result) and not source_eligible:
         buy_line = f"買點：不可買，source {source_status}"
         data_line = "數據：RR 不可用｜S 不可用｜V 不可用"
         price_line = "價格：不可用（source missing）"
@@ -295,16 +335,27 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         data_line = f"數據：RR {rr_text}｜S {data.get('structure_score', '-')}/5｜V {data.get('volume_ratio', '-')}x"
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
     trigger_label = "盤中觸發" if report_phase == "盤中" else "明日觸發"
-    tomorrow_line = f"{trigger_label}：{deps['tomorrow_trigger_text'](state, data)}"
+    if deps["is_valid_entry"](stock_result) and strategy_source_blocked:
+        tomorrow_line = f"{trigger_label}：無有效進場，先補策略樣本證據"
+    else:
+        tomorrow_line = f"{trigger_label}：{deps['tomorrow_trigger_text'](state, data)}"
     reason_line = (
-        f"原因：price/OHLCV/RR source {source_status}，不作新倉決策"
+        (
+            "原因：策略樣本不可用，高置信 S 分數 / 強弱分類暫不採用"
+            if strategy_source_blocked
+            else f"原因：price/OHLCV/RR source {source_status}，不作新倉決策"
+        )
         if deps["is_valid_entry"](stock_result) and not source_eligible
         else deps["rejected_transition_reason_line"](stock_result) if funnel_state == "淘汰" else None
     )
     low_volume_limit_up_risk = deps["low_volume_limit_up_risk_text"](data)
     lines = [
         f"【{deps['stock_title'](name, data)}】{title_icon} {title_action}｜{title_label}",
-        f"盤面：{deps['plain_label'](deps['compact_market_line'](stock_result, dist))}",
+        (
+            "盤面：證據不足｜待確認"
+            if strategy_source_blocked
+            else f"盤面：{deps['plain_label'](deps['compact_market_line'](stock_result, dist))}"
+        ),
         buy_line,
     ]
 

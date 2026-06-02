@@ -1,75 +1,52 @@
-# QA_REPORT:
+# QA_REPORT: evidence_gate_p1_p2_p4_20260602
 
   ## 測試範圍
 
-  - 任務尺寸 / QA 分級：normal_patch / L2。驗證限於 06/02 盤中 v20.4.25 A1/A2/A3 報文硬衝突；未擴成 full pytest、replay、backfill、production write 或 live Telegram。
-  - 已讀：TASK.md、CHANGELOG.md、git diff、core/generator.py、presentation/report.py、tests/test_generator_report.py。
+  - 依 TASK.md 驗收 P1 / P2 / P4；任務尺寸 risk_patch、QA level 至少 L2。
+  - 已讀 TASK.md、CHANGELOG.md、git diff，並抽查 core/generator.py、presentation/report.py、tests/test_generator_report.py。
+  - 本輪沒有驗 P3/P5/P6/P7/P8，沒有做 replay/backfill/full repo pytest。
   - 可吸收 diff：CHANGELOG.md、core/generator.py、presentation/report.py、tests/test_generator_report.py。
-  - worktree 殘留：git status --short 只顯示上述 4 個 tracked modified；.qa_tmp/ 有既存暫存 artifacts，但不在 tracked diff 中，本輪不建議整包合併。
-  - 清理 / 瘦身 / refactor 證據表：不適用，本輪不是清理任務。
+  - worktree 殘留：.qa_tmp/ 內有既存 / 測試暫存檔，但未出現在 git status --short；QA 未修改 tracked file。
 
   ## 風險預算與停止條件
 
-  本輪最值得抓的風險：
-
-  1. A1 手機首屏誤讀：不可買 / 不可追高未持倉仍以「可準備 / 可買 / 推薦」主標籤呈現。
-      - 驗證：重跑 Tech tests，另以獨立 render probe 檢查未持倉卡片 title line。
-      - 停止條件：任一不可買卡片主標籤含「可準備 / 可買 / 推薦」即 blocked。
-  2. A2/A3 跨區塊硬衝突：同一持倉主行動或排序在卡片、持倉風控檢查、詳情索引不一致。
-      - 驗證：按手機閱讀順序抽取 holding card order、control order、index order，並抽取每檔 title / decision / control 主行動。
-      - 停止條件：任一序列或主行動不一致即 blocked。
-  3. 範圍外回退：誤改 strategy decision、RR、holding_status、DB schema/write、live Telegram 或 services/analysis.py。
-      - 驗證：git diff --name-only、git diff -- services/analysis.py、diff keyword scan。
-      - 停止條件：出現上述範圍外產品邏輯 / DB / live delivery diff 即 blocked。
+  - 風險 1：strategy_sample source-error 被誤寫成 price/OHLCV/RR source failure，或把可用價格藏掉。驗證：重跑 Tech probe 並補手機閱讀反證；停止條件為卡片仍顯示價格與 RR，但不進可買 / 觸發。
+  - 風險 2：ledger / positions 不足時，持倉卡仍顯示精確股數、均價、今日買賣。驗證：重跑 P2 regression；停止條件為只顯示執行記憶不足，不與精確欄位並存。
+  - 風險 3：RR 不可用 / 過熱或證據不足時，未持倉仍進可買 / 可準備 / 進場觸發，或完整證據正常案例被誤降級。驗證：重跑 renderer 回歸與補正常可買對照；停止條件為不足 fail-closed、完整證據仍可買。
 
   ## 關聯風險掃描
 
-  - TASK / CHANGELOG / diff 一致：CHANGELOG 宣稱修改檔案與 git diff --name-only 一致。
-  - 版本：core/generator.py VERSION 已由 v20.4.24 升至 v20.4.25，符合不得回退契約。
-  - 未改 services/analysis.py：git diff -- services/analysis.py 無輸出。
-  - 未見 DB schema/write、live Telegram delivery、RR 計算、strategy decision 測試期待值變更；實際 diff 集中在報文顯示 helper、formatter、snapshot/probe tests。
-  - 注意：position_summary_action 一般續抱顯示統一成「續抱觀察」，屬 A2 使用者可見主行動收斂，未看到策略 decision 本身改動。
+  - git diff 只改報文 context / renderer / tests / changelog；未見 services/analysis.py、DB schema、migration、Supabase write path、notifier/live Telegram 變更。
+  - core/generator.py 版本常量仍為 v20.4.25，符合 CHANGELOG「未改 header 格式、不升版」說明。
+  - git diff -U0 抽查未命中 calc_rr、def strategy、DB write、Telegram send 相關實質新增；未發現改 strategy decision、RR 公式、DB schema/write、live delivery。
+  - 不是清理 / 瘦身 / refactor 任務，不適用 path / claim / evidence / risk / action 清理表阻塞條件。
 
   ## 跨區塊語意一致性
 
-  Tech 自檢：
-
-  - pytest -q tests/test_generator_report.py：106 passed，217 warnings。
-  - py_compile core/generator.py presentation/report.py tests/test_generator_report.py：passed。
-  - git diff --check：passed。
-  - warnings 來自既有第三方 deprecation / Python 版本提示，非本輪阻塞。
-
-  QA 額外手機閱讀 probe：
-
-  - 渲染 06/02 盤中訊息：message_count 3，仍是持倉 / 未持倉 / summary message list。
-  - 未持倉不可買 / 不可追高 title：
-      - 【台積電 2330】👀 不可追高觀察｜漲停鎖價
-      - 【台達電 2308】👀 過熱待回測｜過熱降溫
-      - title line 未含「可準備 / 可買 / 推薦」。
-  - 持倉排序：
-      - card order：['英業達', '技嘉']
-      - control order：['英業達', '技嘉']
-      - index order：['英業達', '技嘉']
-  - 同一持倉主行動：probe 抽取 title / decision / control 三處一致。
+  - P1/P4：strategy_sample source-error 時，summary 顯示「新倉：無有效進場」、漏斗顯示 可買 0，未持倉卡為「不可行動｜策略樣本來源異常」，觸發為「無有效進場」，資料依據說策略樣本不納入買賣判斷；四者一致。
+  - P2：ledger / execution memory insufficient 時，持倉卡顯示「今日執行：執行記憶不足，暫不顯示精確執行欄位」，測試確認不含 倉位：70股、均價、今日 買；資料依據包含「執行記憶：資料不足」。
+  - 完整 strategy_sample evidence 對照案例仍顯示「新倉：可行動候選 1 檔」、可買 1、未持倉卡「可買」、S 5/5，未被誤降級。
 
   ## 使用者誤讀風險
 
-  - Summary 仍明確輸出「新倉：無有效進場」，未把不可買標的包裝成可行動推薦。
-  - 漏斗與詳情索引使用「不可追高觀察」口徑，不再以主標籤「可準備」承接不可買 / 不可追高數量。
-  - 持倉卡片、風控檢查、詳情索引能用相同序列對回，手機上下滑不會把持倉順序讀錯。
+  - 已按手機閱讀順序檢查 summary -> 未持倉漏斗 -> 卡片 -> 資料依據。
+  - 補充反證：同一 BUY payload、price/OHLCV/RR available、strategy_sample source-error 時，不出現 price/OHLCV/RR source 或 價格：不可用（source missing），仍顯示 價格：100.0（+1.20%） 與 數據：RR 2.1｜S 證據不足｜V
+    1.5x。
+  - 同一 payload 換成完整 strategy evidence 後仍可買，避免使用者把本輪門控誤讀為「所有完整證據買點都被降級」。
 
   ## 質疑與反證
 
-  - 質疑：Tech tests 新增了 A1/A2/A3，但可能只驗單點文字，沒有按手機閱讀順序看整份 rendered messages。
-  - 反證：QA 獨立 render 同時含 2 檔持倉與 2 檔不可買未持倉，按 summary -> holding cards -> unheld cards -> control/index 抽取並比對，通過。
-  - 質疑：CHANGELOG 宣稱未碰策略 / DB / live delivery，可能與 diff 不一致。
-  - 反證：diff name 只有報文與測試相關檔；services/analysis.py 無 diff；未見 schema/write/live delivery 相關檔案變更。
+  - 重跑 Tech 焦點命令：3 passed, 105 deselected, 17 warnings。
+  - 重跑完整 tests/test_generator_report.py：108 passed, 221 warnings。
+  - 重跑 py_compile：core/generator.py presentation/report.py tests/test_generator_report.py passed。
+  - git diff --check passed。
+  - QA 補充手機閱讀 counter-probe passed：source-error 阻斷可行動分類，不歸咎 price/OHLCV/RR，不隱藏價格；完整證據正常可買案例不降級。
 
   ## 未測項目
 
-  - 未跑 full repo pytest、replay、backfill、production read-only smoke；TASK L2 與本輪非目標不要求。
-  - 未驗 live Telegram delivery、DB write path、production source-of-truth；TASK 明確禁止 / 非目標。
-  - 未處理 Owner 所稱降噪第二批、全量詞彙盤點、全報文瘦身；列為後續風險，不阻塞本輪。
+  - 未測 P3/P5/P6/P7/P8。
+  - 未做 production read-only smoke、正式 replay、backfill、live Telegram delivery。
+  - 未跑全 repo pytest；本輪 L2 範圍集中在 tests/test_generator_report.py shared renderer / message list regression。
 
   ## QA 結論
 
