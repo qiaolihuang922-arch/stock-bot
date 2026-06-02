@@ -1,208 +1,363 @@
-# TASK: 精確修復 market/theme evidence decision gate 與 fallback
+# TASK: per-stock evidence 決策分數與 B5 漏斗一致性收口
 
 ## 任務狀態
 
-- task_id: fix_market_theme_evidence_gate_v20_4_31
-- 任務類型: normal_patch
+- task_id: per_stock_evidence_score_funnel_p0_p3_20260602
+- 任務類型: risk_patch
 - 狀態: done
-- 版本建議: 不升版，必須保持 v20.4.31
-- QA 分級建議: L2
-- 主 bug: market/theme evidence 在已 confirmed 的 8 天背景下仍顯示「不適用」，且 per-stock 缺 market_theme 時未 fallback report-level evidence。
+- QA 分級建議: L3
+- 版本建議: 調試期不升版，使用者可見 VERSION 必須保持 v20.4.31
+- 主問題: evidence 目前仍可能被當成 report-level 或文字裝飾，Owner 要求 P0-P3 / M1-M7 一次收斂為「每檔股票自己的 strategy evidence modifier」，並修正資料依據、弱勢封頂與 B5 漏斗三方一致。
 
 ## Owner 問題
 
-目前 core/generator.py 的 _market_theme_evidence_payload 對 reliability_confirmed 使用 observed_days >= 15，與 loader 的 confirmed_trend 定義不一致。Owner 要求 evidence gate 精準修復：
+Owner 要求一直做到完成：讓 evidence 真正成為 per-stock 決策分數，而不是所有股票共用同一個 market/theme boost，或在資料不足、弱勢、失敗、過熱時仍顯示正向 +8%。
 
-- confirmed_trend 已代表 observed >= 3 且近 3 日支持，market/theme 的 confirmed_trend 應直接 decision_eligible，或改用同一個 reliability 函數。
-- basis line 與 score path 的判斷來源需一致。
-- market/theme 是 report-level 市場級證據；個股 per_stock_evidence 缺 market_theme 時，不應直接 unavailable，而應 fallback 到 report-level market_theme_evidence。
-- services/strategy_evidence.py load_strategy_evidence_summary 必須確認已移除 .eq('version', VERSION)，讓歷史 outcomes 可按 trade_date 跨版本進入回測。
-- 不 bump VERSION，保持 v20.4.31。
+本輪需按 M1-M7 執行：
+
+- M1: services/strategy_evidence.py load_strategy_evidence_summary 移除 current version filter，按 trade_date 近 N 日跨版本 outcomes 取樣，並依每股 setup 類別 reject_family / watch_category 計算勝率。
+- M2: compute_evidence_score 拆兩層：market_theme 是市場級共享背景；strategy_sample 是 per-stock 分量，用 name 取該股 setup 類別回測勝率 / MFE-MAE；合成 evidence_score = w_m * market_score + w_s *
+strategy_score(name)，不同 setup 股票的 modifier 必須不同。
+- M3: _market_theme_evidence_payload 在 per-stock 缺 market_theme 時 fallback report-level market/theme，不得 unavailable。
+- M4: 弱勢 / 失敗 / 過熱股不吃正向 boost：decision FAIL、structure_phase FAILED_BREAKOUT / WEAK / DISTRIBUTION、heat_state EXTREME 時 evidence_modifier <= 1.0。
+- M5: reliability 與 score 同一口徑：資料依據判定資料不足 / 不足以判定時 modifier = 1.0；若正向 boost，資料依據必須顯示對應可靠度，不能同時「不足 +8%」。
+- M6: final <= 0 或 technical = 0 時隱藏 / 不顯示 +8%，改顯示不適用或省略。
+- M7: B5 漏斗分類器統一：卡片 tomorrow_watch_state 與 unheld_funnel_state / tracking_only_count / format_unheld_funnel split_parts 一致；漲停反彈統一「隔日確認」或「等回測」，隔日確認單獨計數不併入等冷卻；拆分之和 = 僅
+追蹤總數 = 卡片實際分類。
 
 ## 使用者可見結果
 
-手機閱讀 Telegram / 報文卡片時，像英業達這種 8 天 confirmed market/theme 背景，不應看到「證據不適用」或等價 unavailable 文案。
+手機閱讀 Telegram 報文時：
+
+- 每檔股票的「證據」分數與 modifier 要反映該股 setup 類別的 strategy 樣本，而不是所有股票因同一 market/theme 都拿到同一個 +8%。
+- 突破確認旺宏與突破失敗聯電應顯示不同 evidence score / modifier。
+- 聯電突破失敗、光寶科弱勢不得再顯示正向 +8%。
+- 資料依據若寫「資料不足 / 不足以判定」，同一卡片不得同時顯示正向 boost。
+- final 或 technical 不可用時，不顯示 +8%，只顯示「證據：不適用」或省略該加成。
+- B5 僅追蹤漏斗的 Summary / 漏斗拆分 / 卡片分類一致，不再出現總數與卡片實際分類不一致。
 
 示例輸出形狀：
 
-英業達
-...
-市場/題材證據：+X%（supporting / confirmed）
+旺宏
+狀態：突破確認
+分數：綜合 72｜技術 68｜證據 +6%（strategy: 突破確認樣本可靠）
 ...
 
-不可輸出形狀：
+聯電
+狀態：突破失敗
+分數：綜合 0｜技術 0｜證據：不適用
+資料依據：突破失敗，不套用正向證據加成
 
-英業達
-...
-市場/題材證據：不適用
-...
+僅追蹤 3：
+- 隔日確認 1
+- 等回測 1
+- 等冷卻 1
+
+上述拆分加總必須等於卡片實際 tracking only 分類數。
 
 ## 非目標
 
-- 不重設策略邏輯。
-- 不修改 RR 公式。
-- 不修改買賣、加減碼、停損停利 decision。
-- 不修改 DB schema、RLS、grant、policy、role、index、constraint。
-- 不寫 production DB，不做 backfill，不手寫 production DML。
+- 不改 RR 公式。
+- 不改 DB schema / RLS / grant / policy / role / index / constraint。
+- 不改 DB write path，不做 production write / backfill / 手寫 DML。
 - 不發 live Telegram。
-- 不升版，不改 VERSION。
-- 不做全量 evidence / report formatter 清理。
+- 不改 approved write CLI 或 Phase 3 production 寫入流程。
+- 不升版，VERSION 保持 v20.4.31。
+- 不重設策略核心、不新增買賣規則、不用 evidence 單獨造 BUY。
+- 不把 M1-M7 擴成全量報文重構或 evidence 資料治理工程。
+- 不處理 production evidence 長期資料品質 / 樣本不足分布，除非阻塞本輪驗收。
 
 ## 影響模組與直接消費者
 
 影響模組：
 
-- core/generator.py
-- _market_theme_evidence_payload
-- market/theme evidence payload 建構路徑
-- per-stock market_theme fallback 路徑
 - services/strategy_evidence.py
 - load_strategy_evidence_summary
-- 確認 strategy outcomes 查詢不再被 current VERSION filter 限制
-- 相關可重跑 probe / tests
-- 必須補或更新能驗證本任務三個 regression 點的 probe。
+- strategy outcomes 查詢與 setup 類別聚合。
+- core/generator.py
+- compute_evidence_score(report_context, name)
+- evidence modifier / final confidence 計算路徑。
+- _market_theme_evidence_payload
+- B5 / unheld funnel 分類與統計路徑。
+- presentation/report.py 或既有 rendered message formatter，如卡片 evidence line / 資料依據 line 由該模組輸出。
+- 相關 tests / probes。
 
 直接消費者：
 
-- Telegram / 報文卡片中的 market/theme evidence 顯示。
-- market/theme production trend consumption check。
-- strategy evidence summary 回測 outcomes 消費路徑。
-- QA regression probe。
+- Telegram rendered message。
+- 未持倉卡片 direct card consumer。
+- Summary / 未持倉漏斗 / tracking_only_count。
+- stock.<name>.risk.value 或等價 manifest / payload 中的 score、modifier、funnel state。
+- QA rendered-message probe，不能只驗 helper return value。
 
 ## 輸出契約
 
-### market/theme evidence payload
+### Strategy Evidence Summary
 
-_market_theme_evidence_payload 對 confirmed market/theme evidence 必須符合：
+load_strategy_evidence_summary 必須：
 
-- 當輸入 evidence 已是 confirmed_trend，且 loader 定義已滿足 observed >= 3 與近 3 日支持時：
-- decision_eligible 必須為 true 或等價可消費狀態。
-- 不得再因 observed_days < 15 變成 unavailable。
-- basis line 與 score path 必須使用一致的 reliability / confirmed 判斷來源。
-- 8 天 confirmed evidence 應可顯示 positive/negative score，例如 +X%，並標示 supporting/confirmed 類型，不得顯示「不適用」。
+- 不使用 current VERSION 過濾 outcomes；不得存在 .eq("version", version) 或等價 current-version-only filter。
+- 以 trade_date 近 N 日跨版本歷史取 outcomes。
+- 對每股 setup 類別計算樣本：
+- setup key 來源優先使用 reject_family / watch_category。
+- 若兩者皆缺，必須 fail closed 為 insufficient，不得亂歸類。
+- 輸出至少能支援 sample_count、win_rate、mfe_mae 或等價 strategy score 所需欄位。
+- 有效樣本 > 0 時 status 必須可進入 ready / available 口徑。
+- 樣本不足、source-error、欄位缺失時不得產生正向 modifier。
 
-### per-stock fallback
+### Evidence Score
 
-當個股 per_stock_evidence 沒有該股 market_theme evidence 時：
+compute_evidence_score(report_context, name) 必須分層：
 
-- 必須 fallback 到 report-level market_theme_evidence。
-- fallback 後仍應保留 market/theme 是市場級證據的語意。
-- per-stock 差異只應主要來自 strategy_sample 同類 setup，而不是因缺個股 market_theme 就 unavailable。
+- market_theme: market-level shared background，只提供共享背景分。
+- strategy_sample: per-stock 分量，必須依 name 找到該股 setup 類別回測結果。
+- 合成公式契約：
+- evidence_score = w_m * market_score + w_s * strategy_score(name)
+- 權重沿用既有 evidence weighting pattern；若現有權重不明，Tech 必須保守最小落地並在 CHANGELOG 寫清楚，不得重設策略權重。
+- evidence_modifier 必須由合成後的 per-stock evidence_score 得出。
+- 不同 setup 的股票在 strategy sample 不同時，evidence_score / evidence_modifier 必須可不同。
 
-### strategy evidence summary
+### Modifier Gate
 
-load_strategy_evidence_summary 必須按 trade_date 查歷史 outcomes，且不得重新加入：
+以下任一條件成立時，正向 evidence boost 必須封頂：
 
-.eq("version", VERSION)
+- decision == FAIL
+- structure_phase in {FAILED_BREAKOUT, WEAK, DISTRIBUTION}
+- heat_state == EXTREME
 
-驗收需覆蓋像 v20.4.5 這類有 outcomes 的歷史版本可進入回測 summary。
+契約：
 
-### 版本契約
+- evidence_modifier <= 1.0
+- 不顯示正向 +8% 或等價 boost 文案。
+- 不得放寬 RR / overheat / chase hard blocker。
 
-- 使用者可見版本、報文 header、常量 VERSION 必須保持 v20.4.31。
-- 不得為本修復 bump version。
+### Reliability / Score 同口徑
+
+- 資料依據若判定 資料不足、不足以判定、insufficient、missing-source、source-error，則 modifier = 1.0。
+- 若 rendered message 顯示正向 boost，資料依據必須顯示對應可靠度與來源，例如 strategy setup 樣本有效、market/theme confirmed/supporting。
+- 禁止同一卡片同時出現「資料不足」與 +8%。
+
+### final / technical 不可用顯示
+
+- final <= 0 或 technical == 0 時，報文不得顯示 +8%。
+- 可顯示：
+- 證據：不適用
+- 或省略 evidence boost line。
+- 不得把 unavailable score 格式化成正向 modifier。
+
+### B5 漏斗分類
+
+以下四者必須同一分類來源或可證明等價：
+
+- card tomorrow_watch_state
+- unheld_funnel_state
+- tracking_only_count
+- format_unheld_funnel split_parts
+
+契約：
+
+- 隔日確認 單獨計數，不併入 等冷卻。
+- 漲停反彈只能落在一致的「隔日確認」或「等回測」分類，不得同一股票在卡片與漏斗分裂。
+- sum(split_parts) == 僅追蹤總數 == 卡片實際 tracking-only 分類數。
 
 ## 版本契約
 
 已存在且不得回退的契約：
 
-- VERSION 保持 v20.4.31。
-- market/theme confirmed 判斷必須與 loader confirmed_trend 定義一致。
-- strategy evidence historical outcomes 查詢不得依 current VERSION 過濾。
-- report-level market_theme_evidence 可作為個股卡片缺 per-stock market_theme 時的 fallback。
-- Telegram / 報文不可把 confirmed 且可消費的 market/theme evidence 顯示成「不適用」。
+- 使用者可見版本保持 v20.4.31。
+- market_theme 是市場級 evidence；per-stock 缺 market_theme 時可 fallback report-level。
+- strategy_sample 必須是 per-stock evidence，不得退回所有股票共用單一 strategy modifier。
+- 缺資料 / source-error / insufficient 必須 fail closed。
+- evidence 不得單獨造 BUY，不得放寬 RR、過熱、追高 hard blockers。
+- supporting / partial 不得冒充 confirmed 強證據。
+- B5 漏斗手機閱讀路徑需 summary / funnel / card 三方一致。
+- live Telegram delivery 需要 Owner 單獨批准，本輪禁止。
 
-若 Tech 發現現有 loader confirmed_trend 定義與 Owner 描述不符，必須 blocked 並交回 Architect 補證，不得自行改定義。
+若 Tech 發現既有程式沒有可識別的 reject_family / watch_category 或 direct card consumer，必須 blocked 並交回 Architect 補資料，不得自行改 schema 或臆造資料。
 
 ## 驗收條件
 
-1. 8 天 confirmed market/theme evidence 可消費
-- 使用英業達或等價 fixture：observed_days = 8、confirmed_trend = true、近 3 日支持。
-- 卡片 market/theme evidence 顯示 +X%（supporting / confirmed） 或等價正向證據。
-- 不得顯示「不適用」或 unavailable。
-- build_market_theme_production_trend_consumption_check 結果必須包含 uses_history=True。
-2. per-stock 缺 market_theme fallback
-- fixture 中 per_stock_evidence 刻意不放該股 market_theme。
-- report-level market_theme_evidence 有 confirmed evidence。
-- 個股卡片仍能顯示 report-level market/theme evidence，不得直接 unavailable。
-3. strategy 跨版本 history 未回歸
-- probe 必須反證 load_strategy_evidence_summary 沒有 current VERSION filter。
-- fixture / mock outcomes 包含非 v20.4.31 的歷史版本，例如 v20.4.5。
-- 只要 trade_date 範圍符合，該 outcomes 應能進入 summary / 回測消費路徑。
-4. VERSION 不變
-- 測試或 probe 必須確認使用者可見版本與 VERSION 仍是 v20.4.31。
+1. M1 strategy 跨版本有效樣本
+
+- 先補 probe。
+- fixture outcomes 包含非 v20.4.31 的歷史版本。
+- 查詢以 trade_date 近 N 日取樣，非 current version filter。
+- setup 類別由 reject_family / watch_category 聚合。
+- 驗收：有效樣本 > 0，status ready / available。
+
+2. M2 兩檔不同 setup modifier 不同
+
+- 先補 probe。
+- fixture 至少包含：
+- 旺宏：突破確認 setup，strategy 樣本偏正。
+- 聯電：突破失敗 setup，strategy 樣本偏弱或失敗。
+- 驗收：兩者 evidence_score 與 evidence_modifier 不同。
+- rendered message / direct card consumer 可看出兩者證據口徑不同。
+
+3. M3 market_theme fallback
+
+- per-stock evidence 缺 market_theme。
+- report-level market/theme 有 available / confirmed payload。
+- 驗收：個股不顯示 unavailable；market/theme 背景可被 score path 消費。
+- 不得把 market/theme fallback 當成 per-stock strategy sample。
+
+4. M4 弱勢 / 失敗 / 過熱 modifier 封頂
+
+- 先補 probe。
+- 聯電突破失敗、光寶科弱勢或等價 fixture。
+- 驗收：evidence_modifier <= 1.0，報文不顯示 +8%。
+- heat_state EXTREME 也需覆蓋。
+
+5. M5 reliability 與 score 一致
+
+- 先補 probe。
+- fixture 中資料依據為 insufficient / 不足以判定。
+- 驗收：modifier = 1.0。
+- 若任一卡片顯示正向 boost，資料依據必須顯示對應可靠度；不得「不足 +8%」。
+
+6. M6 final / technical 不可用
+
+- final <= 0 或 technical == 0。
+- 驗收：不顯示 +8%，顯示 證據：不適用 或省略。
+- rendered message 必須納入驗收。
+
+7. M7 B5 漏斗一致
+
+- 先補 probe。
+- 覆蓋漲停反彈、隔日確認、等回測、等冷卻至少一組。
+- 驗收：
+- card tomorrow_watch_state 與 unheld_funnel_state 一致。
+- tracking_only_count 與 format_unheld_funnel split_parts 一致。
+- sum(split_parts) == 僅追蹤總數 == 卡片實際分類數。
+- 隔日確認不併入等冷卻。
+
+8. VERSION 不變
+
+- 驗收：core/generator.py 或實際版本來源仍為 v20.4.31。
+- rendered header 不得升版。
+
+9. QA L3 必查
+
+- QA 必須檢查 rendered message / direct card consumer。
+- QA 不能只重跑 Tech helper tests。
+- QA 至少補一個 Tech 未覆蓋的使用者誤讀或契約風險 probe。
 
 ## 範例或 Fixture
 
-最小 fixture 形狀：
-
-report_level_market_theme_evidence = {
-"confirmed_trend": True,
-"observed_days": 8,
-"recent_3d_supported": True,
-"score_pct": 0.12,
-"direction": "supporting",
-}
-
-per_stock_evidence = {
-"英業達": {
-# no market_theme key here
-"strategy_sample": {
-"setup": "same_theme_setup"
-}
-}
-}
-
-期望卡片片段：
-
-市場/題材證據：+12%（supporting / confirmed）
-
-strategy outcomes fixture：
+Strategy outcomes fixture 形狀：
 
 outcomes = [
 {
 "trade_date": "2026-05-20",
 "version": "v20.4.5",
-"setup": "same_theme_setup",
-"outcome": "win",
-}
+"name": "旺宏",
+"watch_category": "突破確認",
+"reject_family": None,
+"result": "win",
+"mfe": 0.08,
+"mae": -0.02,
+},
+{
+"trade_date": "2026-05-21",
+"version": "v20.4.8",
+"name": "聯電",
+"watch_category": None,
+"reject_family": "突破失敗",
+"result": "loss",
+"mfe": 0.01,
+"mae": -0.06,
+},
 ]
 
-期望：在查詢日期範圍符合時，此筆可被 load_strategy_evidence_summary 消費，不因 version != v20.4.31 被排除。
+Score fixture 形狀：
+
+report_context = {
+"market_theme_evidence": {
+"status": "available",
+"score": 0.62,
+"reliability": "supporting",
+},
+"per_stock_evidence": {
+"旺宏": {
+"strategy_sample": {
+"setup_key": "突破確認",
+"sample_count": 12,
+"win_rate": 0.67,
+"mfe_mae_score": 0.70,
+"status": "ready",
+}
+},
+"聯電": {
+"strategy_sample": {
+"setup_key": "突破失敗",
+"sample_count": 10,
+"win_rate": 0.30,
+"mfe_mae_score": 0.35,
+"status": "ready",
+}
+},
+},
+}
+
+Rendered message 期望形狀：
+
+旺宏｜突破確認
+分數：綜合 ...｜技術 ...｜證據 +6%（strategy: 突破確認樣本 reliable）
+
+聯電｜突破失敗
+分數：綜合 ...｜技術 ...｜證據：不適用
+資料依據：突破失敗，不套用正向證據加成
+
+B5 fixture 期望形狀：
+
+僅追蹤 3
+- 隔日確認 1
+- 等回測 1
+- 等冷卻 1
 
 ## 明確禁止事項
 
 - 禁止修改 RR 公式。
-- 禁止修改 DB schema / write path / production DML。
+- 禁止修改 DB schema / RLS / grant / policy / role / index / constraint。
+- 禁止 production write / backfill / 手寫 DML。
 - 禁止 live Telegram delivery。
 - 禁止 bump VERSION。
-- 禁止把本任務擴成策略核心重設。
-- 禁止用 observed_days >= 15 作為 confirmed market/theme decision eligibility 的唯一門檻。
-- 禁止 per-stock 缺 market_theme 時直接輸出 unavailable，而不嘗試 report-level fallback。
-- 禁止重新加入 .eq("version", VERSION) 或等價 current-version-only filter。
+- 禁止把 current version filter 加回 strategy outcomes 查詢。
+- 禁止用 report-level strategy evidence 取代 per-stock strategy sample。
+- 禁止資料不足時輸出正向 boost。
+- 禁止弱勢 / 失敗 / 過熱股顯示正向 evidence modifier。
+- 禁止 evidence 單獨造 BUY 或放寬 hard blockers。
+- 禁止只改文案不補 probe。
+- 禁止只驗 helper，不驗 rendered message / direct card consumer。
+- 禁止把 B5 漏斗統一擴成整份 Telegram 版面重構。
 
 ## 阻塞條件
 
-- 找不到 loader confirmed_trend 的既有定義，或其定義不符合 Owner 所述 observed >= 3 且近 3 日支持。
-- 無法構造或重跑 market/theme evidence probe。
-- 無法確認 VERSION 常量或使用者可見報文版本。
-- strategy evidence 查詢路徑無法在 test/probe 中反證是否存在 version filter。
-- 任何修復需要 DB schema/write/live Telegram 權限。
+- 無法從既有 payload 取得每股 reject_family / watch_category 或等價 setup 類別。
+- strategy outcomes 沒有可測的 trade_date / version / outcome 欄位，且無既有 interface 可補。
+- 需要 DB schema 或 write path 變更才能完成。
+- 需要 production live data 或 live Telegram 才能驗收。
+- direct card consumer / rendered message path 無法定位。
+- 權重契約在既有程式中不可判斷，且會影響策略決策口徑；此時 Tech 必須 blocked，交回 Architect / Owner 補確認。
 
 ## 本輪停止條件
 
-本輪完成只限於：
+本輪完成只限於 M1-M7：
 
-- _market_theme_evidence_payload confirmed gate 與 basis/score path 對齊。
-- per-stock 缺 market_theme 時 fallback report-level market_theme evidence。
-- load_strategy_evidence_summary 跨版本 outcomes filter regression 確認。
-- VERSION 保持 v20.4.31。
-- 補可重跑 probe / tests，QA 反證四個指定風險。
+- strategy evidence 可跨版本按 trade_date 取樣，且有效樣本 > 0 時 status ready。
+- evidence score 拆成 market-level background 與 per-stock strategy sample，兩檔不同 setup 股票 modifier 可不同。
+- per-stock 缺 market_theme 時 fallback report-level market/theme。
+- 弱勢 / 失敗 / 過熱 / final<=0 / technical=0 不顯示正向 boost。
+- reliability 與 score 不再出現「資料不足 +8%」衝突。
+- B5 卡片 / 漏斗 / count / split_parts 三方一致。
+- QA L3 驗 rendered message / direct card consumer 後通過。
+- VERSION 仍為 v20.4.31。
 
 旁支問題只記待辦，不納入本輪：
 
-- 其他 evidence formatter 文案優化。
-- 其他股票或其他策略 setup 的命中率調整。
-- 全量 market/theme evidence cleanup。
-- DB 歷史資料補寫或 backfill。
-- Telegram 報文整體版面重設。
+- production evidence 樣本量長期不足。
+- setup taxonomy 重新設計。
+- DB source-of-truth / backfill / write automation。
+- Telegram 整體排版重構。
+- RR、買賣決策、停損停利、持倉狀態機調整。
+- live delivery 或正式上線推送。

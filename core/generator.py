@@ -62,7 +62,7 @@ from services.daily_snapshot_store import (
 from services.strategy_evidence import (
     format_strategy_evidence_summary,
     load_strategy_evidence_summary,
-    record_strategy_evidence
+    record_strategy_evidence,
 )
 from services.cross_day_context import build_cross_day_contexts
 from services.market_theme_evidence_store import load_confirmed_market_theme_evidence
@@ -4070,6 +4070,48 @@ def _per_stock_evidence_payload(report_context, name, source_name):
     return payload if isinstance(payload, dict) else {}
 
 
+def _strategy_setup_key_for_stock(data):
+    result = (data or {}).get("result") or {}
+    return (
+        result.get("reject_family")
+        or result.get("watch_category")
+        or result.get("setup_key")
+        or result.get("setup_category")
+        or (data or {}).get("reject_family")
+        or (data or {}).get("watch_category")
+        or (data or {}).get("setup_key")
+        or (data or {}).get("setup_category")
+    )
+
+
+def _strategy_summary_setup_samples(report_context):
+    summary = (report_context or {}).get("strategy_evidence_summary") or {}
+    if not isinstance(summary, dict):
+        return {}
+    samples = summary.get("setup_strategy_samples") or {}
+    return samples if isinstance(samples, dict) else {}
+
+
+def _strategy_sample_from_setup_summary(report_context, name):
+    data = ((report_context or {}).get("results_map") or {}).get(name) or {}
+    setup_key = _strategy_setup_key_for_stock(data)
+    if not setup_key:
+        return {}
+    sample = _strategy_summary_setup_samples(report_context).get(setup_key) or {}
+    if not isinstance(sample, dict):
+        return {}
+    payload = dict(sample)
+    payload.setdefault("setup_key", setup_key)
+    return payload
+
+
+def _evidence_float(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _market_theme_confirmed_trend_eligible(evidence, source_status=None):
     if not isinstance(evidence, dict):
         return False
@@ -4130,6 +4172,7 @@ def _per_stock_strategy_sample_evidence_payload(report_context, name):
         stock_payload
         or _per_stock_evidence_payload(report_context, name, "backtest_context")
         or _per_stock_evidence_payload(report_context, name, "setup_strategy_sample")
+        or _strategy_sample_from_setup_summary(report_context, name)
     )
     if has_per_stock_map and not backtest:
         return {
@@ -4155,28 +4198,36 @@ def _per_stock_strategy_sample_evidence_payload(report_context, name):
 
     sample = backtest.get("sample")
     if sample is None:
+        sample = backtest.get("sample_count")
+    if sample is None:
         sample = backtest.get("row_count")
     if sample is None:
         sample = backtest.get("evidence_count")
     avg_return = backtest.get("avg_return")
     win_rate = backtest.get("win_rate")
+    win_rate = _evidence_float(win_rate)
+    if win_rate is not None and win_rate <= 1:
+        win_rate = win_rate * 100
+    mfe_mae_score = _evidence_float(backtest.get("mfe_mae_score"))
     label = backtest.get("label") or backtest.get("status") or backtest.get("verdict")
     decision_eligible = (
         (sample or 0) >= STRATEGY_SAMPLE_MIN_ROWS
         and (
-            label in {"confirmed", "買點有效", "持倉同型相對偏強"}
+            label in {"ready", "confirmed", "買點有效", "持倉同型相對偏強"}
             or ((avg_return or 0) >= 1.0 and (win_rate or 0) >= 55)
+            or (mfe_mae_score is not None and mfe_mae_score >= 0.6)
         )
     )
     if decision_eligible:
         evidence_status = "ready"
-        score = 1.0
+        score = max(0.0, min(1.0, mfe_mae_score)) if mfe_mae_score is not None else 1.0
     elif (sample or 0) >= STRATEGY_SAMPLE_MIN_ROWS and (
         label in {"supporting", "樣本中性", "歷史偏強，但今日阻斷仍有效"}
         or ((avg_return or 0) >= 0 and (win_rate or 0) >= 45)
+        or (mfe_mae_score is not None and mfe_mae_score >= 0.45)
     ):
         evidence_status = "supporting"
-        score = 0.65
+        score = max(0.0, min(1.0, mfe_mae_score)) if mfe_mae_score is not None else 0.65
     elif sample:
         evidence_status = "partial"
         score = 0.5
@@ -4187,6 +4238,7 @@ def _per_stock_strategy_sample_evidence_payload(report_context, name):
         "status": evidence_status,
         "score": score,
         "sample": sample,
+        "setup_key": backtest.get("setup_key"),
         "decision_eligible": decision_eligible,
         "forbidden_effects": list(EVIDENCE_FORBIDDEN_EFFECTS),
     }
@@ -4195,14 +4247,16 @@ def _per_stock_strategy_sample_evidence_payload(report_context, name):
 def compute_evidence_score(report_context, name):
     market = _market_theme_evidence_payload(report_context, name)
     strategy = _per_stock_strategy_sample_evidence_payload(report_context, name)
-    scores = [
-        source.get("score")
-        for source in [market, strategy]
-        if source.get("score") is not None
-    ]
+    scores = []
+    weights = []
+    for source, weight in [(market, 0.4), (strategy, 0.6)]:
+        if source.get("score") is None:
+            continue
+        scores.append(source.get("score"))
+        weights.append(weight)
     if not scores:
         return None, "unavailable"
-    score = max(0.0, min(1.0, sum(scores) / len(scores)))
+    score = max(0.0, min(1.0, sum(score * weight for score, weight in zip(scores, weights)) / sum(weights)))
     if market.get("decision_eligible") and strategy.get("decision_eligible"):
         return score, "confirmed"
     if market.get("decision_eligible") or strategy.get("decision_eligible"):
@@ -4239,6 +4293,16 @@ def apply_evidence_confidence(report_context, name, data):
     technical = _technical_confidence(result)
     evidence_score, evidence_status = compute_evidence_score(report_context, name)
     modifier = evidence_modifier_for_score(evidence_score, evidence_status)
+    boost_blocked = (
+        result.get("decision") == "FAIL"
+        or result.get("structure_phase") in {"FAILED_BREAKOUT", "WEAK", "DISTRIBUTION"}
+        or result.get("heat_state") == "EXTREME"
+        or technical <= 0
+    )
+    if technical <= 0 or (boost_blocked and modifier > 1.0):
+        evidence_score = None
+        evidence_status = "unavailable"
+        modifier = 1.0
     final = technical * modifier
     result["technical_confidence"] = technical
     result["evidence_score"] = evidence_score
@@ -4484,7 +4548,9 @@ def build_report_context(
     interim_context = {
         "evidence_manifest": manifest,
         "market_theme_evidence": market_evidence,
+        "strategy_evidence_summary": strategy_evidence_summary if isinstance(strategy_evidence_summary, dict) else {},
         "strategy_sample_structured_status": strategy_structured,
+        "results_map": results_map or {},
         "per_stock_evidence": {
             name: {
                 "market_theme": (
@@ -4836,7 +4902,9 @@ def build_report_context(
         "evidence": interim_context["evidence"],
         "per_stock_evidence": interim_context["per_stock_evidence"],
         "market_theme_evidence": market_evidence,
+        "strategy_evidence_summary": strategy_evidence_summary if isinstance(strategy_evidence_summary, dict) else {},
         "strategy_sample_structured_status": strategy_structured,
+        "results_map": results_map or {},
         "source_status_summary": {
             "price": "available" if any(
                 _price_source_status(data) == "available"

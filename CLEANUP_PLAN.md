@@ -15,6 +15,14 @@
 
 ## Completed
 
+- `per_stock_evidence_score_funnel_p0_p3_20260602`:
+  - 問題：market/theme 已接通後，evidence 仍可能只是共享背景 boost；Owner 要 strategy_sample 成為 per-stock 分量，弱勢 / 失敗 / 過熱 / technical=0 不得被市場背景抬分，B5 漏斗與卡片一致。
+  - 結果：strategy setup sample 以 explicit setup key 匹配；缺 explicit setup fail closed；evidence_score 用 market 0.4 + strategy 0.6 合成；失敗 / 弱勢 / EXTREME / technical<=0 modifier 封頂 1.0；B5 official rendered path 三方一致；VERSION 保持 `v20.4.31`。
+  - 可重跑補強：新增 / 更新 setup strategy sample driving per-stock modifier、缺 setup fail closed、B5 tracking split、跨版本 outcome history probes。
+  - QA 反證：第一輪 QA blocked 有效攔住缺 setup 卻被推導分類加 +7%；第二輪 conditional pass 攔住 CHANGELOG return type overclaim；最終 Re-QA 通過。QA 補手機閱讀 probe，確認不可用 evidence 顯示 `證據：不適用`，旺宏 / 聯電 modifier 不同，B5 Summary / 漏斗 / card 一致。
+  - 主 repo 驗證：targeted tests 4 passed，13 warnings；`py_compile` / `git diff --check` passed。
+  - 規則治理：`evidence_chain` + `mobile_reading` + `QA反證` + `runner_gap`。per-stock evidence 必須有 explicit setup source；不可讓 formatter/derived category 代替 source-of-truth。CHANGELOG overclaim 仍是 handoff runner gap。
+  - 邊界：未改 RR、DB schema/write、production backfill、live Telegram；production setup 欄位覆蓋率與樣本品質另開。
 - `fix_market_theme_evidence_gate_v20_4_31`:
   - 問題：Owner 指出 evidence source 已接通後，market/theme score path 又被兩個顯示/分數閘門擋住：8 日 confirmed_trend 被 15 日二次門檻降級，market 級 evidence 因 per-stock 缺 market_theme 被誤判 unavailable。
   - 結果：`_market_theme_evidence_payload()` 改為 confirmed_trend 直接 decision eligible，不再疊 15 日門檻；per-stock 缺 market_theme fallback report-level market/theme evidence；`ready` source status 正規化 available；VERSION 保持 `v20.4.31`。

@@ -353,12 +353,16 @@ class StrategyEvidenceTest(unittest.TestCase):
 
         client = Client()
 
-        text = strategy_evidence.load_strategy_evidence_summary(client, "v20.4.31", limit=240)
+        summary = strategy_evidence.load_strategy_evidence_summary(client, "v20.4.31", limit=240)
+        text = summary["rendered_text"]
 
         self.assertNotIn(("daily_signal_snapshot", "eq", ("version", "v20.4.31"), {}), client.calls)
         self.assertIn("策略樣本 / 分類回測", text)
         self.assertIn("分類：RR不足｜樣本：10 筆", text)
         self.assertNotIn("狀態：不可用", text)
+        self.assertEqual(summary["structured_status"]["status"], "available")
+        self.assertGreater(summary["setup_strategy_samples"]["RR不足"]["sample_count"], 0)
+        self.assertEqual(summary["setup_strategy_samples"]["RR不足"]["status"], "ready")
 
     def test_record_strategy_evidence_reuses_injected_client(self):
         payload = {

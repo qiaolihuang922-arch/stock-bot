@@ -429,6 +429,64 @@ def calculate_outcome_metrics(feature_rows, price_rows, horizons=None):
     return rows
 
 
+def _setup_key_from_feature(feature):
+    return feature.get("reject_family") or feature.get("watch_category")
+
+
+def _score_from_setup_metrics(win_rate, median_mfe, median_mae):
+    if win_rate is None:
+        return None
+    win_component = max(0.0, min(1.0, float(win_rate) / 100.0))
+    mfe_component = 0.5
+    if median_mfe is not None or median_mae is not None:
+        mfe = float(median_mfe or 0)
+        mae = abs(float(median_mae or 0))
+        mfe_component = max(0.0, min(1.0, (mfe - mae + 10) / 20))
+    return round((win_component * 0.7) + (mfe_component * 0.3), 4)
+
+
+def build_setup_strategy_samples(feature_rows, outcome_rows, min_sample=MIN_REPORT_SAMPLE, horizon_days=3):
+    feature_lookup = {
+        (row.get("stock_id"), str(row.get("trade_date")), row.get("strategy_version")): row
+        for row in feature_rows
+    }
+    by_key = {}
+    for outcome in outcome_rows:
+        if int(outcome.get("horizon_days") or 0) != horizon_days:
+            continue
+        lookup_key = (
+            outcome.get("stock_id"),
+            str(outcome.get("trade_date")),
+            outcome.get("strategy_version"),
+        )
+        feature = feature_lookup.get(lookup_key, {})
+        setup_key = _setup_key_from_feature(feature) or _setup_key_from_feature(outcome)
+        if not setup_key:
+            continue
+        by_key.setdefault(setup_key, []).append(outcome)
+
+    samples = {}
+    for setup_key, rows in by_key.items():
+        sample = len(rows)
+        win_count = sum(1 for row in rows if (_num(row.get("close_return_pct")) or 0) > 0)
+        win_rate = round(win_count / sample * 100, 2) if sample else None
+        median_mfe = _safe_round(_median([_num(row.get("max_favorable_excursion_pct")) for row in rows]), 2)
+        median_mae = _safe_round(_median([_num(row.get("max_adverse_excursion_pct")) for row in rows]), 2)
+        samples[setup_key] = {
+            "setup_key": setup_key,
+            "status": "ready" if sample >= min_sample else "insufficient-data",
+            "source_status": "available" if sample >= min_sample else "insufficient-data",
+            "sample_count": sample,
+            "sample": sample,
+            "win_rate": win_rate,
+            "median_mfe": median_mfe,
+            "median_mae": median_mae,
+            "mfe_mae_score": _score_from_setup_metrics(win_rate, median_mfe, median_mae),
+            "decision_eligible": sample >= min_sample,
+        }
+    return samples
+
+
 def build_classification_report(feature_rows, outcome_rows, min_sample=MIN_REPORT_SAMPLE, horizon_days=3):
     by_key = {}
     feature_lookup = {
@@ -609,10 +667,28 @@ def format_strategy_evidence_summary(
 
 
 def report_from_rows(feature_rows, outcome_rows, audit_rows=None):
-    return format_strategy_evidence_summary(
-        build_classification_report(feature_rows, outcome_rows),
+    report = build_classification_report(feature_rows, outcome_rows)
+    rendered_text = format_strategy_evidence_summary(
+        report,
         audit_rows or build_audit_rows(feature_rows)
     )
+    setup_samples = build_setup_strategy_samples(feature_rows, outcome_rows)
+    ready_count = sum(1 for item in setup_samples.values() if item.get("status") == "ready")
+    row_count = sum((item.get("sample_count") or 0) for item in setup_samples.values())
+    return {
+        "rendered_text": rendered_text,
+        "text": rendered_text,
+        "structured_status": {
+            "status": "available" if ready_count else "insufficient-data",
+            "source": "daily_signal_snapshot",
+            "row_count": row_count,
+            "setup_ready_count": ready_count,
+            "missing_fields": [],
+            "completeness": "complete" if ready_count else "insufficient",
+        },
+        "setup_strategy_samples": setup_samples,
+        "classification_report": report,
+    }
 
 
 def strategy_evidence_error_kind(error):

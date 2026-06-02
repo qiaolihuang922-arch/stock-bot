@@ -6112,6 +6112,111 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotEqual(status, "unavailable")
         self.assertEqual(status, "supporting")
 
+    def test_setup_strategy_summary_drives_per_stock_modifier_and_rendered_cards(self):
+        breakout = self.evidence_payload(confidence=68, decision="WAIT", action=0, rr=1.4, distance=2)
+        breakout["result"]["watch_category"] = "突破確認"
+        failed = self.evidence_payload(confidence=0, decision="FAIL", action=0, rr=0, distance=9)
+        failed["result"]["structure_phase"] = "FAILED_BREAKOUT"
+        failed["result"]["market_grade"] = "D"
+        failed["result"]["reject_family"] = "突破失敗"
+        summary = structured_strategy_evidence("available", row_count=22)
+        summary["setup_strategy_samples"] = {
+            "突破確認": {
+                "setup_key": "突破確認",
+                "source_status": "available",
+                "status": "ready",
+                "sample_count": 12,
+                "win_rate": 67,
+                "mfe_mae_score": 0.70,
+            },
+            "突破失敗": {
+                "setup_key": "突破失敗",
+                "source_status": "available",
+                "status": "ready",
+                "sample_count": 10,
+                "win_rate": 30,
+                "mfe_mae_score": 0.35,
+            },
+        }
+
+        with patch.object(generator, "market_theme_summary_evidence", return_value=self.confirmed_market_evidence("supporting_trend")):
+            messages = generator.formatTelegramMessages(
+                {"旺宏": breakout, "聯電": failed},
+                "",
+                None,
+                None,
+                {"trade_date": "2026-06-02"},
+                datetime(2026, 6, 2),
+                strategy_evidence_summary=summary,
+                report_phase="盤中",
+            )
+            context = generator.build_report_context(
+                {"旺宏": breakout, "聯電": failed},
+                {"trade_date": "2026-06-02"},
+                datetime(2026, 6, 2),
+                strategy_evidence_summary=summary,
+                report_phase="盤中",
+            )
+        macronix_score, macronix_status = generator.compute_evidence_score(context, "旺宏")
+        umc_score, umc_status = generator.compute_evidence_score(context, "聯電")
+        rendered = "\n\n".join(messages)
+        macronix_card = card_block(unheld_message(messages), "【旺宏")
+        umc_card = card_block(unheld_message(messages), "【聯電")
+
+        self.assertNotEqual(macronix_score, umc_score)
+        self.assertNotEqual(breakout["result"]["evidence_modifier"], failed["result"]["evidence_modifier"])
+        self.assertGreater(breakout["result"]["evidence_modifier"], 1.0)
+        self.assertEqual(failed["result"]["evidence_modifier"], 1.0)
+        self.assertIn(macronix_status, {"supporting", "partial"})
+        self.assertIn(umc_status, {"supporting", "neutral", "partial"})
+        self.assertEqual(failed["result"]["evidence_status"], "unavailable")
+        self.assertIn("證據 +", macronix_card)
+        self.assertIn("證據：不適用", umc_card)
+        self.assertNotIn("證據 +", umc_card)
+
+    def test_setup_summary_without_explicit_stock_setup_fails_closed_and_hides_boost(self):
+        inferred_only = self.evidence_payload(confidence=68, decision="WAIT", action=0, rr=1.4, distance=2)
+        summary = structured_strategy_evidence("available", row_count=12)
+        summary["setup_strategy_samples"] = {
+            "突破確認": {
+                "setup_key": "突破確認",
+                "source_status": "available",
+                "status": "ready",
+                "sample_count": 12,
+                "win_rate": 70,
+                "mfe_mae_score": 0.75,
+            }
+        }
+
+        with patch.object(generator, "market_theme_summary_evidence", return_value=self.missing_market_evidence()):
+            messages = generator.formatTelegramMessages(
+                {"缺明確setup": inferred_only},
+                "",
+                None,
+                None,
+                {"trade_date": "2026-06-02"},
+                datetime(2026, 6, 2),
+                strategy_evidence_summary=summary,
+                report_phase="盤中",
+            )
+            context = generator.build_report_context(
+                {"缺明確setup": inferred_only},
+                {"trade_date": "2026-06-02"},
+                datetime(2026, 6, 2),
+                strategy_evidence_summary=summary,
+                report_phase="盤中",
+            )
+        strategy_payload = generator._per_stock_strategy_sample_evidence_payload(context, "缺明確setup")
+        score, status = generator.compute_evidence_score(context, "缺明確setup")
+        card = card_block(unheld_message(messages), "【缺明確setup")
+
+        self.assertEqual(strategy_payload["status"], "unavailable")
+        self.assertIsNone(strategy_payload["score"])
+        self.assertEqual((score, status), (None, "unavailable"))
+        self.assertEqual(inferred_only["result"]["evidence_modifier"], 1.0)
+        self.assertIn("證據：不適用", card)
+        self.assertNotIn("證據 +", card)
+
     def test_supporting_evidence_modifier_is_capped_below_ceiling(self):
         self.assertLessEqual(generator.evidence_modifier_for_score(1.0, "supporting"), 1.08)
         self.assertLess(generator.evidence_modifier_for_score(1.0, "supporting"), 1.15)
@@ -6455,6 +6560,53 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("證據僅調整邊界，不放寬RR/過熱限制", rendered)
         self.assertNotIn("產業主題 confirmed", rendered)
         self.assertNotIn("【支持趨勢 9999】👀 可準備", rendered)
+
+    def test_b5_tracking_split_matches_card_states_and_tracking_total(self):
+        next_day = self.evidence_payload(confidence=64, decision="WAIT", action=0, rr=1.4, distance=2)
+        next_day["result"]["price_behavior"] = "LIMIT_REBOUND"
+        pullback = self.evidence_payload(confidence=64, decision="WAIT", action=0, rr=1.4, distance=9)
+        cooldown = self.evidence_payload(confidence=64, decision="WAIT", action=0, rr=1.4, distance=2, heat="HOT")
+        cooldown["result"]["trade_state"] = "EXTENDED"
+        payloads = {
+            "漲停反彈": next_day,
+            "等回測股": pullback,
+            "等冷卻股": cooldown,
+        }
+        watch_items = list(payloads.items())
+
+        with patch.object(generator, "market_theme_summary_evidence", return_value=self.missing_market_evidence()):
+            messages = generator.formatTelegramMessages(
+                payloads,
+                "",
+                None,
+                None,
+                {"trade_date": "2026-06-02"},
+                datetime(2026, 6, 2),
+                strategy_evidence_summary=structured_strategy_evidence("available", row_count=30),
+                report_phase="盤中",
+            )
+            context = generator.build_report_context(
+                payloads,
+                {"trade_date": "2026-06-02"},
+                datetime(2026, 6, 2),
+                strategy_evidence_summary=structured_strategy_evidence("available", row_count=30),
+                report_phase="盤中",
+            )
+
+        funnel = generator.build_unheld_funnel(watch_items, report_context=context)
+        funnel_text = generator.format_unheld_funnel(watch_items, report_context=context)
+        unheld = unheld_message(messages)
+
+        self.assertEqual(generator.tomorrow_watch_state("漲停反彈", next_day), "隔日確認")
+        self.assertEqual(generator.unheld_funnel_state("漲停反彈", next_day, report_context=context), "隔日確認")
+        self.assertEqual(generator.unheld_tracking_only_count(funnel), 3)
+        self.assertEqual(sum(len(funnel[label]) for label in ["隔日確認", "等冷卻", "等回測", "等RR修復", "等量能"]), 3)
+        self.assertIn("僅追蹤 3", funnel_text)
+        self.assertIn("其中僅追蹤 3 檔拆分：隔日確認 1、等冷卻 1、等回測 1", funnel_text)
+        self.assertIn("隔日確認 1｜僅追蹤 3", funnel_text)
+        self.assertIn("【漲停反彈 9999】👀 隔日確認", unheld)
+        self.assertIn("【等回測股 9999】👀 不可追高觀察", unheld)
+        self.assertIn("【等冷卻股 9999】⏳ 等冷卻", unheld)
 
 
 if __name__ == "__main__":

@@ -28,6 +28,22 @@
 
 ## Latest Completed Handoff
 
+- task_id：`per_stock_evidence_score_funnel_p0_p3_20260602`
+- 狀態：QA passed；commit / push 待 final 收口。
+- 問題：Owner 要 evidence 真正成為 per-stock 決策分數，而不是 market/theme 共享背景無差別 +8%；弱勢 / 失敗 / 過熱 / technical=0 不可被正向 boost；B5 漏斗與卡片需一致。
+- 修正：
+  - `strategy_sample` 以 explicit `reject_family / watch_category / setup_key / setup_category` 對應 `setup_strategy_samples`，成為 per-stock 分量。
+  - 缺 explicit setup 時 fail closed，不用 report layer 推導分類補 boost。
+  - `compute_evidence_score()` 改成 market 0.4 + strategy 0.6 的加權合成；market/theme 仍為共享背景，strategy/setup 提供逐股差異。
+  - `FAIL / FAILED_BREAKOUT / WEAK / DISTRIBUTION / EXTREME / technical<=0` 時 evidence modifier 封頂 1.0，卡片顯示 `證據：不適用`。
+  - B5 official rendered path 補 Summary / 漏斗 / card 三方一致回歸。
+  - 本輪不升版，仍為 `v20.4.31`。
+- 驗證：QA `通過`；主 repo targeted tests 4 passed，13 warnings；`py_compile` passed；`git diff --check` passed；VERSION scan only `v20.4.31`。
+- QA 反證：初輪 QA blocked 抓到缺 explicit setup 仍吃推導分類 +7%；Tech 修後缺 setup / WEAK / EXTREME / technical=0 都不顯示 boost；旺宏 / 聯電 explicit setup modifier 不同；B5 三方一致。
+- 邊界：未改 RR 公式、DB schema/write、production backfill、live Telegram；未跑 production data quality / setup 欄位覆蓋率。
+
+## Previous Completed Handoff
+
 - task_id：`fix_market_theme_evidence_gate_v20_4_31`
 - 狀態：QA passed；commit / push 待 final 收口。
 - 問題：Owner 指出 market/theme evidence 仍被三個閘門擋住：8 日 confirmed_trend 又被 `observed_days >= 15` 二次門檻擋；per-stock 缺 market_theme 被誤判 unavailable；strategy 跨版本 history 需回歸確認。
