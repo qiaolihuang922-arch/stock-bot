@@ -1,65 +1,74 @@
-# CHANGELOG: 證據鏈第一批硬衝突修復 P1/P2/P4
+# CHANGELOG:
 
   ## 任務尺寸與風險
 
-  - 任務尺寸：risk_patch
-  - 風險判斷：改動 Telegram 使用者可見報文的 evidence gate / card / funnel 顯示門控，涉及持倉執行記憶與未持倉可行動分類，但未改 strategy decision、RR 公式、DB schema/write 或 live delivery。
+  - 任務類型：risk_patch
+  - 風險原因：使用者可見 Telegram 持倉 / 未持倉卡顯示門控，涉及 S 分數與強弱高信心文字，但不改 strategy decision、RR、DB、live delivery。
 
   ## 修改內容
 
-  - P1：未持倉卡片把 strategy_sample status 納入可見高置信顯示門控；strategy_sample missing / insufficient / source-error 時，不再顯示可買、S 5/5、突破確認等高置信口徑，改為策略樣本證據不足 / 來源異常與無有效進場。
-- P2：持倉卡片 execution 欄位改為同時檢查 positions 與 ledger / execution_memory status；任一為 missing-source / insufficient-data / source-error / unresolved-conflict 時，不顯示精確股數、均價、今日買賣，改顯示「執行記憶不足」保守文案。
-  - P4：未持倉 funnel source status 已納入 strategy_sample 狀態，保留既有 RR 不足 / 不可追高 / 過熱待回測 / 無有效進場門控；source-error 不會隱藏可用價格，但會阻斷可行動分類。
-  - 新增 P2 可重跑 probe；保留並通過既有 P1/P4 probes 與 source-error 不隱藏價格 probe。
+  - 在 presentation/report.py 新增 score source status 顯示門控。
+  - 顯示 S n/5 或 score/strength 相關高信心盤面文字前，讀取 stock.<name>.score.source_status。
+  - available / derived：保留原本 S 5/5 與 盤面：突破確認 / 極強 等文字。
+  - 非 available / derived：持倉與未持倉卡改顯示 S 證據不足 或 S 不可用，盤面降級為 強弱證據不足｜待確認。
+  - 保留 price / RR / volume 顯示，不因 score 不可用把整卡降級成 price source missing。
+  - 補 regression probe：持倉 insufficient-data、未持倉 source-error、available/derived 正常案例。
 
   ## 修改檔案
 
-  - core/generator.py
   - presentation/report.py
   - tests/test_generator_report.py
 
   ## 最小改動策略
 
-  - 只在既有 report_context.evidence_manifest 到 presentation renderer 的轉換層補門控。
-  - P2 不新增資料來源，不改 execution memory 計算，只消費既有 stock.<name>.position 與 stock.<name>.execution_memory status。
-  - 未重構報文架構，未改 strategy decision、RR 公式、DB schema/write、live Telegram。
+  - 只在 presentation formatter 加小型 helper，不碰 strategy decision、RR 公式、DB schema/write、Telegram live delivery。
+  - 測試使用既有 generator.formatTelegramPositionCard / generator.formatTelegramUnheldCard wrapper，直接驗證 report card rendering path。
+  - 未改 core/generator.py 的 VERSION、message list 結構、分組順序或 payload shape。
 
   ## 契約影響
 
-  - 使用者可見持倉卡片：ledger / positions 不可信時，execution 行由精確 倉位 / 均價 / 今日買賣 改為保守 執行記憶不足。
-  - 使用者可見未持倉卡片：strategy_sample 不可用時，高置信 S 分數 / 強弱分類 / 進場觸發降級為不可買與無有效進場。
-  - 報文版本：未修改 core.generator.VERSION，仍使用既有 v20.4.25；本輪未改 header 格式。
-  - 未改 payload shape、DB contract、DB write path、RR 計算值或 strategy 原始結果。
+  - 使用者可見文字契約變更：score source status 不足時，同卡不得再顯示 S n/5 或依賴 score/strength 的高信心盤面文字。
+  - 無回傳結構變更。
+  - 無 payload shape 變更。
+  - 無 message list 順序變更。
+  - 無 DB contract 變更。
+  - 版本同步：已檢查 core/generator.py 目前 VERSION = "v20.4.25" 與 header tests；repo 內未找到硬性本輪必升版規則，未回退也未擅自升版。
 
   ## 直接消費者同步
 
-  - presentation/report.py 的持倉卡與未持倉卡已同步使用 core/generator.py 注入的 evidence helper。
-  - tests/test_generator_report.py 已同步新增 / 調整 regression probes，覆蓋 P1/P2/P4 的可重跑驗收路徑。
+  - 持倉卡：formatTelegramPositionCard 已同步使用 score source gate。
+  - 未持倉卡：formatTelegramUnheldCard 已同步使用 score source gate。
+  - 既有 generator wrapper 仍透過 presentation deps 呼叫 formatter，無需改呼叫參數。
+  - QA / regression test 已新增持倉與未持倉 probe。
 
   ## 未影響模組
 
-  - 未改 services/analysis.py。
-  - 未改 DB schema、RLS、grant、policy、role、index、constraint。
-  - 未改 DB write / backfill / Supabase write path。
-  - 未執行 live Telegram delivery。
-  - 未處理 P3/P5/P6/P7/P8。
+  - 未改 services/analysis.py
+  - 未改 strategy decision / 買賣 / 加減碼 / 停損停利判斷
+  - 未改 RR 公式
+  - 未改 DB schema / RLS / grant / policy / role / index / constraint
+  - 未新增 production write / backfill / live Telegram delivery
+  - 未改主 repo，未 commit / push
 
   ## 已跑自檢命令
 
-  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py -k 'holding_card_hides_precise_execution_when_ledger_insufficient or
-    strategy_sample_source_error_blocks_action_without_hiding_available_price or manifest_fails_closed_for_missing_candidate_sources'：3 passed。
-  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py：108 passed，221 warnings。
-  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py presentation/report.py tests/test_generator_report.py：passed。
-  - git diff --check：passed。
-  - 補充：未加 arch -arm64 的首次 pytest collection 因本機 Python 架構與 arm64 pydantic_core wheel 不符失敗；已用既有 arm64 runner 方式重跑通過。
+  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache .venv/bin/python -m pytest -q tests/test_generator_report.py -k 'score_source or breakout_distance'
+      - 結果：失敗，原因是 x86_64 Python 載入 arm64 .venv 的 pydantic_core，架構不相容。
+  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py -k 'score_source or breakout_distance'
+      - 結果：6 passed, 105 deselected, 13 warnings
+  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py
+      - 結果：111 passed, 221 warnings
+  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m py_compile presentation/report.py tests/test_generator_report.py
+      - 結果：passed
+  - git diff --check
+      - 結果：passed
 
   ## 殘留風險
 
-  - Tech 自檢只覆蓋 tests/test_generator_report.py 與 py_compile，不代表 QA 通過。
-  - P2 目前是可見 renderer fail-closed；若未來新增其他持倉 execution 顯示 formatter，需要同步套用同一 ledger / positions 合併門控。
-  - 全量證據鏈治理與 P3/P5/P6/P7/P8 不在本輪範圍。
+  - 目前 build_report_context 仍會由 OHLCV 推導 score status；「price/OHLCV/RR 可用但 score source-error」這類情境需要上游已在 evidence_manifest 提供獨立 score status，本輪只修 presentation 消費門控。
+  - QA 仍需補 TASK 要求的額外反證路徑，例如 missing score source status。
 
   ## 旁支待辦
 
-  - 另開任務處理 P3/P5/P6/P7/P8。
-  - 後續可盤點所有持倉 execution 顯示入口，確認沒有新 formatter 繞過 report_context.evidence_manifest 門控。
+  - 其他 evidence gate 缺口與其他顯示門控清單項不在本輪處理。
+  - 若 Architect/Owner 要所有使用者可見文案修復固定升版，需另補明確版本治理規則。

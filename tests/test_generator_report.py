@@ -481,6 +481,122 @@ class GeneratorReportTest(unittest.TestCase):
             payload["breakout_distance"] = data_distance
         return payload
 
+    def score_source_report_context(self, name, score_status, *, report_phase="盤中"):
+        def field(suffix, status):
+            return {"field_name": f"stock.{name}.{suffix}", "source_status": status}
+
+        return {
+            "report_context": {"report_phase": report_phase, "version": generator.VERSION},
+            "evidence_manifest": [
+                field("price", "available"),
+                field("daily_ohlcv", "available"),
+                field("rr", "derived"),
+                field("score", score_status),
+                field("volume", "derived"),
+                field("position", "available"),
+                field("execution_memory", "available"),
+                field("risk", "derived"),
+                {"field_name": "evidence.strategy_sample", "source_status": "available"},
+            ],
+            "source_status_summary": {
+                "price": "available",
+                "position": "available",
+                "strategy_sample": "available",
+                "market_theme": "available",
+                "funnel": "derived",
+            },
+        }
+
+    def score_gate_payload(self, *, holding=False):
+        payload = {
+            "stock_code": "0000",
+            "price": 100.0,
+            "change": 1.2,
+            "price_source": "realtime",
+            "daily_source": "yahoo",
+            "result": {
+                "decision": "BUY",
+                "action": 0.1,
+                "rr": 2.1,
+                "heat_state": "NORMAL",
+                "trade_state": "READY",
+                "structure_phase": "BREAKOUT_CONFIRM",
+                "price_behavior": "NORMAL",
+                "market_grade": "A",
+                "volume_state": "STRONG",
+                "volume_price_state": "EXPANSION",
+                "structure_state": "STRONG",
+                "entry_quality": "A",
+                "confidence_score": 88,
+                "strength": 95,
+            },
+            "holding": {"shares": 10, "avg_price": 96.0} if holding else None,
+            "structure_score": 5,
+            "volume_ratio": 1.5,
+            "closes": [90, 91, 92, 93, 94, 95, 96, 97, 98, 100],
+            "volumes": [1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900],
+        }
+        if holding:
+            payload["holding_decision"] = {
+                "action": "續抱",
+                "level": "HOLD_WATCH",
+                "note": "觀察",
+                "warning_price": 95,
+                "hard_stop_price": 90,
+            }
+        return payload
+
+    def test_score_source_insufficient_holding_card_hides_s_number_and_strength_text(self):
+        card = generator.formatTelegramPositionCard(
+            "TEST",
+            self.score_gate_payload(holding=True),
+            report_context=self.score_source_report_context("TEST", "insufficient-data"),
+        )
+
+        self.assertIn("數據：新倉 RR：不適用（既有持倉）｜S 證據不足｜V 1.5x", card)
+        self.assertIn("盤面：強弱證據不足｜待確認", card)
+        self.assertIn("價格：100.0（+1.20%）", card)
+        self.assertNotIn("S 5/5", card)
+        self.assertNotIn("突破確認", card)
+        self.assertNotIn("極強", card)
+
+    def test_score_source_error_unheld_card_hides_s_number_without_hiding_price_or_rr(self):
+        card = generator.formatTelegramUnheldCard(
+            "TEST",
+            self.score_gate_payload(),
+            report_phase="盤中",
+            report_context=self.score_source_report_context("TEST", "source-error"),
+        )
+
+        self.assertIn("數據：RR 2.1｜S 不可用｜V 1.5x", card)
+        self.assertIn("盤面：強弱證據不足｜待確認", card)
+        self.assertIn("價格：100.0（+1.20%）", card)
+        self.assertNotIn("S 5/5", card)
+        self.assertNotIn("突破確認", card)
+        self.assertNotIn("極強", card)
+
+    def test_score_source_available_and_derived_cards_keep_existing_score_and_strength_text(self):
+        for holding, status, formatter in [
+            (True, "derived", generator.formatTelegramPositionCard),
+            (False, "available", generator.formatTelegramUnheldCard),
+        ]:
+            with self.subTest(holding=holding, status=status):
+                payload = self.score_gate_payload(holding=holding)
+                context = self.score_source_report_context("TEST", status)
+                if holding:
+                    card = formatter("TEST", payload, report_context=context)
+                else:
+                    card = formatter("TEST", payload, report_phase="盤中", report_context=context)
+
+                self.assertIn("S 5/5", card)
+                self.assertIn("盤面：突破確認", card)
+                if holding:
+                    self.assertIn("新倉 RR：不適用（既有持倉）", card)
+                else:
+                    self.assertIn("RR 2.1", card)
+                self.assertNotIn("S 證據不足", card)
+                self.assertNotIn("強弱證據不足", card)
+
     def test_v20_2_1_holding_card_always_shows_breakout_distance_when_available(self):
         cases = [
             (-1, "已突破（-1%）"),

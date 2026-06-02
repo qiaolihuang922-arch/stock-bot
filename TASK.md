@@ -1,203 +1,205 @@
-# TASK: 證據鏈第一批硬衝突修復 P1/P2/P4
+# TASK: 顯示門控修復：S 分數 / 強弱補源證據不足時不得顯示高信心數值
 
 ## 任務狀態
 
-- task_id: evidence_gate_p1_p2_p4_20260602
+- task_id: risk_patch_score_source_status_display_gate_20260602
 - 任務類型: risk_patch
 - 狀態: ready_for_tech
-- QA 分級建議: 至少 L2；若共用 renderer、funnel builder、position card、Telegram message list 多處共享契約被改動，升 L3。
-- 版本建議: 使用者可見報文版本不得回退；若本輪改動造成使用者可見分類、標籤或 header contract 變更，需同步升版與測試。
+- 版本建議: 使用者可見報文文字契約有變更，需同步檢查既有 report/version/header 常量；若現有版本契約要求報文變更升版，需升版，不得回退版本字串。
+- QA 分級建議: L2，需補至少一個直接消費者 probe 與一個正常資料反證案例；不要求 L3，因本輪不改策略 decision、DB、live delivery。
 
 ## Owner 問題
 
-目前 evidence_manifest / 資料依據已宣告 strategy_sample、ledger、market/theme 等證據不足、不可用或只作背景，但使用者可見卡片仍輸出 S 5/5、極強、突破確認、可行動 funnel 分類、精確今日買賣 / 股數 / 均價等高置信內容，造成
-「滿分結論 vs 不足證據」矛盾。
+presentation/report.py 的持倉卡與未持倉卡目前可能在 stock.<name>.score.source_status 非 available / derived 時，仍顯示 S 5/5、S 4/5 或「極強 / 突破確認」等高置信強弱文字，造成手機報文上「分數不可用」與「強信號結論」並
+存的誤讀。
 
-本輪只處理 P1 / P2 / P4：
-
-- P1: 關鍵證據 missing-source / insufficient-data / source-error 時，依賴 strategy sample / RR / execution memory 的 S 分數、強弱標籤、funnel 分類必須降級或隱藏。
-- P2: 卡片執行字段必須與 ledger_status / positions_status 合併門控；ledger 不足或衝突時，不能同時顯示「執行記憶不足」與精確今日 / 股數 / 均價。
-- P4: RR 不可用或過熱時，未持倉 funnel 必須硬門控，不得進入會被手機閱讀誤解為準備買入的分類，不得輸出進場觸發。
+本輪只修復顯示門控類第 1 項：S 分數與依賴 score/strength 的強弱文字，必須受 evidence_manifest 的 score source status 控制。
 
 ## 使用者可見結果
 
-手機閱讀 Telegram / 報文時，資料依據與卡片結論必須一致：
+手機閱讀報文路徑：
 
-- 證據不足時，不再看到 S 5/5、極強、突破確認 等高置信標籤照常出現。
-- 執行記憶不足時，不再看到精確今日交易、股數、均價等像已確認 ledger 的字段。
-- RR 不可用或過熱時，未持倉標的不得出現在「可買 / 可準備 / 進場觸發」等可行動區塊，只能進入不可追高觀察、過熱待回測、待回測或不可行動口徑。
+1. 使用者打開 Telegram/report。
+2. 查看「持倉卡」或「未持倉卡」。
+3. 若該股票 score.source_status 是 insufficient-data、source-error、缺失或其他非 available / derived 狀態：
+- 卡片不得顯示 S 5/5、S 4/5 等 S 數值。
+- 卡片資料行顯示 S 不可用 或 S 證據不足。
+- 若盤面強弱文字依賴 score/strength，需降級為 強弱證據不足、待確認 或等價低置信文字。
+- 不得同卡同時出現 S 證據不足 與 極強 / 突破確認。
 
-手機閱讀路徑示例形狀：
+示例輸出形狀：
 
-資料依據
-- strategy_sample: insufficient-data
+持倉｜2330 台積電
+S 證據不足｜RR 2.1｜價格資料可用
+強弱：待確認（score 證據不足）
 
-個股卡片
-- 強度: 證據不足，暫不顯示 S 分數
-- 狀態: 待回測 / 僅追蹤
-- 進場: 無有效進場
+未持倉｜NVDA
+S 不可用｜RR 1.8｜價格資料可用
+強弱：證據不足
 
-執行記憶
-- ledger_status: insufficient-data
-- 今日執行: 執行記憶不足，暫不顯示股數 / 均價
+正常資料不得被降級：
 
-未持倉漏斗
-- 不可追高觀察 / 過熱待回測
-- 不顯示進場觸發價
+未持倉｜AAPL
+S 5/5｜RR 2.0｜價格資料可用
+強弱：極強
 
 ## 非目標
 
-- 不改 strategy decision 結果。
-- 不改 RR 計算公式。
-- 不改 DB schema、RLS、grant、policy、role、index、constraint。
-- 不改 DB write path。
-- 不做 production DML / backfill。
-- 不做 live Telegram delivery。
-- 不處理 P3 / P5 / P6 / P7 / P8。
-- 不重設策略、分數模型、持倉狀態機或完整報文架構。
-- 不因證據不足刪除整張卡片；本輪目標是降低或隱藏高置信顯示，讓可見結論與證據狀態一致。
+- 不修改 strategy decision、買賣 / 加減碼 / 停損停利判斷。
+- 不修改 RR 公式、structure_score 計算公式或 score 來源生成邏輯。
+- 不修改 DB schema、RLS、grant、policy、role、index、constraint。
+- 不新增 production write / backfill / live Telegram delivery。
+- 不處理顯示門控清單其他項。
+- 不做全量報文重構、全量文案清理或策略語意重設。
 
-## 影響模組
+## 影響模組與直接消費者
 
-- evidence_manifest 到使用者可見 renderer / formatter 的證據狀態轉換層。
-- 個股卡片中 S 分數、強弱標籤、突破 / 確認類文案的顯示門控。
-- 今日買賣、股數、均價等 execution memory 顯示字段。
-- 未持倉 funnel 分類與進場觸發輸出。
-- 相關 probes / tests / fixtures。
+影響模組：
 
-## 直接消費者
+- presentation/report.py
+- 既有 report probe / test fixture 檔案，僅限補本輪可重跑驗收所需。
 
-- Telegram 報文手機閱讀者。
-- 報文 summary / funnel / card renderer。
-- QA probes 與 regression tests。
-- 後續 runner 產生的正式報文；本輪不得 live delivery。
+直接消費者：
+
+- Telegram/report 手機閱讀者。
+- 產生持倉卡與未持倉卡的 report rendering path。
+- QA probe / regression test，用來驗證 source status 與卡片文字一致。
 
 ## 輸出契約
 
-新增或調整一層統一證據門控，或等價集中機制。契約要求如下：
+資料讀取契約：
 
-1. P1 strategy / score / strength gate
+- 顯示 S 分數、structure_score 或依賴 score/strength 的高置信強弱文字前，必須讀取：
+- report_context.evidence_manifest["stock.<name>.score"].source_status
+- 或透過既有 _stock_field(report_context, name, "score")
+- 或等價既有結構化 helper。
+- source_status in {"available", "derived"} 才可顯示 S 數值與依賴 score/strength 的高置信強弱文字。
+- source_status 非上述值、缺失或讀取失敗時，顯示層必須 fail closed。
 
-- 當卡片高置信字段依賴 strategy_sample，且對應 evidence status 為 missing-source、insufficient-data、source-error 時，不得顯示 S 5/5 或等價滿分。
-- 不得顯示極強、突破確認、高置信可行動強弱文案。
-- 必須降級為「證據不足 / 待確認 / 待回測 / 僅追蹤」等保守口徑，或隱藏該字段。
-- 不能改內部 strategy decision 結果；只改可見標籤與分類門控。
+卡片文字契約：
 
-2. P2 ledger / positions execution gate
+- score 可用：
+- 可顯示既有 S n/5、structure_score、強弱高置信文案。
+- 不得因本修復降級。
+- score 不可用：
+- 不得顯示 S 1/5 到 S 5/5 的任何數值型 S 文案。
+- S 資料行需顯示 S 不可用 或 S 證據不足。
+- 若強弱文案依賴 score/strength，需顯示證據不足 / 待確認。
+- price / OHLCV / RR 可用時，仍可正常顯示 price / OHLCV / RR，不得因 score 不可用整卡消失。
 
-- 今日買入、今日賣出、股數、均價、成交記憶、已買入 / 已賣出等精確執行字段，必須同時通過 ledger_status 與 positions_status 的保守檢查。
-- 若 ledger 或 positions 任一為 missing-source、insufficient-data、source-error、衝突或不可判定，不得顯示精確今日 / 股數 / 均價。
-- 必須顯示「執行記憶不足」或等價保守文案。
-- 不得讓精確執行結論與「執行記憶不足」並存。
+已存在且不得回退的契約：
 
-3. P4 RR / overheat funnel gate
+- 持倉卡與未持倉卡仍需保留既有主要欄位順序與行動語意。
+- RR、價格、OHLCV 可用時的顯示不應被 score source status 牽連降級。
+- available / derived 的完整證據案例仍顯示原有 S 數值與強弱結論。
+- 不得更改下游 message list 結構，除非現有 report rendering contract 已要求同一欄位以文字降級。
 
-- RR 不可用、RR source-error、RR insufficient-data、過熱、不可追高時，未持倉不得進入「可買」「可準備」「進場觸發」「突破買入」等可行動 funnel。
-- 不得輸出具體進場觸發。
-- 必須沿用或強化 v20.4.25 既有不可追高觀察 / 過熱待回測 / 待回測口徑。
-- 不改 RR 算法，只改 RR 狀態對 funnel / 文案的硬門控。
+不確定項：
 
-4. 已存在且不得回退的契約
-
-- 無可買時不得使用像推薦的文案；必須是「新倉：無有效進場」或等價不可買表述。
-- 可買、可準備、僅追蹤、淘汰 / 不可行動必須分開。
-- 分組標題、卡片狀態、漏斗、索引、詳情必須一致。
-- 空區塊、0-count、無新增下單占位預設不顯示。
-- 使用者可見版本字串不得回退。
-- v20.4.25 的不可追高觀察 / 過熱待回測 / 待回測口徑不得被弱化；若無法確認既有常量或測試，必須 blocked 並交回 Architect 補充。
+- 若現有版本字串 / header 升版規則無法從 repo 判定，Tech 需標記 blocked 交 Architect 補充，不得自行假設「不用升版」。
 
 ## 版本契約
 
-- 若只新增證據門控且不改報文 header 格式，可維持現行版本字串。
-- 若使用者可見報文分類、標籤或 header contract 被調整，必須升版，不得回退。
-- Tech 必須在 CHANGELOG 寫明實際版本常量 / header 是否改動，以及原因。
+- 本輪屬使用者可見報文文案與顯示門控修復。
+- Tech 必須檢查現有 report 版本字串 / header / 常量。
+- 若 repo 已有「報文可見文字變更需升版」規則，需同步升版。
+- 不得回退既有版本字串。
 
 ## 驗收條件
 
-Tech 必須先補可重跑 probes，再實作修復。驗收至少覆蓋：
-
-1. P1 probe: strategy_sample 不可用
-
-- fixture: strategy_sample 為 missing-source / insufficient-data / source-error 任一狀態。
-- 修復前可重現：卡片仍出現 S 5/5、極強 或 突破確認。
-- 修復後要求：高置信 S 分數 / 強弱 / 突破確認降級或隱藏；資料依據與卡片一致。
-
-2. P2 probe: ledger / positions 不足
-
-- fixture: ledger_status 或 positions_status 為 insufficient / missing / source-error / conflict。
-- 修復前可重現：卡片仍顯示精確今日買賣、股數、均價。
-- 修復後要求：不顯示精確執行字段；只顯示執行記憶不足或等價保守文案。
-
-3. P4 probe: RR 不可用 / 過熱
-
-- fixture: 未持倉標的 RR unavailable / source-error / insufficient-data / overheat。
-- 修復前可重現：標的仍進入可行動準備分類或輸出進場觸發。
-- 修復後要求：標的只能進入不可追高觀察 / 過熱待回測 / 待回測 / 僅追蹤 / 不可行動；不得輸出進場觸發。
-
-4. 回歸要求
-
-- 有完整證據的既有正常案例，不得被錯誤降級。
-- strategy decision 原始結果、RR 計算值、DB payload/write 不得因本輪改動變更。
-- Telegram 手機閱讀路徑需檢查 summary、funnel、卡片、資料依據四者一致。
-- 測試結果只能宣告覆蓋 P1/P2/P4，不得宣告證據鏈全量完成。
+1. 持倉卡 negative probe：
+- fixture 建立持倉卡，price / OHLCV / RR 可用。
+- stock.<name>.score.source_status = "insufficient-data" 或 "source-error"。
+- 修復後輸出不包含 S 5/5、S 4/5 或任一 S n/5。
+- 輸出包含 S 不可用 或 S 證據不足。
+- 若原本會顯示 極強 / 突破確認，修復後需降級為證據不足 / 待確認。
+2. 未持倉卡 negative probe：
+- fixture 建立未持倉卡，price / OHLCV / RR 可用。
+- stock.<name>.score.source_status = "insufficient-data" 或 "source-error"。
+- 修復後不得顯示數值型 S 分數。
+- 不得同時出現 S 證據不足 與高置信強弱文案。
+3. 正常案例 regression：
+- stock.<name>.score.source_status = "available" 或 "derived"。
+- 既有 S 數值與強弱文案正常保留。
+- price / OHLCV / RR 顯示不被改壞。
+4. 可重跑證據：
+- Tech 需提供 probe/test 命令與結果。
+- QA 需補一個 Tech 未覆蓋的反證路徑，例如 missing score source status 或 source-error 與 RR 可用並存案例。
 
 ## 範例或 Fixture
 
-最小 fixture 形狀可由 Tech 依現有測試架構落地，但必須能重跑並保留為 regression：
+最小 fixture 形狀：
 
-Case P1
-evidence_manifest.strategy_sample.status = insufficient-data
-card.before = "S 5/5 / 極強 / 突破確認"
-card.after = "證據不足 / 待確認 / 不顯示 S 分數"
+report_context.evidence_manifest = {
+"stock.TEST.score": {
+"source_status": "insufficient-data"
+},
+"stock.TEST.price": {
+"source_status": "available"
+},
+"stock.TEST.ohlcv": {
+"source_status": "available"
+},
+"stock.TEST.rr": {
+"source_status": "available"
+},
+}
 
-Case P2
-evidence_manifest.ledger_status = missing-source
-evidence_manifest.positions_status = insufficient-data
-card.before = "今日買入 100 股 / 均價 123.45"
-card.after = "執行記憶不足 / 不顯示股數與均價"
+修復前風險輸出示例：
 
-Case P4
-rr.status = unavailable 或 overheat
-position_state = no_position
-funnel.before = "可準備 / 進場觸發 123.45"
-funnel.after = "不可追高觀察 / 過熱待回測 / 無有效進場"
+TEST
+S 5/5｜RR 2.0
+強弱：極強 / 突破確認
+
+修復後期望輸出示例：
+
+TEST
+S 證據不足｜RR 2.0
+強弱：待確認
+
+正常 fixture：
+
+report_context.evidence_manifest = {
+"stock.TEST.score": {
+"source_status": "available"
+}
+}
+
+正常期望：
+
+TEST
+S 5/5
+強弱：極強
 
 ## 明確禁止事項
 
-- 禁止改 DB schema / RLS / grant / policy / role / index / constraint。
-- 禁止改 DB write path 或新增 production DML。
-- 禁止 live Telegram delivery。
-- 禁止改 strategy decision 結果。
-- 禁止改 RR 計算公式。
-- 禁止把 local cache、runtime dict、agent 對話當作跨日 execution memory。
-- 禁止以隱藏 evidence_manifest 來消除矛盾；必須讓可見卡片 / funnel 跟 evidence status 一致。
-- 禁止把 P3/P5/P6/P7/P8 併入本輪。
-- 禁止只改文案不補可重跑 probes。
-- 禁止在 ledger 不足時仍輸出精確今日 / 股數 / 均價。
-- 禁止 RR 不可用或過熱時輸出未持倉進場觸發。
+- 禁止修改策略 decision 或交易建議結果。
+- 禁止修改 RR 公式。
+- 禁止修改 DB schema/write path。
+- 禁止 live Telegram 發送。
+- 禁止直接手寫 production DML。
+- 禁止把 score 不可用擴大成整卡不可顯示。
+- 禁止處理本輪以外的顯示門控清單項。
+- 禁止只改文案、不補可重跑 probe。
+- 禁止在 score source status 非 available / derived 時顯示任何 S n/5 數值。
 
 ## 阻塞條件
 
-- 找不到 evidence_manifest、ledger / positions 狀態或 RR 狀態進入 renderer / funnel 的資料路徑。
-- 現有報文版本常量或 v20.4.25 口徑無法定位，且會影響本輪版本契約判斷。
-- 無法建立三類可重跑 probes。
-- 測試環境缺 pytest / dependency 且 runner 無法補齊。
-- 任何修復必須改 DB schema/write、strategy decision 或 RR 公式才做得到。
-- 需求外發現 P3/P5/P6/P7/P8 問題但不阻塞 P1/P2/P4 驗收時，只能記待辦，不得擴大本輪。
+- 找不到 report_context.evidence_manifest 或既有 _stock_field(report_context, name, "score") / 等價結構化 helper，且無法可靠判定 score source status。
+- 現有 fixture/test infrastructure 無法構造持倉與未持倉 report card，且 Tech 無法提供可重跑替代 probe。
+- 現有版本契約無法判定是否需升版。
+- 修復必須改 strategy decision、DB schema/write 或 live delivery 才能達成時，本輪 blocked。
 
 ## 本輪停止條件
 
-完成標準：
+完成定義：
 
-- P1/P2/P4 三類失敗各有一個可重跑 probe 能先重現、後驗證修復。
-- 使用者可見 summary / funnel / card / 資料依據在三類 fixture 下語意一致。
-- 完整證據正常案例不被誤降級。
-- CHANGELOG 清楚列出修改檔案、契約影響、版本是否同步、自檢命令與結果。
-- QA 至少 L2，且除重跑 Tech 測試外，補一個手機閱讀誤讀路徑、負面案例或契約風險反證。
+- 僅 presentation/report.py 顯示門控與必要 probe/test 完成。
+- 持倉與未持倉 negative probe 均證明 score 不可用時不顯示 S 數值，也不顯示依賴 score/strength 的高置信強弱文字。
+- available/derived 正常案例未被降級。
+- QA 完成 L2 驗收並提供至少一個額外反證。
+- 若需 repo 落地，後續由 Architect 依 git completion gate 收口；PM 不宣告完成、不 commit、不 push。
 
-不納入本輪：
+旁支問題處理：
 
-- P3/P5/P6/P7/P8。
-- 全量證據鏈治理。
-- strategy / RR / DB / live delivery 的任何功能性改動。
-- 新增持久化 source-of-truth 或 backfill。
+- 其他 evidence gate 缺口、其他報文重複噪音、策略分數來源品質、DB source-of-truth 問題，若不阻塞上述驗收，只記待辦，不納入本輪。

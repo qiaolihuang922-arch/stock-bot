@@ -1,52 +1,85 @@
-# QA_REPORT: evidence_gate_p1_p2_p4_20260602
+# QA_REPORT:
 
   ## 測試範圍
 
-  - 依 TASK.md 驗收 P1 / P2 / P4；任務尺寸 risk_patch、QA level 至少 L2。
-  - 已讀 TASK.md、CHANGELOG.md、git diff，並抽查 core/generator.py、presentation/report.py、tests/test_generator_report.py。
-  - 本輪沒有驗 P3/P5/P6/P7/P8，沒有做 replay/backfill/full repo pytest。
-  - 可吸收 diff：CHANGELOG.md、core/generator.py、presentation/report.py、tests/test_generator_report.py。
-  - worktree 殘留：.qa_tmp/ 內有既存 / 測試暫存檔，但未出現在 git status --short；QA 未修改 tracked file。
+  本輪驗收 risk_patch_score_source_status_display_gate_20260602，範圍限於 S 分數 / 強弱補源門控：
+
+  - 讀取 TASK.md、CHANGELOG.md、git diff。
+  - 檢查可吸收 diff：presentation/report.py、tests/test_generator_report.py、CHANGELOG.md。
+  - 確認 worktree 無其他 tracked 殘留；未發現 core/generator.py、strategy、RR、DB schema/write、live Telegram 相關 diff。
+  - 未做 full repo pytest、replay、backfill、production smoke，符合 risk_patch / L2 範圍。
 
   ## 風險預算與停止條件
 
-  - 風險 1：strategy_sample source-error 被誤寫成 price/OHLCV/RR source failure，或把可用價格藏掉。驗證：重跑 Tech probe 並補手機閱讀反證；停止條件為卡片仍顯示價格與 RR，但不進可買 / 觸發。
-  - 風險 2：ledger / positions 不足時，持倉卡仍顯示精確股數、均價、今日買賣。驗證：重跑 P2 regression；停止條件為只顯示執行記憶不足，不與精確欄位並存。
-  - 風險 3：RR 不可用 / 過熱或證據不足時，未持倉仍進可買 / 可準備 / 進場觸發，或完整證據正常案例被誤降級。驗證：重跑 renderer 回歸與補正常可買對照；停止條件為不足 fail-closed、完整證據仍可買。
+  本輪最值得抓的風險：
+
+  1. score.source_status 非 available/derived 時，持倉/未持倉卡仍顯示 S n/5 或高信心 盤面：突破確認 / 極強。
+      - 驗證：Tech probes + QA missing score manifest probe。
+      - 停止條件：任一卡同時出現 S 證據不足/S 不可用 與 S 5/5、盤面：突破確認 或 極強。
+  2. score 不可用時誤把價格/RR/volume 一起藏掉，造成手機讀者誤以為 price/RR source missing。
+      - 驗證：source-error / missing score manifest 下確認價格仍顯示；未持倉 RR 仍顯示。
+      - 停止條件：price/RR 可用 fixture 輸出被改成 source missing 或整卡不可讀。
+  3. available/derived 正常案例被誤降級。
+      - 驗證：Tech regression available/derived card 保留 S 5/5 與 盤面：突破確認。
+      - 停止條件：正常資料出現 S 證據不足 或 強弱證據不足。
 
   ## 關聯風險掃描
 
-  - git diff 只改報文 context / renderer / tests / changelog；未見 services/analysis.py、DB schema、migration、Supabase write path、notifier/live Telegram 變更。
-  - core/generator.py 版本常量仍為 v20.4.25，符合 CHANGELOG「未改 header 格式、不升版」說明。
-  - git diff -U0 抽查未命中 calc_rr、def strategy、DB write、Telegram send 相關實質新增；未發現改 strategy decision、RR 公式、DB schema/write、live delivery。
-  - 不是清理 / 瘦身 / refactor 任務，不適用 path / claim / evidence / risk / action 清理表阻塞條件。
+  TASK / CHANGELOG / diff 一致：本輪只改 presentation formatter 與 regression tests，未擴到策略、RR、DB、live delivery。
+
+  重跑 Tech 測試：
+
+  - arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py -k 'score_source or breakout_distance'
+      - 6 passed, 105 deselected, 13 warnings
+  - arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py
+      - 111 passed, 221 warnings
+  - arch -arm64 .venv/bin/python -m py_compile presentation/report.py tests/test_generator_report.py
+      - passed
+  - git diff --check
+      - passed
+
+  額外 QA probe：
+
+  - 建立持倉與未持倉手機卡 fixture，price / daily_ohlcv / RR / volume 可用，但 stock.TEST.score manifest 缺失。
+  - 結果：持倉與未持倉皆不含 S 5/5、S 4/5、極強、盤面：突破確認；皆顯示 S 證據不足 與 盤面：強弱證據不足｜待確認；價格保留；未持倉 RR 2.1 保留。
 
   ## 跨區塊語意一致性
 
-  - P1/P4：strategy_sample source-error 時，summary 顯示「新倉：無有效進場」、漏斗顯示 可買 0，未持倉卡為「不可行動｜策略樣本來源異常」，觸發為「無有效進場」，資料依據說策略樣本不納入買賣判斷；四者一致。
-  - P2：ledger / execution memory insufficient 時，持倉卡顯示「今日執行：執行記憶不足，暫不顯示精確執行欄位」，測試確認不含 倉位：70股、均價、今日 買；資料依據包含「執行記憶：資料不足」。
-  - 完整 strategy_sample evidence 對照案例仍顯示「新倉：可行動候選 1 檔」、可買 1、未持倉卡「可買」、S 5/5，未被誤降級。
+  持倉卡：
+
+  - 數據 行從 S 5/5 降為 S 證據不足。
+  - 盤面 行同步降為 強弱證據不足｜待確認。
+  - 價格行仍顯示，持倉非加碼 RR 仍維持既有 新倉 RR：不適用（既有持倉） 契約。
+
+  未持倉卡：
+
+  - source-error 與 missing score manifest 都不再顯示數值型 S 分數。
+  - 盤面 不再顯示高信心突破確認。
+  - price/RR/volume 可用資訊未被 score gate 誤藏。
+
+  正常資料：
+
+  - available/derived regression 保留 S 5/5 與 盤面：突破確認，未被降級。
 
   ## 使用者誤讀風險
 
-  - 已按手機閱讀順序檢查 summary -> 未持倉漏斗 -> 卡片 -> 資料依據。
-  - 補充反證：同一 BUY payload、price/OHLCV/RR available、strategy_sample source-error 時，不出現 price/OHLCV/RR source 或 價格：不可用（source missing），仍顯示 價格：100.0（+1.20%） 與 數據：RR 2.1｜S 證據不足｜V
-    1.5x。
-  - 同一 payload 換成完整 strategy evidence 後仍可買，避免使用者把本輪門控誤讀為「所有完整證據買點都被降級」。
+  按手機閱讀順序檢查卡片主體：
+
+  - 先看到標題與行動，再看到 盤面：score 不足時已改成低信心文字，不會先給 突破確認。
+  - 再看到 數據：score 不足時顯示 S 證據不足 或 S 不可用，不會同列出現 S 5/5。
+  - 後續價格/RR 可用時仍保留，避免讀者誤解成整體價格或 RR source missing。
 
   ## 質疑與反證
 
-  - 重跑 Tech 焦點命令：3 passed, 105 deselected, 17 warnings。
-  - 重跑完整 tests/test_generator_report.py：108 passed, 221 warnings。
-  - 重跑 py_compile：core/generator.py presentation/report.py tests/test_generator_report.py passed。
-  - git diff --check passed。
-  - QA 補充手機閱讀 counter-probe passed：source-error 阻斷可行動分類，不歸咎 price/OHLCV/RR，不隱藏價格；完整證據正常可買案例不降級。
+  主動反證 Tech 未覆蓋的缺 score manifest 路徑：stock.TEST.score 欄位完全缺失，但 price/RR/volume 仍可用。結果通過，證明缺欄位 fail closed 且不牽連 price/RR。
+
+  另檢查 diff 未碰 core/generator.py、services、DB/migrations/supabase 路徑；未看到 strategy decision、RR 公式、DB schema/write、live Telegram 變更。
 
   ## 未測項目
 
-  - 未測 P3/P5/P6/P7/P8。
-  - 未做 production read-only smoke、正式 replay、backfill、live Telegram delivery。
-  - 未跑全 repo pytest；本輪 L2 範圍集中在 tests/test_generator_report.py shared renderer / message list regression。
+  - 未驗其他 evidence gate 清單項，依 TASK 不納入本輪。
+  - 未驗 production read-only smoke、Telegram live delivery、backfill/replay。
+  - 無 report_context 的 legacy direct card wrapper 仍屬既有無 evidence manifest 呼叫形態；本輪 QA 只按 TASK 的手機 report/evidence_manifest 路徑驗收，若要把無 context 呼叫也強制視為 missing-source，需另開契約任務。
 
   ## QA 結論
 
