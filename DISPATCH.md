@@ -16,7 +16,7 @@
 
 ## Recently Done
 
-- `pending`｜`20260602_intraday_v20_4_24_a1_a2_a3_hard_conflicts`｜normal_patch｜06/02 盤中報文 A1/A2/A3 硬衝突：不可買未持倉不再以可準備主標籤呈現；持倉主行動與排序跨卡片 / 風控 / 索引一致；`v20.4.25`；QA passed，pending commit / push / gate。
+- `dab598e`｜`20260602_intraday_v20_4_24_a1_a2_a3_hard_conflicts`｜normal_patch｜06/02 盤中報文 A1/A2/A3 硬衝突：不可買未持倉不再以可準備主標籤呈現；持倉主行動與排序跨卡片 / 風控 / 索引一致；`v20.4.25`；QA passed；Git completion gate passed。
 - `33cbc4b`｜`mark-bot-workflow-fix-pushed-20260602`｜process_governance｜校正 DISPATCH / CURRENT_STATE 中上一輪 run-bot workflow fix 的 pending 狀態；scope gate passed；Git completion gate passed。
 - `c6da0bf`｜`fix-bot-workflow-may-backfill-guard-20260602`｜normal_patch｜GitHub Actions default `run_mode=bot` 跳過 May market/theme backfill，避免 2026-06-02 range guard 阻塞；QA passed；Git completion gate passed。
 - `a1ea855`｜`process-dispatch-state-machine-and-profile-boundaries-20260602`｜process_governance｜DISPATCH 三段狀態機、rolling handoff 指針、Architect 角色卡、角色卡機讀 sections / conflict priority / shared boundaries、agent profile contract gate；scope gate passed。

@@ -29,7 +29,8 @@
 ## Latest Completed Handoff
 
 - task_id：`20260602_intraday_v20_4_24_a1_a2_a3_hard_conflicts`
-- 狀態：QA `通過`；主 repo 已吸收 scoped diff，等待 commit / push / Git completion gate。
+- 狀態：done / committed / pushed；Git completion gate passed。
+- commit：`dab598e fix intraday report hard conflicts`。
 - 問題：06/02 盤中 `v20.4.24` 報文有三個手機閱讀硬衝突：未持倉不可買 / 不可追高仍以推薦感 `可準備` 主標籤呈現；同一持倉主行動在卡片 / 決策 / 風控檢查混用；持倉排序在卡片 / 風控檢查 / 詳情索引不一致。
 - 修正：報文版本升 `v20.4.25`；不可買未持倉顯示為 `不可追高觀察` / `過熱待回測` / `待回測`；一般續抱持倉可見主行動收斂為 `續抱觀察`；詳情索引的持倉欄位改列 ordered holding names，與持倉卡片和風控檢查同序。
 - 驗證：QA `通過`；主 repo `tests/test_generator_report.py` 106 passed，217 warnings；`py_compile` / `git diff --check` passed；QA 額外 rendered-message probe 確認 3 則 message、未持倉 title 無 `可準備 / 可買 / 推薦`、持倉 card/control/index order 一致、同一持倉主行動三處一致。
