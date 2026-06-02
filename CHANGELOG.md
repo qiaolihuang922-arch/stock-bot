@@ -1,74 +1,71 @@
-# CHANGELOG:
+# CHANGELOG: risk_patch_unheld_funnel_overheat_prepare_fix
 
   ## 任務尺寸與風險
 
-  - 任務類型：risk_patch
-  - 風險原因：使用者可見 Telegram 持倉 / 未持倉卡顯示門控，涉及 S 分數與強弱高信心文字，但不改 strategy decision、RR、DB、live delivery。
+  - 任務尺寸：risk_patch
+  - 風險：影響未持倉 funnel 分類、summary count、卡片狀態與使用者可見 Telegram 版本；未改策略 decision、RR 公式、DB 或 live delivery。
 
   ## 修改內容
 
-  - 在 presentation/report.py 新增 score source status 顯示門控。
-  - 顯示 S n/5 或 score/strength 相關高信心盤面文字前，讀取 stock.<name>.score.source_status。
-  - available / derived：保留原本 S 5/5 與 盤面：突破確認 / 極強 等文字。
-  - 非 available / derived：持倉與未持倉卡改顯示 S 證據不足 或 S 不可用，盤面降級為 強弱證據不足｜待確認。
-  - 保留 price / RR / volume 顯示，不因 score 不可用把整卡降級成 price source missing。
-  - 補 regression probe：持倉 insufficient-data、未持倉 source-error、available/derived 正常案例。
+  - unheld_funnel_state() 新增過熱 prepare gate：
+      - should_show_overheat_rr_blocker(result, holding=False) 為 true 時，不再回傳 可準備。
+      - heat_state 為 HOT / EXTREME 時，不再回傳 可準備。
+      - strong_prepare_bucket() label 為 過熱降溫 時，不再回傳 可準備。
+      - 上述標的改走既有 等冷卻 / 等回測 僅追蹤分類。
+  - 保留非過熱普通強勢準備，例如 突破回測，仍可在 R3 進攻偏熱 下回傳 可準備。
+  - 報文版本由 v20.4.25 升為 v20.4.26。
+  - 補/更新可重跑 probe，覆蓋過熱 RR blocker、HOT、過熱降溫、EXTREME 漲停與普通強勢準備不誤降級。
 
   ## 修改檔案
 
-  - presentation/report.py
+  - core/generator.py
   - tests/test_generator_report.py
 
   ## 最小改動策略
 
-  - 只在 presentation formatter 加小型 helper，不碰 strategy decision、RR 公式、DB schema/write、Telegram live delivery。
-  - 測試使用既有 generator.formatTelegramPositionCard / generator.formatTelegramUnheldCard wrapper，直接驗證 report card rendering path。
-  - 未改 core/generator.py 的 VERSION、message list 結構、分組順序或 payload shape。
+  - 只在 unheld_funnel_state() 內調整分類 gate，沿用既有 tomorrow_watch_state()、should_show_overheat_rr_blocker()、strong_prepare_bucket() 與既有 funnel buckets。
+  - 未新增 funnel bucket，未重構 summary / card renderer。
+  - 測試只同步受分類與版本影響的既有報文斷言，並新增直接分類 probe。
 
   ## 契約影響
 
-  - 使用者可見文字契約變更：score source status 不足時，同卡不得再顯示 S n/5 或依賴 score/strength 的高信心盤面文字。
-  - 無回傳結構變更。
-  - 無 payload shape 變更。
-  - 無 message list 順序變更。
-  - 無 DB contract 變更。
-  - 版本同步：已檢查 core/generator.py 目前 VERSION = "v20.4.25" 與 header tests；repo 內未找到硬性本輪必升版規則，未回退也未擅自升版。
+  - unheld_funnel_state() public helper 行為變更：
+      - 過熱 / RR blocker / 過熱降溫 未持倉不再回傳 可準備。
+      - 這類標的會計入 等冷卻 或 等回測，因此 summary、漏斗 count、詳情索引、卡片排序會同步反映為僅追蹤。
+  - Telegram header / report context version 同步為 v20.4.26。
+  - 未改 payload shape、DB contract、message list 數量、RR 顯示公式或 strategy decision。
 
   ## 直接消費者同步
 
-  - 持倉卡：formatTelegramPositionCard 已同步使用 score source gate。
-  - 未持倉卡：formatTelegramUnheldCard 已同步使用 score source gate。
-  - 既有 generator wrapper 仍透過 presentation deps 呼叫 formatter，無需改呼叫參數。
-  - QA / regression test 已新增持倉與未持倉 probe。
+  - build_unheld_funnel()、today_conclusion_text()、format_execution_checklist()、format_unheld_funnel()、detail_index_text() 皆透過 unheld_funnel_state() 自動同步新分類。
+  - formatTelegramUnheldCard() 透過同一 helper 顯示 等冷卻 / 等回測 卡片主狀態，避免卡片過熱但漏斗仍算可準備。
+  - format_strong_prepare_summary() 只列仍屬 可準備 的普通準備標的，過熱標的不再列入強勢準備摘要。
 
   ## 未影響模組
 
   - 未改 services/analysis.py
-  - 未改 strategy decision / 買賣 / 加減碼 / 停損停利判斷
-  - 未改 RR 公式
-  - 未改 DB schema / RLS / grant / policy / role / index / constraint
-  - 未新增 production write / backfill / live Telegram delivery
-  - 未改主 repo，未 commit / push
+  - 未改 strategy decision / action 產生邏輯
+  - 未改 RR 計算公式或 blocker 定義
+  - 未改 DB schema / write path / backfill
+  - 未執行 live Telegram 或 Supabase write
+  - 未處理其他清單項
 
   ## 已跑自檢命令
 
-  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache .venv/bin/python -m pytest -q tests/test_generator_report.py -k 'score_source or breakout_distance'
-      - 結果：失敗，原因是 x86_64 Python 載入 arm64 .venv 的 pydantic_core，架構不相容。
-  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py -k 'score_source or breakout_distance'
-      - 結果：6 passed, 105 deselected, 13 warnings
-  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py
-      - 結果：111 passed, 221 warnings
-  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m py_compile presentation/report.py tests/test_generator_report.py
-      - 結果：passed
-  - git diff --check
-      - 結果：passed
+  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py -k "overheat_prepare or overheat_blocker or r3_hot_market_adds_prepare_layer
+    or low_volume_limit_up_prepare or r3_hot_prepare_overflow or mobile_a1_unheld or unheld_funnel_groups"：6 passed，13 warnings
+  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py：112 passed，221 warnings
+  - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py tests/test_generator_report.py：passed
+  - git diff --check：passed
 
   ## 殘留風險
 
-  - 目前 build_report_context 仍會由 OHLCV 推導 score status；「price/OHLCV/RR 可用但 score source-error」這類情境需要上游已在 evidence_manifest 提供獨立 score status，本輪只修 presentation 消費門控。
-  - QA 仍需補 TASK 要求的額外反證路徑，例如 missing score source status。
+  - 本輪只修未持倉 funnel 過熱 prepare 分類；未審全報文所有「追高 / 追蹤」文案。
+  - warnings 皆為既有第三方 deprecation / Python 版本警告，非本輪新增。
+  - Tech 自檢不代表 QA 通過。
 
   ## 旁支待辦
 
-  - 其他 evidence gate 缺口與其他顯示門控清單項不在本輪處理。
-  - 若 Architect/Owner 要所有使用者可見文案修復固定升版，需另補明確版本治理規則。
+  - 其他 Owner 清單項另開任務處理。
+  - 若後續要統一「過熱待回測」與 等冷卻 / 等回測 的可見命名，可另開文案/漏斗命名任務。
+  - 若要完整驗 production 實際報文，需由 QA / Architect 依標準 read-only artifact 或 runner 流程處理，不在本輪 Tech 實作內。

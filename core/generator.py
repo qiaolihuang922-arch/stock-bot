@@ -68,7 +68,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.25"
+VERSION = "v20.4.26"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -4790,6 +4790,7 @@ def unheld_funnel_state(name, data, market_mode=None, report_context=None):
     result = data.get("result") or {}
     state = tomorrow_watch_state(name, data)
     blockers = entry_blockers(result)
+    prepare_label, _prepare_action = strong_prepare_bucket(data)
 
     if is_valid_entry(result) and not _unheld_decision_source_eligible(report_context, name):
         return "淘汰"
@@ -4797,13 +4798,19 @@ def unheld_funnel_state(name, data, market_mode=None, report_context=None):
     if is_valid_entry(result):
         return "可買"
 
-    if cross_day_prepare_promotion(data):
-        return "可準備"
-
     if state == "弱勢淘汰":
         return "淘汰"
 
-    prepare_label, _prepare_action = strong_prepare_bucket(data)
+    if (
+        should_show_overheat_rr_blocker(result, holding=False)
+        or result.get("heat_state") in ["HOT", "EXTREME"]
+        or prepare_label == "過熱降溫"
+    ):
+        return state if state in ["等冷卻", "等回測"] else "等冷卻"
+
+    if cross_day_prepare_promotion(data):
+        return "可準備"
+
     if market_mode == "進攻偏熱" and prepare_label:
         return "可準備"
 

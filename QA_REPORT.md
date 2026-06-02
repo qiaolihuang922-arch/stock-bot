@@ -2,84 +2,92 @@
 
   ## 測試範圍
 
-  本輪驗收 risk_patch_score_source_status_display_gate_20260602，範圍限於 S 分數 / 強弱補源門控：
+  本輪驗收 risk_patch_unheld_funnel_overheat_prepare_fix，只驗 TASK/Architect 指定第 3 項：過熱 / RR blocker / 過熱降溫 未持倉不得回傳或計入 可準備，手機閱讀的 summary、漏斗 count、卡片標題、強勢準備摘要需一致；普通非過
+  熱強勢準備仍保留 可準備。
 
-  - 讀取 TASK.md、CHANGELOG.md、git diff。
-  - 檢查可吸收 diff：presentation/report.py、tests/test_generator_report.py、CHANGELOG.md。
-  - 確認 worktree 無其他 tracked 殘留；未發現 core/generator.py、strategy、RR、DB schema/write、live Telegram 相關 diff。
-  - 未做 full repo pytest、replay、backfill、production smoke，符合 risk_patch / L2 範圍。
+  可吸收 diff 僅限：
+
+  - CHANGELOG.md
+  - core/generator.py
+  - tests/test_generator_report.py
+
+  worktree 殘留：
+
+  - git status --short 只顯示上述 3 個 tracked diff。
+  - .qa_tmp/ 內有既存暫存 artifact，但 git ls-files .qa_tmp 為空，未形成 tracked diff。
 
   ## 風險預算與停止條件
 
   本輪最值得抓的風險：
 
-  1. score.source_status 非 available/derived 時，持倉/未持倉卡仍顯示 S n/5 或高信心 盤面：突破確認 / 極強。
-      - 驗證：Tech probes + QA missing score manifest probe。
-      - 停止條件：任一卡同時出現 S 證據不足/S 不可用 與 S 5/5、盤面：突破確認 或 極強。
-  2. score 不可用時誤把價格/RR/volume 一起藏掉，造成手機讀者誤以為 price/RR source missing。
-      - 驗證：source-error / missing score manifest 下確認價格仍顯示；未持倉 RR 仍顯示。
-      - 停止條件：price/RR 可用 fixture 輸出被改成 source missing 或整卡不可讀。
-  3. available/derived 正常案例被誤降級。
-      - 驗證：Tech regression available/derived card 保留 S 5/5 與 盤面：突破確認。
-      - 停止條件：正常資料出現 S 證據不足 或 強弱證據不足。
+  1. 過熱標的仍被 unheld_funnel_state() 算入 可準備，導致 summary / 漏斗 / 卡片矛盾。
+  2. format_strong_prepare_summary() 仍把同一過熱標的列入「強勢準備」。
+  3. gate 過寬，誤把普通非過熱強勢準備降級成僅追蹤。
+
+  對應驗證：
+
+  - 重跑 Tech 指定測試與完整 tests/test_generator_report.py。
+  - 補獨立手機閱讀 probe：同一份報文同時包含 RR blocker 過熱、過熱降溫、普通突破回測準備。
+
+  停止條件：
+
+  - 僅驗上述輸出契約與直接消費者；不擴成 full repo pytest、replay、backfill、production Telegram 或 DB smoke。
 
   ## 關聯風險掃描
 
-  TASK / CHANGELOG / diff 一致：本輪只改 presentation formatter 與 regression tests，未擴到策略、RR、DB、live delivery。
+  TASK / CHANGELOG / diff 一致：task_id 與修改範圍一致，CHANGELOG 宣稱只改 unheld_funnel_state() gate、版本與測試，diff 符合。
 
-  重跑 Tech 測試：
+  實作重點：
 
-  - arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py -k 'score_source or breakout_distance'
-      - 6 passed, 105 deselected, 13 warnings
-  - arch -arm64 .venv/bin/python -m pytest -q tests/test_generator_report.py
-      - 111 passed, 221 warnings
-  - arch -arm64 .venv/bin/python -m py_compile presentation/report.py tests/test_generator_report.py
-      - passed
-  - git diff --check
-      - passed
+  - core/generator.py:4804 對 should_show_overheat_rr_blocker(...)、heat_state HOT/EXTREME、prepare_label == 過熱降溫 先回 等冷卻 / 等回測，再處理 cross_day_prepare_promotion 與 market_mode == 進攻偏熱 的 可準備。
+  - core/generator.py:5637 的強勢準備摘要只列 unheld_funnel_state(...) == 可準備 的標的。
+  - presentation/report.py:282 卡片主狀態透過同一 funnel helper，舊的 過熱待回測 prepare label 只在 funnel_state == 可準備 時使用。
 
-  額外 QA probe：
-
-  - 建立持倉與未持倉手機卡 fixture，price / daily_ohlcv / RR / volume 可用，但 stock.TEST.score manifest 缺失。
-  - 結果：持倉與未持倉皆不含 S 5/5、S 4/5、極強、盤面：突破確認；皆顯示 S 證據不足 與 盤面：強弱證據不足｜待確認；價格保留；未持倉 RR 2.1 保留。
+  未見 diff 觸及 strategy decision、RR 公式、DB schema/write、backfill、live Telegram delivery。
 
   ## 跨區塊語意一致性
 
-  持倉卡：
+  Tech 測試重跑：
 
-  - 數據 行從 S 5/5 降為 S 證據不足。
-  - 盤面 行同步降為 強弱證據不足｜待確認。
-  - 價格行仍顯示，持倉非加碼 RR 仍維持既有 新倉 RR：不適用（既有持倉） 契約。
+  - targeted pytest：6 passed, 106 deselected, 13 warnings
+  - full tests/test_generator_report.py：112 passed, 221 warnings
+  - py_compile core/generator.py tests/test_generator_report.py：passed
+  - git diff --check：passed
 
-  未持倉卡：
+  QA 補充 probe 結果：
 
-  - source-error 與 missing score manifest 都不再顯示數值型 S 分數。
-  - 盤面 不再顯示高信心突破確認。
-  - price/RR/volume 可用資訊未被 score gate 誤藏。
+  - 熱RR：unheld_funnel_state == 等冷卻
+  - 熱標籤：unheld_funnel_state == 等冷卻
+  - 普通強勢：unheld_funnel_state == 可準備
 
-  正常資料：
+  手機閱讀輸出：
 
-  - available/derived regression 保留 S 5/5 與 盤面：突破確認，未被降級。
+  - Summary：未持倉 1 檔不可追高觀察、2 檔僅追蹤
+  - 漏斗：可買 0｜不可追高觀察 1（不可買）｜僅追蹤 2｜淘汰 0
+  - 僅追蹤拆分：等冷卻 2
+  - 強勢準備只列：普通強勢
+  - 卡片標題：熱RR / 熱標籤 均為 ⏳ 等冷卻｜過熱觀察，普通強勢為 👀 待回測｜突破回測
 
   ## 使用者誤讀風險
 
-  按手機閱讀順序檢查卡片主體：
+  已反證同一過熱標的不會在 summary 漏斗 count、卡片標題、強勢準備三處被顯示成 可準備 / 不可追高觀察 / 過熱待回測。本輪輸出會把過熱標的讀成等冷卻或等回測僅追蹤，普通強勢準備仍可被讀成不可追高觀察。
 
-  - 先看到標題與行動，再看到 盤面：score 不足時已改成低信心文字，不會先給 突破確認。
-  - 再看到 數據：score 不足時顯示 S 證據不足 或 S 不可用，不會同列出現 S 5/5。
-  - 後續價格/RR 可用時仍保留，避免讀者誤解成整體價格或 RR source missing。
+  殘留文案風險：repo 仍有 unheld_non_actionable_prepare_label() 回傳 過熱待回測 的舊分支，但目前只在 funnel_state == 可準備 路徑使用；本輪 probe 未觸發該舊文字。建議作為後續文案清理，不阻塞本輪。
 
   ## 質疑與反證
 
-  主動反證 Tech 未覆蓋的缺 score manifest 路徑：stock.TEST.score 欄位完全缺失，但 price/RR/volume 仍可用。結果通過，證明缺欄位 fail closed 且不牽連 price/RR。
+  質疑：strong_prepare_bucket() 仍會對 trade_state=EXTENDED 回 過熱降溫，是否會被 summary 強勢準備吃到？
+  反證：format_strong_prepare_summary() 先檢查 funnel state；QA probe 中 熱標籤 未出現在強勢準備摘要。
 
-  另檢查 diff 未碰 core/generator.py、services、DB/migrations/supabase 路徑；未看到 strategy decision、RR 公式、DB schema/write、live Telegram 變更。
+  質疑：新增 gate 是否誤殺普通非過熱準備？
+  反證：QA probe 中 普通強勢 仍為 可準備，summary 與卡片仍列 突破回測。
+
+  質疑：RR blocker 過熱是否只改 RR 顯示、不改 funnel？
+  反證：QA probe 中 RR=0 且 HOT/EXTENDED 的 熱RR funnel state 為 等冷卻，卡片顯示過熱觀察，不計入 可準備。
 
   ## 未測項目
 
-  - 未驗其他 evidence gate 清單項，依 TASK 不納入本輪。
-  - 未驗 production read-only smoke、Telegram live delivery、backfill/replay。
-  - 無 report_context 的 legacy direct card wrapper 仍屬既有無 evidence manifest 呼叫形態；本輪 QA 只按 TASK 的手機 report/evidence_manifest 路徑驗收，若要把無 context 呼叫也強制視為 missing-source，需另開契約任務。
+  未跑 full repo pytest、production read-only smoke、replay/backfill、DB schema/write、live Telegram delivery；這些均超出 TASK 本輪停止條件。未審全報文所有「追高 / 追蹤」文案，只驗本輪直接消費者。
 
   ## QA 結論
 
