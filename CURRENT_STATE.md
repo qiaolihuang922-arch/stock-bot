@@ -29,7 +29,8 @@
 ## Latest Completed Handoff
 
 - task_id：`fix-bot-workflow-may-backfill-guard-20260602`
-- 狀態：PM done / Tech done / QA `通過`；主 repo 已吸收 scoped diff，等待 commit / push / Git completion gate。
+- 狀態：done / committed / pushed；Git completion gate passed。
+- commit：`c6da0bf skip may backfill in bot workflow`。
 - 問題：GitHub Actions `Stock Bot Pro / run-bot` 在 default `run_mode=bot` 時仍跑 May market/theme evidence write，2026-06-02 觸發 `source date outside requested May range` guard 後 exit 1。
 - 修正：`.github/workflows/stock-bot.yml` 的 May market/theme evidence backfill step 只在 `backfill_may` / `backfill_and_bot` 執行；default `bot` 明確 skip，不呼叫 `--write --confirm-write`。
 - 驗證：QA `通過`；`tests/test_workflow_runtime_config.py tests/test_market_theme_source_backfill.py` 21 passed；QA 補 fake python success path，確認 backfill modes 仍執行且 guard failure 不被吞。

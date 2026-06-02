@@ -16,7 +16,7 @@
 
 ## Recently Done
 
-- `pending`｜`fix-bot-workflow-may-backfill-guard-20260602`｜normal_patch｜GitHub Actions default `run_mode=bot` 跳過 May market/theme backfill，避免 2026-06-02 range guard 阻塞；QA passed，pending commit / push / gate。
+- `c6da0bf`｜`fix-bot-workflow-may-backfill-guard-20260602`｜normal_patch｜GitHub Actions default `run_mode=bot` 跳過 May market/theme backfill，避免 2026-06-02 range guard 阻塞；QA passed；Git completion gate passed。
 - `a1ea855`｜`process-dispatch-state-machine-and-profile-boundaries-20260602`｜process_governance｜DISPATCH 三段狀態機、rolling handoff 指針、Architect 角色卡、角色卡機讀 sections / conflict priority / shared boundaries、agent profile contract gate；scope gate passed。
 - `254f909`｜`holding-weak-observation-clock-20260601`｜normal_patch｜弱勢遠離持倉觀察天數 / fail-closed；`v20.4.24`；QA passed；Git completion gate passed。
 - `d19fcdf`｜`pm-normal-limit-up-low-volume-risk`｜normal_patch｜縮量漲停風險提示；`v20.4.23`；QA passed；Git completion gate passed。
