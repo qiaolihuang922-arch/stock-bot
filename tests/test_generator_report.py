@@ -1465,6 +1465,63 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【智原 3035】👀 隔日確認｜漲停反彈待確認", unheld)
         self.assertNotIn("等冷卻 1", summary)
 
+    def test_unheld_cooling_and_next_day_rendered_counts_match_cards(self):
+        next_day_payload = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 124],
+            None,
+            price=124,
+            change=3.2,
+        )
+        next_day_payload["stock_code"] = "3035"
+        next_day_payload["result"].update({
+            "decision": "WAIT",
+            "action": 0,
+            "price_behavior": "LIMIT_REBOUND",
+            "heat_state": "NORMAL",
+            "trade_state": "WAIT",
+            "rr": 1.5,
+            "market_grade": "A",
+            "entry_quality": "B",
+        })
+        cooling_payload = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 125],
+            None,
+            price=125,
+            change=4.0,
+        )
+        cooling_payload["stock_code"] = "2301"
+        cooling_payload["result"].update({
+            "decision": "WAIT",
+            "action": 0,
+            "price_behavior": "NORMAL",
+            "heat_state": "HOT",
+            "trade_state": "EXTENDED",
+            "rr": 1.6,
+            "market_grade": "A",
+            "entry_quality": "B",
+        })
+
+        messages = generator.formatTelegramMessages(
+            {"智原": next_day_payload, "光寶科": cooling_payload},
+            "FULL DETAIL",
+            None,
+            None,
+            {"market_theme_evidence": {"theme_status": "absent", "level": "absent"}},
+            datetime(2026, 6, 2),
+            report_phase="盤中",
+        )
+
+        summary = summary_message(messages)
+        unheld = unheld_message(messages)
+
+        self.assertIn("可買 0｜不可追高觀察 0（不可買）｜隔日確認 1｜僅追蹤 2｜淘汰 0", summary)
+        self.assertIn("其中僅追蹤 2 檔拆分：隔日確認 1、等冷卻 1", summary)
+        self.assertIn("【智原 3035】👀 隔日確認｜漲停反彈待確認", unheld)
+        self.assertIn("【光寶科 2301】⏳ 等冷卻｜過熱觀察", unheld)
+        self.assertEqual(summary.count("隔日確認 1"), 3)
+        self.assertNotIn("【智原 3035】⏳ 等冷卻", unheld)
+        self.assertNotIn("【光寶科 2301】👀 隔日確認", unheld)
+
     def test_summary_includes_strategy_evidence_without_changing_actions(self):
         payload = render_payload(
             [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119],

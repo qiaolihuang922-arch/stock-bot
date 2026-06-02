@@ -331,6 +331,61 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             report["blocked_reasons"],
         )
 
+    def test_official_report_string_market_summary_passes_trade_date_to_confirmed_loader(self):
+        payload = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 126],
+            None,
+            price=126,
+            change=3.1,
+        )
+        payload["stock_code"] = "2330"
+        payload["result"].update({
+            "decision": "WAIT",
+            "action": 0,
+            "breakout_distance": 7.5,
+            "rr": 1.8,
+            "market_grade": "A",
+            "heat_state": "NORMAL",
+            "trade_state": "WAIT",
+        })
+        calls = []
+        loaded = load_confirmed_market_theme_evidence(
+            client=EvidenceClient([
+                confirmed_row(trade_date="2026-06-02", sector_theme_key="AI infrastructure"),
+                confirmed_row(trade_date="2026-06-01", sector_theme_key="AI infrastructure"),
+                confirmed_row(trade_date="2026-05-29", sector_theme_key="AI infrastructure"),
+            ]),
+            trade_date="2026-06-02",
+        )
+        loaded["evidence_trend"] = {
+            "status": "confirmed_trend",
+            "observed_days": 20,
+            "recent_supporting_days": 5,
+            "support_streak_days": 3,
+            "lookback_range": "2026-05-04..2026-06-02",
+        }
+
+        def loader(*, trade_date=None):
+            calls.append(trade_date)
+            return loaded
+
+        with patch.object(generator, "load_confirmed_market_theme_evidence", side_effect=loader):
+            messages = generator.formatTelegramMessages(
+                {"台積電": payload},
+                "FULL DETAIL",
+                None,
+                None,
+                "AI/電子供應鏈仍偏多",
+                datetime(2026, 6, 2),
+                report_phase="盤中",
+            )
+
+        summary = summary_message(messages)
+        self.assertIn("2026-06-02", calls)
+        self.assertIn("市場 / 題材背景：近 20 個交易日短期背景", summary)
+        self.assertIn("近期 5 日支持仍支持目前背景觀察，可靠度較高", summary)
+        self.assertNotIn("市場 / 題材背景：短期背景資料不足，僅供觀察。", summary)
+
     def test_readonly_smoke_cli_outputs_consumption_check_json_with_mocked_persistent_rows(self):
         client = MultiTableEvidenceClient({
             "market_theme_confirmed_evidence": [

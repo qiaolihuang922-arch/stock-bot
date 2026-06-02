@@ -266,6 +266,100 @@ class StrategyEvidenceTest(unittest.TestCase):
         self.assertIn("原因：classification backtest 欄位不足（daily_price 無可用資料）", text)
         self.assertIn("狀態碼：insufficient-data", text)
 
+    def test_load_summary_consumes_cross_version_outcome_history(self):
+        class Query:
+            def __init__(self, name, calls, rows):
+                self.name = name
+                self.calls = calls
+                self.rows = rows
+
+            def select(self, *_args, **_kwargs):
+                self.calls.append((self.name, "select"))
+                return self
+
+            def eq(self, *_args, **_kwargs):
+                self.calls.append((self.name, "eq", _args, _kwargs))
+                rows = [
+                    row for row in self.rows
+                    if str(row.get(_args[0])) == str(_args[1])
+                ]
+                return Query(self.name, self.calls, rows)
+
+            def order(self, field, **kwargs):
+                self.calls.append((self.name, "order", field, kwargs))
+                self.rows = sorted(
+                    self.rows,
+                    key=lambda row: str(row.get(field) or ""),
+                    reverse=kwargs.get("desc", False),
+                )
+                return self
+
+            def limit(self, value):
+                self.calls.append((self.name, "limit", value))
+                self.rows = self.rows[:value]
+                return self
+
+            def execute(self):
+                self.calls.append((self.name, "execute"))
+                return SimpleNamespace(data=self.rows)
+
+        class Client:
+            def __init__(self):
+                self.calls = []
+                self.rows = {
+                    "daily_signal_snapshot": [
+                        {
+                            "stock_id": f"24{i:02d}",
+                            "trade_date": "2026-05-28",
+                            "version": "old_version",
+                            "close": 100,
+                            "volume_ratio": 1.0,
+                            "pattern": "BREAKOUT_NEAR",
+                            "market_state": "B",
+                            "structure_state": "NORMAL",
+                            "position_state": "WAIT",
+                            "rr": 0.8,
+                            "score": 4,
+                            "heat_level": 1,
+                            "action": "WAIT",
+                            "reasons": ["RR不足"],
+                            "is_tradeable": False,
+                            "is_best_candidate": False,
+                        }
+                        for i in range(10)
+                    ],
+                    "daily_price": [
+                        {
+                            "stock_id": f"24{i:02d}",
+                            "trade_date": trade_date,
+                            "open": close,
+                            "high": high,
+                            "low": low,
+                            "close": close,
+                            "volume": 1000,
+                        }
+                        for i in range(10)
+                        for trade_date, close, high, low in [
+                            ("2026-05-28", 100, 101, 99),
+                            ("2026-05-29", 101, 103, 100),
+                            ("2026-06-01", 102, 105, 101),
+                            ("2026-06-02", 104, 106, 103),
+                        ]
+                    ],
+                }
+
+            def table(self, name):
+                return Query(name, self.calls, list(self.rows.get(name, [])))
+
+        client = Client()
+
+        text = strategy_evidence.load_strategy_evidence_summary(client, "v20.4.31", limit=240)
+
+        self.assertNotIn(("daily_signal_snapshot", "eq", ("version", "v20.4.31"), {}), client.calls)
+        self.assertIn("策略樣本 / 分類回測", text)
+        self.assertIn("分類：RR不足｜樣本：10 筆", text)
+        self.assertNotIn("狀態：不可用", text)
+
     def test_record_strategy_evidence_reuses_injected_client(self):
         payload = {
             "recorded": True,

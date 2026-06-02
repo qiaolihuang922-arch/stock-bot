@@ -641,7 +641,6 @@ def load_strategy_evidence_summary(client, version, limit=240):
     signal_rows = (
         client.table("daily_signal_snapshot")
         .select("stock_id,trade_date,version,close,volume_ratio,pattern,market_state,structure_state,position_state,rr,score,heat_level,action,reasons,is_tradeable,is_best_candidate")
-        .eq("version", version)
         .order("trade_date", desc=True)
         .limit(limit)
         .execute()

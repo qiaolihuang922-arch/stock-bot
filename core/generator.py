@@ -4467,7 +4467,7 @@ def build_report_context(
         ),
     ]
 
-    market_evidence = market_theme_summary_evidence(results_map, market_summary)
+    market_evidence = market_theme_summary_evidence(results_map, market_summary, trade_date=trade_date)
     market_status = _manifest_status(market_evidence.get("source_status"))
     market_decision_eligible = bool(
         market_evidence.get("confirmed")
@@ -5907,14 +5907,15 @@ def ai_supply_chain_mainline_supported(market_summary):
     return False
 
 
-def market_theme_summary_evidence(results_map, market_summary, evidence_loader=None):
+def market_theme_summary_evidence(results_map, market_summary, evidence_loader=None, trade_date=None):
     loader = evidence_loader or load_confirmed_market_theme_evidence
 
     if isinstance(market_summary, dict):
         evidence = market_summary.get("market_theme_evidence")
+        evidence_trade_date = market_summary.get("trade_date") or market_summary.get("as_of") or trade_date
         if not evidence:
             loaded = loader(
-                trade_date=market_summary.get("trade_date")
+                trade_date=evidence_trade_date
             )
             evidence = loaded
         report_date = market_summary.get("as_of")
@@ -5925,7 +5926,7 @@ def market_theme_summary_evidence(results_map, market_summary, evidence_loader=N
             as_of=report_date,
         )
 
-    loaded = loader()
+    loaded = loader(trade_date=trade_date)
     if loaded.get("status") in {"confirmed", "absent", "missing-source", "source-error", "insufficient-data"}:
         return build_market_theme_evidence_provider(
             results_map=results_map,

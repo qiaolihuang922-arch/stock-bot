@@ -28,6 +28,22 @@
 
 ## Latest Completed Handoff
 
+- task_id：`evidence-wiring-and-funnel-consistency-20260602`
+- 狀態：QA passed；commit / push 待 final 收口。
+- 問題：Owner 指出前一輪只把 evidence 加權框架搭好，但兩個證據源沒有真正喂入：strategy_sample 被 version filter 切斷，market/theme string summary path 沒傳 trade_date，導致報文仍長期 `不適用 / 資料不足`。
+- 修正：
+  - `services/strategy_evidence.py load_strategy_evidence_summary()` 移除 `daily_signal_snapshot.version == version` filter，按 trade_date 讀近期跨版本 outcomes。
+  - `core/generator.py market_theme_summary_evidence()` 新增 / 消費 `trade_date`，market_summary 是字串時也會呼叫 `load_confirmed_market_theme_evidence(trade_date=...)`。
+  - `build_report_context()` 傳入 report trade_date，official `generate_report(dry_run=True)` path 可消費 confirmed evidence trend。
+  - D2/B5 rendered message 補 `等冷卻 / 隔日確認` 漏斗與卡片一致 probe。
+  - 調試期不再 bump VERSION，本輪仍維持 `v20.4.31`。
+- 驗證：QA `通過`；主 repo targeted tests 4 passed，13 warnings；`py_compile` passed；`git diff --check` passed。
+- QA 反證：跨版本 old_version fixture 可產生 `分類：RR不足｜樣本：10 筆`；official generate_report probe 顯示 loader_calls=`['2026-06-02']`，market/theme 不再顯示資料不足；`build_market_theme_production_trend_consumption_check` uses history；智原 / 光寶科 card 分類與漏斗拆分一致。
+- 邊界：未改 RR 公式、DB schema / write path、production backfill、live Telegram；未觸碰未追蹤 `scripts/diagnose_evidence_sources.py`。
+- 後續：production evidence 實際資料品質、逐股 mapping、長期樣本分布需另開 read-only artifact / source-of-truth 任務。
+
+## Previous Completed Handoff
+
 - task_id：`evidence-per-stock-reliability-funnel-phase3-closeout-20260602`
 - 狀態：QA passed；commit / push 待 final 收口。
 - 問題：Owner 要一次性修復 per-stock evidence、可靠度門檻、modifier cap、source fail-closed、資料不足文案、card/funnel tracking 一致與 Phase 3 guard 回歸。

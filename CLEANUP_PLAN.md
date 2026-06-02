@@ -15,6 +15,14 @@
 
 ## Completed
 
+- `evidence-wiring-and-funnel-consistency-20260602`:
+  - 問題：前一輪 evidence weighting 框架已具備 fail-closed / 拆分顯示，但 strategy_sample 因 version filter、market/theme 因 trade_date wiring 缺失而沒有真正進入正式報文路徑，導致框架空轉。
+  - 結果：`load_strategy_evidence_summary()` 移除 version filter，改吃近期 trade_date 跨版本 outcomes；`market_theme_summary_evidence()` string summary path 取得 trade_date 並消費 confirmed evidence_trend；本輪不 bump VERSION，維持 `v20.4.31`；D2/B5 `等冷卻 / 隔日確認` rendered message 補一致性反證。
+  - 可重跑補強：新增 `tests/test_strategy_evidence.py` cross-version outcome history ready/sample probe；新增 market/theme official report string summary trade_date loader probe 與 production trend consumption check；新增 generator rendered message D2/B5 probe。
+  - QA 反證：第一輪 QA blocked 只因 CHANGELOG 錯輪，非產品 blocker；同步本輪 handoff 後 Re-QA 通過。QA 補 official `generate_report(dry_run=True)` probe，確認 loader_calls=`['2026-06-02']`、報文顯示 confirmed trend 而非資料不足、漏斗與卡片分類一致。
+  - 主 repo 驗證：targeted tests 4 passed，13 warnings；`py_compile` / `git diff --check` passed。
+  - 規則治理：`evidence_chain` + `QA反證` + `runner_gap`。證據鏈不能只驗 helper 或文案；必須驗 official generate_report path 與 loader contract。CHANGELOG handoff 仍是 runner gap，Tech answer -> main handoff sync 需要可重跑補強。
+  - 邊界：未改 RR、DB schema/write、production backfill、live Telegram；未觸碰未追蹤診斷腳本。
 - `evidence-per-stock-reliability-funnel-phase3-closeout-20260602`:
   - 問題：Owner 要 evidence chain 真正進入決策分數，但前一輪仍有報表級 evidence 被所有股票共用、可靠度不足仍可能加分、`隔日確認` 與 `僅追蹤` 口徑分裂的風險。
   - 結果：報文版本升 `v20.4.31`；per-stock market/theme 與 strategy/setup 缺 payload 時 fail closed，不再 fallback report-level；source-error / insufficient 先 fail closed；supporting / partial modifier cap；資料不足文案改為 `短期背景資料不足，僅供觀察`；`隔日確認` 納入 `僅追蹤` aggregate。
