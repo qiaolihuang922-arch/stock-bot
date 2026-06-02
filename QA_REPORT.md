@@ -1,55 +1,48 @@
-# QA_REPORT:
+# QA_REPORT: evidence per-stock reliability closeout
 
 ## 測試範圍
 
-- 任務尺寸 / QA：major / L3；範圍鎖定 evidence_score Phase 1/2/2b 的直接消費者，不擴成 full repo、replay、backfill 或 production matrix。
-- 已讀：TASK.md、CHANGELOG.md、git diff、core/generator.py、presentation/report.py、services/analysis.py、tests/test_generator_report.py。
-- 可吸收 diff：CHANGELOG.md、core/generator.py、presentation/report.py、services/analysis.py、tests/test_generator_report.py。
-- worktree 殘留：git status --short 只顯示上述 tracked 修改；QA 另在 .qa_tmp/evidence_phase_l3_probe.py 放暫存 probe，未修改 tracked file。
-
-## 風險預算與停止條件
-
-1. evidence 被誤用成獨立 BUY / 可準備來源。
-   - 驗證：confirmed no setup、supporting_trend、single_day、sample<10、missing evidence。
-   - 停止條件：任一非 strong confirmed + technical setup near-boundary 進入可買 / adjusted 可準備。
-2. chase / LIMIT_LOCK / RR / overheat hard blocker 被 evidence 放寬。
-   - 驗證：Tech 回歸 + QA probe 的 LIMIT_LOCK confirmed evidence 手機卡片與 manifest。
-   - 停止條件：出現 adjustment reason、可準備主狀態或買點文案像推薦。
-3. mixed adjusted + ordinary prepare 手機閱讀與 manifest 分裂。
-   - 驗證：Summary -> 漏斗 -> card -> detail index -> manifest 順序檢查。
-   - 停止條件：ordinary prepare 顯示成可準備、manifest reason 非 None，或 summary/card/detail 計數不一致。
+- 任務尺寸 / QA：major / L3。
+- 驗證範圍：evidence score、modifier cap、market/theme fail-closed、per-stock strategy / market fallback、漏斗一致性、D1 資料不足文案、Phase 3 guard。
+- 已讀：TASK.md、CHANGELOG.md、git diff、core/generator.py、presentation/report.py、tests/test_generator_report.py、tests/test_market_theme_evidence.py。
+- 未要求 / 未執行：production DB read-only smoke、live Telegram、正式 backfill、production data quality matrix、full repo pytest。
 
 ## 關聯風險掃描
 
-- TASK / CHANGELOG / diff 一致：CHANGELOG 宣稱的 helper、modifier、final_confidence、sorting、score line、boundary adjustment、hard blocker、mixed split 都有對應 diff 與測試。
-- 未見 DB schema、RLS、grant、policy、role、index、constraint、production write、backfill、live Telegram 檔案改動。
-- 版本字串由 v20.4.29 升為 v20.4.30，未回退。
+- VERSION 升至 v20.4.31，未回退。
+- 未改 RR 公式、DB schema / RLS / grant / policy / role、production write path、approved write CLI、live Telegram、Phase 3 runner。
+- per-stock evidence 缺 payload 時不再 fallback 到 report-level positive evidence。
+- `source-error / missing-source / insufficient-data / unresolved-conflict` 先 fail closed，不再進 supporting / weak / mixed。
+- supporting / partial modifier cap 成立；confirmed 才可到 ceiling。
 
 ## 跨區塊語意一致性
 
-- market_theme.supporting_trend：不是 confirmed，不 decision eligible，不產生 boundary reason，不調成 adjusted 可準備。
-- single_day：不 decision eligible，不成 confirmed。
-- missing evidence：evidence_modifier=1.0，final_confidence == technical_confidence。
-- mixed adjusted + ordinary prepare：Summary、未持倉漏斗、card、detail index、manifest 拆分一致；ordinary card / manifest 主顯示態為 不可追高觀察，strategy_funnel_state=可準備，evidence_adjustment_reason=None。
-- pick/sort：pick_best_stock、watchlist sort 使用 final_confidence。
+- `per_stock_evidence={"B": {}}` 且 report-level strategy_sample available / row_count=30 時，`compute_evidence_score("B")` 回 `score=None / status=unavailable`，modifier = 1.0。
+- market/theme 逐股缺 payload 時同樣 fail closed，不偷吃 report-level confirmed trend。
+- `unheld_tracking_only_count()` 已把 `隔日確認` 納入 `僅追蹤` aggregate。
+- 漏斗拆分顯示 `隔日確認`，拆分加總 = `僅追蹤` 總數 = card actual。
+- reliability 為資料不足時，報文改為 `短期背景資料不足，僅供觀察`；資料不足路徑不再輸出 `仍支持目前背景觀察`。
 
 ## 使用者誤讀風險
 
-- 手機閱讀順序已檢查：Summary 先拆 可準備 與 不可追高觀察，未持倉卡片再逐檔呈現；ordinary prepare 不會在卡片標題或漏斗被誤讀成 evidence-adjusted prepare。
-- chase/LIMIT_LOCK 卡片仍保留不可追高語意，雖顯示 confirmed evidence 的 score line，但沒有 boundary adjustment reason 或可準備主狀態。
+- 隔日確認現在歸在僅追蹤內並拆分顯示，避免使用者讀成「僅追蹤 0 但另有隔日確認 1」。
+- 資料不足不再使用支撐語氣，避免讀成可加分或可行動。
+- source-error / insufficient 不會顯示 supporting 或 +15%，避免把資料錯誤讀成證據支撐。
 
 ## 質疑與反證
 
-- Tech 聚焦回歸：24 passed, 105 deselected。
-- QA 自補 probe：.qa_tmp/evidence_phase_l3_probe.py 通過，覆蓋 supporting_trend、LIMIT_LOCK chase、mixed 手機路徑 + manifest、missing evidence modifier。
-- 完整直接消費者單檔：tests/test_generator_report.py 通過，129 passed, 225 warnings。
-- git diff --check 通過。
+- QA direct probe：`per_stock_evidence={"B": {}}` + report-level strategy_sample available / row_count=30 + manifest available，結果為 `score=None / status=unavailable / modifier=1.0`，strategy / market payload 皆 unavailable。
+- `git diff --check`：passed。
+- `pytest -q tests/test_generator_report.py -k ...`：10 passed。
+- `pytest -q tests/test_market_theme_evidence.py -k ...`：7 passed。
+- `pytest -q tests/test_phase3_evidence_automation.py tests/test_workflow_runtime_config.py`：20 passed。
+- Combined targeted L3 suite：`tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_phase3_evidence_automation.py tests/test_workflow_runtime_config.py`：191 passed，225 warnings。
 
 ## 未測項目
 
-- 未跑 full repo pytest、production replay、backfill、live Telegram、production write。
-- 未驗 production evidence 資料品質矩陣；本輪只驗 repo 內契約、formatter、manifest 與 regression probes。
-- warnings 為既有 dependency deprecation 類，未見本輪阻塞錯誤。
+- 未測 production DB read-only smoke、live Telegram、正式 backfill、production data quality matrix。
+- 未跑 full repo pytest；本輪 L3 風險集中在 evidence/report/Phase3 guard，已跑相關 combined suite。
+- warnings 為既有第三方 / Python deprecation，非本輪行為失敗。
 
 ## QA 結論
 

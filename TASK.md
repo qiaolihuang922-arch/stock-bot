@@ -1,345 +1,292 @@
-# TASK: evidence_score enters decision score and funnel boundary
+# TASK: per-stock evidence scoring, reliability fail-closed, funnel consistency, and Phase 3 alert guard closeout
 
 ## 任務狀態
 
-- task_id: evidence-score-decision-funnel-phase1-2-2b
+- task_id: evidence-per-stock-reliability-funnel-phase3-closeout-20260602
 - 任務類型: major
-- 狀態: done / QA passed
-- 版本建議: 使用者可見報文內容變更，需升版或更新報文 header / version 常量；不得回退既有版本字串。
+- 狀態: done
+- Owner 優先級: E1 -> E3 -> E2/E4 -> E5 -> D1 -> D2/B5 -> A1
+- 版本建議: 使用者可見報文文案 / 分類 / score line 會變更，需升版，不得回退目前 v20.4.30
 - QA 分級建議: L3
 
 ## Owner 問題
 
-Owner 要把 evidence_score 正式接入決策分數、排序與漏斗邊界，但只允許它作為技術 setup 的加權證據，不允許變成獨立買進訊號、追高放寬或風控覆蓋。
+目前 evidence chain 已進入 final_confidence 與漏斗邊界，但仍可能把報表級證據、資料不足證據或單一來源證據錯當成所有股票的可靠加分，造成手機報文出現以下硬風險：
 
-本輪要完成 Phase 1 / Phase 2 / Phase 2b：
-
-- Phase 1: 產生個股 evidence score 與 source eligibility。
-- Phase 2: 以 evidence modifier 調整 final confidence，並讓排序使用 final confidence。
-- Phase 2b: 僅對接近漏斗邊界且已有技術 setup 的候選，允許 evidence 做有限邊界調整並留下原因。
+- 不同股票共用同一個 evidence_score / modifier，沒有真正 per-stock。
+- 資料依據不足時仍可能得到 confirmed / 滿額 score / +15%。
+- 單一來源、supporting label 或 source-error looking payload 仍可能推到 ceiling。
+- 卡片標題與未持倉漏斗 state 可能對同一標的不一致。
+- Phase 3 前輪已落地，但需確認 scheduled path guard 與連續 N 日 unavailable/stale 告警是否完整；缺口才補，不得重造已完成實作。
 
 ## 使用者可見結果
 
-Telegram / report 手機閱讀時，每檔標的分數行需能看出：
+手機 Telegram 報文需呈現更保守且一致的決策語意：
 
-- 綜合分數是最終排序 / 漏斗使用的分數。
-- 技術分數仍可獨立閱讀。
-- 證據加權只呈現為增減幅或資料不足，不包裝成買進理由。
+- 同一份報文中，不同題材 / setup 的股票可以有不同 證據 分數、evidence_modifier 與 綜合 分數。
+- 資料不足時，不得顯示像 confirmed、強支撐或可加分的語氣。
+- reliability 為 資料不足 時，背景說明改為：
+- 短期背景資料不足，僅供觀察
+- 卡片標題、未持倉漏斗、tracking_only_count、detail / manifest 對同一標的分類一致。
+- source-error / missing / insufficient 的 market/theme evidence 不得包裝成 supporting。
+- Phase 3 若連續 N 個已確認交易日 evidence unavailable/stale，需在既有報文或日誌路徑發出可追蹤告警；不得 live Telegram delivery。
 
-示例輸出形狀：
+手機閱讀示例形狀：
 
-2330 台積電｜可準備
-綜合 82｜技術 78｜證據 +5%（confirmed）
-理由：技術 setup 接近可準備門檻，產業主題 confirmed + strategy sample ready，證據僅調整邊界，不放寬RR/過熱限制。
+分數：綜合 76 / 技術 74 / 證據 82
+證據：題材趨勢 confirmed｜同 setup 回測 supporting｜+8%
 
-資料不足時：
+短期背景資料不足，僅供觀察
 
-2454 聯發科｜僅追蹤
-綜合 74｜技術 74｜證據：不適用（資料不足）
-理由：證據不足，沿用純技術分數與原漏斗邊界。
+未持倉漏斗（非執行）
+僅追蹤 3：隔日確認 1、等回測 2
 
-手機閱讀路徑：
+不可出現示例：
 
-- Summary 仍只回答今天能不能買、持倉先處理什麼、未持倉哪些只是追蹤。
-- 分組標題、卡片狀態、漏斗、索引與詳情必須一致。
-- 無 setup 或硬風控阻擋的標的，即使 evidence confirmed，也不得在手機報文中呈現為可買。
+資料不足｜仍支持目前背景觀察
+source-error｜supporting｜+15%
+卡片：隔日確認；漏斗：可準備
 
 ## 非目標
 
 - 不改 RR 公式。
-- 不改 DB schema、RLS、grant、policy、role、index、constraint。
-- 不新增 production write / backfill / live delivery。
-- 不送 live Telegram。
-- 不做 Phase 3。
-- 不重設策略核心、不重定義既有技術 setup。
-- 不把 evidence 做成 standalone BUY source。
-- 不放寬 chase / overheat / RR / risk controls。
-- 不處理本輪以外的報文清理、全量 refactor 或資料庫治理問題。
+- 不改 DB schema / RLS / grant / policy / role / index / constraint。
+- 不做 live Telegram delivery。
+- 不直接手寫 production DML。
+- 不重做前輪已完成的 Phase 1/2/2b 或 Phase 3 實作；只能用證據確認已滿足，或補本輪明確缺口。
+- 不新增交易策略核心規則或改變 hard blocker 定義。
+- 不處理本輪外的文案降噪、全報文清理、資料治理或 mapping 擴表。
 
 ## 影響模組與直接消費者
 
 影響模組：
 
-- evidence score 計算模組或新增 helper。
-- load_strategy_evidence_summary 的既有讀取消費路徑。
-- market theme / evidence trend 讀取與判斷路徑。
-- decision confidence / candidate scoring。
-- pick_best_stock。
-- funnel sorting / funnel boundary 判斷。
-- manifest / report 產生器。
-- Telegram/report formatter 中個股分數行。
+- core/generator.py
+- presentation/report.py
+- scripts/run_phase3_evidence_automation.py
+- .github/workflows/stock-bot.yml
+- 相關 tests / probes，優先放在既有 generator report、market/theme evidence、phase3 automation 測試檔
 
 直接消費者：
 
-- 日報 / Telegram 報文讀者。
-- pick_best_stock 的呼叫方。
-- funnel 分組與排序的呼叫方。
-- manifest/report artifact 消費者。
-- QA probes / regression tests。
+- Telegram 報文手機閱讀者。
+- generate_report() message list / rendered report。
+- pick_best_stock、watchlist sort、execution ordering 的 final confidence consumer。
+- stock.<name>.risk.value / manifest 中的 score、funnel state、evidence adjustment consumer。
+- Phase 3 scheduled evidence runner 與 GitHub Actions daily_evidence workflow。
+- QA probe / regression tests。
 
 ## 輸出契約
 
-### evidence score helper
+### 1. per-stock evidence score
 
-新增或補齊：
+compute_evidence_score(report_context, name) 必須以 name 取該股自身證據：
 
-compute_evidence_score(report_context, name) -> tuple[float | None, str]
+- strategy_sample: 取同類 setup / 該股 setup 對應回測，不得用報表級單一值套所有股票。
+- market_theme: 取該股所屬題材 / theme 的 trend，不得用報表級單一值套所有股票。
+- 同一報表內兩檔不同題材或不同 setup，允許且應能得到不同：
+- evidence_score
+- evidence_modifier
+- final_confidence
 
-契約：
+### 2. reliability / decision eligibility 門檻
 
-- score: 0.0 <= score <= 1.0，或 None。
-- status: 必須可區分至少以下狀態：
-- confirmed
-- supporting
-- partial
-- neutral
-- unavailable
-- 所有 source insufficient 時：score=None, status="unavailable"。
-- 部分 source insufficient 時：不得 fail open；只能 neutral / partial。
-- source 不足不得產生強證據分數。
+confirmed_trend / decision_eligible 的滿額 score 門檻，必須與 presentation/report.py 目前可靠度門檻同口徑：
 
-### evidence sources
+- 建議同時要求 observed >= threshold 且 streak 達標。
+- 資料不足 / insufficient-data 時，對應 evidence score/status 不得為 confirmed。
+- evidence insufficient 時不得產生正向 +15% modifier。
 
-strategy_sample：
+### 3. 加權合成與 modifier cap
 
-- 來源為 load_strategy_evidence_summary 的既有 setup winrate / MFE-MAE summary。
-- sample threshold 使用既有門檻，Owner 鎖定為約 10；Tech 不得另創新門檻。
-- sample >= existing threshold about 10 且資料可用才可視為 ready / decision_eligible。
-- sample <10 必須是 neutral / partial，不得當 confirmed。
+加權合成需 fail closed：
 
-market_theme：
+- 單一可用來源不得直接給 ceiling 1.15。
+- 使用加權合成，不得以不分來源品質的等權平均推到 ceiling。
+- label=supporting 時 modifier 必須封頂於中間檔，例如 <= 1.08。
+- 只有 confirmed 且雙源或足夠高可信來源時，才允許到 1.15。
+- RR / overheat / chase / LIMIT_LOCK / no setup 等 hard blockers 不得因 evidence modifier 被放寬。
 
-- 來源為 evidence_trend。
-- 狀態包含 confirmed / supporting / single_day。
-- 只有 confirmed 可作強證據。
-- single_day 不得獨立推升到 confirmed，不得放寬 chase。
+### 4. market/theme evidence payload fail closed
 
-### decision eligibility
+_market_theme_evidence_payload 必須先判斷 source status：
 
-輸出 evidence payload 必須包含：
+- 若 source_status in {missing-source, source-error, insufficient-data, unresolved-conflict}：
+- status = unavailable
+- score = None
+- 不得再進入 supporting / weak / mixed 判斷
 
-evidence.market_theme.decision_eligible
-evidence.strategy_sample.decision_eligible
-evidence.*.forbidden_effects
+### 5. reliability 資料不足文案
 
-decision_eligible：
+presentation/report.py reliability 為 資料不足 時：
 
-- market_theme: 只有 confirmed 才可 true。
-- strategy_sample: 只有 ready 且 sample 達既有門檻才可 true。
+- 不再輸出 仍支持目前背景觀察
+- 改輸出 短期背景資料不足，僅供觀察
 
-forbidden_effects 必須至少表達：
+### 6. 卡片與漏斗分類器一致
 
-- no standalone BUY
-- no chase relaxation
-- no override risk controls
+同一標的的卡片標題與 unheld_funnel_state 必須同源或等價同口徑：
 
-### final confidence
+- 卡片 state = 漏斗 state。
+- 漲停反彈 統一為一種口徑：隔日確認 或 等回測，Tech 只能選一個並同步所有 consumer。
+- tracking_only_count 必須包含同一口徑下的 隔日確認。
+- 漏斗拆分加總 = 僅追蹤 總數 = 卡片實際數。
 
-final_confidence = technical_confidence * evidence_modifier
-evidence_modifier = clamp(1 + 0.3 * (evidence_score - 0.5), [0.85, 1.15])
+### 7. Phase 3 缺口收斂
 
-Owner 鎖定參數：
+前輪 commit 281be20 已宣告：
 
-- k = 0.3
-- floor = 0.85
-- ceiling = 1.15
+- daily_evidence schedule 已存在。
+- scheduled path 不送 Telegram。
+- trading day + 13:20 後才跑 daily snapshot 與 market/theme approved write CLI。
+- unknown calendar / 休市 / source-error fail closed skip。
+- stale alert 只按 confirmed trading day 累積。
 
-當 evidence_score is None：
+本輪 Tech 必須先檢查上述是否仍成立：
 
-- evidence_modifier = 1.0
-- final_confidence = technical_confidence
-- 不做 funnel boundary adjustment。
-
-### sorting / picking
-
-- pick_best_stock 必須使用 final_confidence。
-- funnel sorting 必須使用 final_confidence。
-- manifest/report 需保留或揭露 technical_confidence、evidence_modifier、final_confidence，避免無法重跑驗證。
-
-### report data line
-
-使用者可見報文分數行拆成：
-
-綜合 X｜技術 Y｜證據 +Z%（status）
-
-資料不足時：
-
-綜合 X｜技術 Y｜證據：不適用（資料不足）
-
-### Phase 2b boundary adjustment
-
-只允許：
-
-- 候選已有既有 technical setup。
-- 候選接近既有 funnel boundary。
-- evidence 是 strong confirmed。
-- 調整方向只能讓 等回測 / 等RR修復 這類 near-boundary 狀態更接近 可準備。
-- manifest/report 必須標註 evidence adjustment reason。
-
-硬限制：
-
-- 無 technical setup 不得變 BUY。
-- confirmed evidence 不得使無 setup 變可買。
-- overheat / chase ban 不得放寬。
-- RR / overheat hard blockers 仍然阻擋。
-- risk controls 不得被 evidence 覆蓋。
+- 若已滿足，CHANGELOG.md 寫證據與測試，不重複改。
+- 若缺少 scheduled path guard、approved write path guard、或連續 N 日 unavailable/stale 報文 / 日誌告警，才補最小缺口。
+- 告警只能走既有報文或日誌路徑，不得 live Telegram delivery。
 
 ## 版本契約
 
-已存在且不得回退的契約：
+- 現有使用者可見版本不得低於 v20.4.30。
+- 若改動任何 Telegram 報文文案、score line、漏斗分類、卡片標題或 visible alert，必須升 core/generator.py 的 VERSION。
+- 若只補非可見 Phase 3 guard 且無報文輸出變更，可不升版，但 CHANGELOG.md 必須明確說明原因。
+- 不得把「不要回退版本」解讀為「禁止升版」。
 
-- 報文 Summary 只回答決策，不得把追蹤標的寫成推薦。
-- 可買、可準備、僅追蹤、淘汰 / 不可行動必須分開。
-- 無可買時不得使用像推薦的文案。
-- 同一持倉同一份報文只能有一個主行動。
-- 空區塊、0-count、無新增下單占位預設不顯示。
-- 使用者可見報文變更需核對版本字串，不得回退版本。
-- production DB / Telegram live delivery 不在本輪。
+## 已存在且不得回退的契約
 
-若 Tech 發現既有程式沒有可定位的 version/header 常量，需在 CHANGELOG 標成 residual risk，並不得自行擴大成版本系統重構。
+- c7dd94b 已落地 evidence score 進 final_confidence、pick/sort/execution ordering，報文分數拆為 綜合 / 技術 / 證據。
+- missing evidence modifier = 1.0，不得改成正向加分。
+- supporting_trend 只作 supporting score，不作 strong boundary evidence。
+- single_day 不得 decision eligible。
+- Phase 2b 只能把 near-boundary 調整到 可準備，不得直接變 可買。
+- RR / overheat / chase / LIMIT_LOCK hard blockers 不得被 evidence 放寬。
+- mixed adjusted + ordinary prepare 在 Summary / 漏斗 / card / detail index / manifest 必須一致。
+- 281be20 Phase 3 scheduled path 不送 Telegram、不繞過 approved write CLI、不在交易日未知時寫入。
+- v20.4.29 起 隔日確認 已是獨立 bucket；本輪可統一口徑，但不得把它重新混回推薦感 可買 / 可準備。
+- 持倉卡、風控檢查、detail index 同序契約不得回退。
 
 ## 驗收條件
 
-必須新增可重跑 probes / tests，至少覆蓋：
+Tech 必須先補可重跑 probe 復現，再修實作。至少覆蓋：
 
-1. missing evidence
+1. per-stock evidence:
+- 同一報表兩檔不同題材 / setup。
+- 兩檔得到不同 evidence_score、evidence_modifier、final_confidence。
+- 不得共享同一 report-level market/theme 或 strategy sample 值。
+2. reliability insufficient:
+- 資料依據不足時 score/status 不得 confirmed。
+- 不得產生 +15%。
+- confirmed_trend / decision_eligible 門檻與 report reliability threshold 一致。
+3. weighted modifier:
+- only one source available 不到 ceiling。
+- label=supporting modifier <= 中間檔。
+- confirmed 雙源可到 ceiling。
+- hard blockers 仍阻擋可買 / 可準備升級。
+4. market/theme fail closed:
+- source-error 搭配 supporting-looking payload 時仍輸出 unavailable / score=None。
+5. 手機閱讀文案:
+- reliability 資料不足 時 rendered message 含 短期背景資料不足，僅供觀察。
+- rendered message 不含 仍支持目前背景觀察。
+6. 卡片 / 漏斗一致:
+- 同一標的 card state = unheld_funnel_state。
+- 隔日確認 / tracking_only_count 加總一致。
+- 漏斗拆分之和 = 僅追蹤 總數 = 卡片實際。
+7. Phase 3:
+- 若前輪已滿足，測試證明 schedule guard / approved write path / no live Telegram 仍成立。
+- 若補缺口，需測連續 N 個 confirmed trading days unavailable/stale 觸發報文或日誌告警。
+- unknown calendar / source-error / 非交易日不得累積 stale 或寫入。
 
-- compute_evidence_score 回傳 None/unavailable。
-- evidence_modifier=1.0。
-- final_confidence == technical_confidence。
-- 無 funnel adjustment。
+QA L3 必須至少補 Tech 未覆蓋的一條負面路徑，建議優先：
 
-2. confirmed evidence + no technical setup
+- source-error + supporting-looking market/theme payload。
+- two stocks same report 不同 theme/setup。
+- insufficient evidence 不得 +15%。
+- card/funnel/tracking count 手機閱讀完整 rendered message。
 
-- 不得 BUY。
-- 不得進可買。
-- 不得越過 no setup hard gate。
-- report/manifest 必須能看出 evidence 未覆蓋 setup。
-
-3. confirmed evidence + existing setup near boundary
-
-- score/ranking 使用 final_confidence。
-- boundary 可被 evidence 調整。
-- modifier 不得超過 1.15。
-- 不得違反 RR / overheat hard blockers。
-- manifest/report 有 adjustment reason。
-
-4. report score split
-
-- 手機報文可重現：
-- 綜合 X｜技術 Y｜證據 +Z%（status）
-- insufficient 時 證據：不適用（資料不足）
-- 分組標題、卡片狀態、詳情理由一致。
-
-5. market_theme alone confirmed
-
-- 可貢獻 evidence score。
-- 不得放寬 chase。
-- 不得 standalone BUY。
-
-6. strategy_sample below threshold
-
-- sample < existing threshold about 10 時為 neutral / partial。
-- 不得 decision_eligible true。
-- 不得產生 strong confirmed boundary adjustment。
-
-7. pick_best_stock
-
-- 排名與 winner 使用 final_confidence。
-- 測試需能區分 technical score 與 final score，避免仍用 technical score 的假通過。
-
-QA L3 必須補 Tech 未覆蓋的負面 probe 或手機誤讀路徑，且不能只重跑 Tech 命令。
+最終 Architect 收口需在主 repo 跑相關 tests、commit、push、completion gate；PM 不批准跳過 Tech / QA。
 
 ## 範例或 Fixture
 
-最小 fixtures：
+Tech 可用最小 fixture，不需接 production：
 
-A_missing_evidence:
-technical_confidence=80
-strategy_sample=missing
-market_theme=missing
-expected_modifier=1.0
-expected_final=80
-expected_funnel_adjustment=false
-expected_report="證據：不適用（資料不足）"
+stock_a = {
+"name": "A",
+"setup": "breakout_pullback",
+"theme": "ai_server",
+"market_theme": {"source_status": "available", "label": "confirmed", "observed": 3, "streak": 3},
+"strategy_sample": {"source_status": "available", "setup": "breakout_pullback", "label": "confirmed"},
+}
 
-B_confirmed_no_setup:
-technical_confidence=70
-technical_setup=false
-market_theme=confirmed
-strategy_sample=ready/sample>=10
-expected_no_buy=true
-expected_no_prepare_if_existing_rules_block=true
-expected_forbidden_effects=["no standalone BUY", "no chase relaxation", "no override risk controls"]
+stock_b = {
+"name": "B",
+"setup": "limit_rebound",
+"theme": "shipping",
+"market_theme": {"source_status": "insufficient-data", "label": "supporting", "observed": 1, "streak": 0},
+"strategy_sample": {"source_status": "available", "setup": "limit_rebound", "label": "supporting"},
+}
 
-C_confirmed_near_boundary:
-technical_confidence=78
-technical_setup=true
-near_boundary=true
-market_theme=confirmed
-strategy_sample=ready/sample>=10
-expected_modifier<=1.15
-expected_sort_by=final_confidence
-expected_boundary_adjustment_reason_present=true
-expected_rr_overheat_hard_blockers_preserved=true
+預期：
 
-D_strategy_sample_low:
-strategy_sample=9
-market_theme=missing_or_supporting
-expected_status="partial_or_neutral"
-expected_strategy_sample_decision_eligible=false
-expected_no_strong_boundary_adjustment=true
+- A 可高於 B，但仍受 hard blockers 限制。
+- B 不得 confirmed，不得 +15%。
+- 若 B card 為 隔日確認，漏斗與 tracking count 也必須以 隔日確認 計。
 
-E_chase_ban:
-technical_setup=true
-market_theme=confirmed
-strategy_sample=ready/sample>=10
-chase_or_overheat_blocker=true
-expected_no_chase_relaxation=true
-expected_no_buy=true
-expected_report_reason_mentions_hard_blocker=true
+source-error fixture：
+
+payload = {
+"source_status": "source-error",
+"trend": "up",
+"label": "supporting",
+"observed": 5,
+"streak": 5,
+}
+
+預期：
+
+{"status": "unavailable", "score": None}
 
 ## 明確禁止事項
 
-- 禁止改 RR 公式。
-- 禁止 DB schema/write/backfill/live delivery。
-- 禁止 live Telegram。
-- 禁止 evidence 產生 standalone BUY。
-- 禁止 evidence 放寬追高、過熱、RR 或 risk controls。
-- 禁止無 technical setup 因 evidence 變成 BUY / 可買。
-- 禁止把 sample <10 的 strategy evidence 當 ready。
-- 禁止只改報文字串、不讓 pick_best_stock 與 funnel sorting 使用 final_confidence。
-- 禁止把 Phase 3 或全策略重構納入本輪。
-- 禁止用 local cache / runtime dict / agent 記憶當跨日 source-of-truth。
+- 禁止改 RR 公式或 hard blocker 定義。
+- 禁止改 DB schema / RLS / grant / policy / role。
+- 禁止 live Telegram delivery。
+- 禁止手寫 production DML 或繞過 approved write path。
+- 禁止把 local cache / runtime dict / agent 對話當跨日 evidence source。
+- 禁止用報表級 evidence 值套所有股票。
+- 禁止資料不足時輸出 confirmed、滿額 score 或 +15%。
+- 禁止卡片、漏斗、summary、detail、manifest 對同一標的分類不一致。
+- 禁止重造前輪已完成 Phase 3；先用證據判斷缺口。
 
 ## 阻塞條件
 
-若以下任一條成立，Tech 必須 blocked，不得自行假設：
+若出現以下任一情況，Tech / QA 必須 blocked，不得宣告通過：
 
-- 找不到 load_strategy_evidence_summary 或無法確認既有 sample threshold。
-- 找不到 market theme / evidence_trend 可用來源。
-- 既有 candidate payload 無法同時保留 technical_confidence 與 final_confidence，且需要改 public contract 但 TASK 未覆蓋。
-- 需要 DB schema/write 才能完成。
-- 需要 live Telegram 驗證才可判斷完成。
-- 既有 RR / overheat / chase hard blocker 定義不可定位，導致無法驗證 forbidden effects。
-- 測試環境不可用且無法補齊。
+- 找不到現有 compute_evidence_score、_market_theme_evidence_payload、unheld_funnel_state 或 Phase 3 runner 入口，且無法確認直接 consumer。
+- 無法建立同一報表兩檔不同 theme/setup 的可重跑 probe。
+- reliability 門檻來源不明，無法判定 report.py:565 同口徑 threshold。
+- Phase 3 scheduled write path guard 或 approved write CLI contract 無法讀取確認。
+- 測試環境缺 pytest / dependency 且無法補環境。
+- 任一 source-error / insufficient-data path 仍可得到 confirmed 或正向 ceiling。
+- 需要 DB schema 變更或 live Telegram 才能完成。
 
 ## 本輪停止條件
 
-完成條件：
+完成範圍到以下為止：
 
-- Phase 1 evidence score 與 source eligibility 可重跑。
-- Phase 2 final confidence、modifier、report split、sorting、pick_best_stock 全部接入。
-- Phase 2b 僅 near-boundary + existing setup + strong confirmed evidence 可調整，且 hard blockers 不被放寬。
-- Tech 提供 CHANGELOG 與自檢命令。
-- QA L3 通過，包含手機閱讀與負面 probes。
+- E1/E3/E2/E4/E5/D1/D2/B5/A1 缺口均有 probe 與實作證據，或前輪已滿足且有可重跑證據。
+- 使用者可見報文版本契約處理完成。
+- QA L3 通過，且 QA 至少新增 Tech 未覆蓋的負面反證。
+- 主 repo related tests 通過。
+- commit、push、git completion gate 完成。
 
-本輪不處理：
+以下旁支只記待辦，不納入本輪：
 
-- Phase 3。
-- RR 公式合理性。
-- strategy evidence 歷史資料品質重建。
-- DB schema / production write。
-- Telegram live delivery。
-- 其他報文清理與版面重構。
-- 新發現但不阻塞本輪驗收的策略邊界問題；只記入後續待辦。
+- 擴充 production theme membership mapping。
+- 改交易策略核心或 RR。
+- 新增 DB schema / backfill historical source-of-truth。
+- 全報文文案清理。
+- Telegram delivery 行為調整。
+- 觀察第 N 天、持倉 execution memory 或其他跨日資料治理。

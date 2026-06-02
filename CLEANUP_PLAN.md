@@ -15,6 +15,14 @@
 
 ## Completed
 
+- `evidence-per-stock-reliability-funnel-phase3-closeout-20260602`:
+  - 問題：Owner 要 evidence chain 真正進入決策分數，但前一輪仍有報表級 evidence 被所有股票共用、可靠度不足仍可能加分、`隔日確認` 與 `僅追蹤` 口徑分裂的風險。
+  - 結果：報文版本升 `v20.4.31`；per-stock market/theme 與 strategy/setup 缺 payload 時 fail closed，不再 fallback report-level；source-error / insufficient 先 fail closed；supporting / partial modifier cap；資料不足文案改為 `短期背景資料不足，僅供觀察`；`隔日確認` 納入 `僅追蹤` aggregate。
+  - 可重跑補強：`tests/test_generator_report.py` 與 `tests/test_market_theme_evidence.py` 新增 per-stock missing market/theme、per-stock missing strategy、source-error supporting-looking payload、modifier cap、D1 文案、card/funnel tracking 一致 probes；Phase 3 guard tests 納入回歸。
+  - QA 反證：QA 第一輪 blocked 有效攔住兩個硬漏口：缺逐股 market/theme 仍吃 report-level confirmed；缺逐股 strategy 仍吃 report-level strategy sample。第二輪還攔住 `隔日確認 1｜僅追蹤 0` 與 TASK 口徑相反。最終 Re-QA 通過。
+  - 主 repo 驗證：combined targeted suite 191 passed，225 warnings；`py_compile` / `git diff --check` passed。
+  - 規則治理：`evidence_chain` + `QA反證` + `mobile_reading` + `runner_gap`。證據鏈不能只在文案 fail closed；分數、modifier、funnel aggregate、card 實際數都要吃同一 source-status gate。runner 仍需改善 Tech answer -> main `CHANGELOG.md` 同步，否則 QA 容易讀到縮短或 stale handoff。
+  - 邊界：未改 RR 公式、DB schema/write、approved write CLI、Phase 3 runner、production backfill、live Telegram；production per-stock evidence 資料品質 / mapping 另開。
 - `evidence-score-decision-funnel-phase1-2-2b`:
   - 問題：Owner 已拍板 evidence chain 要進決策分數，並可影響排序與 funnel 邊界；但必須保留 fail-closed、透明拆分、不單獨造 BUY、不放寬追高 / 過熱 / RR hard blockers。
   - 結果：報文版本升 `v20.4.30`；新增 evidence score / modifier / final confidence；pick/sort 使用 final confidence；卡片分數行拆成 `綜合 / 技術 / 證據`；Phase 2b 只允許 near-boundary technical setup + strong confirmed evidence 調整到可準備。

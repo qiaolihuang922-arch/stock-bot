@@ -569,16 +569,15 @@ def _market_theme_data_basis_line(report_context, deps):
     else:
         reliability = "可靠度不足以判定"
 
+    if reliability == "資料不足":
+        return "市場 / 題材背景：短期背景資料不足，僅供觀察。"
     if evidence.get("confirmed") and status == "available":
         return (
             f"市場 / 題材背景：{trend_text}仍支持目前背景觀察，{reliability}；"
             "這只用來理解環境，不等於買點。"
         )
     if status in {"missing-source", "source-error", "insufficient-data"}:
-        return (
-            "市場 / 題材背景：短期背景資料不足以形成可靠背景，"
-            "只作觀察，不作買點。"
-        )
+        return "市場 / 題材背景：短期背景資料不足，僅供觀察。"
     return f"市場 / 題材背景：{trend_text}只作背景觀察，可靠度有限，不等於買點。"
 
 

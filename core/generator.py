@@ -69,7 +69,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.30"
+VERSION = "v20.4.31"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -4061,14 +4061,59 @@ def _strategy_sample_evidence_payload(report_context):
     }
 
 
-def _market_theme_evidence_payload(report_context):
-    evidence = (report_context or {}).get("market_theme_evidence") or {}
+def _per_stock_evidence_payload(report_context, name, source_name):
+    per_stock = (report_context or {}).get("per_stock_evidence") or {}
+    stock_payload = per_stock.get(name) or {}
+    if not isinstance(stock_payload, dict):
+        return {}
+    payload = stock_payload.get(source_name) or {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _market_theme_evidence_payload(report_context, name=None):
+    has_per_stock_map = (
+        name
+        and isinstance(report_context, dict)
+        and isinstance(report_context.get("per_stock_evidence"), dict)
+    )
+    evidence = _per_stock_evidence_payload(report_context, name, "market_theme") if name else {}
+    if has_per_stock_map and not evidence:
+        return {
+            "status": "unavailable",
+            "score": None,
+            "decision_eligible": False,
+            "forbidden_effects": list(EVIDENCE_FORBIDDEN_EFFECTS),
+        }
+    if not evidence:
+        evidence = (report_context or {}).get("market_theme_evidence") or {}
     field = _field_by_key(report_context or {}, "evidence.market_theme")
-    source_status = field.get("source_status") or _manifest_status(evidence.get("source_status"))
+    source_status = evidence.get("source_status") or field.get("source_status")
+    source_status = _manifest_status(evidence.get("source_status") or source_status)
     trend = evidence.get("evidence_trend") or {}
-    trend_status = trend.get("status")
-    confirmed = bool(evidence.get("confirmed")) and source_status == "available"
-    decision_eligible = confirmed and trend_status == "confirmed_trend"
+    trend_status = trend.get("status") or evidence.get("trend_status")
+    observed_days = trend.get("observed_days")
+    if observed_days is None:
+        observed_days = evidence.get("observed")
+    supporting_days = trend.get("recent_supporting_days")
+    if supporting_days is None:
+        supporting_days = evidence.get("supporting_days")
+    support_streak = trend.get("support_streak_days")
+    if support_streak is None:
+        support_streak = evidence.get("streak")
+    if source_status in {"missing-source", "source-error", "insufficient-data", "unresolved-conflict"}:
+        return {
+            "status": "unavailable",
+            "score": None,
+            "decision_eligible": False,
+            "forbidden_effects": list(EVIDENCE_FORBIDDEN_EFFECTS),
+        }
+    reliability_confirmed = (
+        (observed_days or 0) >= 15
+        and (supporting_days or 0) >= 3
+        and (support_streak or 0) >= 2
+    )
+    confirmed = bool(evidence.get("confirmed") or evidence.get("label") == "confirmed") and source_status == "available"
+    decision_eligible = confirmed and trend_status == "confirmed_trend" and reliability_confirmed
     if decision_eligible:
         status = "confirmed"
         score = 1.0
@@ -4078,9 +4123,6 @@ def _market_theme_evidence_payload(report_context):
     elif trend_status == "supporting_trend" or evidence.get("level") in {"supporting", "weak", "mixed"}:
         status = "supporting"
         score = 0.65
-    elif source_status in {"missing-source", "source-error", "insufficient-data", "unresolved-conflict"}:
-        status = "unavailable"
-        score = None
     else:
         status = "neutral"
         score = 0.5
@@ -4092,10 +4134,79 @@ def _market_theme_evidence_payload(report_context):
     }
 
 
+def _per_stock_strategy_sample_evidence_payload(report_context, name):
+    per_stock = (report_context or {}).get("per_stock_evidence")
+    has_per_stock_map = name and isinstance(per_stock, dict)
+    stock_payload = _per_stock_evidence_payload(report_context, name, "strategy_sample")
+    backtest = (
+        stock_payload
+        or _per_stock_evidence_payload(report_context, name, "backtest_context")
+        or _per_stock_evidence_payload(report_context, name, "setup_strategy_sample")
+    )
+    if has_per_stock_map and not backtest:
+        return {
+            "status": "unavailable",
+            "score": None,
+            "sample": None,
+            "decision_eligible": False,
+            "forbidden_effects": list(EVIDENCE_FORBIDDEN_EFFECTS),
+        }
+    if not backtest:
+        return _strategy_sample_evidence_payload(report_context)
+
+    field = _field_by_key(report_context or {}, "evidence.strategy_sample")
+    source_status = _manifest_status(backtest.get("source_status") or field.get("source_status", "missing-source"))
+    if source_status in {"missing-source", "source-error", "insufficient-data", "unresolved-conflict"}:
+        return {
+            "status": "unavailable",
+            "score": None,
+            "sample": None,
+            "decision_eligible": False,
+            "forbidden_effects": list(EVIDENCE_FORBIDDEN_EFFECTS),
+        }
+
+    sample = backtest.get("sample")
+    if sample is None:
+        sample = backtest.get("row_count")
+    if sample is None:
+        sample = backtest.get("evidence_count")
+    avg_return = backtest.get("avg_return")
+    win_rate = backtest.get("win_rate")
+    label = backtest.get("label") or backtest.get("status") or backtest.get("verdict")
+    decision_eligible = (
+        (sample or 0) >= STRATEGY_SAMPLE_MIN_ROWS
+        and (
+            label in {"confirmed", "買點有效", "持倉同型相對偏強"}
+            or ((avg_return or 0) >= 1.0 and (win_rate or 0) >= 55)
+        )
+    )
+    if decision_eligible:
+        evidence_status = "ready"
+        score = 1.0
+    elif (sample or 0) >= STRATEGY_SAMPLE_MIN_ROWS and (
+        label in {"supporting", "樣本中性", "歷史偏強，但今日阻斷仍有效"}
+        or ((avg_return or 0) >= 0 and (win_rate or 0) >= 45)
+    ):
+        evidence_status = "supporting"
+        score = 0.65
+    elif sample:
+        evidence_status = "partial"
+        score = 0.5
+    else:
+        evidence_status = "unavailable"
+        score = None
+    return {
+        "status": evidence_status,
+        "score": score,
+        "sample": sample,
+        "decision_eligible": decision_eligible,
+        "forbidden_effects": list(EVIDENCE_FORBIDDEN_EFFECTS),
+    }
+
+
 def compute_evidence_score(report_context, name):
-    evidence_payload = (report_context or {}).get("evidence") or {}
-    market = evidence_payload.get("market_theme") or _market_theme_evidence_payload(report_context)
-    strategy = evidence_payload.get("strategy_sample") or _strategy_sample_evidence_payload(report_context)
+    market = _market_theme_evidence_payload(report_context, name)
+    strategy = _per_stock_strategy_sample_evidence_payload(report_context, name)
     scores = [
         source.get("score")
         for source in [market, strategy]
@@ -4108,15 +4219,24 @@ def compute_evidence_score(report_context, name):
         return score, "confirmed"
     if market.get("decision_eligible") or strategy.get("decision_eligible"):
         return score, "supporting"
+    if any(source.get("status") == "supporting" for source in [market, strategy]):
+        return score, "supporting"
     if any(source.get("status") == "partial" for source in [market, strategy]):
         return score, "partial"
     return score, "neutral"
 
 
-def evidence_modifier_for_score(evidence_score):
+def evidence_modifier_for_score(evidence_score, evidence_status=None):
     if evidence_score is None:
         return 1.0
-    return max(0.85, min(1.15, 1 + 0.3 * (float(evidence_score) - 0.5)))
+    modifier = max(0.85, min(1.15, 1 + 0.3 * (float(evidence_score) - 0.5)))
+    if evidence_status == "confirmed":
+        return modifier
+    if evidence_status == "supporting":
+        return min(modifier, 1.08)
+    if evidence_status == "partial":
+        return min(modifier, 1.03)
+    return min(modifier, 1.0)
 
 
 def _technical_confidence(result):
@@ -4130,7 +4250,7 @@ def apply_evidence_confidence(report_context, name, data):
     result = data.get("result") or {}
     technical = _technical_confidence(result)
     evidence_score, evidence_status = compute_evidence_score(report_context, name)
-    modifier = evidence_modifier_for_score(evidence_score)
+    modifier = evidence_modifier_for_score(evidence_score, evidence_status)
     final = technical * modifier
     result["technical_confidence"] = technical
     result["evidence_score"] = evidence_score
@@ -4381,6 +4501,24 @@ def build_report_context(
         "evidence_manifest": manifest,
         "market_theme_evidence": market_evidence,
         "strategy_sample_structured_status": strategy_structured,
+        "per_stock_evidence": {
+            name: {
+                "market_theme": (
+                    data.get("market_theme_evidence")
+                    or (data.get("result") or {}).get("market_theme_evidence")
+                    or {}
+                ),
+                "strategy_sample": (
+                    data.get("strategy_sample_evidence")
+                    or (data.get("result") or {}).get("strategy_sample_evidence")
+                    or data.get("backtest_context")
+                    or {}
+                ),
+                "backtest_context": data.get("backtest_context") or {},
+            }
+            for name, data in (results_map or {}).items()
+            if isinstance(data, dict)
+        },
     }
     strategy_decision_eligible = (
         strategy_status == "available"
@@ -4507,6 +4645,8 @@ def build_report_context(
                 section,
                 {
                     "technical_confidence": (data.get("result") or {}).get("technical_confidence"),
+                    "evidence_score": (data.get("result") or {}).get("evidence_score"),
+                    "evidence_status": (data.get("result") or {}).get("evidence_status"),
                     "evidence_modifier": (data.get("result") or {}).get("evidence_modifier"),
                     "final_confidence": (data.get("result") or {}).get("final_confidence"),
                     "structure_score": data.get("structure_score") or (data.get("result") or {}).get("strength"),
@@ -4710,6 +4850,7 @@ def build_report_context(
         },
         "evidence_manifest": manifest,
         "evidence": interim_context["evidence"],
+        "per_stock_evidence": interim_context["per_stock_evidence"],
         "market_theme_evidence": market_evidence,
         "strategy_sample_structured_status": strategy_structured,
         "source_status_summary": {
@@ -5339,7 +5480,7 @@ def unheld_tracking_only_count(funnel):
 
     return sum(
         len(funnel[label])
-        for label in ["等冷卻", "等回測", "等RR修復", "等量能"]
+        for label in ["等冷卻", "等回測", "等RR修復", "等量能", "隔日確認"]
     )
 
 
@@ -5380,18 +5521,12 @@ def today_conclusion_text(holding_items, watch_items, market_mode, risk_level, r
             base += f"；已執行 {executed_count} 項不重複"
         if prepare_count and tracking_only_count:
             tail = f"未持倉 {unheld_prepare_count_text(prepare_counts)}、{tracking_only_count} 檔僅追蹤"
-            if next_day_count:
-                tail += f"、{next_day_count} 檔隔日確認"
             return f"{base}；{tail}"
         if prepare_count:
             tail = f"未持倉 {unheld_prepare_count_text(prepare_counts)}"
-            if next_day_count:
-                tail += f"、{next_day_count} 檔隔日確認"
             return f"{base}；{tail}"
         if tracking_only_count:
             tail = f"未持倉 {tracking_only_count} 檔僅追蹤"
-            if next_day_count:
-                tail += f"、{next_day_count} 檔隔日確認"
             return f"{base}；{tail}"
         if next_day_count:
             return f"{base}；未持倉 {next_day_count} 檔隔日確認"
@@ -5403,18 +5538,12 @@ def today_conclusion_text(holding_items, watch_items, market_mode, risk_level, r
             base += f"；已執行 {executed_count} 項不重複"
         if prepare_count and tracking_only_count:
             tail = f"未持倉 {unheld_prepare_count_text(prepare_counts)}、{tracking_only_count} 檔僅追蹤"
-            if next_day_count:
-                tail += f"、{next_day_count} 檔隔日確認"
             return f"{base}；{tail}"
         if prepare_count:
             tail = f"未持倉 {unheld_prepare_count_text(prepare_counts)}"
-            if next_day_count:
-                tail += f"、{next_day_count} 檔隔日確認"
             return f"{base}；{tail}"
         if tracking_only_count:
             tail = f"未持倉 {tracking_only_count} 檔僅追蹤"
-            if next_day_count:
-                tail += f"、{next_day_count} 檔隔日確認"
             return f"{base}；{tail}"
         if next_day_count:
             return f"{base}；未持倉 {next_day_count} 檔隔日確認"
@@ -5422,20 +5551,14 @@ def today_conclusion_text(holding_items, watch_items, market_mode, risk_level, r
 
     if prepare_count and tracking_only_count:
         tail = f"未持倉 {unheld_prepare_count_text(prepare_counts)}、{tracking_only_count} 檔僅追蹤"
-        if next_day_count:
-            tail += f"、{next_day_count} 檔隔日確認"
         return f"{risk_level} {market_mode}；{no_new_entry_text}；{tail}"
 
     if prepare_count:
         tail = f"未持倉 {unheld_prepare_count_text(prepare_counts)}"
-        if next_day_count:
-            tail += f"、{next_day_count} 檔隔日確認"
         return f"{risk_level} {market_mode}；{no_new_entry_text}；{tail}"
 
     if tracking_only_count:
         tail = f"未持倉 {tracking_only_count} 檔僅追蹤"
-        if next_day_count:
-            tail += f"、{next_day_count} 檔隔日確認"
         return f"{risk_level} {market_mode}；{no_new_entry_text}；{tail}"
 
     if next_day_count:
@@ -5573,18 +5696,12 @@ def format_execution_checklist(holding_items, watch_items, limit=5, report_phase
         lines = ["無新增下單"]
         if prepare_count and tracking_only_count:
             tail = f"未持倉 {unheld_prepare_count_text(prepare_counts)}、{tracking_only_count} 檔僅追蹤"
-            if next_day_count:
-                tail += f"、{next_day_count} 檔隔日確認"
             lines.append(f"{tail}，等觸發，{tracking_suffix}")
         elif prepare_count:
             tail = f"未持倉 {unheld_prepare_count_text(prepare_counts)}"
-            if next_day_count:
-                tail += f"、{next_day_count} 檔隔日確認"
             lines.append(f"{tail}，等觸發，{tracking_suffix}")
         elif tracking_only_count:
             tail = f"未持倉 {tracking_only_count} 檔僅追蹤"
-            if next_day_count:
-                tail += f"、{next_day_count} 檔隔日確認"
             lines.append(f"{tail}，等觸發，{tracking_suffix}")
         elif next_day_count:
             lines.append(f"未持倉 {next_day_count} 檔隔日確認，等觸發，{tracking_suffix}")
@@ -5604,18 +5721,12 @@ def format_execution_checklist(holding_items, watch_items, limit=5, report_phase
 
     if prepare_count and tracking_only_count:
         tail = f"未持倉 {unheld_prepare_count_text(prepare_counts)}、{tracking_only_count} 檔只等觸發"
-        if next_day_count:
-            tail += f"、{next_day_count} 檔隔日確認"
         lines.append(f"{tail}，{tracking_suffix}")
     elif prepare_count:
         tail = f"未持倉 {unheld_prepare_count_text(prepare_counts)}"
-        if next_day_count:
-            tail += f"、{next_day_count} 檔隔日確認"
         lines.append(f"{tail}，{tracking_suffix}")
     elif tracking_only_count:
         tail = f"未持倉 {tracking_only_count} 檔只等觸發"
-        if next_day_count:
-            tail += f"、{next_day_count} 檔隔日確認"
         lines.append(f"{tail}，{tracking_suffix}")
     elif next_day_count:
         lines.append(f"未持倉 {next_day_count} 檔隔日確認，{tracking_suffix}")
@@ -5699,7 +5810,7 @@ def format_unheld_funnel(watch_items, market_mode=None, report_context=None):
     next_day_count = unheld_next_day_count(funnel)
     split_parts = [
         f"{label} {len(funnel[label])}"
-        for label in ["等冷卻", "等回測", "等RR修復", "等量能"]
+        for label in ["隔日確認", "等冷卻", "等回測", "等RR修復", "等量能"]
         if funnel[label]
     ]
     prepare_funnel_text = unheld_prepare_funnel_text(prepare_counts) or "不可追高觀察 0"
@@ -5723,8 +5834,9 @@ def format_unheld_funnel(watch_items, market_mode=None, report_context=None):
         for label, count in _prepare_count_parts(prepare_counts):
             total_parts.append(f"{label} {count}")
         if next_day_count:
-            total_parts.append(f"隔日確認 {next_day_count}")
-        total_parts.append(f"僅追蹤 {tracking_only_count}")
+            total_parts.extend(split_parts)
+        else:
+            total_parts.append(f"僅追蹤 {tracking_only_count}")
         lines.append(f"非執行準備/追蹤合計 {tracking_count} 檔（{'｜'.join(total_parts)}）")
     elif prepare_count:
         lines.append(f"{unheld_prepare_count_text(prepare_counts)}，不列入交易執行")

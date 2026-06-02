@@ -6,7 +6,7 @@
 
 - 專案：台股策略 Telegram 報文機器人。
 - 正式結果以 git / runner 產生報文為準。
-- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.30`。
+- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.31`。
 - 固定 8 份 Markdown 不刪：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 - Architect 是總控；產品 / 策略 / 報文 bug 或 feature 預設走 PM -> Tech -> QA。
 - 跨日狀態、已執行交易、歷史 evidence 必須來自 production DB 或 Owner 指定持久來源；local/runtime/worktree 不能當跨日記憶。
@@ -27,6 +27,26 @@
 - 驗證：QA `通過`；full pytest 264 passed，153 warnings（第三方 deprecation 類）。
 
 ## Latest Completed Handoff
+
+- task_id：`evidence-per-stock-reliability-funnel-phase3-closeout-20260602`
+- 狀態：QA passed；commit / push 待 final 收口。
+- 問題：Owner 要一次性修復 per-stock evidence、可靠度門檻、modifier cap、source fail-closed、資料不足文案、card/funnel tracking 一致與 Phase 3 guard 回歸。
+- 修正：
+  - `compute_evidence_score(report_context, name)` 改為真正逐股取 evidence。
+  - `report_context.per_stock_evidence` 已存在時，該股缺 market/theme 或 strategy/setup payload 會 fail closed，不 fallback report-level positive evidence。
+  - market/theme source status 在 supporting / weak / mixed 前先 fail closed。
+  - confirmed / decision eligible 與資料依據可靠度同口徑；insufficient 不得 confirmed 或 +15%。
+  - supporting / partial modifier cap；confirmed 才可到 ceiling。
+  - 資料不足文案改為 `短期背景資料不足，僅供觀察`。
+  - `隔日確認` 納入 `僅追蹤` aggregate，漏斗拆分加總與 card actual 同口徑。
+  - Phase 3 automation 未改碼，但 scheduled / workflow guard 回歸通過。
+- 版本：`core/generator.py` 升為 `v20.4.31`。
+- 驗證：QA `通過`；主 repo `tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_phase3_evidence_automation.py tests/test_workflow_runtime_config.py` 191 passed，225 warnings；`py_compile` passed；`git diff --check` passed。
+- QA 反證：逐股缺 market/theme 或 strategy payload 時不吃 report-level confirmed / available；`source-error + supporting-looking payload` unavailable；supporting modifier 不到 ceiling；`隔日確認 1` 不再與 `僅追蹤 0` 分裂。
+- 邊界：未改 RR 公式、DB schema / write path、approved write CLI、Phase 3 runner、production backfill、live Telegram。
+- 後續：若 production evidence 缺逐股 theme/setup payload，需另開資料品質 / mapping / source-of-truth 任務，不應在 report layer fallback 補缺口。
+
+## Previous Completed Handoff
 
 - task_id：`evidence-score-decision-funnel-phase1-2-2b`
 - 狀態：done / committed；push 與 Git completion gate 待 final 收口。

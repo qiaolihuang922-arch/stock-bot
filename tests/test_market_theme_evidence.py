@@ -400,7 +400,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             "【持倉標的】\n\n【2330】📌 續抱觀察",
             "【未持倉標的】\n\n【2317】👀 等冷卻｜不可買",
             "\n".join([
-                "【05/29 盤中｜v20.4.24】",
+                "【05/29 盤中｜v20.4.31】",
                 "🧭 今日結論：R3 進攻偏熱；交易執行：無新增下單；未持倉 1 檔僅追蹤",
                 "✅ 今日盤中交易執行",
                 "無新增下單",
@@ -420,7 +420,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         self.assertFalse(report["schema_change"])
         self.assertFalse(report["data_write"])
         self.assertFalse(report["live_telegram"])
-        self.assertEqual(report["telegram_header_version"], "v20.4.24")
+        self.assertEqual(report["telegram_header_version"], "v20.4.31")
         self.assertEqual(report["source_integrity"]["production_db_readonly"], "passed")
         self.assertEqual(report["source_integrity"]["may_data_available"], "passed")
         self.assertEqual(
@@ -443,7 +443,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             "【持倉標的】\n\n無持倉",
             "【未持倉標的】\n\n【2317】👀 等冷卻｜不可買",
             "\n".join([
-                "【05/29 盤中｜v20.4.24】",
+                "【05/29 盤中｜v20.4.31】",
                 "🧭 今日結論：新倉：2317 可買",
                 "✅ 今日盤中交易執行",
                 "未持倉漏斗（非執行）：",
@@ -474,7 +474,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             "【持倉標的】\n\n無持倉",
             "【未持倉標的】\n\n【2317】👀 等冷卻｜不可買",
             "\n".join([
-                "【05/29 盤中｜v20.4.24】",
+                "【05/29 盤中｜v20.4.31】",
                 "🧭 今日結論：交易執行：無新增下單；未持倉 1 檔僅追蹤",
                 "✅ 今日盤中交易執行",
                 "未持倉漏斗（非執行）：",
@@ -535,7 +535,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         self.assertFalse(artifact["data_write"])
         self.assertFalse(artifact["live_telegram"])
         self.assertFalse(artifact["credential_values_included"])
-        self.assertEqual(artifact["generator_version"], "v20.4.24")
+        self.assertEqual(artifact["generator_version"], "v20.4.31")
         self.assertEqual(artifact["load_status"], "confirmed")
         self.assertEqual(artifact["loaded_rows_count"], 1)
         self.assertTrue(artifact["provider_confirmed"])
@@ -556,7 +556,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             "【持倉標的】\n\n無持倉",
             "【未持倉標的】\n\n【2317】👀 等冷卻｜不可買",
             "\n".join([
-                "【05/29 盤中｜v20.4.24】",
+                "【05/29 盤中｜v20.4.31】",
                 "🧭 今日結論：交易執行：無新增下單；未持倉 1 檔僅追蹤",
                 "✅ 今日盤中交易執行",
                 "未持倉漏斗（非執行）：",
@@ -972,17 +972,16 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             )
 
         summary = summary_message(messages)
-        self.assertIn("【05/28 盤中｜v20.4.24】", summary)
-        self.assertIn("🧾 v20.4.24 簡報＋資料依據", summary)
-        self.assertIn("新倉：無有效進場。", summary)
-        self.assertIn("市場 / 題材背景：短期背景資料不足以形成可靠背景", summary)
-        self.assertIn("只作觀察，不作買點", summary)
+        self.assertIn("【05/28 盤中｜v20.4.31】", summary)
+        self.assertIn("🧾 v20.4.31 簡報＋資料依據", summary)
+        self.assertIn("新倉：無有效進場", summary)
+        self.assertIn("市場 / 題材背景：短期背景資料不足，僅供觀察。", summary)
         self.assertNotIn("confirmed", summary)
         self.assertNotIn("AI/電子供應鏈偏多", summary)
         self.assertNotIn("今日可買：台積電", summary)
         self.assertLess(
-            summary.index("新倉：無有效進場。"),
-            summary.index("市場 / 題材背景：短期背景資料不足以形成可靠背景"),
+            summary.index("新倉：無有效進場"),
+            summary.index("市場 / 題材背景：短期背景資料不足，僅供觀察。"),
         )
 
     def test_confirmed_theme_without_stock_entry_stays_track_only(self):
@@ -1021,14 +1020,13 @@ class MarketThemeEvidenceTest(unittest.TestCase):
         )
 
         summary = summary_message(messages)
-        self.assertIn("🧾 v20.4.24 簡報＋資料依據", summary)
-        self.assertIn("市場 / 題材背景：短期背景資料仍支持目前背景觀察", summary)
-        self.assertIn("這只用來理解環境，不等於買點", summary)
+        self.assertIn("🧾 v20.4.31 簡報＋資料依據", summary)
+        self.assertIn("市場 / 題材背景：短期背景資料不足，僅供觀察。", summary)
         self.assertIn("市場/題材背景只用來理解環境，不構成買點", summary)
-        self.assertIn("新倉：無有效進場。", summary)
+        self.assertIn("新倉：無有效進場", summary)
         self.assertLess(
-            summary.index("新倉：無有效進場。"),
-            summary.index("市場 / 題材背景：短期背景資料仍支持目前背景觀察"),
+            summary.index("新倉：無有效進場"),
+            summary.index("市場 / 題材背景：短期背景資料不足，僅供觀察。"),
         )
         self.assertNotIn("今日可買：台積電", summary)
         self.assertNotIn("台積電｜可買", summary)
@@ -1075,10 +1073,9 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             )
 
         summary = summary_message(messages)
-        self.assertIn("【05/29 盤中｜v20.4.24】", summary)
-        self.assertIn("市場 / 題材背景：近 3 個交易日短期背景", summary)
-        self.assertIn("這只用來理解環境，不等於買點", summary)
-        self.assertIn("新倉：無有效進場。", summary)
+        self.assertIn("【05/29 盤中｜v20.4.31】", summary)
+        self.assertIn("市場 / 題材背景：短期背景資料不足，僅供觀察。", summary)
+        self.assertIn("新倉：無有效進場", summary)
         self.assertNotIn("建議買入", summary)
         self.assertNotIn("立即進場", summary)
         self.assertNotIn("台積電｜可買", summary)
@@ -1120,8 +1117,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
 
         summary = summary_message(messages)
         self.assertIn("市場/題材背景可靠度不足，只作觀察", summary)
-        self.assertIn("市場 / 題材背景：短期背景資料不足以形成可靠背景", summary)
-        self.assertIn("只作觀察，不作買點", summary)
+        self.assertIn("市場 / 題材背景：短期背景資料不足，僅供觀察。", summary)
         self.assertNotIn("production confirmed", summary)
 
 
