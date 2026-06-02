@@ -28,6 +28,21 @@
 
 ## Latest Completed Handoff
 
+- task_id：`evidence_gate_p1_p2_p4_20260602`
+- 狀態：done / committed；push 與 Git completion gate 待 final 收口。
+- commit：`9b1e084 fix evidence gate report conflicts`。
+- 問題：Owner 指出 evidence_manifest / 資料依據已宣告 strategy_sample、ledger、market/theme 等證據不足或只作背景，但卡片仍顯示 S 5/5、極強、突破確認、精確今日買賣 / 股數 / 均價與可行動 funnel，形成「滿分結論 vs 不足證據」。
+- 修正範圍：只處理 P1/P2/P4。
+  - P1：strategy_sample missing / insufficient / source-error / unresolved-conflict 時，未持倉高置信行動標籤 fail closed；不再顯示可買、S 5/5、突破確認或進場觸發。
+  - P2：持倉卡片 execution 行同時檢查 positions 與 ledger / execution_memory status；任一不足或衝突時，隱藏精確股數、均價、今日買賣，改顯示執行記憶不足。
+  - P4：未持倉 funnel source status 納入 strategy_sample；RR 不可用、過熱或證據不足時不得進可買 / 可準備 / 進場觸發。
+- 重要反證：strategy_sample source-error 但 price/OHLCV/RR available 時，只阻斷高置信策略樣本依賴結論，不把原因誤寫成 price/OHLCV/RR source failure，也不隱藏可用價格。
+- 驗證：QA `通過`；主 repo `tests/test_generator_report.py` 108 passed，221 warnings；`py_compile core/generator.py presentation/report.py tests/test_generator_report.py` passed；`git diff --check` passed。
+- 邊界：未改 `services/analysis.py`、strategy decision、RR 公式、DB schema/write、production DML/backfill、live Telegram；P3/P5/P6/P7/P8 未處理。
+- 流程復盤：第一輪 QA blocked 是有效攔截，抓到 strategy_sample source-error 被誤歸因為 price/OHLCV/RR failure 且價格被藏掉；第二輪 Tech 先漏 P2，Architect 未送 QA，改用 `CLEAN_TECH_WORKTREE=0` 在候選上補 P2。這是 `QA反證` + `Tech同步` + `runner_gap`，後續同類任務要把 P1/P2/P4 三條 probe 都列為 stop condition，不讓局部通過冒充整輪完成。
+
+## Previous Completed Handoff
+
 - task_id：`20260602_intraday_v20_4_24_a1_a2_a3_hard_conflicts`
 - 狀態：done / committed / pushed；Git completion gate passed。
 - commit：`dab598e fix intraday report hard conflicts`。
@@ -37,7 +52,7 @@
 - 邊界：未改 `services/analysis.py`、strategy decision、RR 計算、holding_status、DB schema/write、live Telegram；降噪第二批未處理，另開。
 - 流程復盤：auto runner 第一次被 Tech worktree stale diff 阻塞，已保存 residual patch artifact；Tech agent 前兩次長時間停在分析階段，第三次以「先補紅測再最小實作」指令完成。這是 `runner_gap`，後續需強化 Tech runner 的進度/超時與 worktree hygiene。
 
-## Previous Completed Handoff
+## Earlier Completed Handoff
 
 - task_id：`fix-bot-workflow-may-backfill-guard-20260602`
 - 狀態：done / committed / pushed；Git completion gate passed。
@@ -47,7 +62,7 @@
 - 驗證：QA `通過`；`tests/test_workflow_runtime_config.py tests/test_market_theme_source_backfill.py` 21 passed；QA 補 fake python success path，確認 backfill modes 仍執行且 guard failure 不被吞。
 - 邊界：未改 `scripts/backfill_market_theme_sources.py` production guard、DB schema/write、Telegram 報文、live delivery；Node.js 20 deprecation warning 非本輪目標。
 
-## Earlier Completed Handoff
+## Older Completed Handoff
 
 - task_id：`holding-weak-observation-clock-20260601`
 - 狀態：done / committed / pushed；Git completion gate passed。當前沒有 Active Tech/QA 任務，實際看板以 `DISPATCH.md` 為準。

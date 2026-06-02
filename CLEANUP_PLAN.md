@@ -15,6 +15,13 @@
 
 ## Completed
 
+- `evidence_gate_p1_p2_p4_20260602`:
+  - 問題：Owner 指出 evidence_manifest / 資料依據說 strategy_sample、ledger 等不足，但卡片仍輸出 S 5/5、極強、突破確認、精確今日買賣 / 股數 / 均價與可行動 funnel，形成「滿分結論 vs 不足證據」。
+  - 結果：P1/P2/P4 第一批硬衝突已修。strategy_sample 不足時阻斷未持倉高置信行動標籤與進場觸發；ledger / positions 不足時持倉卡隱藏精確 execution 欄位；RR / 過熱 / 證據不足不進可買 / 可準備 / 進場觸發。
+  - 可重跑補強：新增 / 調整 `tests/test_generator_report.py` probes，覆蓋 strategy_sample source-error 不誤傷可用價格、ledger insufficient 不顯示精確持倉 execution、完整 strategy evidence 正常可買不被誤降級；主 repo 108 passed。
+  - QA 反證：第一輪 QA 擋下 strategy_sample source-error 被誤歸因為 price/OHLCV/RR failure；第二輪 Tech 漏 P2 時 Architect 未送 QA，改用候選續寫補 P2；最終 QA `通過`。
+  - 邊界：不改 strategy decision、RR 公式、DB schema/write、production DML/backfill、live Telegram；P3/P5/P6/P7/P8 另開。
+  - 流程治理：`evidence_chain` + `QA反證` + `runner_gap`。同類任務不能只修文案，必須有手機閱讀反證與完整證據正常案例反證。
 - `20260602_intraday_v20_4_24_a1_a2_a3_hard_conflicts`:
   - 問題：Owner 指出 06/02 盤中 v20.4.24 報文三個硬衝突：不可買 / 不可追高未持倉仍用推薦感 `可準備` 主標籤；持倉主行動在卡片 / 決策 / 風控檢查混用；持倉排序在卡片 / 風控 / 索引不一致。
   - 結果：報文版本升 `v20.4.25`；不可買未持倉改用 `不可追高觀察` / `過熱待回測` / `待回測`；一般續抱持倉主行動收斂為 `續抱觀察`；詳情索引持倉欄位改列 ordered holding names，和卡片 / 風控同序。
