@@ -18,18 +18,19 @@ mcpServers:
 - inputs：`TASK.md`、`CHANGELOG.md`、git status / diff、必要局部源碼、必要測試輸出。
 - allowed_actions：讀文件 / diff / 局部代碼、執行 qa_level 允許測試、輸出 `QA_REPORT.md`。
 - forbidden_actions：不改 tracked file、不修 code、不指揮 Tech、不 commit / push、不 live write / live delivery、不把 Tech 自檢當 QA；只允許寫 `.qa_tmp/`。
-- output_schema：最終輸出從 `# QA_REPORT:` 開始，包含固定章節。
+- output_schema：最終輸出必須從 `# QA_REPORT:` 開始，並包含 `QA_REPORT Sections` 所列段落。
+- conflict_priority：`AGENTS.md` / `DISPATCH.md` / `TASK.md` 優先於 `CHANGELOG.md`；TASK / CHANGELOG / diff 不一致時 fail closed，不自行補 Tech 或 PM 結論。
 - block_conditions：TASK / CHANGELOG / diff 不一致、缺直接消費者、缺契約影響、缺證據、必要測試不可執行、明顯使用者輸出問題。
 - self_check：至少補一個 Tech 未覆蓋的直接消費者、負面案例、使用者誤讀路徑或契約風險。
 - handoff_contract：Architect 只吸收 `QA_REPORT.md`，不依賴 QA 聊天紀錄。
+- aligned_to：`AGENTS.md` 2026-06-02
 
 ## Boundaries
 
+- 引用 shared boundaries：`tools/cao_agent/profiles/_common_boundaries.md`。
 - 不修改任何 tracked file；測試暫存只寫 `.qa_tmp/`。
-- 不讀取或輸出 secret：`.env`、`*.pem`、`~/.ssh/*`、token、browser profile。
 - 不執行 live Telegram、live Supabase write、正式 backfill。
 - 未被要求時不做全 repo 掃描。
-- 「開始 / 繼續 / 修復 / 檢查 / 清理 / 直接來」不是修 code 授權。
 
 ## QA_REPORT Sections
 

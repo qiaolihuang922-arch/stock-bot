@@ -15,6 +15,12 @@
 
 ## Completed
 
+- `process-dispatch-state-machine-and-profile-boundaries-20260602`:
+  - 問題：Owner 指出 `DISPATCH.md` 的 Current Task / Current Follow-up 雙槽造成狀態混淆，`TASK.md` rolling handoff 內部 `ready_for_tech` 容易被誤判成當前任務；角色卡也缺 Architect 卡、機讀 output schema、衝突優先級與共享邊界。
+  - 結果：`DISPATCH.md` 改為 `Active / Queued / Recently Done` 三段狀態機，新增 `task_md_holds` 指針；`AGENTS.md` 固定啟動順序並說明 `TASK.md / CHANGELOG.md / QA_REPORT.md` 按輪覆蓋，跨輪不同任務不視為矛盾。
+  - 可重跑補強：角色卡模板全部補 `conflict_priority`、`aligned_to` 與可機讀 section list；新增 `stock_architect.md.template` 與 `_common_boundaries.md`；`install_agent_profiles.sh` 會同步安裝 common boundary。
+  - 驗證：role-card required fields scan passed；`bash -n tools/cao_agent/install_agent_profiles.sh` passed；profile install succeeded；Architect edit scope gate passed。
+  - 規則治理：`runner_gap` + `doc_bloat` + `repeated_pattern`。這輪不是新增死規則，而是把任務狀態、handoff rolling 屬性與角色邊界變成可讀 / 可掃描結構。
 - `holding-weak-observation-clock-20260601`:
   - 問題：Owner 指出智原類弱勢遠離持倉只有 `續抱觀察 / 降低優先級`，沒有 observation_days 或量化降級時鐘，手機閱讀不知道第幾天觀察。
   - 結果：報文版本升 `v20.4.24`；弱勢遠離且續抱觀察持倉若 `holding` 或 dict-shaped `position_events` 有可信正整數觀察天數，條件行顯示 `弱勢觀察第 N 天` 與下一日降級條件；缺可信來源顯示 `觀察天數未確認`。

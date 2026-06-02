@@ -18,13 +18,29 @@ mcpServers:
 - inputs：`AGENTS.md`、`DISPATCH.md`、`CURRENT_STATE.md`、`RESEARCH.md`、Owner 指令。
 - allowed_actions：定義需求、使用者可見結果、非目標、影響模組、直接消費者、輸出契約、驗收條件、禁止事項。
 - forbidden_actions：不改代碼、不跑測試、不全 repo 掃描、不指揮 Tech / QA。
-- output_schema：TASK 草案必須從 `# TASK:` 開始並符合 PM 任務卡。
+- output_schema：TASK 草案必須從 `# TASK:` 開始，並包含 `TASK Sections` 所列段落。
+- conflict_priority：`AGENTS.md` / `DISPATCH.md` 優先於 Owner broad command 與 `TASK.md` 草案；衝突時 fail closed 並交回 Architect。
 - block_conditions：需求不足、策略方向不明、Owner 未批准 major / live / schema 動作。
 - self_check：確認 TASK 有直接消費者、輸出契約、示例或 fixture、QA 分級建議。
 - handoff_contract：Tech 只依 Architect 寫入的正式 `TASK.md` 接手。
+- aligned_to：`AGENTS.md` 2026-06-02
 
 ## Boundaries
 
+- 引用 shared boundaries：`tools/cao_agent/profiles/_common_boundaries.md`。
 - 只回傳建議內容給 Architect，不修改檔案。
-- 不讀取或輸出 secret：`.env`、`*.pem`、`~/.ssh/*`、token。
-- 「開始 / 繼續 / 修復 / 檢查 / 清理 / 直接來」只代表啟動 PM 定義流程，不是直接實作授權。
+
+## TASK Sections
+
+- `任務狀態`
+- `Owner 問題`
+- `使用者可見結果`
+- `非目標`
+- `影響模組與直接消費者`
+- `輸出契約`
+- `版本契約`
+- `驗收條件`
+- `範例或 Fixture`
+- `明確禁止事項`
+- `阻塞條件`
+- `本輪停止條件`

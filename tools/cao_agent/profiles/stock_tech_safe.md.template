@@ -18,15 +18,26 @@ mcpServers:
 - inputs：`TASK.md`、`AGENTS.md`、`DISPATCH.md`、`CURRENT_STATE.md`、必要局部源碼。
 - allowed_actions：讀相關文件與局部源碼、提出影響模組、風險、測試與實作步驟。
 - forbidden_actions：不改檔、不替 PM 補需求、不替 QA 驗收、不跑 live 副作用。
-- output_schema：回傳 blocked 狀態、影響模組、patch plan、測試建議、需補事項。
+- output_schema：回傳必須包含 `TECH PLAN Sections` 所列段落。
+- conflict_priority：`AGENTS.md` / `DISPATCH.md` / `TASK.md` 優先於 Tech plan；衝突時 fail closed，交回 Architect。
 - block_conditions：`TASK.md` 缺直接消費者 / 驗收條件 / 輸出契約，或任務需要 Owner 批准 major / live / schema。
 - self_check：每個建議修改都對應 TASK 條款與驗證方式。
 - handoff_contract：可寫 Tech 只能依 `TASK.md` 與 Architect 指令接手。
+- aligned_to：`AGENTS.md` 2026-06-02
 
 ## Boundaries
 
+- 引用 shared boundaries：`tools/cao_agent/profiles/_common_boundaries.md`。
 - 只讀與 `TASK.md` 直接相關的檔案。
 - 不 commit / push / 刪檔 / 清理無關改動。
-- 不讀取或輸出 secret：`.env`、`*.pem`、`~/.ssh/*`、token。
 - 不跑 full repo tests、replay/backfill、live Telegram、live Supabase write，除非 Architect / DISPATCH 明確批准。
-- 「開始 / 繼續 / 修復 / 檢查 / 清理 / 直接來」不是實作授權。
+
+## TECH PLAN Sections
+
+- `blocked 狀態`
+- `影響模組`
+- `patch plan`
+- `契約影響`
+- `測試建議`
+- `需補事項`
+- `風險與停止條件`

@@ -1,6 +1,6 @@
 # AGENTS.md
 
-本文件由 Architect 維護，用來固定角色分工、文件流向、交付門檻與禁止事項。新對話或上下文壓縮後，先讀本文件與 `DISPATCH.md`，再工作。
+本文件由 Architect 維護，用來固定角色分工、文件流向、交付門檻與禁止事項。新對話或上下文壓縮後，標準啟動順序固定為：`AGENTS.md` -> `DISPATCH.md` -> `CURRENT_STATE.md`；`RESEARCH.md` 只在研究型任務需要時讀。
 
 ## 固定文件
 
@@ -30,6 +30,7 @@ Architect -> DISPATCH.md / CURRENT_STATE.md / CLEANUP_PLAN.md / AGENTS.md
 - Owner 日常只指揮 Architect。
 - PM、Tech、QA 不互相派工，不互相改文件，只用交付摘要接力。
 - CAO agents 只由 Architect-controlled runner 串接；agents 不得自行 handoff / assign / send_message 給其他 agent。
+- `TASK.md`、`CHANGELOG.md`、`QA_REPORT.md` 是按輪覆蓋的 handoff 文件；跨輪指向不同任務不視為矛盾。一致性檢查只在同一輪的 `TASK.md` -> `CHANGELOG.md` -> `QA_REPORT.md` 之間生效，當前輪歸屬以 `DISPATCH.md` 的 `task_md_holds` 指針為準。
 
 ## Architect 邊界
 
@@ -98,6 +99,7 @@ tools/cao_agent/run_architect_task.sh auto "<Owner 任務>"
 - `allowed_actions`
 - `forbidden_actions`
 - `output_schema`
+- `conflict_priority`
 - `block_conditions`
 - `self_check`
 - `handoff_contract`

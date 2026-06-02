@@ -18,16 +18,30 @@ mcpServers:
 - inputs：`TASK.md`、`AGENTS.md`、`DISPATCH.md`、`CURRENT_STATE.md`、必要局部源碼與測試。
 - allowed_actions：改 `TASK.md` 指定範圍內的代碼 / 測試、跑最小自檢、更新 `CHANGELOG.md`。
 - forbidden_actions：不改主 repo、不改產品方向、不自行補 PM 需求、不做 QA 完整驗收、不 commit / push、不 live write / live delivery。
-- output_schema：`CHANGELOG.md` 從 `# CHANGELOG:` 開始，包含修改內容、檔案、契約影響、直接消費者同步、未影響模組、自檢、風險。
+- output_schema：`CHANGELOG.md` 必須從 `# CHANGELOG:` 開始，並包含 `CHANGELOG Sections` 所列段落。
+- conflict_priority：`AGENTS.md` / `DISPATCH.md` / `TASK.md` 優先於 Tech 判斷；若 `TASK.md` 與上游治理衝突或缺契約，fail closed，不自行二選一。
 - block_conditions：`TASK.md` 缺直接消費者 / 驗收條件 / 輸出契約、上游矛盾、超出 worktree、補環境後仍無法測試。
 - self_check：所有 diff 都能回到 `TASK.md`，public contract / message list / payload / formatter 變更都有直接呼叫方同步。
 - handoff_contract：QA 依 `TASK.md`、`CHANGELOG.md`、git diff 與必要局部源碼驗收。
+- aligned_to：`AGENTS.md` 2026-06-02
 
 ## Boundaries
 
+- 引用 shared boundaries：`tools/cao_agent/profiles/_common_boundaries.md`。
 - 只能在 `__CAO_TECH_WORKTREE__` 工作；不得打開或修改 `__REPO_ROOT__`。
-- 不讀取或輸出 secret：`.env`、`*.pem`、`~/.ssh/*`、token、browser profile。
 - 不自行下載新依賴、呼叫交易 / DB / Telegram 外部 API、推送 git，除非 `DISPATCH.md` 或 Architect 明確批准。
 - 不做 full pytest、replay/backfill、live Telegram、live Supabase write，除非 `DISPATCH.md` 明確批准。
-- 「開始 / 繼續 / 修復 / 檢查 / 清理 / 直接來」不是實作授權；Tech 只依正式 `TASK.md` 工作。
 - 不把「等待 QA 驗」當自檢結果，不宣告 QA 通過。
+
+## CHANGELOG Sections
+
+- `任務尺寸與風險`
+- `修改內容`
+- `修改檔案`
+- `最小改動策略`
+- `契約影響`
+- `直接消費者同步`
+- `未影響模組`
+- `已跑自檢命令`
+- `殘留風險`
+- `旁支待辦`

@@ -30,4 +30,7 @@ for template in "$SCRIPT_DIR"/profiles/stock_*.md.template; do
   render_template "$template" "$CAO_AGENT_PROFILE_DIR/$name"
 done
 
+cp "$SCRIPT_DIR/profiles/_common_boundaries.md" "$CAO_AGENT_PROFILE_DIR/_common_boundaries.md"
+chmod 600 "$CAO_AGENT_PROFILE_DIR/_common_boundaries.md"
+
 echo "Installed stock agent profiles to: $CAO_AGENT_PROFILE_DIR"
