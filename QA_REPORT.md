@@ -1,76 +1,83 @@
-# QA_REPORT: research_trend_continuation_phase1
+# QA_REPORT: research_daily_price_backfill_and_trend_sample_expansion_20260603
 
 ## 測試範圍
 
-- 任務：`research_trend_continuation_phase1`
-- QA 分級：L2。
+- 任務：`research_daily_price_backfill_and_trend_sample_expansion_20260603`
+- QA 分級：L3。
 - 已驗：
-  - 研究腳本可執行。
-  - production DB read-only `daily_price` 實跑輸出。
-  - 缺憑證 / 缺欄位 fail closed。
-  - mutation / live Telegram 禁令。
-  - 未改正式策略核心檔案。
+  - backfill CLI dry-run no-write。
+  - approved write helper contract。
+  - missing credentials fail closed。
+  - research artifact 12 檔 universe / per-symbol / aggregate schema。
+  - 未改正式策略核心檔。
 
 ## 關聯風險掃描
 
-- DB schema / write path：未改。
-- DB write：未發現 `insert / upsert / update / delete / rpc` 或 schema mutation。
-- Telegram live delivery：未發現 send path。
+- DB schema / write path：未新增 schema；write path 走既有 `scripts.backfill_signals.upsert_rows(...)`。
+- Production actual write：未執行。
+- Telegram：未改、未 live send。
 - Strategy decision：未改 `services/analysis.py`、`core/condition_engine.py`、`core/generator.py`。
-- Research source：正式結論來自 production DB read-only `daily_price`，不是 fixture。
+- Credential exposure：blocked output 不含 token / DSN / secret value。
 
 ## 跨區塊語意一致性
 
-- `TASK.md` 要求階段一只做研究；diff 只新增研究腳本、研究測試、研究 artifact 與 handoff 文件。
-- `RESEARCH.md`、`CHANGELOG.md`、artifact 結論一致：`pullback_continuation_edge=insufficient-data`。
-- `CHANGELOG.md` 明確說本輪未消費 `signal_outcomes` / `daily_signal_snapshot`，避免把覆蓋範圍誇大成三表完整研究。
+- `TASK.md` 要求 watchlist 12；實作使用 `core.watchlist.WATCHLIST_CODES`，本地確認 count=12。
+- `RESEARCH.md`、artifact、CHANGELOG 結論一致：目前每檔 rows_used=43、total_hit_count=5、未達 30。
+- Backfill CLI 明確區分 dry-run 與 write；write 需 `--confirm-write`。
 
 ## 使用者誤讀風險
 
-- 研究結論不是「趋势延續可以買」，而是「目前定義不支持進入階段二」。
-- extended spike 對照組數字為正，但 QA 判定它只是對照，不構成追高買入授權。
-- 樣本數不足與 5 日負 edge 同時存在；不可用來放開 RESEARCH.md 的硬邊界。
+- 本輪沒有開策略買路，也沒有說 trend continuation 有 edge。
+- `extended_spike` 在舊 artifact 中表現為正，但本輪仍只是對照，不是追高授權。
+- Backfill CLI 可以實際寫 DB，但本輪沒有執行 production write；需要 Owner 另行確認後跑。
+- 12 檔 full dry-run 被外部行情源拖慢，本輪不能宣稱已完整拿到 12 檔 planned rows。
 
 ## 失敗標本反證
 
-- 缺憑證負面案例：
-  - `--no-config` path 回傳 `status: blocked`、`reason: missing-production-db-credentials`、`no_synthetic_data: true`。
-- 缺欄位負面案例：
-  - test fixture 移除 `low` 欄位後 `normalize_bars()` raise `ResearchBlocked(reason="missing-column")`。
-- 只讀案例：
-  - fake client test 只觀察到 `table / select / order / range / execute`。
-  - mutation regex scan 無命中。
+- missing credentials：
+  - `--write --confirm-write --no-config` 回傳 `status=blocked`、`fail_closed_reason=missing-credentials`、`live_write=false`、exit 2。
+- dry-run no-write：
+  - 單檔 dry-run 回傳 `result=no-write`、`live_write=false`、planned_rows / rows_to_write。
+- approved write helper：
+  - fake client test 觀察到 `daily_price.upsert(..., on_conflict="stock_id,trade_date")` 由 `scripts.backfill_signals.upsert_rows(..., client=...)` 觸發。
+- research artifact：
+  - `universe_count=12`。
+  - `per_symbol_count=12`。
+  - `aggregate.total_hit_count=5`。
+  - `aggregate.meets_min_sample_count=false`。
 
 ## 質疑與反證
 
-- 質疑：Tech fixture 是否被當成正式研究？
-  - 反證：artifact 由 `scripts/research_trend_continuation.py` 實跑 production read-only 生成，`RESEARCH.md` 也明確 fixture 只驗分類與 fail closed。
-- 質疑：是否偷偷改策略核心？
-  - 反證：`git diff --name-only` 未包含 `services/analysis.py`、`core/condition_engine.py`、`core/generator.py`。
-- 質疑：研究是否足以進階段二？
-  - 反證：`pullback_continuation` 樣本 5 < min_sample 30，且 5 日勝率 20.00%、平均收益 -3.89%；不符合 Owner 門檻。
+- 質疑：是否手寫 production DML？
+  - 反證：新 CLI 呼叫 `scripts.backfill_signals.upsert_rows(price_rows, signal_rows=[], client=...)`；未直接在新 CLI 中呼叫 `daily_price.upsert`。
+- 質疑：是否改了正式策略？
+  - 反證：diff 未包含 `services/analysis.py`、`core/condition_engine.py`、`core/generator.py`。
+- 質疑：是否已完成多年樣本擴充？
+  - 反證：research artifact 仍顯示每檔 rows_used=43、total_hit_count=5；沒有完成 production backfill。
 
 ## 已跑命令
 
-- `PYTHONPYCACHEPREFIX=/private/tmp/trend_research_pycache arch -arm64 .venv/bin/python -m py_compile scripts/research_trend_continuation.py tests/test_research_trend_continuation.py`
+- `PYTHONPYCACHEPREFIX=/private/tmp/backfill_trend_pycache arch -arm64 .venv/bin/python -m py_compile scripts/backfill_daily_price_history.py scripts/research_trend_continuation.py scripts/backfill_signals.py tests/test_backfill_daily_price_history.py tests/test_research_trend_continuation.py tests/test_backfill_signals.py`
   - 結果：passed。
-- `arch -arm64 .venv/bin/python -m pytest tests/test_research_trend_continuation.py -q`
-  - 結果：4 passed。
-- `arch -arm64 .venv/bin/python scripts/research_trend_continuation.py`
-  - 結果：completed，產出 research report。
-- `rg ... scripts/research_trend_continuation.py`
-  - 結果：no DB write / schema mutation / live Telegram matches。
+- `arch -arm64 .venv/bin/python -m pytest tests/test_backfill_daily_price_history.py tests/test_research_trend_continuation.py tests/test_backfill_signals.py -q`
+  - 結果：15 passed。
+- `arch -arm64 .venv/bin/python scripts/backfill_daily_price_history.py --dry-run --symbols 3231 --start 2026-06-01 --end 2026-06-02 --no-config`
+  - 結果：no-write dry-run。
+- `arch -arm64 .venv/bin/python scripts/backfill_daily_price_history.py --write --confirm-write --symbols 3231 --start 2026-06-01 --end 2026-06-02 --no-config`
+  - 結果：blocked / missing credentials / exit 2。
+- `arch -arm64 .venv/bin/python scripts/research_trend_continuation.py --json`
+  - 結果：completed，universe_count=12，total_hit_count=5。
 
 ## 未測項目
 
 - 未跑 full pytest。
-- 未實裝階段二。
-- 未消費 `signal_outcomes` 或 `daily_signal_snapshot` 作正式 outcome / setup source。
-- 未 live Telegram。
-- 未 DB write。
+- 未做 production actual write。
+- 未完成 12 檔 full dry-run，因外部行情源呼叫超時偏慢而中止。
+- 未改 / 未驗正式 Telegram 報文。
+- 未接階段二策略。
 
 ## QA 結論
 
 conditional pass
 
-理由：階段一研究腳本、只讀約束、fail closed 與 production DB read-only output 已驗；但本輪未覆蓋 `signal_outcomes / daily_signal_snapshot` 三表完整研究，且研究結論是 insufficient-data，不支持進入階段二。
+理由：CLI contract、approved helper path、fail closed、research artifact schema 已驗；但本輪未實際回填 production daily_price，也未取得完整 12 檔 dry-run output。因此只能說「工具已就緒、目前研究樣本仍不足」，不能說多年樣本已補齊或階段二可開始。

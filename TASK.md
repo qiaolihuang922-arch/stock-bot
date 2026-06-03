@@ -1,218 +1,229 @@
-# TASK: research_trend_continuation_phase1
+# TASK: research_daily_price_backfill_and_trend_sample_expansion_20260603
 
 ## 任務狀態
 
-- task_id: research_trend_continuation_phase1
-- 任務類型: research
-- 狀態: ready_for_tech
-- 任務尺寸判斷: research
-- QA 分級建議: L2
-- 版本建議: 不升版；本輪不改 Telegram / UI / strategy version
-- 本輪目標: 继续执行已写入 TASK.md 的阶段一趋势延续研究任务，新增只读 DB 脚本并输出可重跑研究报告与 RESEARCH.md 高信号结论
+- task_id: research_daily_price_backfill_and_trend_sample_expansion_20260603
+- 任務尺寸: risk_patch / research
+- 狀態: ready_with_blockers
+- QA 分級建議: L3
+- 版本建議: 不升 Telegram / 正式策略版本；研究 CLI / artifact 可標明本輪日期與參數。
 
 ## Owner 問題
 
-Owner 要用 production DB 既有資料，只讀驗證「上升趨勢中，縮量回踩 ma5/ma10 不破後，放量站回」是否具備可討論的正 edge。
+Owner 要繼續既有 TASK：補齊 watchlist 12 檔多年日線資料，讓「回踩延續」研究樣本不只停在目前不足樣本。
 
-本輪只回答研究問題：
+本輪只做兩件事：
 
-- pullback continuation 組是否勝率顯著高於 50%
-- pullback continuation 組平均收益是否為正
-- 相比 extended spike 追高組，是否更值得進入下一階段策略設計
+1. backfill_daily_price_history.py 支援 approved write path 的 dry-run / write / read-after-write。
+2. research_trend_continuation.py 產出 12 檔 universe、per-symbol hit count、total hit count，並判斷 total >= 30。
 
 ## 使用者可見結果
 
-- 新增只讀 DB 腳本：scripts/research_trend_continuation.py
-- 產出可重跑研究報告：stdout 或 repo 既有 research artifact 位置，必須可由 QA 重跑驗證
-- 更新 RESEARCH.md 高信號結論：包含資料來源、重跑命令、樣本數、核心 metrics、結論或 blocked reason
-- 若 DB 不可讀、必要資料不足或欄位不可可靠映射，結果必須是 blocked / insufficient-data，不得造資料
+- Owner 可用 CLI dry-run 檢查將回填哪些 12 檔、哪些日期、多少 rows。
+- Owner 可在 approved write path 存在時執行實際回填，並讀回 daily_price 驗證。
+- Owner 可取得研究 artifact，直接看到：
+- universe 是否為 watchlist 12 檔
+- 每檔命中次數
+- total sample count
+- 是否達到 >=30
+- 1 / 3 / 5 / 10 日 forward return 統計
+- 若找不到 watchlist 12 source-of-truth 或 approved write path，結果必須是 blocked / fail closed，不得自行猜測或手寫 SQL。
 
 ## 非目標
 
-- 不改產品策略規則
-- 不改 services/analysis.py
-- 不改 core/condition_engine.py
-- 不改 core/generator.py
-- 不改 DB schema / RLS / grant / policy / role / index / constraint
-- 不做 DB write、backfill、insert、update、delete
-- 不 live Telegram
-- 不把研究結論接入正式買入建議
-- 不做參數最佳化、全市場策略重設或報文改版
+- 不改正式策略。
+- 不開 trend_continuation 買入路徑。
+- 不改 Telegram 報文。
+- 不改 services/analysis.py、core/condition_engine.py、core/generator.py。
+- 不改 DB schema / RLS / grant / policy / role / index / constraint。
+- 不 live Telegram。
+- 不手寫 production DML。
+- 不把研究結果包裝成交易建議。
 
 ## 影響模組
 
-允許影響：
-
+- scripts/backfill_daily_price_history.py
 - scripts/research_trend_continuation.py
-- RESEARCH.md
-- 必要時可新增只讀研究報告 artifact，但須在 CHANGELOG.md 寫明路徑
-
-不得影響：
-
-- services/analysis.py
-- core/condition_engine.py
-- core/generator.py
-- DB schema / migration / write path
-- Telegram live delivery path
+- 必要時只可新增 / 調整同層研究測試、fixture、script helper。
+- 可使用 repo 既有 DB/service client 與 approved write interface，但不得新增 schema 或繞過既有接口。
 
 ## 直接消費者
 
-- Owner：閱讀研究結論，決定是否進入下一階段策略任務
-- Architect：判斷研究證據是否足以開產品 / 策略設計任務
-- Tech：按本 TASK 實作只讀研究腳本與報告
-- QA：重跑腳本，驗證只讀約束、輸出契約、fail closed 行為
-
-## 已存在且不得回退的契約
-
-- production DB 或 Owner 指定持久 source-of-truth 才能作為跨日研究資料來源
-- local cache、runtime dict、agent 對話、synthetic fixture 不得作為正式研究結論來源
-- 缺 DB 憑證、缺表、缺欄位、讀取錯誤或可信度不足時必須 fail closed
-- 本輪不得改正式 Telegram 報文、策略輸出、版本常量或 live runner
-- 若既有表名 / 欄位名與任務描述不同，Tech 不得猜語意；必須 blocked 或在 CHANGELOG.md 寫明可靠映射證據
+- Owner / Architect：執行 CLI 與讀研究 artifact。
+- QA：驗收 dry-run、write path contract、read-after-write、fail-closed、artifact schema。
+- 後續 PM/Tech：只用 artifact 判斷是否另開階段二策略任務。
 
 ## 輸出契約
 
-腳本：
+### backfill_daily_price_history.py
 
-- 路徑：scripts/research_trend_continuation.py
-- 行為：只讀 production DB 或 Owner 指定既有持久來源
-- 禁止：任何 write SQL / DML / schema mutation / Telegram send
-- DB 不可讀時：exit non-zero 或明確 status: blocked
+CLI 必須支援：
 
-候選定義：
+- --dry-run
+- --symbols
+- --start YYYY-MM-DD
+- --end YYYY-MM-DD
+- --years N
+- --skip-existing
+- --read-after-write
 
-- 趨勢成立：
-- close > ma20
-- ma5 > ma20
-- 近 10 交易日淨漲 > 0
-- 回踩：
-- 近 1-3 日縮量回踩到 ma5 或 ma10 不破
-- low 觸及 ma5 或 ma10 的 ±1%
-- volume < 5日均量
-- 站回：
-- 進場日 close 重新站上 ma5
-- vol_ratio >= 1
-- extended spike 對照組：
-- price / ma20 >= 1.08
-- price / ma20 >= 1.15
-- price / ma20 >= 1.22
+未指定 --symbols 時，必須解析 watchlist 12 檔 source-of-truth；無法唯一確認時 blocked。
 
-輸出分組：
+輸出必須包含：
 
-- pullback_continuation
-- extended_spike_1.08
-- extended_spike_1.15
-- extended_spike_1.22
+- mode: dry-run / write
+- resolved universe symbols
+- universe count
+- requested date range
+- market data source 狀態
+- approved write path/interface 名稱
+- per-symbol planned rows / existing rows / rows to write / skipped rows
+- dry-run 時明確顯示 result: no-write
+- write 後 read-after-write 的 per-symbol row count 與日期範圍
+- fail-closed reason
 
-每組輸出欄位：
+禁止輸出 credential、token、DSN、完整 secret env。
 
-- group
-- extended_level
-- sample_count
-- horizon: 1d / 3d / 5d / 10d
-- win_rate
-- avg_return
-- MFE
-- MAE
-- conclusion: positive / negative / insufficient-data / blocked
+### research_trend_continuation.py
 
-完成輸出形狀：
+artifact 必須包含：
 
-research_trend_continuation
-source: production-db-readonly
-status: completed
-
-group                    level   n    h1_win h1_avg h3_win h3_avg h5_win h5_avg h10_win h10_avg mfe   mae
-pullback_continuation    none    ...  ...    ...    ...    ...    ...    ...    ...     ...     ...   ...
-extended_spike           1.08    ...  ...    ...    ...    ...    ...    ...    ...     ...     ...   ...
-extended_spike           1.15    ...  ...    ...    ...    ...    ...    ...    ...     ...     ...   ...
-extended_spike           1.22    ...  ...    ...    ...    ...    ...    ...    ...     ...     ...   ...
-
-conclusion:
-pullback_continuation_edge: positive | negative | insufficient-data
-reason: win_rate_5d=..., avg_return_5d=..., sample_count=...
-
-blocked 輸出形狀：
-
-research_trend_continuation
-status: blocked
-reason: missing-production-db-credentials | source-error | missing-table | missing-column | insufficient-data
-no_synthetic_data: true
+- source: daily_price
+- universe symbols
+- universe count = 12
+- date range
+- pattern definition summary
+- per-symbol:
+- symbol
+- daily_price rows used
+- hit count
+- forward return count for 1 / 3 / 5 / 10 days
+- average / median forward return for 1 / 3 / 5 / 10 days
+- aggregate:
+- total hit count
+- threshold: 30
+- meets_min_sample_count: true/false
+- blocked reason：
+- missing-watchlist-source
+- missing-approved-write-path
+- missing-credentials
+- source-error
+- daily-price-read-error
+- universe-not-12
+- insufficient-data
 
 ## 版本契約
 
-- 不升 Telegram / UI / strategy version
-- 不改正式報文 header 或 core/generator.py 的版本常量
-- RESEARCH.md 可新增本輪日期 2026-06-03 與 task_id
-- 若新增研究 artifact，檔名需可追溯 task_id 或日期
+已存在且不得回退：
+
+- 正式策略與 Telegram generator 不變。
+- daily_price schema 不變。
+- production write 只能走既有 approved interface。
+- 缺 source、缺憑證、讀寫失敗時 fail closed。
+- watchlist universe 必須是 12 檔；無法確認 source-of-truth 時 blocked。
+- sample count 未達 30 時，不得宣稱可進入買入策略實裝。
+
+不確定契約：
+
+- approved write path/interface 的實際名稱與位置需由 Tech 從 repo 既有程式確認；不存在則 blocked。
+- watchlist 12 檔 source-of-truth 需由 Tech 從既有 config/script/DB read path 確認；不能唯一確認則 blocked。
 
 ## 驗收條件
 
-1. scripts/research_trend_continuation.py 存在，且可用 repo 既有環境重跑。
-2. 腳本只讀 DB；QA 必須掃描並反證沒有 write SQL、DML、schema migration、approved write service、Telegram live send。
-3. 腳本實作趨勢、回踩、站回、extended spike 對照組定義；若欄位不足無法可靠實作，必須 blocked。
-4. 輸出每組 sample_count、1/3/5/10 日 win_rate、avg_return、MFE、MAE。
-5. RESEARCH.md 包含資料來源、重跑命令、完成或 blocked 狀態、核心結論。
-6. DB 不可讀、表不可讀、欄位不足或樣本不足時，腳本與 RESEARCH.md 都必須 fail closed，不得產生 fabricated metrics。
-7. QA 至少補一個負面案例：缺 DB env 或缺必要欄位時，輸出 blocked，而不是 fallback 到 mock / empty positive result。
-8. Tech CHANGELOG.md 必須標明覆蓋層級：production source、script output、fixture/helper coverage、未覆蓋項目。
+1. backfill_daily_price_history.py --dry-run --years 1 可執行，輸出 12 檔 universe、日期範圍、planned rows，且證明沒有 write。
+2. --symbols 可限制到 1-2 檔，且不影響未指定 symbol。
+3. 實際 write 只使用既有 approved write path/interface；CHANGELOG.md 必須列出 interface 名稱與證據。
+4. --read-after-write 可讀回每檔 row count 與日期範圍；讀取失敗必須 fail closed。
+5. 缺憑證、缺 source、缺 approved write path、watchlist 不是 12 檔時，script 必須 non-zero 或明確 blocked，且不得寫入。
+6. research artifact 必須顯示 12 檔 universe、per-symbol hit count、total hit count、total >= 30 判斷。
+7. research 正式結論只能使用 daily_price 多年資料，不得用 synthetic fixture 當 production research conclusion。
+8. QA 必須至少覆蓋 dry-run no-write、fail-closed 負面案例、artifact schema、universe count = 12、total hit count threshold。
 
 ## 範例或 Fixture
 
-正式研究結論不可使用 synthetic fixture。
+mode: dry-run
+source: <market_data_source>
+write_path: <approved_interface_name>
+universe_count: 12
+symbols: [ ...12 symbols... ]
+date_range: 2025-06-03..2026-06-03
+per_symbol:
+- symbol: XXXX
+planned_rows: 250
+existing_rows: 120
+rows_to_write: 130
+skipped_existing: true
+result: no-write
 
-允許 fixture 僅用於：
+source: daily_price
+universe_count: 12
+symbols: [ ...12 symbols... ]
+date_range: 2024-06-03..2026-06-03
+threshold_min_hits: 30
+per_symbol:
+- symbol: XXXX
+rows_used: 500
+hit_count: 4
+forward_returns:
+d1: { count: 4, avg: 0.00, median: 0.00 }
+d3: { count: 4, avg: 0.00, median: 0.00 }
+d5: { count: 4, avg: 0.00, median: 0.00 }
+d10: { count: 4, avg: 0.00, median: 0.00 }
+aggregate:
+total_hit_count: 31
+meets_min_sample_count: true
 
-- 驗證分類邏輯
-- 驗證輸出格式
-- 驗證 fail closed 行為
+## 失敗標本與驗收路由
 
-最小 fixture 欄位形狀：
+失敗標本：
 
-date,symbol,close,low,ma5,ma10,ma20,volume,vol_ma5,vol_ratio,future_return_1d,future_return_3d,future_return_5d,future_return_10d
+- 找不到 watchlist 12 source-of-truth。
+- 找不到 approved write path/interface。
+- 缺 market data source 憑證或 source-error。
+- write 後 read-after-write 查不到剛寫入資料。
+- artifact 沒有 per-symbol hit count 或 total hit count。
+- total < 30 但輸出暗示可開買入路徑。
 
-fixture 結果不得寫成 Owner 研究結論；CHANGELOG.md / QA_REPORT.md 必須清楚區分 fixture coverage 與 production DB coverage。
+驗收路由：
+
+- CLI dry-run 層：參數、universe、日期、no-write。
+- approved write interface 層：確認沒有手寫 production DML。
+- read-after-write 層：確認 daily_price 可讀回。
+- research artifact 層：確認 12 檔、per-symbol、aggregate、>=30 判斷。
+- 不驗 Telegram / official generator / formal strategy。
 
 ## 明確禁止事項
 
-- 禁止改 services/analysis.py
-- 禁止改 core/condition_engine.py
-- 禁止改 core/generator.py
-- 禁止 DB write / DML / schema change
-- 禁止 live Telegram
-- 禁止用 local cache、runtime dict、聊天記錄或 synthetic fixture 當正式研究資料源
-- 禁止 DB 不可讀時造資料、補假 metrics 或宣告 positive edge
-- 禁止把研究結論直接接入正式買入建議
-- 禁止擴大成策略重設、參數最佳化、全市場策略工程或報文改版
+- 禁止修改正式策略、報文、DB schema。
+- 禁止手寫 production DML。
+- 禁止 live Telegram。
+- 禁止把 local cache 當跨日 source-of-truth。
+- 禁止用 synthetic fixture 代替 production research conclusion。
+- 禁止在 log 中輸出 credentials、token、connection string。
+- 禁止 sample count 未達 30 時開買入路徑或宣稱策略可用。
 
 ## 阻塞條件
 
-- production DB 憑證不可用
-- 必要表不可讀
-- 必要欄位無法可靠映射
-- 既有 outcomes 不存在，且 repo 無可用只讀 outcomes 計算路徑
-- 樣本不足以判斷 edge，且無法明確標示 insufficient-data
-- 完成任務需要 DB schema 或 write path
-- 需要 Owner 確認新資料來源、策略語意或正式產品行為
-
-## QA 分級建議
-
-- QA 分級：L2
-- 理由：本輪不改策略 / 報文 / DB schema，但會讀 production source 並產出研究結論；需驗證只讀約束、輸出契約與 fail closed，不可只跑 happy path。
+- 無法確認 watchlist 12 檔 source-of-truth。
+- 無法確認既有 approved write path/interface。
+- 缺 market data source 憑證或 source-error。
+- daily_price read path 不可用。
+- 回填資料不足以計算 1 / 3 / 5 / 10 日 forward return。
+- 任務需要 DB schema / RLS / grant / policy / role 變更時，立即停下交回 Architect/Owner。
 
 ## 本輪停止條件
 
-驗到以下即算本輪完成：
+本輪完成到：
 
-- 腳本可重跑且只讀
-- 產出 pullback continuation 與 extended spike 對照 metrics
-- RESEARCH.md 有資料來源、重跑命令、樣本數、核心結論或 blocked reason
-- QA 反證只讀約束、輸出契約與 fail closed 行為
+- backfill script 具備 dry-run、write、read-after-write、安全日誌與 fail-closed。
+- research script 產出 watchlist 12 檔多年 daily_price artifact。
+- artifact 明確回答 total sample count 是否 >=30。
 
-以下旁支只記待辦，不納入本輪：
+本輪不處理：
 
-- 是否把 positive edge 接入正式策略
-- 是否新增 Telegram 報文區塊
-- 是否改買入評分、持倉狀態機、停損停利
-- 是否補 DB schema、outcomes 表或 production backfill
-- 是否做更多參數搜尋、regime 分層或策略最佳化
+- 階段二買入路徑。
+- 正式策略接線。
+- Telegram 報文改版。
+- DB schema 補強。
+- watchlist 擴編或選股邏輯改動。
+- market data provider 更換。

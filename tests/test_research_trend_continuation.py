@@ -68,7 +68,7 @@ class ResearchTrendContinuationTest(unittest.TestCase):
         with self.assertRaises(research.ResearchBlocked) as ctx:
             research.resolve_read_credentials(env={}, config_module=SimpleNamespace())
 
-        self.assertEqual(ctx.exception.reason, "missing-production-db-credentials")
+        self.assertEqual(ctx.exception.reason, "missing-credentials")
         blocked = research.blocked_report(ctx.exception.reason, ctx.exception.detail)
         self.assertTrue(blocked["no_synthetic_data"])
         self.assertIn("status: blocked", research.render_report(blocked))
@@ -112,6 +112,39 @@ class ResearchTrendContinuationTest(unittest.TestCase):
         self.assertNotIn("insert", str(calls).lower())
         self.assertNotIn("upsert", str(calls).lower())
         self.assertNotIn("delete", str(calls).lower())
+
+    def test_report_includes_universe_per_symbol_and_aggregate_threshold(self):
+        rows = _sample_rows()
+        bars = research.normalize_bars(rows)
+        events = research.collect_events(bars)
+        summaries = research.summarize_events(events, min_sample=1)
+        per_symbol = research.summarize_pullback_by_symbol(bars, events)
+
+        report = research.build_report(
+            summaries,
+            len(rows),
+            min_sample=1,
+            universe=["3231"],
+            date_range={"start": "2026-01-01", "end": "2026-03-31"},
+            per_symbol=per_symbol,
+        )
+
+        self.assertEqual(report["source"], "daily_price")
+        self.assertEqual(report["universe_symbols"], ["3231"])
+        self.assertEqual(report["universe_count"], 1)
+        self.assertEqual(report["per_symbol"][0]["symbol"], "3231")
+        self.assertGreater(report["per_symbol"][0]["hit_count"], 0)
+        self.assertEqual(
+            report["aggregate"]["total_hit_count"],
+            report["per_symbol"][0]["hit_count"],
+        )
+        self.assertTrue(report["aggregate"]["meets_min_sample_count"])
+        rendered = research.render_report(report)
+        self.assertIn("total_hit_count:", rendered)
+        self.assertIn("per_symbol:", rendered)
+
+    def test_watchlist_source_must_resolve_to_12_by_default(self):
+        self.assertEqual(len(research.resolve_watchlist_symbols()), 12)
 
 
 if __name__ == "__main__":

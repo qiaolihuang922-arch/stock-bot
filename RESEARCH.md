@@ -27,6 +27,27 @@
 - 策略含義：階段二 `trend_continuation` 買入路徑不得實裝；更不能放開 RESEARCH.md 既有「證據不得單獨變 BUY / 不得放寬追高」邊界。若要重開，需先擴大樣本來源或重新定義 pullback setup，再跑同層研究。
 - 限制：Owner 任務提到 `daily_signal_snapshot / daily_price / signal_outcomes`；本輪腳本實際以 `daily_price` 直接計算 outcomes，未消費 `signal_outcomes`。因此本結論只覆蓋 `daily_price` 可觀測 OHLCV 路徑。
 
+## Trend Continuation Sample Expansion｜2026-06-03
+
+- task_id：`research_daily_price_backfill_and_trend_sample_expansion_20260603`
+- 目的：先補 watchlist 12 檔多年 `daily_price`，再用同一研究腳本確認回踩延續樣本是否達到 30+。
+- 新增 backfill CLI：`scripts/backfill_daily_price_history.py`
+  - dry-run：`arch -arm64 .venv/bin/python scripts/backfill_daily_price_history.py --dry-run --years 1`
+  - 指定檔案：`--symbols 3231,2421`
+  - 寫入需明確加 `--write --confirm-write`，並可搭配 `--read-after-write`。
+  - approved write path：`scripts.backfill_signals.upsert_rows(price_rows, signal_rows=[], client=...)`。
+  - watchlist source-of-truth：`core.watchlist.WATCHLIST_CODES`，目前 12 檔：3231、2421、3035、2303、3481、2344、2376、2408、2356、2324、2301、2337。
+- 研究 artifact 已更新：
+  - `reports/research/trend_continuation_20260603.txt`
+  - `reports/research/trend_continuation_20260603.json`
+- 最新 `daily_price` 研究結果：
+  - universe_count：12。
+  - 每檔 rows_used：目前各 43。
+  - total_hit_count：5，threshold：30，meets_min_sample_count：false。
+  - per-symbol hit count：2356=2、2376=2、2408=1，其餘 0。
+  - pullback continuation 5 日勝率 20.00%、5 日平均 -3.89%，仍為 `insufficient-data`。
+- 結論：目前尚未完成「1-2 年多年 daily_price」實際回填，因此樣本沒有擴大；不能進入階段二。下一步若要繼續，需用 backfill CLI 經 approved write path 實際回填，read-after-write 後再重跑 research artifact。
+
 ## Data Roles
 
 - `positions`：持倉 source-of-truth。

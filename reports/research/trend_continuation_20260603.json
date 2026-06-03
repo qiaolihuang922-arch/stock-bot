@@ -1,9 +1,361 @@
 {
   "title": "research_trend_continuation",
-  "source": "production-db-readonly",
+  "source": "daily_price",
   "status": "completed",
   "source_table": "daily_price",
   "source_rows": 516,
+  "universe_symbols": [
+    "3231",
+    "2421",
+    "3035",
+    "2303",
+    "3481",
+    "2344",
+    "2376",
+    "2408",
+    "2356",
+    "2324",
+    "2301",
+    "2337"
+  ],
+  "universe_count": 12,
+  "date_range": {
+    "start": null,
+    "end": null
+  },
+  "pattern_definition": "uptrend above ma20 with ma5 > ma20 and positive 10d return; prior 3 sessions include volume contraction pullback touching ma5/ma10 without break; entry closes back above ma5 with volume_ratio >= 1",
+  "per_symbol": [
+    {
+      "symbol": "2301",
+      "daily_price_rows_used": 43,
+      "hit_count": 0,
+      "forward_returns": {
+        "d1": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        },
+        "d3": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        },
+        "d5": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        },
+        "d10": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        }
+      }
+    },
+    {
+      "symbol": "2303",
+      "daily_price_rows_used": 43,
+      "hit_count": 0,
+      "forward_returns": {
+        "d1": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        },
+        "d3": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        },
+        "d5": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        },
+        "d10": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        }
+      }
+    },
+    {
+      "symbol": "2324",
+      "daily_price_rows_used": 43,
+      "hit_count": 0,
+      "forward_returns": {
+        "d1": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        },
+        "d3": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        },
+        "d5": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        },
+        "d10": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        }
+      }
+    },
+    {
+      "symbol": "2337",
+      "daily_price_rows_used": 43,
+      "hit_count": 0,
+      "forward_returns": {
+        "d1": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        },
+        "d3": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        },
+        "d5": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        },
+        "d10": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        }
+      }
+    },
+    {
+      "symbol": "2344",
+      "daily_price_rows_used": 43,
+      "hit_count": 0,
+      "forward_returns": {
+        "d1": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        },
+        "d3": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        },
+        "d5": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        },
+        "d10": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        }
+      }
+    },
+    {
+      "symbol": "2356",
+      "daily_price_rows_used": 43,
+      "hit_count": 2,
+      "forward_returns": {
+        "d1": {
+          "count": 2,
+          "avg": -0.0056106174527226615,
+          "median": -0.0056106174527226615
+        },
+        "d3": {
+          "count": 2,
+          "avg": -0.022620471633629513,
+          "median": -0.022620471633629513
+        },
+        "d5": {
+          "count": 2,
+          "avg": -0.004798929141034405,
+          "median": -0.004798929141034405
+        },
+        "d10": {
+          "count": 2,
+          "avg": 0.1876851218956482,
+          "median": 0.1876851218956482
+        }
+      }
+    },
+    {
+      "symbol": "2376",
+      "daily_price_rows_used": 43,
+      "hit_count": 2,
+      "forward_returns": {
+        "d1": {
+          "count": 2,
+          "avg": 0.005361048278704263,
+          "median": 0.005361048278704263
+        },
+        "d3": {
+          "count": 2,
+          "avg": -0.07115828615048869,
+          "median": -0.07115828615048869
+        },
+        "d5": {
+          "count": 2,
+          "avg": -0.02218062014414769,
+          "median": -0.02218062014414769
+        },
+        "d10": {
+          "count": 2,
+          "avg": 0.08267066608595473,
+          "median": 0.08267066608595473
+        }
+      }
+    },
+    {
+      "symbol": "2408",
+      "daily_price_rows_used": 43,
+      "hit_count": 1,
+      "forward_returns": {
+        "d1": {
+          "count": 1,
+          "avg": -0.08651026392961877,
+          "median": -0.08651026392961877
+        },
+        "d3": {
+          "count": 1,
+          "avg": -0.19501466275659823,
+          "median": -0.19501466275659823
+        },
+        "d5": {
+          "count": 1,
+          "avg": -0.14076246334310852,
+          "median": -0.14076246334310852
+        },
+        "d10": {
+          "count": 1,
+          "avg": -0.04985337243401759,
+          "median": -0.04985337243401759
+        }
+      }
+    },
+    {
+      "symbol": "2421",
+      "daily_price_rows_used": 43,
+      "hit_count": 0,
+      "forward_returns": {
+        "d1": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        },
+        "d3": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        },
+        "d5": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        },
+        "d10": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        }
+      }
+    },
+    {
+      "symbol": "3035",
+      "daily_price_rows_used": 43,
+      "hit_count": 0,
+      "forward_returns": {
+        "d1": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        },
+        "d3": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        },
+        "d5": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        },
+        "d10": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        }
+      }
+    },
+    {
+      "symbol": "3231",
+      "daily_price_rows_used": 43,
+      "hit_count": 0,
+      "forward_returns": {
+        "d1": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        },
+        "d3": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        },
+        "d5": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        },
+        "d10": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        }
+      }
+    },
+    {
+      "symbol": "3481",
+      "daily_price_rows_used": 43,
+      "hit_count": 0,
+      "forward_returns": {
+        "d1": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        },
+        "d3": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        },
+        "d5": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        },
+        "d10": {
+          "count": 0,
+          "avg": null,
+          "median": null
+        }
+      }
+    }
+  ],
+  "aggregate": {
+    "total_hit_count": 5,
+    "threshold": 30,
+    "meets_min_sample_count": false,
+    "blocked_reason": "insufficient-data"
+  },
   "min_sample": 30,
   "groups": [
     {

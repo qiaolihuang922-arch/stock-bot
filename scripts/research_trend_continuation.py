@@ -11,11 +11,14 @@ import os
 import sys
 from collections import defaultdict
 from dataclasses import dataclass
+from statistics import median
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+from core.watchlist import WATCHLIST_CODES
 
 REQUIRED_COLUMNS = ["stock_id", "trade_date", "open", "high", "low", "close", "volume"]
 HORIZONS = [1, 3, 5, 10]
@@ -110,7 +113,7 @@ def resolve_read_credentials(env=None, config_module=None, skip_config=False):
         missing.append("SUPABASE_READONLY_KEY|SUPABASE_KEY")
     if missing:
         raise ResearchBlocked(
-            "missing-production-db-credentials",
+            "missing-credentials",
             "missing required Supabase read credentials: " + ",".join(missing),
         )
     return url, key
@@ -136,19 +139,46 @@ def _classify_source_error(exc):
     return "source-error"
 
 
-def fetch_daily_price_rows(client, page_size=1000, max_rows=200000):
+def resolve_watchlist_symbols(symbols_text=None, expected_count=12):
+    if symbols_text:
+        symbols = [item.strip() for item in symbols_text.split(",") if item.strip()]
+    else:
+        symbols = [str(item) for item in WATCHLIST_CODES if item]
+
+    deduped = []
+    for symbol in symbols:
+        if symbol not in deduped:
+            deduped.append(symbol)
+
+    if not deduped:
+        raise ResearchBlocked("missing-watchlist-source", "watchlist source resolved no symbols")
+    if expected_count is not None and len(deduped) != expected_count:
+        raise ResearchBlocked("universe-not-12", f"resolved universe_count={len(deduped)}")
+    return deduped
+
+
+def _apply_optional_filters(query, symbols=None, start_date=None, end_date=None):
+    if symbols and hasattr(query, "in_"):
+        query = query.in_("stock_id", list(symbols))
+    if start_date and hasattr(query, "gte"):
+        query = query.gte("trade_date", start_date)
+    if end_date and hasattr(query, "lte"):
+        query = query.lte("trade_date", end_date)
+    return query
+
+
+def fetch_daily_price_rows(client, page_size=1000, max_rows=200000, symbols=None, start_date=None, end_date=None):
     rows = []
     start = 0
     try:
         while len(rows) < max_rows:
             end = min(start + page_size - 1, max_rows - 1)
-            result = (
+            query = (
                 client.table("daily_price")
                 .select(",".join(REQUIRED_COLUMNS))
-                .order("trade_date")
-                .range(start, end)
-                .execute()
             )
+            query = _apply_optional_filters(query, symbols, start_date, end_date)
+            result = query.order("trade_date").range(start, end).execute()
             page = result.data or []
             rows.extend(page)
             if len(page) < page_size:
@@ -313,6 +343,45 @@ def collect_events(bars):
     return events
 
 
+def _returns_for_events(group_events, horizon):
+    return [
+        event.get(f"return_{horizon}d")
+        for event in group_events
+        if event.get(f"return_{horizon}d") is not None
+    ]
+
+
+def summarize_pullback_by_symbol(bars, events):
+    rows_by_stock = defaultdict(int)
+    for bar in bars:
+        rows_by_stock[bar.stock_id] += 1
+
+    events_by_stock = defaultdict(list)
+    for event in events.get(("pullback_continuation", None), []):
+        events_by_stock[event["stock_id"]].append(event)
+
+    summaries = []
+    for symbol in sorted(rows_by_stock):
+        group_events = events_by_stock.get(symbol, [])
+        forward_returns = {}
+        for horizon in HORIZONS:
+            returns = _returns_for_events(group_events, horizon)
+            forward_returns[f"d{horizon}"] = {
+                "count": len(returns),
+                "avg": _avg(returns),
+                "median": median(returns) if returns else None,
+            }
+        summaries.append(
+            {
+                "symbol": symbol,
+                "daily_price_rows_used": rows_by_stock[symbol],
+                "hit_count": len(group_events),
+                "forward_returns": forward_returns,
+            }
+        )
+    return summaries
+
+
 def summarize_group(group, level, group_events, min_sample=DEFAULT_MIN_SAMPLE):
     summary = {
         "group": group,
@@ -322,8 +391,7 @@ def summarize_group(group, level, group_events, min_sample=DEFAULT_MIN_SAMPLE):
         "mae": _avg([event.get("mae") for event in group_events]),
     }
     for horizon in HORIZONS:
-        returns = [event.get(f"return_{horizon}d") for event in group_events]
-        returns = [item for item in returns if item is not None]
+        returns = _returns_for_events(group_events, horizon)
         summary[f"win_rate_{horizon}d"] = (
             sum(1 for item in returns if item > 0) / len(returns)
             if returns
@@ -371,8 +439,11 @@ def _summary_lookup(rows, group, level=None):
     return {}
 
 
-def build_report(rows, source_rows, min_sample=DEFAULT_MIN_SAMPLE):
+def build_report(rows, source_rows, min_sample=DEFAULT_MIN_SAMPLE, universe=None, date_range=None, per_symbol=None):
     pullback = _summary_lookup(rows, "pullback_continuation")
+    universe = list(universe or [])
+    per_symbol = list(per_symbol or [])
+    total_hit_count = sum(item.get("hit_count", 0) for item in per_symbol)
     status = "completed"
     edge = pullback.get("conclusion") or "insufficient-data"
     if edge == "positive":
@@ -383,10 +454,25 @@ def build_report(rows, source_rows, min_sample=DEFAULT_MIN_SAMPLE):
         reason_prefix = "pullback continuation sample is below minimum"
     return {
         "title": "research_trend_continuation",
-        "source": "production-db-readonly",
+        "source": "daily_price",
         "status": status,
         "source_table": "daily_price",
         "source_rows": source_rows,
+        "universe_symbols": universe,
+        "universe_count": len(universe),
+        "date_range": date_range or {},
+        "pattern_definition": (
+            "uptrend above ma20 with ma5 > ma20 and positive 10d return; "
+            "prior 3 sessions include volume contraction pullback touching ma5/ma10 without break; "
+            "entry closes back above ma5 with volume_ratio >= 1"
+        ),
+        "per_symbol": per_symbol,
+        "aggregate": {
+            "total_hit_count": total_hit_count,
+            "threshold": min_sample,
+            "meets_min_sample_count": total_hit_count >= min_sample,
+            "blocked_reason": None if total_hit_count >= min_sample else "insufficient-data",
+        },
         "min_sample": min_sample,
         "groups": rows,
         "conclusion": {
@@ -425,14 +511,34 @@ def render_report(report):
 
     lines = [
         "research_trend_continuation",
-        "source: production-db-readonly",
+        "source: daily_price",
         "status: completed",
+        f"universe_count: {report.get('universe_count')}",
+        f"symbols: {','.join(report.get('universe_symbols') or [])}",
+    ]
+    if report.get("date_range"):
+        lines.append(
+            f"date_range: {report['date_range'].get('start')}..{report['date_range'].get('end')}"
+        )
+    aggregate = report.get("aggregate") or {}
+    lines.extend([
+        f"total_hit_count: {aggregate.get('total_hit_count')}",
+        f"threshold: {aggregate.get('threshold')}",
+        f"meets_min_sample_count: {str(aggregate.get('meets_min_sample_count')).lower()}",
+        "",
+        "per_symbol:",
+    ])
+    for item in report.get("per_symbol") or []:
+        lines.append(
+            f"- {item['symbol']}: rows={item['daily_price_rows_used']} hits={item['hit_count']}"
+        )
+    lines.extend([
         "",
         (
             "group                    level   n    h1_win h1_avg h3_win h3_avg "
             "h5_win h5_avg h10_win h10_avg mfe   mae"
         ),
-    ]
+    ])
     for row in report["groups"]:
         level = "none" if row["extended_level"] is None else f"{row['extended_level']:.2f}"
         lines.append(
@@ -457,11 +563,32 @@ def render_report(report):
 def run_research(args, client=None):
     if client is None:
         client = build_supabase_client(skip_config=args.no_config)
-    source_rows = fetch_daily_price_rows(client, args.page_size, args.max_rows)
+    universe = resolve_watchlist_symbols(args.symbols, expected_count=None if args.symbols else 12)
+    source_rows = fetch_daily_price_rows(
+        client,
+        args.page_size,
+        args.max_rows,
+        symbols=universe,
+        start_date=args.start,
+        end_date=args.end,
+    )
     bars = normalize_bars(source_rows)
+    seen_symbols = sorted({bar.stock_id for bar in bars})
+    if sorted(universe) != seen_symbols:
+        missing = sorted(set(universe) - set(seen_symbols))
+        if missing:
+            raise ResearchBlocked("insufficient-data", "daily_price missing symbols: " + ",".join(missing))
     events = collect_events(bars)
+    per_symbol = summarize_pullback_by_symbol(bars, events)
     summaries = summarize_events(events, args.min_sample)
-    return build_report(summaries, len(source_rows), args.min_sample)
+    return build_report(
+        summaries,
+        len(source_rows),
+        args.min_sample,
+        universe=universe,
+        date_range={"start": args.start, "end": args.end},
+        per_symbol=per_symbol,
+    )
 
 
 def parse_args(argv=None):
@@ -469,6 +596,9 @@ def parse_args(argv=None):
     parser.add_argument("--page-size", type=int, default=1000)
     parser.add_argument("--max-rows", type=int, default=200000)
     parser.add_argument("--min-sample", type=int, default=DEFAULT_MIN_SAMPLE)
+    parser.add_argument("--symbols", help="Comma-separated symbols; default resolves core.watchlist 12")
+    parser.add_argument("--start", help="Inclusive daily_price trade_date lower bound")
+    parser.add_argument("--end", help="Inclusive daily_price trade_date upper bound")
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON")
     parser.add_argument(
         "--no-config",

@@ -1,6 +1,26 @@
 research_trend_continuation
-source: production-db-readonly
+source: daily_price
 status: completed
+universe_count: 12
+symbols: 3231,2421,3035,2303,3481,2344,2376,2408,2356,2324,2301,2337
+date_range: None..None
+total_hit_count: 5
+threshold: 30
+meets_min_sample_count: false
+
+per_symbol:
+- 2301: rows=43 hits=0
+- 2303: rows=43 hits=0
+- 2324: rows=43 hits=0
+- 2337: rows=43 hits=0
+- 2344: rows=43 hits=0
+- 2356: rows=43 hits=2
+- 2376: rows=43 hits=2
+- 2408: rows=43 hits=1
+- 2421: rows=43 hits=0
+- 3035: rows=43 hits=0
+- 3231: rows=43 hits=0
+- 3481: rows=43 hits=0
 
 group                    level   n    h1_win h1_avg h3_win h3_avg h5_win h5_avg h10_win h10_avg mfe   mae
 pullback_continuation    none    5    40.00% -1.74% 0.00%  -7.65% 20.00% -3.89% 80.00%  9.82%   16.53% -9.89%

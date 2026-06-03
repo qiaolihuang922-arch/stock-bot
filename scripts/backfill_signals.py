@@ -239,8 +239,8 @@ def build_evidence_rows(price_rows, signal_rows):
     return market_rows, feature_rows, outcome_rows, audit_rows
 
 
-def upsert_rows(price_rows, signal_rows, evidence_rows=None):
-    client = get_supabase_client()
+def upsert_rows(price_rows, signal_rows, evidence_rows=None, client=None):
+    client = client or get_supabase_client()
 
     if price_rows:
         client.table("daily_price").upsert(
