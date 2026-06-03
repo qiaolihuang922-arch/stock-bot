@@ -546,6 +546,39 @@ class AnalysisEngineTest(unittest.TestCase):
         self.assertEqual(signal["level"], "NEW_POSITION_RISK_WATCH")
         self.assertEqual(signal["action"], "新倉風控觀察")
 
+    def test_same_day_buy_fast_drop_reduces_even_when_base_signal_is_watch(self):
+        result = {
+            "structure_phase": "BREAKOUT_CONFIRM",
+            "price_behavior": "NORMAL",
+            "market_regime": "RISK_ON",
+            "multi_day_bias": "MIXED",
+            "decision": "WAIT",
+            "heat_state": "NORMAL",
+            "trade_state": "WAIT",
+            "extended_level": 0,
+            "trend": "UP",
+            "volume_state": "NORMAL",
+            "volume_price_state": "NORMAL",
+            "rr": 1.2,
+            "breakout_distance": 1,
+            "entry_quality": "B",
+            "confidence_score": 60,
+        }
+
+        signal = holding_signal(
+            result,
+            96.9,
+            100,
+            "realtime",
+            -3.1,
+            position_events={"bought_shares": 50},
+        )
+
+        self.assertEqual(signal["level"], "REDUCE_50")
+        self.assertEqual(signal["ratio"], 0.5)
+        self.assertIn("入場即錯", signal["reason"])
+        self.assertNotEqual(signal["action"], "新倉風控觀察")
+
     def test_same_day_buy_hard_stop_still_stops_immediately(self):
         result = {
             "structure_phase": "FAILED_BREAKOUT",

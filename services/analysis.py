@@ -2175,23 +2175,29 @@ def holding_signal(
             "hard_stop_price": hard_stop_price
         }
 
-        if level not in ["REDUCE_25", "REDUCE_50"]:
-            return data
-
-        if today_bought_shares() > 0:
-            same_day_fail_drop = avg_price and price <= avg_price * (1 - SAME_DAY_FAIL_DROP_PCT)
-            # 同日建倉跌破入場價 X%（SAME_DAY_FAIL_DROP_PCT）為硬觸發，不被盤面 label 豁免；
-            # 跌幅未達閾值時才看 label 決定觀察 / 緩衝。
+        # 同日建倉硬風控：跌破 hard_stop 或跌破入場價 X%（SAME_DAY_FAIL_DROP_PCT）為硬觸發，
+        # 優先於底層信號與盤面 label——即使底層只是觀察級，同日入場即錯也當日減碼。
+        # 已是 STOP_100 等更強出場則不弱化。
+        if today_bought_shares() > 0 and avg_price and level != "STOP_100":
+            same_day_fail_drop = price <= avg_price * (1 - SAME_DAY_FAIL_DROP_PCT)
             if price <= hard_stop_price or same_day_fail_drop:
                 trigger = "跌破停損" if price <= hard_stop_price else "入場即錯"
+                forced_ratio = ratio if level in ["REDUCE_25", "REDUCE_50"] else 0.5
                 data.update({
-                    "action": f"硬風控減碼 {int(ratio * 100)}%",
+                    "action": f"硬風控減碼 {int(forced_ratio * 100)}%",
+                    "ratio": forced_ratio,
                     "reason": f"今日新倉{trigger}，先降低風險",
+                    "level": "REDUCE_50" if forced_ratio >= 0.5 else "REDUCE_25",
                     "add_status": "FORBID",
                     "allow_add": False,
                 })
                 return data
 
+        if level not in ["REDUCE_25", "REDUCE_50"]:
+            return data
+
+        if today_bought_shares() > 0:
+            # 同日建倉但跌幅未達硬風控閾值：底層減碼訊號先緩衝為觀察。
             data.update({
                 "action": "新倉風控觀察",
                 "ratio": 0,

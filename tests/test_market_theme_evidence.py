@@ -6,6 +6,7 @@ from datetime import datetime
 from unittest.mock import patch
 
 from core import generator
+from presentation import report as presentation_report
 from scripts import smoke_market_theme_evidence_readonly
 from core.market_theme_evidence import (
     build_market_theme_evidence,
@@ -387,7 +388,8 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             calls.append(trade_date)
             return loaded
 
-        with patch.object(generator, "load_confirmed_market_theme_evidence", side_effect=loader):
+        with patch.object(generator, "load_confirmed_market_theme_evidence", side_effect=loader), \
+             patch.object(presentation_report, "SHOW_DATA_BASIS", True):
             messages = generator.formatTelegramMessages(
                 {"台積電": payload},
                 "FULL DETAIL",
@@ -1033,7 +1035,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
                 "reason": "test isolated from production DB",
                 "rows": [],
             },
-        ):
+        ), patch.object(presentation_report, "SHOW_DATA_BASIS", True):
             messages = generator.formatTelegramMessages(
                 {"台積電": payload},
                 "FULL DETAIL",
@@ -1082,15 +1084,16 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             ],
         )
 
-        messages = generator.formatTelegramMessages(
-            {"台積電": payload},
-            "FULL DETAIL",
-            None,
-            None,
-            {"market_theme_evidence": evidence},
-            datetime(2026, 5, 28),
-            report_phase="盤中",
-        )
+        with patch.object(presentation_report, "SHOW_DATA_BASIS", True):
+            messages = generator.formatTelegramMessages(
+                {"台積電": payload},
+                "FULL DETAIL",
+                None,
+                None,
+                {"market_theme_evidence": evidence},
+                datetime(2026, 5, 28),
+                report_phase="盤中",
+            )
 
         summary = summary_message(messages)
         self.assertIn("🧾 v20.4.36 簡報＋資料依據", summary)
@@ -1133,7 +1136,7 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             generator,
             "load_confirmed_market_theme_evidence",
             return_value=loaded,
-        ):
+        ), patch.object(presentation_report, "SHOW_DATA_BASIS", True):
             messages = generator.formatTelegramMessages(
                 {"台積電": payload},
                 "FULL DETAIL",
@@ -1169,23 +1172,24 @@ class MarketThemeEvidenceTest(unittest.TestCase):
             "trade_state": "WAIT",
         })
 
-        messages = generator.formatTelegramMessages(
-            {"台積電": payload},
-            "FULL DETAIL",
-            None,
-            None,
-            {
-                "market_theme_evidence": {
-                    "confirmed": True,
-                    "theme_status": "confirmed",
-                    "theme_label": "AI/電子供應鏈",
-                    "theme_direction": "bullish",
-                    "source_families": ["report_derived"],
-                }
-            },
-            datetime(2026, 5, 28),
-            report_phase="盤中",
-        )
+        with patch.object(presentation_report, "SHOW_DATA_BASIS", True):
+            messages = generator.formatTelegramMessages(
+                {"台積電": payload},
+                "FULL DETAIL",
+                None,
+                None,
+                {
+                    "market_theme_evidence": {
+                        "confirmed": True,
+                        "theme_status": "confirmed",
+                        "theme_label": "AI/電子供應鏈",
+                        "theme_direction": "bullish",
+                        "source_families": ["report_derived"],
+                    }
+                },
+                datetime(2026, 5, 28),
+                report_phase="盤中",
+            )
 
         summary = summary_message(messages)
         self.assertIn("新倉：無有效進場", summary)
