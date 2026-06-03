@@ -29,7 +29,7 @@
 
 ## Next Action
 
-- 本輪 presentation noise reduction 已 QA passed 並 committed，待 push / completion gate。
+- 本輪 presentation noise reduction 已 committed / pushed；Git completion gate passed。
 - 下一步若繼續，優先看 production evidence 實際資料品質 / 長期樣本分布，而不是再修框架或文案。
 - 開新任務前先看 `task_md_holds`，不要用 `TASK.md` 內部舊狀態反推當前看板。
 - 報文 / 策略 / 產品修復仍走 PM -> Tech -> QA；流程治理文件可由 Architect 直接改。

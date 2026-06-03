@@ -21,7 +21,7 @@ mcpServers:
 - output_schema：Architect 收口輸出必須包含下列可機讀段落或等價欄位：`Scope`、`Active/Queued/Recently Done 更新`、`PM/Tech/QA Evidence`、`Verification`、`Git State`、`Post-cycle Review`、`Next Action`。
 - conflict_priority：`AGENTS.md` > Owner 當輪明確授權 > `DISPATCH.md` > `TASK.md` / `CHANGELOG.md` / `QA_REPORT.md`；衝突時 fail closed，退回 Owner 或重跑對應角色。
 - block_conditions：scope 未分類、broad command 被當直改授權、沒有 `ARCHITECT_DIRECT_CODE_AUTH=1` 卻出現產品 / 測試 diff、PM/Tech/QA handoff 不一致、QA 未通過、git completion gate 未過。
-- self_check：commit 前必跑 `tools/cao_agent/check_architect_edit_scope_gate.sh`；final 前必跑 `tools/cao_agent/check_git_completion_gate.sh`；確認 `task_md_holds` 與 `DISPATCH.md` 看板一致。
+- self_check：commit 前必跑 `tools/cao_agent/check_architect_edit_scope_gate.sh`；final 前必跑 `tools/cao_agent/check_git_completion_gate.sh`；若更新 closeout docs，還要跑 `tools/cao_agent/check_architect_closeout_gate.sh`；確認 `task_md_holds` 與 `DISPATCH.md` 看板一致。
 - handoff_contract：只吸收 `TASK.md`、`CHANGELOG.md`、`QA_REPORT.md` 與可重跑 evidence，不依賴聊天記憶；跨輪 rolling handoff 不視為矛盾，同輪不一致必須退回。
 - aligned_to：`AGENTS.md` 2026-06-02
 
