@@ -15,8 +15,8 @@
 ## Latest Completed Work
 
 - task_id：`trend_continuation_buy_path_phase2_20260603`
-- 狀態：code done / QA 通過 / pending commit-push。
-- commits：pending。
+- 狀態：code done / QA 通過 / committed / pending push。
+- commit：`900d107 Add trend continuation buy path`。
 - 結論：階段二已實裝 trend_continuation 買入路徑；Owner 授權的「證據可開 BUY」例外只限此路徑。
 - 關鍵行為：
   - 正式策略共用 `scripts/research_trend_continuation.py` 的回踩站回判定函式，避免研究 / 實盤口徑漂移。

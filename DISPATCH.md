@@ -16,7 +16,7 @@
 
 ## Recently Done
 
-- `pending`｜`trend_continuation_buy_path_phase2_20260603`｜major/risk_patch｜Owner 授權只在 trend_continuation 路徑放開「證據可開 BUY」邊界；新增回踩站回同源判定、positive evidence gate、`decision_type="trend_continuation"` / `trend_observation`、小倉 `<=15%`、回踩低點下方止損、5 日 edge 退出；official report 新增 `🟢 趨勢延續買入｜小倉` 與獨立 funnel，版本升 `v20.4.36`；資料依據在 trend_continuation BUY 時強制顯示同源策略樣本與候選資料 basis，避免 BUY 卡缺證據鏈；focused tests 6 passed、py_compile / diff check passed；QA `通過`；未改 RR 公式、DB schema/write、live Telegram。
+- `900d107`｜`trend_continuation_buy_path_phase2_20260603`｜major/risk_patch｜Owner 授權只在 trend_continuation 路徑放開「證據可開 BUY」邊界；新增回踩站回同源判定、positive evidence gate、`decision_type="trend_continuation"` / `trend_observation`、小倉 `<=15%`、回踩低點下方止損、5 日 edge 退出；official report 新增 `🟢 趨勢延續買入｜小倉` 與獨立 funnel，版本升 `v20.4.36`；資料依據在 trend_continuation BUY 時強制顯示同源策略樣本與候選資料 basis，避免 BUY 卡缺證據鏈；focused tests 6 passed、py_compile / diff check passed；QA `通過`；未改 RR 公式、DB schema/write、live Telegram。
 - `caab930` / `83fd163`｜`research_daily_price_backfill_and_trend_sample_expansion_20260603`｜risk_patch/research｜Owner 明確要求「直接回填」後，已用 `scripts/backfill_daily_price_history.py --write --confirm-write --years 2 --skip-existing --read-after-write` 逐檔走既有 approved write path 回填 watchlist 12 檔 `daily_price`；12/12 read-after-write `ok`，合計新增 5,218 rows，日期範圍 2024-06-03..2026-06-03；重跑 `scripts/research_trend_continuation.py` 後 `total_hit_count=232`、`meets_min_sample_count=true`，5 日勝率 55.17%、5 日平均 +2.26%，`pullback_continuation_edge=positive`；本輪仍未改策略 / 報文 / DB schema / live Telegram，階段二 `trend_continuation` 買路需另開 major 任務並由 Owner 授權。
 - `5045045`｜`research_daily_price_backfill_and_trend_sample_expansion_20260603`｜risk_patch/research｜新增 `scripts/backfill_daily_price_history.py` 與擴充 `scripts/research_trend_continuation.py` artifact；當時只完成 tooling / dry-run / fail-closed / tests，尚未 production write。已被上一條直接回填結果取代。
 - `3f67e3e`｜`research_trend_continuation_phase1`｜research｜新增只讀研究腳本 `scripts/research_trend_continuation.py`、focused tests 與 `reports/research/trend_continuation_20260603.{txt,json}`；production DB read-only `daily_price` 實跑 `source_rows=516`，`pullback_continuation` 樣本 5、5 日勝率 20.00%、5 日平均 -3.89%，低於 min_sample 30 且不符合正 edge；extended spike 對照組 1.08/1.15/1.22 樣本 78/46/30，5 日平均 +6.23%/+7.45%/+6.17% 只作對照，不構成追高授權；結論 `insufficient-data`，不得進入階段二 trend_continuation 買入實裝；focused tests 4 passed，py_compile / diff check / mutation scan passed；QA conditional pass，因未消費 `signal_outcomes` / `daily_signal_snapshot` 作三表完整研究。
@@ -41,7 +41,7 @@
 
 ## Next Action
 
-- trend_continuation phase2 已通過 QA；下一步是 commit / push 本輪 diff，然後跑 git completion gate 與 Architect closeout gate。
+- trend_continuation phase2 已 commit；下一步是 push `main`，然後跑 git completion gate 與 Architect closeout gate。
 - 前一輪 Render freshness 仍需部署後看 Render 5 分鐘觸發 log，確認 freshness preflight 真實 runtime output。
 - 開新任務前先看 `task_md_holds`，不要用 `TASK.md` 內部舊狀態反推當前看板。
 - 報文 / 策略 / 產品修復仍走 PM -> Tech -> QA；流程治理文件可由 Architect 直接改。
