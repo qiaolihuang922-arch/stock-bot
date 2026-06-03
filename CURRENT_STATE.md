@@ -49,6 +49,7 @@
 - 根因分類：`evidence_chain` + `mobile_reading` + `QA反證` + `runner_gap`。上一輪 QA 有抓 loader pagination，但沒有把 Owner 完整報文作為 final failure specimen，也沒有驗真實 production/report payload shape。
 - 流程補強方向：PM 必須把 Owner 報文濃縮成「失敗標本與驗收路由」；Tech 標明 probe 覆蓋 helper / formatter / official generator / runner artifact 哪一層；QA 若不能在同層 replay Owner 標本，不得給 `通過`。
 - 這不是新增死規則；它把每輪驗收從固定 checklist 改成按失敗發生層級選擇最小反證路徑。
+- 狀態：流程治理已提交 `32a7a8b Tighten report failure specimen validation flow`。下一輪產品修復不得從 helper fixture 起手；必須先把 Owner 06/03 v20.4.32 報文轉成同層 replay / artifact，再修 evidence partial 與聯電同日快速止損。
 
 ## Previous Completed Handoff
 
