@@ -3,7 +3,7 @@
 依 `AGENTS.md` 啟動順序閱讀；本文件只保留任務看板、handoff 指針與固定啟動命令。
 
 - task_md_holds: `recently_done`
-- task_md_task_id: `research_trend_continuation_phase1`
+- task_md_task_id: `research_daily_price_backfill_and_trend_sample_expansion_20260603`
 - task_md_note: `TASK.md / CHANGELOG.md / QA_REPORT.md 目前是最近完成任務的滾動 handoff，不代表仍在 Tech/QA。`
 
 ## Active
@@ -16,6 +16,7 @@
 
 ## Recently Done
 
+- `5045045`｜`research_daily_price_backfill_and_trend_sample_expansion_20260603`｜risk_patch/research｜新增 `scripts/backfill_daily_price_history.py`：dry-run / write / confirm-write / symbols / start-end / years / skip-existing / read-after-write；未指定 symbols 時讀 `core.watchlist.WATCHLIST_CODES` 12 檔；write 只走既有 `scripts.backfill_signals.upsert_rows(price_rows, signal_rows=[], client=...)`，缺憑證或 source-error fail closed；擴充 `scripts/research_trend_continuation.py` artifact，顯示 12 檔 universe、per-symbol rows/hits/forward returns、aggregate total_hit_count / threshold / meets_min_sample_count；目前 daily_price 每檔仍 43 rows，total_hit_count=5，未達 30，階段二仍不得啟動；focused tests 15 passed，py_compile / diff check / mutation scan passed；QA conditional pass，因未實際 production write，且 12 檔 full dry-run 受外部行情源速度影響未完成。
 - `3f67e3e`｜`research_trend_continuation_phase1`｜research｜新增只讀研究腳本 `scripts/research_trend_continuation.py`、focused tests 與 `reports/research/trend_continuation_20260603.{txt,json}`；production DB read-only `daily_price` 實跑 `source_rows=516`，`pullback_continuation` 樣本 5、5 日勝率 20.00%、5 日平均 -3.89%，低於 min_sample 30 且不符合正 edge；extended spike 對照組 1.08/1.15/1.22 樣本 78/46/30，5 日平均 +6.23%/+7.45%/+6.17% 只作對照，不構成追高授權；結論 `insufficient-data`，不得進入階段二 trend_continuation 買入實裝；focused tests 4 passed，py_compile / diff check / mutation scan passed；QA conditional pass，因未消費 `signal_outcomes` / `daily_signal_snapshot` 作三表完整研究。
 - `32098c1`｜`v20.4.35-report-semantics`｜risk_patch｜維持 `v20.4.35`：過熱 / 不可追高 evidence boost blocker 擴到 `AVOID`、`LIMIT_LOCK / LIMIT_REBOUND` 與 RR overheat blocker，光寶科類漲停鎖價不再顯示 `證據 +`，改 `過熱不適用`；低量降級文案改 `縮量觀察`，避免 `突破確認｜待確認`；非加碼持倉資料行保留 `V`，格式為 `不適用（既有持倉）｜V {vol}x`；首屏簡報改 `執行動作 N` / `今日新建倉 M` 去歧義；主 repo `tests/test_generator_report.py` 157 passed，py_compile / diff check passed；QA conditional pass，未取得正式 runner artifact。
 - `58969a8`｜`report-score-evidence-display-20260603`｜risk_patch｜升版 `v20.4.35`：非加碼持倉卡片 `數據` 行整段顯示 `不適用（既有持倉）`，不再顯示 RR / 綜合 / 技術 / 證據 / V；加碼與新倉候選仍顯示分數；`final_confidence` 封頂 100；過熱 / 風控 / 資料不足三類 evidence unavailable 文案分流；盤後縮量整理降 `極強` 為 `待確認｜縮量`；低分或 rounded 無變化顯示 `微幅` 而非 `+X%`；主 repo generator + market tests 195 passed，py_compile / diff check passed；QA conditional pass，未取得正式 runner artifact。
@@ -38,7 +39,7 @@
 
 ## Next Action
 
-- 本輪 trend continuation phase 1 research 已收口並 commit；結論是 insufficient-data / 不支持階段二實裝。若 Owner 要再研究，下一步應先擴大樣本或納入 `signal_outcomes` / `daily_signal_snapshot`，不是直接改策略。
+- Backfill/research tooling 已收口並 commit；下一步若要補樣本，先跑 `scripts/backfill_daily_price_history.py --dry-run --years 2`，確認 12 檔行情源可用，再由 Owner 明確批准 `--write --confirm-write --read-after-write`。回填完成後重跑 research；total_hit_count 未達 30 前不得開階段二策略。
 - 前一輪 Render freshness 仍需部署後看 Render 5 分鐘觸發 log，確認 freshness preflight 真實 runtime output。
 - 開新任務前先看 `task_md_holds`，不要用 `TASK.md` 內部舊狀態反推當前看板。
 - 報文 / 策略 / 產品修復仍走 PM -> Tech -> QA；流程治理文件可由 Architect 直接改。

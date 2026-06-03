@@ -28,6 +28,32 @@
 
 ## Latest Completed Handoff
 
+- task_id：`research_daily_price_backfill_and_trend_sample_expansion_20260603`
+- 狀態：tooling done / committed；QA conditional pass；push 與 git completion gate 待收口。
+- commit：`5045045 Add daily price backfill research tooling`。
+- 問題：Owner 要把 watchlist 12 檔 daily_price 歷史補成 1-2 年，讓 trend continuation 研究不要停在樣本 5；同時研究 artifact 必須固定 12 檔 universe、列每檔命中次數與 total >=30 判斷。
+- 修正 / 交付：
+  - 新增 `scripts/backfill_daily_price_history.py`。
+  - backfill CLI 支援 `--dry-run`、`--write`、`--confirm-write`、`--symbols`、`--start`、`--end`、`--years`、`--skip-existing`、`--read-after-write`、`--no-config`。
+  - 未指定 symbols 時使用 `core.watchlist.WATCHLIST_CODES`，目前 12 檔：3231、2421、3035、2303、3481、2344、2376、2408、2356、2324、2301、2337。
+  - 寫入只走既有 approved interface：`scripts.backfill_signals.upsert_rows(price_rows, signal_rows=[], client=...)`；為此 `upsert_rows()` 新增向後相容 optional `client=None`。
+  - 擴充 `scripts/research_trend_continuation.py` artifact：`universe_symbols / universe_count / date_range / pattern_definition / per_symbol / aggregate`。
+  - 新增 `tests/test_backfill_daily_price_history.py`，更新 `tests/test_research_trend_continuation.py`。
+- 最新 artifact：
+  - `reports/research/trend_continuation_20260603.txt`
+  - `reports/research/trend_continuation_20260603.json`
+  - universe_count=12；目前每檔 rows_used=43；total_hit_count=5；meets_min_sample_count=false。
+  - per-symbol hits：2356=2、2376=2、2408=1，其餘 0。
+- 驗證：
+  - `tests/test_backfill_daily_price_history.py tests/test_research_trend_continuation.py tests/test_backfill_signals.py` 15 passed。
+  - `py_compile` passed；`git diff --check` passed。
+  - 單檔 dry-run `3231` 回傳 `result=no-write`、`live_write=false`、planned_rows=2。
+  - write 缺憑證 probe exit 2 blocked，`live_write=false`。
+- QA 狀態：`conditional pass`。原因：CLI contract / approved helper / fail closed / artifact schema 已驗，但本輪未實際 production write，且 12 檔 full dry-run 受外部行情源速度影響未完成。
+- 邊界：未改正式策略、Telegram、DB schema、live delivery。階段二仍不得啟動；需先完成 dry-run / approved write / read-after-write，再重跑 research，且 total_hit_count >=30 才能另開策略任務。
+
+## Previous Completed Handoff
+
 - task_id：`research_trend_continuation_phase1`
 - 狀態：research done / committed；QA conditional pass；push 與 git completion gate 待收口。
 - commit：`3f67e3e Add trend continuation research script`。
