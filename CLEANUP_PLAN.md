@@ -15,6 +15,14 @@
 
 ## Completed
 
+- `20260603_evidence_sample_gating_v20_4_34`:
+  - 問題：Owner 指出 evidence source 已多輪接通，但 06/03 報文仍顯示 `partial / 不適用（資料不足）` 與 `綜合=技術`；本輪聚焦 market/theme 8 天 confirmed、strategy_sample 真實 sample count 與 version filter。
+  - 結果：VERSION 升 `v20.4.34`；strategy sample count 映射支援 `classification_sample_count / sample_count` 等欄位，避免真實分類樣本 36/38 被讀成 0；official message-list replay 下建準等價卡片顯示 `綜合 90｜技術 78｜證據 +15%（confirmed）`，過熱卡不再 false partial。
+  - 可重跑補強：新增 8 天 confirmed market payload、strategy structured sample 36 ready、official replay confirmed evidence boost、HOT overheat evidence non-zero、cross-version loader history / recent 60 distinct days probes。
+  - 主 repo 驗證：targeted evidence 6 passed；generator / market_theme / strategy_evidence suite 206 passed；`py_compile` / `git diff --check` passed。
+  - QA / runner：自動 QA agent 遇 Codex usage limit 互動提示，未產生 agent QA_REPORT；Architect 本地補反證並標 `conditional pass`，不能寫成 QA passed。後續需補 runner 對 usage prompt / model fallback 的處理。
+  - 規則治理：`evidence_chain` + `runner_gap`。這輪證明「框架已接通」仍不夠，必須驗 official message-list 是否真的從 structured sample count 取得 >=10；若 production 報文仍不足，下一輪應改讀 production read-only artifact，不再盲改 formatter。
+  - 邊界：未改 RR、策略 decision、DB schema/write、production backfill、live Telegram；未讀 production source。
 - `20260603_same_day_risk_report_replay_regressions`:
   - 問題：Owner 指出 06/03 v20.4.32 報文仍有同日建倉風控與手機閱讀矛盾：聯電 -3.86% + 突破失敗仍顯示新倉觀察；技嘉過熱觀察露 RR 0.21；簡報原因逐檔串接；回測行部分有部分無；光寶科防抖仍可能誤讀。
   - 結果：VERSION 升 `v20.4.33`；同日建倉 -3% 且突破失敗 / 結構轉弱顯示減碼；前態淘汰 / failed / weak 的單次 BUY 防抖，卡片副標題改 `前態待確認`；過熱 RR 統一 `-（過熱）`；原因行單句化；未持倉回測不可用 / 樣本不足不逐卡混排。

@@ -6,7 +6,7 @@
 
 - 專案：台股策略 Telegram 報文機器人。
 - 正式結果以 git / runner 產生報文為準。
-- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.33`。
+- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.34`。
 - 固定 8 份 Markdown 不刪：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 - Architect 是總控；產品 / 策略 / 報文 bug 或 feature 預設走 PM -> Tech -> QA。
 - 跨日狀態、已執行交易、歷史 evidence 必須來自 production DB 或 Owner 指定持久來源；local/runtime/worktree 不能當跨日記憶。
@@ -27,6 +27,24 @@
 - 驗證：QA `通過`；full pytest 264 passed，153 warnings（第三方 deprecation 類）。
 
 ## Latest Completed Handoff
+
+- task_id：`20260603_evidence_sample_gating_v20_4_34`
+- 狀態：done / committed；push 與 git completion gate 待收口。
+- commit：`b38ae26 Fix evidence sample gating`。
+- 問題：Owner 指出 06/03 報文仍顯示 `證據：partial / 不適用（資料不足）`、`綜合=技術`，並已指出三個源頭：market/theme 不該再疊 15 日門檻；strategy_sample 要吃到真實 classification sample count；version filter 若仍在要移除。
+- 修正：
+  - `core/generator.py` 升 `v20.4.34`。
+  - strategy sample count 統一讀 `row_count / sample_rows / evidence_count / sample / sample_count / classification_sample_count`，供 `_strategy_sample_status()`、`_strategy_sample_row_count()`、per-stock strategy payload 共用。
+  - `services/strategy_evidence.py` 本輪未改；已核對 loader 目前按近 60 交易日跨版本讀取，沒有 `.eq("version", version)`。
+  - official message-list replay 覆蓋 market confirmed + strategy sample 36 的建準等價卡片，顯示非 0 evidence boost 且 `綜合 != 技術`；過熱卡仍維持等冷卻 hard block，但不誤顯 partial。
+- 驗證：
+  - 主 repo targeted evidence tests 6 passed，13 warnings。
+  - 主 repo `tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_strategy_evidence.py` 206 passed，241 warnings。
+  - `py_compile` passed；`git diff --check` passed。
+- QA 狀態：自動 QA agent runner 遇 Codex usage limit 互動提示，未產生可吸收 agent QA_REPORT；Architect 本地補同層 replay / loader / suite 反證，`QA_REPORT.md` 標 `conditional pass`，不冒稱 agent QA 通過。
+- 邊界：未改 RR 公式、DB schema/write path、production backfill、live Telegram；未讀 production source。若 production 真實報文仍不足，下一步應做 read-only artifact 核對真實 evidence payload 欄位。
+
+## Previous Completed Handoff
 
 - task_id：`20260603_same_day_risk_report_replay_regressions`
 - 狀態：done / committed / pushed；Git completion gate passed。
