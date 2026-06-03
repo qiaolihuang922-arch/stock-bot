@@ -29,8 +29,8 @@
 ## Latest Completed Handoff
 
 - task_id：`research_daily_price_backfill_and_trend_sample_expansion_20260603`
-- 狀態：direct production backfill done；QA conditional pass；commit / push / git completion gate 待收口。
-- commit：`pending_commit`（上一輪 tooling commit：`5045045 Add daily price backfill research tooling`）。
+- 狀態：direct production backfill done / committed；QA conditional pass；push / git completion gate 待收口。
+- commit：`caab930 Record daily price backfill results`（上一輪 tooling commit：`5045045 Add daily price backfill research tooling`）。
 - 問題：Owner 要直接回填 watchlist 12 檔 daily_price 1-2 年資料，讓 trend continuation 研究不要停在樣本 5；同時研究 artifact 必須固定 12 檔 universe、列每檔命中次數與 total >=30 判斷。
 - 修正 / 交付：
   - 新增 `scripts/backfill_daily_price_history.py`。
@@ -59,7 +59,7 @@
 ## Previous Completed Handoff
 
 - task_id：`research_trend_continuation_phase1`
-- 狀態：research done / committed；QA conditional pass；push 與 git completion gate 待收口。
+- 狀態：research done / committed / pushed；QA conditional pass；Git completion gate passed。
 - commit：`3f67e3e Add trend continuation research script`。
 - 問題：Owner 要解決「漲兩週的趨勢股永遠不讓買」，但明確要求先做階段一研究，驗證「上升趨勢中縮量回踩 ma5 / ma10 不破後放量站回」是否有正 edge，再決定是否能開 `trend_continuation` 買入路徑。
 - 研究交付：
@@ -82,7 +82,7 @@
 ## Previous Completed Handoff
 
 - task_id：`v20.4.35-report-semantics`
-- 狀態：code done / committed；QA conditional pass；push 與 git completion gate 待收口。
+- 狀態：code done / committed / pushed；QA conditional pass；Git completion gate passed。
 - commit：`32098c1 Fix v20.4.35 report semantics`。
 - 問題：Owner 指出上一輪 v20.4.35 還有四個手機閱讀錯誤：漲停鎖價 / 不可追高標的仍可能取得 evidence boost；低量降級產生 `突破確認｜待確認` 衝突；非加碼持倉數據行把 V 一起拿掉；簡報 `交易執行 N` 與今日新建倉數容易誤讀。
 - 修正：
@@ -161,7 +161,7 @@
 ## Previous Completed Handoff
 
 - task_id：`20260603_evidence_sample_gating_v20_4_34`
-- 狀態：done / committed；push 與 git completion gate 待收口。
+- 狀態：done / committed / pushed；Git completion gate passed。
 - commit：`b38ae26 Fix evidence sample gating`。
 - 問題：Owner 指出 06/03 報文仍顯示 `證據：partial / 不適用（資料不足）`、`綜合=技術`，並已指出三個源頭：market/theme 不該再疊 15 日門檻；strategy_sample 要吃到真實 classification sample count；version filter 若仍在要移除。
 - 修正：
@@ -257,14 +257,14 @@
 
 - 觸發：Owner 指出「在討論流程優化時，Architect 又退回去解釋產品 diff」。
 - 根因分類：`runner_gap` + `文件不足` + `post-cycle closeout`。產品修復已 push，但 `DISPATCH.md` / `CURRENT_STATE.md` 仍殘留 `待 push / completion gate`，重開或被追問時容易把焦點帶回上一輪 diff，而不是處理流程失效本身。
-- 流程補強：新增 `tools/cao_agent/check_architect_closeout_gate.sh`，在 git completion passed 後掃描 `DISPATCH.md` / `CURRENT_STATE.md` 是否仍有 pending commit / push / completion 語句，並要求 Recently Done 與 Git completion gate 狀態一致。
+- 流程補強：新增 `tools/cao_agent/check_architect_closeout_gate.sh`，在 git completion passed 後掃描 `DISPATCH.md` / `CURRENT_STATE.md` 是否仍有未收口語句，並要求 Recently Done 與 Git completion gate 狀態一致。
 - 新收口順序：產品或流程任務完成後，先跑 git completion gate，再更新 closeout docs，最後跑 architect closeout gate；任一 gate fail，不得 final 寫完成。
 - 這不是新增死規則；它把「不要靠記憶判斷是否已推」改成可重跑檢查。
 
 ## Previous Completed Handoff
 
 - task_id：`per_stock_evidence_score_funnel_p0_p3_20260602`
-- 狀態：QA passed；commit / push 待 final 收口。
+- 狀態：done / committed / pushed；Git completion gate passed。
 - 問題：Owner 要 evidence 真正成為 per-stock 決策分數，而不是 market/theme 共享背景無差別 +8%；弱勢 / 失敗 / 過熱 / technical=0 不可被正向 boost；B5 漏斗與卡片需一致。
 - 修正：
   - `strategy_sample` 以 explicit `reject_family / watch_category / setup_key / setup_category` 對應 `setup_strategy_samples`，成為 per-stock 分量。
@@ -280,7 +280,7 @@
 ## Previous Completed Handoff
 
 - task_id：`fix_market_theme_evidence_gate_v20_4_31`
-- 狀態：QA passed；commit / push 待 final 收口。
+- 狀態：done / committed / pushed；Git completion gate passed。
 - 問題：Owner 指出 market/theme evidence 仍被三個閘門擋住：8 日 confirmed_trend 又被 `observed_days >= 15` 二次門檻擋；per-stock 缺 market_theme 被誤判 unavailable；strategy 跨版本 history 需回歸確認。
 - 修正：
   - `_market_theme_evidence_payload()` 不再用 15 日二次門檻；confirmed + source available + `evidence_trend.status == confirmed_trend` 即 decision eligible。
@@ -295,7 +295,7 @@
 ## Previous Completed Handoff
 
 - task_id：`evidence-wiring-and-funnel-consistency-20260602`
-- 狀態：QA passed；commit / push 待 final 收口。
+- 狀態：done / committed / pushed；Git completion gate passed。
 - 問題：Owner 指出前一輪只把 evidence 加權框架搭好，但兩個證據源沒有真正喂入：strategy_sample 被 version filter 切斷，market/theme string summary path 沒傳 trade_date，導致報文仍長期 `不適用 / 資料不足`。
 - 修正：
   - `services/strategy_evidence.py load_strategy_evidence_summary()` 移除 `daily_signal_snapshot.version == version` filter，按 trade_date 讀近期跨版本 outcomes。
@@ -311,7 +311,7 @@
 ## Previous Completed Handoff
 
 - task_id：`evidence-per-stock-reliability-funnel-phase3-closeout-20260602`
-- 狀態：QA passed；commit / push 待 final 收口。
+- 狀態：done / committed / pushed；Git completion gate passed。
 - 問題：Owner 要一次性修復 per-stock evidence、可靠度門檻、modifier cap、source fail-closed、資料不足文案、card/funnel tracking 一致與 Phase 3 guard 回歸。
 - 修正：
   - `compute_evidence_score(report_context, name)` 改為真正逐股取 evidence。
@@ -331,7 +331,7 @@
 ## Previous Completed Handoff
 
 - task_id：`evidence-score-decision-funnel-phase1-2-2b`
-- 狀態：done / committed；push 與 Git completion gate 待 final 收口。
+- 狀態：done / committed / pushed；Git completion gate passed。
 - commit：`c7dd94b Add evidence score decision weighting`。
 - 問題：Owner 已拍板 evidence chain 要成為決策分數的一部分，並可影響排序與 funnel 邊界；同時必須保留 fail-closed、透明拆分、不單獨造 BUY、不放寬 chase / overheat / RR hard blockers。
 - 修正：
