@@ -164,6 +164,8 @@ def formatTelegramSummary(
     if unheld_funnel_text:
         lines.extend(["", "未持倉漏斗（非執行）：", unheld_funnel_text])
 
+    lines.extend(deps["format_backtest_groups"](watch_items, report_context=report_context))
+
     lines.extend(["", deps["detail_index_text"](
         holding_items, watch_items, report_phase=report_phase, market_mode=market_mode, report_context=report_context
     )])
@@ -219,16 +221,9 @@ def _card_history_line(data, report_context, deps, dedupe_setup_key=False):
     strategy_line = deps["_strategy_sample_unavailable_card_line"](report_context)
     if strategy_line:
         return None
-    setup_key = deps["_strategy_setup_key_for_stock"](data)
-    if dedupe_setup_key and setup_key and report_context is not None:
-        seen = report_context.setdefault("_visible_unheld_backtest_setup_keys", set())
-        if setup_key in seen:
-            return None
     line = deps["compact_backtest_line"](data.get("backtest_context"))
     if _is_unavailable_history_line(line):
         return None
-    if dedupe_setup_key and setup_key and report_context is not None:
-        seen.add(setup_key)
     return line
 
 
@@ -624,7 +619,6 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         ),
         data_line,
         low_volume_limit_up_risk,
-        _card_history_line(data, report_context, deps, dedupe_setup_key=True),
         price_line,
     ])
     lines = [line for line in lines if line is not None]
@@ -807,6 +801,7 @@ def _afterhours_brief_lines(holding_items, watch_items, report_context, deps, ma
     unheld_funnel_text = deps["format_unheld_funnel"](watch_items, market_mode=market_mode, report_context=report_context)
     if unheld_funnel_text:
         lines.extend(["", "未持倉漏斗（非執行）：", unheld_funnel_text])
+    lines.extend(deps["format_backtest_groups"](watch_items, report_context=report_context))
     if daily_write_warning:
         lines.append(f"資料寫入：{daily_write_warning}，明日前確認補寫狀態。")
     return lines
@@ -851,11 +846,11 @@ def _market_theme_data_basis_line(report_context, deps):
 def _strategy_sample_data_basis_line(report_context, deps):
     strategy = deps["_field_by_key"](report_context, "evidence.strategy_sample")
     status = strategy.get("source_status", "missing-source")
-    results_map = report_context.get("results_map") or {}
+    report_results = report_context.get("results_map") or {}
     has_trend_continuation_buy = any(
         ((data.get("result") or {}).get("decision_type") == "trend_continuation")
         and ((data.get("result") or {}).get("decision") == "BUY")
-        for data in results_map.values()
+        for data in report_results.values()
         if isinstance(data, dict)
     )
     if status == "missing-source":
@@ -1030,12 +1025,12 @@ def _status_is_abnormal(status):
 
 
 def _has_abnormal_data_basis(report_context):
-    results_map = (report_context or {}).get("results_map") or {}
-    for data in results_map.values():
+    report_results = (report_context or {}).get("results_map") or {}
+    for data in report_results.values():
         if not isinstance(data, dict):
             continue
-        result = data.get("result") or {}
-        if result.get("decision_type") == "trend_continuation" and result.get("decision") == "BUY":
+        stock_result = data.get("result") or {}
+        if stock_result.get("decision_type") == "trend_continuation" and stock_result.get("decision") == "BUY":
             return True
     statuses = (report_context or {}).get("source_status_summary") or {}
     for key, status in statuses.items():

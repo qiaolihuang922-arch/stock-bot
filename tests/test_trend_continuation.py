@@ -285,14 +285,13 @@ class TrendContinuationValidationTest(unittest.TestCase):
             report_phase="盤中",
         )
         unheld = unheld_message(messages)
-        first_card = unheld.split("【建準 2421】", 1)[0]
-        second_card = unheld.split("【建準 2421】", 1)[1].split("【智原 3035】", 1)[0]
-        third_card = unheld.split("【智原 3035】", 1)[1]
+        summary = summary_message(messages)
 
-        self.assertEqual(unheld.count("回測：樣本35"), 2)
-        self.assertIn("回測：樣本35", first_card)
-        self.assertNotIn("回測：樣本35", second_card)
-        self.assertIn("回測：樣本35", third_card)
+        self.assertNotIn("回測：樣本35", unheld)
+        self.assertEqual(summary.count("回測分組"), 1)
+        self.assertIn("樣本35｜參考度高｜3日勝率60%｜相對+1.2%｜略優：", summary)
+        for name in ["緯創", "建準", "智原"]:
+            self.assertIn(name, summary)
 
     def test_monitor_outputs_readonly_json_and_fail_closed_without_outcomes(self):
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -5744,7 +5744,7 @@ def today_conclusion_text(holding_items, watch_items, market_mode, risk_level, r
             tail = f"未持倉 {unheld_prepare_count_text(prepare_counts)}"
             return f"{base}；{tail}"
         if tracking_only_count or rejected_count:
-            tail = f"未持倉 {unheld_total}（僅追蹤{tracking_only_count}/淘汰{rejected_count}）"
+            tail = f"未持倉 {unheld_total}"
             return f"{base}；{tail}"
         if next_day_count:
             return f"{base}；未持倉 {next_day_count} 檔隔日確認"
@@ -5763,7 +5763,7 @@ def today_conclusion_text(holding_items, watch_items, market_mode, risk_level, r
             tail = f"未持倉 {unheld_prepare_count_text(prepare_counts)}"
             return f"{base}；{tail}"
         if tracking_only_count or rejected_count:
-            tail = f"未持倉 {unheld_total}（僅追蹤{tracking_only_count}/淘汰{rejected_count}）"
+            tail = f"未持倉 {unheld_total}"
             return f"{base}；{tail}"
         if next_day_count:
             return f"{base}；未持倉 {next_day_count} 檔隔日確認"
@@ -5781,7 +5781,7 @@ def today_conclusion_text(holding_items, watch_items, market_mode, risk_level, r
         return f"{risk_level} {market_mode}；{no_new_entry_text}；{tail}"
 
     if tracking_only_count or rejected_count:
-        tail = f"未持倉 {unheld_total}（僅追蹤{tracking_only_count}/淘汰{rejected_count}）"
+        tail = f"未持倉 {unheld_total}"
         return f"{risk_level} {market_mode}；{no_new_entry_text}；{tail}"
 
     if next_day_count:
@@ -6075,46 +6075,33 @@ def format_unheld_funnel(watch_items, market_mode=None, report_context=None):
     prepare_count = len(funnel["可準備"])
     trend_count = len(funnel["趨勢延續"])
     next_day_count = unheld_next_day_count(funnel)
-    split_parts = [
-        f"{label} {len(funnel[label])}"
-        for label in ["隔日確認", "等冷卻", "等回測", "等RR修復", "等量能"]
+    # 僅追蹤分桶：只有一桶時直接標桶名（不重複數字），多桶時內聯各桶數，避免「拆分」「合計」重複行。
+    track_buckets = [
+        (label, len(funnel[label]))
+        for label in ["等冷卻", "等回測", "等RR修復", "等量能"]
         if funnel[label]
     ]
+    if len(track_buckets) == 1:
+        track_text = f"僅追蹤 {tracking_only_count}（{track_buckets[0][0]}）"
+    elif len(track_buckets) > 1:
+        track_text = f"僅追蹤 {tracking_only_count}（{'/'.join(f'{l}{c}' for l, c in track_buckets)}）"
+    else:
+        track_text = f"僅追蹤 {tracking_only_count}"
+
     prepare_funnel_text = unheld_prepare_funnel_text(prepare_counts) or "不可追高觀察 0"
-    funnel_summary = f"可買 {len(funnel['可買'])}"
+    parts = [f"可買 {len(funnel['可買'])}"]
     if trend_count:
-        funnel_summary += f"｜趨勢延續 {trend_count}"
+        parts.append(f"趨勢延續 {trend_count}")
     for part in prepare_funnel_text.split("｜"):
-        funnel_summary += f"｜{part}（不可買）"
+        parts.append(f"{part}（不可買）")
     if next_day_count:
-        funnel_summary += f"｜隔日確認 {next_day_count}"
-    funnel_summary += f"｜僅追蹤 {tracking_only_count}｜淘汰 {len(funnel['淘汰'])}"
+        parts.append(f"隔日確認 {next_day_count}")
+    if tracking_only_count:
+        parts.append(track_text)
+    parts.append(f"淘汰 {len(funnel['淘汰'])}")
 
-    lines = [
-        f"未持倉總數 {total_count} 檔",
-        funnel_summary,
-    ]
-
-    if split_parts:
-        lines.append(f"其中僅追蹤 {tracking_only_count} 檔拆分：" + "、".join(split_parts))
-
-    if (prepare_count or next_day_count) and tracking_only_count:
-        total_parts = []
-        for label, count in _prepare_count_parts(prepare_counts):
-            total_parts.append(f"{label} {count}")
-        if next_day_count:
-            total_parts.extend(split_parts)
-        else:
-            total_parts.append(f"僅追蹤 {tracking_only_count}")
-        lines.append(f"非執行準備/追蹤合計 {tracking_count} 檔（{'｜'.join(total_parts)}）")
-    elif prepare_count:
-        lines.append(f"{unheld_prepare_count_text(prepare_counts)}，不列入交易執行")
-    elif tracking_only_count:
-        lines.append(f"僅追蹤 {tracking_only_count} 檔，不列入交易執行")
-    elif next_day_count:
-        lines.append(f"隔日確認 {next_day_count} 檔，不列入交易執行")
-
-    return "\n".join(lines)
+    # 單行匯總：總數 + 各分類，去掉原本的總數行 / 拆分行 / 合計行重複。
+    return f"未持倉 {total_count}｜" + "｜".join(parts)
 
 
 def detail_index_text(holding_items, watch_items, report_phase=None, market_mode=None, report_context=None):
@@ -6600,6 +6587,7 @@ def _telegram_presentation_deps():
         "_strategy_sample_unavailable_card_line": _strategy_sample_unavailable_card_line,
         "_strategy_setup_key_for_stock": _strategy_setup_key_for_stock,
         "compact_backtest_line": compact_backtest_line,
+        "format_backtest_groups": format_backtest_groups,
         "price_change_line": price_change_line,
         "cross_day_detail_line": cross_day_detail_line,
         "entry_blockers": entry_blockers,
@@ -7009,6 +6997,30 @@ def compact_backtest_line(context):
         f"｜相對{relative}"
         f"｜{verdict}"
     )
+
+
+def format_backtest_groups(watch_items, report_context=None):
+    # 未持倉回測按簽名分組、點名到股：每個回測結果只顯示一次，並列出屬於該組的標的，
+    # 避免逐卡重複（噪音）又不丟資訊。樣本不足 / 不可用的不列入。
+    if _strategy_sample_unavailable_card_line(report_context):
+        return []
+    groups = {}
+    order = []
+    for name, data in (watch_items or []):
+        line = compact_backtest_line((data or {}).get("backtest_context"))
+        if not line or line == "回測：-" or "不可用" in line or "樣本不足" in line:
+            continue
+        body = line.replace("回測：", "", 1)
+        if body not in groups:
+            groups[body] = []
+            order.append(body)
+        groups[body].append(name)
+    if not order:
+        return []
+    out = ["", "回測分組"]
+    for body in order:
+        out.append(f"{body}：{'、'.join(groups[body])}")
+    return out
 
 
 def formatTelegramUnheldCard(name, data, report_phase=None, market_mode=None, report_context=None):
