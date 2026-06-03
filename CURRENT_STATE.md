@@ -28,6 +28,29 @@
 
 ## Latest Completed Handoff
 
+- task_id：`research_trend_continuation_phase1`
+- 狀態：research done / committed；QA conditional pass；push 與 git completion gate 待收口。
+- commit：`3f67e3e Add trend continuation research script`。
+- 問題：Owner 要解決「漲兩週的趨勢股永遠不讓買」，但明確要求先做階段一研究，驗證「上升趨勢中縮量回踩 ma5 / ma10 不破後放量站回」是否有正 edge，再決定是否能開 `trend_continuation` 買入路徑。
+- 研究交付：
+  - 新增只讀腳本 `scripts/research_trend_continuation.py`。
+  - 新增 focused tests `tests/test_research_trend_continuation.py`。
+  - 產出 artifacts：`reports/research/trend_continuation_20260603.txt`、`reports/research/trend_continuation_20260603.json`。
+  - 更新 `RESEARCH.md` 高信號結論。
+- 實跑結果：
+  - source：production DB read-only `daily_price`，`source_rows=516`。
+  - `pullback_continuation`：樣本 5；1 日勝率 40.00%、平均 -1.74%；3 日勝率 0.00%、平均 -7.65%；5 日勝率 20.00%、平均 -3.89%；10 日勝率 80.00%、平均 +9.82%；MFE +16.53%、MAE -9.89%。
+  - `extended_spike >=1.08 / 1.15 / 1.22`：樣本 78 / 46 / 30；5 日勝率 65.38% / 65.22% / 63.33%；5 日平均 +6.23% / +7.45% / +6.17%。這只是對照，不授權追高。
+- 結論：`pullback_continuation_edge=insufficient-data`。目前定義樣本數低於 min_sample 30，且 5 日勝率與平均收益不符合 Owner 門檻；不得進入階段二實裝，不得放開 `RESEARCH.md` 的「證據不得單獨變 BUY / 不得放寬追高」硬邊界。
+- 驗證：
+  - `tests/test_research_trend_continuation.py` 4 passed。
+  - `py_compile` passed；`git diff --check` passed。
+  - mutation scan 無 DB write / schema mutation / live Telegram matches。
+- QA 狀態：`conditional pass`。原因：腳本與 production `daily_price` output 已驗，但本輪未消費 `signal_outcomes` / `daily_signal_snapshot` 作三表完整研究。
+- 邊界：未改 `services/analysis.py`、`core/condition_engine.py`、`core/generator.py`、DB schema/write、live Telegram。
+
+## Previous Completed Handoff
+
 - task_id：`v20.4.35-report-semantics`
 - 狀態：code done / committed；QA conditional pass；push 與 git completion gate 待收口。
 - commit：`32098c1 Fix v20.4.35 report semantics`。
