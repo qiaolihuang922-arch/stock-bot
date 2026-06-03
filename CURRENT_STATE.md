@@ -6,7 +6,7 @@
 
 - 專案：台股策略 Telegram 報文機器人。
 - 正式結果以 git / runner 產生報文為準。
-- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.32`。
+- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.33`。
 - 固定 8 份 Markdown 不刪：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 - Architect 是總控；產品 / 策略 / 報文 bug 或 feature 預設走 PM -> Tech -> QA。
 - 跨日狀態、已執行交易、歷史 evidence 必須來自 production DB 或 Owner 指定持久來源；local/runtime/worktree 不能當跨日記憶。
@@ -27,6 +27,23 @@
 - 驗證：QA `通過`；full pytest 264 passed，153 warnings（第三方 deprecation 類）。
 
 ## Latest Completed Handoff
+
+- task_id：`20260603_same_day_risk_report_replay_regressions`
+- 狀態：done / committed；push 與 git completion gate 待 final 收口。
+- commit：`ea75f15 Fix same-day risk and report replay regressions`。
+- 問題：Owner 要修 7 項 06/03 v20.4.32 報文問題，並要求不要再只驗 helper：聯電同日 -3.86% + 突破失敗仍顯示新倉觀察；光寶科可買 / 淘汰同日抖動；技嘉過熱觀察露 RR 0.21；簡報原因逐檔串接；未持倉回測行部分有部分無；盤中 / 盤後降噪漂移；strategy sample version filter 需確認不回退。
+- 修正：
+  - 同日建倉新增 `SAME_DAY_FAIL_DROP_PCT = 0.03`；今日買入後若 -3% 且突破失敗 / 結構轉弱，持倉主行動顯示 `減碼`；hard_stop 仍優先，僅輕微回落維持新倉風控觀察。
+  - 前態淘汰 / failed / weak 的單次 BUY 不直接翻可買；需連續確認且 `breakout_distance <= 1`。被防抖保守降級的卡片顯示 `不買｜前態待確認`，不再出現 `不買｜進場`。
+  - 過熱 / 等冷卻 / 過熱觀察未持倉 RR 統一顯示 `-（過熱）`。
+  - Summary 原因行單句主線化，不再逐檔串接。
+  - 補 06/03 v20.4.32 等價 official message-list replay probe，覆蓋聯電減碼、技嘉 RR、光寶科防抖、原因行、未持倉回測降噪與 `v20.4.33` header。
+  - 報文版本升 `v20.4.33`。
+- 驗證：QA `通過`；主 repo `tests/test_analysis_engine.py tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_strategy_evidence.py` 240 passed，241 warnings；06/03 replay single test passed；`py_compile` passed；`git diff --check` passed。
+- QA 反證：第一輪 QA blocked 抓到 CHANGELOG 與 diff 不一致；第二輪 QA blocked 抓到 `不買｜進場` 手機誤讀；Tech 補同層 replay 後抓出聯電主行動優先序仍被 `硬風控減碼` 吃掉並修復；最終 QA 額外 probe 確認前態 weak + 連續 2 次但 `breakout_distance=1.2` 仍維持淘汰。
+- 邊界：未改 RR 公式、DB schema/write path、production smoke/backfill、live Telegram；`services/strategy_evidence.py` 本輪未改，既有跨版本證據取樣維持。
+
+## Previous Completed Handoff
 
 - task_id：`20260603_strategy_evidence_report_risk_patch`
 - 狀態：done / committed / pushed；Git completion gate passed。

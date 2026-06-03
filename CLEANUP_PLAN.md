@@ -15,6 +15,13 @@
 
 ## Completed
 
+- `20260603_same_day_risk_report_replay_regressions`:
+  - 問題：Owner 指出 06/03 v20.4.32 報文仍有同日建倉風控與手機閱讀矛盾：聯電 -3.86% + 突破失敗仍顯示新倉觀察；技嘉過熱觀察露 RR 0.21；簡報原因逐檔串接；回測行部分有部分無；光寶科防抖仍可能誤讀。
+  - 結果：VERSION 升 `v20.4.33`；同日建倉 -3% 且突破失敗 / 結構轉弱顯示減碼；前態淘汰 / failed / weak 的單次 BUY 防抖，卡片副標題改 `前態待確認`；過熱 RR 統一 `-（過熱）`；原因行單句化；未持倉回測不可用 / 樣本不足不逐卡混排。
+  - 可重跑補強：新增 `test_0603_v20_4_32_failure_specimen_message_list_replay`，直接走 official `formatTelegramMessages` 三段 message-list，覆蓋聯電、技嘉、光寶科、原因行與回測降噪；另有同日風控三分支、D1 防抖、過熱 RR 非零隱藏 probes。
+  - QA 反證：第一輪 QA blocked 抓 handoff 不一致；第二輪 QA blocked 抓 `不買｜進場` 副標題誤讀；同層 replay probe 抓到聯電主行動仍被 `硬風控減碼` 優先序吃掉，Tech 返工後通過。最終主 repo targeted suite 240 passed。
+  - 規則治理：`failure_specimen` 流程有效，不是死規則；Owner 完整報文轉成同層 replay 後，真的抓到 helper / lower-layer tests 漏掉的可見主行動優先序問題。
+  - 邊界：未改 RR 公式、DB schema/write、production backfill、live Telegram；production evidence partial/source 品質另開。
 - `process_validation_route_for_owner_report_samples`:
   - 問題：Owner 指出同一問題修了一天仍在真實報文中復發；上一輪用 synthetic fixtures 和 helper/targeted tests 證明局部修改，但沒有把 Owner 完整報文當作最終驗收標本。
   - 流程補強：`AGENTS.md` 的交付證據、PM / Tech / QA 卡片、Telegram 規則與 Post-cycle Review 新增「失敗標本與驗收路由」。PM 要標出失敗發生層級；Tech 要說明 probe 覆蓋哪一層；QA 必須在同層 replay / artifact 反證，拿不到同層 artifact 時不能直接通過。

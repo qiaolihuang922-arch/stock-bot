@@ -3,7 +3,7 @@
 依 `AGENTS.md` 啟動順序閱讀；本文件只保留任務看板、handoff 指針與固定啟動命令。
 
 - task_md_holds: `recently_done`
-- task_md_task_id: `20260603_strategy_evidence_report_risk_patch`
+- task_md_task_id: `20260603_same_day_risk_report_replay_regressions`
 - task_md_note: `TASK.md / CHANGELOG.md / QA_REPORT.md 目前是最近完成任務的滾動 handoff，不代表仍在 Tech/QA。`
 
 ## Active
@@ -16,6 +16,7 @@
 
 ## Recently Done
 
+- `ea75f15`｜`20260603_same_day_risk_report_replay_regressions`｜risk_patch｜升版 `v20.4.33`：同日建倉入場即錯（-3% 且突破失敗 / 結構轉弱）覆蓋新倉觀察並顯示減碼；hard_stop 仍優先；光寶科類前態淘汰 / failed / weak 單次 BUY 防抖，卡片顯示 `不買｜前態待確認` 而非 `不買｜進場`；過熱 / 等冷卻 / 過熱觀察 RR 顯示 `-（過熱）`；簡報原因行單句化；06/03 v20.4.32 failure specimen 補 official message-list replay；QA passed；主 repo targeted suite 240 passed；py_compile / diff check passed。
 - `32a7a8b`｜`process_validation_route_for_owner_report_samples`｜process｜不改產品代碼：Owner 完整報文成為 failure specimen；PM 必須定義驗收路由，Tech 必須標明 probe 覆蓋層級，QA 必須用同層 replay / artifact 反證，否則只能 conditional / blocked；agent profile contract gate、Architect scope gate、diff check passed。
 - `7ccc808`｜`20260603_strategy_evidence_report_risk_patch`｜risk_patch｜升版 `v20.4.32`：strategy evidence loader 移除 version filter 並以 `.range()` 分頁取得最近 60 個 distinct trade_date；交易執行 / 新倉建議拆分，未持倉可買標示尚未買入 / 建議分批；原因 / 風險按對象拆分；partial +0% 顯示 `僅輔助參考`；同日建倉 hard_stop / 入場價 -3% / 入場 K 低點觸發當日減碼，僅破警戒維持新倉風控觀察；D1 光寶科翻轉 deferred；QA passed；主 repo targeted tests 201 passed；Git completion gate passed。
 - `32fcfd8`｜`telegram_message_noise_consistency_20260603`｜normal_patch｜不升版仍維持 `v20.4.31`：首屏市場行去重並改為 compact count；有可買時顯示 `可買N/僅追蹤N/淘汰N`，無可買時維持不可推薦語氣；刪冗餘新倉/背景/持倉行；交易執行短文案；僅追蹤與 cross-day 歷史 token 降噪；淘汰/弱勢不可行動 RR 顯示 `-（不可行動）`；partial +0% 顯示 `僅輔助參考`；QA passed；主 repo `tests/test_generator_report.py` 146 passed。
@@ -31,8 +32,8 @@
 
 ## Next Action
 
-- 本輪流程治理已落地：把 Owner 完整報文升級為 failure specimen，PM/QA 必須按失敗層驗證，而不是只驗 helper fixture。
-- 下一步若繼續產品修復，第一步必須先用 06/03 v20.4.32 報文建立同層 replay / artifact，再處理 evidence partial 與聯電同日快速止損未觸發。
+- 本輪 06/03 v20.4.32 failure specimen 已補同層 message-list replay 並通過；聯電同日快速止損、技嘉過熱 RR、簡報原因、未持倉回測降噪與光寶科防抖副標題已收口。
+- 下一步若繼續 evidence partial / production source 品質，需另開 source-of-truth / production read-only artifact 任務，不要混入本輪報文風控修復。
 - 開新任務前先看 `task_md_holds`，不要用 `TASK.md` 內部舊狀態反推當前看板。
 - 報文 / 策略 / 產品修復仍走 PM -> Tech -> QA；流程治理文件可由 Architect 直接改。
 
