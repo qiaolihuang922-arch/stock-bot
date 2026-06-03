@@ -29,8 +29,11 @@
 ## Latest Completed Handoff
 
 - task_id：`research_daily_price_backfill_and_trend_sample_expansion_20260603`
-- 狀態：direct production backfill done / committed；QA conditional pass；push / git completion gate 待收口。
-- commit：`caab930 Record daily price backfill results`（上一輪 tooling commit：`5045045 Add daily price backfill research tooling`）。
+- 狀態：direct production backfill done / committed / pushed；QA conditional pass；Git completion gate passed。
+- commits：
+  - `caab930 Record daily price backfill results`
+  - `83fd163 Document daily price backfill closeout`
+  - 上一輪 tooling commit：`5045045 Add daily price backfill research tooling`
 - 問題：Owner 要直接回填 watchlist 12 檔 daily_price 1-2 年資料，讓 trend continuation 研究不要停在樣本 5；同時研究 artifact 必須固定 12 檔 universe、列每檔命中次數與 total >=30 判斷。
 - 修正 / 交付：
   - 新增 `scripts/backfill_daily_price_history.py`。
