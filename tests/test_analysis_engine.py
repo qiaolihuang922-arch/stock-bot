@@ -6,7 +6,16 @@ from core.signal_snapshot import (
     is_tradeable_result,
     mark_best_candidate
 )
-from services.analysis import calc_rr, can_buy, extended_level, holding_signal
+from services.analysis import (
+    TREND_CONTINUATION_DEFAULT_EVIDENCE,
+    calc_rr,
+    can_buy,
+    detect_trend_continuation_setup,
+    extended_level,
+    holding_signal,
+    strategy,
+)
+from scripts import research_trend_continuation as research
 
 
 VOL_NORMAL = [1000] * 20
@@ -23,7 +32,126 @@ def snap(name, closes, volumes=None):
     )
 
 
+def trend_continuation_rows():
+    rows = []
+    for idx in range(26):
+        close = 100 + idx
+        volume = 1000
+        low = close - 0.5
+        high = close + 1.0
+        if idx == 24:
+            close = 121
+            low = 119.2
+            volume = 600
+        if idx == 25:
+            close = 124
+            low = 122.8
+            high = 125
+            volume = 1400
+        rows.append({
+            "stock_id": "3231",
+            "trade_date": f"2026-02-{idx + 1:02d}",
+            "open": close - 0.2,
+            "high": high,
+            "low": low,
+            "close": close,
+            "volume": volume,
+        })
+    return rows
+
+
+_DEFAULT_TEST_EVIDENCE = object()
+
+
+def strategy_from_rows(rows, evidence=_DEFAULT_TEST_EVIDENCE):
+    closes = [row["close"] for row in rows]
+    volumes = [row["volume"] for row in rows]
+    price = closes[-1]
+    previous = closes[-2]
+    change = (price - previous) / previous * 100
+    kwargs = {
+        "ohlcv_bars": rows,
+        "stock_id": "3231",
+    }
+    if evidence is not _DEFAULT_TEST_EVIDENCE:
+        kwargs["trend_continuation_evidence"] = evidence
+    return strategy(
+        price,
+        change,
+        sum(closes[-5:]) / 5,
+        sum(closes[-20:]) / 20,
+        closes,
+        volumes,
+        **kwargs,
+    )
+
+
 class AnalysisEngineTest(unittest.TestCase):
+    def test_trend_continuation_reuses_research_match_and_buys_small(self):
+        rows = trend_continuation_rows()
+        bars = research.normalize_bars(rows)
+        metrics = {index: research._series_metrics(bars, index) for index in range(len(bars))}
+        research_match = research.pullback_continuation_match(bars, len(bars) - 1, metrics)
+
+        result = strategy_from_rows(rows, evidence=TREND_CONTINUATION_DEFAULT_EVIDENCE)
+
+        self.assertTrue(research_match)
+        self.assertEqual(detect_trend_continuation_setup(rows)["trigger_date"], research_match["trigger_date"])
+        self.assertEqual(result["decision"], "BUY")
+        self.assertEqual(result["decision_type"], "trend_continuation")
+        self.assertLessEqual(result["position"], 0.15)
+        self.assertEqual(result["position_label"], "小倉")
+        self.assertEqual(result["stop_label"], "回踩低點下方")
+        self.assertEqual(result["exit_horizon_days"], 5)
+
+    def test_trend_continuation_negative_or_missing_evidence_downgrades_to_observation(self):
+        missing_result = strategy_from_rows(trend_continuation_rows(), evidence=None)
+        empty_result = strategy_from_rows(trend_continuation_rows(), evidence={})
+        omitted_result = strategy_from_rows(
+            trend_continuation_rows(),
+            evidence=_DEFAULT_TEST_EVIDENCE,
+        )
+        result = strategy_from_rows(
+            trend_continuation_rows(),
+            evidence={
+                "sample_n": 232,
+                "win_rate_5d": 54.9,
+                "avg_return_5d": -0.1,
+                "polarity": "negative",
+                "meets_min_sample": True,
+                "source": "daily_price",
+            },
+        )
+
+        self.assertEqual(missing_result["decision"], "WAIT")
+        self.assertEqual(missing_result["decision_type"], "trend_observation")
+        self.assertEqual(empty_result["decision"], "WAIT")
+        self.assertEqual(empty_result["decision_type"], "trend_observation")
+        self.assertEqual(omitted_result["decision"], "WAIT")
+        self.assertEqual(omitted_result["decision_type"], "trend_observation")
+        self.assertEqual(result["decision"], "WAIT")
+        self.assertEqual(result["decision_type"], "trend_observation")
+
+    def test_extended_spike_without_pullback_does_not_become_trend_continuation_buy(self):
+        rows = []
+        for idx in range(26):
+            close = 100 + idx * 0.2
+            if idx == 25:
+                close = 130
+            rows.append({
+                "stock_id": "3231",
+                "trade_date": f"2026-03-{idx + 1:02d}",
+                "open": close - 0.2,
+                "high": close + 1,
+                "low": close - 0.5,
+                "close": close,
+                "volume": 1800 if idx == 25 else 1000,
+            })
+
+        result = strategy_from_rows(rows)
+
+        self.assertNotEqual(result["decision_type"], "trend_continuation")
+
     def test_breakout_confirmed_tradeable(self):
         item = snap("breakout", [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119], VOL_ATTACK)
         self.assertEqual(item["pattern"], "BREAKOUT_CONFIRM")

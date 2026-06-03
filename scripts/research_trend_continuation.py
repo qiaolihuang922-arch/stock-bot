@@ -262,15 +262,15 @@ def _touches_without_breaking(bar, ma_value):
     return ma_value * 0.99 <= bar.low <= ma_value * 1.01
 
 
-def is_pullback_continuation(series, index, metrics_by_index):
+def pullback_continuation_match(series, index, metrics_by_index):
     entry_metrics = metrics_by_index.get(index)
     if not _is_trend(series, index, entry_metrics):
-        return False
+        return None
     entry = series[index]
     if not entry_metrics["ma5"] or entry.close <= entry_metrics["ma5"]:
-        return False
+        return None
     if entry_metrics["vol_ratio"] is None or entry_metrics["vol_ratio"] < 1:
-        return False
+        return None
 
     for pullback_index in range(max(20, index - 3), index):
         pullback_metrics = metrics_by_index.get(pullback_index)
@@ -288,8 +288,23 @@ def is_pullback_continuation(series, index, metrics_by_index):
         )
         price_pulls_back = pullback.close <= previous.close
         if touched and volume_contracts and price_pulls_back:
-            return True
-    return False
+            touched_ma = "ma5" if _touches_without_breaking(pullback, pullback_metrics["ma5"]) else "ma10"
+            return {
+                "matched": True,
+                "trigger_index": index,
+                "trigger_date": entry.trade_date,
+                "pullback_index": pullback_index,
+                "pullback_date": pullback.trade_date,
+                "pullback_low": pullback.low,
+                "touched_ma": touched_ma,
+                "entry_close": entry.close,
+                "volume_ratio": entry_metrics["vol_ratio"],
+            }
+    return None
+
+
+def is_pullback_continuation(series, index, metrics_by_index):
+    return bool(pullback_continuation_match(series, index, metrics_by_index))
 
 
 def is_extended_spike(series, index, metrics, level):

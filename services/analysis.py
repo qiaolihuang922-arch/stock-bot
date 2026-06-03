@@ -1,10 +1,27 @@
 # Strategy constants and signal analysis.
+from scripts.research_trend_continuation import (
+    Bar as TrendContinuationBar,
+    _series_metrics as trend_continuation_series_metrics,
+    pullback_continuation_match,
+)
+
 BREAKOUT_THRESHOLD = 0.005
 MIN_DATA_POINTS = 20
 
 MIN_RR_BREAKOUT = 1.5
 MIN_RR_PREBREAK = 1.0
 MIN_RR_STRONG = 2.0
+TREND_CONTINUATION_MAX_POSITION = 0.15
+TREND_CONTINUATION_MIN_WIN_RATE = 55
+TREND_CONTINUATION_DEFAULT_EVIDENCE = {
+    "sample_n": 232,
+    "win_rate_5d": 55.17,
+    "avg_return_5d": 2.26,
+    "polarity": "positive",
+    "meets_min_sample": True,
+    "source": "daily_price",
+    "source_artifact": "reports/research/trend_continuation_20260603.json",
+}
 
 MIN_STOP_BUFFER = 0.015
 SAME_DAY_FAIL_DROP_PCT = 0.03
@@ -803,6 +820,17 @@ def build_result(**kwargs):
             0
         )
     }
+
+    for key in [
+        "position_label",
+        "trend_continuation_evidence",
+        "trend_continuation_setup",
+        "stop_label",
+        "exit_rule",
+        "exit_horizon_days",
+    ]:
+        if key in kwargs:
+            result[key] = kwargs.get(key)
 
     result["strength"] = strength_score(
         result
@@ -1670,6 +1698,105 @@ def wait_decision_type(
     return "none"
 
 
+def _trend_continuation_num(value):
+    try:
+        if value in [None, ""]:
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _trend_continuation_evidence_value(evidence, *keys):
+    for key in keys:
+        if key in evidence:
+            return evidence.get(key)
+    return None
+
+
+def trend_continuation_evidence_passes(evidence):
+    if not isinstance(evidence, dict) or not evidence:
+        return False
+
+    win_rate = _trend_continuation_num(_trend_continuation_evidence_value(
+        evidence,
+        "win_rate_5d",
+        "win_rate",
+    ))
+    avg_return = _trend_continuation_num(_trend_continuation_evidence_value(
+        evidence,
+        "avg_return_5d",
+        "avg_5d_return",
+        "avg_return",
+    ))
+    sample_n = _trend_continuation_num(_trend_continuation_evidence_value(
+        evidence,
+        "sample_n",
+        "sample_count",
+        "total_hit_count",
+    ))
+    if win_rate is not None and win_rate <= 1:
+        win_rate *= 100
+    if avg_return is not None and abs(avg_return) <= 1:
+        avg_return *= 100
+
+    return bool(
+        evidence.get("source") == "daily_price"
+        and evidence.get("polarity") == "positive"
+        and evidence.get("meets_min_sample") is True
+        and sample_n is not None
+        and sample_n >= 30
+        and win_rate is not None
+        and win_rate >= TREND_CONTINUATION_MIN_WIN_RATE
+        and avg_return is not None
+        and avg_return > 0
+    )
+
+
+def normalize_trend_continuation_bars(ohlcv_bars, stock_id=""):
+    if not ohlcv_bars:
+        return []
+
+    bars = []
+    for index, row in enumerate(ohlcv_bars):
+        if isinstance(row, TrendContinuationBar):
+            bars.append(row)
+            continue
+        if not isinstance(row, dict):
+            continue
+        try:
+            open_price = _trend_continuation_num(row.get("open"))
+            high = _trend_continuation_num(row.get("high"))
+            low = _trend_continuation_num(row.get("low"))
+            close = _trend_continuation_num(row.get("close"))
+            volume = _trend_continuation_num(row.get("volume"))
+            if None in [open_price, high, low, close, volume]:
+                continue
+            bars.append(TrendContinuationBar(
+                stock_id=str(row.get("stock_id") or stock_id or ""),
+                trade_date=str(row.get("trade_date") or row.get("date") or index),
+                open=open_price,
+                high=high,
+                low=low,
+                close=close,
+                volume=volume,
+            ))
+        except (TypeError, ValueError):
+            continue
+    return bars
+
+
+def detect_trend_continuation_setup(ohlcv_bars, stock_id=""):
+    series = normalize_trend_continuation_bars(ohlcv_bars, stock_id=stock_id)
+    if len(series) < MIN_DATA_POINTS + 1:
+        return None
+    metrics_by_index = {
+        index: trend_continuation_series_metrics(series, index)
+        for index in range(len(series))
+    }
+    return pullback_continuation_match(series, len(series) - 1, metrics_by_index)
+
+
 def watch_result(
     reason,
     m_score,
@@ -2481,7 +2608,10 @@ def strategy(
     ma5,
     ma20,
     closes,
-    volumes
+    volumes,
+    ohlcv_bars=None,
+    trend_continuation_evidence=None,
+    stock_id=""
 ):
 
     # 中文註釋：v19.1.3 在策略入口統一補齊資料，避免後面 [-20:] / [-10:-5] 空窗。
@@ -2765,6 +2895,14 @@ def strategy(
         "confidence_score": confidence
     }
 
+    trend_continuation_setup = detect_trend_continuation_setup(
+        ohlcv_bars,
+        stock_id=stock_id,
+    )
+    trend_continuation_evidence_ok = trend_continuation_evidence_passes(
+        trend_continuation_evidence
+    )
+
     if (
         market == "WEAK"
         or trend == "DOWN"
@@ -2822,6 +2960,93 @@ def strategy(
                 trade_state
             ),
 
+            **strategy_tags
+        )
+
+    if (
+        trend_continuation_setup
+        and not failed_breakout
+        and not fake_break
+        and heat_state != "EXTREME"
+    ):
+        trend_payload = {
+            "trend_continuation_evidence": trend_continuation_evidence,
+            "trend_continuation_setup": trend_continuation_setup,
+            "stop_label": "回踩低點下方",
+            "exit_rule": "5日內未續漲或跌破回踩低點即了結",
+            "exit_horizon_days": 5,
+        }
+
+        if (
+            trend_continuation_evidence_ok
+            and behavior not in ["LIMIT_LOCK", "LIMIT_REBOUND", "WEAK_REBOUND"]
+            and trade_state not in ["AVOID", "NO_VOLUME"]
+        ):
+            stop_price = trend_continuation_setup.get("pullback_low")
+            if stop_price is not None:
+                stop_price = round(stop_price * (1 - MIN_STOP_BUFFER), 2)
+            trend_risk = calc_risk(price, stop_price)
+            trend_rr = calc_rr(price, stop_price, resistance, "breakout")
+            return build_result(
+                decision="BUY",
+                decision_type="trend_continuation",
+                buy=price,
+                stop=stop_price,
+                position=TREND_CONTINUATION_MAX_POSITION,
+                position_label="小倉",
+                market_score=m_score,
+                market_grade=m_grade,
+                setup_score=setup,
+                execution_score=execute,
+                trend=trend,
+                trend_bias=trend_bias,
+                volume_state=volume,
+                volume_price_state=vp_state,
+                structure_state=structure,
+                rr=trend_rr,
+                risk=trend_risk,
+                entry_stage="PULLBACK_RECLAIM",
+                lifecycle=lifecycle,
+                breakout_state=breakout_state,
+                trade_state=trade_state,
+                heat_state=heat_state,
+                dominant_state=dominant,
+                extended=extended,
+                extended_level=ext_level,
+                period_metrics=metrics,
+                breakout_days=b_days,
+                breakout_hold_days=b_hold_days,
+                **trend_payload,
+                **strategy_tags
+            )
+
+        return build_result(
+            decision="WAIT",
+            decision_type="trend_observation",
+            wait_reason="WAIT_TREND_CONTINUATION_EVIDENCE",
+            market_score=m_score,
+            market_grade=m_grade,
+            setup_score=setup,
+            execution_score=execute,
+            trend=trend,
+            trend_bias=trend_bias,
+            volume_state=volume,
+            volume_price_state=vp_state,
+            structure_state=structure,
+            rr=rr,
+            risk=risk,
+            entry_stage="PULLBACK_RECLAIM",
+            lifecycle=lifecycle,
+            breakout_state=breakout_state,
+            trade_state=trade_state,
+            heat_state=heat_state,
+            dominant_state=dominant,
+            extended=extended,
+            extended_level=ext_level,
+            period_metrics=metrics,
+            breakout_days=b_days,
+            breakout_hold_days=b_hold_days,
+            **trend_payload,
             **strategy_tags
         )
 

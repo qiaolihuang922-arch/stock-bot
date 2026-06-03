@@ -8,6 +8,7 @@ from datetime import datetime
 from core import generator
 from presentation import report as presentation_report
 from core.signal_snapshot import analyze_ohlcv_snapshot
+from services.analysis import TREND_CONTINUATION_DEFAULT_EVIDENCE, strategy
 
 
 VOL_ATTACK = [1000] * 19 + [1800]
@@ -83,6 +84,68 @@ def render_payload(closes, holding=None, price=None, change=0):
         "closes": closes,
         "volumes": VOL_ATTACK,
         "holding": holding,
+    }
+
+
+def trend_continuation_rows():
+    rows = []
+    for idx in range(26):
+        close = 100 + idx
+        volume = 1000
+        low = close - 0.5
+        high = close + 1
+        if idx == 24:
+            close = 121
+            low = 119.2
+            volume = 600
+        if idx == 25:
+            close = 124
+            low = 122.8
+            high = 125
+            volume = 1400
+        rows.append({
+            "stock_id": "3231",
+            "trade_date": f"2026-02-{idx + 1:02d}",
+            "open": close - 0.2,
+            "high": high,
+            "low": low,
+            "close": close,
+            "volume": volume,
+        })
+    return rows
+
+
+def trend_continuation_payload():
+    rows = trend_continuation_rows()
+    closes = [row["close"] for row in rows]
+    volumes = [row["volume"] for row in rows]
+    price = closes[-1]
+    previous = closes[-2]
+    result = strategy(
+        price,
+        (price - previous) / previous * 100,
+        sum(closes[-5:]) / 5,
+        sum(closes[-20:]) / 20,
+        closes,
+        volumes,
+        ohlcv_bars=rows,
+        trend_continuation_evidence=TREND_CONTINUATION_DEFAULT_EVIDENCE,
+        stock_id="3231",
+    )
+    return {
+        "result": result,
+        "price": price,
+        "change": (price - previous) / previous * 100,
+        "price_source": "realtime",
+        "daily_source": "yahoo",
+        "stock_code": "3231",
+        "ma5": sum(closes[-5:]) / 5,
+        "ma20": sum(closes[-20:]) / 20,
+        "closes": closes,
+        "volumes": volumes,
+        "volume_ratio": round(volumes[-1] / (sum(volumes[-10:]) / 10), 2),
+        "ohlcv": rows[-1],
+        "holding": None,
     }
 
 
@@ -280,6 +343,89 @@ def _format_import_boundary_violations(violations):
 
 
 class GeneratorReportTest(unittest.TestCase):
+    def test_trend_continuation_official_report_has_separate_small_buy_bucket(self):
+        payload = trend_continuation_payload()
+        self.assertEqual(payload["result"]["decision_type"], "trend_continuation")
+
+        messages = generator.formatTelegramMessages(
+            {"智原": payload},
+            "",
+            "智原",
+            90,
+            "市場偏強",
+            datetime(2026, 6, 3, 10, 0),
+            strategy_evidence_summary=AVAILABLE_STRATEGY_EVIDENCE,
+            report_phase="盤中",
+        )
+        summary = summary_message(messages)
+        unheld = unheld_message(messages)
+        evidence = evidence_message(messages)
+        rendered = "\n\n".join(messages)
+
+        self.assertIn("趨勢延續買入 1 檔小倉", summary)
+        self.assertIn("新倉建議 1", summary)
+        self.assertIn("未持倉 1（趨勢延續1/僅追蹤0/淘汰0）", evidence)
+        self.assertIn("趨勢延續 1", rendered)
+        self.assertIn("【智原 3231】🟢 趨勢延續買入｜小倉", unheld)
+        self.assertIn("買點：趨勢延續買入｜小倉 <=15%｜回測 55% 勝 / +2.26%", unheld)
+        self.assertIn("依據：回測 55% 勝 / +2.26%，回踩站回 ma5/ma10 後放量確認", unheld)
+        self.assertIn("倉位：<=15%", unheld)
+        self.assertIn("止損：回踩低點下方；形態失效即出", unheld)
+        self.assertIn("持有：對齊 5 日 edge", unheld)
+        self.assertIn("策略樣本：trend_continuation 同源證據達標", evidence)
+        self.assertIn("trend_continuation 同源證據達標者支持小倉進場", evidence)
+        self.assertNotIn("策略樣本來源可驗證，只作輔助參考，不新增買點", rendered)
+        self.assertNotIn("未持倉資料只支持分類觀察，不支持直接進場", rendered)
+
+    def test_load_stock_signal_passes_trend_continuation_ohlcv_and_evidence(self):
+        rows = trend_continuation_rows()
+        closes = [row["close"] for row in rows]
+        volumes = [row["volume"] for row in rows]
+        daily = (
+            closes[-1],
+            (closes[-1] - closes[-2]) / closes[-2] * 100,
+            sum(closes[-5:]) / 5,
+            sum(closes[-20:]) / 20,
+            closes,
+            volumes,
+            rows,
+        )
+
+        with patch.object(generator, "load_report_daily_kline", return_value=(daily, "yahoo", None)), \
+             patch.object(generator, "get_realtime_price", return_value=None), \
+             patch.object(generator, "get_yahoo", return_value=None), \
+             patch.object(generator, "get_last_ohlcv", return_value=rows[-1]):
+            name, data, decision, error = generator.load_stock_signal("智原", "3231")
+
+        self.assertEqual(name, "智原")
+        self.assertIsNone(error)
+        self.assertEqual(decision, "BUY")
+        self.assertEqual(data["result"]["decision_type"], "trend_continuation")
+        self.assertEqual(data["ohlcv_bars"], rows)
+
+    def test_load_stock_signal_fails_closed_without_trend_continuation_source_rows(self):
+        rows = trend_continuation_rows()
+        closes = [row["close"] for row in rows]
+        volumes = [row["volume"] for row in rows]
+        daily = (
+            closes[-1],
+            (closes[-1] - closes[-2]) / closes[-2] * 100,
+            sum(closes[-5:]) / 5,
+            sum(closes[-20:]) / 20,
+            closes,
+            volumes,
+        )
+
+        with patch.object(generator, "load_report_daily_kline", return_value=(daily, "yahoo", None)), \
+             patch.object(generator, "get_realtime_price", return_value=None), \
+             patch.object(generator, "get_yahoo", return_value=None), \
+             patch.object(generator, "get_last_ohlcv", return_value=rows[-1]):
+            _name, data, _decision, error = generator.load_stock_signal("智原", "3231")
+
+        self.assertIsNone(error)
+        self.assertNotEqual(data["result"]["decision_type"], "trend_continuation")
+        self.assertIsNone(data["ohlcv_bars"])
+
     def test_import_boundary_gate_for_strategy_presentation_and_service_layers(self):
         sources_by_relative_path = {
             str(path.relative_to(ROOT)): path.read_text(encoding="utf-8")
@@ -6673,7 +6819,7 @@ class GeneratorReportTest(unittest.TestCase):
 
         market = generator._market_theme_evidence_payload(context)
 
-        self.assertEqual(generator.VERSION, "v20.4.35")
+        self.assertEqual(generator.VERSION, "v20.4.36")
         self.assertEqual(market["status"], "confirmed")
         self.assertEqual(market["score"], 1.0)
         self.assertTrue(market["decision_eligible"])

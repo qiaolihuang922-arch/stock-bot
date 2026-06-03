@@ -35,7 +35,8 @@ from services.analysis import (
     pick_best_stock,
     BREAKOUT_THRESHOLD,
     holding_signal as strategy_holding_signal,
-    MIN_DATA_POINTS
+    MIN_DATA_POINTS,
+    TREND_CONTINUATION_DEFAULT_EVIDENCE
 )
 
 from core.condition_engine import (
@@ -69,7 +70,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.35"
+VERSION = "v20.4.36"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -737,6 +738,13 @@ def entry_header(result):
     blockers = entry_blockers(result)
 
     if (
+        result.get("decision_type") == "trend_continuation"
+        and decision == "BUY"
+        and result.get("action", 0) > 0
+    ):
+        return "🟢 趨勢延續買入｜小倉"
+
+    if (
         decision == "BUY"
         and result.get("action", 0) > 0
         and not blockers
@@ -886,6 +894,12 @@ def semantic_reason(result):
     quality = result.get("entry_quality")
     confidence = result.get("confidence_score")
     holding_decision = result.get("_holding_decision")
+
+    if result.get("decision_type") == "trend_continuation":
+        return "回踩站回放量"
+
+    if result.get("decision_type") == "trend_observation":
+        return "趨勢觀察"
 
     if holding_decision:
         level = holding_decision.get("level")
@@ -3776,6 +3790,18 @@ def position_summary_note(name, data):
 
 
 def is_valid_entry(result):
+    if result.get("decision_type") == "trend_continuation":
+        try:
+            return (
+                result.get("decision") == "BUY"
+                and float(result.get("action", 0)) > 0
+                and float(result.get("position", 0)) <= 0.15
+                and result.get("heat_state") not in ["HOT", "EXTREME"]
+                and result.get("price_behavior") not in ["LIMIT_LOCK", "LIMIT_REBOUND", "WEAK_REBOUND"]
+            )
+        except (TypeError, ValueError):
+            return False
+
     return (
         result.get("decision") == "BUY"
         and result.get("action", 0) > 0
@@ -3786,6 +3812,9 @@ def is_valid_entry(result):
 
 
 def entry_size_text(result):
+    if result.get("decision_type") == "trend_continuation":
+        return "小倉<=15%"
+
     action = result.get("action", 0)
 
     try:
@@ -3798,6 +3827,9 @@ def entry_size_text(result):
 
 
 def unheld_entry_size_detail_text(result):
+    if result.get("decision_type") == "trend_continuation":
+        return "小倉 <=15%"
+
     action = result.get("action", 0)
 
     try:
@@ -5356,6 +5388,8 @@ def unheld_funnel_assessment(name, data, market_mode=None, report_context=None):
         return "淘汰", "前態淘汰/弱勢，單次買點不直接翻可買，需連續確認"
 
     if is_valid_entry(result):
+        if result.get("decision_type") == "trend_continuation":
+            return "趨勢延續", None
         return "可買", None
 
     if state == "弱勢淘汰":
@@ -5502,6 +5536,9 @@ def unheld_execution_trigger(funnel_state, data):
 
         return "分批，不追價"
 
+    if funnel_state == "趨勢延續":
+        return "小倉<=15%，回踩低點下方停損"
+
     if funnel_state == "可準備":
         return f"不可買，{trigger or '等條件確認'}"
 
@@ -5525,6 +5562,7 @@ def unheld_execution_priority(index, name, data, market_mode=None, report_contex
     funnel_state = unheld_funnel_state(name, data, market_mode=market_mode, report_context=report_context)
     rank = {
         "可買": 0,
+        "趨勢延續": 1,
         "可準備": 3,
         "等冷卻": 4,
         "等回測": 5,
@@ -5553,7 +5591,7 @@ def unheld_execution_item(index, name, data, market_mode=None, report_context=No
 
     state = unheld_funnel_state(name, data, market_mode=market_mode, report_context=report_context)
 
-    if state != "可買":
+    if state not in ["可買", "趨勢延續"]:
         return None
 
     return {
@@ -5574,6 +5612,7 @@ def build_unheld_funnel(watch_items, market_mode=None, report_context=None):
 
     groups = {
         "可買": [],
+        "趨勢延續": [],
         "可準備": [],
         "等冷卻": [],
         "等回測": [],
@@ -5671,6 +5710,7 @@ def today_conclusion_text(holding_items, watch_items, market_mode, risk_level, r
     executed_count = len(executed_trade_items(holding_items, watch_items, market_mode=market_mode, report_context=report_context))
     tracking_count = unheld_tracking_count(funnel)
     prepare_count = len(funnel["可準備"])
+    trend_count = len(funnel["趨勢延續"])
     tracking_only_count = unheld_tracking_only_count(funnel)
     next_day_count = unheld_next_day_count(funnel)
     rejected_count = len(funnel["淘汰"])
@@ -5690,6 +5730,8 @@ def today_conclusion_text(holding_items, watch_items, market_mode, risk_level, r
             base += f"；持倉風控檢查 {holding_count} 檔"
         if executed_count:
             base += f"；已執行 {executed_count} 項不重複"
+        if trend_count:
+            base += f"；趨勢延續買入 {trend_count} 檔小倉"
         if prepare_count and tracking_only_count:
             tail = f"未持倉 {unheld_prepare_count_text(prepare_counts)}、{tracking_only_count} 檔僅追蹤"
             return f"{base}；{tail}"
@@ -5707,6 +5749,8 @@ def today_conclusion_text(holding_items, watch_items, market_mode, risk_level, r
         base = f"{risk_level} {market_mode}；{no_new_entry_text}；持倉風控檢查 {holding_count} 檔"
         if executed_count:
             base += f"；已執行 {executed_count} 項不重複"
+        if trend_count:
+            base += f"；趨勢延續買入 {trend_count} 檔小倉"
         if prepare_count and tracking_only_count:
             tail = f"未持倉 {unheld_prepare_count_text(prepare_counts)}、{tracking_only_count} 檔僅追蹤"
             return f"{base}；{tail}"
@@ -5719,6 +5763,9 @@ def today_conclusion_text(holding_items, watch_items, market_mode, risk_level, r
         if next_day_count:
             return f"{base}；未持倉 {next_day_count} 檔隔日確認"
         return f"{base}；未持倉無追蹤"
+
+    if trend_count:
+        return f"{risk_level} {market_mode}；趨勢延續買入 {trend_count} 檔小倉；其他新倉不追價"
 
     if prepare_count and tracking_only_count:
         tail = f"未持倉 {unheld_prepare_count_text(prepare_counts)}、{tracking_only_count} 檔僅追蹤"
@@ -5742,9 +5789,11 @@ def today_reason_text(watch_items, market_mode, report_phase=None, report_contex
 
     funnel = build_unheld_funnel(watch_items, market_mode=market_mode, report_context=report_context)
 
-    if funnel["可買"]:
+    if funnel["可買"] or funnel["趨勢延續"]:
         if report_phase not in (None, "盤中"):
             return "盤後只列明日追蹤，開盤後再確認，不追價"
+        if funnel["趨勢延續"] and not funnel["可買"]:
+            return "趨勢延續回踩站回，僅小倉執行並守回踩低點"
         return "存在合格買點，分批執行，不追價"
 
     if market_mode == "進攻偏熱":
@@ -5790,7 +5839,7 @@ def new_entry_suggestion_items(watch_items, market_mode=None, report_context=Non
     items = []
     for index, (name, data) in watch_items:
         item = unheld_execution_item(index, name, data, market_mode=market_mode, report_context=report_context)
-        if item and item.get("state") == "可買":
+        if item and item.get("state") in ["可買", "趨勢延續"]:
             items.append(item)
 
     return items
@@ -5800,6 +5849,7 @@ def pending_trade_items(holding_items, watch_items, market_mode=None, report_con
 
     pending_states = {
         "可買",
+        "趨勢延續",
         "停損",
         "硬風控減碼",
         "增量減碼",
@@ -5909,10 +5959,12 @@ def format_new_entry_suggestions(watch_items, limit=5, report_phase=None, market
 
     intraday = report_phase in (None, "盤中")
     timing = "盤中觸發" if intraday else "明日開盤後確認"
-    lines = [
-        f"{item['name']} 可買（分批，不追價）｜尚未買入｜建議分批｜{timing}"
-        for item in items[:limit]
-    ]
+    lines = []
+    for item in items[:limit]:
+        if item.get("state") == "趨勢延續":
+            lines.append(f"{item['name']} 趨勢延續買入（小倉<=15%）｜尚未買入｜回踩低點下方停損｜{timing}")
+        else:
+            lines.append(f"{item['name']} 可買（分批，不追價）｜尚未買入｜建議分批｜{timing}")
     if len(items) > limit:
         lines.append(f"另有 {len(items) - limit} 檔新倉建議見詳情")
     return lines
@@ -5921,6 +5973,10 @@ def format_new_entry_suggestions(watch_items, limit=5, report_phase=None, market
 def compact_execution_checklist_line(item, intraday=True):
 
     if item.get("kind") == "watch":
+        if item.get("state") == "趨勢延續":
+            if intraday:
+                return f"{item['name']} 趨勢延續買入（小倉<=15%）"
+            return f"{item['name']} 明日追蹤（趨勢延續，小倉<=15%）"
         if intraday:
             return f"{item['name']} 可買（分批，不追價）"
         return f"{item['name']} 明日追蹤（開盤後確認，不追價）"
@@ -6012,6 +6068,7 @@ def format_unheld_funnel(watch_items, market_mode=None, report_context=None):
     tracking_count = unheld_tracking_count(funnel)
     tracking_only_count = unheld_tracking_only_count(funnel)
     prepare_count = len(funnel["可準備"])
+    trend_count = len(funnel["趨勢延續"])
     next_day_count = unheld_next_day_count(funnel)
     split_parts = [
         f"{label} {len(funnel[label])}"
@@ -6020,6 +6077,8 @@ def format_unheld_funnel(watch_items, market_mode=None, report_context=None):
     ]
     prepare_funnel_text = unheld_prepare_funnel_text(prepare_counts) or "不可追高觀察 0"
     funnel_summary = f"可買 {len(funnel['可買'])}"
+    if trend_count:
+        funnel_summary += f"｜趨勢延續 {trend_count}"
     for part in prepare_funnel_text.split("｜"):
         funnel_summary += f"｜{part}（不可買）"
     if next_day_count:
@@ -6394,7 +6453,9 @@ def market_execution_bridge_lines(holding_items, watch_items, market_mode, marke
     else:
         mainline = "主線：題材仍可追蹤，不等於今日可買。"
 
-    if funnel["等回測"]:
+    if funnel.get("趨勢延續"):
+        execution = "執行：趨勢延續同源證據達標，僅小倉並守回踩低點。"
+    elif funnel["等回測"]:
         execution = "執行：新增買點未成立，先等回測，不追高。"
     elif tracking_count:
         execution = "執行：新增買點未成立，等觸發，不追高。"
@@ -7970,6 +8031,33 @@ def formatTelegramMessages(results_map, full_msg, best, score, market_summary, n
 REPORT_DAILY_MIN_ROWS = MIN_DATA_POINTS
 
 
+def _report_daily_parts(daily):
+    if not daily:
+        return None
+
+    parts = tuple(daily)
+    if len(parts) < 6:
+        return None
+
+    return {
+        "price": parts[0],
+        "change": parts[1],
+        "ma5": parts[2],
+        "ma20": parts[3],
+        "closes": parts[4],
+        "volumes": parts[5],
+        "ohlcv_bars": parts[6] if len(parts) >= 7 else None,
+    }
+
+
+def _trend_continuation_evidence_for_report(daily_source, ohlcv_bars):
+    if daily_source not in {"yahoo", "twse"}:
+        return None
+    if not ohlcv_bars or len(ohlcv_bars) < REPORT_DAILY_MIN_ROWS:
+        return None
+    return dict(TREND_CONTINUATION_DEFAULT_EVIDENCE)
+
+
 def load_report_daily_kline(code):
 
     # 中文註釋：線上報文只需要 MA20 / 10日量 / 20日支撐壓力，不走 replay/backfill 的長歷史抓取口徑。
@@ -8036,14 +8124,17 @@ def load_stock_signal(name, code):
         if not daily:
             return name, None, None, f"{name}({code}) {daily_error}"
 
-        (
-            t_price,
-            t_change,
-            ma5,
-            ma20,
-            closes,
-            volumes
-        ) = daily
+        daily_parts = _report_daily_parts(daily)
+        if not daily_parts:
+            return name, None, None, f"{name}({code}) {daily_source}: invalid kline"
+
+        t_price = daily_parts["price"]
+        t_change = daily_parts["change"]
+        ma5 = daily_parts["ma5"]
+        ma20 = daily_parts["ma20"]
+        closes = daily_parts["closes"]
+        volumes = daily_parts["volumes"]
+        ohlcv_bars = daily_parts["ohlcv_bars"]
 
         realtime = get_realtime_price(code)
         yahoo = None if realtime else get_yahoo(code)
@@ -8069,7 +8160,13 @@ def load_stock_signal(name, code):
             ma5,
             ma20,
             closes,
-            volumes
+            volumes,
+            ohlcv_bars=ohlcv_bars,
+            trend_continuation_evidence=_trend_continuation_evidence_for_report(
+                daily_source,
+                ohlcv_bars,
+            ),
+            stock_id=code,
         )
 
         display_closes = (
@@ -8095,6 +8192,7 @@ def load_stock_signal(name, code):
 
             "closes": display_closes,
             "volumes": volumes,
+            "ohlcv_bars": ohlcv_bars,
             "ohlcv": last_ohlcv_fallback_payload(code) if daily_source == "LAST_OHLCV" else get_last_ohlcv(code),
 
             "holding": (

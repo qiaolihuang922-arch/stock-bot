@@ -469,7 +469,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     state = deps["tomorrow_watch_state"](name, data)
     funnel_state = deps["unheld_funnel_state"](name, data, market_mode=market_mode, report_context=report_context)
     prepare_label, prepare_action = deps["strong_prepare_bucket"](data)
-    if valid_entry and funnel_state != "可買":
+    if valid_entry and funnel_state not in ["可買", "趨勢延續"]:
         valid_entry = False
         title_label = (
             "前態待確認"
@@ -489,7 +489,10 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
 
     if valid_entry:
         title_icon = "🟢"
-        if report_phase not in (None, "盤中"):
+        if funnel_state == "趨勢延續":
+            title_action = "趨勢延續買入"
+            title_label = "小倉"
+        elif report_phase not in (None, "盤中"):
             title_action = f"明日追蹤｜{deps['unheld_entry_size_detail_text'](stock_result)}"
         else:
             title_action = f"可買｜{deps['unheld_entry_size_detail_text'](stock_result)}"
@@ -531,6 +534,10 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         buy_line = f"買點：不可買，source {source_status}"
         data_line = "數據：RR 不可用｜S 不可用｜V 不可用"
         price_line = "價格：不可用（source missing）"
+    elif valid_entry and funnel_state == "趨勢延續":
+        buy_line = "買點：趨勢延續買入｜小倉 <=15%｜回測 55% 勝 / +2.26%"
+        data_line = f"數據：{rr_data_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
+        price_line = deps["price_change_line"](data.get("price"), data.get("change"))
     elif valid_entry and report_phase not in (None, "盤中"):
         buy_line = "買點：盤後追蹤｜開盤後確認｜不追價"
         data_line = f"數據：{rr_data_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
@@ -560,11 +567,16 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         data_line = f"數據：{rr_data_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
     trigger_label = "盤中觸發" if report_phase == "盤中" else "明日觸發"
-    if deps["is_valid_entry"](stock_result) and strategy_source_blocked:
+    if valid_entry and funnel_state == "趨勢延續":
+        tomorrow_line = f"{trigger_label}：回踩站回日，小倉執行；不追高加碼"
+    elif deps["is_valid_entry"](stock_result) and strategy_source_blocked:
         tomorrow_line = f"{trigger_label}：無有效進場，先補策略樣本證據"
     else:
         tomorrow_line = f"{trigger_label}：{deps['tomorrow_trigger_text'](state, data)}"
     reason_line = (
+        "依據：回測 55% 勝 / +2.26%，回踩站回 ma5/ma10 後放量確認"
+        if valid_entry and funnel_state == "趨勢延續"
+        else
         (
             "原因：策略樣本不可用，高置信 S 分數 / 強弱分類暫不採用"
             if strategy_source_blocked
@@ -573,6 +585,13 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         if deps["is_valid_entry"](stock_result) and not source_eligible
         else f"理由：{data.get('evidence_adjustment_reason')}" if data.get("evidence_adjustment_reason") else deps["rejected_transition_reason_line"](stock_result) if funnel_state == "淘汰" else None
     )
+    trend_control_lines = []
+    if valid_entry and funnel_state == "趨勢延續":
+        trend_control_lines = [
+            "倉位：<=15%",
+            "止損：回踩低點下方；形態失效即出",
+            "持有：對齊 5 日 edge，5 日內未續漲或跌破回踩低點即了結",
+        ]
     low_volume_limit_up_risk = deps["low_volume_limit_up_risk_text"](data)
     lines = [
         f"【{deps['stock_title'](name, data)}】{title_icon} {title_action}｜{title_label}",
@@ -586,6 +605,8 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
 
     if reason_line:
         lines.append(reason_line)
+
+    lines.extend(trend_control_lines)
 
     lines.extend([
         tomorrow_line,
@@ -622,7 +643,7 @@ def _brief_holding_line(holding_items, deps):
 
 def _brief_new_position_line(watch_items, report_context, deps, market_mode=None):
     funnel = deps["build_unheld_funnel"](watch_items, market_mode=market_mode, report_context=report_context) if watch_items else {"可買": []}
-    actionable = len(funnel["可買"])
+    actionable = len(funnel.get("可買") or []) + len(funnel.get("趨勢延續") or [])
     if actionable:
         return f"新倉：可行動候選 {actionable} 檔，以第二則卡片為準。"
     return "新倉：目前沒有可行動候選。"
@@ -700,12 +721,15 @@ def _compact_market_overview_line(holding_items, watch_items, report_context, de
             action_labels.append(state)
     action_suffix = f"（{'/'.join(action_labels[:3])}）" if action_labels else ""
     actionable_count = len(funnel.get("可買") or []) if funnel else 0
+    trend_count = len(funnel.get("趨勢延續") or []) if funnel else 0
     tracking_only_count = deps["unheld_tracking_only_count"](funnel) if funnel else 0
     rejected_count = len(funnel.get("淘汰") or []) if funnel else 0
     unheld_count = sum(len(items) for items in funnel.values()) if funnel else len(watch_items)
     unheld_parts = []
     if actionable_count:
         unheld_parts.append(f"可買{actionable_count}")
+    if trend_count:
+        unheld_parts.append(f"趨勢延續{trend_count}")
     unheld_parts.extend([f"僅追蹤{tracking_only_count}", f"淘汰{rejected_count}"])
     parts = [
         f"市場：{market_mode} {risk_level}",
@@ -716,6 +740,8 @@ def _compact_market_overview_line(holding_items, watch_items, report_context, de
     ]
     if new_entry_count:
         parts.insert(2, f"新倉建議 {new_entry_count}")
+    if trend_count:
+        parts.insert(3, f"趨勢延續買入 {trend_count} 檔小倉")
     return "｜".join(parts)
 
 
@@ -816,12 +842,21 @@ def _market_theme_data_basis_line(report_context, deps):
 def _strategy_sample_data_basis_line(report_context, deps):
     strategy = deps["_field_by_key"](report_context, "evidence.strategy_sample")
     status = strategy.get("source_status", "missing-source")
+    results_map = report_context.get("results_map") or {}
+    has_trend_continuation_buy = any(
+        ((data.get("result") or {}).get("decision_type") == "trend_continuation")
+        and ((data.get("result") or {}).get("decision") == "BUY")
+        for data in results_map.values()
+        if isinstance(data, dict)
+    )
     if status == "missing-source":
         return "策略樣本：缺少可驗證來源，本次不納入買賣判斷。"
     if status == "insufficient-data":
         return "策略樣本：樣本不足，本次不納入買賣判斷。"
     if status == "source-error":
         return "策略樣本：來源讀取異常，本次不納入買賣判斷。"
+    if has_trend_continuation_buy:
+        return "策略樣本：trend_continuation 同源證據達標，僅此例外支持回踩站回小倉買入。"
     return "策略樣本：樣本來源可驗證，只作輔助參考，不新增買點。"
 
 
@@ -834,6 +869,7 @@ def _position_candidate_data_basis_line(report_context, holding_items=None, watc
     holding_count = len(holding_items or [])
     watch_count = len(watch_items or [])
     funnel_text = ""
+    trend_count = 0
     if deps and watch_items:
         funnel = deps["build_unheld_funnel"](watch_items, market_mode=market_mode, report_context=report_context)
         prepare_counts = deps["unheld_prepare_bucket_counts"](
@@ -843,13 +879,15 @@ def _position_candidate_data_basis_line(report_context, holding_items=None, watc
             report_context=report_context,
         )
         buy_count = len(funnel.get("可買") or [])
+        trend_count = len(funnel.get("趨勢延續") or [])
         prepare_count = len(funnel.get("可準備") or [])
         prepare_text = deps["unheld_prepare_funnel_text"](prepare_counts) or "不可追高觀察 0"
         tracking_count = deps["unheld_tracking_only_count"](funnel)
         rejected_count = len(funnel.get("淘汰") or [])
+        trend_text = f"趨勢延續 {trend_count}、" if trend_count else ""
         funnel_text = (
             f"未持倉 {watch_count} 檔已分類：可買 {buy_count}、"
-            f"{prepare_text}、僅追蹤 {tracking_count}、淘汰 {rejected_count}；"
+            f"{trend_text}{prepare_text}、僅追蹤 {tracking_count}、淘汰 {rejected_count}；"
         )
     elif watch_count:
         funnel_text = f"未持倉 {watch_count} 檔已分類；"
@@ -859,6 +897,12 @@ def _position_candidate_data_basis_line(report_context, holding_items=None, watc
         if holding_count
         else "持倉與價格資料可支持風控檢查；"
     )
+
+    if trend_count:
+        return (
+            f"持倉 / 價格 / 候選資料：{position_text}{funnel_text}"
+            "trend_continuation 同源證據達標者支持小倉進場，其餘未持倉資料只支持分類觀察。"
+        )
 
     if position_ready and candidate_ready:
         return (
@@ -977,6 +1021,13 @@ def _status_is_abnormal(status):
 
 
 def _has_abnormal_data_basis(report_context):
+    results_map = (report_context or {}).get("results_map") or {}
+    for data in results_map.values():
+        if not isinstance(data, dict):
+            continue
+        result = data.get("result") or {}
+        if result.get("decision_type") == "trend_continuation" and result.get("decision") == "BUY":
+            return True
     statuses = (report_context or {}).get("source_status_summary") or {}
     for key, status in statuses.items():
         if key == "position" and status == "not-applicable":

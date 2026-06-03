@@ -65,6 +65,19 @@ def condition_engine(result):
             "rr": bool(rr is not None and rr >= 1.0)
         }
 
+    if decision_type == "trend_continuation":
+        return {
+            **conditions,
+            "market": bool(market_grade and market_grade != "D"),
+            "structure": structure in ["STRONG", "NORMAL"],
+            "trend": trend == "UP",
+            "volume": bool(volume and volume not in ["WEAK", "DISTRIBUTION"]),
+            "event": True,
+            "edge": True,
+            "risk": bool(risk is not None and 0 < risk <= 0.08),
+            "rr": True,
+        }
+
     if heat_state == "EXTREME":
         # 中文註釋：v19.1.3 禁追由過熱主導，不再把風控 / RR 顯示成主要缺口。
         return {
@@ -128,6 +141,9 @@ def condition_engine(result):
     if decision_type == "pullback":
         conditions["event"] = True
         conditions["edge"] = True
+
+    if decision_type == "trend_observation":
+        conditions["event"] = True
 
     if decision_type == "early":
         conditions["edge"] = True

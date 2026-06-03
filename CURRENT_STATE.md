@@ -6,7 +6,7 @@
 
 - 專案：台股策略 Telegram 報文機器人。
 - 正式結果以 git / runner 產生報文為準。
-- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.35`。
+- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.36`。
 - 固定 8 份 Markdown 不刪：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 - Architect 是總控；產品 / 策略 / 報文 bug 或 feature 預設走 PM -> Tech -> QA。
 - 跨日狀態、已執行交易、歷史 evidence 必須來自 production DB 或 Owner 指定持久來源；local/runtime/worktree 不能當跨日記憶。
@@ -14,17 +14,23 @@
 
 ## Latest Completed Work
 
-- task_id：`risk_patch_20260531_holiday_report_execution_memory_evidence_dates`
-- commits：
-  - `6367d78 fix holiday execution memory report`
-  - `4f19e16 docs mark holiday fix pushed`
-- 結論：05/31 假日报文重複第二段停利已修並推送。
+- task_id：`trend_continuation_buy_path_phase2_20260603`
+- 狀態：code done / QA 通過 / pending commit-push。
+- commits：pending。
+- 結論：階段二已實裝 trend_continuation 買入路徑；Owner 授權的「證據可開 BUY」例外只限此路徑。
 - 關鍵行為：
-  - production cross-day execution memory 足夠時，英業達 2356 顯示已執行不重複。
-  - prior take-profit guard 存在但 execution memory 缺失或 `sold_shares <= 0` 時，顯示 `停利記憶不足`，不輸出賣出股數，不進明日計畫。
-  - market/theme evidence 顯示 actual/latest trade date 與 `lookback_range`。
-  - strategy sample 0 與 market/theme production evidence 已分層。
-- 驗證：QA `通過`；full pytest 264 passed，153 warnings（第三方 deprecation 類）。
+  - 正式策略共用 `scripts/research_trend_continuation.py` 的回踩站回判定函式，避免研究 / 實盤口徑漂移。
+  - `services/analysis.py` 新增 `decision_type="trend_continuation"`；positive same-source evidence 才 BUY，缺 / 負 evidence 降級 `trend_observation` / WAIT。
+  - extended spike / 無回踩不開 trend_continuation BUY，不放寬追高。
+  - 倉位 `<=15%`，止損在回踩低點下方，退出 / 持有對齊 5 日 edge；沿用既有同日入場即錯風控。
+  - `core/generator.py` 版本升 `v20.4.36`；official report 新增 `🟢 趨勢延續買入｜小倉`、獨立 funnel / summary / 卡片 / 資料依據。
+  - trend_continuation BUY 時即使資料源正常，也強制顯示策略樣本與候選資料 basis，避免可買卡片缺證據鏈。
+- 驗證：
+  - `py_compile` passed。
+  - focused tests 6 passed，17 warnings。
+  - `git diff --check` passed。
+  - QA `通過`；額外 probe 確認缺 OHLCV/source 不產生 `decision_type=trend_continuation` BUY，也不顯示 trend_continuation 小倉支持語氣。
+- 邊界：未改 RR 公式、DB schema/write、live Telegram；legacy `strong_follow` 缺 OHLCV 時仍可能 BUY，屬 out-of-scope follow-up，除非 Owner 要求所有 BUY 全域 source gate。
 
 ## Latest Completed Handoff
 

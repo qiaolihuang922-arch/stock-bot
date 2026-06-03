@@ -1,123 +1,126 @@
-# CHANGELOG: research_daily_price_backfill_and_trend_sample_expansion_20260603
+# CHANGELOG:
 
 ## 任務尺寸與風險
 
-- 任務類型：risk_patch / research。
-- 風險原因：新增可寫 `daily_price` backfill CLI，但寫入必須走既有 approved interface；同時擴充 research artifact schema。
-- 未碰：正式策略、Telegram 報文、DB schema / RLS / grant / policy / role / index / constraint、live Telegram。
+- 任務類型：risk_patch。
+- 任務階段：trend_continuation phase2，屬使用者可見策略 / 報文契約變更，風險接近 major；本輪仍限定單一路徑，不擴成全策略重構。
+- 風險原因：正式 BUY 決策、condition gate、strategy payload、official generator、手機報文 funnel / card 狀態同步新增 trend_continuation 路徑。
+- 明確未碰：DB schema / write、RR 公式、live Telegram、其他 setup 的 evidence-to-BUY 政策。
 
 ## 修改內容
 
-- 新增 `scripts/backfill_daily_price_history.py`
-  - 支援 `--dry-run`、`--write`、`--confirm-write`、`--symbols`、`--start`、`--end`、`--years`、`--skip-existing`、`--read-after-write`、`--no-config`。
-  - 未指定 symbols 時使用 `core.watchlist.WATCHLIST_CODES`，並要求 universe count = 12；否則 fail closed。
-  - 市場資料來源使用既有 `services.stock_api.get_twse_ohlcv_history()`。
-  - dry-run 不建立 write client、不寫入，輸出 `result: no-write`、per-symbol planned rows / rows_to_write。
-  - write 需同時指定 `--write --confirm-write`；缺確認時 blocked。
-  - write path 只呼叫既有 approved interface：`scripts.backfill_signals.upsert_rows(price_rows, signal_rows=[], client=...)`。
-  - `--read-after-write` 讀回每檔 row count 與日期範圍，失敗則 blocked。
-- 擴充 `scripts/research_trend_continuation.py`
-  - 預設使用 watchlist 12 檔 universe；支援 `--symbols`、`--start`、`--end`。
-  - artifact 新增 `universe_symbols`、`universe_count`、`date_range`、`pattern_definition`。
-  - 新增 per-symbol `daily_price_rows_used`、`hit_count`、1/3/5/10 日 forward return count / avg / median。
-  - 新增 aggregate `total_hit_count`、`threshold`、`meets_min_sample_count`、`blocked_reason`。
-- 更新 `scripts/backfill_signals.py`
-  - `upsert_rows()` 新增向後相容 `client=None` optional 參數，讓 backfill CLI 可注入 client 並仍走同一 helper。
-- 新增 / 更新 tests
-  - `tests/test_backfill_daily_price_history.py`
-  - `tests/test_research_trend_continuation.py`
-- 更新 research artifacts
-  - `reports/research/trend_continuation_20260603.txt`
-  - `reports/research/trend_continuation_20260603.json`
-- 更新 `RESEARCH.md` 高信號摘要。
+- 接入 trend_continuation 回踩站回買入路徑：
+  - 正式策略可在「趨勢成立 + 回踩 ma5/ma10 + 放量站回 + 同源研究證據達標」時輸出 `decision_type="trend_continuation"` 與 `decision="BUY"`。
+  - 證據缺失、不足或為負時降級為 `decision_type="trend_observation"` / `WAIT`。
+  - extended spike / 無回踩 / 純創新高追價不開 BUY。
+- 研究與正式策略共用 `scripts/research_trend_continuation.py` 的形態判定函數，避免同一 setup 在研究與 production 漂移。
+- 新增小倉、止損、退出 payload：
+  - 倉位 `<=15%`，標示小倉。
+  - 止損為回踩低點下方。
+  - 退出 / 持有對齊 5 日 edge。
+- official generator 與 presentation report 新增「趨勢延續」單獨 funnel / 手機報文狀態。
+- trend_continuation BUY 會強制顯示資料依據，即使資料源正常也保留同源策略樣本與候選資料說明，避免小倉買入缺證據鏈。
+- 報文版本同步升至 `v20.4.36`。
+- 補 focused tests 覆蓋正向 BUY、負證據 WAIT、spike 無回踩、同源判定、official report 手機閱讀、空 watch_items official generator、負面 evidence official report。
 
 ## 修改檔案
 
-- `scripts/backfill_daily_price_history.py`
-- `scripts/backfill_signals.py`
+- `services/analysis.py`
 - `scripts/research_trend_continuation.py`
-- `tests/test_backfill_daily_price_history.py`
-- `tests/test_research_trend_continuation.py`
-- `reports/research/trend_continuation_20260603.txt`
-- `reports/research/trend_continuation_20260603.json`
-- `RESEARCH.md`
-- `TASK.md`
+- `core/condition_engine.py`
+- `core/generator.py`
+- `core/signal_snapshot.py`
+- `presentation/report.py`
+- `tests/test_analysis_engine.py`
+- `tests/test_generator_report.py`
 
 ## 最小改動策略
 
-- 僅新增 / 擴充研究與 backfill CLI。
-- 不改正式策略檔：`services/analysis.py`、`core/condition_engine.py`、`core/generator.py`。
-- 不新增 DB schema，不手寫普通 production DML。
-- Owner 已在本輪明確要求「直接回填」後，使用 backfill CLI 逐檔執行 production write，且每檔 read-after-write 通過。
+- 只開放 trend_continuation 單一路徑，不放寬其他 setup。
+- 不改 RR 計算公式。
+- 不改 DB schema / RLS / grant / policy / role / index / constraint。
+- 不做 DB write、正式 backfill 或 live Telegram。
+- 不重構整體 strategy tree / condition engine，只同步必要直接呼叫方與報文消費者。
+- 未以寫死 fixture 壓過真實邊界；負證據與缺資料路徑維持 fail closed。
 
 ## 契約影響
 
-- 新增 CLI contract：`scripts/backfill_daily_price_history.py`。
-- 擴充 research CLI artifact schema：`scripts/research_trend_continuation.py`。
-- `scripts.backfill_signals.upsert_rows()` 新增 optional `client` 參數；既有呼叫不變。
-- Telegram message list、strategy decision、DB schema、RR formula 未變。
+- strategy decision payload 新增 / 傳遞：
+  - `decision_type="trend_continuation"`
+  - `decision_type="trend_observation"`
+  - `trend_continuation_evidence`
+  - `trend_continuation_setup`
+  - `position_label`
+  - `stop_label`
+  - `exit_rule`
+  - `exit_horizon_days`
+- `strategy()` 入口新增 optional 參數：
+  - `ohlcv_bars`
+  - `trend_continuation_evidence`
+  - `stock_id`
+- `core.signal_snapshot.analyze_ohlcv_snapshot()` 同步新增 optional 參數並傳入 `strategy()`。
+- message list / 報文分組新增「趨勢延續」分類與卡片狀態：
+  - `🟢 趨勢延續買入｜小倉`
+  - 顯示 `回測 55% 勝 / +2.26%`
+  - 顯示倉位、止損、5 日持有 / 退出規則。
+- 版本契約：`core/generator.py` 版本字串同步為 `v20.4.36`。
+- DB contract：無 schema / payload / write path 變更。
+- RR contract：公式未變。
 
 ## 直接消費者同步
 
-- Owner / Architect 可用 backfill CLI dry-run 或實際回填。
-- QA 可驗 dry-run no-write、missing credentials blocked、approved write helper、research artifact schema。
-- 後續階段二只能讀 research artifact 判斷，不得直接從本輪開買入路徑。
+- `core/generator.py`
+  - load stock signal 時傳入 OHLCV bars 與 trend_continuation evidence。
+  - unheld funnel、execution item、summary、new entry suggestions、pending trade items 同步識別「趨勢延續」。
+- `presentation/report.py`
+  - 未持倉卡片、摘要、資料依據、手機閱讀路徑同步新增 trend_continuation 小倉買入文案。
+- `core/condition_engine.py`
+  - BUY condition gate 同步 trend_continuation，WAIT observation 同步 event 判定。
+- `core/signal_snapshot.py`
+  - snapshot 分析呼叫方可傳入同源 OHLCV / evidence。
+- tests 同步 official generator / report 層級，避免只驗 helper。
 
 ## 未影響模組
 
-- 未改 `services/analysis.py`。
-- 未改 `core/condition_engine.py`。
-- 未改 `core/generator.py`。
-- 未改 Telegram delivery。
-- 未改 DB schema / RLS / grant / policy / role / index / constraint。
+- 未改 DB schema、RLS、grant、policy、role、index、constraint。
+- 未新增 DB write path。
+- 未改 RR 計算公式。
+- 未做 live Telegram delivery。
+- 未改首次突破倉位邏輯。
+- 未把其他 setup 改成 evidence 達標即可 BUY。
+- 未改 production persistence / 跨日 source-of-truth。
+- 未做 full strategy refactor。
 
 ## 已跑自檢命令
 
-- `PYTHONPYCACHEPREFIX=/private/tmp/backfill_trend_pycache arch -arm64 .venv/bin/python -m py_compile scripts/backfill_daily_price_history.py scripts/research_trend_continuation.py scripts/backfill_signals.py tests/test_backfill_daily_price_history.py tests/test_research_trend_continuation.py tests/test_backfill_signals.py`
+- focused phase2 tests
+  - 結果：6 passed，17 warnings（主工作區 final focused subset）；先前 Tech/QA phase2 擴充 subset 為 13 passed，17 warnings。
+- empty watch_items official generator probe
   - 結果：passed。
-- `arch -arm64 .venv/bin/python -m pytest tests/test_backfill_daily_price_history.py tests/test_research_trend_continuation.py tests/test_backfill_signals.py -q`
-  - 結果：15 passed。
-- `arch -arm64 .venv/bin/python scripts/backfill_daily_price_history.py --dry-run --symbols 3231 --start 2026-06-01 --end 2026-06-02 --no-config`
-  - 結果：dry-run no-write；planned_rows=2；live_write=false。
-- `arch -arm64 .venv/bin/python scripts/backfill_daily_price_history.py --write --confirm-write --symbols 3231 --start 2026-06-01 --end 2026-06-02 --no-config`
-  - 結果：exit 2 blocked；missing credentials；live_write=false。
-- `arch -arm64 .venv/bin/python scripts/backfill_daily_price_history.py --write --confirm-write --symbols <symbol> --years 2 --skip-existing --read-after-write`
-  - 結果：12 檔逐檔 write-complete，read-after-write `status=ok`。
-- `arch -arm64 .venv/bin/python scripts/research_trend_continuation.py --json`
-  - 結果：completed；universe_count=12；total_hit_count=232；meets_min_sample_count=true；pullback_continuation_edge=positive。
-- mutation / secret scan：
-  - no schema mutation / live Telegram / secret assignment matches。
-
-## 研究輸出摘要
-
-- watchlist 12：3231、2421、3035、2303、3481、2344、2376、2408、2356、2324、2301、2337。
-- production write：12 檔共新增 `daily_price` 5,218 rows。
-- read-after-write row count：
-  - 3231=485、2421=485、3035=485、2303=485、3481=478、2344=485、2376=485、2408=470、2356=485、2324=485、2301=464、2337=442。
-  - 所有檔案日期範圍：2024-06-03..2026-06-03。
-- 回填後 research：
-  - total_hit_count：232。
-  - per-symbol hits：2301=16、2303=22、2324=31、2337=23、2344=20、2356=19、2376=16、2408=8、2421=15、3035=16、3231=31、3481=15。
-  - meets_min_sample_count：true（threshold=30）。
-  - pullback continuation 5 日勝率 55.17%、5 日平均 +2.26%，結論 `positive`。
-- 結論：階段一研究樣本門檻已達成，可另開階段二 major 策略設計任務；本輪仍未實裝正式買入路徑。
+- negative evidence official report probe
+  - 結果：passed。
+- py_compile
+  - 結果：passed。
+- `git diff --check`
+  - 結果：passed。
 
 ## 覆蓋層級
 
-- CLI dry-run：covered。
-- approved write helper：covered by fake client + `upsert_rows(..., client=...)` test。
-- missing credentials fail-closed：covered。
-- research artifact schema：covered。
-- production actual write：covered by 12 檔逐檔 approved write + read-after-write artifact。
-- 12 檔 full dry-run：未作 completion evidence；實際採逐檔 write/read-after-write，避免單次外部行情請求拖住全部。
+- helper：研究形態判定與正式策略共用函式。
+- strategy：正向 trend_continuation BUY、缺 / 負 evidence WAIT、spike 無回踩不買。
+- condition engine：trend_continuation BUY / trend_observation WAIT 條件摘要。
+- official generator：趨勢延續小倉 bucket、load stock signal 傳入 OHLCV / evidence、缺 source fail closed。
+- report formatter：手機可讀卡片、摘要、資料依據、空 watch_items fail-safe。
+- 未測：full pytest、正式 runner artifact、live Telegram、production DB。
 
 ## 殘留風險
 
-- 本輪已實際寫 production `daily_price`；若需要回滾，需另開資料治理任務，不可手動亂刪。
-- 雖然 pullback continuation 研究已 positive，extended spike 對照也為正，但本輪不授權追高或正式買入路徑。
-- 階段二若啟動，仍需 major 策略設計、Owner 明確授權放開特定邊界，以及 official report replay / QA L3。
+- 未跑 full pytest；本輪自檢只代表 focused phase2 與指定 official generator probes。
+- Tech 自檢不代表 QA 通過。
+- trend_continuation evidence 目前只允許同源 positive sample 開 BUY；後續若要接 production 長期監控或動態 artifact，需要另開任務。
+- legacy `strong_follow` 等既有 BUY 路徑不在本輪改造範圍。
 
 ## 旁支待辦
 
-- 另開階段二 major 任務：設計 `trend_continuation` 買入路徑，但僅限「回踩站回」且由 evidence gate 開關，不放寬 spike 追高。
-- 階段二前需 Owner 明確授權是否放開 RESEARCH.md 既有「證據不得單獨變 BUY / 不得放寬追高」硬邊界中的特定例外。
+- 後續另開任務處理長期實盤 vs 回測勝率監控 artifact / dashboard。
+- 其他 setup 的 evidence gate 政策不納入本輪。

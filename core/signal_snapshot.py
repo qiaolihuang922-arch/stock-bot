@@ -145,7 +145,15 @@ def is_tradeable_result(result):
     return True
 
 
-def analyze_ohlcv_snapshot(stock_id, trade_date, closes, volumes, version="v19.3"):
+def analyze_ohlcv_snapshot(
+    stock_id,
+    trade_date,
+    closes,
+    volumes,
+    version="v19.3",
+    ohlcv_bars=None,
+    trend_continuation_evidence=None,
+):
     if not closes or not volumes:
         raise ValueError("closes and volumes are required")
 
@@ -155,7 +163,17 @@ def analyze_ohlcv_snapshot(stock_id, trade_date, closes, volumes, version="v19.3
     ma5 = _avg(closes[-5:])
     ma20 = _avg(closes[-20:])
 
-    result = strategy(close, change, ma5, ma20, closes, volumes)
+    result = strategy(
+        close,
+        change,
+        ma5,
+        ma20,
+        closes,
+        volumes,
+        ohlcv_bars=ohlcv_bars,
+        trend_continuation_evidence=trend_continuation_evidence,
+        stock_id=stock_id,
+    )
     distance = _breakout_distance(close, closes)
     result["breakout_distance"] = distance
     reasons = _reason_labels(result)
