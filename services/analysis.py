@@ -245,6 +245,11 @@ def structure_phase_signal(
         if trend == "UP" and structure != "WEAK":
             return "SHAKEOUT"
 
+        # 健康回踩只在「趨勢仍強 + 接近突破區」才成立；
+        # 弱勢或遠離突破 > 5% 時如實標記為回踩轉弱，不得稱健康。
+        if structure == "WEAK" or (dist is not None and dist > 5):
+            return "PULLBACK_WEAK"
+
         return "HEALTHY_PULLBACK"
 
     if price_behavior == "WEAK_REBOUND":
@@ -2175,7 +2180,9 @@ def holding_signal(
 
         if today_bought_shares() > 0:
             same_day_fail_drop = avg_price and price <= avg_price * (1 - SAME_DAY_FAIL_DROP_PCT)
-            if price <= hard_stop_price or (same_day_fail_drop and (structure_broken or decision == "FAIL" or phase == "FAILED_BREAKOUT")):
+            # 同日建倉跌破入場價 X%（SAME_DAY_FAIL_DROP_PCT）為硬觸發，不被盤面 label 豁免；
+            # 跌幅未達閾值時才看 label 決定觀察 / 緩衝。
+            if price <= hard_stop_price or same_day_fail_drop:
                 trigger = "跌破停損" if price <= hard_stop_price else "入場即錯"
                 data.update({
                     "action": f"硬風控減碼 {int(ratio * 100)}%",

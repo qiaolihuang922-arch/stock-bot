@@ -461,6 +461,7 @@ def semantic_state(result):
         "BREAKOUT_WATCH": "👀 突破觀察",
         "SHAKEOUT": "🧽 洗盤回測",
         "HEALTHY_PULLBACK": "↘ 健康回踩",
+        "PULLBACK_WEAK": "↘ 回踩轉弱",
         "WEAK_REBOUND": "↗ 弱勢反彈",
         "FAILED_BREAKOUT": "❌ 突破失敗",
         "DISTRIBUTION": "📦 高位出貨",
@@ -1640,7 +1641,8 @@ PATTERN_LABELS = {
     "SHAKEOUT": "洗盤回測",
     "FAILED_BREAKOUT": "突破失敗",
     "DISTRIBUTION": "出貨",
-    "HEALTHY_PULLBACK": "健康回測"
+    "HEALTHY_PULLBACK": "健康回測",
+    "PULLBACK_WEAK": "回踩轉弱"
 }
 
 POSITION_LABELS = {
