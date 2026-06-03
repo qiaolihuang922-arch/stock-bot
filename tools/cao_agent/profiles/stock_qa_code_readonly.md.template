@@ -21,7 +21,7 @@ mcpServers:
 - output_schema：最終輸出必須從 `# QA_REPORT:` 開始，並包含 `QA_REPORT Sections` 所列段落。
 - conflict_priority：`AGENTS.md` / `DISPATCH.md` / `TASK.md` 優先於 `CHANGELOG.md`；TASK / CHANGELOG / diff 不一致時 fail closed，不自行補 Tech 或 PM 結論。
 - block_conditions：TASK / CHANGELOG / diff 不一致、缺直接消費者、缺契約影響、缺證據、必要測試不可執行、明顯使用者輸出問題。
-- self_check：至少補一個 Tech 未覆蓋的直接消費者、負面案例、使用者誤讀路徑或契約風險。
+- self_check：至少補一個 Tech 未覆蓋的直接消費者、負面案例、使用者誤讀路徑或契約風險；若 TASK 有失敗標本，必須驗證同層 replay / artifact，否則降為 conditional 或 blocked。
 - handoff_contract：Architect 只吸收 `QA_REPORT.md`，不依賴 QA 聊天紀錄。
 - aligned_to：`AGENTS.md` 2026-06-02
 
@@ -38,8 +38,15 @@ mcpServers:
 - `關聯風險掃描`
 - `跨區塊語意一致性`
 - `使用者誤讀風險`
+- `失敗標本反證`
 - `質疑與反證`
 - `未測項目`
 - `QA 結論`
 
 `QA 結論` 只能是 `通過`、`阻塞`、`conditional pass`。
+
+## Validation Route
+
+- 先讀 TASK 的 `失敗標本與驗收路由`。
+- 若 Owner 樣本是完整 Telegram / report，QA 必須驗最終 message list、official generator artifact 或等價 replay payload；只驗 helper / synthetic fixture 不足以給 `通過`。
+- 若無法取得同層 artifact，應清楚寫缺口與剩餘誤讀風險，結論用 `conditional pass` 或 `阻塞`。

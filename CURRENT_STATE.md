@@ -43,6 +43,13 @@
 - QA 反證：前兩輪 QA blocked 抓到 A1 先是 60 rows、後是 `limit * 20` 在 25 檔/日只覆蓋 48 天；最終 pagination 版通過 61 天 x 17 檔跨頁邊界 probe，保留 60 distinct dates / 1020 rows，無 version eq。
 - 邊界：未改 RR 公式、DB schema/write、production backfill、live Telegram；未跑 production smoke / full pytest。
 
+## Current Process Correction
+
+- 觸發：Owner 指出「修改一天仍證據不足」，且 06/03 v20.4.32 完整報文仍顯示 strategy evidence partial / market-theme 資料不足，以及聯電同日 -3.86% 未觸發快速止損減碼。
+- 根因分類：`evidence_chain` + `mobile_reading` + `QA反證` + `runner_gap`。上一輪 QA 有抓 loader pagination，但沒有把 Owner 完整報文作為 final failure specimen，也沒有驗真實 production/report payload shape。
+- 流程補強方向：PM 必須把 Owner 報文濃縮成「失敗標本與驗收路由」；Tech 標明 probe 覆蓋 helper / formatter / official generator / runner artifact 哪一層；QA 若不能在同層 replay Owner 標本，不得給 `通過`。
+- 這不是新增死規則；它把每輪驗收從固定 checklist 改成按失敗發生層級選擇最小反證路徑。
+
 ## Previous Completed Handoff
 
 - task_id：`telegram_message_noise_consistency_20260603`

@@ -63,8 +63,11 @@ tools/cao_agent/run_architect_task.sh auto "<Owner 任務>"
 完成結論必須和 Owner 目標同口徑。測試通過、dry-run 成功、單一路徑可執行或局部資料可讀，只能證明該範圍，不得升格成資料完成、策略完成、流程完成或上線完成。
 
 - PM 定義完成口徑、直接消費者、驗收證據與非目標。
+- PM 必須把 Owner 提供的失敗樣本轉成「失敗標本 / 驗收路由」：標明失敗出現在 helper、資料載入、formatter、official generator、runner 報文或 production source 哪一層。若 Owner 貼的是完整報文，該報文或等價 replay artifact 必須成為驗收標本；不得只改寫成自造 helper fixture。
 - Tech 按口徑交付可重跑證據，不能用自檢代替 QA。
+- Tech 的 probe 必須打到 PM 指定的失敗層；若只能測到較低層，CHANGELOG 必須寫 `partial` 與未覆蓋的上層路徑，不能宣稱使用者可見問題完成。
 - QA 反證證據是否覆蓋 Owner 目標，而不是只驗工具本身。
+- QA 必須沿 PM 的驗收路由反證；若拿不到 Owner 報文的等價 payload / replay artifact，且任務目標是使用者可見報文或 production evidence，QA 結論只能是 `conditional pass` 或 `阻塞`，不得用 synthetic fixture 直接通過。
 - 證據只覆蓋部分目標時，結論必須寫 `partial`、`blocked` 或 follow-up。
 - 任一角色把「可能」「應該」「看起來」當結論但沒有 evidence，Architect 必須拒收。
 
@@ -120,6 +123,7 @@ tools/cao_agent/run_architect_task.sh auto "<Owner 任務>"
 - 版本契約：使用者可見報文 / CLI / UI 是否升版。
 - 驗收條件。
 - 範例或 fixture。
+- 失敗標本與驗收路由。
 - 禁止事項與阻塞條件。
 
 PM 若缺直接消費者、輸出契約或驗收條件，Tech 必須 blocked。
@@ -134,6 +138,7 @@ PM 若缺直接消費者、輸出契約或驗收條件，Tech 必須 blocked。
 - 直接消費者同步。
 - 未影響模組。
 - 自檢命令與結果。
+- 覆蓋層級：列出已測 helper / formatter / official generator / runner artifact / production source 哪幾層，以及未測層級。
 - 殘留風險。
 
 Tech 只按 `TASK.md` 指定範圍改代碼與測試；不補 PM 需求、不宣告 QA 通過、不 commit / push、不 live write / live delivery。
@@ -146,6 +151,7 @@ Tech 只按 `TASK.md` 指定範圍改代碼與測試；不補 PM 需求、不宣
 - 關聯風險掃描。
 - 跨區塊語意一致性。
 - 使用者誤讀風險。
+- 失敗標本反證：Owner 樣本或等價 replay artifact 的結果。
 - 質疑與反證。
 - 未測項目。
 - QA 結論：只能是 `通過`、`阻塞`、`conditional pass`。
@@ -175,6 +181,7 @@ QA 不只重跑 Tech 命令；至少補一個 Tech 未覆蓋的直接消費者�
 - 同一行動不得在多個區塊重複長句；空區塊、0-count、無新增下單占位預設不顯示。
 - 使用者可見報文變更需核對版本字串；不得把「不要回退版本」解讀成「禁止升版」。
 - 報文修正若源於手機閱讀誤讀、重複噪音或跨區塊衝突，優先補既有測試 / QA probe 來重現並防回退；不要只把事故寫成新文字規則。
+- Owner 貼出的完整報文視為 failure specimen。PM / QA 要先保留其中的關鍵可見矛盾、數字與順序，再選擇最小 replay 路徑；若只驗 helper 或局部 formatter，必須明確寫尚未驗最終報文。
 
 ## 清理任務證據
 
@@ -213,6 +220,7 @@ Architect 發現以下情況一律退回：
 - 判斷 QA 是否攔住風險、Tech 是否回退既有契約、是否需要 runner / agent prompt 補丁。
 - 規則治理先分類：`one_off`、`repeated_pattern`、`high_risk_invariant`、`runner_gap`、`doc_bloat`。
 - `runner_gap` / `證據鏈` / `文件不足` 類問題不能只記事故；Architect 必須優先補強可重跑流程，例如 runner gate、標準 artifact 產生命令、agent prompt 或驗收腳本，讓下一輪自然走對路。
+- 若 Owner 指出「已修一天仍同樣失敗」，Architect 復盤優先檢查驗收路由是否降層：是否用 synthetic fixture 取代 Owner 標本、是否只驗 helper 未驗 official report、是否未檢 production source artifact。若是，先補任務卡 / agent prompt / runner artifact 流程，再開下一輪產品修復。
 - 若 QA 因 sandbox / network / permission 無法直接讀 production，但 Architect 本地能 read-only 取證，必須改走標準 safe read-only artifact 流程；artifact 需標明 source、版本、無 credential、無 write、無 live delivery，並由 QA 獨立驗證 artifact schema/content。
 - 不把每次事故直接塞進 `AGENTS.md`；優先合併既有規則，具體事故留在 `CURRENT_STATE.md` 或 `CLEANUP_PLAN.md`。
 - `DISPATCH.md` 記當前結果與下一步；`CURRENT_STATE.md` 留高信號狀態；`CLEANUP_PLAN.md` 留待補與已完成壓縮摘要。

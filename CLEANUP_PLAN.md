@@ -15,6 +15,11 @@
 
 ## Completed
 
+- `process_validation_route_for_owner_report_samples`:
+  - 問題：Owner 指出同一問題修了一天仍在真實報文中復發；上一輪用 synthetic fixtures 和 helper/targeted tests 證明局部修改，但沒有把 Owner 完整報文當作最終驗收標本。
+  - 流程補強：`AGENTS.md` 的交付證據、PM / Tech / QA 卡片、Telegram 規則與 Post-cycle Review 新增「失敗標本與驗收路由」。PM 要標出失敗發生層級；Tech 要說明 probe 覆蓋哪一層；QA 必須在同層 replay / artifact 反證，拿不到同層 artifact 時不能直接通過。
+  - 不是死規則：不要求所有任務都跑 production 或全量 replay；只要求驗收層級跟 Owner 看到的失敗層級一致。
+  - 適用到下一輪：06/03 v20.4.32 報文需成為 evidence partial 與聯電同日快速止損的 failure specimen。
 - `20260603_strategy_evidence_report_risk_patch`:
   - 問題：Owner 要直接完成 A1+B1-B4+C。核心風險是 strategy_sample 仍可能因 version / row window 取樣不足而空轉；報文把未持倉可買放進交易執行會造成已下單誤讀；同日建倉硬風控不該被「剛買入」一刀切豁免。
   - 結果：`load_strategy_evidence_summary(limit=60)` 移除 version filter，使用 Supabase `.range()` 分頁取得最近 60 個 distinct `trade_date`；未持倉可買改列 `新倉建議` 並標 `尚未買入 / 建議分批`；原因 / 風險拆分；partial +0% 改 `僅輔助參考`；同日建倉 hard_stop / 入場價 -3% / 入場 K 低點觸發當日減碼，僅破警戒維持新倉風控觀察；VERSION 升 `v20.4.32`。

@@ -8,7 +8,7 @@
 
 ## Active
 
-- none
+- process_validation_route_for_owner_report_samples｜process｜更新流程治理，防止 helper fixture 取代 Owner 完整報文驗收
 
 ## Queued
 
@@ -30,8 +30,8 @@
 
 ## Next Action
 
-- 本輪 `20260603_strategy_evidence_report_risk_patch` 已 committed / pushed；Git completion gate passed。
-- 下一步若繼續，優先看 production evidence 實際資料品質 / daily_signal_snapshot row density / 長期樣本分布，而不是再修文案。
+- 本輪流程治理正在收口：把 Owner 完整報文升級為 failure specimen，PM/QA 必須按失敗層驗證，而不是只驗 helper fixture。
+- 下一步若繼續產品修復，先用 06/03 v20.4.32 報文建立 replay / artifact，再處理 evidence partial 與聯電同日快速止損未觸發。
 - 開新任務前先看 `task_md_holds`，不要用 `TASK.md` 內部舊狀態反推當前看板。
 - 報文 / 策略 / 產品修復仍走 PM -> Tech -> QA；流程治理文件可由 Architect 直接改。
 

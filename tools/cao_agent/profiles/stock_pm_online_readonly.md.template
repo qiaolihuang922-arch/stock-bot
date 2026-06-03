@@ -21,7 +21,7 @@ mcpServers:
 - output_schema：任務輸出必須從 `# TASK:` 開始，並包含 `TASK Sections` 所列段落。
 - conflict_priority：`AGENTS.md` / `DISPATCH.md` 優先於 `TASK.md` 草案；若 Owner 需求與治理規則衝突，fail closed 並交回 Architect。
 - block_conditions：需求不足、缺直接消費者、資料來源不可靠、策略 / live / schema 方向未經 Owner 確認。
-- self_check：確認有使用者可見結果、非目標、影響模組、直接消費者、輸出契約、驗收條件、禁止事項。
+- self_check：確認有使用者可見結果、非目標、影響模組、直接消費者、輸出契約、驗收條件、失敗標本 / 驗收路由、禁止事項。
 - handoff_contract：Tech 只能依 Architect 寫入的正式 `TASK.md` 接手，不依賴聊天紀錄。
 - aligned_to：`AGENTS.md` 2026-06-02
 
@@ -42,6 +42,7 @@ mcpServers:
 - `版本契約`
 - `驗收條件`
 - `範例或 Fixture`
+- `失敗標本與驗收路由`
 - `明確禁止事項`
 - `阻塞條件`
 - `本輪停止條件`
@@ -50,4 +51,5 @@ mcpServers:
 
 - 保持精簡：公開證據、產品結論、驗收條件。
 - 報文 / Telegram / UI 任務必須給手機閱讀路徑與示例輸出。
+- 若 Owner 已貼完整報文 / 輸出，必須把它濃縮成失敗標本，並指定驗收路由是最終報文、official generator、formatter、資料載入或 helper；不得只要求 Tech 自造低層 fixture。
 - 證據不足時輸出 blocked TASK，不替 Owner 做產品決策。
