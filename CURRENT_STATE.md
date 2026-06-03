@@ -28,6 +28,22 @@
 
 ## Latest Completed Handoff
 
+- task_id：`presentation_noise_reduction_v20_4_31`
+- 狀態：QA passed；commit / push 待 final 收口。
+- 問題：Owner 要把 Telegram/report 簡報按手機閱讀降噪：刪重複行、合併市場/結論與原因/風險、移除偽 `追蹤最強`、交易執行短句、卡片不可用歷史/回測不逐卡印、資料依據正常隱藏、B5 漏斗與卡片一致。
+- 修正：
+  - `format_cross_day_tracking_summary()` 將無有效進場時的 `追蹤最強` 改為 `僅追蹤`。
+  - `presentation/report.py` 新增共用降噪/顯示 helper，盤中/盤後共用；市場/結論、原因/風險合併。
+  - 正常資料源不顯示資料依據；異常 source-error 盤後顯示單一資料依據短訊。
+  - 卡片不可用回測 / 歷史行隱藏，避免逐卡不可用噪音。
+  - B5 rendered path 補 `隔日確認 / 等冷卻 / 等回測` Summary、漏斗、card 三方一致。
+  - 本輪不升版，仍為 `v20.4.31`。
+- 驗證：QA `通過`；主 repo rendered/message tests 8 passed，25 warnings；`py_compile` passed；`git diff --check` passed；VERSION scan only `v20.4.31`。
+- QA 反證：盤中 no-valid-entry summary 出現 `僅追蹤`、不出現 `追蹤最強 / 🔥 最強`，`資料依據` count=0；盤後 source-error 只顯示一次策略樣本資料依據；既有 message order / afterhours readability / execution contract 仍通過。
+- 邊界：未改 strategy decision、RR 公式、DB schema/write、production backfill、live Telegram。
+
+## Previous Completed Handoff
+
 - task_id：`per_stock_evidence_score_funnel_p0_p3_20260602`
 - 狀態：QA passed；commit / push 待 final 收口。
 - 問題：Owner 要 evidence 真正成為 per-stock 決策分數，而不是 market/theme 共享背景無差別 +8%；弱勢 / 失敗 / 過熱 / technical=0 不可被正向 boost；B5 漏斗與卡片需一致。

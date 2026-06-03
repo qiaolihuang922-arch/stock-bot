@@ -1,84 +1,79 @@
-# CHANGELOG: per-stock evidence 決策分數與 B5 漏斗一致性收口
+# CHANGELOG: presentation/report Telegram message list 降噪
 
   ## 任務尺寸與風險
 
-  - 任務尺寸：risk_patch
-  - QA 分級：L3
-  - 版本：維持 v20.4.31，未升版
-  - 本輪 continuation 類型：handoff-only / process text correction；未修改產品碼或測試碼，只修正 CHANGELOG 契約描述
-  - QA conditional pass 狀態：functionality passed；本次已處理條件項「CHANGELOG overclaims load_strategy_evidence_summary() all-branches dict return」
+  - 任務尺寸：normal_patch
+  - QA 分級：L2
+  - 任務類型判斷：presentation / report Telegram message list 使用者可見文案與 section visibility 降噪。
+  - 風險邊界：改 message list、section 顯示與 formatter 文案；不改 strategy decision、RR、DB write、payload 寫庫或 live delivery。
+  - 版本：維持 v20.4.31，未升版。
 
   ## 修改內容
 
-  - strategy evidence 已移除 current VERSION-only outcome filter，改以 trade_date 近 N 日跨版本 daily_signal_snapshot / daily_price 取樣。
-  - 在資料足夠可形成 outcome rows 時，strategy evidence summary 會建立 structured setup_strategy_samples 與 structured_status，依 reject_family / watch_category setup 類別聚合 sample_count、win_rate、median_mfe、
-    median_mae、mfe_mae_score。
-  - compute_evidence_score(report_context, name) 已改為 market/theme 共享背景 + per-stock strategy setup sample 加權合成，權重為 market 0.4 / strategy 0.6。
-  - 單檔缺明確 reject_family / watch_category / setup 欄位時，不用 report layer 推導類別補缺口；即使 summary 有正向 setup sample，也 fail closed，不產生 per-stock strategy boost。
-  - 弱勢 / 失敗 / EXTREME / technical=0 正向 boost 封頂，rendered card 顯示「證據：不適用」，不顯示正向「證據 +%」。
-  - 補 B5 漏斗一致性 probe：隔日確認 / 等回測 / 等冷卻 拆分加總等於「僅追蹤」總數，且 card state 與 funnel state 一致。
-  - 本次 handoff-only 修正 CHANGELOG 文字：不再宣稱 load_strategy_evidence_summary() 所有分支都改成 dict summary。
+  - 無有效進場但仍有追蹤標的時，將像推薦排名的 追蹤最強 改為不可行動語意 僅追蹤，並標明 未達進場條件。
+  - Telegram summary 合併重複資訊：市場/結論 合併呈現，原因/風險 合併呈現，移除原本分散的 今日結論、原因、最強、重複風險行。
+  - 交易執行保留短文案與既有行動結論，不重複完整風控長句。
+  - 卡片歷史 / 回測降噪：回測或歷史不可用、樣本不足、回測：-、歷史：- 類行不逐卡顯示；可用資料仍保留精簡行。
+  - 資料依據 section 正常來源時隱藏；盤中預設不顯示；僅在 missing-source、source-error、insufficient-data、unresolved-conflict 等異常狀態或 evidence manifest conflict 時顯示。
+  - 盤後完整版若來源異常，仍顯示單一資料依據短訊；策略樣本狀態與卡片顯示一致，不在卡片重複 策略樣本：不可用。
+  - B5 card / funnel count consistency regression 保留覆蓋：等冷卻、等回測、隔日確認拆分需與卡片分類與僅追蹤總數一致。
 
   ## 修改檔案
 
   - core/generator.py
-  - services/strategy_evidence.py
+  - presentation/report.py
   - tests/test_generator_report.py
-  - tests/test_strategy_evidence.py
-  - CHANGELOG.md：由 runner 依本回答覆寫；本輪未直接編輯
 
   ## 最小改動策略
 
-  - 只描述 TASK 指定的 evidence score、strategy setup sample、rendered-message probe 與 B5 probe。
-  - 本輪 continuation 未改產品碼、未改測試碼，僅收斂 handoff 文件契約描述。
-  - 未改 RR 公式、策略方向、DB schema/write path、approved write CLI、Phase 3 runner、live Telegram。
-  - 未修改 tests/test_market_theme_evidence.py，不宣稱該檔有 diff。
+  - 只處理 TASK.md 指定的 presentation/message list 降噪與對應 rendered message probes。
+  - 沒有改策略判斷、買賣 / 加減碼、停損停利、RR 公式、DB schema、DB write path、production backfill 或 live Telegram。
+  - 沒有清理旁支檔案，沒有擴大為全量 template 重設。
+  - 本輪未直接編輯 CHANGELOG.md；由 runner 依本回答覆寫。
 
   ## 契約影響
 
-  - load_strategy_evidence_summary() 不新增「所有分支都回傳 dict」的 public contract。
-  - load_strategy_evidence_summary() 在 missing-source、insufficient-data、fail-closed 類分支仍保留既有 textual summary 回傳口徑。
-  - load_strategy_evidence_summary() 在 feature rows / price rows 足夠並可計算 outcome rows 時，透過 report_from_rows() 回傳包含 rendered_text、text、structured_status、setup_strategy_samples、classification_report 的
-    dict，用於 evidence scoring。
-  - compute_evidence_score(report_context, name) 仍回傳 (score, status)；score 來源改為 market/theme background 與 per-stock strategy setup sample 加權合成。
-  - per-stock strategy setup matching 只接受明確 setup 欄位；缺欄位時 unavailable，modifier = 1.0。
-  - rendered score line 在 unavailable / blocked boost 時顯示「證據：不適用」，不顯示正向加成。
-  - 無 VERSION bump，使用者可見版本仍維持 v20.4.31。
-  - 無 DB write、live Telegram、正式 backfill、RR 公式或買賣策略契約變更。
+  - 使用者可見 message list 有調整：summary 文案由多行 市場 / 今日結論 / 原因 / 最強 / 風險 收斂為 市場/結論 與 原因/風險，並移除 🔥 最強 推薦語感。
+  - format_cross_day_tracking_summary() 新增 optional report_context、market_mode 參數，既有回傳仍是 list of strings；直接呼叫方已同步以 keyword 傳入，不改 strategy payload。
+  - 資料依據 section visibility 改為異常觸發；正常盤中 / 盤後 summary 不再固定顯示 簡報＋資料依據。
+  - 卡片 formatter 不再輸出不可用歷史 / 回測行；可用 backtest line contract 保留。
+  - VERSION / header 仍為 v20.4.31。
+  - 無 DB 寫入、CLI 輸出、RR、策略 decision 或 public payload shape 變更。
 
   ## 直接消費者同步
 
-  - Telegram rendered card 已用 probe 覆蓋：缺明確 setup + market missing + summary 正樣本時，不顯示「證據 +%」。
-  - direct card consumer / stock.<name>.risk.value 仍由 build_report_context() 同步寫入 technical_confidence、evidence_status、evidence_modifier、final_confidence。
-  - Summary / 未持倉漏斗 / tracking count 已用 B5 probe 覆蓋拆分一致。
-  - QA 已回報 functionality passed；本次已針對 QA conditional item 修正 CHANGELOG overclaim。
+  - presentation/report.py summary renderer 已同步消費新的 tracking summary 與資料依據 visibility helper。
+  - core/generator.py cross-day tracking formatter 已同步文案與 optional signature。
+  - tests/test_generator_report.py 補 / 更新 rendered message probes，覆蓋盤中、盤後、source-error、卡片歷史不可用與既有 B5 count consistency 路徑。
+  - 直接消費者包含 Owner Telegram 手機閱讀、盤中 rendered message、盤後 rendered message、QA rendered snapshot/probe。
 
   ## 未影響模組
 
-  - 未改 presentation/report.py
-  - 未改 tests/test_market_theme_evidence.py
-  - 未改 DB / Supabase write path
-  - 未改 Telegram live delivery
-  - 未改 RR / overheat / chase hard blocker 定義
-  - 未改 VERSION
+  - 未改 services/analysis.py
+  - 未改 strategy evidence loader / DB source-of-truth
+  - 未改 RR / overheat / chase hard blocker
+  - 未改 DB schema / RLS / grant / policy / role / index / constraint
+  - 未改 Supabase write path、production backfill、live Telegram delivery
+  - 未改 VERSION，仍為 v20.4.31
 
   ## 已跑自檢命令
 
   - git diff --check：passed
   - PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/stock_tech_pycache arch -arm64 .venv/bin/python -m pytest -q tests/
-    test_strategy_evidence.py::StrategyEvidenceTest::test_load_summary_consumes_cross_version_outcome_history tests/
-    test_generator_report.py::GeneratorReportTest::test_setup_strategy_summary_drives_per_stock_modifier_and_rendered_cards tests/
-    test_generator_report.py::GeneratorReportTest::test_setup_summary_without_explicit_stock_setup_fails_closed_and_hides_boost tests/
-    test_generator_report.py::GeneratorReportTest::test_b5_tracking_split_matches_card_states_and_tracking_total：4 passed
-  - 兩次 pytest node-id typo 嘗試在 collection 階段失敗，原因是測試名稱輸入錯誤，未進入測試本體；已用正確 node id 重跑通過
+    test_generator_report.py::GeneratorReportTest::test_presentation_noise_intraday_no_valid_entry_uses_track_only_without_data_basis tests/
+    test_generator_report.py::GeneratorReportTest::test_presentation_noise_afterhours_normal_sources_hide_data_basis tests/
+    test_generator_report.py::GeneratorReportTest::test_presentation_noise_afterhours_source_error_shows_single_data_basis tests/
+    test_generator_report.py::GeneratorReportTest::test_presentation_noise_card_history_unavailable_hidden_across_cards：4 passed，13 warnings
+  - QA phone probe evidence（引用 QA 阻塞原因以外的既有反證結果，Tech 不宣告 QA 通過）：has_track_only=True、has_strong_tracking=False、data_basis_count=0
 
   ## 殘留風險
 
-  - 本輪 handoff-only continuation 未跑 full pytest；只重跑與 QA condition / TASK 直接相關的 targeted tests。
-  - production evidence 長期資料品質、setup 欄位覆蓋率與樣本分布未處理，屬 TASK 非目標。
-  - load_strategy_evidence_summary() 回傳型別仍依分支不同可能是 textual summary 或 structured dict；目前 CHANGELOG 已明確描述，不宣稱 all-branches dict contract。
+  - 本輪只跑 presentation noise targeted tests，未跑 full pytest。
+  - 降噪只保證 rendered message 層；production 資料品質、策略樣本覆蓋率與長期 source-of-truth 非本輪目標。
+  - 資料依據異常顯示依賴現有 source_status_summary / evidence_manifest 狀態欄位；若上游新增異常 status 名稱，需另補 mapping。
 
   ## 旁支待辦
 
-  - 若 production payload 缺明確 setup 欄位，需另開資料品質 / source-of-truth 任務，不應在 report layer 推導補缺口。
-  - 若後續要把 load_strategy_evidence_summary() 統一成 all-branches structured return，需另開 public helper contract 任務並同步所有直接呼叫方與測試。
+  - 若 Owner 要重新設計全量 Telegram template 或 section 順序，需另開任務。
+  - 若 production source 狀態欄位不完整，需另開 source-of-truth / data quality 任務。
+  - 若要統一更多歷史 / 回測 formatter contract，需另開 public helper contract 任務並同步所有直接呼叫方。

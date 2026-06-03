@@ -6286,7 +6286,7 @@ def format_strong_prepare_summary(watch_items, market_mode, limit=3):
     return lines
 
 
-def format_cross_day_tracking_summary(watch_items, limit=3):
+def format_cross_day_tracking_summary(watch_items, limit=3, report_context=None, market_mode=None):
 
     items = []
     for index, (name, data) in enumerate(watch_items):
@@ -6303,9 +6303,9 @@ def format_cross_day_tracking_summary(watch_items, limit=3):
         return []
 
     items.sort(key=lambda item: item[0])
-    lines = ["追蹤最強："]
+    lines = ["僅追蹤："]
     for _priority, name, label in items[:limit]:
-        lines.append(f"- {name} {label}，不可買，待觸發")
+        lines.append(f"- {name}（{label}，未達進場條件）")
     if len(items) > limit:
         lines.append(f"- 另 {len(items) - limit} 檔見詳情")
     return lines

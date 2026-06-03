@@ -59,27 +59,35 @@ def formatTelegramSummary(
         lines.append(f"⚠ {daily_write_warning}")
 
     holding_names = "、".join(name for name, _data in holding_items) or "無"
-    lines.extend([
-        f"📊 市場：{market_mode}｜{risk_level}",
-    ])
+    conclusion_text = deps["today_conclusion_text"](
+        holding_items,
+        watch_items,
+        market_mode,
+        risk_level,
+        report_phase=report_phase,
+        report_context=report_context,
+    )
+    reason_text = deps["today_reason_text"](
+        watch_items,
+        market_mode,
+        report_phase=report_phase,
+        report_context=report_context,
+    )
+    risk_text = deps["compact_risk_text"](results_map)
+    lines.append(f"市場/結論：{market_mode}｜{risk_level}；{conclusion_text}")
 
     if report_phase == "盤中":
         lines.append(deps["source_summary_text"](results_map))
 
-    lines.extend([
-        f"🧭 今日結論：{deps['today_conclusion_text'](holding_items, watch_items, market_mode, risk_level, report_phase=report_phase, report_context=report_context)}",
-        f"🧭 原因：{deps['today_reason_text'](watch_items, market_mode, report_phase=report_phase, report_context=report_context)}",
-    ])
+    lines.append(f"原因/風險：{reason_text}；{risk_text}")
 
     lines.extend([
         *deps["market_execution_bridge_lines"](holding_items, watch_items, market_mode, market_summary),
-        *deps["format_cross_day_tracking_summary"](watch_items),
+        *deps["format_cross_day_tracking_summary"](watch_items, report_context=report_context, market_mode=market_mode),
         *deps["format_strong_prepare_summary"](watch_items, market_mode),
         *deps["format_market_theme_summary_lines"](
             report_context.get("market_theme_evidence") or deps["market_theme_summary_evidence"](results_map, market_summary)
         ),
-        f"🔥 最強：{deps['best_stock_text'](results_map, best, score, report_context=report_context)}",
-        f"🚨 風險：{deps['compact_risk_text'](results_map)}",
         f"📌 持倉：{holding_names}",
     ])
 
@@ -140,6 +148,27 @@ def _strategy_evidence_text(strategy_evidence_summary):
     if isinstance(strategy_evidence_summary, dict):
         return strategy_evidence_summary.get("rendered_text") or strategy_evidence_summary.get("text")
     return strategy_evidence_summary
+
+
+def _is_unavailable_history_line(line):
+    if not line:
+        return True
+    return (
+        line in {"回測：-", "歷史：-"}
+        or "回測：不可用" in line
+        or "歷史：不可用" in line
+        or "樣本不足" in line
+    )
+
+
+def _card_history_line(data, report_context, deps):
+    strategy_line = deps["_strategy_sample_unavailable_card_line"](report_context)
+    if strategy_line:
+        return None
+    line = deps["compact_backtest_line"](data.get("backtest_context"))
+    if _is_unavailable_history_line(line):
+        return None
+    return line
 
 
 def _afterhours_card_text(line, report_context):
@@ -281,11 +310,7 @@ def formatTelegramPositionCard(name, data, *, deps, report_context=None):
         f"下一步：{next_step}",
         deps["_source_status_line"](report_context, name, holding=True) if report_context else None,
         f"{rr_line}｜{score_text}｜V {data.get('volume_ratio', '-')}x",
-        (
-            None
-            if _report_phase(report_context) == "盤後" and deps["_strategy_sample_unavailable"](report_context)
-            else deps["_strategy_sample_unavailable_card_line"](report_context) or deps["compact_backtest_line"](data.get("backtest_context"))
-        ),
+        _card_history_line(data, report_context, deps),
         deps["price_change_line"](data.get("price"), data.get("change")),
     ]
     lines = [line for line in lines if line is not None]
@@ -431,11 +456,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         ),
         data_line,
         low_volume_limit_up_risk,
-        (
-            None
-            if _report_phase(report_context) == "盤後" and deps["_strategy_sample_unavailable"](report_context)
-            else deps["_strategy_sample_unavailable_card_line"](report_context) or deps["compact_backtest_line"](data.get("backtest_context"))
-        ),
+        _card_history_line(data, report_context, deps),
         price_line,
     ])
     lines = [line for line in lines if line is not None]
@@ -527,10 +548,7 @@ def _afterhours_brief_lines(holding_items, watch_items, report_context, deps, ma
         ])
     elif not actionable:
         lines.append("新增有效進場：無")
-    lines.extend([
-        _strategy_sample_status_line(report_context, deps),
-        f"明日前確認：{'；'.join(checks[:3])}。",
-    ])
+    lines.append(f"明日前確認：{'；'.join(checks[:3])}。")
     if holding_items:
         lines.extend([
             "",
@@ -582,8 +600,6 @@ def _market_theme_data_basis_line(report_context, deps):
 
 
 def _strategy_sample_data_basis_line(report_context, deps):
-    if _report_phase(report_context) == "盤後":
-        return None
     strategy = deps["_field_by_key"](report_context, "evidence.strategy_sample")
     status = strategy.get("source_status", "missing-source")
     if status == "missing-source":
@@ -726,6 +742,52 @@ def _decision_brief_lines(summary_message, version, excluded_summary_lines=None,
     return lines
 
 
+def _status_is_abnormal(status):
+    return status in {
+        "missing-source",
+        "source-error",
+        "insufficient-data",
+        "insufficient",
+        "missing",
+        "unresolved-conflict",
+    }
+
+
+def _has_abnormal_data_basis(report_context):
+    statuses = (report_context or {}).get("source_status_summary") or {}
+    for key, status in statuses.items():
+        if key == "position" and status == "not-applicable":
+            continue
+        if _status_is_abnormal(status):
+            return True
+    for field in (report_context or {}).get("evidence_manifest") or []:
+        field_name = field.get("field_name") or ""
+        status = field.get("source_status") or field.get("status")
+        if field_name.startswith("source.") and _status_is_abnormal(status):
+            return True
+        if field.get("conflict") not in [None, "", "none"]:
+            return True
+    return False
+
+
+def _data_basis_lines(report_context, holding_items, watch_items, deps, market_mode=None):
+    if not _has_abnormal_data_basis(report_context):
+        return []
+    lines = [
+        _market_theme_data_basis_line(report_context, deps),
+        _strategy_sample_data_basis_line(report_context, deps),
+        _position_candidate_data_basis_line(
+            report_context,
+            holding_items=holding_items,
+            watch_items=watch_items,
+            deps=deps,
+            market_mode=market_mode,
+        ),
+        *_evidence_human_status_lines(report_context, deps),
+    ]
+    return [line for line in lines if line is not None]
+
+
 def format_brief_data_evidence_message(
     report_context,
     holding_items,
@@ -762,24 +824,22 @@ def format_brief_data_evidence_message(
         ]
         decision_lines = brief_lines + decision_lines
 
+    data_basis_lines = _data_basis_lines(
+        report_context,
+        holding_items,
+        watch_items,
+        deps,
+        market_mode=market_mode,
+    )
+    title = f"🧾 {version} 簡報＋資料依據" if data_basis_lines else f"🧾 {version} 簡報"
     lines = [
-        f"🧾 {version} 簡報＋資料依據",
+        title,
         "",
         "決策簡報",
         *decision_lines,
-        "",
-        "資料依據",
-        _market_theme_data_basis_line(report_context, deps),
-        _strategy_sample_data_basis_line(report_context, deps),
-        _position_candidate_data_basis_line(
-            report_context,
-            holding_items=holding_items,
-            watch_items=watch_items,
-            deps=deps,
-            market_mode=market_mode,
-        ),
-        *_evidence_human_status_lines(report_context, deps),
     ]
+    if data_basis_lines:
+        lines.extend(["", "資料依據", *data_basis_lines])
     return "\n".join(line for line in lines if line is not None)
 
 

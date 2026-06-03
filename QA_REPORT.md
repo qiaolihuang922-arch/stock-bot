@@ -1,44 +1,49 @@
-# QA_REPORT: per-stock evidence 決策分數與 B5 漏斗一致性收口
+# QA_REPORT: presentation_noise_reduction_v20_4_31
 
 ## 測試範圍
 
-- 任務尺寸 / QA：risk_patch / L3。
-- 驗證範圍：M1-M7 的 evidence modifier、per-stock setup sample、弱勢/失敗/過熱封頂、資料不足 fail closed、rendered Telegram card、B5 漏斗一致、VERSION 不變。
-- 未執行：full pytest、production read-only smoke、live Telegram、DB write/backfill、production replay。
+- 任務尺寸 / QA：normal_patch / L2。
+- 驗證範圍：presentation/message list、手機閱讀順序、section visibility、卡片降噪、B5 split。
+- 未執行：full pytest、production read-only smoke、replay、backfill、live Telegram delivery。
 
 ## 關聯風險掃描
 
-- 可吸收 diff：`CHANGELOG.md`、`core/generator.py`、`services/strategy_evidence.py`、`tests/test_generator_report.py`、`tests/test_strategy_evidence.py`。
-- `load_strategy_evidence_summary()` 缺來源 / insufficient 分支仍為文字 fail-closed；rows 足夠時回傳 structured dict，含 `rendered_text`、`structured_status`、`setup_strategy_samples`。
-- `VERSION` 保持 `v20.4.31`。
-- 未見 DB schema/write、approved write CLI、live Telegram、RR 公式改動。
+- 可吸收 diff：`CHANGELOG.md`、`core/generator.py`、`presentation/report.py`、`tests/test_generator_report.py`。
+- `core/generator.py` 只改 `format_cross_day_tracking_summary()` signature 與文案：`追蹤最強` -> `僅追蹤`。
+- `presentation/report.py` 只改 summary 合併、卡片 history/backtest hidden helper、data basis abnormal visibility。
+- 未碰 DB schema/write path、RR 公式、production backfill、live Telegram。
+- VERSION 保持 `v20.4.31`。
 
 ## 跨區塊語意一致性
 
-- 旺宏 / 聯電不同 explicit setup modifier：通過。
-- 缺 explicit setup 不用 report layer 推導補 boost：通過。
-- weak / failed / EXTREME / technical=0 不吃正向 boost：通過。
-- B5 official rendered path：Summary、漏斗、card 在同一 market_mode 下三方一致。
-- strategy 跨版本 outcome history：通過。
+- 無有效進場時不再輸出 `追蹤最強` / `🔥 最強`，改為 `僅追蹤` 並標 `未達進場條件`。
+- 市場/結論與原因/風險已合併；舊 `🧭 今日結論`、`🧭 原因`、`🔥 最強` 不再作為 summary 主輸出。
+- 正常資料源：盤中與盤後簡報不顯示 `資料依據`。
+- 異常資料源：盤後 source-error 顯示單一 `簡報＋資料依據`，`策略樣本：` count 為 1。
+- B5：`隔日確認 1、等冷卻 1、等回測 1` 與卡片 `隔日確認 / 等冷卻 / 不可追高觀察` 一致。
 
 ## 使用者誤讀風險
 
-- 不可用 evidence 顯示 `證據：不適用`，不顯示 `證據 +%`。
-- Summary 明確寫 `新倉：無有效進場 / 目前沒有可行動候選`。
-- B5 漏斗沒有把 `隔日確認` 併入 `等冷卻`，split sum 與僅追蹤 count 一致。
+- 無有效進場時不再出現偽推薦感的 `追蹤最強`。
+- 交易執行仍保留短資訊，不把持倉風控整句重複成新增下單。
+- 卡片不可用回測/歷史行被隱藏，避免逐卡 `不可用` 噪音。
 
 ## 質疑與反證
 
-- Targeted tests：4 passed。
-- QA 負面 probe：WEAK、EXTREME、technical=0 即使有正向 setup sample，也不顯示 boost。
-- QA 手機閱讀 probe：Telegram Summary / 未持倉漏斗 / card 的 B5 計數一致。
-- 初次 pytest 使用預設架構命中 `.venv` arm64/x86_64 不相容；已按 runner 口徑用 `arch -arm64 .venv/bin/python` 重跑通過。
+- `test_presentation_noise_intraday_no_valid_entry_uses_track_only_without_data_basis`
+- `test_presentation_noise_afterhours_normal_sources_hide_data_basis`
+- `test_presentation_noise_afterhours_source_error_shows_single_data_basis`
+- `test_presentation_noise_card_history_unavailable_hidden_across_cards`
+- `test_b5_tracking_split_matches_card_states_and_tracking_total`
+- 結果：5 passed，13 warnings。
+- 既有手機路徑 probes：3 passed，25 warnings。
+- `git diff --check`：passed。
 
 ## 未測項目
 
 - 未跑 full pytest。
-- 未跑 production read-only smoke、live Telegram、DB write/backfill。
-- 未驗長期 production setup 欄位覆蓋率與樣本分布。
+- 未做 production read-only smoke、replay、backfill、live Telegram。
+- 未驗未來新增 source status 名稱。
 
 ## QA 結論
 

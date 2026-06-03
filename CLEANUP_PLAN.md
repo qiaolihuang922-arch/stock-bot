@@ -15,6 +15,14 @@
 
 ## Completed
 
+- `presentation_noise_reduction_v20_4_31`:
+  - 問題：Owner 要簡報按手機閱讀重構，消除重複行、偽推薦 `追蹤最強`、逐卡不可用噪音、資料依據過度展示，以及 B5 漏斗 / 卡片分類漂移。
+  - 結果：市場/結論與原因/風險合併；無有效進場時使用 `僅追蹤` 並標未達進場條件；資料依據正常隱藏、異常才短顯示；卡片不可用歷史/回測行隱藏；B5 official rendered path 三方一致；VERSION 保持 `v20.4.31`。
+  - 可重跑補強：新增 / 更新盤中 no-valid-entry、盤後正常 source hidden、盤後 source-error single data basis、卡片 unavailable history hidden、B5 tracking split、既有 message order / afterhours readability / execution contract probes。
+  - QA 反證：第一輪 QA blocked 有效攔住 CHANGELOG 錯輪；同步 handoff 後 Re-QA 通過。QA 補手機閱讀 probe，確認 summary 無 `追蹤最強 / 🔥 最強`、盤中 `資料依據` count=0、B5 split 與 card 一致。
+  - 主 repo 驗證：rendered/message tests 8 passed，25 warnings；`py_compile` / `git diff --check` passed。
+  - 規則治理：`mobile_reading` + `QA反證` + `runner_gap`。報文降噪必須用 rendered message 直接消費者測試；Tech CHANGELOG 仍會錯輪，需持續補 handoff sync/gate。
+  - 邊界：未改 strategy decision、RR、DB schema/write、production backfill、live Telegram。
 - `per_stock_evidence_score_funnel_p0_p3_20260602`:
   - 問題：market/theme 已接通後，evidence 仍可能只是共享背景 boost；Owner 要 strategy_sample 成為 per-stock 分量，弱勢 / 失敗 / 過熱 / technical=0 不得被市場背景抬分，B5 漏斗與卡片一致。
   - 結果：strategy setup sample 以 explicit setup key 匹配；缺 explicit setup fail closed；evidence_score 用 market 0.4 + strategy 0.6 合成；失敗 / 弱勢 / EXTREME / technical<=0 modifier 封頂 1.0；B5 official rendered path 三方一致；VERSION 保持 `v20.4.31`。
