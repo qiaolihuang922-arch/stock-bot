@@ -15,8 +15,8 @@
 ## Latest Completed Work
 
 - task_id：`trend_continuation_v20_4_36_validation_monitor_report_noise_20260603`
-- 狀態：code done / local focused validation passed / QA conditional pass due runner_gap / pending commit-push。
-- commits：pending。
+- 狀態：code done / local focused validation passed / QA conditional pass due runner_gap / committed / pending push。
+- commit：`9eea5c4 Validate trend continuation trigger and hide data basis`。
 - 結論：v20.4.36 的 trend_continuation 已補「真能觸發」驗證、只讀監控、手機資料依據隱藏與回測行降噪。
 - 關鍵行為：
   - 新增 `tests/test_trend_continuation.py`，確認正式 `strategy()` 在回踩延續 fixture 會輸出 `decision_type="trend_continuation"` / BUY / 小倉 `<=15%`，official report 出現「趨勢延續」與「小倉」。
