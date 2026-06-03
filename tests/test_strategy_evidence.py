@@ -1,5 +1,5 @@
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -175,6 +175,10 @@ class StrategyEvidenceTest(unittest.TestCase):
                 self.calls.append((self.name, "limit", value))
                 return self
 
+            def range(self, start, end):
+                self.calls.append((self.name, "range", start, end))
+                return self
+
             def execute(self):
                 return SimpleNamespace(data=[])
 
@@ -190,9 +194,9 @@ class StrategyEvidenceTest(unittest.TestCase):
         strategy_evidence.load_strategy_evidence_summary(client, "v20.0.6", limit=25)
 
         self.assertIn(("daily_signal_snapshot", "order", "trade_date", {"desc": True}), client.calls)
-        self.assertIn(("daily_signal_snapshot", "limit", 25), client.calls)
+        self.assertIn(("daily_signal_snapshot", "range", 0, 999), client.calls)
         self.assertIn(("daily_price", "order", "trade_date", {"desc": True}), client.calls)
-        self.assertIn(("daily_price", "limit", 25), client.calls)
+        self.assertIn(("daily_price", "range", 0, 999), client.calls)
 
     def test_load_summary_uses_desc_limit_before_downstream_summary(self):
         class Query:
@@ -215,6 +219,11 @@ class StrategyEvidenceTest(unittest.TestCase):
 
             def limit(self, value):
                 self.calls.append((self.name, "limit", value))
+                return self
+
+            def range(self, start, end):
+                self.calls.append((self.name, "range", start, end))
+                self.rows = self.rows[start:end + 1]
                 return self
 
             def execute(self):
@@ -256,10 +265,10 @@ class StrategyEvidenceTest(unittest.TestCase):
 
         self.assertLess(
             signal_calls.index(("daily_signal_snapshot", "order", "trade_date", {"desc": True})),
-            signal_calls.index(("daily_signal_snapshot", "limit", 25)),
+            signal_calls.index(("daily_signal_snapshot", "range", 0, 999)),
         )
         self.assertLess(
-            signal_calls.index(("daily_signal_snapshot", "limit", 25)),
+            signal_calls.index(("daily_signal_snapshot", "range", 0, 999)),
             signal_calls.index(("daily_signal_snapshot", "execute")),
         )
         self.assertIn("狀態：不可用", text)
@@ -297,6 +306,11 @@ class StrategyEvidenceTest(unittest.TestCase):
             def limit(self, value):
                 self.calls.append((self.name, "limit", value))
                 self.rows = self.rows[:value]
+                return self
+
+            def range(self, start, end):
+                self.calls.append((self.name, "range", start, end))
+                self.rows = self.rows[start:end + 1]
                 return self
 
             def execute(self):
@@ -363,6 +377,127 @@ class StrategyEvidenceTest(unittest.TestCase):
         self.assertEqual(summary["structured_status"]["status"], "available")
         self.assertGreater(summary["setup_strategy_samples"]["RR不足"]["sample_count"], 0)
         self.assertEqual(summary["setup_strategy_samples"]["RR不足"]["status"], "ready")
+
+    def test_load_summary_defaults_to_recent_60_distinct_cross_version_days(self):
+        class Query:
+            def __init__(self, name, calls, rows):
+                self.name = name
+                self.calls = calls
+                self.rows = rows
+
+            def select(self, *_args, **_kwargs):
+                self.calls.append((self.name, "select"))
+                return self
+
+            def eq(self, *_args, **_kwargs):
+                self.calls.append((self.name, "eq", _args, _kwargs))
+                return self
+
+            def order(self, field, **kwargs):
+                self.calls.append((self.name, "order", field, kwargs))
+                self.rows = sorted(
+                    self.rows,
+                    key=lambda row: str(row.get(field) or ""),
+                    reverse=kwargs.get("desc", False),
+                )
+                return self
+
+            def limit(self, value):
+                self.calls.append((self.name, "limit", value))
+                self.rows = self.rows[:value]
+                return self
+
+            def range(self, start, end):
+                self.calls.append((self.name, "range", start, end))
+                self.rows = self.rows[start:end + 1]
+                return self
+
+            def execute(self):
+                self.calls.append((self.name, "execute"))
+                return SimpleNamespace(data=self.rows)
+
+        class Client:
+            def __init__(self):
+                self.calls = []
+                base_date = datetime(2026, 3, 1)
+                dates = [
+                    (base_date + timedelta(days=offset)).strftime("%Y-%m-%d")
+                    for offset in range(80)
+                ]
+                stock_ids = [f"24{i:02d}" for i in range(25)]
+                self.rows = {
+                    "daily_signal_snapshot": [
+                        {
+                            "stock_id": stock_id,
+                            "trade_date": trade_date,
+                            "version": "vA" if day_index % 2 else "vB",
+                            "close": 100,
+                            "volume_ratio": 1.0,
+                            "pattern": "BREAKOUT_NEAR",
+                            "market_state": "B",
+                            "structure_state": "NORMAL",
+                            "position_state": "WAIT",
+                            "rr": 1.5,
+                            "score": 4,
+                            "heat_level": 1,
+                            "action": "BUY",
+                            "reasons": ["買點成立"],
+                            "is_tradeable": True,
+                            "is_best_candidate": day_index == 79 and stock_id == "2401",
+                        }
+                        for day_index, trade_date in enumerate(dates)
+                        for stock_id in stock_ids
+                    ],
+                    "daily_price": [
+                        {
+                            "stock_id": stock_id,
+                            "trade_date": trade_date,
+                            "open": close,
+                            "high": high,
+                            "low": low,
+                            "close": close,
+                            "volume": 1000,
+                        }
+                        for day_index, trade_date in enumerate(dates)
+                        for stock_id in stock_ids
+                        for close, high, low in [
+                            (100 + day_index, 102 + day_index, 99 + day_index),
+                        ]
+                    ],
+                }
+
+            def table(self, name):
+                return Query(name, self.calls, list(self.rows.get(name, [])))
+
+        client = Client()
+        captured = {}
+
+        def capture_report(feature_rows, outcome_rows, audit_rows=None):
+            captured["feature_rows"] = feature_rows
+            captured["outcome_rows"] = outcome_rows
+            return {
+                "rendered_text": "ok",
+                "structured_status": {"status": "available"},
+                "setup_strategy_samples": {},
+            }
+
+        with patch.object(strategy_evidence, "report_from_rows", side_effect=capture_report):
+            strategy_evidence.load_strategy_evidence_summary(client, "v20.4.32")
+
+        self.assertIn(("daily_signal_snapshot", "range", 0, 999), client.calls)
+        self.assertIn(("daily_signal_snapshot", "range", 1000, 1999), client.calls)
+        self.assertIn(("daily_price", "range", 0, 999), client.calls)
+        self.assertIn(("daily_price", "range", 1000, 1999), client.calls)
+        self.assertNotIn(("daily_signal_snapshot", "eq", ("version", "v20.4.32"), {}), client.calls)
+        feature_dates = {row["trade_date"] for row in captured["feature_rows"]}
+        outcome_dates = {row["trade_date"] for row in captured["outcome_rows"]}
+        self.assertEqual(len(feature_dates), 60)
+        self.assertEqual(len(captured["feature_rows"]), 1500)
+        self.assertEqual(min(feature_dates), "2026-03-21")
+        self.assertEqual(max(feature_dates), "2026-05-19")
+        self.assertEqual(len(outcome_dates), 59)
+        self.assertIn("2026-03-21", outcome_dates)
+        self.assertNotIn("2026-03-20", feature_dates)
 
     def test_record_strategy_evidence_reuses_injected_client(self):
         payload = {

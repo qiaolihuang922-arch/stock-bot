@@ -6,7 +6,7 @@
 
 - 專案：台股策略 Telegram 報文機器人。
 - 正式結果以 git / runner 產生報文為準。
-- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.31`。
+- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.32`。
 - 固定 8 份 Markdown 不刪：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 - Architect 是總控；產品 / 策略 / 報文 bug 或 feature 預設走 PM -> Tech -> QA。
 - 跨日狀態、已執行交易、歷史 evidence 必須來自 production DB 或 Owner 指定持久來源；local/runtime/worktree 不能當跨日記憶。
@@ -27,6 +27,22 @@
 - 驗證：QA `通過`；full pytest 264 passed，153 warnings（第三方 deprecation 類）。
 
 ## Latest Completed Handoff
+
+- task_id：`20260603_strategy_evidence_report_risk_patch`
+- 狀態：QA passed；commit / push 待 final 收口。
+- 問題：Owner 要一次性完成 A1+B1-B4+C：strategy evidence 跨版本歷史要真正進樣本；未持倉可買不得混入交易執行；原因 / 風險需拆分；partial +0% 不得誤導；同日建倉 hard_stop / 快速止損不得被剛買入豁免。
+- 修正：
+  - `load_strategy_evidence_summary(limit=60)` 移除 version filter，改用 `.range()` 分頁，直到資料涵蓋超過 60 個 distinct `trade_date` 後裁切為最近 60 交易日；高 row-density 不再退回 60 rows。
+  - 未持倉可買移至 `新倉建議`，標示 `尚未買入｜建議分批`；`今日盤中交易執行` 只列已執行 / 持倉動作。
+  - Summary 拆 `原因` / `風險`，按持倉 / 新倉對象呈現；空交易執行不顯示 `無新增下單`。
+  - partial evidence modifier = 1.0 顯示 `僅輔助參考`，不顯示 `+0%`。
+  - 同日建倉若跌破 hard_stop、入場價 -3%、或入場 K 棒低點，顯示當日減碼；僅破警戒仍為新倉風控觀察。
+  - 報文版本升 `v20.4.32`；D1 光寶科同日淘汰 -> 可買翻轉維持 deferred。
+- 驗證：QA `通過`；主 repo `tests/test_strategy_evidence.py tests/test_generator_report.py tests/test_market_theme_evidence.py` 201 passed，241 warnings；`py_compile` passed；`git diff --check` passed。
+- QA 反證：前兩輪 QA blocked 抓到 A1 先是 60 rows、後是 `limit * 20` 在 25 檔/日只覆蓋 48 天；最終 pagination 版通過 61 天 x 17 檔跨頁邊界 probe，保留 60 distinct dates / 1020 rows，無 version eq。
+- 邊界：未改 RR 公式、DB schema/write、production backfill、live Telegram；未跑 production smoke / full pytest。
+
+## Previous Completed Handoff
 
 - task_id：`telegram_message_noise_consistency_20260603`
 - 狀態：done / committed / pushed；Git completion gate passed。

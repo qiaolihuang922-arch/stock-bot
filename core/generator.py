@@ -69,7 +69,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.31"
+VERSION = "v20.4.32"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -3432,6 +3432,8 @@ def position_summary_action(name, data):
         return "第二段停利"
 
     if is_today_buy_holding(data):
+        if today_buy_holding_risk_reason(data, decision) and level in ["REDUCE_25", "REDUCE_50"]:
+            return "減碼"
         return "新倉風控觀察"
 
     duplicate_action = cross_day_duplicate_action(data, decision)
@@ -3550,6 +3552,60 @@ def today_buy_holding_current_can_buy(data):
 
     result = data.get("result") or {}
     return is_valid_entry(result)
+
+
+def _float_or_none(value):
+
+    try:
+        if value is None or isinstance(value, bool):
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _entry_candle_low(data):
+
+    result = data.get("result") or {}
+    holding = data.get("holding") or {}
+    events = position_events_dict(data)
+    for source in [data, holding, events, result]:
+        for key in ["entry_candle_low", "entry_low", "buy_candle_low", "entry_k_low"]:
+            value = _float_or_none((source or {}).get(key))
+            if value is not None:
+                return value
+    return None
+
+
+def today_buy_holding_risk_reason(data, decision=None):
+
+    if not is_today_buy_holding(data):
+        return None
+
+    decision = decision or data.get("holding_decision") or {}
+    price = _float_or_none(data.get("price"))
+    if price is None:
+        return None
+
+    hard_stop = _float_or_none(decision.get("hard_stop_price"))
+    if hard_stop is not None and price <= hard_stop:
+        return "同日建倉後跌破 hard_stop"
+
+    holding = data.get("holding") or {}
+    entry_price = _float_or_none(
+        data.get("entry_price")
+        or holding.get("entry_price")
+        or holding.get("avg_price")
+        or (position_events_dict(data) or {}).get("buy_price")
+    )
+    if entry_price is not None and price <= entry_price * 0.97:
+        return "同日建倉後跌破快速止損 / 入場價 3%"
+
+    entry_low = _entry_candle_low(data)
+    if entry_low is not None and price <= entry_low:
+        return "同日建倉後跌破快速止損 / 入場 K 棒低點"
+
+    return None
 
 
 def today_buy_holding_context_line(data):
@@ -5667,21 +5723,27 @@ def today_reason_text(watch_items, market_mode, report_phase=None, report_contex
 def build_execution_items(holding_items, watch_items, market_mode=None, report_context=None):
 
     holding_items = sorted(holding_items, key=lambda item: holding_execution_priority(item[0], item[1]))
-    watch_items = sorted(
-        enumerate(watch_items),
-        key=lambda item: unheld_execution_priority(
-            item[0], item[1][0], item[1][1], market_mode=market_mode, report_context=report_context
-        )
-    )
 
     items = [
         holding_execution_item(name, data)
         for name, data in holding_items
     ]
 
+    return items
+
+
+def new_entry_suggestion_items(watch_items, market_mode=None, report_context=None):
+
+    watch_items = sorted(
+        enumerate(watch_items),
+        key=lambda item: unheld_execution_priority(
+            item[0], item[1][0], item[1][1], market_mode=market_mode, report_context=report_context
+        )
+    )
+    items = []
     for index, (name, data) in watch_items:
         item = unheld_execution_item(index, name, data, market_mode=market_mode, report_context=report_context)
-        if item:
+        if item and item.get("state") == "可買":
             items.append(item)
 
     return items
@@ -5742,38 +5804,11 @@ def post_market_plan_line(item):
 def format_execution_checklist(holding_items, watch_items, limit=5, report_phase=None, market_mode=None, report_context=None):
 
     items = pending_trade_items(holding_items, watch_items, market_mode=market_mode, report_context=report_context)
-    funnel = build_unheld_funnel(watch_items, market_mode=market_mode, report_context=report_context)
-    prepare_counts = unheld_prepare_bucket_counts(
-        watch_items,
-        funnel=funnel,
-        market_mode=market_mode,
-        report_context=report_context,
-    )
-    tracking_count = unheld_tracking_count(funnel)
-    prepare_count = len(funnel["可準備"])
-    tracking_only_count = unheld_tracking_only_count(funnel)
-    next_day_count = unheld_next_day_count(funnel)
+    items.extend(executed_trade_items(holding_items, watch_items, market_mode=market_mode, report_context=report_context))
     intraday = report_phase in (None, "盤中")
-    tracking_suffix = (
-        "不列入今日盤中交易執行"
-        if intraday
-        else "不列入明日計畫"
-    )
 
     if not items:
-        lines = ["無新增下單"]
-        if prepare_count and tracking_only_count:
-            tail = f"未持倉 {unheld_prepare_count_text(prepare_counts)}、{tracking_only_count} 檔僅追蹤"
-            lines.append(f"{tail}，等觸發，{tracking_suffix}")
-        elif prepare_count:
-            tail = f"未持倉 {unheld_prepare_count_text(prepare_counts)}"
-            lines.append(f"{tail}，等觸發，{tracking_suffix}")
-        elif tracking_only_count:
-            tail = f"未持倉 {tracking_only_count} 檔僅追蹤"
-            lines.append(f"{tail}，等觸發，{tracking_suffix}")
-        elif next_day_count:
-            lines.append(f"未持倉 {next_day_count} 檔隔日確認，等觸發，{tracking_suffix}")
-        return lines
+        return []
 
     displayed = items[:limit]
     lines = [
@@ -5787,22 +5822,52 @@ def format_execution_checklist(holding_items, watch_items, limit=5, report_phase
         else:
             lines.append(f"另有 {len(items) - len(displayed)} 項明日計畫見詳情")
 
-    if prepare_count and tracking_only_count:
-        rejected_count = len(funnel["淘汰"])
-        total_count = sum(len(values) for values in funnel.values())
-        tail = f"未持倉 {total_count}（僅追蹤{tracking_only_count}/淘汰{rejected_count}）"
-        lines.append(f"{tail}，{tracking_suffix}")
-    elif prepare_count:
-        tail = f"未持倉 {unheld_prepare_count_text(prepare_counts)}"
-        lines.append(f"{tail}，{tracking_suffix}")
-    elif tracking_only_count:
-        rejected_count = len(funnel["淘汰"])
-        total_count = sum(len(values) for values in funnel.values())
-        tail = f"未持倉 {total_count}（僅追蹤{tracking_only_count}/淘汰{rejected_count}）"
-        lines.append(f"{tail}，{tracking_suffix}")
-    elif next_day_count:
-        lines.append(f"未持倉 {next_day_count} 檔隔日確認，{tracking_suffix}")
+    return lines
 
+
+def format_unheld_non_execution_lines(watch_items, report_phase=None, market_mode=None, report_context=None):
+
+    funnel = build_unheld_funnel(watch_items, market_mode=market_mode, report_context=report_context)
+    prepare_counts = unheld_prepare_bucket_counts(
+        watch_items,
+        funnel=funnel,
+        market_mode=market_mode,
+        report_context=report_context,
+    )
+    prepare_count = len(funnel["可準備"])
+    tracking_only_count = unheld_tracking_only_count(funnel)
+    next_day_count = unheld_next_day_count(funnel)
+    intraday = report_phase in (None, "盤中")
+    tracking_suffix = "不列入今日盤中交易執行" if intraday else "不列入明日計畫"
+
+    if prepare_count and tracking_only_count:
+        tail = f"未持倉 {unheld_prepare_count_text(prepare_counts)}、{tracking_only_count} 檔僅追蹤"
+        return [f"{tail}，等觸發，{tracking_suffix}"]
+    if prepare_count:
+        tail = f"未持倉 {unheld_prepare_count_text(prepare_counts)}"
+        return [f"{tail}，等觸發，{tracking_suffix}"]
+    if tracking_only_count:
+        tail = f"未持倉 {tracking_only_count} 檔僅追蹤"
+        return [f"{tail}，等觸發，{tracking_suffix}"]
+    if next_day_count:
+        return [f"未持倉 {next_day_count} 檔隔日確認，等觸發，{tracking_suffix}"]
+    return []
+
+
+def format_new_entry_suggestions(watch_items, limit=5, report_phase=None, market_mode=None, report_context=None):
+
+    items = new_entry_suggestion_items(watch_items, market_mode=market_mode, report_context=report_context)
+    if not items:
+        return []
+
+    intraday = report_phase in (None, "盤中")
+    timing = "盤中觸發" if intraday else "明日開盤後確認"
+    lines = [
+        f"{item['name']} 可買（分批，不追價）｜尚未買入｜建議分批｜{timing}"
+        for item in items[:limit]
+    ]
+    if len(items) > limit:
+        lines.append(f"另有 {len(items) - limit} 檔新倉建議見詳情")
     return lines
 
 
@@ -5953,6 +6018,12 @@ def detail_index_text(holding_items, watch_items, report_phase=None, market_mode
     execution_count = len(pending_trade_items(
         holding_items, watch_items, market_mode=market_mode, report_context=report_context
     ))
+    execution_count += len(executed_trade_items(
+        holding_items, watch_items, market_mode=market_mode, report_context=report_context
+    ))
+    new_entry_count = len(new_entry_suggestion_items(
+        watch_items, market_mode=market_mode, report_context=report_context
+    ))
     prepare_count = len(funnel["可準備"])
     tracking_only_count = unheld_tracking_only_count(funnel)
     rejected = funnel["淘汰"]
@@ -5962,6 +6033,8 @@ def detail_index_text(holding_items, watch_items, report_phase=None, market_mode
 
     if execution_count:
         parts.append(f"{execution_label} {execution_count}")
+    if new_entry_count:
+        parts.append(f"新倉建議 {new_entry_count}")
 
     if prepare_count:
         parts.extend(f"{label} {count}" for label, count in _prepare_count_parts(prepare_counts))
@@ -6376,9 +6449,13 @@ def _telegram_presentation_deps():
         "best_stock_text": best_stock_text,
         "compact_risk_text": compact_risk_text,
         "format_execution_checklist": format_execution_checklist,
+        "format_unheld_non_execution_lines": format_unheld_non_execution_lines,
+        "format_new_entry_suggestions": format_new_entry_suggestions,
         "format_executed_checklist": format_executed_checklist,
         "format_holding_control_checklist": format_holding_control_checklist,
         "pending_trade_items": pending_trade_items,
+        "executed_trade_items": executed_trade_items,
+        "new_entry_suggestion_items": new_entry_suggestion_items,
         "is_today_buy_holding": is_today_buy_holding,
         "today_buy_holding_context_line": today_buy_holding_context_line,
         "format_unheld_funnel": format_unheld_funnel,
@@ -6396,6 +6473,7 @@ def _telegram_presentation_deps():
         "rr_display_text": rr_display_text,
         "stock_title": stock_title,
         "position_summary_action": position_summary_action,
+        "position_summary_note": position_summary_note,
         "signed_pct": signed_pct,
         "stock_pnl": stock_pnl,
         "price_text": price_text,
@@ -6428,6 +6506,7 @@ def _telegram_presentation_deps():
         "rejected_transition_reason_line": rejected_transition_reason_line,
         "build_unheld_funnel": build_unheld_funnel,
         "pending_trade_items": pending_trade_items,
+        "new_entry_suggestion_items": new_entry_suggestion_items,
         "unheld_tracking_only_count": unheld_tracking_only_count,
         "_field_by_key": _field_by_key,
         "_manifest_status": _manifest_status,
@@ -6483,6 +6562,9 @@ def holding_reason_line(name, data):
         return "高浮盈且過熱延伸，先保留獲利"
 
     if level in ["REDUCE_25", "REDUCE_50"]:
+        today_buy_risk = today_buy_holding_risk_reason(data, decision)
+        if today_buy_risk:
+            return today_buy_risk + "，觸發當日減碼"
         if cross_day_duplicate_action(data, decision) == "reduce":
             return "歷史減碼已執行，避免同級重複"
         if str(decision.get("action", "")).startswith("硬風控"):
@@ -6688,6 +6770,9 @@ def holding_detail_decision_lines(name, data):
         return f"{action_text}，鎖定部分獲利", "高浮盈或過熱延伸，保留核心倉"
 
     if level in ["REDUCE_25", "REDUCE_50"]:
+        today_buy_risk = today_buy_holding_risk_reason(data, decision)
+        if today_buy_risk:
+            return f"{action_text}，{note or today_buy_risk}", "同日建倉後觸發快速止損 / 入場即錯"
         if str(action_text).startswith("硬風控"):
             return f"{action_text}，{note or '今日事件後仍需降低風險'}", "硬風控覆蓋，高於今日交易事件"
         if str(action_text).startswith("增量"):

@@ -15,6 +15,14 @@
 
 ## Completed
 
+- `20260603_strategy_evidence_report_risk_patch`:
+  - 問題：Owner 要直接完成 A1+B1-B4+C。核心風險是 strategy_sample 仍可能因 version / row window 取樣不足而空轉；報文把未持倉可買放進交易執行會造成已下單誤讀；同日建倉硬風控不該被「剛買入」一刀切豁免。
+  - 結果：`load_strategy_evidence_summary(limit=60)` 移除 version filter，使用 Supabase `.range()` 分頁取得最近 60 個 distinct `trade_date`；未持倉可買改列 `新倉建議` 並標 `尚未買入 / 建議分批`；原因 / 風險拆分；partial +0% 改 `僅輔助參考`；同日建倉 hard_stop / 入場價 -3% / 入場 K 低點觸發當日減碼，僅破警戒維持新倉風控觀察；VERSION 升 `v20.4.32`。
+  - 可重跑補強：`tests/test_strategy_evidence.py` 高密度 80 天 x 25 檔 fixture 驗證 60 distinct dates / 1500 feature rows / no version eq；`tests/test_generator_report.py` 覆蓋新倉建議、交易執行分區、partial evidence、同日 hard_stop / 快速止損 / 警戒緩衝；market theme tests 同步版本與文案。
+  - QA 反證：第一輪 QA blocked 抓到 Tech 只做 60 rows；第二輪 QA blocked 抓到 `limit * 20` 在高密度 rows 只覆蓋 48 天；第三輪 QA 補跨頁日期邊界 probe 通過。這是有效的 evidence_chain 反證，而不是文案檢查。
+  - 主 repo 驗證：targeted tests 201 passed，241 warnings；`py_compile` / `git diff --check` passed。
+  - 規則治理：`evidence_chain` + `QA反證` + `mobile_reading` + `runner_gap`。證據 loader 的完成口徑要驗資料形狀與反例密度，不能只驗 helper 沒有 version filter；Tech CHANGELOG 需描述整輪 diff，不可只描述最後返工片段。
+  - 邊界：未改 RR、DB schema/write、production backfill、live Telegram；D1 光寶科翻轉另開。
 - `telegram_message_noise_consistency_20260603`:
   - 問題：Owner 指出上一輪降噪仍不徹底：首屏市場/R 值重複、冗餘新倉/背景/持倉行殘留、交易執行與風控重複、僅追蹤 / cross-day 歷史 token 重複、未持倉總數漏淘汰或可買、不可行動卡片露 RR、partial +0% 語義誤導。
   - 結果：首屏 compact market line 統一交易執行 / 持倉風控 / 未持倉拆分；有可買時列 `可買N`，無可買時只列 `僅追蹤 / 淘汰`；交易執行短句；不可行動 RR 顯示 `-（不可行動）`；partial +0% 改 `僅輔助參考`；cross-day 歷史 token 去重；VERSION 保持 `v20.4.31`。

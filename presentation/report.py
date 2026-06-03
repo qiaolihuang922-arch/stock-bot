@@ -67,19 +67,39 @@ def formatTelegramSummary(
         report_phase=report_phase,
         report_context=report_context,
     )
-    reason_text = deps["today_reason_text"](
+    reason_parts = []
+    for name, data in holding_items:
+        reason = deps["holding_reason_line"](name, data) or deps["position_summary_note"](name, data)
+        if reason:
+            reason_parts.append(f"{name}：{reason}")
+    new_entry_items = deps["new_entry_suggestion_items"](
         watch_items,
-        market_mode,
-        report_phase=report_phase,
+        market_mode=market_mode,
         report_context=report_context,
     )
-    risk_text = deps["compact_risk_text"](results_map)
+    if new_entry_items:
+        reason_parts.extend(f"{item['name']}：未持倉可買，等待分批進場" for item in new_entry_items[:3])
+    if not reason_parts:
+        reason_parts.append(deps["today_reason_text"](
+            watch_items,
+            market_mode,
+            report_phase=report_phase,
+            report_context=report_context,
+        ))
+    risk_parts = []
+    if holding_items:
+        risk_parts.append("持倉：hard_stop 永不豁免，跌破警戒 / 停損依風控處理")
+    if new_entry_items:
+        risk_parts.append("新倉：尚未買入，不列入交易執行，分批且不追價")
+    if not risk_parts:
+        risk_parts.append(deps["compact_risk_text"](results_map))
     lines.append(f"市場/結論：{market_mode}｜{risk_level}；{conclusion_text}")
 
     if report_phase == "盤中":
         lines.append(deps["source_summary_text"](results_map))
 
-    lines.append(f"原因/風險：{reason_text}；{risk_text}")
+    lines.append(f"原因：{'；'.join(reason_parts)}")
+    lines.append(f"風險：{'；'.join(risk_parts)}")
 
     lines.extend([
         *deps["market_execution_bridge_lines"](holding_items, watch_items, market_mode, market_summary),
@@ -99,6 +119,17 @@ def formatTelegramSummary(
         if execution_lines:
             lines.extend(["", "✅ 今日盤中交易執行"])
             lines.extend(execution_lines)
+        new_entry_lines = deps["format_new_entry_suggestions"](
+            watch_items, report_phase=report_phase, market_mode=market_mode, report_context=report_context
+        )
+        if new_entry_lines:
+            lines.extend(["", "新倉建議"])
+            lines.extend(new_entry_lines)
+        unheld_non_execution_lines = deps["format_unheld_non_execution_lines"](
+            watch_items, report_phase=report_phase, market_mode=market_mode, report_context=report_context
+        )
+        if unheld_non_execution_lines:
+            lines.extend(unheld_non_execution_lines)
     else:
         lines.extend(["", "今日交易"])
         lines.append("新增交易建議：無")
@@ -120,6 +151,17 @@ def formatTelegramSummary(
             lines.extend(deps["format_execution_checklist"](
                 holding_items, watch_items, report_phase=report_phase, market_mode=market_mode, report_context=report_context
             ))
+        new_entry_lines = deps["format_new_entry_suggestions"](
+            watch_items, report_phase=report_phase, market_mode=market_mode, report_context=report_context
+        )
+        if new_entry_lines:
+            lines.extend(["", "新倉建議"])
+            lines.extend(new_entry_lines)
+        unheld_non_execution_lines = deps["format_unheld_non_execution_lines"](
+            watch_items, report_phase=report_phase, market_mode=market_mode, report_context=report_context
+        )
+        if unheld_non_execution_lines:
+            lines.extend(unheld_non_execution_lines)
 
     unheld_funnel_text = deps["format_unheld_funnel"](watch_items, market_mode=market_mode, report_context=report_context)
     if unheld_funnel_text:
@@ -538,6 +580,17 @@ def _compact_market_overview_line(holding_items, watch_items, report_context, de
         market_mode=market_mode,
         report_context=report_context,
     ))
+    pending_count += len(deps["executed_trade_items"](
+        holding_items,
+        watch_items,
+        market_mode=market_mode,
+        report_context=report_context,
+    ))
+    new_entry_count = len(deps["new_entry_suggestion_items"](
+        watch_items,
+        market_mode=market_mode,
+        report_context=report_context,
+    ))
     actionable_count = len(funnel.get("可買") or []) if funnel else 0
     tracking_only_count = deps["unheld_tracking_only_count"](funnel) if funnel else 0
     rejected_count = len(funnel.get("淘汰") or []) if funnel else 0
@@ -552,6 +605,8 @@ def _compact_market_overview_line(holding_items, watch_items, report_context, de
         f"持倉風控 {len(holding_items)}",
         f"未持倉 {unheld_count}（{'/'.join(unheld_parts)}）",
     ]
+    if new_entry_count:
+        parts.insert(2, f"新倉建議 {new_entry_count}")
     return "｜".join(parts)
 
 
@@ -600,6 +655,11 @@ def _afterhours_brief_lines(holding_items, watch_items, report_context, deps, ma
             "持倉風控檢查",
             *deps["format_holding_control_checklist"](holding_items, report_phase="盤後"),
         ])
+    new_entry_lines = deps["format_new_entry_suggestions"](
+        watch_items, report_phase="盤後", market_mode=market_mode, report_context=report_context
+    )
+    if new_entry_lines:
+        lines.extend(["", "新倉建議", *new_entry_lines])
     unheld_funnel_text = deps["format_unheld_funnel"](watch_items, market_mode=market_mode, report_context=report_context)
     if unheld_funnel_text:
         lines.extend(["", "未持倉漏斗（非執行）：", unheld_funnel_text])
@@ -877,6 +937,12 @@ def format_brief_data_evidence_message(
             _compact_market_overview_line(holding_items, watch_items, report_context, deps, market_mode=market_mode),
             _brief_holding_line(holding_items, deps),
         ]
+        if not deps["new_entry_suggestion_items"](
+            watch_items,
+            market_mode=market_mode,
+            report_context=report_context,
+        ):
+            brief_lines.append("新倉：無有效進場")
         decision_lines = brief_lines + decision_lines
 
     data_basis_lines = _data_basis_lines(

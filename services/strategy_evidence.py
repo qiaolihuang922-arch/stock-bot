@@ -343,6 +343,46 @@ def sorted_dates(rows):
     return sorted({str(row.get("trade_date")) for row in rows if row.get("trade_date")})
 
 
+def _recent_trade_dates(rows, limit):
+    dates = sorted_dates(rows)
+    if not limit:
+        return set(dates)
+    return set(dates[-limit:])
+
+
+def _trim_rows_to_recent_trade_dates(rows, limit):
+    keep_dates = _recent_trade_dates(rows, limit)
+    return [row for row in rows if str(row.get("trade_date")) in keep_dates]
+
+
+def _fetch_recent_date_window_rows(client, table_name, columns, limit, page_size=1000):
+    rows = []
+    start = 0
+    while True:
+        query = (
+            client.table(table_name)
+            .select(columns)
+            .order("trade_date", desc=True)
+        )
+        if hasattr(query, "range"):
+            query = query.range(start, start + page_size - 1)
+        else:
+            if start:
+                break
+            query = query.limit(page_size)
+
+        page_rows = query.execute().data or []
+        rows.extend(page_rows)
+        if not page_rows:
+            break
+        if limit and len(_recent_trade_dates(rows, None)) > limit:
+            break
+        if len(page_rows) < page_size:
+            break
+        start += page_size
+    return _trim_rows_to_recent_trade_dates(rows, limit)
+
+
 def _future_window(lookup, stock_id, trade_date, horizon_days):
     dates = sorted(lookup.get(stock_id, {}))
     if trade_date not in dates:
@@ -713,24 +753,18 @@ def format_strategy_evidence_error(error):
     return "證據層暫時略過：資料更新失敗，主報文不受影響"
 
 
-def load_strategy_evidence_summary(client, version, limit=240):
-    signal_rows = (
-        client.table("daily_signal_snapshot")
-        .select("stock_id,trade_date,version,close,volume_ratio,pattern,market_state,structure_state,position_state,rr,score,heat_level,action,reasons,is_tradeable,is_best_candidate")
-        .order("trade_date", desc=True)
-        .limit(limit)
-        .execute()
-        .data
-        or []
+def load_strategy_evidence_summary(client, version, limit=60):
+    signal_rows = _fetch_recent_date_window_rows(
+        client,
+        "daily_signal_snapshot",
+        "stock_id,trade_date,version,close,volume_ratio,pattern,market_state,structure_state,position_state,rr,score,heat_level,action,reasons,is_tradeable,is_best_candidate",
+        limit,
     )
-    price_rows = (
-        client.table("daily_price")
-        .select("stock_id,trade_date,open,high,low,close,volume")
-        .order("trade_date", desc=True)
-        .limit(limit)
-        .execute()
-        .data
-        or []
+    price_rows = _fetch_recent_date_window_rows(
+        client,
+        "daily_price",
+        "stock_id,trade_date,open,high,low,close,volume",
+        limit,
     )
     feature_rows = feature_rows_from_signal_rows(signal_rows)
     if not feature_rows:

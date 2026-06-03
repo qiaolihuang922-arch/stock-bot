@@ -1,179 +1,328 @@
-# TASK: Telegram 簡報/卡片降噪與一致性修復
+# TASK: A1+B1-B4+C 報文與 evidence 修正；D1 僅 PM 判定
 
 ## 任務狀態
 
-- task_id：telegram_message_noise_consistency_20260603
-- 任務類型：normal_patch
-- 狀態：done
-- 版本建議：使用者可見 Telegram 報文有文案與顯示契約變更，需同步檢查/更新報文版本字串；不得回退既有版本。
-- QA 分級建議：L2
+- task_id: 20260603_strategy_evidence_report_risk_patch
+- 任務類型: risk_patch
+- 狀態: done / QA passed
+- 版本建議: 使用者可見 Telegram / 報文內容有變更，需升版或同步既有報文版本字串，不得回退版本。
+- QA 分級建議: L3
+- 本輪範圍: A1 + B1 + B2 + B3 + B4 + C 納入實作與 QA；D1 僅做 PM 判定並 deferred。
 
 ## Owner 問題
 
-Telegram 簡報與未持倉/持倉卡片目前存在重複、計數不一致、不可行動標的仍露 RR、部分回測/證據文案時有時無等問題，造成手機首屏誤讀與噪音。Owner 要一次修復 9 個已點名的報文顯示問題，但不得改策略 decision、RR 公式、DB
-schema/write 或 live Telegram。
+Owner 已確認按上一份 Codex 修復指令執行，但需要重新生成正式 TASK，讓 Tech/QA 依本輪契約處理：
+
+- A1: strategy evidence 歷史取樣被 version filter 限制，導致樣本不足、modifier 不生效、可買標的顯示不適用。
+- B1-B4: Telegram / 報文在交易執行、原因/風險、未持倉回測行、partial modifier 顯示上造成手機閱讀誤讀與噪音。
+- C: 同日建倉後 hard_stop / 快速止損 / 只破警戒的處理不完整，導致聯電 -3.86% + 突破失敗可能被「剛買入」豁免。
+- D1: 光寶科同日淘汰 -> 可買翻轉是否為真問題未足以安全納入本輪，先 PM 判定為 deferred。
 
 ## 使用者可見結果
 
-手機閱讀 Telegram 報文時：
+手機閱讀 Telegram / 報文時應看到：
 
-- 首屏「市場」行只出現一次市場狀態與 R 值，並同時列出交易執行、持倉風控、未持倉總數與拆分。
-- 簡報刪除已由其他區塊表達的冗餘行。
-- 交易執行只顯示短動作摘要，不重複風控檢查完整句。
-- 僅追蹤區塊不逐行重複「修復中｜連續觀察 1 天」等歷史 token。
-- 淘汰或結構弱的不可行動卡片 RR 顯示 -（不可行動）。
-- 未持倉回測顯示口徑一致；樣本不足/不可用不逐卡製造噪音。
-- partial 且 modifier=1.0 時，證據段顯示 僅輔助參考，不顯示 +0%。
+- 「交易執行」只列已執行或持倉處理動作，不混入未持倉可買。
+- 未持倉可買標的進入「新倉建議」，並明確標示尚未買入 / 建議分批。
+- 原因與風險依對象拆分，避免持倉與未持倉原因混在一起。
+- 未持倉回測行降噪，盤中/盤後呈現一致。
+- partial evidence modifier 等於 1.0 時顯示「僅輔助參考」，不顯示「+0%」。
+- 同日建倉若跌破 hard_stop 或快速止損條件，不能被剛買入豁免；若只破警戒但未達 hard_stop / 快速止損，降級為當日觀察。
+- 聯電 fixture: 同日建倉後 -3.86% + 突破失敗，應進入「當日減碼」而不是「剛買入豁免」。
+
+手機閱讀示例形狀：
+
+交易執行
+- 已持倉：聯電｜當日減碼｜同日建倉後跌破快速止損 / 突破失敗
+
+新倉建議
+- XXX｜尚未買入｜建議分批｜evidence: ready/effective，僅輔助參考
+
+原因
+- 聯電：同日建倉後轉弱，觸發快速止損條件
+- XXX：未持倉可買，等待分批進場
+
+風險
+- 聯電：hard_stop 永不豁免
+- XXX：尚未買入，不列入交易執行
 
 ## 非目標
 
-- 不改策略 decision、買賣/加減碼判斷、停損停利邏輯。
-- 不改 RR 計算公式，只改不可行動時的顯示。
+- 不改 RR 公式。
 - 不改 DB schema、RLS、grant、policy、role、index、constraint。
-- 不新增 production write/backfill，不做 live Telegram delivery。
-- 不重設整份 Telegram 報文架構，不引入新策略分類。
-- 不處理本輪 9 點以外的文案偏好或排序需求；旁支問題記待辦。
+- 不新增或改 production DB write path。
+- 不做 live Telegram delivery。
+- 不重設策略核心、不改整體買賣評分模型。
+- 不把 D1 光寶科翻轉納入本輪實作；只記 deferred 判定。
+- 不做全量報文重構或文案大改，只修正本輪指定誤讀與契約。
 
 ## 影響模組與直接消費者
 
-- 影響模組：
-- Telegram 報文 generator/rendering path。
-- 簡報首屏 summary/market line formatter。
-- 交易執行區塊 formatter。
-- 未持倉僅追蹤/淘汰卡片 formatter。
-- cross_day_detail_line 附近歷史行 formatter。
-- 回測/證據顯示 formatter。
-- rendered-message probe / snapshot 類測試。
-- 直接消費者：
-- Owner 手機閱讀 Telegram 簡報。
-- Telegram rendered message 測試/probe。
-- 盤中與盤後共用報文降噪輸出。
-- QA 驗收腳本與人工手機閱讀路徑。
+影響模組：
+
+- services/strategy_evidence.py
+- load_strategy_evidence_summary 或其直接 evidence summary 載入路徑。
+- Telegram / 報文 formatter 相關模組
+- 交易執行區塊。
+- 新倉建議區塊。
+- 原因 / 風險區塊。
+- 未持倉回測顯示。
+- evidence modifier 顯示。
+- 同日建倉風控判斷相關模組
+- hard_stop。
+- 快速止損。
+- 警戒緩衝。
+- 當日減碼分類。
+- 盤中 / 盤後共用降噪與計數 helper。
+
+直接消費者：
+
+- Owner 手機端 Telegram 報文。
+- 盤中報文產生流程。
+- 盤後報文產生流程。
+- strategy evidence summary 下游使用者。
+- QA probes / regression tests。
+- Architect closeout 讀取的 TASK.md -> CHANGELOG.md -> QA_REPORT.md 交付鏈。
 
 ## 輸出契約
 
-- 首屏市場行目標形狀：
-- 市場：進攻偏熱 R3｜交易執行 1｜持倉風控 4｜未持倉 8（僅追蹤7/淘汰1）
-- 首屏市場行不得同時出現：
-- 進攻偏熱｜R3
-- R3 進攻偏熱
-- 同一市場狀態/R 值只能保留一次。
-- 簡報中刪除下列獨立冗餘行：
-- 新倉：目前沒有可行動候選
-- 背景：...
-- 📌 持倉：...
-- 未持倉 7 檔只等觸發...
-- 交易執行區塊：
-- 使用短文案，例如 旺宏 減碼（續降優先級）
-- 不得重複風控檢查中的完整句。
-- 僅追蹤區塊：
-- 不逐行印出與卡片歷史行重複的 修復中｜連續觀察 1 天。
-- 無有效進場時，只列名稱或併入漏斗；不得讓區塊看起來像推薦。
-- 歷史行：
-- cross_day_detail_line 不得讓 repair_label 與 reason 重複顯示同義 token。
-- 修復中、連續失效 等狀態 token 同一卡片同一行只出現一次。
-- 未持倉計數：
-- 簡報結論行用總數口徑，例如 未持倉 8（僅追蹤7/淘汰1）。
-- 必須與漏斗總數一致，不得只寫 7 檔僅追蹤 而漏掉淘汰。
-- RR 顯示：
-- 若卡片 decision/分類為淘汰，或結構弱且不可行動，RR 顯示 -（不可行動）。
-- 不得露出具體 RR 數值，例如光寶科不可再顯示 RR 3.06。
-- 回測行：
-- 未持倉回測行要全顯示或全不顯示，不得部分卡片缺失造成誤讀。
-- 樣本不足/不可用 不逐卡印；可用時歸一處或精簡顯示。
-- 盤中與盤後必須套用同一降噪函式。
-- partial 證據：
-- partial 且 modifier=1.0 時，證據段顯示 僅輔助參考。
-- 不顯示 +0%。
-- 依賴 M1 version 過濾修復，讓 strategy_sample 穩定，不得時有時無。
+A1 strategy evidence summary:
+
+- services/strategy_evidence.py load_strategy_evidence_summary 必須刪除 version filter。
+- 取樣口徑改為依 trade_date 近 N=60 個交易日跨版本歷史取樣。
+- ready/effective samples 必須以跨版本歷史計算。
+- 當樣本足夠且 evidence 有效時，至少部分標的的 evidence_modifier != 1.0。
+- 可買標的不應因 version filter 導致顯示「不適用」。
+- 缺樣本、source-error、欄位不足或可信度不足時必須 fail closed，不得假裝可用。
+
+B1 交易執行 / 新倉建議:
+
+- 「交易執行」只放：
+- 已執行動作。
+- 已持倉處理動作。
+- 未持倉可買不得出現在「交易執行」。
+- 未持倉可買必須進「新倉建議」。
+- 新倉建議需標示：
+- 尚未買入。
+- 建議分批。
+
+B2 原因 / 風險:
+
+- 原因與風險必須按對象拆分。
+- 持倉與未持倉不得共用一段容易誤讀的原因 / 風險長句。
+- 同一標的的原因、風險、主行動需一致。
+
+B3 未持倉回測行:
+
+- 未持倉回測行需一致降噪。
+- 盤中 / 盤後必須共用降噪與計數函式或等價單一契約，避免兩套輸出漂移。
+- 空區塊、0-count、無新增下單占位預設不顯示。
+
+B4 partial modifier 顯示:
+
+- partial evidence modifier = 1.0 時，顯示「僅輔助參考」。
+- 不得顯示「+0%」。
+- 非 1.0 modifier 的既有顯示不得回退。
+
+C 同日建倉硬風控:
+
+- hard_stop 永不豁免。
+- 同日建倉快速止損預設條件：
+- 跌破入場價 3%；或
+- 跌破入場 K 棒低點。
+- 僅破警戒、未達 hard_stop / 快速止損時，當日降級觀察。
+- 同日建倉且入場即錯，觸發當日減碼。
+- 聯電 -3.86% + 突破失敗 fixture 必須落入當日減碼，不得被剛買入豁免。
+
+D1 PM 判定:
+
+- 光寶科同日淘汰 -> 可買翻轉本輪判定為 deferred。
+- 原因: 此問題可能涉及策略翻轉、狀態記憶或跨區塊候選排序，超出本輪 A/B/C 的收斂修正；若未有獨立 fixture 與 Owner 確認，不得在本輪順手修。
+- 後續需另開任務，先確認是否為真 bug、資料來源與使用者可見誤讀。
 
 ## 版本契約
 
-- 已存在且不得回退的契約：
-- Telegram 報文仍維持既有盤中/盤後入口與 message list 輸出方式。
-- 既有策略 decision、RR raw value、DB payload 不因本任務改變。
-- 持倉與未持倉分組仍需可被直接閱讀，不得合併到無法判斷行動狀態。
-- 無可買時不得使用像推薦的文案。
-- 使用者可見報文版本字串不得回退；若現有版本契約不明，Tech 必須先 blocked 並請 Architect 補充。
+- Telegram / 報文使用者可見內容改動需同步版本字串或 header 常量。
+- 不得回退既有版本。
+- 若現有版本契約位置不明，Tech 必須 blocked 並要求 Architect 補充，不得自行假設無需升版。
+- CHANGELOG 必須列明版本同步位置與結果。
+- QA 必須核對實際輸出 header / 常量與 CHANGELOG 一致。
+
+## 已存在且不得回退的契約
+
+- Summary 只回答決策：今天能不能買、持倉先處理什麼、未持倉哪些只是追蹤、哪些不可行動。
+- 可買、可準備、僅追蹤、淘汰 / 不可行動必須分開。
+- 無可買時不得使用像推薦的文案；只能寫「新倉：無有效進場」或等價不可買表述。
+- 分組標題、卡片狀態、漏斗、索引、詳情必須一致。
+- 同一持倉在同一份報文只能有一個主行動：加碼 / 續抱 / 觀察 / 減碼 / 停損 / 停利 / 不動作。
+- 今日買入後預設只能新倉風控觀察；若轉弱要賣，必須同行說明跌破警戒、停損或策略失效。
+- 同一行動不得在多個區塊重複長句。
+- 空區塊、0-count、無新增下單占位預設不顯示。
+- hard_stop 永不豁免。
+- 缺樣本 / source-error / insufficient-data 必須 fail closed。
+- local cache、runtime dict、agent 對話不得作為跨日記憶 source-of-truth。
+- live Telegram delivery 需 Owner 單獨批准。
 
 ## 驗收條件
 
-- Tech 必須先補 rendered-message probe，覆蓋本任務 9 點，才能改 formatter。
-- 盤中與盤後 fixture 均通過同一降噪函式，不得維護兩套漂移邏輯。
-- 手機閱讀首屏驗收：
-- 市場行符合目標形狀。
-- 首屏不再出現被刪除的四類冗餘行。
-- 未持倉總數與漏斗一致。
-- 交易執行驗收：
-- 交易執行只出現短摘要。
-- 風控檢查可保留完整說明，但同一句不得在交易執行重複。
-- 僅追蹤/歷史行驗收：
-- 僅追蹤區塊不逐行重複 修復中｜連續觀察 1 天。
-- 歷史行中 修復中、連續失效 不重複。
-- RR 驗收：
-- 淘汰或結構弱不可行動卡片 RR 顯示 -（不可行動）。
-- fixture 中光寶科不得出現 RR 3.06。
-- 回測/證據驗收：
-- 未持倉回測行顯示口徑一致。
-- 樣本不足/不可用不逐卡印。
-- partial + modifier=1.0 顯示 僅輔助參考，不得顯示 +0%。
-- strategy_sample 在 M1 version 過濾後穩定出現或穩定不出現，不得同 fixture 多次 render 時有時無。
-- QA 必須至少補一個 Tech 未覆蓋的直接消費者或負面案例，並檢查：
-- 手機閱讀路徑。
-- 首屏計數。
-- 交易執行去重。
-- RR 隱藏。
-- 證據 +0% 文案。
+Tech 必須先補可重跑 probe，再修實作；每項至少有對應 regression。
+
+A1:
+
+- 有 probe 證明 load_strategy_evidence_summary 不再套 version filter。
+- 有 fixture 或測試資料覆蓋近 60 個交易日跨版本取樣。
+- ready/effective samples 可被計算。
+- 至少部分 evidence_modifier 不等於 1.0。
+- 可買標的不再因 version filter 顯示不適用。
+- 缺樣本 / source-error 時 fail closed。
+
+B1:
+
+- 未持倉可買不出現在「交易執行」。
+- 未持倉可買出現在「新倉建議」。
+- 新倉建議含尚未買入 / 建議分批。
+- 已執行或持倉處理仍保留在「交易執行」。
+
+B2:
+
+- 原因 / 風險按標的或對象拆分。
+- 持倉與未持倉不共用造成誤讀的同一段原因 / 風險。
+- 報文中同一標的主行動、原因、風險一致。
+
+B3:
+
+- 盤中與盤後未持倉回測行使用共用降噪與計數契約。
+- 空區塊、0-count、無新增下單占位不顯示。
+- 未持倉回測行不重複長句，不干擾主要決策。
+
+B4:
+
+- partial modifier = 1.0 顯示「僅輔助參考」。
+- partial modifier = 1.0 不顯示「+0%」。
+- 非 1.0 modifier 的顯示仍保留原有語意。
+
+C:
+
+- hard_stop probe: 同日建倉跌破 hard_stop，不能豁免。
+- 快速止損 probe: 同日建倉跌破入場價 3%，觸發當日減碼。
+- 快速止損 probe: 同日建倉跌破入場 K 棒低點，觸發當日減碼。
+- 警戒緩衝 probe: 僅破警戒、未達 hard_stop / 快速止損，當日降級觀察。
+- 聯電 fixture: -3.86% + 突破失敗，落入當日減碼，不是剛買入豁免。
+
+QA L3:
+
+- QA 不只重跑 Tech 命令；至少補一個 Tech 未覆蓋的直接消費者、負面案例、手機閱讀誤讀路徑或契約風險。
+- QA 必須覆蓋盤中與盤後報文路徑。
+- QA 必須檢查版本字串 / header 常量。
+- QA 必須反證 D1 未被實作或誤納入本輪。
 
 ## 範例或 Fixture
 
-- 首屏示例：
+A1 fixture:
 
-市場：進攻偏熱 R3｜交易執行 1｜持倉風控 4｜未持倉 8（僅追蹤7/淘汰1）
+trade_date: 最近 60 個交易日
+versions: vA, vB, vC
+symbol: 可買標的
+expected:
+- 跨版本樣本納入 ready/effective samples
+- evidence_modifier 至少部分不等於 1.0
+- 不顯示 evidence 不適用
 
-- 交易執行示例：
+A1 fail-closed fixture:
 
-交易執行
-旺宏 減碼（續降優先級）
+source: strategy evidence summary
+condition: 無樣本或 source-error
+expected:
+- status: missing-source / source-error / insufficient-data
+- 不產生假 modifier
+- 不把標的升格為 evidence 可用
 
-- 不可行動 RR 示例：
+B1 mobile fixture:
 
-光寶科｜淘汰
-RR：-（不可行動）
+input:
+- A: 未持倉，可買
+- B: 已持倉，續抱
+expected:
+交易執行:
+- B 續抱
+新倉建議:
+- A 尚未買入，建議分批
+not expected:
+- A 出現在交易執行
 
-- partial 證據示例：
+B4 fixture:
 
-證據：partial｜僅輔助參考
+input:
+- evidence_state: partial
+- evidence_modifier: 1.0
+expected:
+- 顯示「僅輔助參考」
+not expected:
+- 顯示「+0%」
 
-- rendered-message probe 至少包含：
-- 盤後報文 fixture。
-- 盤中報文 fixture。
-- 淘汰/結構弱且原始 RR 有數值的 fixture。
-- partial + modifier=1.0 fixture。
-- M1 version 過濾後 strategy_sample 穩定性的 fixture。
+C 聯電 fixture:
+
+symbol: 聯電
+position_state: 同日建倉
+move: -3.86%
+signal: 突破失敗
+expected:
+- 主行動: 當日減碼
+- 原因: 同日建倉後觸發快速止損 / 入場即錯
+not expected:
+- 剛買入豁免
+
+C 警戒 fixture:
+
+position_state: 同日建倉
+condition:
+- 只破警戒
+- 未跌破 hard_stop
+- 未跌破入場價 3%
+- 未跌破入場 K 棒低點
+expected:
+- 當日降級觀察
+not expected:
+- 當日減碼
+- 剛買入豁免
 
 ## 明確禁止事項
 
-- 禁止改 strategy decision。
-- 禁止改 RR 公式或 raw RR 計算。
-- 禁止改 DB schema/write path。
-- 禁止 production write/backfill。
+- 禁止改 RR 公式。
+- 禁止改 DB schema / RLS / grant / policy / role / index / constraint。
+- 禁止新增或改 production DB write。
 - 禁止 live Telegram delivery。
-- 禁止只改盤後、不改盤中，或盤中/盤後各自做不同降噪邏輯。
-- 禁止用刪除整個未持倉/持倉卡片來規避重複問題。
-- 禁止把 +0% 換成其他數字文案；本條目標是 僅輔助參考。
-- 禁止把「無可買」寫成推薦語氣。
+- 禁止直接手寫 production DML。
+- 禁止把 local cache、worktree、runtime dict 或 agent 對話當跨日記憶。
+- 禁止把 D1 光寶科翻轉順手修進本輪。
+- 禁止只改文案不補 probe。
+- 禁止只驗單一路徑後宣告盤中 / 盤後都通過。
+- 禁止 source-error、缺樣本、insufficient-data 時仍宣告 ready / effective。
+- 禁止讓未持倉可買出現在交易執行。
+- 禁止 hard_stop 被任何「同日建倉 / 剛買入」邏輯豁免。
 
 ## 阻塞條件
 
-- 若找不到盤中與盤後共用 formatter 或無法建立共用降噪函式，Tech 必須 blocked。
-- 若 rendered-message probe 無法穩定重現 Owner 9 點中的任一點，Tech 必須標明缺哪個 fixture，不得宣告完成。
-- 若現有報文版本字串/版本契約無法定位，Tech 必須 blocked 請 Architect 補充。
-- 若修復需要改 DB schema/write、策略 decision 或 RR 公式，必須 blocked，不能在本任務內擴權。
-- 若 QA 無法執行手機閱讀路徑或 rendered-message 驗收，QA 結論不得為通過。
+- 找不到 load_strategy_evidence_summary 或其實際 evidence summary 載入路徑。
+- 無法建立跨版本近 60 交易日取樣 fixture 或 probe。
+- 報文版本字串 / header 常量位置不明且無法安全確認。
+- 盤中 / 盤後報文路徑無法重跑。
+- 缺測試環境且補環境後仍無法跑 regression。
+- 同日建倉入場價、入場 K 棒低點、hard_stop 任一必要欄位缺失且無可靠 source。
+- 任何修正需要 DB schema/write 或 live Telegram 才能完成。
+- D1 若被證明會阻塞 A/B/C 驗收，需停下交回 Architect，不得擅自擴大本輪。
 
 ## 本輪停止條件
 
-- 完成條件：9 點均有 rendered-message probe 覆蓋，盤中/盤後共用降噪函式，Tech 自檢通過，QA L2 驗收通過且確認手機閱讀首屏無誤讀。
-- 不納入本輪：策略排序優化、新增推薦邏輯、DB 持久化補丁、live delivery、全量 Telegram 重構、未被 9 點點名的文案偏好。
-- 若發現旁支問題但不阻塞上述驗收，只記入後續待辦，不擴大本輪任務。
+完成定義：
+
+- A1、B1、B2、B3、B4、C 均有可重跑 probe。
+- Tech CHANGELOG 交代修改檔案、契約影響、版本同步、直接消費者、自檢命令與結果。
+- QA L3 通過，且包含盤中 / 盤後、手機閱讀誤讀路徑、版本核對、D1 deferred 反證。
+- Architect 後續完成 commit / push / gates 後，本輪才可被收口為完成。
+
+本輪不處理：
+
+- D1 光寶科同日淘汰 -> 可買翻轉，只記 deferred。
+- 其他策略翻轉、候選排序、RR 公式、DB 持久化、live delivery 問題。
+- 任何新發現但不阻塞 A/B/C 驗收的旁支問題，記入後續待辦，不納入本輪。
