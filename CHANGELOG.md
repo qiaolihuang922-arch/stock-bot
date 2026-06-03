@@ -48,7 +48,7 @@
 - 僅新增 / 擴充研究與 backfill CLI。
 - 不改正式策略檔：`services/analysis.py`、`core/condition_engine.py`、`core/generator.py`。
 - 不新增 DB schema，不手寫普通 production DML。
-- actual write 仍需要明確 CLI 參數與 production credentials；本輪未執行 production write。
+- Owner 已在本輪明確要求「直接回填」後，使用 backfill CLI 逐檔執行 production write，且每檔 read-after-write 通過。
 
 ## 契約影響
 
@@ -81,19 +81,26 @@
   - 結果：dry-run no-write；planned_rows=2；live_write=false。
 - `arch -arm64 .venv/bin/python scripts/backfill_daily_price_history.py --write --confirm-write --symbols 3231 --start 2026-06-01 --end 2026-06-02 --no-config`
   - 結果：exit 2 blocked；missing credentials；live_write=false。
+- `arch -arm64 .venv/bin/python scripts/backfill_daily_price_history.py --write --confirm-write --symbols <symbol> --years 2 --skip-existing --read-after-write`
+  - 結果：12 檔逐檔 write-complete，read-after-write `status=ok`。
 - `arch -arm64 .venv/bin/python scripts/research_trend_continuation.py --json`
-  - 結果：completed；universe_count=12；total_hit_count=5；meets_min_sample_count=false。
+  - 結果：completed；universe_count=12；total_hit_count=232；meets_min_sample_count=true；pullback_continuation_edge=positive。
 - mutation / secret scan：
   - no schema mutation / live Telegram / secret assignment matches。
 
 ## 研究輸出摘要
 
 - watchlist 12：3231、2421、3035、2303、3481、2344、2376、2408、2356、2324、2301、2337。
-- 目前 `daily_price` 每檔 rows_used：43。
-- total_hit_count：5。
-- per-symbol hits：2356=2、2376=2、2408=1，其餘 0。
-- meets_min_sample_count：false（threshold=30）。
-- 結論：尚未完成多年回填；不能進入階段二。
+- production write：12 檔共新增 `daily_price` 5,218 rows。
+- read-after-write row count：
+  - 3231=485、2421=485、3035=485、2303=485、3481=478、2344=485、2376=485、2408=470、2356=485、2324=485、2301=464、2337=442。
+  - 所有檔案日期範圍：2024-06-03..2026-06-03。
+- 回填後 research：
+  - total_hit_count：232。
+  - per-symbol hits：2301=16、2303=22、2324=31、2337=23、2344=20、2356=19、2376=16、2408=8、2421=15、3035=16、3231=31、3481=15。
+  - meets_min_sample_count：true（threshold=30）。
+  - pullback continuation 5 日勝率 55.17%、5 日平均 +2.26%，結論 `positive`。
+- 結論：階段一研究樣本門檻已達成，可另開階段二 major 策略設計任務；本輪仍未實裝正式買入路徑。
 
 ## 覆蓋層級
 
@@ -101,18 +108,16 @@
 - approved write helper：covered by fake client + `upsert_rows(..., client=...)` test。
 - missing credentials fail-closed：covered。
 - research artifact schema：covered。
-- production actual write：not run。
-- 12 檔 full dry-run network fetch：attempted but external market source call was too slow; not used as completion evidence.
+- production actual write：covered by 12 檔逐檔 approved write + read-after-write artifact。
+- 12 檔 full dry-run：未作 completion evidence；實際採逐檔 write/read-after-write，避免單次外部行情請求拖住全部。
 
 ## 殘留風險
 
-- 12 檔多年 backfill 尚未實際寫入 production DB。
-- 12 檔 full dry-run 受外部行情源速度影響，本輪未取得完整 12 檔 planned rows output；單檔 dry-run 與 focused tests 已覆蓋 contract。
-- `get_twse_ohlcv_history()` 的 1-2 年可得性仍需實際 dry-run / write 時確認。
-- Research artifact 仍顯示 total_hit_count=5，未達 30。
+- 本輪已實際寫 production `daily_price`；若需要回滾，需另開資料治理任務，不可手動亂刪。
+- 雖然 pullback continuation 研究已 positive，extended spike 對照也為正，但本輪不授權追高或正式買入路徑。
+- 階段二若啟動，仍需 major 策略設計、Owner 明確授權放開特定邊界，以及 official report replay / QA L3。
 
 ## 旁支待辦
 
-- 執行 `scripts/backfill_daily_price_history.py --dry-run --years 2` 驗證 12 檔行情源可用性。
-- Owner 確認後再執行 `--write --confirm-write --read-after-write`。
-- 回填完成後重跑 `scripts/research_trend_continuation.py --json`，若 total_hit_count >=30 再另開階段二策略研究 / 實裝任務。
+- 另開階段二 major 任務：設計 `trend_continuation` 買入路徑，但僅限「回踩站回」且由 evidence gate 開關，不放寬 spike 追高。
+- 階段二前需 Owner 明確授權是否放開 RESEARCH.md 既有「證據不得單獨變 BUY / 不得放寬追高」硬邊界中的特定例外。

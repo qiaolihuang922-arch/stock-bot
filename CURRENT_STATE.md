@@ -29,9 +29,9 @@
 ## Latest Completed Handoff
 
 - task_id：`research_daily_price_backfill_and_trend_sample_expansion_20260603`
-- 狀態：tooling done / committed；QA conditional pass；push 與 git completion gate 待收口。
-- commit：`5045045 Add daily price backfill research tooling`。
-- 問題：Owner 要把 watchlist 12 檔 daily_price 歷史補成 1-2 年，讓 trend continuation 研究不要停在樣本 5；同時研究 artifact 必須固定 12 檔 universe、列每檔命中次數與 total >=30 判斷。
+- 狀態：direct production backfill done；QA conditional pass；commit / push / git completion gate 待收口。
+- commit：`pending_commit`（上一輪 tooling commit：`5045045 Add daily price backfill research tooling`）。
+- 問題：Owner 要直接回填 watchlist 12 檔 daily_price 1-2 年資料，讓 trend continuation 研究不要停在樣本 5；同時研究 artifact 必須固定 12 檔 universe、列每檔命中次數與 total >=30 判斷。
 - 修正 / 交付：
   - 新增 `scripts/backfill_daily_price_history.py`。
   - backfill CLI 支援 `--dry-run`、`--write`、`--confirm-write`、`--symbols`、`--start`、`--end`、`--years`、`--skip-existing`、`--read-after-write`、`--no-config`。
@@ -42,15 +42,19 @@
 - 最新 artifact：
   - `reports/research/trend_continuation_20260603.txt`
   - `reports/research/trend_continuation_20260603.json`
-  - universe_count=12；目前每檔 rows_used=43；total_hit_count=5；meets_min_sample_count=false。
-  - per-symbol hits：2356=2、2376=2、2408=1，其餘 0。
+  - production write：12 檔逐檔 approved write / read-after-write，合計新增 `daily_price` 5,218 rows。
+  - read-after-write row count：3231=485、2421=485、3035=485、2303=485、3481=478、2344=485、2376=485、2408=470、2356=485、2324=485、2301=464、2337=442；日期範圍皆為 2024-06-03..2026-06-03。
+  - universe_count=12；total_hit_count=232；meets_min_sample_count=true。
+  - per-symbol hits：2301=16、2303=22、2324=31、2337=23、2344=20、2356=19、2376=16、2408=8、2421=15、3035=16、3231=31、3481=15。
+  - pullback continuation：1 日勝率 46.98%、平均 +0.45%；3 日勝率 55.17%、平均 +1.74%；5 日勝率 55.17%、平均 +2.26%；10 日勝率 54.74%、平均 +2.77%；結論 `positive`。
 - 驗證：
   - `tests/test_backfill_daily_price_history.py tests/test_research_trend_continuation.py tests/test_backfill_signals.py` 15 passed。
   - `py_compile` passed；`git diff --check` passed。
   - 單檔 dry-run `3231` 回傳 `result=no-write`、`live_write=false`、planned_rows=2。
   - write 缺憑證 probe exit 2 blocked，`live_write=false`。
-- QA 狀態：`conditional pass`。原因：CLI contract / approved helper / fail closed / artifact schema 已驗，但本輪未實際 production write，且 12 檔 full dry-run 受外部行情源速度影響未完成。
-- 邊界：未改正式策略、Telegram、DB schema、live delivery。階段二仍不得啟動；需先完成 dry-run / approved write / read-after-write，再重跑 research，且 total_hit_count >=30 才能另開策略任務。
+  - 12 檔逐檔 write-complete，read-after-write `status=ok`。
+- QA 狀態：`conditional pass`。原因：approved write path、12 檔 production write、read-after-write、research artifact schema 已驗；但本輪仍未改正式策略，也未取得階段二 Owner 授權。
+- 邊界：未改正式策略、Telegram、DB schema、live delivery。階段一研究門檻已達成，可另開階段二 major 策略設計任務；不得把本輪 positive edge 直接視為已開正式買路或追高授權。
 
 ## Previous Completed Handoff
 

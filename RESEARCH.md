@@ -40,13 +40,17 @@
 - 研究 artifact 已更新：
   - `reports/research/trend_continuation_20260603.txt`
   - `reports/research/trend_continuation_20260603.json`
-- 最新 `daily_price` 研究結果：
+- 實際回填：Owner 已授權後，12 檔逐檔用 approved write path 回填並 read-after-write 通過；總計新增 `daily_price` 5,218 rows。
+- read-after-write row count：
+  - 3231 485、2421 485、3035 485、2303 485、3481 478、2344 485、2376 485、2408 470、2356 485、2324 485、2301 464、2337 442。
+  - 日期範圍皆為 2024-06-03 至 2026-06-03。
+- 回填後 `daily_price` 研究結果：
   - universe_count：12。
-  - 每檔 rows_used：目前各 43。
-  - total_hit_count：5，threshold：30，meets_min_sample_count：false。
-  - per-symbol hit count：2356=2、2376=2、2408=1，其餘 0。
-  - pullback continuation 5 日勝率 20.00%、5 日平均 -3.89%，仍為 `insufficient-data`。
-- 結論：目前尚未完成「1-2 年多年 daily_price」實際回填，因此樣本沒有擴大；不能進入階段二。下一步若要繼續，需用 backfill CLI 經 approved write path 實際回填，read-after-write 後再重跑 research artifact。
+  - total_hit_count：232，threshold：30，meets_min_sample_count：true。
+  - per-symbol hit count：2301=16、2303=22、2324=31、2337=23、2344=20、2356=19、2376=16、2408=8、2421=15、3035=16、3231=31、3481=15。
+  - pullback continuation：1 日勝率 46.98%、平均 +0.45%；3 日勝率 55.17%、平均 +1.74%；5 日勝率 55.17%、平均 +2.26%；10 日勝率 54.74%、平均 +2.77%；MFE +9.85%、MAE -4.89%。
+  - extended spike 對照：1.08 / 1.15 / 1.22 的 5 日勝率 55.12% / 59.34% / 56.52%，5 日平均 +3.21% / +4.40% / +3.30%，仍只作對照，不等於追高授權。
+- 結論：階段一研究門檻已達成，`pullback_continuation_edge=positive`。這代表可以另開階段二 major 策略設計任務；但尚未授權正式實裝，也尚未放開 `RESEARCH.md` 既有硬邊界。階段二需明確定義「只買回踩站回，不買 spike」、小倉位、回踩低點止損、同日入場即錯風控與 evidence gate。
 
 ## Data Roles
 

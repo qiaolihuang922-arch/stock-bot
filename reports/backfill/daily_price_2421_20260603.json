@@ -1,0 +1,42 @@
+{
+  "approved_write_path": "scripts.backfill_signals.upsert_rows(price_rows, signal_rows=[], client=...)",
+  "live_write": true,
+  "market_data_source": {
+    "errors": {},
+    "name": "twse",
+    "status": "ok"
+  },
+  "mode": "write",
+  "per_symbol": [
+    {
+      "existing_rows": 43,
+      "planned_rows": 485,
+      "rows_to_write": 442,
+      "skipped_rows": 43,
+      "symbol": "2421"
+    }
+  ],
+  "read_after_write": {
+    "per_symbol": [
+      {
+        "max_trade_date": "2026-06-03",
+        "min_trade_date": "2024-06-03",
+        "row_count": 485,
+        "symbol": "2421"
+      }
+    ],
+    "status": "ok"
+  },
+  "requested_date_range": {
+    "end": "2026-06-03",
+    "start": "2024-06-03"
+  },
+  "result": "write-complete",
+  "rows_written": 442,
+  "skip_existing": true,
+  "source": "daily_price_history_backfill",
+  "universe_count": 1,
+  "universe_symbols": [
+    "2421"
+  ]
+}

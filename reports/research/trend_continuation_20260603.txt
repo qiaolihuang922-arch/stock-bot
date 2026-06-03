@@ -4,30 +4,30 @@ status: completed
 universe_count: 12
 symbols: 3231,2421,3035,2303,3481,2344,2376,2408,2356,2324,2301,2337
 date_range: None..None
-total_hit_count: 5
+total_hit_count: 232
 threshold: 30
-meets_min_sample_count: false
+meets_min_sample_count: true
 
 per_symbol:
-- 2301: rows=43 hits=0
-- 2303: rows=43 hits=0
-- 2324: rows=43 hits=0
-- 2337: rows=43 hits=0
-- 2344: rows=43 hits=0
-- 2356: rows=43 hits=2
-- 2376: rows=43 hits=2
-- 2408: rows=43 hits=1
-- 2421: rows=43 hits=0
-- 3035: rows=43 hits=0
-- 3231: rows=43 hits=0
-- 3481: rows=43 hits=0
+- 2301: rows=464 hits=16
+- 2303: rows=484 hits=22
+- 2324: rows=483 hits=31
+- 2337: rows=441 hits=23
+- 2344: rows=486 hits=20
+- 2356: rows=485 hits=19
+- 2376: rows=486 hits=16
+- 2408: rows=470 hits=8
+- 2421: rows=485 hits=15
+- 3035: rows=485 hits=16
+- 3231: rows=485 hits=31
+- 3481: rows=480 hits=15
 
 group                    level   n    h1_win h1_avg h3_win h3_avg h5_win h5_avg h10_win h10_avg mfe   mae
-pullback_continuation    none    5    40.00% -1.74% 0.00%  -7.65% 20.00% -3.89% 80.00%  9.82%   16.53% -9.89%
-extended_spike           1.08    78   56.41% 1.26%  61.54% 3.47%  65.38% 6.23%  83.33%  15.98%  26.08% -6.68%
-extended_spike           1.15    46   60.87% 1.37%  69.57% 4.00%  65.22% 7.45%  82.61%  19.21%  29.07% -7.08%
-extended_spike           1.22    30   60.00% 0.88%  70.00% 3.16%  63.33% 6.17%  83.33%  21.87%  29.85% -8.01%
+pullback_continuation    none    232  46.98% 0.45%  55.17% 1.74%  55.17% 2.26%  54.74%  2.77%   9.85% -4.89%
+extended_spike           1.08    684  51.75% 0.79%  52.49% 2.14%  55.12% 3.21%  63.16%  7.61%   17.35% -7.26%
+extended_spike           1.15    332  55.12% 1.10%  56.63% 2.78%  59.34% 4.40%  69.58%  10.41%  20.89% -8.16%
+extended_spike           1.22    184  53.80% 0.75%  54.35% 1.89%  56.52% 3.30%  69.57%  11.44%  21.69% -9.46%
 
 conclusion:
-pullback_continuation_edge: insufficient-data
-reason: pullback continuation sample is below minimum; win_rate_5d=20.00%, avg_return_5d=-3.89%, sample_count=5
+pullback_continuation_edge: positive
+reason: pullback continuation shows positive 5d edge; win_rate_5d=55.17%, avg_return_5d=2.26%, sample_count=232
