@@ -29,8 +29,8 @@
 ## Latest Completed Handoff
 
 - task_id：`report-score-evidence-display-20260603`
-- 狀態：code done；QA conditional pass；commit / push 待收口。
-- commit：pending。
+- 狀態：code done / committed；QA conditional pass；push 與 git completion gate 待收口。
+- commit：`58969a8 Fix report score evidence display`。
 - 問題：Owner 指出既有持倉非加碼仍顯示新倉品質分，且 `綜合` 可超過 100；證據不可用全部寫成資料不足；過熱 / 低量 / 低分文案容易誤讀。
 - 修正：
   - `core/generator.py` 升 `v20.4.35`，`final_confidence` 封頂 100。
