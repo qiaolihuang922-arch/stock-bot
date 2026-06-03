@@ -1,44 +1,34 @@
-# TASK: 修復報文數據行與證據分數顯示問題
+# TASK: v20.4.35-report-semantics
 
 ## 任務狀態
 
-- task_id: report-score-evidence-display-20260603
-- 任務類型: risk_patch
+- task_id: v20.4.35-report-semantics
+- 任務尺寸判斷: risk_patch
+- 判斷理由: 本輪雖是四個小型報文語意修正，但會碰 evidence modifier、過熱 blocker、持倉資料行與簡報計數，屬使用者可見決策語意，不可當 tiny_patch。
 - 狀態: ready_for_tech
-- 版本建議: 使用者可見報文需升版或更新可見版本字串；不得回退既有版本。
 - QA 分級建議: L3
+- 版本建議: 維持並核對使用者可見報文版本 v20.4.35；不得回退。若實際 header / constant 尚未是 v20.4.35，Tech 需同步到 v20.4.35；本輪不主動升到其他版本。
+- 本輪主問題: v20.4.35 報文語意一致性修正，只處理 Owner 指定四項。
 
 ## Owner 問題
 
-目前報文在持倉非加碼、證據加成、過熱/風控/資料不足、低量強度與低分百分比顯示上，讓手機閱讀者誤以為「既有持倉仍有新倉品質分」、「綜合分可超過 100」、「所有不可用原因都是資料不足」、「低量仍極強」、「低分仍有有效加成」。
+Owner 要繼續執行已寫入 TASK.md 的 v20.4.35-report-semantics，完成四項修復並補 probe：
+
+1. 過熱 / 不可追高所有 blocker 均使 evidence modifier = 1.0，且手機報文顯示「過熱不適用」。
+2. 低量強度降級不得出現「突破確認 + 裸待確認」的可見衝突。
+3. 持倉非加碼資料行仍需保留量比 V。
+4. 簡報計數需明確區分「執行動作」與「今日新建倉」。
+
+Owner 的「繼續」只代表啟動 PM -> Tech -> QA 流程，不授權 PM / Architect 跳過 Tech 或 QA，也不授權直接改產品代碼。
 
 ## 使用者可見結果
 
-手機閱讀路徑：Telegram 報文卡片的數據行、證據段、強度標籤與分數摘要。
+Telegram 手機閱讀路徑中，正式 generator / report text 應呈現：
 
-- 持倉且 holding_decision 存在、且非加碼時，數據行整段顯示 不適用（既有持倉），不顯示綜合/技術/證據/RR 分。
-- 只有新倉候選或持倉加碼才顯示綜合分。
-- 所有卡片 綜合 分不得大於 100。
-- 證據不可用文案需區分：
-- heat / 過熱來源: 過熱不適用
-- decision FAIL / 減碼 / 結構弱: 風控不適用
-- 真無回測且 market 缺資料: 資料不足
-- 盤後/收縮整理且量比 <0.8 時，不得顯示 極強；需降級為中性/待確認，或加縮量注記。
-- technical < 10 或 round(final)==round(technical) 時，證據段不得顯示誤導性百分比；可省略百分比或顯示微幅。
-
-示例輸出形狀：
-
-建準｜既有持倉｜新倉風控觀察
-數據：不適用（既有持倉）
-
-某標的｜過熱 Lv.3
-證據：過熱不適用
-
-某新倉候選
-技術 96｜證據 +4%｜綜合 100
-
-低量標的｜收縮整理｜量比 0.7
-強度：待確認（縮量）
+- 過熱、不可追高、等冷卻、RR 過熱 blocker 成立的標的，不顯示任何 evidence boost；證據欄顯示「過熱不適用」，RR 維持 -（過熱） 或既有等價過熱 blocker 文案。
+- 低量降級標的不得同時讓使用者讀到「突破確認」與裸「待確認」；需改成不衝突的形狀，例如 突破確認｜縮量觀察。
+- 持倉非加碼資料行仍顯示既有持倉不適用，但保留量比，例如 數據：不適用（既有持倉）｜V 1.2x。
+- 簡報計數不得使用裸 交易執行 N｜今日 M；需清楚顯示，例如 執行動作 1（減碼）｜今日新建倉 0。
 
 ## 非目標
 
@@ -46,141 +36,172 @@
 - 不改 DB schema、RLS、grant、policy、role、index、constraint。
 - 不改 production write path。
 - 不做 live Telegram delivery。
-- 不重設整體策略評分模型。
-- 不重構全報文格式。
-- 不處理本輪未列出的其他文案、排序或策略問題。
+- 不改持倉狀態機或買賣策略核心。
+- 不重構整份 generator / formatter。
+- 不新增 Telegram 區塊。
+- 不處理非本輪四項以外的排序、美化、文案降噪或資料品質問題。
 
-## 影響模組與直接消費者
+## 影響模組
 
-影響模組：
+- core/generator.py
+- evidence modifier / boost blocker 判定既有路徑
+- 過熱 / 不可追高 / RR blocker 可見文案既有路徑
+- 低量強度降級與卡片狀態文案既有路徑
+- 持倉資料行格式化既有路徑
+- 簡報 / summary 計數既有路徑
+- 現有 generator / report tests 與 probe
 
-- core/generator.py 的 apply_evidence_confidence 綜合分封頂。
-- 報文 formatter / generator 中數據行、證據段、強度標籤、卡片渲染相關邏輯。
-- official rendered/message probe 或等價官方報文產生路徑。
-- 對應測試與 fixtures。
+若實際程式位置不同，Tech 只能在既有報文產生鏈內做最小修正，不得藉機搬移架構。
 
-直接消費者：
+## 直接消費者
 
-- Telegram 手機閱讀者。
-- official report/message generator。
-- runner 產出的 rendered/message artifact。
-- QA probe 與報文回歸測試。
+- Telegram 手機閱讀報文。
+- official report generator 產出的 message list / report text。
+- formatTelegramMessages 或等價 official formatter replay。
+- 既有 report / generator regression tests。
+- QA L3 replay / artifact 驗收。
 
 ## 輸出契約
 
-既有且不得回退的契約：
+### 過熱 / 不可追高 evidence 契約
 
-- RR 顯示豁免邏輯不得被改壞；持倉非加碼與 RR 使用同一套豁免口徑。
-- 新倉候選與持倉加碼仍需顯示綜合/技術/證據分。
-- 分組標題、卡片狀態、漏斗、索引、詳情需保持一致。
+任一過熱 blocker 成立時，evidence modifier 必須為 1.0：
+
+- heat_state 為既有過熱 / 不可追高語意值。
+- funnel / card 狀態為 等冷卻。
+- funnel / card 狀態為 不可追高觀察 或等價不可追高狀態。
+- RR 顯示為過熱 blocker。
+- 既有 helper 如 should_show_overheat_rr_blocker(result) 回傳 true。
+
+可見輸出必須符合：
+
+- 不得顯示 證據 +8%、+15% 或任何 evidence boost。
+- 證據欄顯示 過熱不適用 或既有等價過熱不適用文案。
+- RR 維持 -（過熱） 或既有等價過熱 blocker 文案。
+
+### 低量降級契約
+
+- 同一標的同一手機可見區塊不得同時出現 突破確認 與裸 待確認。
+- 低量降級需使用明確限定文案，例如 縮量觀察、突破確認｜縮量觀察，不得只追加裸 待確認。
+
+### 持倉資料行契約
+
+- 非加碼持倉可豁免 RR / 綜合 / 技術 / 證據。
+- 非加碼持倉不得豁免量比 V。
+- 可見形狀需保留：
+數據：不適用（既有持倉）｜V {vol}x
+
+### 簡報計數契約
+
+- 簡報計數必須明確區分「執行動作」與「今日新建倉」。
+- 示例形狀：
+執行動作 N（減碼/停利/停損/加碼...）｜今日新建倉 M
+- 今日新建倉 只計今天新建立倉位，不得混入減碼、停利、停損、續抱、觀察等執行動作。
+
+### 已存在且不得回退的契約
+
+- 無可買時不得使用推薦式文案。
+- 可買、可準備、僅追蹤、淘汰 / 不可行動維持分開。
 - 同一持倉在同一份報文只能有一個主行動。
-- 空區塊、0-count、無新增下單占位預設不顯示。
-- 使用者可見報文版本不得回退。
-
-本輪輸出契約：
-
-- 持倉非加碼:
-- 條件: holding_decision 存在，且不是加碼。
-- 數據行: 整段固定為 不適用（既有持倉） 或等價明確不可新倉評分文案。
-- 禁止: 顯示 綜合/技術/證據/RR 任一新倉品質分。
-- 持倉加碼 / 新倉候選:
-- 可顯示 技術、證據、綜合。
-- 綜合 <= 100。
-- 證據不可用:
-- heat / overheat: 過熱不適用
-- decision FAIL / 減碼 / 結構弱: 風控不適用
-- no backtest 且 market 缺資料: 資料不足
-- 強度標籤:
-- 盤後/收縮整理且量比 <0.8 不得輸出 極強。
-- 低分證據百分比:
-- technical < 10 或 round(final)==round(technical) 時，不顯示明顯加成百分比；只能省略或標成微幅。
+- 今日買入後若轉弱，同行需說明跌破警戒、停損或策略失效；不得產生跨區塊矛盾。
+- RR 公式與既有過熱 RR blocker 不可變更。
+- DB payload / schema 不可變更。
+- 使用者可見版本不得回退。
+- probe 必須打到 official generator / report text 或等價 message-list replay，不得只驗 helper。
 
 ## 版本契約
 
-- 報文可見輸出有變更，Tech 必須核對實際 header / version constant / rendered artifact 的版本字串。
-- 若 repo 既有規則要求報文版本升版，需升版；若版本規則不明，Tech 需標 blocked 請 Architect 補充，不得自行假設「不用升版」。
+- 本輪以 v20.4.35 為使用者可見版本契約。
+- 若 code 已是 v20.4.35，保持不變並補驗 header / constant。
+- 若 code 低於 v20.4.35，同步到 v20.4.35。
+- 不得自行升到 v20.4.36+，除非 Architect 另行確認。
+- QA 必須核對實際報文 header / version constant 與本 TASK 一致。
 
 ## 驗收條件
 
-1. 持倉非加碼豁免：
-- fixture/probe 包含 建準、holding_decision=暫不加碼 或等價非加碼狀態。
-- official rendered/message artifact 中不再出現 綜合106 或任何新倉品質分。
-- 對應位置顯示 不適用（既有持倉）。
-2. 綜合分封頂：
-- core/generator.py apply_evidence_confidence 最終分數需等價於 final=min(100.0, technical*modifier)。
-- official rendered/message probe 覆蓋至少一張原本會超過 100 的卡片。
-- 渲染結果沒有任何 綜合>100。
-3. 證據不可用文案：
-- 過熱 Lv.3 卡片顯示 過熱不適用。
-- decision FAIL / 減碼 / 結構弱卡片顯示 風控不適用。
-- 真無回測且 market 缺資料卡片顯示 資料不足。
-- 不得把三種情境一律輸出成 資料不足。
-4. 極強與量能一致性：
-- 盤後/收縮整理且量比 <0.8 的低量標的不顯示 極強。
-- 顯示中性/待確認或縮量注記，且不與其他區塊語意衝突。
-5. 低分證據百分比：
-- technical<10 案例不得出現類似 +6% 但 綜合=技術=7 的誤導顯示。
-- round(final)==round(technical) 案例需省略百分比或顯示微幅。
-6. 覆蓋層級：
-- Tech 自檢必須覆蓋 helper/formatter 與 official generator/message artifact。
-- QA 必須補一個 Tech 未覆蓋的直接消費者、負面案例、使用者誤讀路徑或契約風險。
-- 若只能測 helper 或局部 formatter，結論只能是 partial，不得宣告使用者可見問題完成。
+- 過熱 / 漲停鎖價 replay：
+- 條件包含漲幅約 +9.89%、不可追高或 RR 過熱 blocker 成立。
+- 預期 evidence modifier = 1.0。
+- 報文顯示 證據：過熱不適用。
+- 報文不得出現 證據 +8% 或任何 boost。
+- RR 顯示 -（過熱） 或等價過熱 blocker。
+- 不可追高 / 等冷卻 replay：
+- 即使 heat_state 不是 EXTREME，只要可見狀態屬不可追高 / 等冷卻 / RR 過熱 blocker，就不得取得 evidence boost。
+- 預期同樣顯示 過熱不適用 且 modifier = 1.0。
+- 低量強度降級 replay：
+- 原會出現 突破確認 + 待確認 的建準等價案例，修後同一標的同一區塊不得再出現裸 待確認。
+- 可接受形狀如 突破確認｜縮量觀察。
+- 持倉非加碼 replay：
+- 旺宏 / 建準等價既有持倉、非加碼案例。
+- 預期資料行包含 不適用（既有持倉）。
+- 同一行仍包含 V {vol}x。
+- 簡報計數 replay：
+- 有減碼 / 停利 / 停損等執行動作且今日新建倉為 0。
+- 預期顯示 執行動作 1（減碼）｜今日新建倉 0 或等價清楚形狀。
+- 不得讓 今日 裸字被誤讀為今日所有交易動作。
+- QA 必須至少補一個 Tech 未覆蓋的使用者誤讀、負面案例或契約風險。
+- QA 不得只重跑 Tech 命令後宣告通過。
 
 ## 範例或 Fixture
 
-必要 fixture/probe 類型：
-
-- holding_non_add: 建準，既有持倉，holding_decision=暫不加碼/新倉風控觀察/減碼/續抱 任一非加碼。
-- holding_add: 既有持倉但加碼，仍可顯示綜合分。
-- new_candidate: 新倉候選，仍可顯示綜合分。
-- over_cap: technical 與 modifier 乘積大於 100。
-- overheat_lv3: boost blocked by heat/overheat。
-- risk_blocked: decision FAIL / 減碼 / 結構弱。
-- missing_data: 無回測且 market 缺資料。
-- low_volume_strong: 盤後/收縮整理且量比 <0.8，原本可能顯示極強。
-- low_score_flat: technical<10 或 round(final)==round(technical)。
+- 光寶科過熱：
+- 條件：漲停鎖價、漲幅約 +9.89%、RR 過熱 blocker 成立。
+- 預期：RR：-（過熱）、證據：過熱不適用、modifier = 1.0。
+- 建準低量降級：
+- 條件：原本同時出現 突破確認 與裸 待確認。
+- 預期：只保留不衝突文案，例如 突破確認｜縮量觀察。
+- 旺宏 / 建準持倉非加碼：
+- 條件：既有持倉、非加碼。
+- 預期：數據：不適用（既有持倉）｜V 1.2x 類似形狀。
+- 簡報計數：
+- 條件：有一個減碼執行動作、今日新建倉為 0。
+- 預期：執行動作 1（減碼）｜今日新建倉 0。
 
 ## 失敗標本與驗收路由
 
-Owner 指定失敗標本：
-
-- 建準暫不加碼持倉顯示 綜合106，應改為 不適用（既有持倉）。
-- 過熱 Lv.3 卡片一律顯示 資料不足，應改為 過熱不適用。
-- 低量標的仍顯示 極強。
-- 低分卡顯示 +6% 但 綜合=技術=7。
-- 任一卡片出現 綜合>100。
-
-驗收路由：
-
-- official generator/message artifact 為主驗收層。
-- formatter/helper 單測只能作定位與防回歸，不可單獨代表使用者可見完成。
-- QA 需用 rendered/message artifact 從手機閱讀視角反證。
+- Owner 指定四項即為本輪 failure specimen。
+- 驗收路由需覆蓋：
+- helper / modifier 層：確認過熱 blocker 導致 modifier = 1.0。
+- formatter 層：確認可見文案為 過熱不適用、不出現裸 待確認、持倉保留 V、簡報計數去歧義。
+- official generator / message-list replay 層：確認手機報文最終文字符合契約。
+- 若 Tech 只能覆蓋 helper 或 formatter，CHANGELOG.md 必須標 partial 並列未覆蓋的 official generator / report text 層。
+- 若 QA 拿不到等價 replay artifact，結論最多只能是 conditional pass。
 
 ## 明確禁止事項
 
-- 禁止修改 RR 公式。
-- 禁止 DB schema/write/live Telegram。
-- 禁止直接手寫 production DML。
-- 禁止把持倉非加碼仍顯示為新倉品質分。
-- 禁止任何卡片 綜合>100。
-- 禁止把過熱、風控、資料缺失三種情境一律寫成 資料不足。
-- 禁止低量收縮整理仍標 極強。
-- 禁止只用 synthetic helper fixture 宣告整體報文完成。
-- 禁止順手重構策略核心或全報文結構。
+- 禁止改 RR 公式。
+- 禁止改 DB schema / RLS / grant / policy / role / index / constraint。
+- 禁止改 production write path。
+- 禁止 live Telegram delivery。
+- 禁止把本輪擴成策略重設、全量清理、全量報文重構。
+- 禁止用 synthetic helper fixture 取代 official generator / report text 驗收。
+- 禁止讓過熱 / 不可追高 / 等冷卻標的顯示任何 evidence boost。
+- 禁止讓同一標的手機可見文字同時表達 突破確認 與裸 待確認。
+- 禁止讓非加碼持倉資料行遺失 V。
+- 禁止把減碼 / 停利 / 停損等執行動作計入 今日新建倉。
 
 ## 阻塞條件
 
-- 找不到 official rendered/message artifact 產生路徑，且無等價 replay artifact。
-- 無法構造或取得 Owner 失敗標本等價 payload。
-- 既有版本字串規則不明且報文版本是否需升版無法判定。
-- 持倉加碼與非加碼的資料欄位無法可靠區分。
-- boost_blocked 來源無法保留 heat / decision / missing-data 三種原因。
-- 測試環境缺依賴且無法補齊。
+- 找不到 official generator / report replay 路徑可產出等價手機報文時，Tech 必須標 partial，QA 最多 conditional pass。
+- 無法建立光寶科、建準、旺宏等價 fixture / replay 時，不得宣告完整完成。
+- 若實際程式不存在 Owner 指定語意欄位或 helper，Tech 不可自行改策略，需回報 Architect 釐清。
+- 若修正需要 RR 公式、DB schema、production write path 或 live delivery 變更，立即 blocked。
+- 若版本 header / constant 無法核對，QA 不得給 通過。
 
 ## 本輪停止條件
 
-完成到以下範圍即停止：
+驗到以下四項在 official generator / report text 或等價 replay artifact 中成立，即本輪可停止：
 
-- official rendered/message probe 覆蓋持倉非加碼、持倉加碼或新倉、過熱、風控失敗/減碼/結構弱、資料不足、低量、低分、綜合封頂。
-- QA L3 對手機閱讀路徑給出 通過，或因 artifact/source 不足給出 conditional pass/阻塞。
-- 不處理其他分數模型、排序、候選池、DB 持久化、live delivery 或未列出的 Telegram 文案問題；發現旁支只記待辦，不納入本輪。
+1. 過熱 / 不可追高 / 等冷卻 blocker 使 evidence modifier = 1.0，且顯示 過熱不適用。
+2. 低量降級不再出現 突破確認 + 裸待確認。
+3. 非加碼持倉資料行保留 V {vol}x。
+4. 簡報計數明確區分 執行動作 與 今日新建倉。
+
+以下旁支只記待辦，不納入本輪：
+
+- 其他標的分數爭議。
+- 其他報文排序或美化。
+- 其他 evidence 資料品質問題。
+- 新增 Telegram 區塊。
+- formatter 架構清理。
+- production DB 補資料、回寫或 backfill。

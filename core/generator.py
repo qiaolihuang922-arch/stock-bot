@@ -4408,7 +4408,9 @@ def apply_evidence_confidence(report_context, name, data):
         result.get("decision") == "FAIL"
         or result.get("structure_phase") in {"FAILED_BREAKOUT", "WEAK", "DISTRIBUTION"}
         or result.get("heat_state") in {"HOT", "EXTREME"}
-        or result.get("trade_state") == "EXTENDED"
+        or result.get("trade_state") in {"EXTENDED", "AVOID"}
+        or result.get("price_behavior") in {"LIMIT_LOCK", "LIMIT_REBOUND"}
+        or should_show_overheat_rr_blocker(result, holding=False)
         or technical <= 0
     )
     if technical <= 0 or boost_blocked:

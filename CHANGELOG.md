@@ -1,57 +1,51 @@
-# CHANGELOG: report-score-evidence-display-20260603
+# CHANGELOG: v20.4.35-report-semantics
 
 ## 任務尺寸與風險
 
 - 任務類型：risk_patch。
-- 風險原因：本輪改使用者可見 Telegram 報文數據行、證據文案、強度標籤與版本字串。
-- 未碰：DB schema/write path、RR 公式、策略 decision、live Telegram。
+- 風險原因：本輪修正使用者可見 Telegram 報文中的 evidence boost 邊界、盤面文案、持倉數據行與簡報計數。
+- 未碰：RR 公式、DB schema / write path、策略 decision、持倉狀態機、live Telegram。
 
 ## 修改內容
 
 - `core/generator.py`
-  - 報文版本由 `v20.4.34` 升為 `v20.4.35`。
-  - `apply_evidence_confidence()` 的 `final_confidence` 封頂為 `min(100.0, technical * modifier)`。
-  - 過熱 / 延伸、FAIL / 弱結構、technical<=0 的 blocked 情境一律將 evidence 標成 unavailable，不再保留百分比或 partial。
+  - `apply_evidence_confidence()` 的 boost blocker 擴大到不可追高 / 漲停鎖價 / 漲停反彈 / 過熱 RR blocker。
+  - `trade_state=AVOID`、`price_behavior=LIMIT_LOCK/LIMIT_REBOUND`、`should_show_overheat_rr_blocker(...)` 任一成立時，evidence modifier 固定為 `1.0`，不再顯示正向 boost。
 - `presentation/report.py`
-  - 持倉且非加碼時，卡片數據行改為 `數據：不適用（既有持倉）`，不顯示 RR / 綜合 / 技術 / 證據 / V。
-  - 持倉加碼與未持倉新倉候選仍顯示 `RR / 綜合 / 技術 / 證據 / V`。
-  - 證據不可用文案分流：
-    - 過熱 / 延伸：`證據：過熱不適用`
-    - FAIL / 減碼 / 結構弱：`證據：風控不適用`
-    - 真缺資料：`證據：資料不足`
-  - 盤後收縮整理且量比 `<0.8` 時，`極強` 降為 `待確認` 並加 `縮量`。
-  - `technical < 10` 或 rounded final 等於 rounded technical 時，不顯示 `+X%`，改顯示 `證據：微幅（status）`。
-- Tests：
-  - 新增 official `formatTelegramMessages` message-list replay，覆蓋非加碼持倉、加碼、新倉封頂、過熱、風控、資料不足、低量、低分。
-  - 同步既有版本與數據行預期。
+  - evidence unavailable 的 heat 判定同步納入 `AVOID`、`LIMIT_LOCK`、`LIMIT_REBOUND`，讓顯示文案與分數 blocker 對齊。
+  - 低量收縮降級不再輸出裸 `待確認`，改用 `縮量觀察`，避免 `突破確認｜待確認` 同時出現。
+  - 持倉非加碼資料行保留量比，格式為 `數據：不適用（既有持倉）｜V {vol}x`。
+  - 簡報第一行改為明確區分 `執行動作 N` 與 `今日新建倉 M`，並在可辨識時標注動作類型。
+- `tests/test_generator_report.py`
+  - 更新既有 summary 斷言為 `執行動作` / `今日新建倉`。
+  - 補不可追高 / 漲停鎖價 replay：RR 為過熱時 `evidence_modifier=1.0`，卡片顯示 `證據：過熱不適用`，且不出現 `證據 +`。
+  - 補非加碼持倉保留 V、低量降級不含 `突破確認｜待確認` 的回歸斷言。
 
 ## 修改檔案
 
 - `core/generator.py`
 - `presentation/report.py`
 - `tests/test_generator_report.py`
-- `tests/test_market_theme_evidence.py`
 
 ## 最小改動策略
 
-- 只改 TASK 指定的分數套用與顯示 formatter。
-- 不改報文分組、排序、RR 計算、候選池或策略模型。
-- 以 official message-list replay 驗手機可見結果，避免只驗 helper。
+- 只在既有 scoring / formatter / summary line 路徑補 gate 與文案對齊。
+- 不改 RR 計算、不改候選池、不改 DB payload、不新增 schema。
+- 以 official message-list replay 與既有 generator tests 覆蓋手機可見輸出。
 
 ## 契約影響
 
-- 使用者可見報文版本：`v20.4.35`。
-- `result["final_confidence"]` 新契約：最大值 `100.0`。
-- 持倉非加碼數據行新契約：整段 `不適用（既有持倉）`。
-- 證據 unavailable 文案新增原因分流：過熱 / 風控 / 資料不足。
-- Message order、payload shape、DB contract、RR formula 未變。
+- 過熱 / 不可追高契約：RR 過熱、漲停鎖價、漲停反彈、不可追高狀態不得取得 evidence boost。
+- 持倉非加碼資料行契約：仍豁免 RR / 綜合 / 技術 / 證據，但保留 V。
+- 簡報契約：`交易執行 N` 改為 `執行動作 N`，另列 `今日新建倉 M`。
+- 使用者可見版本維持 `v20.4.35`，未回退。
+- Message order、DB contract、RR formula 未變。
 
 ## 直接消費者同步
 
-- `presentation/report.py` 的持倉 / 未持倉卡片 formatter 已同步。
+- `presentation/report.py` 持倉 / 未持倉卡片與簡報 formatter 已同步。
 - `core/generator.py` official message path 已同步。
-- `tests/test_generator_report.py` 增加 Owner specimen 等價 message-list replay。
-- `tests/test_market_theme_evidence.py` 同步版本字串。
+- `tests/test_generator_report.py` 覆蓋 Owner 指定四個 probe。
 
 ## 未影響模組
 
@@ -62,27 +56,20 @@
 
 ## 已跑自檢命令
 
-- `arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py`
-  - 結果：157 passed，241 warnings。
-- `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py`
-  - 結果：38 passed，13 warnings。
-- `PYTHONPYCACHEPREFIX=/private/tmp/report_score_display_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py presentation/report.py tests/test_generator_report.py tests/test_market_theme_evidence.py`
-  - 結果：passed。
-- `git diff --check`
-  - 結果：passed。
+- `arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py -q`
+  - Tech 結果：157 passed，241 warnings。
 
 ## 覆蓋層級
 
 - helper / formatter：covered。
 - official generator / message artifact：covered by `formatTelegramMessages` replay。
-- runner artifact / production source：not covered，本輪未執行 runner、未讀 production、未 live delivery。
+- runner artifact / production source：not covered，本輪未執行 live runner、未讀 production、未 live delivery。
 
 ## 殘留風險
 
-- 低量收縮降級依現有 `volume_price_state=COILING`、`structure_phase=BASE`、`lifecycle=BASE` 欄位判斷；若 production payload 使用其他同義欄位，需另補 mapping。
-- 未取得正式 runner artifact；本輪以 official message-list replay 反證。
+- QA 取得的是 official generator message-list replay，不是 Render / GitHub runner 產出的正式 artifact。
+- 若 production payload 使用不同欄位表達不可追高，仍需另補 mapping；本輪已覆蓋現有 `heat_state`、`trade_state`、`price_behavior`、RR blocker 路徑。
 
 ## 旁支待辦
 
-- 若後續發現其他「縮量但極強」來源欄位，另開欄位 mapping 任務。
-- 若 Owner 要把證據不可用原因寫入 structured artifact 欄位，而不只顯示文案，另開 payload contract 任務。
+- 若後續報文仍出現其它同義不可追高狀態吃 boost，另開 mapping 收斂任務。

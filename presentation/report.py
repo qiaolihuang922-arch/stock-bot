@@ -293,7 +293,8 @@ def _score_data_text(report_context, name, data, deps):
 def _is_heat_blocked(stock_result):
     return (
         stock_result.get("heat_state") in {"HOT", "EXTREME"}
-        or stock_result.get("trade_state") == "EXTENDED"
+        or stock_result.get("trade_state") in {"EXTENDED", "AVOID"}
+        or stock_result.get("price_behavior") in {"LIMIT_LOCK", "LIMIT_REBOUND"}
         or str(stock_result.get("extended_level") or "") in {"3", "4", "5"}
     )
 
@@ -372,9 +373,10 @@ def _score_gated_market_line(report_context, name, data, dist, deps):
         if ("弱勢" in market_text or "遠離突破" in market_text) and "極強" in market_text:
             market_text = market_text.replace("極強", "待確認")
         if _is_low_volume_consolidation(report_context, data, stock_result):
-            market_text = market_text.replace("極強", "待確認")
+            market_text = market_text.replace("極強", "縮量觀察")
+            market_text = market_text.replace("｜待確認", "｜縮量觀察")
             if "縮量" not in market_text:
-                market_text = f"{market_text}｜縮量"
+                market_text = f"{market_text}｜縮量觀察"
         return f"盤面：{market_text}"
     return "盤面：強弱證據不足｜待確認"
 
@@ -420,7 +422,7 @@ def formatTelegramPositionCard(name, data, *, deps, report_context=None):
     )
     score_text = _confidence_data_text(report_context, name, data, deps)
     data_line = (
-        "數據：不適用（既有持倉）"
+        f"數據：不適用（既有持倉）｜V {data.get('volume_ratio', '-')}x"
         if decision and not is_add_context
         else f"數據：RR {rr_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
     )
@@ -670,6 +672,33 @@ def _compact_market_overview_line(holding_items, watch_items, report_context, de
         market_mode=market_mode,
         report_context=report_context,
     ))
+    today_new_entry_count = len(_today_buy_holding_names(holding_items, deps))
+    executed_actions = deps["executed_trade_items"](
+        holding_items,
+        watch_items,
+        market_mode=market_mode,
+        report_context=report_context,
+    )
+    pending_actions = deps["pending_trade_items"](
+        holding_items,
+        watch_items,
+        market_mode=market_mode,
+        report_context=report_context,
+    )
+    action_labels = []
+    for item in [*pending_actions, *executed_actions]:
+        state = item.get("state") if isinstance(item, dict) else None
+        line = item.get("line", "") if isinstance(item, dict) else ""
+        if state == "已執行":
+            if "停利" in line:
+                state = "停利"
+            elif "減碼" in line:
+                state = "減碼"
+            elif "停損" in line:
+                state = "停損"
+        if state and state not in action_labels:
+            action_labels.append(state)
+    action_suffix = f"（{'/'.join(action_labels[:3])}）" if action_labels else ""
     actionable_count = len(funnel.get("可買") or []) if funnel else 0
     tracking_only_count = deps["unheld_tracking_only_count"](funnel) if funnel else 0
     rejected_count = len(funnel.get("淘汰") or []) if funnel else 0
@@ -680,7 +709,8 @@ def _compact_market_overview_line(holding_items, watch_items, report_context, de
     unheld_parts.extend([f"僅追蹤{tracking_only_count}", f"淘汰{rejected_count}"])
     parts = [
         f"市場：{market_mode} {risk_level}",
-        f"交易執行 {pending_count}",
+        f"執行動作 {pending_count}{action_suffix}",
+        f"今日新建倉 {today_new_entry_count}",
         f"持倉風控 {len(holding_items)}",
         f"未持倉 {unheld_count}（{'/'.join(unheld_parts)}）",
     ]
