@@ -28,6 +28,23 @@
 
 ## Latest Completed Handoff
 
+- task_id：`telegram_message_noise_consistency_20260603`
+- 狀態：QA passed；commit / push 待 final 收口。
+- 問題：Owner 要把 Telegram 首屏與卡片降噪做徹底：市場/R 值不重複、刪冗餘新倉/背景/持倉行、交易執行短句、僅追蹤與 cross-day 歷史 token 去重、未持倉總數和漏斗一致、淘汰/弱勢不可行動 RR 不露數值、partial +0% 改成僅輔助參考。
+- 修正：
+  - 首屏市場行改成 compact count：`市場：{mode} {R}｜交易執行 N｜持倉風控 N｜未持倉 N（可買N/僅追蹤N/淘汰N）`；無可買時不印 `可買0`，維持不可推薦語氣。
+  - Summary 排除重複 `市場/結論`、`📌 持倉`、`背景`、逐行 `僅追蹤` 等首屏噪音。
+  - 交易執行改為短文案，例如 `建準 可買（分批，不追價）`、`旺宏 減碼（續降優先級）`。
+  - `cross_day_detail_line()` 去掉與 repair label 重複的 reason token，同一卡片 `修復中 / 連續觀察` 不重複。
+  - 未持倉不可行動 RR 顯示為 `RR：-（不可行動）`；可買卡仍保留 raw RR 顯示。
+  - partial 且 modifier=1.0 時顯示 `證據：partial｜僅輔助參考`，不顯示 `+0%`。
+  - 本輪不升版，仍為 `v20.4.31`。
+- 驗證：QA `通過`；主 repo `tests/test_generator_report.py` 146 passed，225 warnings；`py_compile` passed；`git diff --check` passed；VERSION scan only `v20.4.31`。
+- QA 反證：第一次 QA blocked 抓到 full file 26 failed 與有可買時首屏未列 `可買N` 的誤讀風險；Tech 返工後 QA 自建 `可買1 / 僅追蹤1 / 淘汰1` 盤中 fixture 通過，首屏、交易執行、漏斗、卡片 RR 一致。
+- 邊界：未改 strategy decision、RR 公式、DB schema/write、production backfill、live Telegram；未跑 production smoke / full repo pytest。
+
+## Previous Completed Handoff
+
 - task_id：`presentation_noise_reduction_v20_4_31`
 - 狀態：done / committed / pushed；Git completion gate passed。
 - 問題：Owner 要把 Telegram/report 簡報按手機閱讀降噪：刪重複行、合併市場/結論與原因/風險、移除偽 `追蹤最強`、交易執行短句、卡片不可用歷史/回測不逐卡印、資料依據正常隱藏、B5 漏斗與卡片一致。

@@ -15,6 +15,14 @@
 
 ## Completed
 
+- `telegram_message_noise_consistency_20260603`:
+  - 問題：Owner 指出上一輪降噪仍不徹底：首屏市場/R 值重複、冗餘新倉/背景/持倉行殘留、交易執行與風控重複、僅追蹤 / cross-day 歷史 token 重複、未持倉總數漏淘汰或可買、不可行動卡片露 RR、partial +0% 語義誤導。
+  - 結果：首屏 compact market line 統一交易執行 / 持倉風控 / 未持倉拆分；有可買時列 `可買N`，無可買時只列 `僅追蹤 / 淘汰`；交易執行短句；不可行動 RR 顯示 `-（不可行動）`；partial +0% 改 `僅輔助參考`；cross-day 歷史 token 去重；VERSION 保持 `v20.4.31`。
+  - 可重跑補強：新增 Owner 9 點盤中 / 盤後 rendered-message probes；更新 full `tests/test_generator_report.py` 舊 snapshot expectations，避免 targeted pass 但直接消費者 full file failed。
+  - QA 反證：第一次 QA blocked 有效攔住 `tests/test_generator_report.py` 26 failed 與有可買時首屏括號缺 `可買N`；返工後 Re-QA 自建可買 / 僅追蹤 / 淘汰混合 fixture 通過。
+  - 主 repo 驗證：`tests/test_generator_report.py` 146 passed，225 warnings；`py_compile` / `git diff --check` passed。
+  - 規則治理：`mobile_reading` + `QA反證` + `runner_gap`。同類報文任務不能只補 targeted probes；若改 summary contract，必須同步同一直接消費者 full test file，並用混合可買/追蹤/淘汰 fixture 反證首屏計數。
+  - 邊界：未改 strategy decision、RR 公式、DB schema/write、production backfill、live Telegram。
 - `presentation_noise_reduction_v20_4_31`:
   - 問題：Owner 要簡報按手機閱讀重構，消除重複行、偽推薦 `追蹤最強`、逐卡不可用噪音、資料依據過度展示，以及 B5 漏斗 / 卡片分類漂移。
   - 結果：市場/結論與原因/風險合併；無有效進場時使用 `僅追蹤` 並標未達進場條件；資料依據正常隱藏、異常才短顯示；卡片不可用歷史/回測行隱藏；B5 official rendered path 三方一致；VERSION 保持 `v20.4.31`。

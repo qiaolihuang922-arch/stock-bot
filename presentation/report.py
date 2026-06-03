@@ -258,6 +258,8 @@ def _confidence_data_text(report_context, name, data, deps):
         pct = round((float(stock_result.get("evidence_modifier") or 1.0) - 1.0) * 100)
     except (TypeError, ValueError):
         pct = 0
+    if status == "partial" and pct == 0:
+        return f"綜合 {final}｜技術 {technical}｜證據：partial｜僅輔助參考"
     sign = "+" if pct >= 0 else ""
     return f"綜合 {final}｜技術 {technical}｜證據 {sign}{pct}%（{status}）"
 
@@ -269,6 +271,18 @@ def _score_gated_market_line(report_context, name, stock_result, dist, deps):
             market_text = market_text.replace("極強", "待確認")
         return f"盤面：{market_text}"
     return "盤面：強弱證據不足｜待確認"
+
+
+def _unheld_rr_text(stock_result, funnel_state, valid_entry, deps):
+    weak_structure = (
+        stock_result.get("decision") in {"NO_TRADE", "FAIL"}
+        or stock_result.get("structure_phase") in {"FAILED_BREAKOUT", "WEAK", "DISTRIBUTION", "WEAK_REBOUND"}
+        or stock_result.get("price_behavior") == "WEAK_REBOUND"
+        or stock_result.get("market_grade") == "D"
+    )
+    if not valid_entry and (funnel_state == "淘汰" or weak_structure):
+        return "-（不可行動）"
+    return deps["rr_display_text"](stock_result, holding=False)
 
 
 def formatTelegramPositionCard(name, data, *, deps, report_context=None):
@@ -375,11 +389,12 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         title_icon = "⛔"
         title_action = "不買"
 
-    rr_text = deps["rr_display_text"](stock_result, holding=False)
+    rr_text = _unheld_rr_text(stock_result, funnel_state, valid_entry, deps)
     wait_text = deps["unheld_entry_wait_text"](stock_result, state, funnel_state)
     detail_size_text = deps["unheld_entry_size_detail_text"](stock_result)
     raw_size_text = deps["entry_size_text"](stock_result)
     score_text = _confidence_data_text(report_context, name, data, deps)
+    rr_data_text = f"RR：{rr_text}" if rr_text == "-（不可行動）" else f"RR {rr_text}"
     if deps["is_valid_entry"](stock_result) and strategy_source_blocked:
         strategy_reason = {
             "missing-source": "策略樣本來源缺失",
@@ -387,7 +402,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
             "source-error": "策略樣本來源讀取異常",
         }.get(strategy_source_status, "策略樣本不可用")
         buy_line = f"買點：不可買，{strategy_reason}"
-        data_line = f"數據：RR {rr_text}｜S 證據不足｜V {data.get('volume_ratio', '-')}x"
+        data_line = f"數據：{rr_data_text}｜S 證據不足｜V {data.get('volume_ratio', '-')}x"
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
     elif deps["is_valid_entry"](stock_result) and not source_eligible:
         buy_line = f"買點：不可買，source {source_status}"
@@ -395,31 +410,31 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         price_line = "價格：不可用（source missing）"
     elif valid_entry and report_phase not in (None, "盤中"):
         buy_line = "買點：盤後追蹤｜開盤後確認｜不追價"
-        data_line = f"數據：RR {rr_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
+        data_line = f"數據：{rr_data_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
     elif valid_entry and detail_size_text != raw_size_text:
         buy_line = f"買點：可買｜{detail_size_text}｜分批，不追價"
-        data_line = f"數據：RR {rr_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
+        data_line = f"數據：{rr_data_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
     elif valid_entry:
         buy_line = f"買點：可買｜建議 {raw_size_text}｜{wait_text}"
-        data_line = f"數據：RR {rr_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
+        data_line = f"數據：{rr_data_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
     elif funnel_state == "可準備" and prepare_action:
         buy_line = f"買點：{prepare_action}"
-        data_line = f"數據：RR {rr_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
+        data_line = f"數據：{rr_data_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
     elif funnel_state == "等回測":
         buy_line = "買點：不買，等回測"
-        data_line = f"數據：RR {rr_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
+        data_line = f"數據：{rr_data_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
     elif funnel_state == "淘汰":
         buy_line = f"買點：不可買，{wait_text}"
-        data_line = f"數據：RR {rr_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
+        data_line = f"數據：{rr_data_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
     else:
         buy_line = f"買點：不買，{wait_text}"
-        data_line = f"數據：RR {rr_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
+        data_line = f"數據：{rr_data_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
     trigger_label = "盤中觸發" if report_phase == "盤中" else "明日觸發"
     if deps["is_valid_entry"](stock_result) and strategy_source_blocked:
@@ -511,6 +526,35 @@ def _brief_background_line(report_context, deps):
     return f"背景：{market_text}；策略樣本只作輔助，不新增進場理由。"
 
 
+def _compact_market_overview_line(holding_items, watch_items, report_context, deps, market_mode=None):
+    if market_mode is None:
+        market_mode, risk_level = deps["derive_market_state"](watch_items)
+    else:
+        _mode, risk_level = deps["derive_market_state"](watch_items)
+    funnel = deps["build_unheld_funnel"](watch_items, market_mode=market_mode, report_context=report_context) if watch_items else {}
+    pending_count = len(deps["pending_trade_items"](
+        holding_items,
+        watch_items,
+        market_mode=market_mode,
+        report_context=report_context,
+    ))
+    actionable_count = len(funnel.get("可買") or []) if funnel else 0
+    tracking_only_count = deps["unheld_tracking_only_count"](funnel) if funnel else 0
+    rejected_count = len(funnel.get("淘汰") or []) if funnel else 0
+    unheld_count = sum(len(items) for items in funnel.values()) if funnel else len(watch_items)
+    unheld_parts = []
+    if actionable_count:
+        unheld_parts.append(f"可買{actionable_count}")
+    unheld_parts.extend([f"僅追蹤{tracking_only_count}", f"淘汰{rejected_count}"])
+    parts = [
+        f"市場：{market_mode} {risk_level}",
+        f"交易執行 {pending_count}",
+        f"持倉風控 {len(holding_items)}",
+        f"未持倉 {unheld_count}（{'/'.join(unheld_parts)}）",
+    ]
+    return "｜".join(parts)
+
+
 def _afterhours_brief_lines(holding_items, watch_items, report_context, deps, market_mode=None, daily_write_warning=None):
     funnel = deps["build_unheld_funnel"](watch_items, market_mode=market_mode, report_context=report_context) if watch_items else {"可買": []}
     actionable = len(funnel.get("可買") or [])
@@ -539,6 +583,7 @@ def _afterhours_brief_lines(holding_items, watch_items, report_context, deps, ma
 
     lines = [
         "📌 盤後簡報",
+        _compact_market_overview_line(holding_items, watch_items, report_context, deps, market_mode=market_mode),
         conclusion,
     ]
     if today_buy_names:
@@ -716,9 +761,16 @@ def _evidence_human_status_lines(report_context, deps):
     return lines
 
 
-def _decision_brief_lines(summary_message, version, excluded_summary_lines=None, excluded_summary_sections=None):
+def _decision_brief_lines(
+    summary_message,
+    version,
+    excluded_summary_lines=None,
+    excluded_summary_sections=None,
+    excluded_summary_prefixes=None,
+):
     excluded_summary_lines = set(excluded_summary_lines or [])
     excluded_summary_sections = set(excluded_summary_sections or [])
+    excluded_summary_prefixes = tuple(excluded_summary_prefixes or ())
     lines = []
     skip_excluded_section = False
     for line in (summary_message or "").splitlines():
@@ -730,6 +782,8 @@ def _decision_brief_lines(summary_message, version, excluded_summary_lines=None,
                 skip_excluded_section = False
             continue
         if line in excluded_summary_lines:
+            continue
+        if excluded_summary_prefixes and line.startswith(excluded_summary_prefixes):
             continue
         if line.startswith("【") and f"｜{version}】" in line:
             continue
@@ -798,6 +852,7 @@ def format_brief_data_evidence_message(
     market_mode=None,
     summary_message=None,
     summary_excluded_lines=None,
+    summary_excluded_prefixes=None,
     summary_excluded_sections=None,
     daily_write_warning=None,
 ):
@@ -815,12 +870,12 @@ def format_brief_data_evidence_message(
             summary_message,
             version,
             excluded_summary_lines=summary_excluded_lines,
+            excluded_summary_prefixes=summary_excluded_prefixes,
             excluded_summary_sections=summary_excluded_sections,
         )
         brief_lines = [
+            _compact_market_overview_line(holding_items, watch_items, report_context, deps, market_mode=market_mode),
             _brief_holding_line(holding_items, deps),
-            _brief_new_position_line(watch_items, report_context, deps, market_mode=market_mode),
-            _brief_background_line(report_context, deps),
         ]
         decision_lines = brief_lines + decision_lines
 
@@ -932,7 +987,13 @@ def render_telegram_messages(
         telegram_header,
         f"報告日：{report_context['report_context'].get('as_of_date')}｜資料交易日：{report_context['report_context'].get('trade_date')}",
         f"Source：{report_context.get('source_status_text')}",
+        f"📌 持倉：{'、'.join(name for name, _data in holding_items) or '無'}",
     }
+    summary_excluded_prefixes = (
+        "市場/結論：",
+        "背景：",
+        "僅追蹤：",
+    )
     if position_warning:
         summary_excluded_lines.add(f"⚠ {position_warning}，持倉狀態不可信")
     summary_excluded_lines.update(deps["format_market_theme_summary_lines"](
@@ -965,6 +1026,7 @@ def render_telegram_messages(
     strategy_evidence_text = _strategy_evidence_text(strategy_evidence_summary)
     if strategy_evidence_text:
         summary_excluded_sections.append(strategy_evidence_text.splitlines()[0])
+    summary_excluded_sections.append("僅追蹤：")
     evidence_message = deps["format_brief_data_evidence_message"](
         report_context,
         holding_items,
@@ -972,6 +1034,7 @@ def render_telegram_messages(
         market_mode=market_mode,
         summary_message=summary_message,
         summary_excluded_lines=summary_excluded_lines,
+        summary_excluded_prefixes=summary_excluded_prefixes,
         summary_excluded_sections=summary_excluded_sections,
         daily_write_warning=daily_write_warning,
     )

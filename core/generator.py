@@ -2884,7 +2884,21 @@ def cross_day_detail_line(data):
         parts.append(f"權重 {weight:+}")
     reasons = context.get("weight_reason") or []
     if reasons:
-        parts.append("、".join(str(item) for item in reasons[:2]))
+        existing_tokens = set()
+        for part in parts:
+            for token in str(part).replace("、", "｜").split("｜"):
+                if token:
+                    existing_tokens.add(token)
+        reason_parts = []
+        for item in reasons:
+            text = str(item)
+            if text in existing_tokens or any(text in token or token in text for token in existing_tokens):
+                continue
+            reason_parts.append(text)
+            if len(reason_parts) >= 2:
+                break
+        if reason_parts:
+            parts.append("、".join(reason_parts))
     if not parts:
         return None
     return "歷史：" + "｜".join(parts[:4])
@@ -5556,6 +5570,8 @@ def today_conclusion_text(holding_items, watch_items, market_mode, risk_level, r
     prepare_count = len(funnel["可準備"])
     tracking_only_count = unheld_tracking_only_count(funnel)
     next_day_count = unheld_next_day_count(funnel)
+    rejected_count = len(funnel["淘汰"])
+    unheld_total = sum(len(items) for items in funnel.values())
     holding_count = len(holding_items)
     intraday = report_phase in (None, "盤中")
     execution_label = "交易執行" if intraday else "明日計畫"
@@ -5577,8 +5593,8 @@ def today_conclusion_text(holding_items, watch_items, market_mode, risk_level, r
         if prepare_count:
             tail = f"未持倉 {unheld_prepare_count_text(prepare_counts)}"
             return f"{base}；{tail}"
-        if tracking_only_count:
-            tail = f"未持倉 {tracking_only_count} 檔僅追蹤"
+        if tracking_only_count or rejected_count:
+            tail = f"未持倉 {unheld_total}（僅追蹤{tracking_only_count}/淘汰{rejected_count}）"
             return f"{base}；{tail}"
         if next_day_count:
             return f"{base}；未持倉 {next_day_count} 檔隔日確認"
@@ -5594,8 +5610,8 @@ def today_conclusion_text(holding_items, watch_items, market_mode, risk_level, r
         if prepare_count:
             tail = f"未持倉 {unheld_prepare_count_text(prepare_counts)}"
             return f"{base}；{tail}"
-        if tracking_only_count:
-            tail = f"未持倉 {tracking_only_count} 檔僅追蹤"
+        if tracking_only_count or rejected_count:
+            tail = f"未持倉 {unheld_total}（僅追蹤{tracking_only_count}/淘汰{rejected_count}）"
             return f"{base}；{tail}"
         if next_day_count:
             return f"{base}；未持倉 {next_day_count} 檔隔日確認"
@@ -5609,8 +5625,8 @@ def today_conclusion_text(holding_items, watch_items, market_mode, risk_level, r
         tail = f"未持倉 {unheld_prepare_count_text(prepare_counts)}"
         return f"{risk_level} {market_mode}；{no_new_entry_text}；{tail}"
 
-    if tracking_only_count:
-        tail = f"未持倉 {tracking_only_count} 檔僅追蹤"
+    if tracking_only_count or rejected_count:
+        tail = f"未持倉 {unheld_total}（僅追蹤{tracking_only_count}/淘汰{rejected_count}）"
         return f"{risk_level} {market_mode}；{no_new_entry_text}；{tail}"
 
     if next_day_count:
@@ -5761,8 +5777,8 @@ def format_execution_checklist(holding_items, watch_items, limit=5, report_phase
 
     displayed = items[:limit]
     lines = [
-        f"{index}. {item['line'] if intraday else post_market_plan_line(item)}"
-        for index, item in enumerate(displayed, start=1)
+        compact_execution_checklist_line(item, intraday=intraday)
+        for item in displayed
     ]
 
     if len(items) > len(displayed):
@@ -5772,18 +5788,43 @@ def format_execution_checklist(holding_items, watch_items, limit=5, report_phase
             lines.append(f"另有 {len(items) - len(displayed)} 項明日計畫見詳情")
 
     if prepare_count and tracking_only_count:
-        tail = f"未持倉 {unheld_prepare_count_text(prepare_counts)}、{tracking_only_count} 檔只等觸發"
+        rejected_count = len(funnel["淘汰"])
+        total_count = sum(len(values) for values in funnel.values())
+        tail = f"未持倉 {total_count}（僅追蹤{tracking_only_count}/淘汰{rejected_count}）"
         lines.append(f"{tail}，{tracking_suffix}")
     elif prepare_count:
         tail = f"未持倉 {unheld_prepare_count_text(prepare_counts)}"
         lines.append(f"{tail}，{tracking_suffix}")
     elif tracking_only_count:
-        tail = f"未持倉 {tracking_only_count} 檔只等觸發"
+        rejected_count = len(funnel["淘汰"])
+        total_count = sum(len(values) for values in funnel.values())
+        tail = f"未持倉 {total_count}（僅追蹤{tracking_only_count}/淘汰{rejected_count}）"
         lines.append(f"{tail}，{tracking_suffix}")
     elif next_day_count:
         lines.append(f"未持倉 {next_day_count} 檔隔日確認，{tracking_suffix}")
 
     return lines
+
+
+def compact_execution_checklist_line(item, intraday=True):
+
+    if item.get("kind") == "watch":
+        if intraday:
+            return f"{item['name']} 可買（分批，不追價）"
+        return f"{item['name']} 明日追蹤（開盤後確認，不追價）"
+
+    state = item.get("state") or "待確認"
+    note = ""
+    parts = str(item.get("line") or "").split("｜")
+    if len(parts) >= 4:
+        note = parts[-1]
+    elif len(parts) >= 3:
+        note = parts[-1]
+    if "繼續降低優先級" in note:
+        note = "續降優先級"
+    if note and note != state:
+        return f"{item['name']} {state}（{note}）"
+    return f"{item['name']} {state}"
 
 
 def format_executed_checklist(holding_items, watch_items, limit=3):
@@ -6386,6 +6427,7 @@ def _telegram_presentation_deps():
         "tomorrow_trigger_text": tomorrow_trigger_text,
         "rejected_transition_reason_line": rejected_transition_reason_line,
         "build_unheld_funnel": build_unheld_funnel,
+        "pending_trade_items": pending_trade_items,
         "unheld_tracking_only_count": unheld_tracking_only_count,
         "_field_by_key": _field_by_key,
         "_manifest_status": _manifest_status,
@@ -6890,6 +6932,7 @@ def format_brief_data_evidence_message(
     market_mode=None,
     summary_message=None,
     summary_excluded_lines=None,
+    summary_excluded_prefixes=None,
     summary_excluded_sections=None,
     daily_write_warning=None,
 ):
@@ -6902,6 +6945,7 @@ def format_brief_data_evidence_message(
         market_mode=market_mode,
         summary_message=summary_message,
         summary_excluded_lines=summary_excluded_lines,
+        summary_excluded_prefixes=summary_excluded_prefixes,
         summary_excluded_sections=summary_excluded_sections,
         daily_write_warning=daily_write_warning,
     )
