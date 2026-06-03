@@ -28,6 +28,25 @@
 
 ## Latest Completed Handoff
 
+- task_id：`render_market_theme_evidence_freshness_20260603`
+- 狀態：code done / committed；QA conditional pass；push 與 git completion gate 待收口。
+- commit：`5b9523f Add Render market evidence freshness preflight`。
+- 問題：Owner 說實際流程是 Render 每 5 分鐘啟動，不是手動 GitHub Action；寫過的日期不能重寫，缺的日期要自動補，避免 6/1、6/2、6/3 類漏寫後永遠停在 5/29。
+- 修正：
+  - `app.py` Render route 在 dispatch workflow / already-sent tag 前先跑 market/theme freshness preflight；失敗時不 dispatch、不寫 tag，讓下一次 5 分鐘觸發可重試。
+  - `run_phase3_evidence_automation.py --freshness-check-only` 預設檢查最近 5 個 confirmed trading days，safe write time 預設台北 14:00。
+  - 已完整日期輸出 `already-complete` 並跳過；未到時間輸出 `skipped-before-safe-write-time`；缺失且過時間走既有 backfill/upsert 並 read-after-write。
+  - `market_theme_confirmed_evidence` 完整性要求 9 個官方 TWSE 題材 key，避免只寫一條也被當完整。
+  - backfill workflow / CLI 吃 `start_date/end_date + --historical-range`，不再 May-only。
+- 驗證：
+  - `tests/test_app_render_preflight.py tests/test_phase3_evidence_automation.py tests/test_market_theme_source_backfill.py tests/test_workflow_runtime_config.py` 45 passed。
+  - `py_compile` passed；`git diff --check` passed。
+  - Architect 已用既有 approved script 回寫 `2026-06-01~2026-06-03`：`market_theme_confirmed_evidence` 27 rows、`market_theme_index_daily_bars` 30 rows，read-after-write passed。
+- QA 狀態：`conditional pass`。原因：程式與 runner route 已反證，但尚未取得 Render production 5 分鐘觸發 log；部署後需確認 freshness preflight 真實輸出。
+- 邊界：未改 DB schema、RR、策略決策、Telegram 報文格式、live delivery；未手寫 production DML。
+
+## Previous Completed Handoff
+
 - task_id：`20260603_evidence_score_effective_market_freshness_v20_4_34`
 - 狀態：code done / committed / pushed；QA conditional pass；git completion gate passed。
 - commit：`135bae7 Make evidence scoring use per-stock backtests`。

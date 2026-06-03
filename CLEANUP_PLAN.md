@@ -15,6 +15,15 @@
 
 ## Completed
 
+- `render_market_theme_evidence_freshness_20260603`:
+  - 問題：Render 每 5 分鐘啟動時缺少幂等 evidence freshness preflight，6/1~6/3 漏寫後 market/theme 仍停在 5/29。
+  - 結果：Render route dispatch 前先跑 `--freshness-check-only`；最近 5 個 confirmed trading days 已完整則 skip，未到 14:00 不寫，缺失且過 14:00 走既有 approved backfill/upsert + read-after-write；失敗 blocking dispatch 並保留下一輪重試。
+  - 完整性補強：`market_theme_confirmed_evidence` 必須覆蓋 9 個官方 TWSE 題材 key 才算已完整；部分 rows 不跳過。
+  - Backfill 收斂：workflow/CLI 改吃 `start_date/end_date` 與 `--historical-range`，不再 May-only。
+  - 可重跑補強：Render route preflight、already-complete skip、partial rows backfill、before-safe-time no-write、after-safe-time backfill、read-after-write mismatch fail-closed、workflow arg contract。
+  - 主 repo 驗證：45 passed；`py_compile` / `git diff --check` passed。
+  - Production 取證：已用既有 script 實際回寫 `2026-06-01~2026-06-03`，confirmed evidence 27 rows、index bars 30 rows、read-after-write passed。
+  - 殘留：QA conditional pass；仍需部署後 Render 5 分鐘觸發 log 驗證真實 runtime latency / output。
 - `20260603_evidence_score_effective_market_freshness_v20_4_34`:
   - 問題：Owner 指出 evidence 仍像「顯示但 0 作用」；根因是 strategy scoring 沒吃 per-stock backtest，以及 market confirmed evidence 沒有每日保鮮。
   - 結果：per-stock strategy evidence 改讀各股 `backtest_context`；sample 36/38 + 高參考度可進 ready 並讓 `綜合 != 技術`；弱勢 / FAILED_BREAKOUT 不吃正向 boost；daily_evidence cron 改收盤後；Phase3 缺 approved payload 或 payload trade_date mismatch 會 fail closed。
