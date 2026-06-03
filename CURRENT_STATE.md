@@ -29,8 +29,10 @@
 ## Latest Completed Handoff
 
 - task_id：`20260603_same_day_risk_report_replay_regressions`
-- 狀態：done / committed；push 與 git completion gate 待 final 收口。
-- commit：`ea75f15 Fix same-day risk and report replay regressions`。
+- 狀態：done / committed / pushed；Git completion gate passed。
+- commits：
+  - `ea75f15 Fix same-day risk and report replay regressions`
+  - `a7ac71d Mark same-day report replay fix closeout`
 - 問題：Owner 要修 7 項 06/03 v20.4.32 報文問題，並要求不要再只驗 helper：聯電同日 -3.86% + 突破失敗仍顯示新倉觀察；光寶科可買 / 淘汰同日抖動；技嘉過熱觀察露 RR 0.21；簡報原因逐檔串接；未持倉回測行部分有部分無；盤中 / 盤後降噪漂移；strategy sample version filter 需確認不回退。
 - 修正：
   - 同日建倉新增 `SAME_DAY_FAIL_DROP_PCT = 0.03`；今日買入後若 -3% 且突破失敗 / 結構轉弱，持倉主行動顯示 `減碼`；hard_stop 仍優先，僅輕微回落維持新倉風控觀察。
