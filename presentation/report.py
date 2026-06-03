@@ -290,13 +290,40 @@ def _score_data_text(report_context, name, data, deps):
     return "S 不可用"
 
 
+def _is_heat_blocked(stock_result):
+    return (
+        stock_result.get("heat_state") in {"HOT", "EXTREME"}
+        or stock_result.get("trade_state") == "EXTENDED"
+        or str(stock_result.get("extended_level") or "") in {"3", "4", "5"}
+    )
+
+
+def _is_risk_blocked(stock_result, data):
+    decision = stock_result.get("_holding_decision") or (data or {}).get("holding_decision") or {}
+    decision_text = f"{decision.get('action') or ''} {decision.get('level') or ''} {decision.get('note') or ''}"
+    return (
+        stock_result.get("decision") == "FAIL"
+        or stock_result.get("structure_phase") in {"FAILED_BREAKOUT", "WEAK", "DISTRIBUTION", "WEAK_REBOUND"}
+        or stock_result.get("price_behavior") == "WEAK_REBOUND"
+        or any(token in decision_text for token in ["減碼", "停損", "硬風控", "結構弱"])
+    )
+
+
+def _evidence_unavailable_text(stock_result, data):
+    if _is_heat_blocked(stock_result):
+        return "過熱不適用"
+    if _is_risk_blocked(stock_result, data):
+        return "風控不適用"
+    return "資料不足"
+
+
 def _confidence_data_text(report_context, name, data, deps):
     stock_result = data.get("result") or {}
     if "final_confidence" not in stock_result or "technical_confidence" not in stock_result:
         return _score_data_text(report_context, name, data, deps)
 
     try:
-        final = round(float(stock_result.get("final_confidence") or 0))
+        final = min(100, round(float(stock_result.get("final_confidence") or 0)))
         technical = round(float(stock_result.get("technical_confidence") or 0))
     except (TypeError, ValueError):
         return _score_data_text(report_context, name, data, deps)
@@ -304,23 +331,50 @@ def _confidence_data_text(report_context, name, data, deps):
     evidence_score = stock_result.get("evidence_score")
     status = stock_result.get("evidence_status") or "unavailable"
     if evidence_score is None or status == "unavailable":
-        return f"綜合 {final}｜技術 {technical}｜證據：不適用（資料不足）"
+        return f"綜合 {final}｜技術 {technical}｜證據：{_evidence_unavailable_text(stock_result, data)}"
 
     try:
         pct = round((float(stock_result.get("evidence_modifier") or 1.0) - 1.0) * 100)
     except (TypeError, ValueError):
         pct = 0
+    if technical < 10 or final == technical:
+        return f"綜合 {final}｜技術 {technical}｜證據：微幅（{status}）"
     if status == "partial" and pct == 0:
         return f"綜合 {final}｜技術 {technical}｜證據：partial｜僅輔助參考"
     sign = "+" if pct >= 0 else ""
     return f"綜合 {final}｜技術 {technical}｜證據 {sign}{pct}%（{status}）"
 
 
-def _score_gated_market_line(report_context, name, stock_result, dist, deps):
+def _low_volume_ratio(data):
+    try:
+        return float((data or {}).get("volume_ratio"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_low_volume_consolidation(report_context, data, stock_result):
+    if _report_phase(report_context) != "盤後":
+        return False
+    ratio = _low_volume_ratio(data)
+    if ratio is None or ratio >= 0.8:
+        return False
+    return (
+        stock_result.get("volume_price_state") == "COILING"
+        or stock_result.get("structure_phase") == "BASE"
+        or stock_result.get("lifecycle") == "BASE"
+    )
+
+
+def _score_gated_market_line(report_context, name, data, dist, deps):
+    stock_result = data.get("result") or {}
     if _score_source_available(report_context, name, deps):
         market_text = deps["plain_label"](deps["compact_market_line"](stock_result, dist))
         if ("弱勢" in market_text or "遠離突破" in market_text) and "極強" in market_text:
             market_text = market_text.replace("極強", "待確認")
+        if _is_low_volume_consolidation(report_context, data, stock_result):
+            market_text = market_text.replace("極強", "待確認")
+            if "縮量" not in market_text:
+                market_text = f"{market_text}｜縮量"
         return f"盤面：{market_text}"
     return "盤面：強弱證據不足｜待確認"
 
@@ -364,20 +418,24 @@ def formatTelegramPositionCard(name, data, *, deps, report_context=None):
         and decision.get("allow_add") is not False
         and summary_action != "新倉風控觀察"
     )
-    rr_line = "數據：新倉 RR：不適用（既有持倉）" if decision and not is_add_context else f"數據：RR {rr_text}"
     score_text = _confidence_data_text(report_context, name, data, deps)
+    data_line = (
+        "數據：不適用（既有持倉）"
+        if decision and not is_add_context
+        else f"數據：RR {rr_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
+    )
 
     lines = [
         f"【{deps['stock_title'](name, data)}】📌 {summary_action}｜{deps['signed_pct'](deps['stock_pnl'](data))}",
         execution_line,
         f"風控：{deps['holding_risk_text'](decision)}",
-        _score_gated_market_line(report_context, name, stock_result, dist, deps),
+        _score_gated_market_line(report_context, name, data, dist, deps),
         deps["today_buy_holding_context_line"](data) if _report_phase(report_context) == "盤後" else None,
         f"決策：{decision_line}",
         f"條件：{condition_line}",
         f"下一步：{next_step}",
         deps["_source_status_line"](report_context, name, holding=True) if report_context else None,
-        f"{rr_line}｜{score_text}｜V {data.get('volume_ratio', '-')}x",
+        data_line,
         _card_history_line(data, report_context, deps),
         deps["price_change_line"](data.get("price"), data.get("change")),
     ]
@@ -519,7 +577,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         (
             "盤面：證據不足｜待確認"
             if strategy_source_blocked
-            else _score_gated_market_line(report_context, name, stock_result, dist, deps)
+            else _score_gated_market_line(report_context, name, data, dist, deps)
         ),
         buy_line,
     ]

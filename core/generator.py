@@ -69,7 +69,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.34"
+VERSION = "v20.4.35"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -4407,14 +4407,15 @@ def apply_evidence_confidence(report_context, name, data):
     boost_blocked = (
         result.get("decision") == "FAIL"
         or result.get("structure_phase") in {"FAILED_BREAKOUT", "WEAK", "DISTRIBUTION"}
-        or result.get("heat_state") == "EXTREME"
+        or result.get("heat_state") in {"HOT", "EXTREME"}
+        or result.get("trade_state") == "EXTENDED"
         or technical <= 0
     )
-    if technical <= 0 or (boost_blocked and modifier > 1.0):
+    if technical <= 0 or boost_blocked:
         evidence_score = None
         evidence_status = "unavailable"
         modifier = 1.0
-    final = technical * modifier
+    final = min(100.0, technical * modifier)
     result["technical_confidence"] = technical
     result["evidence_score"] = evidence_score
     result["evidence_status"] = evidence_status

@@ -28,6 +28,27 @@
 
 ## Latest Completed Handoff
 
+- task_id：`report-score-evidence-display-20260603`
+- 狀態：code done；QA conditional pass；commit / push 待收口。
+- commit：pending。
+- 問題：Owner 指出既有持倉非加碼仍顯示新倉品質分，且 `綜合` 可超過 100；證據不可用全部寫成資料不足；過熱 / 低量 / 低分文案容易誤讀。
+- 修正：
+  - `core/generator.py` 升 `v20.4.35`，`final_confidence` 封頂 100。
+  - heat / extended、FAIL / 弱結構、technical<=0 的 blocked 情境一律 evidence unavailable。
+  - 持倉非加碼卡片數據行改 `數據：不適用（既有持倉）`，不顯示 RR / 綜合 / 技術 / 證據 / V；加碼持倉與新倉候選仍顯示分數。
+  - evidence unavailable 顯示分流：`過熱不適用`、`風控不適用`、`資料不足`。
+  - 盤後低量收縮整理不顯示 `極強`，改 `待確認｜縮量`。
+  - technical <10 或 rounded final=technical 時顯示 `微幅`，不顯示 `+X%`。
+- 驗證：
+  - `tests/test_generator_report.py tests/test_market_theme_evidence.py` 195 passed。
+  - `py_compile` passed；`git diff --check` passed。
+  - official `formatTelegramMessages` replay 覆蓋非加碼持倉、加碼、新倉封頂、過熱、風控、資料不足、低量、低分。
+- QA 狀態：`conditional pass`。原因：message-list replay 與 tests 覆蓋核心可見錯誤，但未取得正式 runner artifact。
+- 流程事件：第一次 QA blocked 抓到 `CHANGELOG.md` 錯輪；Architect 重寫本輪 handoff 後於主 repo 重跑測試。
+- 邊界：未改 DB schema/write、RR、策略 decision、Render freshness、live Telegram。
+
+## Previous Completed Handoff
+
 - task_id：`render_market_theme_evidence_freshness_20260603`
 - 狀態：code done / committed / pushed；QA conditional pass；git completion gate passed。
 - commit：`5b9523f Add Render market evidence freshness preflight`。

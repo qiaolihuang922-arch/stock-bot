@@ -1,81 +1,81 @@
-# QA_REPORT: Render market/theme evidence freshness check 與幂等補寫
+# QA_REPORT: report-score-evidence-display-20260603
 
 ## 測試範圍
 
-- 任務：`render_market_theme_evidence_freshness_20260603`
+- 任務：`report-score-evidence-display-20260603`
 - QA 分級：L3。
-- 範圍：
-  - Render `/` route preflight 行為。
-  - Phase3 freshness-only CLI。
-  - market/theme completeness 與 read-after-write fail closed。
-  - backfill CLI / workflow range contract。
-  - 靜態語法與 diff hygiene。
+- 使用者可見面：
+  - Telegram 卡片 `數據` 行。
+  - 證據不可用原因文案。
+  - 強度標籤與低量一致性。
+  - 報文版本字串。
+- 未擴大到 production DB、live Telegram、full runner artifact。
 
 ## 關聯風險掃描
 
-- DB schema：未變更。
-- Production write path：仍走既有 `upsert_source_payloads()` / approved backfill script interface；未手寫 DML。
-- Telegram live delivery：未觸發。
-- Telegram 報文格式 / VERSION：未改。
-- Strategy / RR / holding state：未改。
-- Render high-frequency risk：preflight 失敗會 blocking dispatch，避免錯誤資料下仍發報文；這是 intentional fail closed。
+- DB schema / write path：未改。
+- RR 公式：未改。
+- Strategy decision / holding state machine：未改。
+- Render freshness preflight：未改。
+- Telegram visible report：已改，版本升 `v20.4.35`。
 
 ## 跨區塊語意一致性
 
-- `TASK.md` 要求 Render 每次啟動可呼叫 freshness check；`app.py` 已在 dispatch 前呼叫。
-- `TASK.md` 要求已完整日期跳過不重寫；test 覆蓋 `already-complete` 且 backfill 未被呼叫。
-- `TASK.md` 要求未到 14:00 只讀不寫；test 覆蓋 `skipped-before-safe-write-time` 且 backfill 未被呼叫。
-- `TASK.md` 要求缺失且 14:00 後補寫並驗證；test 覆蓋 `backfilled-and-verified`。
-- `TASK.md` 要求某日 read-after-write mismatch fail closed；test 覆蓋 `read-after-write-mismatch` 與非成功狀態。
-- `TASK.md` 要求 backfill 不再 May-only；workflow / CLI tests 覆蓋 `--historical-range --start-date --end-date`。
+- TASK 要求非加碼持倉不顯示新倉品質分；message-list replay 確認非加碼持倉卡片只有 `數據：不適用（既有持倉）`，不含 `綜合 / 技術 / 證據 / RR`。
+- TASK 要求持倉加碼仍可顯示分數；QA 自補探針確認 `ADD_10` 持倉仍含 `數據：RR / 綜合 / 技術`。
+- TASK 要求 `綜合 <= 100`；message-list replay 斷言不出現 `綜合 10[1-9]`，且高分候選顯示 `綜合 100｜技術 96`。
+- TASK 要求過熱文案不再是資料不足；message-list replay 顯示 `證據：過熱不適用`。
+- TASK 要求風控 / 缺資料分流；message-list replay 顯示 `證據：風控不適用` 與 `證據：資料不足`。
+- TASK 要求低量不顯示 `極強`；message-list replay 顯示 `待確認` 與 `縮量`。
 
 ## 使用者誤讀風險
 
-- `MARKET_THEME_FRESHNESS_FAILED` log 帶 `trade_date / source / stage / reason / action=fail_closed`，可直接知道卡在哪一層。
-- freshness report 帶 `version=market_theme_freshness_v1`，不混同 Telegram 報文版本。
-- 已寫過但只寫一條 confirmed row 的情境不會被誤判完整；本輪新增反證，必須 9 個官方 TWSE 題材 key 齊全才跳過。
+- 非加碼持倉不再同時顯示 `RR 不適用` 和 `綜合/技術`，避免把既有持倉誤讀成新倉品質評分。
+- 加碼持倉仍保留分數，避免把可加碼情境誤讀成不可評估。
+- 過熱 / 風控 / 資料不足三類文案分開，避免全部顯示成 `資料不足`。
+- 低量盤後整理不再呈現 `極強｜V<0.8` 的直覺衝突。
 
 ## 失敗標本反證
 
-- Owner 標本：Render 每 5 分鐘啟動，不是手動 GitHub Action；6/1、6/2、6/3 因舊流程漏寫，market/theme 仍停在 5/29。
-- 反證路徑：
-  - Render route：freshness failure blocks workflow dispatch and already-sent tag。
-  - Freshness helper：最近交易日已完整時跳過，不重寫。
-  - Freshness helper：部分 confirmed rows 不算完整，會補寫。
-  - Freshness helper：14:00 前不寫。
-  - Freshness helper：14:00 後缺失會補寫並 read-after-write。
-  - Freshness helper：read-after-write 仍缺 business key 時 fail closed。
-  - Workflow：manual backfill step 傳入 `start_date/end_date`。
+- Owner 標本：建準暫不加碼持倉曾顯示 `綜合106`。
+- 等價 replay：
+  - 非加碼持倉：`數據：不適用（既有持倉）`，且不含 `綜合 / 技術 / 證據 / RR 2.7`。
+  - 高分新倉候選：顯示 `綜合 100｜技術 96`，無 `綜合 >100`。
+  - 過熱：`證據：過熱不適用`。
+  - 風控：`證據：風控不適用`。
+  - 缺資料：`證據：資料不足`。
+  - 低量：無 `極強`，有 `待確認` 與 `縮量`。
+  - 低分：無 `證據 +`，顯示 `證據：微幅（confirmed）`。
 
 ## 質疑與反證
 
-- 質疑：Render 每 5 分鐘會不會無腦寫？
-  - 反證：`already-complete` fixture 中 backfill calls 為空。
-- 質疑：半寫入是否會被誤判已完成？
-  - 反證：只有一條 confirmed row 的 fixture 會觸發 backfill。
-- 質疑：未到安全時間是否會寫 DB？
-  - 反證：13:55 fixture backfill calls 為空。
-- 質疑：失敗後是否仍發 workflow？
-  - 反證：`test_freshness_failure_blocks_dispatch_before_sent_tag` 確認 `already_sent` 與 workflow dispatch 都未執行。
+- 質疑：修非加碼持倉會不會誤傷加碼？
+  - 反證：QA 自補 `ADD_10` 持倉探針確認加碼卡仍顯示 `RR / 綜合 / 技術`。
+- 質疑：版本只改常量但沒進 message header？
+  - 反證：official message-list replay 顯示 `【06/03 盤後｜v20.4.35】`。
+- 質疑：Tech handoff 曾錯輪？
+  - 反證：第一次 QA blocked 抓到 CHANGELOG 錯輪；Architect 已重寫本輪 CHANGELOG / QA_REPORT，並在主 repo 重跑測試。
 
 ## 已跑命令
 
-- `arch -arm64 .venv/bin/python -m pytest tests/test_app_render_preflight.py tests/test_phase3_evidence_automation.py tests/test_market_theme_source_backfill.py tests/test_workflow_runtime_config.py`
-  - 結果：45 passed。
-- `PYTHONPYCACHEPREFIX=/private/tmp/stock_bot_pycache_main arch -arm64 .venv/bin/python -m py_compile app.py scripts/run_phase3_evidence_automation.py scripts/backfill_market_theme_sources.py`
+- `arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py`
+  - 結果：157 passed，241 warnings。
+- `arch -arm64 .venv/bin/python -m pytest tests/test_market_theme_evidence.py`
+  - 結果：38 passed，13 warnings。
+- `PYTHONPYCACHEPREFIX=/private/tmp/report_score_display_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py presentation/report.py tests/test_generator_report.py tests/test_market_theme_evidence.py`
   - 結果：passed。
 - `git diff --check`
   - 結果：passed。
 
 ## 未測項目
 
-- 未在 Render production runtime 實際跑 5 分鐘 endpoint。
-- 未執行本輪新 freshness preflight 對 production DB 的 live write。
 - 未跑 full pytest。
-- 未驗證 Render timeout / memory / cold start 表現。
+- 未執行 live Telegram。
+- 未讀寫 production DB。
+- 未取得 Render / GitHub runner artifact；本輪驗 official generator message-list replay。
 
 ## QA 結論
 
 conditional pass
 
-理由：程式碼、helper、runner route、workflow/CLI contract 的 L3 反證已通過；但 production Render 部署後的實際 5 分鐘觸發 log 尚未取得，因此不能宣稱 production runtime 已完全驗收。程式 diff 可吸收，部署後需看一次 Render log 或 GitHub dispatch artifact，確認 freshness preflight 在真實環境輸出 `already-complete` 或 `backfilled-and-verified`。
+理由：使用者可見 message-list replay 與相關 regression tests 已覆蓋本輪核心錯誤，且錯輪 CHANGELOG 已修正；但尚未取得正式 runner artifact，因此不寫成完全 `通過`。

@@ -16,6 +16,13 @@
 
 ## Completed
 
+- `report-score-evidence-display-20260603`:
+  - 問題：既有持倉非加碼仍顯示新倉品質分，`綜合` 可能超過 100；證據不可用原因一律資料不足；低量盤後仍可能顯示 `極強`。
+  - 結果：VERSION 升 `v20.4.35`；非加碼持倉數據行整段 `不適用（既有持倉）`；加碼 / 新倉保留分數；`final_confidence` 封頂 100；過熱 / 風控 / 資料不足文案分流；盤後縮量整理改 `待確認｜縮量`；低分顯示 `微幅`。
+  - 可重跑補強：official message-list replay 覆蓋非加碼、加碼、新倉封頂、過熱、風控、資料不足、低量、低分；generator + market tests 195 passed。
+  - QA 狀態：conditional pass；未取得正式 runner artifact。
+  - 流程事件：第一輪 QA blocked 抓到 `CHANGELOG.md` 錯輪，避免 Architect 吸收錯任務 handoff；已重寫本輪 `CHANGELOG.md / QA_REPORT.md` 並重跑主 repo tests。
+  - 邊界：未改 RR、DB schema/write、策略 decision、Render freshness、live Telegram。
 - `local_context_cleanup_20260603`:
   - 問題：本地 `.cao_agent_context` 累積大量舊 PM/Tech/QA 流水與 residual patch，重開對話時容易把注意力拖回過期上下文。
   - 清理：刪除非 `20260603_*` 的舊 outputs、全部舊 artifacts residual patch、空目錄；保留 2026-06-03 最新任務證據。
