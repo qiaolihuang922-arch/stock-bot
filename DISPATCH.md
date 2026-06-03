@@ -3,7 +3,7 @@
 依 `AGENTS.md` 啟動順序閱讀；本文件只保留任務看板、handoff 指針與固定啟動命令。
 
 - task_md_holds: `recently_done`
-- task_md_task_id: `20260603_evidence_sample_gating_v20_4_34`
+- task_md_task_id: `20260603_evidence_score_effective_market_freshness_v20_4_34`
 - task_md_note: `TASK.md / CHANGELOG.md / QA_REPORT.md 目前是最近完成任務的滾動 handoff，不代表仍在 Tech/QA。`
 
 ## Active
@@ -16,6 +16,7 @@
 
 ## Recently Done
 
+- `135bae7`｜`20260603_evidence_score_effective_market_freshness_v20_4_34`｜risk_patch｜維持 `v20.4.34`：per-stock strategy evidence 改用各股 `backtest_context`，sample 36/38 且參考度高可在 global sample partial 時進 ready；緯創 / 華邦等價 replay 顯示 `綜合 != 技術`、證據 +8% supporting，弱勢 / FAILED_BREAKOUT modifier <= 1.0；daily evidence cron 改台北 14:00，Phase3 runner 缺 `MARKET_THEME_APPROVED_PAYLOAD` fail closed，payload trade_date mismatch 不進 write；主 repo generator + Phase3 + workflow tests 179 passed，py_compile / diff check passed；QA conditional pass，因未讀 production DB / 未取得正式 runner artifact，不能宣稱 2026-06-03 confirmed row 已落庫。
 - `b38ae26`｜`20260603_evidence_sample_gating_v20_4_34`｜risk_patch｜升版 `v20.4.34`：strategy sample count 統一讀 `row_count / sample_rows / evidence_count / sample / sample_count / classification_sample_count`，避免 classification 樣本 36/38 被讀成 0 後降為 partial；8 天 confirmed_trend market/theme 維持 decision eligible；official message-list replay 覆蓋建準等價卡片 `綜合 90｜技術 78｜證據 +15%（confirmed）`，不再 `partial/+0%` 或 `綜合=技術`；過熱卡保留等冷卻 hard block 但 evidence 不誤顯不足；主 repo evidence targeted 6 passed、generator/market/strategy suite 206 passed、py_compile / diff check passed；QA agent runner 遇 usage limit，QA_REPORT 標為 conditional pass 並記錄本地反證。
 - `ea75f15`｜`20260603_same_day_risk_report_replay_regressions`｜risk_patch｜升版 `v20.4.33`：同日建倉入場即錯（-3% 且突破失敗 / 結構轉弱）覆蓋新倉觀察並顯示減碼；hard_stop 仍優先；光寶科類前態淘汰 / failed / weak 單次 BUY 防抖，卡片顯示 `不買｜前態待確認` 而非 `不買｜進場`；過熱 / 等冷卻 / 過熱觀察 RR 顯示 `-（過熱）`；簡報原因行單句化；06/03 v20.4.32 failure specimen 補 official message-list replay；QA passed；主 repo targeted suite 240 passed；py_compile / diff check passed。
 - `32a7a8b`｜`process_validation_route_for_owner_report_samples`｜process｜不改產品代碼：Owner 完整報文成為 failure specimen；PM 必須定義驗收路由，Tech 必須標明 probe 覆蓋層級，QA 必須用同層 replay / artifact 反證，否則只能 conditional / blocked；agent profile contract gate、Architect scope gate、diff check passed。
@@ -33,8 +34,8 @@
 
 ## Next Action
 
-- 本輪 evidence sample gating code path 已收口並 commit；下一步若報文仍顯示資料不足，優先開 production read-only artifact 任務核對真實 source payload 是否提供 `classification_sample_count / sample_count` 或等價欄位。
-- QA agent runner 本輪因 Codex usage limit 卡在互動提示；後續流程治理應補 runner 對 usage prompt / model fallback 的 fail-fast 或可設定模型機制。
+- 本輪 evidence scoring code path 已收口並 commit；下一步若要把 market freshness 從 conditional 變通過，需 Owner 配好 `MARKET_THEME_APPROVED_PAYLOAD` 後提供 daily_evidence runner artifact，或開 production read-only artifact 任務確認當日 confirmed row。
+- QA agent runner 前輪 usage limit 卡點仍是 runner_gap；本輪 QA 產出 conditional pass，產品 diff 已以主 repo 179 tests 反證。
 - 開新任務前先看 `task_md_holds`，不要用 `TASK.md` 內部舊狀態反推當前看板。
 - 報文 / 策略 / 產品修復仍走 PM -> Tech -> QA；流程治理文件可由 Architect 直接改。
 

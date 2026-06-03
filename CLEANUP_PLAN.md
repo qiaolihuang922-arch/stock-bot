@@ -15,6 +15,14 @@
 
 ## Completed
 
+- `20260603_evidence_score_effective_market_freshness_v20_4_34`:
+  - 問題：Owner 指出 evidence 仍像「顯示但 0 作用」；根因是 strategy scoring 沒吃 per-stock backtest，以及 market confirmed evidence 沒有每日保鮮。
+  - 結果：per-stock strategy evidence 改讀各股 `backtest_context`；sample 36/38 + 高參考度可進 ready 並讓 `綜合 != 技術`；弱勢 / FAILED_BREAKOUT 不吃正向 boost；daily_evidence cron 改收盤後；Phase3 缺 approved payload 或 payload trade_date mismatch 會 fail closed。
+  - 可重跑補強：新增 per-stock replay、低樣本 / 無歷史、FAILED_BREAKOUT modifier<=1、missing payload fail-closed、payload date mismatch、workflow command probes。
+  - 主 repo 驗證：generator + Phase3 + workflow 179 passed；`py_compile` / `git diff --check` passed。
+  - QA 狀態：conditional pass。程式局部 diff 可吸收；production 當日 confirmed row 未驗，因沒有 Owner secret / runner artifact / read-only production artifact。
+  - 規則治理：`evidence_chain` + `runner_gap`。下一輪若報文仍顯示 market 資料不足，先取 production read-only artifact 或正式 runner artifact，不能再只改 scoring / formatter。
+  - 邊界：未改 RR、DB schema/write、live Telegram、production backfill；未執行 production write。
 - `20260603_evidence_sample_gating_v20_4_34`:
   - 問題：Owner 指出 evidence source 已多輪接通，但 06/03 報文仍顯示 `partial / 不適用（資料不足）` 與 `綜合=技術`；本輪聚焦 market/theme 8 天 confirmed、strategy_sample 真實 sample count 與 version filter。
   - 結果：VERSION 升 `v20.4.34`；strategy sample count 映射支援 `classification_sample_count / sample_count` 等欄位，避免真實分類樣本 36/38 被讀成 0；official message-list replay 下建準等價卡片顯示 `綜合 90｜技術 78｜證據 +15%（confirmed）`，過熱卡不再 false partial。

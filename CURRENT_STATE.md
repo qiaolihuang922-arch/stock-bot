@@ -28,6 +28,26 @@
 
 ## Latest Completed Handoff
 
+- task_id：`20260603_evidence_score_effective_market_freshness_v20_4_34`
+- 狀態：code done / committed；QA conditional pass；push 與 git completion gate 待收口。
+- commit：`135bae7 Make evidence scoring use per-stock backtests`。
+- 問題：Owner 要讓 evidence 從「顯示但 0 作用」變成真正改變 `綜合` 分，並讓 market confirmed_evidence 每日保鮮。
+- 修正：
+  - per-stock strategy evidence 改用各股 `backtest_context`；有 sample 但無 source_status 時不再被 global strategy manifest 拉成 unavailable。
+  - `reference / reference_level` 支援 `高 / high / reliable / strong` 作為 sample >= 10 的 ready 判斷。
+  - avg_return 轉 numeric 後判斷，避免字串欄位比較風險。
+  - daily_evidence cron 改為 `0 6 * * 1-5`，對應台北 14:00 收盤後。
+  - Phase3 runner 新增 `--require-market-theme-payload`；缺 `MARKET_THEME_APPROVED_PAYLOAD` 時 fail closed / exit 2；payload trade_date mismatch 會在 write CLI 前失敗。
+- 驗證：
+  - 主 repo `tests/test_generator_report.py tests/test_phase3_evidence_automation.py tests/test_workflow_runtime_config.py` 179 passed，241 warnings。
+  - `py_compile` passed；`git diff --check` passed。
+  - per-stock replay：global row_count=3 時，緯創 sample 36、華邦 sample 38 仍 ready，兩股 modifier 不同，`final != technical`。
+  - weak / failed guard：FAILED_BREAKOUT fixture modifier <= 1.0。
+- QA 狀態：`conditional pass`。原因：程式與 runner fail-closed path 可吸收，但未讀 production DB、未跑正式 daily_evidence artifact，不能證明 2026-06-03 production confirmed row 已存在。
+- 邊界：未改 RR 公式、DB schema/write path、live Telegram、production backfill；未執行 production write。若要把本輪升為 `通過`，需 Owner 配置 `MARKET_THEME_APPROVED_PAYLOAD` 並提供正式 runner artifact，或另開 read-only artifact 任務。
+
+## Previous Completed Handoff
+
 - task_id：`20260603_evidence_sample_gating_v20_4_34`
 - 狀態：done / committed；push 與 git completion gate 待收口。
 - commit：`b38ae26 Fix evidence sample gating`。
