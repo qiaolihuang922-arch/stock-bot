@@ -6598,6 +6598,89 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertEqual(payload["sample"], 36)
         self.assertTrue(payload["decision_eligible"])
 
+    def test_per_stock_backtest_context_drives_strategy_ready_when_global_sample_partial(self):
+        wistron = self.evidence_payload(confidence=78, decision="BUY", action=0.1, rr=1.6, distance=0.5)
+        wistron["stock_code"] = "3231"
+        wistron["backtest_context"] = {
+            "sample": 36,
+            "reference": "高",
+            "win_rate": 58,
+            "avg_return": 1.2,
+        }
+        winbond = self.evidence_payload(confidence=76, decision="WAIT", action=0, rr=1.4, distance=2)
+        winbond["stock_code"] = "2344"
+        winbond["backtest_context"] = {
+            "sample": 38,
+            "reference": "高",
+            "win_rate": 56,
+            "avg_return": 1.1,
+            "mfe_mae_score": 0.6,
+        }
+        low_sample = self.evidence_payload(confidence=70, decision="WAIT", action=0, rr=1.3, distance=2)
+        low_sample["backtest_context"] = {"sample": 9, "reference": "高", "win_rate": 70, "avg_return": 2.0}
+        no_history = self.evidence_payload(confidence=69, decision="WAIT", action=0, rr=1.2, distance=2)
+        no_history["backtest_context"] = None
+        weak = self.evidence_payload(confidence=74, decision="FAIL", action=0, rr=1.7, distance=0.5)
+        weak["stock_code"] = "2303"
+        weak["result"].update({
+            "structure_phase": "FAILED_BREAKOUT",
+            "market_grade": "D",
+            "entry_quality": "D",
+        })
+        weak["backtest_context"] = {"sample": 36, "reference": "高", "win_rate": 60, "avg_return": 1.5}
+
+        with patch.object(generator, "market_theme_summary_evidence", return_value=self.missing_market_evidence()):
+            messages = generator.formatTelegramMessages(
+                {
+                    "緯創": wistron,
+                    "華邦": winbond,
+                    "低樣本": low_sample,
+                    "無歷史": no_history,
+                    "聯電": weak,
+                },
+                "FULL DETAIL",
+                None,
+                None,
+                {"trade_date": "2026-06-03"},
+                datetime(2026, 6, 3),
+                strategy_evidence_summary=structured_strategy_evidence("available", row_count=3),
+                report_phase="盤中",
+            )
+            context = generator.build_report_context(
+                {
+                    "緯創": wistron,
+                    "華邦": winbond,
+                    "低樣本": low_sample,
+                    "無歷史": no_history,
+                    "聯電": weak,
+                },
+                {"trade_date": "2026-06-03"},
+                datetime(2026, 6, 3),
+                strategy_evidence_summary=structured_strategy_evidence("available", row_count=3),
+                report_phase="盤中",
+            )
+
+        self.assertEqual(generator._per_stock_strategy_sample_evidence_payload(context, "緯創")["status"], "ready")
+        self.assertEqual(generator._per_stock_strategy_sample_evidence_payload(context, "緯創")["sample"], 36)
+        self.assertEqual(generator._per_stock_strategy_sample_evidence_payload(context, "華邦")["status"], "ready")
+        self.assertEqual(generator._per_stock_strategy_sample_evidence_payload(context, "華邦")["sample"], 38)
+        self.assertEqual(generator._per_stock_strategy_sample_evidence_payload(context, "低樣本")["status"], "partial")
+        self.assertEqual(generator._per_stock_strategy_sample_evidence_payload(context, "無歷史")["status"], "unavailable")
+        self.assertGreater(wistron["result"]["evidence_modifier"], 1.0)
+        self.assertGreater(winbond["result"]["evidence_modifier"], 1.0)
+        self.assertNotEqual(wistron["result"]["evidence_modifier"], winbond["result"]["evidence_modifier"])
+        self.assertNotEqual(wistron["result"]["final_confidence"], wistron["result"]["technical_confidence"])
+        self.assertNotEqual(winbond["result"]["final_confidence"], winbond["result"]["technical_confidence"])
+        self.assertLessEqual(weak["result"]["evidence_modifier"], 1.0)
+        rendered = "\n\n".join(messages)
+        self.assertIn("【06/03 盤中｜v20.4.34】", rendered)
+        self.assertIn("【緯創 3231】", rendered)
+        self.assertIn("綜合 84｜技術 78｜證據 +8%（supporting）", rendered)
+        self.assertIn("回測：樣本36", rendered)
+        self.assertIn("【華邦 2344】", rendered)
+        self.assertIn("證據 +", rendered)
+        self.assertNotIn("證據：partial｜僅輔助參考", card_block(unheld_message(messages), "【緯創 3231】"))
+
     def test_per_stock_market_theme_missing_fallbacks_to_report_level_confirmed(self):
         context = {
             "market_theme_evidence": self.confirmed_market_evidence(),

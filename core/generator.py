@@ -4294,7 +4294,14 @@ def _per_stock_strategy_sample_evidence_payload(report_context, name):
         return _strategy_sample_evidence_payload(report_context)
 
     field = _field_by_key(report_context or {}, "evidence.strategy_sample")
-    source_status = _manifest_status(backtest.get("source_status") or field.get("source_status", "missing-source"))
+    explicit_source_status = backtest.get("source_status") or backtest.get("status")
+    sample = _strategy_sample_count_from_payload(backtest)
+    if explicit_source_status:
+        source_status = _manifest_status(explicit_source_status)
+    elif sample is not None:
+        source_status = "available"
+    else:
+        source_status = _manifest_status(field.get("source_status", "missing-source"))
     if source_status in {"missing-source", "source-error", "insufficient-data", "unresolved-conflict"}:
         return {
             "status": "unavailable",
@@ -4304,18 +4311,20 @@ def _per_stock_strategy_sample_evidence_payload(report_context, name):
             "forbidden_effects": list(EVIDENCE_FORBIDDEN_EFFECTS),
         }
 
-    sample = _strategy_sample_count_from_payload(backtest)
-    avg_return = backtest.get("avg_return")
+    avg_return = _evidence_float(backtest.get("avg_return"))
     win_rate = backtest.get("win_rate")
     win_rate = _evidence_float(win_rate)
     if win_rate is not None and win_rate <= 1:
         win_rate = win_rate * 100
     mfe_mae_score = _evidence_float(backtest.get("mfe_mae_score"))
     label = backtest.get("label") or backtest.get("status") or backtest.get("verdict")
+    reference = str(backtest.get("reference") or backtest.get("reference_level") or "").lower()
+    high_reference = reference in {"high", "高", "參考度高", "reliable", "strong"}
     decision_eligible = (
         (sample or 0) >= STRATEGY_SAMPLE_MIN_ROWS
         and (
             label in {"ready", "confirmed", "買點有效", "持倉同型相對偏強"}
+            or high_reference
             or ((avg_return or 0) >= 1.0 and (win_rate or 0) >= 55)
             or (mfe_mae_score is not None and mfe_mae_score >= 0.6)
         )

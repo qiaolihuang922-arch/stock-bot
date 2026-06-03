@@ -2,7 +2,7 @@ name: Stock Bot Pro
 
 "on":
   schedule:
-    - cron: "25 5 * * 1-5"
+    - cron: "0 6 * * 1-5"
   workflow_dispatch:
     inputs:
       run_mode:
@@ -174,7 +174,7 @@ jobs:
             printf '%s\n' "$MARKET_THEME_APPROVED_PAYLOAD" > market_theme_approved_payload.json
             payload_arg="--market-theme-payload market_theme_approved_payload.json"
           fi
-          python scripts/run_phase3_evidence_automation.py $payload_arg
+          python scripts/run_phase3_evidence_automation.py --require-market-theme-payload $payload_arg
 
       - name: Run bot (retry 3 times)
         env:

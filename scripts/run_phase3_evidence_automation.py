@@ -201,11 +201,43 @@ def _twse_confirmed_rows_payload(trading_day):
     return payloads["confirmed_rows"]
 
 
+def _load_market_theme_payload_rows(payload_path):
+    payload = json.loads(Path(payload_path).read_text(encoding="utf-8"))
+    if isinstance(payload, dict):
+        for key in ("rows", "payloads", "confirmed_rows"):
+            rows = payload.get(key)
+            if isinstance(rows, list):
+                return rows
+    if isinstance(payload, list):
+        return payload
+    return []
+
+
+def validate_market_theme_payload_trade_date(payload_path, trading_day):
+    rows = _load_market_theme_payload_rows(payload_path)
+    if not rows:
+        raise RuntimeError("approved payload has no rows")
+    mismatched = sorted(
+        {
+            str(row.get("trade_date") or "")
+            for row in rows
+            if str(row.get("trade_date") or "") != trading_day
+        }
+    )
+    if mismatched:
+        raise RuntimeError(
+            "approved payload trade_date mismatch: "
+            f"expected {trading_day}, got {', '.join(mismatched)}"
+        )
+    return True
+
+
 def run_market_theme_confirmed_evidence(trading_day, payload_path=None, runner=None):
     runner = runner or subprocess.run
     with tempfile.TemporaryDirectory() as tmpdir:
         if payload_path:
             path = Path(payload_path)
+            validate_market_theme_payload_trade_date(path, trading_day)
         else:
             path = Path(tmpdir) / "market_theme_confirmed_evidence_payload.json"
             path.write_text(
@@ -251,6 +283,11 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Run scheduled Phase 3 evidence production.")
     parser.add_argument("--now", help="Asia/Taipei ISO timestamp for probes.")
     parser.add_argument("--market-theme-payload", help="Approved market/theme payload JSON for tests or manual runs.")
+    parser.add_argument(
+        "--require-market-theme-payload",
+        action="store_true",
+        help="Fail closed when the approved market/theme payload is not provided.",
+    )
     parser.add_argument("--stale-status-json", help="JSON source status history for stale alert probes.")
     args = parser.parse_args(argv)
 
@@ -265,6 +302,14 @@ def main(argv=None):
         for source in ("daily_signal_snapshot", "market_theme_confirmed_evidence"):
             emit(f"EVIDENCE_WRITE_SKIPPED source={source} trading_day={trading_day} reason={reason}")
         return 0
+
+    if args.require_market_theme_payload and not args.market_theme_payload:
+        emit(
+            "EVIDENCE_WRITE_FAILED "
+            f"source=market_theme_confirmed_evidence trading_day={trading_day} "
+            "reason=missing-approved-payload action=fail_closed"
+        )
+        return 2
 
     daily_status = run_daily_signal_snapshot(trading_day)
     market_status = run_market_theme_confirmed_evidence(

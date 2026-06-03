@@ -223,7 +223,16 @@ class Phase3EvidenceAutomationTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             payload_path = Path(tmpdir) / "payload.json"
-            payload_path.write_text("[]", encoding="utf-8")
+            payload_path.write_text(
+                json.dumps([
+                    {
+                        "trade_date": "2026-06-02",
+                        "market_index": "TAIEX",
+                        "sector_theme_key": "market",
+                    }
+                ]),
+                encoding="utf-8",
+            )
             out = io.StringIO()
             with redirect_stdout(out):
                 returncode = phase3.run_market_theme_confirmed_evidence(
@@ -239,6 +248,54 @@ class Phase3EvidenceAutomationTest(unittest.TestCase):
             "EVIDENCE_WRITE_FAILED source=market_theme_confirmed_evidence trading_day=2026-06-02 action=fail_closed",
             out.getvalue(),
         )
+
+    def test_main_requires_market_theme_payload_when_gate_enabled(self):
+        out = io.StringIO()
+        with patch.object(
+            phase3,
+            "confirm_trading_day",
+            return_value={"confirmed": True, "reason": "confirmed-trading-day"},
+        ), redirect_stdout(out):
+            returncode = phase3.main([
+                "--now",
+                "2026-06-02T13:25:00+08:00",
+                "--require-market-theme-payload",
+            ])
+
+        self.assertEqual(returncode, 2)
+        self.assertIn(
+            "EVIDENCE_WRITE_FAILED source=market_theme_confirmed_evidence trading_day=2026-06-02 reason=missing-approved-payload action=fail_closed",
+            out.getvalue(),
+        )
+
+    def test_market_theme_payload_trade_date_mismatch_fails_before_write(self):
+        calls = []
+
+        def fake_runner(args, **kwargs):
+            calls.append(args)
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            payload_path = Path(tmpdir) / "payload.json"
+            payload_path.write_text(
+                json.dumps([
+                    {
+                        "trade_date": "2026-05-29",
+                        "market_index": "TAIEX",
+                        "sector_theme_key": "market",
+                    }
+                ]),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(RuntimeError, "trade_date mismatch"):
+                phase3.run_market_theme_confirmed_evidence(
+                    "2026-06-02",
+                    payload_path=str(payload_path),
+                    runner=fake_runner,
+                )
+
+        self.assertEqual(calls, [])
 
     def test_market_theme_payload_uses_twse_historical_readonly_sources(self):
         with patch(

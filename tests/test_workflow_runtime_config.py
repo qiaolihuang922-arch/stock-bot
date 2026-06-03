@@ -143,7 +143,7 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
         workflow_text = WORKFLOW.read_text(encoding="utf-8")
 
         self.assertIn("schedule:", workflow_text)
-        self.assertIn('cron: "25 5 * * 1-5"', workflow_text)
+        self.assertIn('cron: "0 6 * * 1-5"', workflow_text)
         self.assertIn("run_mode:", workflow_text)
         self.assertIn("- daily_evidence", workflow_text)
         self.assertIn("- backfill_may", workflow_text)
@@ -159,7 +159,7 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
         self.assertIn("--confirm-write", workflow_text)
         self.assertIn('Run bot skipped for run_mode=$RUN_MODE', workflow_text)
         self.assertIn("Run Phase 3 evidence automation", workflow_text)
-        self.assertIn("python scripts/run_phase3_evidence_automation.py $payload_arg", workflow_text)
+        self.assertIn("python scripts/run_phase3_evidence_automation.py --require-market-theme-payload $payload_arg", workflow_text)
         self.assertIn("github.event_name == 'schedule' && 'daily_evidence'", workflow_text)
 
     def _run_market_theme_backfill_step(self, run_mode, fake_python_exit=0):
@@ -264,7 +264,38 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("scripts/run_phase3_evidence_automation.py", calls)
+        self.assertIn("--require-market-theme-payload", calls)
         self.assertIn("--market-theme-payload market_theme_approved_payload.json", calls)
+
+    def test_phase3_evidence_step_fails_closed_without_market_theme_payload_secret(self):
+        script = _workflow_run_script("Run Phase 3 evidence automation")
+        runtime_env = os.environ.copy()
+        runtime_env["RUN_MODE"] = "daily_evidence"
+        runtime_env["MARKET_THEME_APPROVED_PAYLOAD"] = ""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bin_path = Path(tmpdir) / "bin"
+            bin_path.mkdir()
+            calls_path = Path(tmpdir) / "python_calls.txt"
+            fake_python = bin_path / "python"
+            fake_python.write_text(
+                f"#!/usr/bin/env bash\necho \"$@\" >> \"{calls_path}\"\ncase \"$*\" in *--require-market-theme-payload*) exit 2;; *) exit 0;; esac\n",
+                encoding="utf-8",
+            )
+            fake_python.chmod(0o755)
+            runtime_env["PATH"] = f"{bin_path}{os.pathsep}{runtime_env.get('PATH', '')}"
+            completed = subprocess.run(
+                ["bash", "-e", "-c", script],
+                cwd=tmpdir,
+                text=True,
+                capture_output=True,
+                check=False,
+                env=runtime_env,
+            )
+            calls = calls_path.read_text(encoding="utf-8")
+
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn("--require-market-theme-payload", calls)
+        self.assertNotIn("--market-theme-payload", calls)
 
 
 if __name__ == "__main__":

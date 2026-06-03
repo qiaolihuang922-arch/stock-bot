@@ -2,60 +2,92 @@
 
 ## 測試範圍
 
-- 任務尺寸 / QA：risk_patch / L3。
-- 驗收目標：market_theme 8 天 confirmed_trend 可 decision_eligible；strategy_sample 真實 classification sample >=10 可進 ready；official message-list 不再出現 confirmed+sample 足夠但 partial/+0% / 綜合=技術。
-- 可吸收 diff：TASK.md、CHANGELOG.md、core/generator.py、tests/test_generator_report.py、tests/test_market_theme_evidence.py、tests/test_strategy_evidence.py。
-- QA runner 狀態：自動 QA agent 啟動後遇到 Codex usage limit 互動提示，未產生可吸收 agent QA_REPORT；Architect 依 AGENTS post-cycle 要求做本地可重跑反證，未執行 live Telegram、production write、production backfill。
+本輪 TASK 為 risk_patch / L3。驗證範圍聚焦 Owner 指定的 evidence source / modifier / daily evidence runner / 使用者可見報文，不擴成 full repo、live Telegram、production backfill 或 production write。
+
+已核對：
+
+- TASK.md
+- CHANGELOG.md
+- git diff --stat / git diff --name-status
+- core/generator.py
+- scripts/run_phase3_evidence_automation.py
+- .github/workflows/stock-bot.yml
+- tests/test_generator_report.py
+- tests/test_phase3_evidence_automation.py
+- tests/test_workflow_runtime_config.py
+
+可吸收 diff：
+
+- .github/workflows/stock-bot.yml
+- CHANGELOG.md
+- QA_REPORT.md
+- TASK.md
+- core/generator.py
+- scripts/run_phase3_evidence_automation.py
+- tests/test_generator_report.py
+- tests/test_phase3_evidence_automation.py
+- tests/test_workflow_runtime_config.py
 
 ## 風險預算與停止條件
 
-- 風險 1：market_theme confirmed_trend 仍被二次 15 日門檻擋住。停止條件：8 天 confirmed_trend payload 不是 score=1.0 / status=confirmed / decision_eligible=true。
-- 風險 2：strategy structured sample 實際 >=10 仍被讀成 0/None。停止條件：_strategy_sample_row_count 讀不到 classification_sample_count，或 evidence payload 仍 partial。
-- 風險 3：使用者可見卡片仍是 partial+0%、綜合=技術。停止條件：official replay 的建準等價卡片不含非 0 evidence boost，或過熱卡誤顯 partial。
+1. per-stock strategy evidence 仍吃 global classification，導致 sample 36/38 仍 partial。
+   - 停止條件：緯創 / 華邦等價 fixture 無法在 global row_count=3 時依自身 backtest_context 進 ready，或 final_confidence 仍等於 technical_confidence。
+2. market daily evidence runner 缺 payload 或舊 trade_date payload 時仍靜默成功。
+   - 停止條件：缺 MARKET_THEME_APPROVED_PAYLOAD 仍 exit 0，或 payload trade_date mismatch 仍進 write path。
+3. 弱勢 / 失敗 / 過熱股被 evidence 背景抬分，或過熱 RR 數值外漏。
+   - 停止條件：decision=FAIL / FAILED_BREAKOUT modifier > 1.0，或過熱 hard blocker 被放寬。
 
 ## 關聯風險掃描
 
-- core/generator.py 版本已升為 v20.4.34，相關 generator / market_theme / strategy_evidence 測試預期同步。
-- services/strategy_evidence.py 未改，但已核對 load_strategy_evidence_summary 目前按近 60 交易日跨版本讀取 daily_signal_snapshot / daily_price，沒有 .eq("version", version)。
-- 未修改 RR 公式、DB schema/write path、live Telegram、production backfill。
-- git diff --check：passed。
-- py_compile：passed。
+- core/generator.py 仍為 VERSION = "v20.4.34"，未回退。
+- per-stock strategy evidence 現在可從各股 backtest_context 取得 sample/reference，sample >= 10 且參考度高時可進 ready。
+- apply_evidence_confidence 仍保留弱勢 / FAIL / FAILED_BREAKOUT / WEAK / DISTRIBUTION / EXTREME 護欄，不允許正向 boost。
+- workflow cron 已由 `25 5 * * 1-5` 改為 `0 6 * * 1-5`，對應台北收盤後。
+- Phase 3 runner 新增 `--require-market-theme-payload`；缺 approved payload 時 fail closed；payload trade_date mismatch 會在 write CLI 前失敗。
+- 未見 RR 公式、DB schema、live Telegram、production write path、持倉狀態機 diff。
 
 ## 跨區塊語意一致性
 
-- targeted official replay passed：market confirmed + strategy sample 36 時，建準等價卡片顯示「綜合 90｜技術 78｜證據 +15%（confirmed）」；不含「證據：partial」或「證據 +0%」。
-- overheat path passed：HOT 標的在 market confirmed 下仍可顯示 confirmed evidence 非 0 加權，同時保留等冷卻 hard block，不把證據誤當可買理由。
-- evidence payload helper passed：8 天 confirmed_trend -> market score=1.0 / confirmed；strategy structured sample 36 -> ready / score=1.0。
+- per-stock replay passed：global strategy row_count=3 時，緯創 sample 36、華邦 sample 38 仍進 ready，兩股 modifier 不同，final != technical。
+- low sample / no history path passed：低樣本 partial，無 backtest unavailable，不偽造 ready。
+- weak / failed path passed：聯電等價 FAILED_BREAKOUT fixture modifier <= 1.0，不被背景抬分。
+- overheat / RR hard blocker 既有回歸 passed：confirmed evidence 不放寬過熱和 RR hard blockers。
+- Phase 3 runner path passed：缺 payload fail closed、舊 trade_date payload 不進 write、workflow step 帶 `--require-market-theme-payload`。
 
 ## 使用者誤讀風險
 
-- 主要誤讀「資料足夠但報文仍說證據不足」已由 official message-list replay 反證。
-- 主要誤讀「綜合=技術但顯示 confirmed」已由同一 replay 反證：綜合與技術不同，且 evidence modifier > 1.0。
-- 殘留風險：本輪未讀 production source；若 production 真實資料仍缺 classification_sample_count / sample_count，報文仍會 fail closed。這是資料源品質問題，不是本輪 code path。
+- 已反證「回測樣本 36/38 但 evidence partial +0%」：official message-list fixture 顯示 `綜合 84｜技術 78｜證據 +8%（supporting）`，且不含該卡 `證據：partial｜僅輔助參考`。
+- 已反證「證據抬高弱勢 / 失敗股」：FAILED_BREAKOUT fixture modifier <= 1.0。
+- RR / 防抖 / summary count 本輪主要依賴既有契約與既有回歸，未新增策略方向；本輪未改 RR 公式。
+- market daily freshness 的使用者可見完成口徑仍缺 production/read-only artifact：目前只能證明 runner 會在缺 payload / 舊 payload 時 fail closed，不能證明 2026-06-03 production row 已存在。
 
 ## 質疑與反證
 
-- QA 額外質疑：Tech 是否只修 helper、未打到 official message-list。反證：主倉跑過 tests/test_generator_report.py::GeneratorReportTest::test_official_replay_confirmed_market_and_classification_sample_changes_composite，結果 passed。
-- QA 額外質疑：version filter 是否仍在 loader。反證：主倉跑過 tests/test_strategy_evidence.py::StrategyEvidenceTest::test_load_summary_consumes_cross_version_outcome_history 與 test_load_summary_defaults_to_recent_60_distinct_cross_version_days，結果 passed；同時手動核對 loader 無 .eq("version", version)。
-- QA 額外質疑：只跑 targeted 會漏版本同步。反證：主倉跑過 tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_strategy_evidence.py，結果 206 passed。
+- 質疑：Tech 是否只修 helper，沒有打到 official message-list？
+  - 反證：`tests/test_generator_report.py::GeneratorReportTest::test_per_stock_backtest_context_drives_strategy_ready_when_global_sample_partial` 通過，覆蓋 `formatTelegramMessages()` rendered card。
+- 質疑：daily_evidence 是否仍在收盤前跑？
+  - 反證：workflow runtime test 通過，cron 斷言為 `0 6 * * 1-5`。
+- 質疑：缺 MARKET_THEME_APPROVED_PAYLOAD 是否仍靜默 skip？
+  - 反證：`test_main_requires_market_theme_payload_when_gate_enabled` 與 `test_phase3_evidence_step_fails_closed_without_market_theme_payload_secret` 通過，缺 payload exit 2。
+- 質疑：舊日期 approved payload 是否可能寫入當日？
+  - 反證：`test_market_theme_payload_trade_date_mismatch_fails_before_write` 通過，runner 在 write 前擋下 mismatch。
 
 ## 已跑命令
 
-- arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py::GeneratorReportTest::test_eight_day_confirmed_market_theme_is_decision_eligible tests/test_generator_report.py::GeneratorReportTest::test_strategy_sample_count_accepts_classification_sample_count tests/test_generator_report.py::GeneratorReportTest::test_official_replay_confirmed_market_and_classification_sample_changes_composite tests/test_generator_report.py::GeneratorReportTest::test_hot_stock_keeps_non_zero_evidence_without_false_partial tests/test_strategy_evidence.py::StrategyEvidenceTest::test_load_summary_consumes_cross_version_outcome_history tests/test_strategy_evidence.py::StrategyEvidenceTest::test_load_summary_defaults_to_recent_60_distinct_cross_version_days
-  - 結果：6 passed，13 warnings。
-- arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_strategy_evidence.py
-  - 結果：206 passed，241 warnings。
-- PYTHONPYCACHEPREFIX=/private/tmp/evidence_fix_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py services/strategy_evidence.py tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_strategy_evidence.py
+- `arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py tests/test_phase3_evidence_automation.py tests/test_workflow_runtime_config.py`
+  - 結果：179 passed，241 warnings。
+- `PYTHONPYCACHEPREFIX=/private/tmp/evidence_score_effective_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py scripts/run_phase3_evidence_automation.py tests/test_generator_report.py tests/test_phase3_evidence_automation.py tests/test_workflow_runtime_config.py`
   - 結果：passed。
-- git diff --check
+- `git diff --check`
   - 結果：passed。
 
 ## 未測項目
 
 - 未跑 live Telegram。
 - 未跑 production write / backfill。
-- 未跑 production read-only artifact；若 Owner 要確認 production 真實資料已補齊，需要另開 read-only source artifact 任務。
-- 自動 QA agent 因 usage limit 未完成；本報告是 Architect 本地反證，不冒稱 agent QA 通過。
+- 未讀 production DB，也沒有 safe read-only artifact；因此未證明 market_theme_confirmed_evidence 已存在 2026-06-03 row。
+- 未驗真實 GitHub Actions run artifact；目前只驗 workflow script 與 local runner fixture。
+- 未跑 full repo pytest；本輪按 L3 直接消費者與 risk path 跑 generator + Phase3 + workflow 相關測試。
 
 ## QA 結論
 
