@@ -1,75 +1,99 @@
-# CHANGELOG: v20.4.35-report-semantics
+# CHANGELOG: research_trend_continuation_phase1
 
 ## 任務尺寸與風險
 
-- 任務類型：risk_patch。
-- 風險原因：本輪修正使用者可見 Telegram 報文中的 evidence boost 邊界、盤面文案、持倉數據行與簡報計數。
-- 未碰：RR 公式、DB schema / write path、策略 decision、持倉狀態機、live Telegram。
+- 任務類型：research。
+- 風險原因：本輪讀 production DB 產出策略研究結論，但不改正式策略、報文或 DB。
+- 未碰：`services/analysis.py`、`core/condition_engine.py`、`core/generator.py`、DB schema/write path、live Telegram。
 
 ## 修改內容
 
-- `core/generator.py`
-  - `apply_evidence_confidence()` 的 boost blocker 擴大到不可追高 / 漲停鎖價 / 漲停反彈 / 過熱 RR blocker。
-  - `trade_state=AVOID`、`price_behavior=LIMIT_LOCK/LIMIT_REBOUND`、`should_show_overheat_rr_blocker(...)` 任一成立時，evidence modifier 固定為 `1.0`，不再顯示正向 boost。
-- `presentation/report.py`
-  - evidence unavailable 的 heat 判定同步納入 `AVOID`、`LIMIT_LOCK`、`LIMIT_REBOUND`，讓顯示文案與分數 blocker 對齊。
-  - 低量收縮降級不再輸出裸 `待確認`，改用 `縮量觀察`，避免 `突破確認｜待確認` 同時出現。
-  - 持倉非加碼資料行保留量比，格式為 `數據：不適用（既有持倉）｜V {vol}x`。
-  - 簡報第一行改為明確區分 `執行動作 N` 與 `今日新建倉 M`，並在可辨識時標注動作類型。
-- `tests/test_generator_report.py`
-  - 更新既有 summary 斷言為 `執行動作` / `今日新建倉`。
-  - 補不可追高 / 漲停鎖價 replay：RR 為過熱時 `evidence_modifier=1.0`，卡片顯示 `證據：過熱不適用`，且不出現 `證據 +`。
-  - 補非加碼持倉保留 V、低量降級不含 `突破確認｜待確認` 的回歸斷言。
+- 新增 `scripts/research_trend_continuation.py`
+  - 只讀 `daily_price`，用 OHLCV 本地計算 ma5 / ma10 / ma20、vol_ratio、1/3/5/10 日 forward returns、MFE / MAE。
+  - 分組輸出 `pullback_continuation` 與 `extended_spike` 1.08 / 1.15 / 1.22 對照組。
+  - DB 憑證缺失、表不可讀、欄位缺失或資料不足時 fail closed，輸出 `status: blocked` 或 `insufficient-data`，不產生假 metrics。
+- 新增 `tests/test_research_trend_continuation.py`
+  - 覆蓋 pullback continuation fixture 分類與報告渲染。
+  - 覆蓋缺 DB env fail closed。
+  - 覆蓋缺必要欄位 fail closed。
+  - 覆蓋 DB fetch 只使用 `select / order / range / execute`。
+- 新增 research artifacts：
+  - `reports/research/trend_continuation_20260603.txt`
+  - `reports/research/trend_continuation_20260603.json`
+- 更新 `RESEARCH.md`
+  - 記錄資料來源、重跑命令、核心 metrics、結論與限制。
 
 ## 修改檔案
 
-- `core/generator.py`
-- `presentation/report.py`
-- `tests/test_generator_report.py`
+- `scripts/research_trend_continuation.py`
+- `tests/test_research_trend_continuation.py`
+- `reports/research/trend_continuation_20260603.txt`
+- `reports/research/trend_continuation_20260603.json`
+- `RESEARCH.md`
+- `TASK.md`
 
 ## 最小改動策略
 
-- 只在既有 scoring / formatter / summary line 路徑補 gate 與文案對齊。
-- 不改 RR 計算、不改候選池、不改 DB payload、不新增 schema。
-- 以 official message-list replay 與既有 generator tests 覆蓋手機可見輸出。
+- 只新增獨立研究腳本與 focused tests。
+- 不接正式買入路徑，不更改 scoring / funnel / report formatter。
+- 研究結論只來自 production DB read-only `daily_price` 實跑輸出，fixture 只用於測試分類與 fail closed。
 
 ## 契約影響
 
-- 過熱 / 不可追高契約：RR 過熱、漲停鎖價、漲停反彈、不可追高狀態不得取得 evidence boost。
-- 持倉非加碼資料行契約：仍豁免 RR / 綜合 / 技術 / 證據，但保留 V。
-- 簡報契約：`交易執行 N` 改為 `執行動作 N`，另列 `今日新建倉 M`。
-- 使用者可見版本維持 `v20.4.35`，未回退。
-- Message order、DB contract、RR formula 未變。
+- 新增 CLI research contract：
+  - `arch -arm64 .venv/bin/python scripts/research_trend_continuation.py`
+  - `--json` 可輸出 machine-readable JSON。
+  - `--no-config` 可驗缺憑證 fail closed。
+- 不改 public strategy contract、Telegram message list、DB contract、RR formula。
 
 ## 直接消費者同步
 
-- `presentation/report.py` 持倉 / 未持倉卡片與簡報 formatter 已同步。
-- `core/generator.py` official message path 已同步。
-- `tests/test_generator_report.py` 覆蓋 Owner 指定四個 probe。
+- Owner / Architect：讀 `RESEARCH.md` 與 `reports/research/*` 判斷是否進入階段二。
+- QA：可重跑腳本、focused tests、mutation scan。
+- 後續 Tech：若 Owner 另行授權階段二，需以本輪 research artifact 作為前置證據；本輪結論不支持直接實裝。
 
 ## 未影響模組
 
+- 未改 `services/analysis.py`。
+- 未改 `core/condition_engine.py`。
+- 未改 `core/generator.py`。
 - 未改 DB schema / RLS / grant / policy / role / index / constraint。
 - 未改 production write / backfill / live Telegram。
-- 未改 RR 公式、候選來源、策略 decision、持倉狀態機。
-- 未改 Render freshness preflight。
 
 ## 已跑自檢命令
 
-- `arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py -q`
-  - Tech 結果：157 passed，241 warnings。
+- `PYTHONPYCACHEPREFIX=/private/tmp/trend_research_pycache arch -arm64 .venv/bin/python -m py_compile scripts/research_trend_continuation.py tests/test_research_trend_continuation.py`
+  - 結果：passed。
+- `arch -arm64 .venv/bin/python -m pytest tests/test_research_trend_continuation.py -q`
+  - 結果：4 passed。
+- `rg -n "table\\([^\\n]+\\)\\.(insert|upsert|update|delete)|\\.(upsert|update|delete|rpc)\\(|\\b(create|alter|drop|truncate)\\s+table\\b|send_telegram" scripts/research_trend_continuation.py`
+  - 結果：no matches。
+- `arch -arm64 .venv/bin/python scripts/research_trend_continuation.py`
+  - 結果：completed；`pullback_continuation_edge=insufficient-data`。
+
+## 研究輸出摘要
+
+- `daily_price` source rows：516。
+- `pullback_continuation`：樣本 5，5 日勝率 20.00%，5 日平均收益 -3.89%，結論 `insufficient-data`。
+- `extended_spike >=1.08`：樣本 78，5 日勝率 65.38%，5 日平均收益 +6.23%。
+- `extended_spike >=1.15`：樣本 46，5 日勝率 65.22%，5 日平均收益 +7.45%。
+- `extended_spike >=1.22`：樣本 30，5 日勝率 63.33%，5 日平均收益 +6.17%。
+- 階段二狀態：不應啟動。當前 pullback continuation 定義沒有通過「樣本足夠、勝率 >50%、平均收益為正」門檻。
 
 ## 覆蓋層級
 
-- helper / formatter：covered。
-- official generator / message artifact：covered by `formatTelegramMessages` replay。
-- runner artifact / production source：not covered，本輪未執行 live runner、未讀 production、未 live delivery。
+- production source：covered by read-only `daily_price` run。
+- script output：covered，txt/json artifact 已產出。
+- fixture/helper：covered by focused tests。
+- 未覆蓋：未消費 `signal_outcomes`，未讀 `daily_signal_snapshot` 作 setup source；本輪結論只覆蓋 `daily_price` OHLCV 計算路徑。
 
 ## 殘留風險
 
-- QA 取得的是 official generator message-list replay，不是 Render / GitHub runner 產出的正式 artifact。
-- 若 production payload 使用不同欄位表達不可追高，仍需另補 mapping；本輪已覆蓋現有 `heat_state`、`trade_state`、`price_behavior`、RR blocker 路徑。
+- `pullback_continuation` 樣本只有 5，不能據此實裝策略。
+- extended spike 對照組表現為正，但本輪只是對照，不代表授權追高買入；仍受既有不可追高邊界約束。
+- 若 Owner 要重新研究，應先擴大樣本來源、納入 `signal_outcomes` 或調整 pullback 定義，再重跑同層研究。
 
 ## 旁支待辦
 
-- 若後續報文仍出現其它同義不可追高狀態吃 boost，另開 mapping 收斂任務。
+- 可另開研究任務：納入 `signal_outcomes` 與 `daily_signal_snapshot` 的 setup/outcome mapping，確認是否能增加樣本與可靠度。
+- 若未來研究通過，再另開 major 策略設計任務，並由 Owner 明確授權是否放開 RESEARCH.md 既有硬邊界。

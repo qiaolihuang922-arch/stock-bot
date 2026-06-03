@@ -8,6 +8,25 @@
 - 結論：DB 不是直接替代即時策略引擎；它優先承擔「記憶、證據、排序提示、去重、追溯」。
 - 邊界：market/theme evidence confirmed 不能單獨把不可買改成可買，不能放寬追高限制。
 
+## Trend Continuation Phase 1｜2026-06-03
+
+- task_id：`research_trend_continuation_phase1`
+- 研究問題：驗證「上升趨勢中，縮量回踩 ma5 / ma10 不破後放量站回」是否有足夠正 edge，作為日後 `trend_continuation` 買入路徑的前置證據。
+- 可重跑腳本：`arch -arm64 .venv/bin/python scripts/research_trend_continuation.py`
+- artifact：
+  - `reports/research/trend_continuation_20260603.txt`
+  - `reports/research/trend_continuation_20260603.json`
+- 資料來源：production DB read-only `daily_price`，本輪讀取 `source_rows=516`；OHLCV、ma5 / ma10 / ma20、volume ratio 與 1/3/5/10 日 forward outcome 由腳本本地計算。
+- 只讀邊界：腳本只使用 `select / order / range / execute`；沒有 DB write、schema mutation、Telegram send。
+- 結果：
+  - `pullback_continuation`：樣本 5，1 日勝率 40.00%、平均 -1.74%；3 日勝率 0.00%、平均 -7.65%；5 日勝率 20.00%、平均 -3.89%；10 日勝率 80.00%、平均 +9.82%；MFE +16.53%、MAE -9.89%。
+  - `extended_spike >=1.08`：樣本 78，5 日勝率 65.38%、平均 +6.23%。
+  - `extended_spike >=1.15`：樣本 46，5 日勝率 65.22%、平均 +7.45%。
+  - `extended_spike >=1.22`：樣本 30，5 日勝率 63.33%、平均 +6.17%。
+- 結論：`pullback_continuation_edge=insufficient-data`。目前定義下樣本數低於 `min_sample=30`，且 5 日勝率 20.00%、平均收益 -3.89%，不符合「勝率顯著 >50% 且平均收益為正」。
+- 策略含義：階段二 `trend_continuation` 買入路徑不得實裝；更不能放開 RESEARCH.md 既有「證據不得單獨變 BUY / 不得放寬追高」邊界。若要重開，需先擴大樣本來源或重新定義 pullback setup，再跑同層研究。
+- 限制：Owner 任務提到 `daily_signal_snapshot / daily_price / signal_outcomes`；本輪腳本實際以 `daily_price` 直接計算 outcomes，未消費 `signal_outcomes`。因此本結論只覆蓋 `daily_price` 可觀測 OHLCV 路徑。
+
 ## Data Roles
 
 - `positions`：持倉 source-of-truth。

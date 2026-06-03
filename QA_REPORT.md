@@ -1,80 +1,76 @@
-# QA_REPORT: v20.4.35-report-semantics
+# QA_REPORT: research_trend_continuation_phase1
 
 ## 測試範圍
 
-- 任務：`v20.4.35-report-semantics`
-- QA 分級：L3。
-- 已驗使用者可見面：
-  - Telegram 未持倉卡片的過熱 / 不可追高 evidence blocker。
-  - 持倉非加碼卡片的數據行。
-  - 盤面低量降級文案。
-  - 簡報第一行計數標籤。
-- 未擴大到 production DB、live Telegram、full runner artifact。
+- 任務：`research_trend_continuation_phase1`
+- QA 分級：L2。
+- 已驗：
+  - 研究腳本可執行。
+  - production DB read-only `daily_price` 實跑輸出。
+  - 缺憑證 / 缺欄位 fail closed。
+  - mutation / live Telegram 禁令。
+  - 未改正式策略核心檔案。
 
 ## 關聯風險掃描
 
 - DB schema / write path：未改。
-- RR 公式：未改。
-- Strategy decision / holding state machine：未改。
-- Telegram visible report：已改，版本維持 `v20.4.35`。
-- Handoff 風險：runner 第一次 QA 發現 `CHANGELOG.md` 錯輪；已在主 repo 重寫本輪 `CHANGELOG.md` / `QA_REPORT.md` 後重跑測試。
+- DB write：未發現 `insert / upsert / update / delete / rpc` 或 schema mutation。
+- Telegram live delivery：未發現 send path。
+- Strategy decision：未改 `services/analysis.py`、`core/condition_engine.py`、`core/generator.py`。
+- Research source：正式結論來自 production DB read-only `daily_price`，不是 fixture。
 
 ## 跨區塊語意一致性
 
-- 過熱 / 不可追高：generator 分數 gate 與 formatter 文案同時納入 `HOT/EXTREME`、`AVOID`、`LIMIT_LOCK/LIMIT_REBOUND` 與 RR overheat blocker。
-- 持倉非加碼：卡片不再顯示 RR / 綜合 / 技術 / 證據，但同一行保留 `V {vol}x`。
-- 盤面強度：低量收縮降級使用 `縮量觀察`，避免 `突破確認｜待確認` 同時出現。
-- 簡報計數：第一行改為 `執行動作 N` 與 `今日新建倉 M` 分開，避免不同口徑裸數字並列。
+- `TASK.md` 要求階段一只做研究；diff 只新增研究腳本、研究測試、研究 artifact 與 handoff 文件。
+- `RESEARCH.md`、`CHANGELOG.md`、artifact 結論一致：`pullback_continuation_edge=insufficient-data`。
+- `CHANGELOG.md` 明確說本輪未消費 `signal_outcomes` / `daily_signal_snapshot`，避免把覆蓋範圍誇大成三表完整研究。
 
 ## 使用者誤讀風險
 
-- 光寶科這類漲停鎖價 / 不可追高標的不再因 market evidence 顯示 `證據 +8%`，避免「最熱反而加分」。
-- 持倉非加碼仍保留 V，避免風控閱讀少掉量能資訊。
-- `縮量觀察` 比裸 `待確認` 更能說明降級原因，不與 `突破確認` 直接衝突。
-- `執行動作` / `今日新建倉` 分開後，手機首屏不再把減碼動作數誤讀成新建倉數。
+- 研究結論不是「趋势延續可以買」，而是「目前定義不支持進入階段二」。
+- extended spike 對照組數字為正，但 QA 判定它只是對照，不構成追高買入授權。
+- 樣本數不足與 5 日負 edge 同時存在；不可用來放開 RESEARCH.md 的硬邊界。
 
 ## 失敗標本反證
 
-- Owner 樣本等價路徑：不可追高 / 漲停鎖價標的原本 RR 為過熱卻顯示 evidence boost。
-- 等價 replay 結果：
-  - `evidence_modifier == 1.0`
-  - 卡片含 `RR -（過熱）｜綜合 78｜技術 78｜證據：過熱不適用`
-  - 卡片不含 `證據 +`
-- 持倉非加碼 replay：
-  - 卡片含 `數據：不適用（既有持倉）｜V 1.4x`
-  - 卡片不含 `綜合`、`技術`、`證據`
-- 低量 replay：
-  - 卡片含 `縮量觀察`
-  - 卡片不含 `突破確認｜待確認`
-- 簡報 replay：
-  - 第一行含 `執行動作 ...｜今日新建倉 ...`
-  - 回歸測試不再期待舊 `交易執行 N` 裸標籤。
+- 缺憑證負面案例：
+  - `--no-config` path 回傳 `status: blocked`、`reason: missing-production-db-credentials`、`no_synthetic_data: true`。
+- 缺欄位負面案例：
+  - test fixture 移除 `low` 欄位後 `normalize_bars()` raise `ResearchBlocked(reason="missing-column")`。
+- 只讀案例：
+  - fake client test 只觀察到 `table / select / order / range / execute`。
+  - mutation regex scan 無命中。
 
 ## 質疑與反證
 
-- 質疑：不可追高 blocker 會不會誤傷近門檻可準備候選？
-  - 反證：Tech 中途測試失敗後已把新斷言移回漲停 / 不可追高 replay，近門檻可準備測試恢復既有行為。
-- 質疑：持倉非加碼保留 V 是否會讓新倉分數回來？
-  - 反證：回歸斷言確認同一卡片不含 `綜合`、`技術`、`證據`。
-- 質疑：簡報新標籤是否只改單一路徑？
-  - 反證：`tests/test_generator_report.py` 多個盤中 / 盤後 summary 斷言已同步為 `執行動作` / `今日新建倉`。
+- 質疑：Tech fixture 是否被當成正式研究？
+  - 反證：artifact 由 `scripts/research_trend_continuation.py` 實跑 production read-only 生成，`RESEARCH.md` 也明確 fixture 只驗分類與 fail closed。
+- 質疑：是否偷偷改策略核心？
+  - 反證：`git diff --name-only` 未包含 `services/analysis.py`、`core/condition_engine.py`、`core/generator.py`。
+- 質疑：研究是否足以進階段二？
+  - 反證：`pullback_continuation` 樣本 5 < min_sample 30，且 5 日勝率 20.00%、平均收益 -3.89%；不符合 Owner 門檻。
 
 ## 已跑命令
 
-- `arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py -q`
-  - Tech 結果：157 passed，241 warnings。
-- QA 自補 direct consumer replay：
-  - 結果：passed；非加碼持倉保留 V，summary 不再出現舊 `交易執行 0`。
+- `PYTHONPYCACHEPREFIX=/private/tmp/trend_research_pycache arch -arm64 .venv/bin/python -m py_compile scripts/research_trend_continuation.py tests/test_research_trend_continuation.py`
+  - 結果：passed。
+- `arch -arm64 .venv/bin/python -m pytest tests/test_research_trend_continuation.py -q`
+  - 結果：4 passed。
+- `arch -arm64 .venv/bin/python scripts/research_trend_continuation.py`
+  - 結果：completed，產出 research report。
+- `rg ... scripts/research_trend_continuation.py`
+  - 結果：no DB write / schema mutation / live Telegram matches。
 
 ## 未測項目
 
 - 未跑 full pytest。
-- 未執行 live Telegram。
-- 未讀寫 production DB。
-- 未取得 Render / GitHub runner artifact；本輪驗 official generator message-list replay 與 QA 臨時探針。
+- 未實裝階段二。
+- 未消費 `signal_outcomes` 或 `daily_signal_snapshot` 作正式 outcome / setup source。
+- 未 live Telegram。
+- 未 DB write。
 
 ## QA 結論
 
 conditional pass
 
-理由：使用者可見 message-list replay 與相關 regression tests 已覆蓋本輪四項核心錯誤；但尚未取得正式 runner artifact，因此不寫成完全 `通過`。
+理由：階段一研究腳本、只讀約束、fail closed 與 production DB read-only output 已驗；但本輪未覆蓋 `signal_outcomes / daily_signal_snapshot` 三表完整研究，且研究結論是 insufficient-data，不支持進入階段二。

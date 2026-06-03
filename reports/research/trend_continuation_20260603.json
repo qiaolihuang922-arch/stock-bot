@@ -1,0 +1,78 @@
+{
+  "title": "research_trend_continuation",
+  "source": "production-db-readonly",
+  "status": "completed",
+  "source_table": "daily_price",
+  "source_rows": 516,
+  "min_sample": 30,
+  "groups": [
+    {
+      "group": "pullback_continuation",
+      "extended_level": null,
+      "sample_count": 5,
+      "mfe": 0.165300455314024,
+      "mae": -0.09890946628255307,
+      "win_rate_1d": 0.4,
+      "avg_return_1d": -0.017401880455531114,
+      "win_rate_3d": 0.0,
+      "avg_return_3d": -0.07651443566496693,
+      "win_rate_5d": 0.2,
+      "avg_return_5d": -0.03894431238269454,
+      "win_rate_10d": 0.8,
+      "avg_return_10d": 0.09817164070583766,
+      "conclusion": "insufficient-data"
+    },
+    {
+      "group": "extended_spike",
+      "extended_level": 1.08,
+      "sample_count": 78,
+      "mfe": 0.2608469622456815,
+      "mae": -0.06677475918645653,
+      "win_rate_1d": 0.5641025641025641,
+      "avg_return_1d": 0.012572445379877376,
+      "win_rate_3d": 0.6153846153846154,
+      "avg_return_3d": 0.03469875633064981,
+      "win_rate_5d": 0.6538461538461539,
+      "avg_return_5d": 0.06234033037614982,
+      "win_rate_10d": 0.8333333333333334,
+      "avg_return_10d": 0.15975459359054192,
+      "conclusion": "positive"
+    },
+    {
+      "group": "extended_spike",
+      "extended_level": 1.15,
+      "sample_count": 46,
+      "mfe": 0.2907460765753246,
+      "mae": -0.07079461844505275,
+      "win_rate_1d": 0.6086956521739131,
+      "avg_return_1d": 0.013731569562182978,
+      "win_rate_3d": 0.6956521739130435,
+      "avg_return_3d": 0.040001697674296184,
+      "win_rate_5d": 0.6521739130434783,
+      "avg_return_5d": 0.07453487241523303,
+      "win_rate_10d": 0.8260869565217391,
+      "avg_return_10d": 0.19211488342293195,
+      "conclusion": "positive"
+    },
+    {
+      "group": "extended_spike",
+      "extended_level": 1.22,
+      "sample_count": 30,
+      "mfe": 0.29848929506755767,
+      "mae": -0.08013755326737451,
+      "win_rate_1d": 0.6,
+      "avg_return_1d": 0.008792193794588931,
+      "win_rate_3d": 0.7,
+      "avg_return_3d": 0.03163316457243995,
+      "win_rate_5d": 0.6333333333333333,
+      "avg_return_5d": 0.06165236850851336,
+      "win_rate_10d": 0.8333333333333334,
+      "avg_return_10d": 0.2187462376087349,
+      "conclusion": "positive"
+    }
+  ],
+  "conclusion": {
+    "pullback_continuation_edge": "insufficient-data",
+    "reason": "pullback continuation sample is below minimum; win_rate_5d=20.00%, avg_return_5d=-3.89%, sample_count=5"
+  }
+}

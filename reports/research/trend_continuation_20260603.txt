@@ -1,0 +1,13 @@
+research_trend_continuation
+source: production-db-readonly
+status: completed
+
+group                    level   n    h1_win h1_avg h3_win h3_avg h5_win h5_avg h10_win h10_avg mfe   mae
+pullback_continuation    none    5    40.00% -1.74% 0.00%  -7.65% 20.00% -3.89% 80.00%  9.82%   16.53% -9.89%
+extended_spike           1.08    78   56.41% 1.26%  61.54% 3.47%  65.38% 6.23%  83.33%  15.98%  26.08% -6.68%
+extended_spike           1.15    46   60.87% 1.37%  69.57% 4.00%  65.22% 7.45%  82.61%  19.21%  29.07% -7.08%
+extended_spike           1.22    30   60.00% 0.88%  70.00% 3.16%  63.33% 6.17%  83.33%  21.87%  29.85% -8.01%
+
+conclusion:
+pullback_continuation_edge: insufficient-data
+reason: pullback continuation sample is below minimum; win_rate_5d=20.00%, avg_return_5d=-3.89%, sample_count=5
