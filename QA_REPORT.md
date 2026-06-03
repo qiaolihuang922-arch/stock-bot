@@ -1,58 +1,62 @@
 # QA_REPORT:
 
-  ## 測試範圍
+## 測試範圍
 
-  - 任務尺寸 / QA：risk_patch / L3；範圍限定在 TASK.md 指定的使用者可見報文、同層 06/03 message-list replay、targeted tests、compile、diff check；未擴大到 production smoke / live Telegram / backfill。
-  - 已核對：TASK.md、CHANGELOG.md、git diff --name-only、core/generator.py、presentation/report.py、services/analysis.py、相關測試 diff。
-  - 可吸收 diff：CHANGELOG.md、core/generator.py、presentation/report.py、services/analysis.py、tests/test_analysis_engine.py、tests/test_generator_report.py、tests/test_market_theme_evidence.py、tests/
-    test_strategy_evidence.py。
-  - worktree 殘留：上述 8 個 tracked modified files；未見 services/strategy_evidence.py modified。
+- 任務尺寸 / QA：risk_patch / L3。
+- 驗收目標：market_theme 8 天 confirmed_trend 可 decision_eligible；strategy_sample 真實 classification sample >=10 可進 ready；official message-list 不再出現 confirmed+sample 足夠但 partial/+0% / 綜合=技術。
+- 可吸收 diff：TASK.md、CHANGELOG.md、core/generator.py、tests/test_generator_report.py、tests/test_market_theme_evidence.py、tests/test_strategy_evidence.py。
+- QA runner 狀態：自動 QA agent 啟動後遇到 Codex usage limit 互動提示，未產生可吸收 agent QA_REPORT；Architect 依 AGENTS post-cycle 要求做本地可重跑反證，未執行 live Telegram、production write、production backfill。
 
-  ## 風險預算與停止條件
+## 風險預算與停止條件
 
-  - 風險 1：06/03 手機閱讀順序仍有跨區塊矛盾，例如聯電 summary / 持倉卡主行動不同、技嘉 RR 數值外漏、光寶科出現 不買｜進場。驗證：單一 06/03 message-list replay。停止條件：任一矛盾出現即 blocked。
-  - 風險 2：D1 防抖只改 title 文案但未守住分類契約，導致單次或 breakout_distance > 1% 仍翻可買。驗證：既有單卡測試 + QA 額外 consumer probe。停止條件：保守側未維持或出現進場語意即 blocked。
-  - 風險 3：TASK / CHANGELOG / diff / version 不一致。驗證：diff 檔案清單、VERSION 搜尋、services/strategy_evidence.py 未修改確認。停止條件：版本殘留、CHANGELOG 列錯實際檔案、或 diff 含禁止修改檔即 blocked。
+- 風險 1：market_theme confirmed_trend 仍被二次 15 日門檻擋住。停止條件：8 天 confirmed_trend payload 不是 score=1.0 / status=confirmed / decision_eligible=true。
+- 風險 2：strategy structured sample 實際 >=10 仍被讀成 0/None。停止條件：_strategy_sample_row_count 讀不到 classification_sample_count，或 evidence payload 仍 partial。
+- 風險 3：使用者可見卡片仍是 partial+0%、綜合=技術。停止條件：official replay 的建準等價卡片不含非 0 evidence boost，或過熱卡誤顯 partial。
 
-  ## 關聯風險掃描
+## 關聯風險掃描
 
-  - CHANGELOG.md 宣告版本 v20.4.33，實際 core/generator.py 為 VERSION = "v20.4.33"；產品與測試範圍內未搜尋到舊版 v20.4.32 殘留，測試名稱 / TASK 歷史標本語意除外。
-  - services/strategy_evidence.py 未出現在 modified list；符合 Architect 指令與 CHANGELOG「未修改」。
-  - git diff --check：passed。
-  - py_compile 使用 PYTHONPYCACHEPREFIX=.qa_tmp/pycache：passed。
-  - targeted suite：240 passed，只有既有第三方 deprecation warnings。
+- core/generator.py 版本已升為 v20.4.34，相關 generator / market_theme / strategy_evidence 測試預期同步。
+- services/strategy_evidence.py 未改，但已核對 load_strategy_evidence_summary 目前按近 60 交易日跨版本讀取 daily_signal_snapshot / daily_price，沒有 .eq("version", version)。
+- 未修改 RR 公式、DB schema/write path、live Telegram、production backfill。
+- git diff --check：passed。
+- py_compile：passed。
 
-  ## 跨區塊語意一致性
+## 跨區塊語意一致性
 
-  - 06/03 replay passed：聯電卡片為 減碼，summary 也含 聯電｜-3.86%｜減碼，未再把 新倉風控觀察 當主行動。
-  - 技嘉 replay passed：等冷卻 / 過熱觀察卡片顯示 RR -（過熱），未顯示 RR 0.21。
-  - 簡報原因行 replay passed：只有一行原因，不逐檔串接，且未出現 ； 分隔的逐檔原因。
-  - 未持倉回測降噪 replay passed：未逐卡輸出 回測：不可用、回測：-、樣本不足（有效樣本3）。
-  - 盤中 / 盤後共用降噪由 targeted report tests 覆蓋，未另跑 full replay matrix。
+- targeted official replay passed：market confirmed + strategy sample 36 時，建準等價卡片顯示「綜合 90｜技術 78｜證據 +15%（confirmed）」；不含「證據：partial」或「證據 +0%」。
+- overheat path passed：HOT 標的在 market confirmed 下仍可顯示 confirmed evidence 非 0 加權，同時保留等冷卻 hard block，不把證據誤當可買理由。
+- evidence payload helper passed：8 天 confirmed_trend -> market score=1.0 / confirmed；strategy structured sample 36 -> ready / score=1.0。
 
-  ## 使用者誤讀風險
+## 使用者誤讀風險
 
-  - 主要誤讀路徑「⛔ 不買｜進場」已被 replay 和額外 probe 反證：整份 06/03 message list 不含 不買｜進場，光寶科顯示 不買｜前態待確認。
-  - Summary 手機閱讀順序未再把無有效新倉寫成推薦語氣；相關 targeted tests 保持 新倉：無有效進場。
-  - 殘留風險：本輪 replay 是等價 message-list fixture，不是 live Telegram 實機截圖；依 Architect 指令不要求 live delivery。
+- 主要誤讀「資料足夠但報文仍說證據不足」已由 official message-list replay 反證。
+- 主要誤讀「綜合=技術但顯示 confirmed」已由同一 replay 反證：綜合與技術不同，且 evidence modifier > 1.0。
+- 殘留風險：本輪未讀 production source；若 production 真實資料仍缺 classification_sample_count / sample_count，報文仍會 fail closed。這是資料源品質問題，不是本輪 code path。
 
-  ## 失敗標本反證
+## 質疑與反證
 
-  - 命令：arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py::GeneratorReportTest::test_0603_v20_4_32_failure_specimen_message_list_replay
-  - 結果：1 passed。
-  - 覆蓋 Owner 06/03 等價標本的同層 message-list：聯電減碼、技嘉過熱 RR 隱藏、光寶科 D1 防抖、原因行精簡、未持倉回測降噪、版本 v20.4.33。
+- QA 額外質疑：Tech 是否只修 helper、未打到 official message-list。反證：主倉跑過 tests/test_generator_report.py::GeneratorReportTest::test_official_replay_confirmed_market_and_classification_sample_changes_composite，結果 passed。
+- QA 額外質疑：version filter 是否仍在 loader。反證：主倉跑過 tests/test_strategy_evidence.py::StrategyEvidenceTest::test_load_summary_consumes_cross_version_outcome_history 與 test_load_summary_defaults_to_recent_60_distinct_cross_version_days，結果 passed；同時手動核對 loader 無 .eq("version", version)。
+- QA 額外質疑：只跑 targeted 會漏版本同步。反證：主倉跑過 tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_strategy_evidence.py，結果 206 passed。
 
-  ## 質疑與反證
+## 已跑命令
 
-  - QA 額外 probe：previous_state=weak、consecutive_buy_signals=2 但 breakout_distance=1.2，結果仍為 淘汰，卡片含 前態待確認，不含 可買｜ / 不買｜進場。這補到 Tech 單次防抖以外的 breakout distance 邊界。
-  - 反證結論：D1 防抖不是只修掉字串；分類仍維持保守側，符合「連續確認且 breakout_distance <= 1% 才允許可買」契約。
+- arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py::GeneratorReportTest::test_eight_day_confirmed_market_theme_is_decision_eligible tests/test_generator_report.py::GeneratorReportTest::test_strategy_sample_count_accepts_classification_sample_count tests/test_generator_report.py::GeneratorReportTest::test_official_replay_confirmed_market_and_classification_sample_changes_composite tests/test_generator_report.py::GeneratorReportTest::test_hot_stock_keeps_non_zero_evidence_without_false_partial tests/test_strategy_evidence.py::StrategyEvidenceTest::test_load_summary_consumes_cross_version_outcome_history tests/test_strategy_evidence.py::StrategyEvidenceTest::test_load_summary_defaults_to_recent_60_distinct_cross_version_days
+  - 結果：6 passed，13 warnings。
+- arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_strategy_evidence.py
+  - 結果：206 passed，241 warnings。
+- PYTHONPYCACHEPREFIX=/private/tmp/evidence_fix_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py services/strategy_evidence.py tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_strategy_evidence.py
+  - 結果：passed。
+- git diff --check
+  - 結果：passed。
 
-  ## 未測項目
+## 未測項目
 
-  - 未跑 live Telegram delivery、production write、正式 backfill。
-  - 未跑 production smoke / read-only DB artifact；Architect 明確指示本輪不要求。
-  - 未跑 full pytest；本輪按 L3 風險點跑 targeted suite + replay + 額外 probe。
+- 未跑 live Telegram。
+- 未跑 production write / backfill。
+- 未跑 production read-only artifact；若 Owner 要確認 production 真實資料已補齊，需要另開 read-only source artifact 任務。
+- 自動 QA agent 因 usage limit 未完成；本報告是 Architect 本地反證，不冒稱 agent QA 通過。
 
-  ## QA 結論
+## QA 結論
 
-  通過
+conditional pass

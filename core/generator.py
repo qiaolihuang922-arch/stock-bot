@@ -69,7 +69,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.33"
+VERSION = "v20.4.34"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -4079,11 +4079,7 @@ def _strategy_sample_status(strategy_evidence_summary):
         return "missing-source", "缺 strategy_sample structured_status"
 
     status = _manifest_status(structured.get("status") or structured.get("source_status"))
-    row_count = structured.get("row_count")
-    if row_count is None:
-        row_count = structured.get("sample_rows")
-    if row_count is None:
-        row_count = structured.get("evidence_count")
+    row_count = _strategy_sample_count_from_payload(structured)
     missing_fields = structured.get("missing_fields") or []
     completeness = structured.get("completeness")
     source = structured.get("source") or structured.get("source_of_truth") or "strategy_sample"
@@ -4111,15 +4107,36 @@ def _strategy_sample_structured_status(report_context):
     return (report_context or {}).get("strategy_sample_structured_status") or {}
 
 
+def _strategy_sample_count_from_payload(payload):
+    if not isinstance(payload, dict):
+        return None
+    for key in [
+        "row_count",
+        "sample_rows",
+        "evidence_count",
+        "sample",
+        "sample_count",
+        "classification_sample_count",
+    ]:
+        value = payload.get(key)
+        if value is None:
+            continue
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
 def _strategy_sample_row_count(report_context):
     structured = _strategy_sample_structured_status(report_context)
-    for key in ["row_count", "sample_rows", "evidence_count", "sample"]:
-        value = structured.get(key)
-        if value is not None:
-            try:
-                return int(value)
-            except (TypeError, ValueError):
-                return None
+    row_count = _strategy_sample_count_from_payload(structured)
+    if row_count is not None:
+        return row_count
+    summary = (report_context or {}).get("strategy_evidence_summary") or {}
+    row_count = _strategy_sample_count_from_payload(summary)
+    if row_count is not None:
+        return row_count
     field = _field_by_key(report_context or {}, "evidence.strategy_sample")
     value = field.get("value")
     if value:
@@ -4287,13 +4304,7 @@ def _per_stock_strategy_sample_evidence_payload(report_context, name):
             "forbidden_effects": list(EVIDENCE_FORBIDDEN_EFFECTS),
         }
 
-    sample = backtest.get("sample")
-    if sample is None:
-        sample = backtest.get("sample_count")
-    if sample is None:
-        sample = backtest.get("row_count")
-    if sample is None:
-        sample = backtest.get("evidence_count")
+    sample = _strategy_sample_count_from_payload(backtest)
     avg_return = backtest.get("avg_return")
     win_rate = backtest.get("win_rate")
     win_rate = _evidence_float(win_rate)

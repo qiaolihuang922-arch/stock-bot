@@ -2,77 +2,92 @@
 
   ## 任務尺寸與風險
 
-  - 任務類型：risk_patch
-  - 判斷：本輪涉及使用者可見報文分組 / 卡片標題 / 持倉風控主行動 / D1 防抖顯示與 replay probe，屬策略報文風險修補；本次追加修正只限 QA blocked 指出的 D1 防抖 card title residual 與 CHANGELOG 對齊。
-  - 版本：v20.4.33
+  - 任務尺寸：risk_patch
+  - 風險原因：修正 Telegram 使用者可見 evidence 加權、綜合分數與版本字串；不改 RR、策略核心、DB write/schema、live delivery。
 
   ## 修改內容
 
-  - 修正 D1 防抖降級後的未持倉卡片標題：前態為淘汰 / failed / weak 且單次 BUY 被維持保守側時，不再顯示 ⛔ 不買｜進場，改顯示保守 label 前態待確認。
-  - 保留現有 D1 防抖實作：單次 BUY 不直接由淘汰 / FAIL / 結構弱翻可買；連續確認且 breakout_distance <= 1% 才允許可買。
-  - 保留 v20.4.33 既有 diff：同日建倉快速止損 / 減碼、過熱 RR 隱藏、簡報原因行壓縮、未持倉回測行一致、盤中盤後共用降噪、策略證據報文消費 probe。
-  - 新增 / 更新 consumer/message-list 測試：06/03 replay probe 斷言整份 message list 不含 不買｜進場，並斷言光寶科 D1 防抖卡片顯示 不買｜前態待確認。
+  - core/generator.py 升版 v20.4.34。
+  - 新增統一 strategy sample count 讀取邏輯，支援：
+      - row_count
+      - sample_rows
+      - evidence_count
+      - sample
+      - sample_count
+      - classification_sample_count
+  - _strategy_sample_status()、_strategy_sample_row_count()、per-stock strategy sample evidence payload 共用同一計數來源，避免真實有效樣本數被讀成 0/None 後降為 partial。
+  - 補 official message-list replay 測試：建準等價標的在 market confirmed + strategy sample 36 時，卡片顯示非 0 evidence 加權，且 綜合 != 技術。
+  - 補過熱路徑測試：HOT 標的仍顯示 confirmed evidence 非 0 加權，但 funnel 保持既有等冷卻 hard block，不誤顯 partial。
+  - 同步既有版本字串測試預期到 v20.4.34。
 
   ## 修改檔案
 
   - core/generator.py
-  - presentation/report.py
-  - services/analysis.py
-  - tests/test_analysis_engine.py
   - tests/test_generator_report.py
   - tests/test_market_theme_evidence.py
   - tests/test_strategy_evidence.py
 
-  未修改：
-
-  - services/strategy_evidence.py
-
   ## 最小改動策略
 
-  - 本次 QA blocked 修正只改 presentation/report.py 的 D1 防抖降級 title label 分支，未更動 BUY 判斷、RR 公式、DB path 或整體策略方向。
-  - 測試只在既有單卡 probe 與 06/03 message-list replay probe 補上 不買｜進場 反證。
-  - 未重構、未新增依賴、未修改主 repo、未 commit / push。
+  - 只補 TASK 指定的 sample count 映射缺口與版本同步。
+  - 未改 RR 公式、策略 decision、買賣/加減碼、停損停利、DB schema/write path、production backfill、live Telegram。
+  - 未改報文版型，只讓既有 evidence/綜合欄位吃到正確樣本數。
 
   ## 契約影響
 
-  - 使用者可見報文版本同步為 v20.4.33。
-  - 未改函式回傳結構、payload shape、DB schema/write path 或 public helper contract。
-  - 使用者可見卡片文字契約有修正：D1 防抖保守降級時，secondary label 不再使用進場語意，改為 前態待確認。
-  - 報文分組契約維持：被 D1 防抖擋下的單次 BUY 留在保守 / 淘汰側，不列入可買。
+  - 使用者可見報文版本：v20.4.33 -> v20.4.34。
+  - public helper 行為：
+      - _strategy_sample_row_count() 現可從 classification_sample_count / sample_count 讀取有效樣本數。
+      - _strategy_sample_evidence_payload() 在樣本數 >=10 且 source available 時回傳 status=ready、score=1.0、decision_eligible=true。
+  - message list：
+      - market confirmed + strategy sample >=10 時，證據顯示 confirmed/supporting 非 0 加權；綜合分數不再等於純技術分數。
+  - payload / DB：
+      - 未改 DB 寫入、schema、RLS、grant、policy、role、index、constraint。
+      - 未新增 production write/backfill 需求。
 
   ## 直接消費者同步
 
-  - presentation/report.py 的未持倉卡片 title 消費 core/generator.py funnel / evidence adjustment 結果，已同步 D1 防抖顯示。
-  - tests/test_generator_report.py 已覆蓋直接卡片 consumer 與 official generator message-list replay。
-  - 06/03 同層 message-list replay probe 存在且通過。
+  - Telegram / official message-list generator 已透過 formatTelegramMessages() replay 測試同步。
+  - evidence payload 消費者透過 build_report_context()、compute_evidence_score()、卡片 rendered line 測試同步。
+  - strategy evidence loader version-filter 回歸測試同步到 v20.4.34。
 
   ## 未影響模組
 
-  - 未修改 RR 計算公式。
-  - 未修改 DB schema、RLS、grant、policy、role、index、constraint。
-  - 未修改 production DB write path。
-  - 未執行 live Telegram。
-  - 未執行正式 backfill。
-  - 未修改 services/strategy_evidence.py。
+  - RR 公式未改。
+  - 持倉狀態機、同日風控、買賣/加減碼、停損停利未改。
+  - production Supabase write path 未改。
+  - live Telegram delivery 未執行。
+  - 報文分組規則與版型未重設。
 
   ## 已跑自檢命令
 
-  - arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py::GeneratorReportTest::test_0603_v20_4_32_failure_specimen_message_list_replay
-      - 結果：1 passed
-  - arch -arm64 .venv/bin/python -m pytest tests/test_analysis_engine.py tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_strategy_evidence.py
-      - 結果：240 passed
-  - PYTHONPYCACHEPREFIX=/private/tmp/stock_bot_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py presentation/report.py services/analysis.py tests/test_analysis_engine.py tests/test_generator_report.py
-    tests/test_market_theme_evidence.py tests/test_strategy_evidence.py
-      - 結果：passed
-  - git diff --check
-      - 結果：passed
+  - arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py::GeneratorReportTest::test_eight_day_confirmed_market_theme_is_decision_eligible tests/
+    test_generator_report.py::GeneratorReportTest::test_strategy_sample_count_accepts_classification_sample_count tests/
+    test_generator_report.py::GeneratorReportTest::test_official_replay_confirmed_market_and_classification_sample_changes_composite tests/
+    test_generator_report.py::GeneratorReportTest::test_hot_stock_keeps_non_zero_evidence_without_false_partial tests/
+    test_strategy_evidence.py::StrategyEvidenceTest::test_load_summary_consumes_cross_version_outcome_history tests/
+    test_strategy_evidence.py::StrategyEvidenceTest::test_load_summary_defaults_to_recent_60_distinct_cross_version_days：6 passed，13 warnings。
+  - arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_strategy_evidence.py：206 passed，241 warnings。
+  - PYTHONPYCACHEPREFIX=/private/tmp/tech_write_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py services/strategy_evidence.py tests/test_generator_report.py tests/test_market_theme_evidence.py tests/
+    test_strategy_evidence.py：passed。
+  - git diff --check：passed。
+  - 備註：直接 pytest 不在 PATH；直接 .venv/bin/python 以 x86_64 載入時遇到 arm64 pydantic_core 架構錯誤，已用 arch -arm64 重跑通過。
+
+  ## 覆蓋層級
+
+  - helper：已測 _market_theme_evidence_payload、_strategy_sample_row_count、_strategy_sample_evidence_payload。
+  - data loader：已測 load_strategy_evidence_summary 不使用 .eq("version", current_version)，並保留 60 distinct cross-version days。
+  - official generator / message-list：已測建準等價標的 confirmed evidence 非 0、綜合 != 技術、不顯示 partial/+0%。
+  - overheat path：已測 HOT 標的 evidence 非 0，且仍維持等冷卻 hard block。
+  - production source：未讀 production；本輪只用 read-only fixture/replay 驗 code path，未做 live write/delivery。
 
   ## 殘留風險
 
-  - Tech 自檢只代表交付前檢查，不宣告 QA 通過。
-  - 本輪 replay 為等價 06/03 message-list probe；未執行 live Telegram、production write 或正式 backfill。
-  - 測試仍有既有第三方套件 deprecation warnings，非本輪改動引入。
+  - 未驗 production 真實資料是否已提供 classification_sample_count 或等價欄位；若 production source 本身缺資料，仍需 source-of-truth/read-only artifact 任務。
+  - 未跑 full repo pytest。
+  - 未做 live Telegram、production smoke、backfill。
 
   ## 旁支待辦
 
-  - 無本輪新增旁支待辦。
+  - 若 Owner 要確認所有標的 production evidence 品質，另開 read-only production artifact 任務。
+  - 若要校準 evidence 權重大小或 RR/策略核心，另開獨立策略任務，不併入本輪。
