@@ -42,7 +42,7 @@
 
 ## Next Action
 
-- trend_continuation v20.4.36 驗證 / monitor / 報文降噪已完成本地 focused 驗證；下一步是 commit / push，然後跑 git completion gate 與 Architect closeout gate。
+- trend_continuation v20.4.36 驗證 / monitor / 報文降噪已 commit / pushed；下一步是跑 git completion gate 與 Architect closeout gate。
 - 前一輪 Render freshness 仍需部署後看 Render 5 分鐘觸發 log，確認 freshness preflight 真實 runtime output。
 - 開新任務前先看 `task_md_holds`，不要用 `TASK.md` 內部舊狀態反推當前看板。
 - 報文 / 策略 / 產品修復仍走 PM -> Tech -> QA；流程治理文件可由 Architect 直接改。
