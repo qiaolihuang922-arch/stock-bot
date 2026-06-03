@@ -6,6 +6,7 @@
 
 - `AGENTS.md` 只放跨任務原則。
 - 具體事故進本文件或 `CURRENT_STATE.md`，並定期壓縮。
+- `.cao_agent_context` 是本地 runner 流水，不是 source-of-truth；高信號結果進 `DISPATCH.md` / `CURRENT_STATE.md` / 本文件後，可刪過期 outputs、tmp、stale patch。
 - 規則變更先分類：
   - `one_off`：只記摘要。
   - `repeated_pattern`：合併既有規則或任務卡契約。
@@ -15,6 +16,11 @@
 
 ## Completed
 
+- `local_context_cleanup_20260603`:
+  - 問題：本地 `.cao_agent_context` 累積大量舊 PM/Tech/QA 流水與 residual patch，重開對話時容易把注意力拖回過期上下文。
+  - 清理：刪除非 `20260603_*` 的舊 outputs、全部舊 artifacts residual patch、空目錄；保留 2026-06-03 最新任務證據。
+  - 結果：`.cao_agent_context` 約 865 files / 14MB -> 103 files / 2.1MB。
+  - 邊界：未刪固定 8 份 Markdown；未改產品代碼；git tracked worktree 維持 clean。
 - `render_market_theme_evidence_freshness_20260603`:
   - 問題：Render 每 5 分鐘啟動時缺少幂等 evidence freshness preflight，6/1~6/3 漏寫後 market/theme 仍停在 5/29。
   - 結果：Render route dispatch 前先跑 `--freshness-check-only`；最近 5 個 confirmed trading days 已完整則 skip，未到 14:00 不寫，缺失且過 14:00 走既有 approved backfill/upsert + read-after-write；失敗 blocking dispatch 並保留下一輪重試。
