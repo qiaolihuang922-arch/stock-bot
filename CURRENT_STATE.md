@@ -29,7 +29,7 @@
 ## Latest Completed Handoff
 
 - task_id：`telegram_message_noise_consistency_20260603`
-- 狀態：QA passed；commit / push 待 final 收口。
+- 狀態：done / committed / pushed；Git completion gate passed。
 - 問題：Owner 要把 Telegram 首屏與卡片降噪做徹底：市場/R 值不重複、刪冗餘新倉/背景/持倉行、交易執行短句、僅追蹤與 cross-day 歷史 token 去重、未持倉總數和漏斗一致、淘汰/弱勢不可行動 RR 不露數值、partial +0% 改成僅輔助參考。
 - 修正：
   - 首屏市場行改成 compact count：`市場：{mode} {R}｜交易執行 N｜持倉風控 N｜未持倉 N（可買N/僅追蹤N/淘汰N）`；無可買時不印 `可買0`，維持不可推薦語氣。
