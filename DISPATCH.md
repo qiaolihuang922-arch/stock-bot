@@ -3,7 +3,7 @@
 依 `AGENTS.md` 啟動順序閱讀；本文件只保留任務看板、handoff 指針與固定啟動命令。
 
 - task_md_holds: `recently_done`
-- task_md_task_id: `report-score-evidence-display-20260603`
+- task_md_task_id: `v20.4.35-report-semantics`
 - task_md_note: `TASK.md / CHANGELOG.md / QA_REPORT.md 目前是最近完成任務的滾動 handoff，不代表仍在 Tech/QA。`
 
 ## Active
@@ -16,6 +16,7 @@
 
 ## Recently Done
 
+- `32098c1`｜`v20.4.35-report-semantics`｜risk_patch｜維持 `v20.4.35`：過熱 / 不可追高 evidence boost blocker 擴到 `AVOID`、`LIMIT_LOCK / LIMIT_REBOUND` 與 RR overheat blocker，光寶科類漲停鎖價不再顯示 `證據 +`，改 `過熱不適用`；低量降級文案改 `縮量觀察`，避免 `突破確認｜待確認`；非加碼持倉資料行保留 `V`，格式為 `不適用（既有持倉）｜V {vol}x`；首屏簡報改 `執行動作 N` / `今日新建倉 M` 去歧義；主 repo `tests/test_generator_report.py` 157 passed，py_compile / diff check passed；QA conditional pass，未取得正式 runner artifact。
 - `58969a8`｜`report-score-evidence-display-20260603`｜risk_patch｜升版 `v20.4.35`：非加碼持倉卡片 `數據` 行整段顯示 `不適用（既有持倉）`，不再顯示 RR / 綜合 / 技術 / 證據 / V；加碼與新倉候選仍顯示分數；`final_confidence` 封頂 100；過熱 / 風控 / 資料不足三類 evidence unavailable 文案分流；盤後縮量整理降 `極強` 為 `待確認｜縮量`；低分或 rounded 無變化顯示 `微幅` 而非 `+X%`；主 repo generator + market tests 195 passed，py_compile / diff check passed；QA conditional pass，未取得正式 runner artifact。
 - `5b9523f`｜`render_market_theme_evidence_freshness_20260603`｜risk_patch｜新增 Render route 前置 market/theme freshness check：每次啟動先檢最近 5 個 confirmed trading days，已完整日期跳過，未到台北 14:00 只讀不寫，缺失且過安全時間走既有 approved backfill/upsert 並 read-after-write；失敗時 blocking dispatch 且不寫 already-sent tag；confirmed evidence 完整性要求 9 個官方 TWSE 題材 key；backfill workflow/CLI 改吃 start_date/end_date + historical-range，不再 May-only；targeted tests 45 passed、py_compile / diff check passed；QA conditional pass，待 Render production log 驗證真實 5 分鐘觸發。
 - `135bae7`｜`20260603_evidence_score_effective_market_freshness_v20_4_34`｜risk_patch｜維持 `v20.4.34`：per-stock strategy evidence 改用各股 `backtest_context`，sample 36/38 且參考度高可在 global sample partial 時進 ready；緯創 / 華邦等價 replay 顯示 `綜合 != 技術`、證據 +8% supporting，弱勢 / FAILED_BREAKOUT modifier <= 1.0；daily evidence cron 改台北 14:00，Phase3 runner 缺 `MARKET_THEME_APPROVED_PAYLOAD` fail closed，payload trade_date mismatch 不進 write；主 repo generator + Phase3 + workflow tests 179 passed，py_compile / diff check passed；QA conditional pass，因未讀 production DB / 未取得正式 runner artifact，不能宣稱 2026-06-03 confirmed row 已落庫。
@@ -36,8 +37,8 @@
 
 ## Next Action
 
-- 本輪 report score/evidence display code path 已收口並 commit；下一步仍是部署後看 Render 5 分鐘觸發 log，確認前一輪 freshness preflight 真實 runtime output。
-- QA agent runner 前輪 usage limit 卡點仍是 runner_gap；本輪 QA 產出 conditional pass，產品 diff 已以主 repo 179 tests 反證。
+- 本輪 v20.4.35 report semantics code path 已收口並 commit；下一步仍是部署後看 Render 5 分鐘觸發 log，確認前一輪 freshness preflight 真實 runtime output。
+- 本輪 QA 為 conditional pass，原因是未取得正式 runner artifact；產品 diff 已以主 repo official message-list replay 反證。
 - 開新任務前先看 `task_md_holds`，不要用 `TASK.md` 內部舊狀態反推當前看板。
 - 報文 / 策略 / 產品修復仍走 PM -> Tech -> QA；流程治理文件可由 Architect 直接改。
 

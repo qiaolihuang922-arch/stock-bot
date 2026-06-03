@@ -6,7 +6,7 @@
 
 - 專案：台股策略 Telegram 報文機器人。
 - 正式結果以 git / runner 產生報文為準。
-- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.34`。
+- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.35`。
 - 固定 8 份 Markdown 不刪：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 - Architect 是總控；產品 / 策略 / 報文 bug 或 feature 預設走 PM -> Tech -> QA。
 - 跨日狀態、已執行交易、歷史 evidence 必須來自 production DB 或 Owner 指定持久來源；local/runtime/worktree 不能當跨日記憶。
@@ -27,6 +27,25 @@
 - 驗證：QA `通過`；full pytest 264 passed，153 warnings（第三方 deprecation 類）。
 
 ## Latest Completed Handoff
+
+- task_id：`v20.4.35-report-semantics`
+- 狀態：code done / committed；QA conditional pass；push 與 git completion gate 待收口。
+- commit：`32098c1 Fix v20.4.35 report semantics`。
+- 問題：Owner 指出上一輪 v20.4.35 還有四個手機閱讀錯誤：漲停鎖價 / 不可追高標的仍可能取得 evidence boost；低量降級產生 `突破確認｜待確認` 衝突；非加碼持倉數據行把 V 一起拿掉；簡報 `交易執行 N` 與今日新建倉數容易誤讀。
+- 修正：
+  - `apply_evidence_confidence()` 的 boost blocker 擴到 `trade_state=AVOID`、`price_behavior=LIMIT_LOCK/LIMIT_REBOUND`、以及 `should_show_overheat_rr_blocker(...)`。
+  - formatter heat unavailable 文案同步上述 blocker，RR 過熱 / 漲停鎖價 / 不可追高不再顯示 `證據 +`，改 `證據：過熱不適用`。
+  - 低量收縮降級使用 `縮量觀察`，避免 `突破確認｜待確認` 同時出現。
+  - 非加碼持倉資料行改為 `數據：不適用（既有持倉）｜V {vol}x`，仍不顯示 RR / 綜合 / 技術 / 證據。
+  - Summary 首行改 `執行動作 N` 與 `今日新建倉 M` 分開，必要時標注動作類型。
+- 驗證：
+  - `tests/test_generator_report.py` 157 passed，241 warnings。
+  - `py_compile` passed；`git diff --check` passed。
+  - official message-list replay 覆蓋不可追高 / 漲停鎖價 evidence blocker、非加碼持倉保留 V、低量文案、簡報計數。
+- QA 狀態：`conditional pass`。原因：message-list replay 與 regression tests 覆蓋核心可見錯誤，但未取得正式 runner artifact。
+- 邊界：未改 RR 公式、DB schema/write、策略 decision、持倉狀態機、live Telegram。
+
+## Previous Completed Handoff
 
 - task_id：`report-score-evidence-display-20260603`
 - 狀態：code done / committed / pushed；QA conditional pass；git completion gate passed。
