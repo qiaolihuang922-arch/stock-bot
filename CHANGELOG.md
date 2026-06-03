@@ -2,125 +2,112 @@
 
 ## 任務尺寸與風險
 
-- 任務類型：risk_patch。
-- 任務階段：trend_continuation phase2，屬使用者可見策略 / 報文契約變更，風險接近 major；本輪仍限定單一路徑，不擴成全策略重構。
-- 風險原因：正式 BUY 決策、condition gate、strategy payload、official generator、手機報文 funnel / card 狀態同步新增 trend_continuation 路徑。
-- 明確未碰：DB schema / write、RR 公式、live Telegram、其他 setup 的 evidence-to-BUY 政策。
+- 任務類型：mixed_patch。
+- 風險分級：trend_continuation 觸發驗證與只讀監控屬 risk_patch；資料依據隱藏、QA probe 改讀 manifest、回測行降噪屬 normal_patch。
+- 版本契約：維持 `v20.4.36`，不回退也不升版；本輪沒有改 header 版本常量。
+- 明確未碰：RR 公式、DB schema / write path、live Telegram、既有持倉風控主決策。
 
 ## 修改內容
 
-- 接入 trend_continuation 回踩站回買入路徑：
-  - 正式策略可在「趨勢成立 + 回踩 ma5/ma10 + 放量站回 + 同源研究證據達標」時輸出 `decision_type="trend_continuation"` 與 `decision="BUY"`。
-  - 證據缺失、不足或為負時降級為 `decision_type="trend_observation"` / `WAIT`。
-  - extended spike / 無回踩 / 純創新高追價不開 BUY。
-- 研究與正式策略共用 `scripts/research_trend_continuation.py` 的形態判定函數，避免同一 setup 在研究與 production 漂移。
-- 新增小倉、止損、退出 payload：
-  - 倉位 `<=15%`，標示小倉。
-  - 止損為回踩低點下方。
-  - 退出 / 持有對齊 5 日 edge。
-- official generator 與 presentation report 新增「趨勢延續」單獨 funnel / 手機報文狀態。
-- trend_continuation BUY 會強制顯示資料依據，即使資料源正常也保留同源策略樣本與候選資料說明，避免小倉買入缺證據鏈。
-- 報文版本同步升至 `v20.4.36`。
-- 補 focused tests 覆蓋正向 BUY、負證據 WAIT、spike 無回踩、同源判定、official report 手機閱讀、空 watch_items official generator、負面 evidence official report。
+- 新增 `tests/test_trend_continuation.py`：
+  - 正向回踩延續 fixture：正式 `strategy()` 產生 `decision_type="trend_continuation"` / BUY / 小倉 `<=15%`。
+  - official generator / report 路由顯示「趨勢延續」與「小倉」。
+  - extended spike 無回踩不開 trend_continuation BUY。
+  - 負證據不開 BUY，降級 `trend_observation` / WAIT。
+  - 同一 OHLCV fixture 驗 research helper 與 production detector 命中一致。
+- 新增 `scripts/monitor_trend_continuation.py`：
+  - 只讀比對 production trend_continuation live hits 與 5 日 outcomes。
+  - 輸出 hit count、evaluated count、live win rate、backtest baseline、diff、連續低於閾值筆數與 alert。
+  - 缺 read credentials / source-of-truth 時 fail closed 為 `source-error` 或 `insufficient-data`，不產生假勝率。
+- `presentation/report.py`：
+  - 新增 `SHOW_DATA_BASIS = False`，預設隱藏第三則「資料依據」文字段。
+  - `SHOW_DATA_BASIS=True` 時可恢復可見資料依據。
+  - 只隱藏文字，不刪 `report_context`、manifest、source_status、evidence_status、compute_evidence_score 或 fail-closed gate。
+- `core/generator.py`：
+  - evidence maturity / structural artifacts 的 pass 條件改讀 `evidence_manifest` source/status/use/limit/conflict，不再依賴可見「資料依據」文案。
+  - ledger conflict 情境允許 `stock.智原.risk` 在 manifest 中呈現 `unresolved-conflict`，並繼續要求報文不可輸出確認執行語氣。
+  - 未持倉回測行按同 `setup_key` 去重；相同 setup_key 只顯示一次，不同 setup_key 保留。
+- `tests/test_generator_report.py`：
+  - 原本依賴可見「資料依據」文案的 structural / maturity probe 改讀 manifest。
+  - trend_continuation official report 測試改為確認 summary 預設不露資料依據，同時 manifest / context 仍保留來源狀態。
 
 ## 修改檔案
 
-- `services/analysis.py`
-- `scripts/research_trend_continuation.py`
-- `core/condition_engine.py`
+- `TASK.md`
+- `CHANGELOG.md`
 - `core/generator.py`
-- `core/signal_snapshot.py`
 - `presentation/report.py`
-- `tests/test_analysis_engine.py`
+- `scripts/monitor_trend_continuation.py`
 - `tests/test_generator_report.py`
+- `tests/test_trend_continuation.py`
 
 ## 最小改動策略
 
-- 只開放 trend_continuation 單一路徑，不放寬其他 setup。
+- 不改 trend_continuation 已有策略門檻，只補可重跑觸發驗證與監控。
 - 不改 RR 計算公式。
 - 不改 DB schema / RLS / grant / policy / role / index / constraint。
-- 不做 DB write、正式 backfill 或 live Telegram。
-- 不重構整體 strategy tree / condition engine，只同步必要直接呼叫方與報文消費者。
-- 未以寫死 fixture 壓過真實邊界；負證據與缺資料路徑維持 fail closed。
+- 不新增 production write 或 live Telegram。
+- 資料依據只改可見文字預設，不改內部 evidence / manifest payload。
+- 回測行只做同 setup_key 可見去重，不刪 backtest payload。
 
 ## 契約影響
 
-- strategy decision payload 新增 / 傳遞：
-  - `decision_type="trend_continuation"`
-  - `decision_type="trend_observation"`
-  - `trend_continuation_evidence`
-  - `trend_continuation_setup`
-  - `position_label`
-  - `stop_label`
-  - `exit_rule`
-  - `exit_horizon_days`
-- `strategy()` 入口新增 optional 參數：
-  - `ohlcv_bars`
-  - `trend_continuation_evidence`
-  - `stock_id`
-- `core.signal_snapshot.analyze_ohlcv_snapshot()` 同步新增 optional 參數並傳入 `strategy()`。
-- message list / 報文分組新增「趨勢延續」分類與卡片狀態：
-  - `🟢 趨勢延續買入｜小倉`
-  - 顯示 `回測 55% 勝 / +2.26%`
-  - 顯示倉位、止損、5 日持有 / 退出規則。
-- 版本契約：`core/generator.py` 版本字串同步為 `v20.4.36`。
-- DB contract：無 schema / payload / write path 變更。
-- RR contract：公式未變。
+- 新增 CLI：`scripts/monitor_trend_continuation.py`。
+  - stdout JSON fields 包含 `status`、`trade_date`、`source`、`setup_key`、`live_hit_count`、`evaluated_trade_count`、`live_win_rate_5d`、`backtest_win_rate_5d`、`backtest_avg_return_5d`、`win_rate_diff`、`consecutive_below_threshold`、`alert_threshold_win_rate`、`alert_after_trades`、`alert`。
+  - 缺 production read source 時 exit 2，且 JSON status 為 `source-error` 或 `insufficient-data`。
+- 報文第三則：
+  - 預設標題為 `🧾 v20.4.36 簡報`，不顯示「資料依據」段。
+  - `SHOW_DATA_BASIS=True` 可恢復「簡報＋資料依據」。
+- QA / artifact：
+  - visible data basis 不再是驗證來源完整度的 contract；manifest/source_status/evidence_status 才是 contract。
+- 未持倉卡片：
+  - 同 setup_key 的重複回測行降噪；不同 setup_key 仍顯示。
 
 ## 直接消費者同步
 
-- `core/generator.py`
-  - load stock signal 時傳入 OHLCV bars 與 trend_continuation evidence。
-  - unheld funnel、execution item、summary、new entry suggestions、pending trade items 同步識別「趨勢延續」。
-- `presentation/report.py`
-  - 未持倉卡片、摘要、資料依據、手機閱讀路徑同步新增 trend_continuation 小倉買入文案。
-- `core/condition_engine.py`
-  - BUY condition gate 同步 trend_continuation，WAIT observation 同步 event 判定。
-- `core/signal_snapshot.py`
-  - snapshot 分析呼叫方可傳入同源 OHLCV / evidence。
-- tests 同步 official generator / report 層級，避免只驗 helper。
+- Owner 手機報文：預設少一段長資料依據噪音；trend_continuation 卡片與 summary 仍可讀。
+- official generator / report：仍建構完整 `report_context` 與 `evidence_manifest`。
+- QA probe：改讀 manifest/source_status/evidence_status，不再依賴隱藏文字。
+- 監控消費者：可定期只讀跑 `scripts/monitor_trend_continuation.py`，由 stdout / artifact 判斷是否 alert。
 
 ## 未影響模組
 
-- 未改 DB schema、RLS、grant、policy、role、index、constraint。
-- 未新增 DB write path。
-- 未改 RR 計算公式。
-- 未做 live Telegram delivery。
-- 未改首次突破倉位邏輯。
-- 未把其他 setup 改成 evidence 達標即可 BUY。
-- 未改 production persistence / 跨日 source-of-truth。
-- 未做 full strategy refactor。
+- 未改 `services/analysis.py` 的 strategy decision 結果。
+- 未改 `core/condition_engine.py`。
+- 未改 `core/signal_snapshot.py`。
+- 未改 RR 公式。
+- 未改 DB schema / write path。
+- 未改 live Telegram delivery。
+- 未做 production DB write / backfill。
 
 ## 已跑自檢命令
 
-- focused phase2 tests
-  - 結果：6 passed，17 warnings（主工作區 final focused subset）；先前 Tech/QA phase2 擴充 subset 為 13 passed，17 warnings。
-- empty watch_items official generator probe
+- `PYTHONPYCACHEPREFIX=/private/tmp/tech_validate_pycache python3 -m py_compile services/analysis.py core/generator.py presentation/report.py scripts/research_trend_continuation.py scripts/monitor_trend_continuation.py tests/test_trend_continuation.py tests/test_generator_report.py`
   - 結果：passed。
-- negative evidence official report probe
-  - 結果：passed。
-- py_compile
-  - 結果：passed。
+- `arch -arm64 ./.venv/bin/python -m pytest tests/test_trend_continuation.py tests/test_generator_report.py -k 'trend_continuation or v20_4_18_structural_artifacts or v20_4_20_maturity_report' -q`
+  - 結果：13 passed，154 deselected，41 warnings。
+- `python3 scripts/monitor_trend_continuation.py --no-config --trade-date 2026-06-03`
+  - 結果：exit 2，JSON `status="source-error"`，原因為缺 Supabase read credentials；fail-closed 符合契約。
 - `git diff --check`
   - 結果：passed。
 
 ## 覆蓋層級
 
-- helper：研究形態判定與正式策略共用函式。
-- strategy：正向 trend_continuation BUY、缺 / 負 evidence WAIT、spike 無回踩不買。
-- condition engine：trend_continuation BUY / trend_observation WAIT 條件摘要。
-- official generator：趨勢延續小倉 bucket、load stock signal 傳入 OHLCV / evidence、缺 source fail closed。
-- report formatter：手機可讀卡片、摘要、資料依據、空 watch_items fail-safe。
-- 未測：full pytest、正式 runner artifact、live Telegram、production DB。
+- strategy：正向 fixture 確認正式 `strategy()` 可觸發 trend_continuation BUY；負證據 / spike 反例不開 BUY。
+- research / production parity：同一 OHLCV fixture 的 research helper 與 production detector 命中一致。
+- official generator / report：趨勢延續小倉卡片、隱藏資料依據、manifest 保留、回測行去重。
+- structural artifact：maturity / structural coverage 改讀 manifest，ledger conflict 仍 fail closed。
+- monitor：缺 source fail closed JSON。
 
 ## 殘留風險
 
-- 未跑 full pytest；本輪自檢只代表 focused phase2 與指定 official generator probes。
-- Tech 自檢不代表 QA 通過。
-- trend_continuation evidence 目前只允許同源 positive sample 開 BUY；後續若要接 production 長期監控或動態 artifact，需要另開任務。
-- legacy `strong_follow` 等既有 BUY 路徑不在本輪改造範圍。
+- 未跑 full pytest。
+- 未跑正式 runner artifact。
+- 未讀 production DB，也未做 production write。
+- monitor 目前驗證了缺憑證 fail-closed；真實 live win rate 需有 production read credentials 與已成熟 outcomes 才會從 `insufficient-data` 進入 `ok/alert`。
+- `SHOW_DATA_BASIS=False` 隱藏的是手機文字，不代表來源證據被刪；後續 debug 若需要可臨時開 `SHOW_DATA_BASIS=True`。
 
 ## 旁支待辦
 
-- 後續另開任務處理長期實盤 vs 回測勝率監控 artifact / dashboard。
-- 其他 setup 的 evidence gate 政策不納入本輪。
+- 若 Owner 要正式 runner 定期跑 monitor，需要另開 runner / schedule 任務。
+- 若 Owner 要缺 OHLCV 時所有非 trend_continuation BUY 也 fail closed，需要另開全域 source gate 任務；本輪只驗 trend_continuation。

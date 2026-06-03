@@ -361,6 +361,13 @@ class GeneratorReportTest(unittest.TestCase):
         unheld = unheld_message(messages)
         evidence = evidence_message(messages)
         rendered = "\n\n".join(messages)
+        context = generator.build_report_context(
+            {"智原": payload},
+            "市場偏強",
+            datetime(2026, 6, 3, 10, 0),
+            strategy_evidence_summary=AVAILABLE_STRATEGY_EVIDENCE,
+            report_phase="盤中",
+        )
 
         self.assertIn("趨勢延續買入 1 檔小倉", summary)
         self.assertIn("新倉建議 1", summary)
@@ -372,8 +379,10 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("倉位：<=15%", unheld)
         self.assertIn("止損：回踩低點下方；形態失效即出", unheld)
         self.assertIn("持有：對齊 5 日 edge", unheld)
-        self.assertIn("策略樣本：trend_continuation 同源證據達標", evidence)
-        self.assertIn("trend_continuation 同源證據達標者支持小倉進場", evidence)
+        self.assertNotIn("資料依據", evidence)
+        self.assertTrue(context["manifest"])
+        self.assertEqual(context["source_status"]["strategy_sample"], "available")
+        self.assertTrue(context["evidence_status"]["strategy_sample"])
         self.assertNotIn("策略樣本來源可驗證，只作輔助參考，不新增買點", rendered)
         self.assertNotIn("未持倉資料只支持分類觀察，不支持直接進場", rendered)
 
@@ -556,12 +565,9 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【持倉標的】", messages[0])
         self.assertIn("【未持倉標的】", messages[1])
         self.assertIn("｜v20.4.35】", summary)
-        self.assertIn("🧾 v20.4.35 簡報＋資料依據", summary)
+        self.assertIn(f"🧾 {generator.VERSION} 簡報", summary)
         self.assertIn("新倉：無有效進場", summary)
-        self.assertIn("資料依據", summary)
-        self.assertIn("市場 / 題材背景：短期背景資料不足，僅供觀察。", summary)
-        self.assertIn("策略樣本：缺少可驗證來源，本次不納入買賣判斷。", summary)
-        self.assertIn("持倉 / 價格 / 候選資料：部分持倉或候選資料不足", summary)
+        self.assertNotIn("資料依據", summary)
         for term in FORBIDDEN_SHORT_EVIDENCE_TERMS:
             self.assertNotIn(term, summary)
         self.assertNotIn("今日可買", summary)
@@ -1704,10 +1710,29 @@ class GeneratorReportTest(unittest.TestCase):
 
         summary = summary_message(messages)
         evidence = evidence_message(messages)
+        context = generator.build_report_context(
+            {"建準": payload},
+            "🟢 市場偏強",
+            datetime(2026, 5, 26),
+            strategy_evidence_summary=structured_strategy_evidence(
+                "insufficient-data",
+                row_count=3,
+                rendered_text=(
+                    "📊 策略證據 v20.0\n"
+                    "策略樣本 / 分類回測\n"
+                    "狀態：不可用\n"
+                    "原因：classification backtest 樣本不足（有效樣本 3）\n"
+                    "解讀：本次不把策略樣本納入判斷；個股決策只看既有買點與風控。\n"
+                    "狀態碼：insufficient-sample"
+                ),
+            ),
+        )
         self.assertNotIn("📊 策略證據 v20.0", summary)
         self.assertNotIn("策略樣本 / 分類回測", summary)
-        self.assertIn("v20.4.35 簡報＋資料依據", evidence)
-        self.assertIn("策略樣本：樣本不足，本次不納入買賣判斷。", evidence)
+        self.assertIn("v20.4.35 簡報", evidence)
+        self.assertNotIn("資料依據", evidence)
+        self.assertEqual(context["source_status"]["strategy_sample"], "insufficient-data")
+        self.assertTrue(context["evidence_status"]["strategy_sample"])
         self.assertEqual(payload["result"]["decision"], "BUY")
         self.assertEqual(payload["result"]["action"], 0.1)
 
@@ -5537,12 +5562,17 @@ class GeneratorReportTest(unittest.TestCase):
                         self.assertNotIn(slot[key], ["", [], None])
 
                 if case == "missing_strategy_sample_source":
-                    self.assertIn("策略樣本：缺少可驗證來源，本次不納入買賣判斷。", rendered)
+                    fields = {slot["field_name"]: slot for slot in artifact["evidence_manifest"]}
+                    self.assertEqual(fields["evidence.strategy_sample"]["source_status"], "missing-source")
+                    self.assertFalse(fields["evidence.strategy_sample"]["decision_eligible"])
                     self.assertIn("新倉：無有效進場", rendered)
                     self.assertNotIn("建準｜可買", rendered)
                     self.assertNotIn("買點：可買", rendered)
                 if case == "ledger_position_conflict":
-                    self.assertIn("執行記憶：紀錄仍有待釐清的差異", rendered)
+                    fields = {slot["field_name"]: slot for slot in artifact["evidence_manifest"]}
+                    self.assertEqual(fields["stock.智原.execution_memory"]["source_status"], "unresolved-conflict")
+                    self.assertEqual(fields["stock.智原.execution_memory"]["conflict"], "position-vs-event")
+                    self.assertEqual(fields["source.conflict"]["source_status"], "unresolved-conflict")
                     self.assertNotIn("已確認停利", rendered)
 
     def test_v20_4_18_verifier_blocks_pass_and_actionable_entry_wording(self):
@@ -5574,7 +5604,7 @@ class GeneratorReportTest(unittest.TestCase):
                 rendered = "\n\n".join(report["telegram_messages"])
 
                 self.assertEqual(report["artifact_type"], "evidence_chain_maturity_report")
-                self.assertEqual(report["generator_version"], "v20.4.35")
+                self.assertEqual(report["generator_version"], generator.VERSION)
                 self.assertFalse(report["schema_change"])
                 self.assertFalse(report["data_write"])
                 self.assertFalse(report["live_telegram"])
@@ -5590,7 +5620,13 @@ class GeneratorReportTest(unittest.TestCase):
                 self.assertEqual(len(report["telegram_messages"]), 3)
                 self.assertIn("【持倉標的】", report["telegram_messages"][0])
                 self.assertIn("【未持倉標的】", report["telegram_messages"][1])
-                self.assertIn("資料依據", report["telegram_messages"][2])
+                self.assertNotIn("資料依據", report["telegram_messages"][2])
+                fields = {
+                    slot["field_name"]: slot
+                    for slot in report["structural_artifact"]["evidence_manifest"]
+                }
+                self.assertIn("evidence.strategy_sample", fields)
+                self.assertIn("stock.智原.risk", fields)
                 for term in FORBIDDEN_SHORT_EVIDENCE_TERMS:
                     self.assertNotIn(term, report["telegram_messages"][2])
                 for slot in report["structural_artifact"]["evidence_manifest"]:
@@ -6210,7 +6246,7 @@ class GeneratorReportTest(unittest.TestCase):
         summary = summary_message(messages)
         unheld = unheld_message(messages)
         rendered = "\n\n".join(messages)
-        self.assertIn("🧾 v20.4.35 簡報", summary)
+        self.assertIn(f"🧾 {generator.VERSION} 簡報", summary)
         self.assertNotIn("資料依據", summary)
         self.assertNotIn("追蹤最強", rendered)
         self.assertIn("市場：中性觀察 R2｜執行動作 0｜今日新建倉 0｜持倉風控 0｜未持倉 1", summary)
@@ -6236,14 +6272,14 @@ class GeneratorReportTest(unittest.TestCase):
             )
 
         brief = summary_message(messages)
-        self.assertIn("🧾 v20.4.35 簡報", brief)
+        self.assertIn(f"🧾 {generator.VERSION} 簡報", brief)
         self.assertNotIn("資料依據", brief)
         self.assertIn("📌 盤後簡報", brief)
         self.assertIn("新增有效進場：無", brief)
         self.assertNotIn("市場 / 題材背景：", brief)
         self.assertNotIn("策略樣本：", brief)
 
-    def test_presentation_noise_afterhours_source_error_shows_single_data_basis(self):
+    def test_presentation_noise_afterhours_source_error_keeps_manifest_and_hides_data_basis(self):
         payload = self.evidence_payload(confidence=64, decision="WAIT", action=0, rr=1.2, distance=4)
 
         with patch.object(generator, "market_theme_summary_evidence", return_value=self.confirmed_market_evidence()):
@@ -6257,13 +6293,21 @@ class GeneratorReportTest(unittest.TestCase):
                 strategy_evidence_summary=structured_strategy_evidence("source-error", row_count=0),
                 report_phase="盤後",
             )
+            context = generator.build_report_context(
+                {"來源異常": payload},
+                {"trade_date": "2026-06-02"},
+                datetime(2026, 6, 2),
+                strategy_evidence_summary=structured_strategy_evidence("source-error", row_count=0),
+                report_phase="盤後",
+            )
 
         brief = summary_message(messages)
         unheld = unheld_message(messages)
-        self.assertIn("🧾 v20.4.35 簡報＋資料依據", brief)
-        self.assertIn("資料依據", brief)
-        self.assertIn("策略樣本：來源讀取異常，本次不納入買賣判斷。", brief)
-        self.assertEqual(brief.count("策略樣本："), 1)
+        fields = {slot["field_name"]: slot for slot in context["evidence_manifest"]}
+        self.assertIn(f"🧾 {generator.VERSION} 簡報", brief)
+        self.assertNotIn("資料依據", brief)
+        self.assertEqual(fields["evidence.strategy_sample"]["source_status"], "source-error")
+        self.assertFalse(fields["evidence.strategy_sample"]["decision_eligible"])
         self.assertNotIn("策略樣本：不可用，本次不納入判斷", unheld)
 
     def test_presentation_noise_card_history_unavailable_hidden_across_cards(self):

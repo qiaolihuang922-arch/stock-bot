@@ -5045,7 +5045,9 @@ def build_report_context(
             "trade_date": trade_date,
         },
         "evidence_manifest": manifest,
+        "manifest": manifest,
         "evidence": interim_context["evidence"],
+        "evidence_status": interim_context["evidence"],
         "per_stock_evidence": interim_context["per_stock_evidence"],
         "market_theme_evidence": market_evidence,
         "strategy_evidence_summary": strategy_evidence_summary if isinstance(strategy_evidence_summary, dict) else {},
@@ -5062,6 +5064,7 @@ def build_report_context(
             "funnel": funnel_status,
         },
     }
+    context["source_status"] = context["source_status_summary"]
     context["source_status_text"] = (
         f"核心價格 {context['source_status_summary']['price']}；"
         f"持倉 {context['source_status_summary']['position']}；"
@@ -6593,6 +6596,7 @@ def _telegram_presentation_deps():
         "_stock_field": _stock_field,
         "_strategy_sample_unavailable": _strategy_sample_unavailable,
         "_strategy_sample_unavailable_card_line": _strategy_sample_unavailable_card_line,
+        "_strategy_setup_key_for_stock": _strategy_setup_key_for_stock,
         "compact_backtest_line": compact_backtest_line,
         "price_change_line": price_change_line,
         "cross_day_detail_line": cross_day_detail_line,
@@ -7910,16 +7914,26 @@ def build_evidence_maturity_report(case="production_all_sources_available", now=
     telegram_pass = (
         structural_verifier["pass"]
         and len(messages) == 3
-        and "資料依據" in messages[2]
-        and "策略樣本" in messages[2]
-        and "持倉 RR" in messages[2]
-        and not any(
-            term in messages[2]
-            for term in ["source:", "status:", "use:", "limit:", "conflict:"]
+        and any(
+            slot.get("field_name") == "evidence.strategy_sample"
+            and slot.get("source_status") in {
+                "available",
+                "derived",
+                "missing-source",
+                "source-error",
+                "insufficient-data",
+                "not-applicable",
+            }
+            for slot in structural_artifact["evidence_manifest"]
+        )
+        and any(
+            slot.get("field_name") == "stock.智原.risk"
+            and slot.get("source_status") in {"available", "derived", "not-applicable", "unresolved-conflict"}
+            for slot in structural_artifact["evidence_manifest"]
         )
         and all(
-            key in structural_artifact["evidence_manifest"][0]
-            for key in STRUCTURAL_EVIDENCE_REQUIRED_KEYS
+            all(key in slot for key in STRUCTURAL_EVIDENCE_REQUIRED_KEYS)
+            for slot in structural_artifact["evidence_manifest"]
         )
     )
     strategy_blocking = strategy_artifact["status"] in STRUCTURAL_EVIDENCE_BLOCKING_STATUSES

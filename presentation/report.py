@@ -5,6 +5,8 @@ does not import storage clients or evidence writers; core.generator owns data
 preparation and passes the formatter helpers needed for compatibility.
 """
 
+SHOW_DATA_BASIS = False
+
 
 def formatTelegramSummary(
     results_map,
@@ -213,13 +215,20 @@ def _is_unavailable_history_line(line):
     )
 
 
-def _card_history_line(data, report_context, deps):
+def _card_history_line(data, report_context, deps, dedupe_setup_key=False):
     strategy_line = deps["_strategy_sample_unavailable_card_line"](report_context)
     if strategy_line:
         return None
+    setup_key = deps["_strategy_setup_key_for_stock"](data)
+    if dedupe_setup_key and setup_key and report_context is not None:
+        seen = report_context.setdefault("_visible_unheld_backtest_setup_keys", set())
+        if setup_key in seen:
+            return None
     line = deps["compact_backtest_line"](data.get("backtest_context"))
     if _is_unavailable_history_line(line):
         return None
+    if dedupe_setup_key and setup_key and report_context is not None:
+        seen.add(setup_key)
     return line
 
 
@@ -615,7 +624,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         ),
         data_line,
         low_volume_limit_up_risk,
-        _card_history_line(data, report_context, deps),
+        _card_history_line(data, report_context, deps, dedupe_setup_key=True),
         price_line,
     ])
     lines = [line for line in lines if line is not None]
@@ -1105,13 +1114,15 @@ def format_brief_data_evidence_message(
             brief_lines.append("新倉：無有效進場")
         decision_lines = brief_lines + decision_lines
 
-    data_basis_lines = _data_basis_lines(
-        report_context,
-        holding_items,
-        watch_items,
-        deps,
-        market_mode=market_mode,
-    )
+    data_basis_lines = []
+    if SHOW_DATA_BASIS:
+        data_basis_lines = _data_basis_lines(
+            report_context,
+            holding_items,
+            watch_items,
+            deps,
+            market_mode=market_mode,
+        )
     title = f"🧾 {version} 簡報＋資料依據" if data_basis_lines else f"🧾 {version} 簡報"
     lines = [
         title,

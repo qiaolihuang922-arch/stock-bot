@@ -14,6 +14,26 @@
 
 ## Latest Completed Work
 
+- task_id：`trend_continuation_v20_4_36_validation_monitor_report_noise_20260603`
+- 狀態：code done / local focused validation passed / QA conditional pass due runner_gap / pending commit-push。
+- commits：pending。
+- 結論：v20.4.36 的 trend_continuation 已補「真能觸發」驗證、只讀監控、手機資料依據隱藏與回測行降噪。
+- 關鍵行為：
+  - 新增 `tests/test_trend_continuation.py`，確認正式 `strategy()` 在回踩延續 fixture 會輸出 `decision_type="trend_continuation"` / BUY / 小倉 `<=15%`，official report 出現「趨勢延續」與「小倉」。
+  - extended spike 無回踩不開 trend_continuation BUY；負 evidence 不 BUY；research helper 與 production detector 對同一 fixture 命中一致。
+  - 新增 `scripts/monitor_trend_continuation.py` 只讀監控；缺 Supabase read credentials 時 fail closed 為 `source-error`，不產生假 live win rate。
+  - `presentation/report.py` 新增 `SHOW_DATA_BASIS=False`，預設不顯示第三則「資料依據」；`SHOW_DATA_BASIS=True` 可恢復，manifest/source_status/evidence_status 仍保留。
+  - `core/generator.py` 的 structural/maturity evidence checks 改讀 manifest/source/status/use/limit/conflict，不再依賴可見資料依據文字；未持倉同 setup_key 回測行去重。
+- 驗證：
+  - `py_compile` passed。
+  - `arch -arm64 ./.venv/bin/python -m pytest tests/test_trend_continuation.py tests/test_generator_report.py -k 'trend_continuation or data_basis or presentation_noise or v20_4_18_structural_artifacts or v20_4_20_maturity_report' -q` -> 17 passed。
+  - `python3 scripts/monitor_trend_continuation.py --no-config --trade-date 2026-06-03` -> exit 2 / `status="source-error"` / no fake live rate。
+  - `git diff --check` passed。
+- QA 狀態：`conditional pass`。原因：QA agent 兩次報告舊測試狀態（聲稱 6240-6310 仍為 v20.4.35 / visible data basis），但主 repo 文件與同一命令輸出均顯示已修；列為 runner_gap follow-up。
+- 邊界：未改 RR 公式、DB schema/write、live Telegram；版本維持 `v20.4.36`。
+
+## Previous Completed Work
+
 - task_id：`trend_continuation_buy_path_phase2_20260603`
 - 狀態：code done / QA 通過 / committed / pushed。
 - commits：
