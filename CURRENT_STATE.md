@@ -29,7 +29,7 @@
 ## Latest Completed Handoff
 
 - task_id：`render_market_theme_evidence_freshness_20260603`
-- 狀態：code done / committed；QA conditional pass；push 與 git completion gate 待收口。
+- 狀態：code done / committed / pushed；QA conditional pass；git completion gate passed。
 - commit：`5b9523f Add Render market evidence freshness preflight`。
 - 問題：Owner 說實際流程是 Render 每 5 分鐘啟動，不是手動 GitHub Action；寫過的日期不能重寫，缺的日期要自動補，避免 6/1、6/2、6/3 類漏寫後永遠停在 5/29。
 - 修正：
