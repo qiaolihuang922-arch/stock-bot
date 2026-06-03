@@ -67,25 +67,20 @@ def formatTelegramSummary(
         report_phase=report_phase,
         report_context=report_context,
     )
-    reason_parts = []
-    for name, data in holding_items:
-        reason = deps["holding_reason_line"](name, data) or deps["position_summary_note"](name, data)
-        if reason:
-            reason_parts.append(f"{name}：{reason}")
     new_entry_items = deps["new_entry_suggestion_items"](
         watch_items,
         market_mode=market_mode,
         report_context=report_context,
     )
-    if new_entry_items:
-        reason_parts.extend(f"{item['name']}：未持倉可買，等待分批進場" for item in new_entry_items[:3])
-    if not reason_parts:
-        reason_parts.append(deps["today_reason_text"](
-            watch_items,
-            market_mode,
-            report_phase=report_phase,
-            report_context=report_context,
-        ))
+    reason_line = _summary_reason_line(
+        holding_items,
+        watch_items,
+        new_entry_items,
+        market_mode,
+        report_phase,
+        report_context,
+        deps,
+    )
     risk_parts = []
     if holding_items:
         risk_parts.append("持倉：hard_stop 永不豁免，跌破警戒 / 停損依風控處理")
@@ -98,7 +93,7 @@ def formatTelegramSummary(
     if report_phase == "盤中":
         lines.append(deps["source_summary_text"](results_map))
 
-    lines.append(f"原因：{'；'.join(reason_parts)}")
+    lines.append(f"原因：{reason_line}")
     lines.append(f"風險：{'；'.join(risk_parts)}")
 
     lines.extend([
@@ -190,6 +185,21 @@ def _strategy_evidence_text(strategy_evidence_summary):
     if isinstance(strategy_evidence_summary, dict):
         return strategy_evidence_summary.get("rendered_text") or strategy_evidence_summary.get("text")
     return strategy_evidence_summary
+
+
+def _summary_reason_line(holding_items, watch_items, new_entry_items, market_mode, report_phase, report_context, deps):
+    if holding_items and not new_entry_items:
+        return "持倉多數依風控處理，新倉無有效進場。"
+    if holding_items and new_entry_items:
+        return "持倉依風控處理，新倉僅列可行動候選。"
+    if new_entry_items:
+        return "持倉無需處理，新倉僅列可行動候選。"
+    return deps["today_reason_text"](
+        watch_items,
+        market_mode,
+        report_phase=report_phase,
+        report_context=report_context,
+    )
 
 
 def _is_unavailable_history_line(line):
@@ -316,6 +326,8 @@ def _score_gated_market_line(report_context, name, stock_result, dist, deps):
 
 
 def _unheld_rr_text(stock_result, funnel_state, valid_entry, deps):
+    if funnel_state == "等冷卻" or deps["should_show_overheat_rr_blocker"](stock_result, holding=False):
+        return "-（過熱）"
     weak_structure = (
         stock_result.get("decision") in {"NO_TRADE", "FAIL"}
         or stock_result.get("structure_phase") in {"FAILED_BREAKOUT", "WEAK", "DISTRIBUTION", "WEAK_REBOUND"}
@@ -397,6 +409,15 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     state = deps["tomorrow_watch_state"](name, data)
     funnel_state = deps["unheld_funnel_state"](name, data, market_mode=market_mode, report_context=report_context)
     prepare_label, prepare_action = deps["strong_prepare_bucket"](data)
+    if valid_entry and funnel_state != "可買":
+        valid_entry = False
+        title_label = (
+            "前態待確認"
+            if funnel_state == "淘汰" and data.get("evidence_adjustment_reason")
+            else deps["rejected_primary_reason"](stock_result)
+            if funnel_state == "淘汰"
+            else (blockers[0] if blockers else deps["final_label"](stock_result))
+        )
     if deps["is_valid_entry"](stock_result) and strategy_source_blocked:
         title_label = "策略樣本證據不足" if strategy_source_status != "source-error" else "策略樣本來源異常"
     elif deps["is_valid_entry"](stock_result) and not source_eligible:

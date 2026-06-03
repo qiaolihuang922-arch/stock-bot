@@ -1,73 +1,78 @@
-# CHANGELOG: 20260603_strategy_evidence_report_risk_patch
+# CHANGELOG:
 
-## 任務尺寸與風險
+  ## 任務尺寸與風險
 
-- 任務尺寸：risk_patch。
-- 風險原因：本輪同時影響 strategy evidence 歷史取樣、Telegram 使用者可見報文分組，以及同日建倉 hard_stop / 快速止損風控顯示與主行動。
+  - 任務類型：risk_patch
+  - 判斷：本輪涉及使用者可見報文分組 / 卡片標題 / 持倉風控主行動 / D1 防抖顯示與 replay probe，屬策略報文風險修補；本次追加修正只限 QA blocked 指出的 D1 防抖 card title residual 與 CHANGELOG 對齊。
+  - 版本：v20.4.33
 
-## 修改內容
+  ## 修改內容
 
-- A1：`load_strategy_evidence_summary(limit=60)` 移除 `version` filter，改為跨版本歷史取樣。
-- A1：`limit=60` 的語意改為最近 60 個 distinct `trade_date`，不是 60 rows；以 `range(start,end)` 分頁讀取 ordered rows，直到資料涵蓋超過 `limit` 個 distinct trade dates 或資料耗盡，再裁切成最近 60 個交易日。
-- B1：`今日盤中交易執行` 只保留已執行 / 持倉動作；未持倉可買改列 `新倉建議`，並標示 `尚未買入`、`建議分批`。
-- B2：Summary 的 `原因` / `風險` 拆成持倉與新倉對象，避免持倉和未持倉共用同一段長句。
-- B3：未持倉非執行追蹤行抽成共用 formatter，盤中 / 盤後同步降噪；空交易執行不再顯示 `無新增下單`。
-- B4：partial evidence modifier = 1.0 時顯示 `僅輔助參考`，不顯示 `+0%`。
-- C：同日建倉若跌破 hard_stop、跌破入場價 3%，或跌破入場 K 棒低點，允許進入當日減碼；只破警戒但未達 hard_stop / 快速止損時維持新倉風控觀察。
-- 版本同步：使用者可見報文版本升為 `v20.4.32`。
+  - 修正 D1 防抖降級後的未持倉卡片標題：前態為淘汰 / failed / weak 且單次 BUY 被維持保守側時，不再顯示 ⛔ 不買｜進場，改顯示保守 label 前態待確認。
+  - 保留現有 D1 防抖實作：單次 BUY 不直接由淘汰 / FAIL / 結構弱翻可買；連續確認且 breakout_distance <= 1% 才允許可買。
+  - 保留 v20.4.33 既有 diff：同日建倉快速止損 / 減碼、過熱 RR 隱藏、簡報原因行壓縮、未持倉回測行一致、盤中盤後共用降噪、策略證據報文消費 probe。
+  - 新增 / 更新 consumer/message-list 測試：06/03 replay probe 斷言整份 message list 不含 不買｜進場，並斷言光寶科 D1 防抖卡片顯示 不買｜前態待確認。
 
-## 修改檔案
+  ## 修改檔案
 
-- `services/strategy_evidence.py`
-- `core/generator.py`
-- `presentation/report.py`
-- `tests/test_strategy_evidence.py`
-- `tests/test_generator_report.py`
-- `tests/test_market_theme_evidence.py`
+  - core/generator.py
+  - presentation/report.py
+  - services/analysis.py
+  - tests/test_analysis_engine.py
+  - tests/test_generator_report.py
+  - tests/test_market_theme_evidence.py
+  - tests/test_strategy_evidence.py
 
-## 最小改動策略
+  未修改：
 
-- 沿用既有 evidence summary / report formatter / holding decision helper，只新增必要的分頁取樣 helper、新倉建議 helper、未持倉非執行行 helper、同日建倉風控 helper。
-- A1 只修 history loading 契約，不改 scoring model、DB schema、DB write path 或 production backfill。
-- B/C 只修使用者可見分組、原因風險拆分、partial 顯示與同日建倉 hard risk guard；不改 RR 公式。
+  - services/strategy_evidence.py
 
-## 契約影響
+  ## 最小改動策略
 
-- `load_strategy_evidence_summary()` 回傳結構不變，但 public `limit` 語意由 row count 修正為 distinct `trade_date` history window。
-- Telegram message list / 報文分組有變更：未持倉可買從 `今日盤中交易執行` 移到 `新倉建議`；空交易執行區塊不顯示無動作文案。
-- 報文版本 header / artifact version 同步為 `v20.4.32`。
-- Payload / DB：無新增 DB 欄位，無 schema / write 變更。
+  - 本次 QA blocked 修正只改 presentation/report.py 的 D1 防抖降級 title label 分支，未更動 BUY 判斷、RR 公式、DB path 或整體策略方向。
+  - 測試只在既有單卡 probe 與 06/03 message-list replay probe 補上 不買｜進場 反證。
+  - 未重構、未新增依賴、未修改主 repo、未 commit / push。
 
-## 直接消費者同步
+  ## 契約影響
 
-- `presentation/report.py` 已同步新倉建議、交易執行、原因 / 風險、未持倉非執行行。
-- `tests/test_generator_report.py` 覆蓋盤中 / 盤後、新倉建議、partial evidence、同日建倉 hard_stop / 入場價 3% / 入場 K 棒低點 / 警戒緩衝。
-- `tests/test_strategy_evidence.py` 覆蓋 `.range()` 分頁、無 `version` eq、高 row density 下最近 60 distinct trade dates。
-- `tests/test_market_theme_evidence.py` 同步 `v20.4.32` 與新報文文案。
+  - 使用者可見報文版本同步為 v20.4.33。
+  - 未改函式回傳結構、payload shape、DB schema/write path 或 public helper contract。
+  - 使用者可見卡片文字契約有修正：D1 防抖保守降級時，secondary label 不再使用進場語意，改為 前態待確認。
+  - 報文分組契約維持：被 D1 防抖擋下的單次 BUY 留在保守 / 淘汰側，不列入可買。
 
-## 未影響模組
+  ## 直接消費者同步
 
-- 未改 RR 計算公式。
-- 未改 DB schema、RLS、grant、policy、role、index、constraint。
-- 未新增 production DB write path。
-- 未執行 live Telegram delivery。
-- 未做 production backfill。
-- 未實作 D1 光寶科同日淘汰 -> 可買翻轉；維持 deferred。
+  - presentation/report.py 的未持倉卡片 title 消費 core/generator.py funnel / evidence adjustment 結果，已同步 D1 防抖顯示。
+  - tests/test_generator_report.py 已覆蓋直接卡片 consumer 與 official generator message-list replay。
+  - 06/03 同層 message-list replay probe 存在且通過。
 
-## 已跑自檢命令
+  ## 未影響模組
 
-- `.venv/bin/python -m pytest tests/test_strategy_evidence.py`：13 passed。
-- `arch -arm64 .venv/bin/python -m pytest tests/test_strategy_evidence.py tests/test_generator_report.py tests/test_market_theme_evidence.py`：201 passed，241 warnings。
-- `PYTHONPYCACHEPREFIX=/private/tmp/tech_write_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py presentation/report.py services/strategy_evidence.py tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_strategy_evidence.py`：passed。
-- `git diff --check`：passed。
+  - 未修改 RR 計算公式。
+  - 未修改 DB schema、RLS、grant、policy、role、index、constraint。
+  - 未修改 production DB write path。
+  - 未執行 live Telegram。
+  - 未執行正式 backfill。
+  - 未修改 services/strategy_evidence.py。
 
-## 殘留風險
+  ## 已跑自檢命令
 
-- 一般 `.venv/bin/python` 在部分 shell 會用 x86_64 執行並撞到 arm64 `pydantic_core`；含 Supabase import 的 targeted tests 需使用 `arch -arm64 .venv/bin/python`。
-- 若未來需支援非 Supabase-compatible query object，需另補明確 pagination contract；production Supabase path 預期支援 `.range()`。
-- 未跑 full pytest、production smoke、正式 replay/backfill 或 live Telegram。
+  - arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py::GeneratorReportTest::test_0603_v20_4_32_failure_specimen_message_list_replay
+      - 結果：1 passed
+  - arch -arm64 .venv/bin/python -m pytest tests/test_analysis_engine.py tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_strategy_evidence.py
+      - 結果：240 passed
+  - PYTHONPYCACHEPREFIX=/private/tmp/stock_bot_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py presentation/report.py services/analysis.py tests/test_analysis_engine.py tests/test_generator_report.py
+    tests/test_market_theme_evidence.py tests/test_strategy_evidence.py
+      - 結果：passed
+  - git diff --check
+      - 結果：passed
 
-## 旁支待辦
+  ## 殘留風險
 
-- D1 光寶科同日淘汰 -> 可買翻轉另開任務確認真 bug、資料來源與使用者可見契約。
-- 可另開 read-only artifact 驗證 production daily_signal_snapshot / daily_price 的實際 row density 與 pagination 成本。
+  - Tech 自檢只代表交付前檢查，不宣告 QA 通過。
+  - 本輪 replay 為等價 06/03 message-list probe；未執行 live Telegram、production write 或正式 backfill。
+  - 測試仍有既有第三方套件 deprecation warnings，非本輪改動引入。
+
+  ## 旁支待辦
+
+  - 無本輪新增旁支待辦。

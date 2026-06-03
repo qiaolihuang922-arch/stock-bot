@@ -354,6 +354,101 @@ class AnalysisEngineTest(unittest.TestCase):
         self.assertEqual(stop_signal["level"], "STOP_100")
         self.assertEqual(stop_signal["ratio"], 1)
 
+    def test_same_day_buy_failed_breakout_fast_drop_reduces_instead_of_watch(self):
+        result = {
+            "structure_phase": "FAILED_BREAKOUT",
+            "price_behavior": "NORMAL",
+            "market_regime": "RISK_ON",
+            "multi_day_bias": "MIXED",
+            "decision": "FAIL",
+            "heat_state": "NORMAL",
+            "trade_state": "WAIT",
+            "extended_level": 0,
+            "trend": "UP",
+            "volume_state": "STRONG",
+            "volume_price_state": "NORMAL",
+            "rr": 1.2,
+            "breakout_distance": 0,
+            "entry_quality": "B",
+            "confidence_score": 70,
+        }
+
+        signal = holding_signal(
+            result,
+            132.75,
+            138.08,
+            "realtime",
+            -3.86,
+            position_events={"bought_shares": 50},
+        )
+
+        self.assertEqual(signal["level"], "REDUCE_50")
+        self.assertIn("減碼", signal["action"])
+        self.assertIn("入場即錯", signal["reason"])
+        self.assertNotEqual(signal["action"], "新倉風控觀察")
+
+    def test_same_day_buy_light_loss_keeps_new_position_watch_buffer(self):
+        result = {
+            "structure_phase": "DISTRIBUTION",
+            "price_behavior": "NORMAL",
+            "market_regime": "RISK_ON",
+            "multi_day_bias": "MIXED",
+            "decision": "WAIT",
+            "heat_state": "NORMAL",
+            "trade_state": "WAIT",
+            "extended_level": 0,
+            "trend": "UP",
+            "volume_state": "STRONG",
+            "volume_price_state": "DISTRIBUTION",
+            "rr": 1.2,
+            "breakout_distance": 0,
+            "entry_quality": "B",
+            "confidence_score": 70,
+        }
+
+        signal = holding_signal(
+            result,
+            99,
+            100,
+            "realtime",
+            -1.0,
+            position_events={"bought_shares": 50},
+        )
+
+        self.assertEqual(signal["level"], "NEW_POSITION_RISK_WATCH")
+        self.assertEqual(signal["action"], "新倉風控觀察")
+
+    def test_same_day_buy_hard_stop_still_stops_immediately(self):
+        result = {
+            "structure_phase": "FAILED_BREAKOUT",
+            "price_behavior": "NORMAL",
+            "market_regime": "RISK_ON",
+            "multi_day_bias": "MIXED",
+            "decision": "FAIL",
+            "heat_state": "NORMAL",
+            "trade_state": "WAIT",
+            "extended_level": 0,
+            "trend": "DOWN",
+            "volume_state": "STRONG",
+            "volume_price_state": "NORMAL",
+            "rr": 1.2,
+            "breakout_distance": 0,
+            "entry_quality": "D",
+            "confidence_score": 20,
+        }
+
+        signal = holding_signal(
+            result,
+            91,
+            100,
+            "realtime",
+            -9.0,
+            position_events={"bought_shares": 50},
+        )
+
+        self.assertEqual(signal["level"], "STOP_100")
+        self.assertEqual(signal["ratio"], 1)
+
     def test_profit_taken_same_level_does_not_block_hard_stop(self):
         result = {
             "structure_phase": "WEAK",

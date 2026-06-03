@@ -69,7 +69,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.32"
+VERSION = "v20.4.33"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -1193,14 +1193,6 @@ def hidden_rr_reason(result, holding=False):
 def should_show_overheat_rr_blocker(result, holding=False):
 
     if holding:
-        return False
-
-    try:
-        rr = float(result.get("rr"))
-    except (TypeError, ValueError):
-        rr = None
-
-    if rr is None or round(rr, 2) != 0:
         return False
 
     blockers = entry_blockers(result)
@@ -2925,6 +2917,35 @@ def cross_day_prepare_promotion(data):
     )
 
 
+def cross_day_unstable_buy_transition(data):
+
+    if not cross_day_ready(data):
+        return False
+
+    context = cross_day_context(data)
+    previous_state = context.get("previous_state")
+    if previous_state not in ["eliminated", "failed", "weak"]:
+        return False
+
+    result = data.get("result") or {}
+    try:
+        stable_count = int(
+            context.get("consecutive_buy_signals")
+            or context.get("consecutive_valid_entries")
+            or context.get("consecutive_observe_days")
+            or 0
+        )
+    except (TypeError, ValueError):
+        stable_count = 0
+
+    try:
+        breakout_distance = float(result.get("breakout_distance"))
+    except (TypeError, ValueError):
+        breakout_distance = None
+
+    return stable_count < 2 or breakout_distance is None or breakout_distance > 1
+
+
 def cross_day_higher_priority_risk_action(decision):
 
     decision = decision or {}
@@ -3412,6 +3433,11 @@ def position_summary_action(name, data):
     if level == "STOP_100":
         return "停損"
 
+    if is_today_buy_holding(data):
+        if today_buy_holding_risk_reason(data, decision) and level in ["REDUCE_25", "REDUCE_50"]:
+            return "減碼"
+        return "新倉風控觀察"
+
     if str(action).startswith("硬風控"):
         return "硬風控減碼"
 
@@ -3430,11 +3456,6 @@ def position_summary_action(name, data):
 
     if second_profit_state.get("is_second_stage"):
         return "第二段停利"
-
-    if is_today_buy_holding(data):
-        if today_buy_holding_risk_reason(data, decision) and level in ["REDUCE_25", "REDUCE_50"]:
-            return "減碼"
-        return "新倉風控觀察"
 
     duplicate_action = cross_day_duplicate_action(data, decision)
     if duplicate_action == "take_profit":
@@ -5308,6 +5329,9 @@ def unheld_funnel_assessment(name, data, market_mode=None, report_context=None):
     if is_valid_entry(result) and not _unheld_decision_source_eligible(report_context, name):
         return "淘汰", None
 
+    if is_valid_entry(result) and cross_day_unstable_buy_transition(data):
+        return "淘汰", "前態淘汰/弱勢，單次買點不直接翻可買，需連續確認"
+
     if is_valid_entry(result):
         return "可買", None
 
@@ -6471,6 +6495,7 @@ def _telegram_presentation_deps():
         "holding_reason_line": holding_reason_line,
         "holding_next_step_line": holding_next_step_line,
         "rr_display_text": rr_display_text,
+        "should_show_overheat_rr_blocker": should_show_overheat_rr_blocker,
         "stock_title": stock_title,
         "position_summary_action": position_summary_action,
         "position_summary_note": position_summary_note,

@@ -7,6 +7,7 @@ MIN_RR_PREBREAK = 1.0
 MIN_RR_STRONG = 2.0
 
 MIN_STOP_BUFFER = 0.015
+SAME_DAY_FAIL_DROP_PCT = 0.03
 
 EXTENDED_LV1 = 1.08
 EXTENDED_LV2 = 1.15
@@ -2046,8 +2047,9 @@ def holding_signal(
             return data
 
         if today_bought_shares() > 0:
-            if price <= warning_price:
-                trigger = "跌破停損" if price <= hard_stop_price else "跌破警戒"
+            same_day_fail_drop = avg_price and price <= avg_price * (1 - SAME_DAY_FAIL_DROP_PCT)
+            if price <= hard_stop_price or (same_day_fail_drop and (structure_broken or decision == "FAIL" or phase == "FAILED_BREAKOUT")):
+                trigger = "跌破停損" if price <= hard_stop_price else "入場即錯"
                 data.update({
                     "action": f"硬風控減碼 {int(ratio * 100)}%",
                     "reason": f"今日新倉{trigger}，先降低風險",

@@ -482,13 +482,13 @@ class StrategyEvidenceTest(unittest.TestCase):
             }
 
         with patch.object(strategy_evidence, "report_from_rows", side_effect=capture_report):
-            strategy_evidence.load_strategy_evidence_summary(client, "v20.4.32")
+            strategy_evidence.load_strategy_evidence_summary(client, "v20.4.33")
 
         self.assertIn(("daily_signal_snapshot", "range", 0, 999), client.calls)
         self.assertIn(("daily_signal_snapshot", "range", 1000, 1999), client.calls)
         self.assertIn(("daily_price", "range", 0, 999), client.calls)
         self.assertIn(("daily_price", "range", 1000, 1999), client.calls)
-        self.assertNotIn(("daily_signal_snapshot", "eq", ("version", "v20.4.32"), {}), client.calls)
+        self.assertNotIn(("daily_signal_snapshot", "eq", ("version", "v20.4.33"), {}), client.calls)
         feature_dates = {row["trade_date"] for row in captured["feature_rows"]}
         outcome_dates = {row["trade_date"] for row in captured["outcome_rows"]}
         self.assertEqual(len(feature_dates), 60)
