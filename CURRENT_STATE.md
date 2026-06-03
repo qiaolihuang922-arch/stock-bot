@@ -29,7 +29,7 @@
 ## Latest Completed Handoff
 
 - task_id：`20260603_evidence_score_effective_market_freshness_v20_4_34`
-- 狀態：code done / committed；QA conditional pass；push 與 git completion gate 待收口。
+- 狀態：code done / committed / pushed；QA conditional pass；git completion gate passed。
 - commit：`135bae7 Make evidence scoring use per-stock backtests`。
 - 問題：Owner 要讓 evidence 從「顯示但 0 作用」變成真正改變 `綜合` 分，並讓 market confirmed_evidence 每日保鮮。
 - 修正：
