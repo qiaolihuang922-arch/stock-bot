@@ -16,7 +16,7 @@
 
 ## Recently Done
 
-- `pending commit`｜`20260603_strategy_evidence_report_risk_patch`｜risk_patch｜升版 `v20.4.32`：strategy evidence loader 移除 version filter 並以 `.range()` 分頁取得最近 60 個 distinct trade_date；交易執行 / 新倉建議拆分，未持倉可買標示尚未買入 / 建議分批；原因 / 風險按對象拆分；partial +0% 顯示 `僅輔助參考`；同日建倉 hard_stop / 入場價 -3% / 入場 K 低點觸發當日減碼，僅破警戒維持新倉風控觀察；D1 光寶科翻轉 deferred；QA passed；主 repo targeted tests 201 passed。
+- `7ccc808`｜`20260603_strategy_evidence_report_risk_patch`｜risk_patch｜升版 `v20.4.32`：strategy evidence loader 移除 version filter 並以 `.range()` 分頁取得最近 60 個 distinct trade_date；交易執行 / 新倉建議拆分，未持倉可買標示尚未買入 / 建議分批；原因 / 風險按對象拆分；partial +0% 顯示 `僅輔助參考`；同日建倉 hard_stop / 入場價 -3% / 入場 K 低點觸發當日減碼，僅破警戒維持新倉風控觀察；D1 光寶科翻轉 deferred；QA passed；主 repo targeted tests 201 passed；Git completion gate passed。
 - `32fcfd8`｜`telegram_message_noise_consistency_20260603`｜normal_patch｜不升版仍維持 `v20.4.31`：首屏市場行去重並改為 compact count；有可買時顯示 `可買N/僅追蹤N/淘汰N`，無可買時維持不可推薦語氣；刪冗餘新倉/背景/持倉行；交易執行短文案；僅追蹤與 cross-day 歷史 token 降噪；淘汰/弱勢不可行動 RR 顯示 `-（不可行動）`；partial +0% 顯示 `僅輔助參考`；QA passed；主 repo `tests/test_generator_report.py` 146 passed。
 - `a92a884`｜`presentation_noise_reduction_v20_4_31`｜normal_patch｜不升版仍維持 `v20.4.31`：簡報市場/結論、原因/風險合併；無有效進場時 `追蹤最強` 改為 `僅追蹤`；盤中/盤後正常來源隱藏資料依據、異常才顯示；卡片不可用歷史/回測降噪；B5 Summary / 漏斗 / card 一致；QA passed；主 repo rendered tests 8 passed。
 - `0d20b35`｜`per_stock_evidence_score_funnel_p0_p3_20260602`｜risk_patch｜不升版仍維持 `v20.4.31`：strategy setup sample 成為 per-stock 分量；缺 explicit setup fail closed；弱勢 / 失敗 / EXTREME / technical=0 不吃正向 boost；旺宏 / 聯電 modifier 不同；B5 Summary / 漏斗 / card 一致；QA passed；主 repo targeted tests 4 passed。
@@ -30,7 +30,7 @@
 
 ## Next Action
 
-- 本輪 `20260603_strategy_evidence_report_risk_patch` 已 QA passed，待 commit / push / git completion gate。
+- 本輪 `20260603_strategy_evidence_report_risk_patch` 已 committed / pushed；Git completion gate passed。
 - 下一步若繼續，優先看 production evidence 實際資料品質 / daily_signal_snapshot row density / 長期樣本分布，而不是再修文案。
 - 開新任務前先看 `task_md_holds`，不要用 `TASK.md` 內部舊狀態反推當前看板。
 - 報文 / 策略 / 產品修復仍走 PM -> Tech -> QA；流程治理文件可由 Architect 直接改。

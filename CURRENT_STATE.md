@@ -29,7 +29,8 @@
 ## Latest Completed Handoff
 
 - task_id：`20260603_strategy_evidence_report_risk_patch`
-- 狀態：QA passed；commit / push 待 final 收口。
+- 狀態：done / committed / pushed；Git completion gate passed。
+- commit：`7ccc808 Fix evidence sampling and same-day risk report`。
 - 問題：Owner 要一次性完成 A1+B1-B4+C：strategy evidence 跨版本歷史要真正進樣本；未持倉可買不得混入交易執行；原因 / 風險需拆分；partial +0% 不得誤導；同日建倉 hard_stop / 快速止損不得被剛買入豁免。
 - 修正：
   - `load_strategy_evidence_summary(limit=60)` 移除 version filter，改用 `.range()` 分頁，直到資料涵蓋超過 60 個 distinct `trade_date` 後裁切為最近 60 交易日；高 row-density 不再退回 60 rows。
