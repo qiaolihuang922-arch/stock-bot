@@ -151,6 +151,8 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
         self.assertIn('default: "2026-05-01"', workflow_text)
         self.assertIn('default: "2026-05-29"', workflow_text)
         self.assertIn("python scripts/backfill_signals.py \\", workflow_text)
+        self.assertIn("python scripts/backfill_market_theme_sources.py \\", workflow_text)
+        self.assertIn("--historical-range", workflow_text)
         self.assertIn('--start-date "$BACKFILL_START_DATE"', workflow_text)
         self.assertIn('--end-date "$BACKFILL_END_DATE"', workflow_text)
         self.assertIn('--version "$BACKFILL_VERSION"', workflow_text)
@@ -166,6 +168,8 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
         script = _workflow_run_script("Backfill official market/theme evidence (retry 3 times)")
         runtime_env = os.environ.copy()
         runtime_env["RUN_MODE"] = run_mode
+        runtime_env["BACKFILL_START_DATE"] = "2026-06-01"
+        runtime_env["BACKFILL_END_DATE"] = "2026-06-03"
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
             bin_path = tmp_path / "bin"
@@ -177,7 +181,7 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
                     f"""\
                     #!/usr/bin/env bash
                     echo "$@" >> "{calls_path}"
-                    echo "ValueError: market_theme_confirmed_evidence blocked: source date outside requested May range" >&2
+                    echo "ValueError: market_theme_confirmed_evidence blocked: source date outside requested range" >&2
                     exit {fake_python_exit}
                     """
                 ),
@@ -219,7 +223,9 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
                 )
                 self.assertEqual(calls.count("scripts/backfill_market_theme_sources.py"), 3)
                 self.assertIn("--write --confirm-write", calls)
-                self.assertIn("source date outside requested May range", completed.stderr)
+                self.assertIn("--start-date 2026-06-01", calls)
+                self.assertIn("--end-date 2026-06-03", calls)
+                self.assertIn("source date outside requested range", completed.stderr)
 
     def test_scheduled_daily_evidence_mode_skips_live_bot_delivery(self):
         script = _workflow_run_script("Run bot (retry 3 times)")

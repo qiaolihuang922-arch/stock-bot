@@ -1,78 +1,101 @@
-# CHANGELOG: evidence_score_effective_market_freshness_v20_4_34
+# CHANGELOG: Render market/theme evidence freshness check 與幂等補寫
 
-  ## 任務尺寸與風險
+## 任務尺寸與風險
 
-  risk_patch。原因：改到 evidence score / modifier helper、Telegram/official generator 證據分數效果，以及 GitHub Actions daily_evidence runner fail-closed 行為；未改 RR 公式、DB schema、持倉狀態機或 live delivery。
+- 任務類型：risk_patch。
+- 風險原因：本輪改 Render / runner 啟動前置檢查、market/theme production evidence approved write path、read-after-write fail-closed 與 backfill workflow / CLI。
+- 未改：DB schema、RR 公式、策略決策、Telegram 報文內容、live delivery。
 
-  ## 修改內容
+## 修改內容
 
-  - compute_evidence_score() 的 per-stock strategy 分量現在可直接消費各股 backtest_context：有 sample 但沒有 source_status 時，不再被全局 strategy manifest 的 partial / insufficient 拉成 unavailable。
-  - backtest_context.reference / reference_level 支援 高 / high / reliable / strong 作為 sample >= 10 的 ready 判斷依據。
-  - avg_return 轉為 numeric 後判斷，避免字串型 backtest 欄位造成比較風險。
-  - Phase 3 daily evidence workflow cron 從 25 5 * * 1-5 改為 0 6 * * 1-5，對應台北收盤後。
-  - scripts/run_phase3_evidence_automation.py 新增 --require-market-theme-payload：daily evidence runner 缺 MARKET_THEME_APPROVED_PAYLOAD 時 fail closed，回傳非 0。
-  - market/theme approved payload 寫入前驗證 payload rows 的 trade_date 必須等於本次 trading_day；不符時不進 write CLI。
-  - 補測緯創 sample 36、華邦 sample 38、低樣本、無 backtest、弱勢/失敗不抬分、workflow secret 缺失 fail-closed、payload trade_date mismatch。
+- `scripts/run_phase3_evidence_automation.py` 新增 freshness-only 流程：
+  - 預設檢查最近 5 個 confirmed trading days。
+  - safe write time 預設台北 14:00，可用 CLI/env 覆寫。
+  - 逐日檢查 `market_theme_confirmed_evidence` 與 `market_theme_index_daily_bars`。
+  - 已完整日期輸出 `already-complete` 並跳過 upsert。
+  - 未到安全時間輸出 `skipped-before-safe-write-time`，只讀不寫。
+  - 已到安全時間且缺失時，走既有 `backfill_market_theme_sources.py` / `upsert_source_payloads()` approved interface，寫後再 read-after-write。
+  - read、upsert、read-after-write mismatch、preflight exception 都輸出 `MARKET_THEME_FRESHNESS_FAILED ... action=fail_closed` 並讓 CLI 非 0。
+  - freshness log/report 增加流程版本 `market_theme_freshness_v1`。
+- `market_theme_confirmed_evidence` 完整性改為必須覆蓋 9 個官方 TWSE 題材 key；部分 rows 不算完整，會觸發補寫。
+- `app.py` 在 Render route dispatch GitHub workflow 前執行 freshness preflight；失敗時不 dispatch，也不寫 already-sent tag，保留 5 分鐘後重試機會。
+- `scripts/backfill_market_theme_sources.py` 改為顯式 `--trade-date` 或 `--start-date/--end-date` 決定驗證範圍；錯誤文案不再 May-only。
+- `.github/workflows/stock-bot.yml` 的 market/theme backfill step 同步傳入 `start_date/end_date` 並使用 `--historical-range`。
 
-  ## 修改檔案
+## 修改檔案
 
-  - .github/workflows/stock-bot.yml
-  - core/generator.py
-  - scripts/run_phase3_evidence_automation.py
-  - tests/test_generator_report.py
-  - tests/test_phase3_evidence_automation.py
-  - tests/test_workflow_runtime_config.py
+- `.github/workflows/stock-bot.yml`
+- `app.py`
+- `scripts/backfill_market_theme_sources.py`
+- `scripts/run_phase3_evidence_automation.py`
+- `tests/test_app_render_preflight.py`
+- `tests/test_market_theme_source_backfill.py`
+- `tests/test_phase3_evidence_automation.py`
+- `tests/test_workflow_runtime_config.py`
 
-  ## 最小改動策略
+## 最小改動策略
 
-  只修改 TASK 指定的 evidence source / daily evidence runner / 相關測試。既有 RR 顯示、防抖、報文版本、排序公式、DB write CLI、Telegram delivery 路徑未擴大重構。
+- 不新增 DB schema 或新 source-of-truth。
+- 不手寫 production DML。
+- 不把 `2026-06-01~2026-06-03` 寫死在產品邏輯，只作為 backfill / probe 日期。
+- 保留既有 approved upsert/read-after-write path，僅增加 Render 前置 freshness orchestration。
 
-  ## 契約影響
+## 契約影響
 
-  - public helper _per_stock_strategy_sample_evidence_payload() 行為改變：per-stock backtest_context.sample 成為 strategy evidence source，可在全局 sample partial 時仍判定該股 ready。
-  - compute_evidence_score() / apply_evidence_confidence() 的輸出可因此讓合格股票 final_confidence != technical_confidence。
-  - 弱勢 / FAIL / FAILED_BREAKOUT 等既有 guard 保持 modifier <= 1.0。
-  - runner CLI 新增 --require-market-theme-payload，缺 approved payload 時非 0 exit。
-  - 使用者可見版本維持 v20.4.34；掃描結果：core/generator.py:72 VERSION = "v20.4.34"。本輪是 v20.4.34 同版契約修復，不升版。
+- 新 CLI：
+  - `scripts/run_phase3_evidence_automation.py --freshness-check-only`
+  - `--freshness-lookback-days`
+  - `--safe-write-time`
+- 新 env：
+  - `MARKET_THEME_FRESHNESS_LOOKBACK_DAYS`
+  - `MARKET_THEME_SAFE_WRITE_TIME`
+- 新 log / report version：
+  - `market_theme_freshness_v1`
+- Render route：
+  - freshness preflight 成功後才檢查 already-sent 與 dispatch workflow。
+  - freshness preflight 失敗時回傳 `freshness check failed`，不發 workflow，不寫送出 tag。
+- Backfill CLI：
+  - `--start-date/--end-date` 顯式控制 range。
+  - `--trade-date` 單日 backfill 時 effective range 等於該日。
 
-  ## 直接消費者同步
+## 直接消費者同步
 
-  - official message-list generator 測試新增緯創 / 華邦等價 replay，覆蓋卡片分數行與樣本行。
-  - GitHub Actions daily_evidence step 已同步傳入 --require-market-theme-payload。
-  - Phase 3 automation tests 已同步 secret 缺失與 payload date gate。
-  - workflow runtime tests 已同步新 cron 與 runner command。
+- Render 每 5 分鐘觸發的 `/` route 已接入 freshness preflight。
+- GitHub workflow 手動 backfill step 已同步 `start_date/end_date`。
+- Phase3 evidence CLI 保留既有 daily evidence path，新增 freshness-only mode，不影響 Telegram runner payload。
 
-  ## 未影響模組
+## 未影響模組
 
-  - RR 公式未改。
-  - DB schema / RLS / grant / policy / role / index / constraint 未改。
-  - scripts/write_market_theme_confirmed_evidence.py approved write CLI 未改。
-  - live Telegram delivery 未執行、未修改。
-  - 持倉狀態機、同日買入風控、光寶科既有防抖邏輯未改。
+- 未改 `core/generator.py` Telegram 報文版本或格式。
+- 未改 RR 計算。
+- 未改 strategy decision / holding state machine。
+- 未改 DB schema / RLS / grant / policy / role。
+- 未執行 live Telegram。
 
-  ## 已跑自檢命令
+## 已跑自檢命令
 
-  - arch -arm64 .venv/bin/python -m pytest tests/test_generator_report.py：156 passed，241 warnings。
-  - arch -arm64 .venv/bin/python -m pytest tests/test_phase3_evidence_automation.py tests/test_workflow_runtime_config.py：23 passed。
-  - PYTHONPYCACHEPREFIX=/private/tmp/stock_bot_pycache arch -arm64 .venv/bin/python -m py_compile core/generator.py scripts/run_phase3_evidence_automation.py：passed。
-  - git diff --check：passed。
-  - rg -n '^VERSION = ' core/generator.py：VERSION = "v20.4.34"。
-  - 備註：python 不在 PATH；直接用 .venv/bin/python 會遇到 pydantic_core 架構不相容，已改用 arch -arm64 .venv/bin/python 完成測試。
+- `arch -arm64 .venv/bin/python -m pytest tests/test_app_render_preflight.py tests/test_phase3_evidence_automation.py tests/test_market_theme_source_backfill.py tests/test_workflow_runtime_config.py`
+  - 結果：45 passed。
+- `PYTHONPYCACHEPREFIX=/private/tmp/stock_bot_pycache_main arch -arm64 .venv/bin/python -m py_compile app.py scripts/run_phase3_evidence_automation.py scripts/backfill_market_theme_sources.py`
+  - 結果：passed。
+- `git diff --check`
+  - 結果：passed。
 
-  ## 覆蓋層級
+## 覆蓋層級
 
-  helper：覆蓋 per-stock strategy evidence payload、modifier 生效、弱勢不抬分、runner payload gate。
-  formatter / official generator：覆蓋 Telegram message-list 卡片分數、回測樣本、RR/防抖既有 replay。
-  runner artifact：覆蓋 workflow command、missing secret fail-closed、payload trade_date mismatch。
-  production source：未讀 production DB、未做 live write；market daily freshness 的真實 production row 仍需 QA/Architect safe read-only artifact 或正式 runner 證據驗。
+- helper：recent confirmed trade dates、safe write time、complete / missing 判斷。
+- interface：approved backfill function、read-after-write mismatch fail closed。
+- runner：Render route freshness failure blocks dispatch and already-sent tag。
+- workflow / CLI：backfill workflow uses `start_date/end_date` and `--historical-range`。
+- production source：未在本輪測試中讀寫 production；6/1~6/3 已由 Architect 另用既有 script 實際補寫並 read-after-write passed。
 
-  ## 殘留風險
+## 殘留風險
 
-  - 本輪未執行 production daily_evidence smoke，無法證明 market_theme_confirmed_evidence 已有 2026-06-03 真實行。
-  - 若 GitHub secret MARKET_THEME_APPROVED_PAYLOAD 未配置，daily_evidence 會正確 fail closed，但不會完成 market/theme 當日保鮮。
-  - 測試使用等價 fixture / replay，未接觸 live Supabase 或 live Telegram。
+- Render preflight 每次會執行最多 5 個交易日的 freshness checks；若 production read 或 TWSE calendar source error，會 fail closed 並暫停 dispatch，避免錯誤報文，但也可能造成短暫不發。
+- `market_theme_index_daily_bars` 完整性目前要求 market row + 至少一個 sector theme row；若未來要跟 confirmed evidence 一樣嚴格覆蓋全部官方題材，需另開 tighten task。
+- production DB 的實際 Render 環境需部署後看 runner log，確認 5 分鐘觸發下 latency 在 Render timeout 內。
 
-  ## 旁支待辦
+## 旁支待辦
 
-  - QA 若要驗 market daily freshness 完成口徑，需要 safe read-only artifact 或正式 runner artifact，確認 production market_theme_confirmed_evidence.trade_date 當日存在且 report 背景為 confirmed_trend。
-  - 若 Owner 要完全自動生成 approved payload 而不依賴 secret，需另開任務確認 approved service API 契約，不能在本輪改成繞過 approved payload gate。
+- 若 Render timeout 太短，需把 freshness preflight 拆成獨立 lightweight endpoint 或 background job，但仍保持「發報文前先看 freshness 狀態」。
+- 若未來官方題材 key 變更，`EXPECTED_CONFIRMED_SECTOR_THEMES` 應改為從 backfill source map 派生，避免常量漂移。

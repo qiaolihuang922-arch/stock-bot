@@ -594,7 +594,7 @@ def _confirmed_row_validation_errors(row, start_date, end_date):
         errors.append(f"required fields missing: {', '.join(missing)}")
     trade_date = row.get("trade_date")
     if trade_date and (trade_date < start_date or trade_date > end_date):
-        errors.append("source date outside requested May range")
+        errors.append("source date outside requested range")
     source_family = str(row.get("source_family") or "").strip().lower()
     if source_family in FORBIDDEN_SOURCE_FAMILIES or _source_family_forbidden(source_family):
         errors.append("forbidden source_family")
@@ -719,7 +719,7 @@ def build_market_theme_history_backfill_report(
     if not index_rows:
         index_reasons.append("missing official historical index bars source")
     if index_bad_dates:
-        index_reasons.append("source date outside requested May range")
+        index_reasons.append("source date outside requested range")
     index_table = _report_table(
         "market_theme_index_daily_bars",
         "official_or_owner_approved_historical_market_theme_bars",
@@ -823,7 +823,7 @@ def upsert_source_payloads(client, payloads, start_date=DEFAULT_START_DATE, end_
     index_bad_dates = _row_dates_outside_range(index_rows, start_date, end_date)
     if not index_rows or index_bad_dates:
         raise ValueError(
-            "market_theme_index_daily_bars blocked: missing-source or source date outside requested May range"
+            "market_theme_index_daily_bars blocked: missing-source or source date outside requested range"
         )
     confirmed_rows = _dedupe_by_key(
         confirmed_rows,
@@ -862,8 +862,8 @@ def main(argv=None):
         description="Backfill market/theme source tables and confirmed evidence from official TWSE OpenAPI."
     )
     parser.add_argument("--trade-date", help="YYYY-MM-DD. Defaults to the latest date returned by TWSE.")
-    parser.add_argument("--start-date", default=DEFAULT_START_DATE)
-    parser.add_argument("--end-date", default=DEFAULT_END_DATE)
+    parser.add_argument("--start-date")
+    parser.add_argument("--end-date")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--write", action="store_true")
     parser.add_argument("--confirm-write", action="store_true")
@@ -875,14 +875,17 @@ def main(argv=None):
     if not args.write and not args.dry_run:
         raise SystemExit("Use --dry-run for preview, or --write --confirm-write for DB upsert")
 
+    effective_start_date = args.start_date or args.trade_date or DEFAULT_START_DATE
+    effective_end_date = args.end_date or args.trade_date or DEFAULT_END_DATE
+
     profiles_raw = fetch_twse_company_profiles()
     if args.historical_range:
         payloads = build_historical_source_payloads(
             fetch_twse_historical_index_rows,
             fetch_twse_historical_breadth_rows,
             profiles_raw,
-            args.start_date,
-            args.end_date,
+            effective_start_date,
+            effective_end_date,
         )
     else:
         index_raw = fetch_twse_index_rows()
@@ -895,8 +898,8 @@ def main(argv=None):
         )
     report = build_market_theme_history_backfill_report(
         payloads,
-        start_date=args.start_date,
-        end_date=args.end_date,
+        start_date=effective_start_date,
+        end_date=effective_end_date,
         write_execution="dry-run",
     )
     if args.write:
@@ -904,8 +907,8 @@ def main(argv=None):
         write_counts = upsert_source_payloads(
             client,
             payloads,
-            start_date=args.start_date,
-            end_date=args.end_date,
+            start_date=effective_start_date,
+            end_date=effective_end_date,
         )
         requested_trade_date = args.trade_date or (
             payloads["confirmed_rows"][0]["trade_date"] if payloads["confirmed_rows"] else None
@@ -917,8 +920,8 @@ def main(argv=None):
         correction_audit = build_market_theme_production_correction_audit(client, limit=20000)
         report = build_market_theme_history_backfill_report(
             payloads,
-            start_date=args.start_date,
-            end_date=args.end_date,
+            start_date=effective_start_date,
+            end_date=effective_end_date,
             write_execution="executed",
             written_confirmed_rows=write_counts.get("market_theme_confirmed_evidence", 0),
             read_after_write_result=read_after_write,

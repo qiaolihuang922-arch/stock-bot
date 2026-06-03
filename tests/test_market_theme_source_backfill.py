@@ -266,7 +266,7 @@ class MarketThemeSourceBackfillTest(unittest.TestCase):
         )
         self.assertFalse(report["strategy_consumption_check"]["uses_only_daily_signal_snapshot"])
 
-    def test_history_report_blocks_latest_source_outside_requested_may_range(self):
+    def test_history_report_blocks_latest_source_outside_requested_range(self):
         payloads = build_source_payloads(
             [
                 {"日期": "1150601", "指數": "發行量加權股價指數", "收盤指數": "44732.94", "漲跌百分比": "2.51"},
@@ -282,7 +282,29 @@ class MarketThemeSourceBackfillTest(unittest.TestCase):
         confirmed = report["tables"][0]
         self.assertEqual(confirmed["status"], "blocked")
         self.assertEqual(confirmed["validated_rows"], 0)
-        self.assertIn("source date outside requested May range", confirmed["blocked_reasons"])
+        self.assertIn("source date outside requested range", confirmed["blocked_reasons"])
+
+    def test_history_report_accepts_explicit_june_requested_range(self):
+        payloads = build_source_payloads(
+            [
+                {"日期": "1150601", "指數": "發行量加權股價指數", "收盤指數": "44732.94", "漲跌百分比": "2.51"},
+                {"日期": "1150601", "指數": "電子工業類指數", "收盤指數": "2928.42", "漲跌百分比": "2.62"},
+            ],
+            [{"出表日期": "1150601", "類型": "股票", "上漲": "805", "下跌": "202", "持平": "69"}],
+            [],
+            trade_date="2026-06-01",
+        )
+
+        report = build_market_theme_history_backfill_report(
+            payloads,
+            start_date="2026-06-01",
+            end_date="2026-06-03",
+        )
+
+        confirmed = report["tables"][0]
+        self.assertEqual(confirmed["status"], "ready")
+        self.assertEqual(confirmed["validated_rows"], 1)
+        self.assertEqual(confirmed["coverage"]["first_trade_date"], "2026-06-01")
 
     def test_history_report_rejects_forbidden_daily_signal_snapshot_payload(self):
         payloads = build_source_payloads(

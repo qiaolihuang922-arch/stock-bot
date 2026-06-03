@@ -3,10 +3,11 @@
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 try:
@@ -21,7 +22,26 @@ if str(ROOT) not in sys.path:
 TAIPEI = ZoneInfo("Asia/Taipei") if ZoneInfo else timezone.utc
 AFTER_CLOSE_HOUR = 13
 AFTER_CLOSE_MINUTE = 20
+FRESHNESS_LOOKBACK_DAYS = 5
+FRESHNESS_SAFE_WRITE_HOUR = 14
+FRESHNESS_SAFE_WRITE_MINUTE = 0
 STALE_ALERT_THRESHOLD_DAYS = 2
+FRESHNESS_CHECK_VERSION = "market_theme_freshness_v1"
+FRESHNESS_SOURCES = (
+    "market_theme_confirmed_evidence",
+    "market_theme_index_daily_bars",
+)
+EXPECTED_CONFIRMED_SECTOR_THEMES = {
+    "twse_electronics",
+    "twse_semiconductor",
+    "twse_computer_peripheral",
+    "twse_optoelectronics",
+    "twse_electronic_components",
+    "twse_communications",
+    "twse_electronic_distribution",
+    "twse_information_services",
+    "twse_other_electronics",
+}
 
 
 def parse_now(value=None):
@@ -85,6 +105,286 @@ def should_run_evidence_writes(now, trading_day_checker=None):
 
 def emit(line):
     print(line, flush=True)
+
+
+def _parse_positive_int(value, default):
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
+
+
+def _parse_hhmm(value, default_hour=FRESHNESS_SAFE_WRITE_HOUR, default_minute=FRESHNESS_SAFE_WRITE_MINUTE):
+    text = str(value or "").strip()
+    if not text:
+        return default_hour, default_minute
+    try:
+        hour_text, minute_text = text.split(":", 1)
+        hour = int(hour_text)
+        minute = int(minute_text)
+    except ValueError:
+        raise RuntimeError(f"invalid safe write time: {text}")
+    if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+        raise RuntimeError(f"invalid safe write time: {text}")
+    return hour, minute
+
+
+def _is_after_freshness_safe_write_time(now, safe_write_time=None):
+    safe_hour, safe_minute = _parse_hhmm(safe_write_time)
+    return now.hour > safe_hour or (now.hour == safe_hour and now.minute >= safe_minute)
+
+
+def recent_confirmed_trade_dates(now, lookback_days=FRESHNESS_LOOKBACK_DAYS, trading_day_checker=None):
+    checker = trading_day_checker or confirm_trading_day
+    trade_dates = []
+    current = now.date()
+    scanned = 0
+    while len(trade_dates) < lookback_days and scanned < lookback_days * 10:
+        scanned += 1
+        trade_date = current.isoformat()
+        candidate_weekday = current.weekday()
+        current -= timedelta(days=1)
+        if candidate_weekday >= 5:
+            continue
+        status = checker(trade_date)
+        if status.get("source_status") == "source-error":
+            raise RuntimeError(f"calendar source-error for {trade_date}: {status.get('error') or status.get('reason')}")
+        if status.get("confirmed"):
+            trade_dates.append(trade_date)
+    if len(trade_dates) < lookback_days:
+        raise RuntimeError(f"unable to resolve {lookback_days} confirmed trading days")
+    return trade_dates
+
+
+def _query_trade_date_rows(client, table, fields, trade_date, limit=1000):
+    try:
+        result = (
+            client.table(table)
+            .select(fields, count="exact")
+            .eq("trade_date", trade_date)
+            .limit(limit)
+            .execute()
+        )
+        rows = result.data or []
+        count = getattr(result, "count", None)
+        return {"status": "ok", "rows": rows, "row_count": count if count is not None else len(rows)}
+    except Exception as exc:
+        return {"status": "source-error", "rows": [], "row_count": 0, "reason": str(exc)}
+
+
+def _confirmed_evidence_complete(rows):
+    required = {
+        "trade_date",
+        "market_index",
+        "sector_theme_key",
+        "source_family",
+        "source_name",
+        "freshness",
+        "evidence_status",
+        "support_level",
+    }
+    valid = [
+        row for row in rows or []
+        if all(row.get(field) not in (None, "") for field in required)
+        and row.get("freshness") == "fresh"
+        and row.get("evidence_status") == "confirmed"
+    ]
+    observed_themes = {row.get("sector_theme_key") for row in valid}
+    return EXPECTED_CONFIRMED_SECTOR_THEMES.issubset(observed_themes)
+
+
+def _index_daily_bars_complete(rows):
+    required = {
+        "trade_date",
+        "index_scope",
+        "market_index",
+        "source_family",
+        "source_name",
+        "close",
+    }
+    valid = [
+        row for row in rows or []
+        if all(row.get(field) not in (None, "") for field in required)
+    ]
+    has_market = any(row.get("index_scope") == "market" for row in valid)
+    has_theme = any(
+        row.get("index_scope") == "sector_theme" and row.get("sector_theme_key") not in (None, "")
+        for row in valid
+    )
+    return has_market and has_theme
+
+
+def read_market_theme_freshness_status(client, trade_date):
+    confirmed = _query_trade_date_rows(
+        client,
+        "market_theme_confirmed_evidence",
+        "trade_date,market_index,sector_theme_key,source_family,source_name,freshness,evidence_status,support_level",
+        trade_date,
+    )
+    if confirmed["status"] != "ok":
+        return {
+            "trade_date": trade_date,
+            "complete": False,
+            "source_status": "source-error",
+            "missing_sources": ["market_theme_confirmed_evidence"],
+            "error_stage": "read",
+            "reason": confirmed.get("reason") or "read failed",
+        }
+    index_bars = _query_trade_date_rows(
+        client,
+        "market_theme_index_daily_bars",
+        "trade_date,index_scope,market_index,sector_theme_key,source_family,source_name,close",
+        trade_date,
+    )
+    if index_bars["status"] != "ok":
+        return {
+            "trade_date": trade_date,
+            "complete": False,
+            "source_status": "source-error",
+            "missing_sources": ["market_theme_index_daily_bars"],
+            "error_stage": "read",
+            "reason": index_bars.get("reason") or "read failed",
+        }
+    missing = []
+    if not _confirmed_evidence_complete(confirmed["rows"]):
+        missing.append("market_theme_confirmed_evidence")
+    if not _index_daily_bars_complete(index_bars["rows"]):
+        missing.append("market_theme_index_daily_bars")
+    return {
+        "trade_date": trade_date,
+        "complete": not missing,
+        "source_status": "ok",
+        "missing_sources": missing,
+        "row_counts": {
+            "market_theme_confirmed_evidence": confirmed["row_count"],
+            "market_theme_index_daily_bars": index_bars["row_count"],
+        },
+    }
+
+
+def backfill_market_theme_sources_for_trade_date(trade_date, client=None):
+    from scripts.backfill_market_theme_sources import (
+        build_source_payloads,
+        fetch_twse_company_profiles,
+        fetch_twse_historical_breadth_rows,
+        fetch_twse_historical_index_rows,
+        get_supabase_client,
+        upsert_source_payloads,
+    )
+
+    payloads = build_source_payloads(
+        fetch_twse_historical_index_rows(trade_date),
+        fetch_twse_historical_breadth_rows(trade_date),
+        fetch_twse_company_profiles(),
+        trade_date=trade_date,
+    )
+    if payloads.get("status") != "ready":
+        raise RuntimeError(payloads.get("reason") or "missing-source")
+    writer = client or get_supabase_client()
+    return upsert_source_payloads(
+        writer,
+        payloads,
+        start_date=trade_date,
+        end_date=trade_date,
+    )
+
+
+def run_market_theme_freshness_check(
+    now=None,
+    lookback_days=None,
+    safe_write_time=None,
+    client=None,
+    trading_day_checker=None,
+    backfill_func=None,
+):
+    from scripts.backfill_market_theme_sources import get_supabase_client
+
+    now = now or parse_now()
+    lookback = _parse_positive_int(
+        lookback_days if lookback_days is not None else os.environ.get("MARKET_THEME_FRESHNESS_LOOKBACK_DAYS"),
+        FRESHNESS_LOOKBACK_DAYS,
+    )
+    safe_time = safe_write_time or os.environ.get("MARKET_THEME_SAFE_WRITE_TIME") or "14:00"
+    writer_client = client or get_supabase_client()
+    trade_dates = recent_confirmed_trade_dates(
+        now,
+        lookback_days=lookback,
+        trading_day_checker=trading_day_checker,
+    )
+    can_write = _is_after_freshness_safe_write_time(now, safe_time)
+    backfill = backfill_func or backfill_market_theme_sources_for_trade_date
+    results = []
+    failures = []
+
+    for trade_date in trade_dates:
+        status = read_market_theme_freshness_status(writer_client, trade_date)
+        if status.get("source_status") == "source-error":
+            failures.append({**status, "status": "source-error"})
+            emit(
+                "MARKET_THEME_FRESHNESS_FAILED "
+                f"version={FRESHNESS_CHECK_VERSION} trade_date={trade_date} "
+                f"source={','.join(status['missing_sources'])} "
+                f"stage={status['error_stage']} reason={status['reason']} action=fail_closed"
+            )
+            continue
+        if status["complete"]:
+            row = {**status, "status": "already-complete"}
+            results.append(row)
+            emit(
+                "MARKET_THEME_FRESHNESS "
+                f"version={FRESHNESS_CHECK_VERSION} trade_date={trade_date} "
+                "source=all status=already-complete action=skip"
+            )
+            continue
+        missing = ",".join(status["missing_sources"])
+        if not can_write:
+            row = {**status, "status": "skipped-before-safe-write-time"}
+            results.append(row)
+            emit(
+                "MARKET_THEME_FRESHNESS "
+                f"version={FRESHNESS_CHECK_VERSION} trade_date={trade_date} source={missing} "
+                f"status=skipped-before-safe-write-time safe_write_time={safe_time}"
+            )
+            continue
+        try:
+            backfill(trade_date, client=writer_client)
+            verified = read_market_theme_freshness_status(writer_client, trade_date)
+        except Exception as exc:
+            failures.append({**status, "status": "upsert-error", "reason": str(exc)})
+            emit(
+                "MARKET_THEME_FRESHNESS_FAILED "
+                f"version={FRESHNESS_CHECK_VERSION} trade_date={trade_date} "
+                f"source={missing} stage=upsert "
+                f"reason={str(exc)} action=fail_closed"
+            )
+            continue
+        if not verified.get("complete"):
+            still_missing = ",".join(verified.get("missing_sources") or status["missing_sources"])
+            failures.append({**verified, "status": "read-after-write-mismatch"})
+            emit(
+                "MARKET_THEME_FRESHNESS_FAILED "
+                f"version={FRESHNESS_CHECK_VERSION} trade_date={trade_date} source={still_missing} "
+                "stage=read-after-write reason=business-key-incomplete action=fail_closed"
+            )
+            continue
+        row = {**verified, "status": "backfilled-and-verified"}
+        results.append(row)
+        emit(
+            "MARKET_THEME_FRESHNESS "
+            f"version={FRESHNESS_CHECK_VERSION} trade_date={trade_date} "
+            f"source={missing} status=backfilled-and-verified"
+        )
+
+    return {
+        "status": "fail-closed" if failures else "ok",
+        "version": FRESHNESS_CHECK_VERSION,
+        "lookback_days": lookback,
+        "safe_write_time": safe_time,
+        "checked_trade_dates": trade_dates,
+        "results": results,
+        "failures": failures,
+    }
 
 
 def _entry_is_confirmed_trading_day(entry, trading_day_checker=None):
@@ -289,10 +589,34 @@ def main(argv=None):
         help="Fail closed when the approved market/theme payload is not provided.",
     )
     parser.add_argument("--stale-status-json", help="JSON source status history for stale alert probes.")
+    parser.add_argument(
+        "--freshness-check-only",
+        action="store_true",
+        help="Check recent market/theme source freshness and run idempotent backfill when safe.",
+    )
+    parser.add_argument("--freshness-lookback-days", help="Recent confirmed trading days to check. Defaults to 5.")
+    parser.add_argument("--safe-write-time", help="Asia/Taipei HH:MM time after which missing sources may be backfilled.")
     args = parser.parse_args(argv)
 
     now = parse_now(args.now)
     trading_day = now.date().isoformat()
+
+    if args.freshness_check_only:
+        try:
+            report = run_market_theme_freshness_check(
+                now=now,
+                lookback_days=args.freshness_lookback_days,
+                safe_write_time=args.safe_write_time,
+            )
+        except Exception as exc:
+            emit(
+                "MARKET_THEME_FRESHNESS_FAILED "
+                f"version={FRESHNESS_CHECK_VERSION} trade_date={trading_day} source=market_theme "
+                f"stage=preflight reason={str(exc)} action=fail_closed"
+            )
+            return 2
+        return 0 if report["status"] == "ok" else 2
+
     should_run, reason = should_run_evidence_writes(now)
 
     if args.stale_status_json:

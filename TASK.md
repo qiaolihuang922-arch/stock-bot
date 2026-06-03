@@ -1,280 +1,182 @@
-# TASK: evidence_score_effective_and_market_daily_freshness_v20_4_34
+# TASK: Render 啟動時 market/theme evidence freshness check 與幂等補寫
 
 ## 任務狀態
 
-- task_id：20260603_evidence_score_effective_market_freshness_v20_4_34
-- 任務類型：risk_patch
-- 狀態：ready_for_tech
-- 任務尺寸判定：本輪不是 tiny_patch；主 bug 是「證據已顯示但沒有真正進分數」。market daily freshness 是同一證據鏈的 production source 前置條件；RR 隱藏、簡報計數、防抖只納入 Owner 指定的最小報文一致性修補，不擴成策略重
-設。
-- QA 分級建議：L3
-- 落地順序：二 market daily freshness -> 一 per-stock strategy sample -> 三 evidence_modifier 生效與護欄 -> 四/五報文一致性 -> 六光寶科防抖
+- task_id: render_market_theme_evidence_freshness_20260603
+- 任務類型: risk_patch
+- 狀態: ready_for_tech
+- 版本建議: 需升版使用者可見 runner / CLI log 版本或流程版本；若現有專案已有 report / runner version 常量，不得回退。
+- QA 分級建議: L3
 
 ## Owner 問題
 
-Owner 要修復 v20.4.34 證據鏈兩個死因：
+Render 不是手動 GitHub Action，而是高頻每 5 分鐘啟動。現有 market/theme evidence 寫入流程在 Render runner 場景下可能漏寫 market_theme_confirmed_evidence / market_theme_index_daily_bars，導致後續報文或策略讀不到最近交易
+日 evidence。
 
-1. strategy 评分读错来源：compute_evidence_score 用全局 report_from_rows classification / structured_status 判斷 ready，因 REPORT_CATEGORIES=[淘汰, 等回測, RR不足] 每組幾乎不足 10，導致 strategy 長期 partial(0.5)、
-modifier 1.0；但卡片顯示的回測樣本來自 per-stock data[backtest_context]，兩邊不同源。
-2. market confirmed_evidence 沒有每日保鮮：market_theme_confirmed_evidence 停在 2026-05-29；到 2026-06-03 gap=5，大於 MAX_PREVIOUS_TRADE_DATE_GAP_DAYS=4，報文出現資料不足。每日 cron / Phase 3 evidence automation 必須在
-收盤後寫入當日 confirmed evidence，不能因 secret 缺失靜默跳過。
-
-附帶修補 Owner 指定的三個使用者可見一致性問題：evidence modifier 必須真的改綜合分且弱勢股不被抬分、過熱/等冷卻 RR 一律隱藏、簡報計數口徑消除歧義、光寶科可買/淘汰抖動加防抖。
+本輪要補一個 Render/runner 每次啟動可呼叫的幂等 freshness check 流程：檢查最近 N 個交易日預設 5 日是否缺 evidence；已完整寫入的日期跳過；缺失且已過安全寫入時間才補寫；未到時間只讀不寫；寫後 read-after-write；任一日期失
+敗要 fail closed 並明確 log。
 
 ## 使用者可見結果
 
-手機閱讀路徑：Telegram 報文首屏 summary -> 市場背景 / 今日交易執行 -> 持倉與未持倉卡片 -> 詳情。
-
-期望形狀：
-
-市場背景：confirmed_trend（2026-06-03）
-今日交易執行：執行動作 2 檔
-今日新倉建議：新建倉 3 檔
-
-緯創
-綜合 90｜技術 78｜證據 +15%（confirmed）
-回測樣本 36｜參考度高
-狀態：可買 / 可準備 / 僅追蹤 中之一
-
-技嘉
-RR -（過熱）
-狀態：過熱觀察
-
-旺宏 / 聯電
-綜合 <= 技術 或 modifier <= 1.0
-狀態：減碼 / 失敗 / 弱勢時不得被背景證據抬分
-
-不可再出現：
-
-回測樣本 36 / 38，但 strategy evidence 仍 partial +0%
-confirmed_evidence 已有當日資料，但 market 背景仍資料不足
-交易執行 2 與 今日交易已建立新倉 3 檔 使用同一語境造成歧義
-技嘉 過熱觀察 RR 0.21
-同一標的盤中在 可買 / 淘汰 間來回翻
+- Render 每次啟動 runner 前會先執行 market/theme evidence freshness check。
+- 最近 N 個交易日 evidence 完整時，不重寫、不覆蓋、不產生誤導成功。
+- 最近 N 個交易日缺 evidence 且已過台北時間安全寫入時間，會透過既有 approved script/interface 補寫並驗證。
+- 未到安全寫入時間時只檢查、不寫入，log 明確顯示 skipped-by-time。
+- 若任一日期讀取、補寫或 read-after-write 失敗，runner 回傳 fail closed，不靜默進入使用者報文流程。
+- 手動 backfill workflow/CLI 可使用 start_date / end_date，不再預設鎖死 2026-05-04~2026-05-29 或 May-only。
 
 ## 非目標
 
-- 不改 RR 公式。
 - 不改 DB schema、RLS、grant、policy、role、index、constraint。
+- 不改 RR 公式、策略核心、買賣判斷、持倉狀態機。
 - 不做 live Telegram delivery。
-- 不手寫 production DML；資料寫入只能走既有 repo script / approved service API。
-- 不把 local cache、runtime dict、agent 對話當跨日 evidence source。
-- 不重設整體策略、買賣規則、持倉狀態機或 ranking 公式，只修 Owner 指定的 evidence source / modifier / 報文一致性。
-- 不把 missing secret 或 production source-error 包裝成 pass。
+- 不手寫 production DML。
+- 不新增另一套 production source-of-truth。
+- 不把日期 2026-06-01~2026-06-03 寫死在產品代碼；這些日期只能作為驗收 / probe / backfill fixture。
+- 不全量重跑歷史資料，不處理本輪以外的 market/theme 資料品質問題。
 
 ## 影響模組與直接消費者
 
-影響模組：
-
-- core/generator.py
-- compute_evidence_score(report_context, name)
-- _strategy_sample_evidence_payload
-- evidence_modifier_for_score
-- apply_evidence_confidence
-- rr_display_text
-- should_show_overheat_rr_blocker
-- 簡報 / Telegram 報文 summary 行與卡片分數行
-- .github/workflows/stock-bot.yml
-- daily evidence cron 時間
-- scripts/run_phase3_evidence_automation.py
-- approved payload secret 缺失 fail closed
-- 當日 trade_date 寫入與 read-after-write smoke
-- scripts/backfill_market_theme_sources.py
-- 僅限確認不破壞 official market/theme evidence 路徑；若需補當日路徑，必須走既有接口
-- services/analysis.py / core/condition_engine.py
-- 光寶科類「淘汰 -> 可買」防抖最小修補
-
-直接消費者：
-
-- Telegram 手機報文讀者。
-- official report/message-list generator。
-- GitHub Actions RUN_MODE=daily_evidence。
-- Phase 3 evidence automation。
-- QA replay / probes。
-- 後續排序、funnel、卡片狀態使用的 final confidence / evidence modifier。
+- 影響模組:
+- Render / runner 啟動流程中的 preflight 或 freshness check hook。
+- market/theme evidence 既有 approved upsert interface / script。
+- market/theme index daily bars 既有 approved upsert interface / script。
+- 手動 backfill workflow / CLI 的日期參數處理。
+- runner log / exit status / artifact summary。
+- 直接消費者:
+- Render 高頻啟動 runner。
+- 報文 runner 在產生 Telegram 報文前讀取 market/theme evidence 的流程。
+- 手動 backfill 操作者。
+- QA replay / probe 腳本。
 
 ## 輸出契約
 
-strategy evidence 契約：
-
-- compute_evidence_score(report_context, name) 的 strategy 分量必須用該股 data[backtest_context]，不得用全局 classification ready_count 作主要 ready 判斷。
-- name 必須選到各股自身 backtest context，達成 per-stock 生效。
-- sample >= STRATEGY_SAMPLE_MIN_ROWS(10) 且 reference 高：
-- status=ready
-- score=1.0
-- strategy modifier 可高於 1.0，仍受 cap 約束
-- sample 不足：
-- status=partial
-- score=0.5
-- modifier 不得產生正向 boost
-- 無 backtest context：
-- strategy 分量為 None 或等價 fail-closed，不得假造 ready
-
-market evidence 契約：
-
-- daily evidence 收盤後執行，cron 從 25 5 * * 1-5 調整為收盤後，例如 0 6 * * 1-5。
-- MARKET_THEME_APPROVED_PAYLOAD secret 未配置時，run_phase3_evidence_automation.py 必須報錯並讓 job fail，不得靜默 skip。
-- 當日路徑必須使用最新 TWSE trading day 的 --trade-date。
-- run_market_theme_confirmed_evidence(trading_day) 寫入後必須 read-after-write smoke，確認 market_theme_confirmed_evidence.trade_date == trading_day 有行；失敗則 job fail。
-- secret / credential 不得輸出到 log。
-
-modifier 契約：
-
-- strategy=ready(1.0) 或 market=confirmed(1.0) 時，合格股票 modifier 必須在 (1.0, 1.15]。
-- final = technical * modifier 或既有等價公式必須讓至少一卡 綜合 != 技術。
-- 弱勢 / 失敗 / 過熱股不得被背景抬分：
-- decision=FAIL
-- structure_phase in {FAILED_BREAKOUT, WEAK, DISTRIBUTION}
-- heat=EXTREME
-- 上述情境 modifier 必須 <= 1.0
-
-RR 顯示契約：
-
-- funnel 為 等冷卻、過熱*、過熱觀察 時，RR 一律顯示 -（過熱）。
-- 不改 RR 公式，只改顯示與 blocker 顯示口徑。
-
-簡報計數契約：
-
-- 交易執行 N 與 今日交易已建立新倉 M 檔 必須同一定義，或改成明確不同標籤：
-- 交易執行：執行動作 N 檔
-- 今日新倉建議 / 已建立新倉：M 檔
-- 不得讓手機首屏誤讀成同一件事有兩個數字。
-
-防抖契約：
-
-- 淘汰 / failed / weak 翻可買需連續 >=2 次評估維持買點，且 breakout_distance <= 1%。
-- 同盤中翻轉標記 unstable，維持保守側。
-- 不得讓同一標的同盤中在 可買 / 淘汰 間反覆跳。
+- Freshness check 必須可由 Render/runner 每次啟動呼叫，且幂等。
+- 預設檢查最近 N=5 個交易日；N 可由 env 或 CLI/config 覆寫。
+- 安全寫入時間預設為台北時間 14:00；可由 env 覆寫。
+- 每個 trade_date 對兩類 evidence 分別檢查:
+- market_theme_confirmed_evidence
+- market_theme_index_daily_bars
+- Business key 已完整存在時:
+- 不 upsert。
+- log 狀態為 already-complete 或等價明確語意。
+- 缺失且未到安全寫入時間:
+- 只讀不寫。
+- log 狀態為 skipped-before-safe-write-time 或等價明確語意。
+- 不視為成功補寫；但若流程契約允許 runner 繼續，必須明確區分「未到時間所以不寫」與「資料完整」。
+- 缺失且已到安全寫入時間:
+- 只能呼叫既有 approved upsert/read-after-write interface 或 approved repo script。
+- 寫入後必須 read-after-write 驗證 business key 完整。
+- log 狀態為 backfilled-and-verified 或等價明確語意。
+- 任一日期 / 任一資料類型發生 source-error、upsert-error、read-after-write mismatch、缺必要欄位:
+- exit / return 必須 fail closed。
+- log 必須包含 trade_date、資料類型、錯誤階段、可重跑線索。
+- 不得靜默吞錯後繼續宣告 freshness ok。
+- Backfill workflow / CLI:
+- 必須接受 start_date / end_date。
+- 不得保留 May-only 預設鎖定。
+- 未給日期時可使用既有安全預設，但不得阻擋 2026-06-01~2026-06-03 這類後續日期。
 
 ## 版本契約
 
-- 使用者可見報文版本不得低於 v20.4.34。
-- 若本輪有報文 header / 手機可見格式變更，Tech 必須明確說明維持 v20.4.34 或升版；不得回退版本。
-- CHANGELOG 必須列出實際 core/generator.py VERSION 掃描結果。
-- 若不升版，需說明理由：本輪是 v20.4.34 修復同版契約，而非新能力。
-
-## 驗收條件
-
-必須全部滿足，否則 QA 結論不得為 通過：
-
-1. per-stock strategy evidence：
-- 緯創 backtest sample 36、reference 高時：strategy ready / 1.0。
-- 華邦 backtest sample 38、reference 高時：strategy ready / 1.0。
-- 兩股卡片 綜合 != 技術，顯示 證據 +X%，不得是 partial +0%。
-- 至少兩檔不同股票 modifier 不同，證明 per-stock 生效。
-2. market daily freshness：
-- 收盤後手動跑 RUN_MODE=daily_evidence，使用 2026-06-03 或最新 TWSE trading day。
-- market_theme_confirmed_evidence 出現當日 trade_date 行。
-- read-after-write smoke 可重跑，且失敗時 job 非 0 exit。
-- official report 背景顯示 confirmed_trend，不得顯示 資料不足。
-3. evidence modifier：
-- 至少一張 official message-list / report 卡片 綜合 != 技術。
-- 當日有 confirmed market evidence 時，market 分量進入分數，不只是顯示文案。
-- 旺宏 / 聯電等減碼、失敗、弱勢案例 modifier <=1.0。
-4. RR 過熱顯示：
-- 技嘉 過熱觀察 原 RR 0.21 改為 -（過熱）。
-- 等冷卻 / 過熱* / 過熱觀察 全部同口徑。
-5. 簡報計數：
-- 首屏不再出現 交易執行2 / 新倉3 這種未定義歧義。
-- 若保留兩個數字，標籤必須明確區分「執行動作數」與「新建倉 / 新倉建議數」。
-6. 光寶科防抖：
-- 同一標的盤中不在 可買 / 淘汰 間來回翻。
-- 前態淘汰 / failed / weak 單次 BUY 不直接翻可買。
-- 連續 >=2 次且 breakout_distance <=1% 才允許翻可買；否則維持保守側並可標記 unstable。
-7. 回歸護欄：
-- RR 公式未改。
-- DB schema 未改。
-- 無 live Telegram delivery。
-- secret / credential 未出現在 log。
-- Tech probe 覆蓋 helper / formatter / official generator / runner artifact；production source 若無權限，必須產出 read-only artifact 或標 partial。
-
-## 範例或 Fixture
-
-最小 fixture / replay 必須包含：
-
-- 緯創：backtest_context.sample=36、reference 高、technical score 與 final score 可比較。
-- 華邦：backtest_context.sample=38、reference 高、technical score 與 final score可比較。
-- 一檔 sample < 10：strategy partial / 0.5，modifier 不正向 boost。
-- 一檔無 backtest context：strategy fail closed。
-- market/theme：2026-05-29 舊資料 + 2026-06-03 當日資料，驗證舊資料 gap=5 會 insufficient，當日資料會 confirmed。
-- 旺宏 / 聯電：decision=FAIL 或 structure_phase=FAILED_BREAKOUT / WEAK / DISTRIBUTION，驗證 modifier <=1.0。
-- 技嘉：funnel 過熱觀察 且原 RR 0.21，驗證顯示 -（過熱）。
-- 光寶科：同盤中第一次從淘汰翻 BUY、第二次連續確認、breakout_distance 分別 <=1% 與 >1% 的防抖案例。
-
-## 失敗標本與驗收路由
-
-Owner 失敗標本為本次完整指令描述的 v20.4.34 報文問題與具名股票：
-
-- 緯創 / 華邦：卡片有回測樣本 36 / 38 且參考度高，但 strategy 分數仍 partial / +0%。
-- market/theme：2026-06-03 報文因 confirmed_evidence 停在 2026-05-29 而資料不足。
-- 旺宏 / 聯電：弱勢 / 失敗 / 減碼股不得被 evidence 背景抬分。
-- 技嘉：過熱觀察仍顯示 RR 0.21。
-- 光寶科：盤中可買 / 淘汰抖動。
-
-驗收路由：
-
-1. helper 層：直接測 compute_evidence_score、_strategy_sample_evidence_payload、evidence_modifier_for_score、apply_evidence_confidence、RR 顯示、防抖判斷。
-2. formatter 層：測卡片分數行、RR 行、summary 計數行。
-3. official generator 層：用 message-list / official report replay 驗證手機閱讀順序與文案。
-4. runner artifact 層：跑 RUN_MODE=daily_evidence 或等價 CI command，驗證當日 confirmed row。
-5. production source 層：若可 read-only，驗證 market_theme_confirmed_evidence.trade_date 當日存在；若 QA 無 production 權限，只能用 Architect 提供的 safe read-only artifact，否則 market daily freshness 結論最多
-conditional pass。
+- 若 runner / report header / CLI 有版本字串，需同步升版或明確記錄本次流程版本。
+- 不得回退既有使用者可見版本字串。
+- 不得改變 Telegram 報文內容格式，除非現有 runner log/version 是報文前置可見資訊；本輪不是報文文案任務。
 
 ## 已存在且不得回退的契約
 
-- 使用者可見報文版本不得低於 v20.4.34。
-- evidence 不足時 fail closed，不得假造 confirmed / ready。
-- market/theme confirmed_trend 才能作 strong boundary evidence；supporting / single_day 不得升成 confirmed。
-- hard blockers 不得被 evidence 放寬：RR、overheat、chase、LIMIT_LOCK、弱勢 / 失敗結構。
-- 今日買入後若轉弱，必須同行說明跌破警戒、停損或策略失效；不得無理由從新倉觀察變賣出。
-- 空區塊、0-count、無新增下單占位預設不顯示。
-- 同一持倉同一份報文只能有一個主行動。
-- official runner / git 產生報文才是正式結果。
-- production secret / credential 不入 log。
-- 非 DB schema 資料寫入走既有 repo script / approved service API，不手寫 production DML。
+- Production DB schema 不變。
+- Production 寫入必須走既有 approved upsert/read-after-write interface 或 approved script。
+- Runner 視為無狀態；跨日 evidence 狀態只能來自 production DB 或 Owner 指定 source-of-truth。
+- 缺資料、source-error、欄位不足或可信度不足時必須 fail closed。
+- Live Telegram delivery 需 Owner 單獨批准，本輪不得觸發。
+- TASK.md -> CHANGELOG.md -> QA_REPORT.md 交付鏈不得跳過 Tech / QA。
+
+## 驗收條件
+
+1. 已存在日期跳過不重寫:
+- fixture 中某 trade_date 兩類 evidence 均完整。
+- freshness check 結果為 skipped/already-complete。
+- approved upsert interface 未被呼叫。
+- runner 不回報補寫成功。
+2. 缺失日期在台北 14:00 後補寫:
+- fixture 中某 trade_date 缺一類或兩類 evidence。
+- 模擬時間為台北 14:00 後。
+- 流程呼叫既有 approved upsert interface。
+- 寫後 read-after-write 驗證完整。
+- 結果明確列出 backfilled-and-verified。
+3. 未到台北 14:00 不寫:
+- fixture 中某 trade_date 缺 evidence。
+- 模擬時間為台北 14:00 前。
+- 流程只讀不寫，upsert interface 未被呼叫。
+- log 明確顯示 skipped-before-safe-write-time。
+- 不得把該日期標成 evidence complete。
+4. 最近 5 個交易日中某天失敗會 fail closed:
+- fixture 中 5 個交易日包含至少一個 read / upsert / read-after-write 失敗日期。
+- 整體流程返回非成功狀態或 runner-blocking failure。
+- log 指出失敗 trade_date、資料類型、錯誤階段。
+- 不得靜默產出 freshness ok。
+5. Backfill workflow / CLI 使用 start_date / end_date:
+- 指定 2026-06-01 到 2026-06-03 可走已驗證 backfill 路徑。
+- 代碼不寫死這三天。
+- workflow/CLI 不再預設只處理 2026-05-04~2026-05-29。
+- 若未提供日期，行為需有清楚文件或 log，且不影響顯式日期參數。
+
+## 範例或 Fixture
+
+- freshness check fixture:
+- 2026-06-01: market_theme_confirmed_evidence 與 market_theme_index_daily_bars 已完整，預期跳過不重寫。
+- 2026-06-02: 缺 evidence，模擬台北 14:05，預期補寫並 read-after-write 通過。
+- 2026-06-03: 缺 evidence，模擬台北 13:55，預期只讀不寫。
+- failure fixture:
+- 最近 5 個交易日其中一天 upsert 成功但 read-after-write 缺 business key，預期 fail closed。
+- backfill fixture:
+- CLI/workflow input: start_date=2026-06-01, end_date=2026-06-03
+- 預期不受 May-only 預設限制。
+
+## 失敗標本與驗收路由
+
+- 失敗標本:
+- Render 每 5 分鐘啟動時，runner 沒有先做 freshness check，導致最近交易日 market/theme evidence 漏寫或缺失仍繼續產生後續流程。
+- 手動 backfill 預設鎖在 2026-05-04~2026-05-29，無法覆蓋 2026-06-01~2026-06-03。
+- 驗收路由:
+- helper 層: 交易日窗口、safe write time、business key completeness 判斷。
+- interface 層: 既有 approved upsert + read-after-write 被正確呼叫。
+- runner 層: Render/runner 啟動可呼叫 freshness check，失敗會 blocking/fail closed。
+- workflow/CLI 層: start_date / end_date 參數可控，不 May-only。
+- production source 層: QA 若無權直接讀 production，需使用 Architect 提供的 read-only artifact；artifact 必須標明 source、版本、無 credential、無 write、無 live delivery。
 
 ## 明確禁止事項
 
-- 禁止 Architect 或 PM 直接改產品代碼；本任務必須走 Tech -> QA。
-- 禁止跳過 QA 或用 Tech 自檢代替 QA。
-- 禁止只驗 helper 後宣稱 Telegram 報文完成。
-- 禁止用 synthetic fixture 取代 Owner 具名失敗標本；fixture 可以用，但必須有等價 official replay。
-- 禁止缺 MARKET_THEME_APPROVED_PAYLOAD 時靜默 skip。
-- 禁止在 log 輸出 secret / credential / approved payload 原文。
-- 禁止 live Telegram delivery。
-- 禁止 DB schema / RLS / grant / policy / role / index / constraint 變更。
+- 禁止改 DB schema 或權限設定。
 - 禁止手寫 production DML。
-- 禁止改 RR 公式。
-- 禁止讓弱勢 / 失敗 / EXTREME 過熱股因 confirmed market 或 strategy evidence 被抬分。
+- 禁止 live Telegram delivery。
+- 禁止修改 RR 公式或策略決策。
+- 禁止把 local cache、runtime dict、agent 對話當跨日 evidence source-of-truth。
+- 禁止吞錯後繼續宣告成功。
+- 禁止把未到 14:00 的缺失日期補寫。
+- 禁止用 synthetic fixture 取代 runner 層驗收；若只能測低層，Tech 必須標 partial。
+- 禁止把 2026-06-01~2026-06-03 寫死在產品代碼。
+- 禁止把本輪擴成全面資料清理或歷史重建。
 
 ## 阻塞條件
 
-- Owner / Architect 無法提供或允許產生 safe read-only artifact，且 QA 需要驗 production 當日 market confirmed row。
-- MARKET_THEME_APPROVED_PAYLOAD secret 未配置，且任務目標要求完成 daily_evidence production smoke；此時 automation 應 fail closed，QA 不能通過 market daily freshness。
-- repo 缺可執行測試環境且無法補齊。
-- 找不到既有 approved service API / script 可寫入 market/theme confirmed evidence；不得改用手寫 DML，需 blocked。
-- Owner 要求 live Telegram delivery，但未給本輪單獨批准。
-- 實作需要 DB schema 變更；本輪未授權，需回 Owner / Architect 確認。
+- 找不到既有 approved upsert/read-after-write interface 或 approved script，且需新增 interface 時，Tech 必須 blocked 或先明確最小新增接口，不得手寫 production DML。
+- 無法判斷兩類 evidence 的 business key completeness 定義時，blocked，需 Architect 補充既有契約。
+- 無法在 runner 啟動流程插入 freshness check 且沒有替代固定呼叫點時，blocked。
+- 無法模擬台北時間或安全寫入時間設定時，blocked。
+- QA 無法取得 runner artifact / replay artifact 且任務目標是 runner 場景，QA 結論最多 conditional pass，不得直接通過。
 
 ## 本輪停止條件
 
-完成條件：
-
-- Tech 依本 TASK 完成最小範圍實作與 probes。
-- CHANGELOG 說明修改檔案、契約影響、版本、直接消費者、測試命令、覆蓋層級與未測層級。
-- QA 以 Owner 具名失敗標本或等價 official replay 反證，且至少補一個 Tech 未覆蓋的 consumer / 負面案例 / 手機誤讀路徑。
-- 五個必要 probes 均通過：
-- 不同股 strategy modifier 不同。
-- 當日 confirmed_evidence 時 market 進分數。
-- 弱勢 / 失敗股 modifier <=1.0。
-- 至少一卡 綜合 != 技術。
-- 收盤後 daily_evidence 跑出當日 confirmed row。
-- 無 RR 公式、DB schema、live Telegram、secret log 回退。
-
-不納入本輪，只記待辦：
-
-- 全量 production evidence 歷史補洞。
-- 長期資料品質 / source-of-truth governance。
-- 其他股票 ranking 或策略重設。
-- observation day / 持倉天數持久化。
-- 非 Owner 指定的報文降噪與版面重排。
+- 完成到以下範圍即停止:
+- runner 每次啟動可呼叫幂等 freshness check。
+- 最近 N 個交易日檢查、safe write time、skip/backfill/read-after-write/fail-closed 契約具備可重跑 probe。
+- backfill workflow/CLI 支援 start_date / end_date，不再 May-only。
+- 2026-06-01~2026-06-03 可作為驗收路徑覆蓋，但產品代碼不硬編碼。
+- 以下旁支只記待辦，不納入本輪:
+- 歷史全量 market/theme 資料稽核。
+- evidence 內容品質重新評分。
+- Telegram 報文版面或策略文案調整。
+- DB schema 優化或新表設計。
+- RR、買賣策略、持倉狀態機變更。

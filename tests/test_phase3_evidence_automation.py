@@ -11,6 +11,81 @@ from scripts import run_phase3_evidence_automation as phase3
 
 
 class Phase3EvidenceAutomationTest(unittest.TestCase):
+    def _freshness_client(self, rows_by_table):
+        class Result:
+            def __init__(self, rows):
+                self.data = rows
+                self.count = len(rows)
+
+        class Table:
+            def __init__(self, rows):
+                self.rows = rows
+                self.filters = {}
+
+            def select(self, fields, count=None):
+                return self
+
+            def eq(self, field, value):
+                self.filters[field] = value
+                return self
+
+            def limit(self, value):
+                return self
+
+            def execute(self):
+                trade_date = self.filters.get("trade_date")
+                rows = [
+                    row for row in self.rows
+                    if not trade_date or row.get("trade_date") == trade_date
+                ]
+                return Result(rows)
+
+        class Client:
+            def table(self, name):
+                return Table(rows_by_table.get(name, []))
+
+        return Client()
+
+    def _confirmed_row(self, trade_date, sector_theme_key="twse_electronics"):
+        return {
+            "trade_date": trade_date,
+            "market_index": "TAIEX",
+            "sector_theme_key": sector_theme_key,
+            "source_family": "market_data",
+            "source_name": "twse_openapi_mi_index",
+            "freshness": "fresh",
+            "evidence_status": "confirmed",
+            "support_level": "supporting",
+        }
+
+    def _confirmed_rows(self, trade_date):
+        return [
+            self._confirmed_row(trade_date, sector_theme_key)
+            for sector_theme_key in phase3.EXPECTED_CONFIRMED_SECTOR_THEMES
+        ]
+
+    def _index_rows(self, trade_date):
+        return [
+            {
+                "trade_date": trade_date,
+                "index_scope": "market",
+                "market_index": "TAIEX",
+                "sector_theme_key": None,
+                "source_family": "market_data",
+                "source_name": "twse_openapi_mi_index",
+                "close": 21000,
+            },
+            {
+                "trade_date": trade_date,
+                "index_scope": "sector_theme",
+                "market_index": "TAIEX",
+                "sector_theme_key": "twse_electronics",
+                "source_family": "market_data",
+                "source_name": "twse_openapi_mi_index",
+                "close": 1200,
+            },
+        ]
+
     def test_time_guard_requires_confirmed_trading_day_after_close(self):
         saturday = phase3.parse_now("2026-06-06T13:25:00+08:00")
         before_close = phase3.parse_now("2026-06-02T12:30:00+08:00")
@@ -322,6 +397,128 @@ class Phase3EvidenceAutomationTest(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["trade_date"], "2026-06-02")
         self.assertEqual(rows[0]["source_name"], "twse_openapi_mi_index")
+
+    def test_recent_freshness_complete_dates_skip_without_backfill(self):
+        client = self._freshness_client(
+            {
+                "market_theme_confirmed_evidence": self._confirmed_rows("2026-06-02"),
+                "market_theme_index_daily_bars": self._index_rows("2026-06-02"),
+            }
+        )
+        calls = []
+        out = io.StringIO()
+        with redirect_stdout(out):
+            report = phase3.run_market_theme_freshness_check(
+                now=phase3.parse_now("2026-06-02T14:05:00+08:00"),
+                lookback_days=1,
+                client=client,
+                trading_day_checker=lambda trade_date: {"confirmed": True},
+                backfill_func=lambda trade_date, client=None: calls.append(trade_date),
+            )
+
+        self.assertEqual(report["status"], "ok")
+        self.assertEqual(report["results"][0]["status"], "already-complete")
+        self.assertEqual(calls, [])
+        self.assertIn("status=already-complete", out.getvalue())
+
+    def test_recent_freshness_partial_confirmed_rows_do_not_skip(self):
+        rows_by_table = {
+            "market_theme_confirmed_evidence": [self._confirmed_row("2026-06-02")],
+            "market_theme_index_daily_bars": self._index_rows("2026-06-02"),
+        }
+        client = self._freshness_client(rows_by_table)
+        calls = []
+
+        def backfill(trade_date, client=None):
+            calls.append(trade_date)
+            rows_by_table["market_theme_confirmed_evidence"] = self._confirmed_rows(trade_date)
+
+        report = phase3.run_market_theme_freshness_check(
+            now=phase3.parse_now("2026-06-02T14:05:00+08:00"),
+            lookback_days=1,
+            client=client,
+            trading_day_checker=lambda trade_date: {"confirmed": True},
+            backfill_func=backfill,
+        )
+
+        self.assertEqual(report["status"], "ok")
+        self.assertEqual(calls, ["2026-06-02"])
+        self.assertEqual(report["results"][0]["status"], "backfilled-and-verified")
+
+    def test_recent_freshness_before_safe_write_time_reads_without_backfill(self):
+        client = self._freshness_client(
+            {
+                "market_theme_confirmed_evidence": [],
+                "market_theme_index_daily_bars": [],
+            }
+        )
+        calls = []
+        out = io.StringIO()
+        with redirect_stdout(out):
+            report = phase3.run_market_theme_freshness_check(
+                now=phase3.parse_now("2026-06-03T13:55:00+08:00"),
+                lookback_days=1,
+                safe_write_time="14:00",
+                client=client,
+                trading_day_checker=lambda trade_date: {"confirmed": True},
+                backfill_func=lambda trade_date, client=None: calls.append(trade_date),
+            )
+
+        self.assertEqual(report["status"], "ok")
+        self.assertEqual(report["results"][0]["status"], "skipped-before-safe-write-time")
+        self.assertEqual(calls, [])
+        self.assertIn("status=skipped-before-safe-write-time", out.getvalue())
+
+    def test_recent_freshness_after_safe_write_time_backfills_and_verifies(self):
+        rows_by_table = {
+            "market_theme_confirmed_evidence": [],
+            "market_theme_index_daily_bars": [],
+        }
+        client = self._freshness_client(rows_by_table)
+        calls = []
+
+        def backfill(trade_date, client=None):
+            calls.append(trade_date)
+            rows_by_table["market_theme_confirmed_evidence"].extend(self._confirmed_rows(trade_date))
+            rows_by_table["market_theme_index_daily_bars"].extend(self._index_rows(trade_date))
+
+        out = io.StringIO()
+        with redirect_stdout(out):
+            report = phase3.run_market_theme_freshness_check(
+                now=phase3.parse_now("2026-06-02T14:05:00+08:00"),
+                lookback_days=1,
+                safe_write_time="14:00",
+                client=client,
+                trading_day_checker=lambda trade_date: {"confirmed": True},
+                backfill_func=backfill,
+            )
+
+        self.assertEqual(report["status"], "ok")
+        self.assertEqual(calls, ["2026-06-02"])
+        self.assertEqual(report["results"][0]["status"], "backfilled-and-verified")
+        self.assertIn("status=backfilled-and-verified", out.getvalue())
+
+    def test_recent_freshness_read_after_write_mismatch_fails_closed(self):
+        client = self._freshness_client(
+            {
+                "market_theme_confirmed_evidence": [],
+                "market_theme_index_daily_bars": [],
+            }
+        )
+        out = io.StringIO()
+        with redirect_stdout(out):
+            report = phase3.run_market_theme_freshness_check(
+                now=phase3.parse_now("2026-06-02T14:05:00+08:00"),
+                lookback_days=1,
+                safe_write_time="14:00",
+                client=client,
+                trading_day_checker=lambda trade_date: {"confirmed": True},
+                backfill_func=lambda trade_date, client=None: None,
+            )
+
+        self.assertEqual(report["status"], "fail-closed")
+        self.assertEqual(report["failures"][0]["status"], "read-after-write-mismatch")
+        self.assertIn("stage=read-after-write", out.getvalue())
 
 
 if __name__ == "__main__":

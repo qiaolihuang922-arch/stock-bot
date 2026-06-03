@@ -1,6 +1,8 @@
 from flask import Flask, request
 import requests
 import os
+import subprocess
+import sys
 import time
 from datetime import datetime
 import pytz
@@ -27,6 +29,31 @@ def already_sent(tag):
         f.write(tag + "\n")
 
     return False
+
+
+def run_market_theme_freshness_preflight():
+    lookback = os.getenv("MARKET_THEME_FRESHNESS_LOOKBACK_DAYS", "5")
+    safe_write_time = os.getenv("MARKET_THEME_SAFE_WRITE_TIME", "14:00")
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_phase3_evidence_automation.py",
+            "--freshness-check-only",
+            "--freshness-lookback-days",
+            lookback,
+            "--safe-write-time",
+            safe_write_time,
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=120,
+    )
+    if completed.stdout:
+        print(completed.stdout, end="" if completed.stdout.endswith("\n") else "\n", flush=True)
+    if completed.stderr:
+        print(completed.stderr, end="" if completed.stderr.endswith("\n") else "\n", flush=True)
+    return completed.returncode
 
 
 @app.route("/")
@@ -70,6 +97,10 @@ def home():
 
         elif not tag:
             return "⏭️ Skip"
+
+        freshness_status = run_market_theme_freshness_preflight()
+        if freshness_status != 0:
+            return f"❌ freshness check failed {freshness_status}"
 
         if already_sent(tag):
             return f"⏭️ 已發 {tag}"
