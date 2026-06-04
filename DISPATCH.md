@@ -3,7 +3,7 @@
 依 `AGENTS.md` 啟動順序閱讀；本文件只保留任務看板、handoff 指針與固定啟動命令。
 
 - task_md_holds: `recently_done`
-- task_md_task_id: `telegram_card_evidence_wording_v20_4_44`
+- task_md_task_id: `telegram_future_30d_watch_v20_4_45`
 - task_md_note: `TASK.md / CHANGELOG.md / QA_REPORT.md 目前是最近完成任務的滾動 handoff，不代表仍在 Tech/QA。`
 
 ## Active
@@ -16,6 +16,7 @@
 
 ## Recently Done
 
+- `v20.4.45`｜`telegram_future_30d_watch_v20_4_45`｜minor/L3｜新增可選第 4 則 Telegram `【未來30日關注】`，由 `generate_report()` 預設追加在持倉 / 未持倉 / 決策簡報三則之後，不污染前三則；區塊固定為 `歷史類比`、`法說會提醒`、`全球事件`。歷史類比在資料不足時顯示 `無高相似崩盤樣本｜依據不足/相似度低`；MOPS 法說會 adapter 維持 fail-closed 並明示 source-error；全球事件預設加入 2026-06-04 起 30 日官方日程 seed/snapshot，最多顯示 5 筆，支援 `06/10-11`、`06/15-16` 等多日區間 label，前 5 筆為 ECB、CPI、BOJ、G7、Fed，06/18 BoE / 06/25 BEA 因 max 5 不顯示。focused tests v20.4.45 4 passed、future slice 3 passed、py_compile / diff check passed；QA 補 official `generate_report(dry_run=True)` 手機閱讀 probe，確認 4 則順序、前三則無污染、第 4 則無可買 / 可下單 / 崩盤預測語意，QA `通過`。未改交易策略、RR、持倉風控、DB schema/write、live Telegram；live official adapters / MOPS / historical timeline source 仍是後續任務。
 - `v20.4.44`｜`telegram_card_evidence_wording_v20_4_44`｜normal_patch｜只改 Telegram 卡片顯示語意：證據鏈不再把 `決策證據：來源可追溯` 當交易依據外露，不顯示 raw `hard stop` / `持倉硬風控` / `既有買點與倉位規則通過`；未持倉非可買卡維持 `卡關主因` / `量化差距`，新增更清楚的 `解鎖` / `依據`，有可信數字時優先顯示 RR、距突破、熱度、警戒/停損距離，沒有數字才寫事件型 blocker；光寶科類 prepare 改 `買點：明日準備｜不可下單`、`卡關主因：開盤確認未完成`、`量化差距：盤後待開盤確認`、`解鎖：明日開盤後仍守突破區 / 不追價`；建準類持倉觀察不刷 generic evidence，停損/減碼持倉顯示人話風險與距警戒/停損距離；QA `通過`，core 4 passed、wide regression 14 passed、QA-only mobile replay passed、py_compile / diff check passed；未改策略 decision、RR、heat/breakout 判定、DB/write、live Telegram。
 - `v20.4.43`｜`evidence_chain_decision_layers_v20_4_43`｜risk_patch｜保留 v20.4.42 卡片顯示風格，新增每檔 `decision_judgment` evidence-chain 聚合與 `決策證據：...` reason slot；`stock.*.decision_judgment` / `report_context["stock_judgments"]` 可追溯 eligibility、evidence_status、blocking/progress reasons；RR不足、過熱/EXTREME、突破失敗、source missing/error/conflict、量能、追高/漲停、持倉 hard stop 等 hard gates 會讓 judgment / summary / funnel / card 同步 fail closed，不再只做文字說明；低 RR `trend_continuation` 降 `等RR修復` 並保留 `卡關主因` / `量化差距`；focused official replay 14 passed、py_compile / diff check passed、混合 direct consumer probe passed；QA `conditional pass`，原因是正式 QA runner 遇 Codex usage limit，但本地 official message-list 反證通過；未改 RR 公式、strategy threshold、DB schema/write、live Telegram。
 - `v20.4.42`｜`pm-20260604-v20.4.42-unheld-attribution-readable-gap`｜normal_patch｜未持倉非可買卡片 attribution 由單行 `到達可買差距` 改為兩行 `卡關主因` / `量化差距`：RR不足顯示 RR 現值、門檻與差值；距突破 >4% 顯示差值，<=4% 不列；過熱 / Lv.3、盤後待確認、突破失敗、資料來源缺失、策略樣本、漲跌停鎖定、弱反彈皆人話化；真正可買與 `trend_continuation` 小倉 BUY 不顯示卡關兩行；版本升 `v20.4.42`，tests current-version `v20.4.41` 殘留已清空；focused official replay 12 passed、py_compile / diff check passed、QA `通過`；未改策略、RR、can_buy/is_valid_entry、持倉、DB、live Telegram。
@@ -47,11 +48,13 @@
 
 ## Blocked / Deferred
 
+- future-watch live adapters：v20.4.45 第 4 則已可顯示固定官方全球事件 seed/snapshot；若要長期自動更新，需另開任務補 live official global event adapters、MOPS official 法說會 adapter、historical analogy timeline source 與 production-safe read-only artifact。未實作前不得假造法說會或崩盤類比。
 - `strategy-support-stop-candidate-20260601`：blocked，未吸收產品 diff。原因：support stop candidate 會改變使用者可見 `stop / risk / rr`，但 VERSION / Owner 放行契約未完成。主 repo 未吸收 `services/analysis.py` / `tests/test_analysis_engine.py` candidate diff。
 - production source follow-up：若 Owner 要長期顯示持倉觀察第 N 天，需另開 observation start / observation days 持久來源治理；本輪只保證有可信來源時顯示、缺來源時不假造。
 
 ## Next Action
 
+- v20.4.45 未來 30 日關注第 4 則已 QA 通過；若 Owner 要 live 更新法說會 / 全球事件 / 歷史類比，再另開 source adapter 任務。
 - v20.4.44 卡片證據語意已 QA 通過；若 Owner 要更細的全市場 wording 矩陣或排序，另開顯示文案任務，不在本輪改策略。
 - 前一輪 Render freshness 仍需部署後看 Render 5 分鐘觸發 log，確認 freshness preflight 真實 runtime output。
 - 開新任務前先看 `task_md_holds`，不要用 `TASK.md` 內部舊狀態反推當前看板。

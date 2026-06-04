@@ -1,68 +1,71 @@
 # CHANGELOG:
 
-  ## 任務尺寸與風險
+## 任務尺寸與風險
 
-  normal_patch。Telegram 使用者可見卡片 wording / message-list 顯示語意修正；未改策略 decision、RR 公式、DB/write、持倉狀態機或 live Telegram。
+- 本輪 Re-Tech 尺寸：normal_patch。
+- 原 TASK 為 minor / L3；本輪只修補既有 v20.4.45 第 4 則預設資料，不擴大產品方向、不改策略、不改 DB、不做 live delivery。
 
-  ## 修改內容
+## 修改內容
 
-  - VERSION 升至 v20.4.44。
-  - 未持倉卡片補齊人話交易語意：卡關主因、量化差距、解鎖、依據。
-  - 移除可見卡片中的 generic 決策證據：來源可追溯。
-  - raw/internal gate 顯示改成人話，例如 overheat、failed breakout、holding hard risk。
-  - 盤後 prepare 卡改為明確 買點：明日準備｜不可下單，解鎖為開盤後守突破區 / 不追價。
-  - 持倉 hard stop 卡顯示跌破停損線距離，不再外露 hard stop / 持倉風控。
+- 在 `core.future_watch.default_future_watch_sources()` 補上 2026-06-04 起 30 日窗口的 global official event seed/snapshot。
+- 預設全球事件不再是全域 `source-error`，會顯示官方 source 標記事件，formatter 仍只顯示最多 5 筆並保留日期區間 label。
+- MOPS adapter 維持 fail-closed；歷史類比維持 insufficient-data / 低相似 fail-closed。
+- 更新 `generate_report` focused test：預設第 4 則顯示 global events、保留候選、前三則不混入未來 30 日內容。
 
-  ## 修改檔案
+## 修改檔案
 
-  - core/generator.py
-  - presentation/report.py
-  - tests/test_generator_report.py
+- `core/future_watch.py`
+- `core/generator.py`
+- `presentation/report.py`
+- `tests/test_generator_report.py`
 
-  ## 最小改動策略
+## 最小改動策略
 
-  只改 Telegram formatter wording、VERSION、official message-list focused tests。保留 v20.4.43 decision_judgment payload 與 hard-gate fail-closed 判斷，不碰策略閾值、RR 計算、DB/write/live delivery。
+- 只改 `default_future_watch_sources()` 的 global source 預設與對應測試。
+- 未新增 live network adapter，未接 MOPS live request，未假造 MOPS / history。
+- 未重構既有 formatter / generator message-list 組裝流程。
 
-  ## 契約影響
+## 契約影響
 
-  - 使用者可見報文 header/version 改為 v20.4.44。
-  - Telegram card message list wording 改變。
-  - 未改函式回傳結構、payload shape、DB contract、策略 decision、message 分組順序。
-  - decision_judgment 內部 blocking/progress reasons 保留，僅 formatter 轉成人話或隱藏 generic 可追溯 wording。
+- Public helper `default_future_watch_sources()` 的 `global_event_source` 預設由 `source-error` 改為 available official seed/snapshot。
+- Message list 仍為可選第 4 則；既有第 1-3 則順序與 summary 決策語意不變。
+- 第 4 則全球事件仍按日期升冪與 impact priority 排序，最多顯示 5 筆。
+- 實際限制：global default 是 2026-06-04 這個 30 日窗口的官方 seed/snapshot；live official adapters、MOPS live adapter、historical analogy source 仍是 follow-up。
 
-  ## 直接消費者同步
+## 直接消費者同步
 
-  - formatTelegramMessages official message-list tests 已同步。
-  - Owner specimen 等價 replay 覆蓋 prepare、overheat/failed breakout blocker priority、holding hard stop、source missing/error/conflict fail-closed。
-  - QA 可沿同一 official message-list replay 驗收。
+- `generate_report()` 透過既有 `default_future_watch_sources()` 消費新 global seed。
+- `formatTelegramMessages()` / `render_telegram_messages()` 既有第 4 則接線維持。
+- `tests/test_generator_report.py` 同步覆蓋 `generate_report` official message-list 層，不只測 helper。
 
-  ## 未影響模組
+## 未影響模組
 
-  - strategy decision / can_buy / is_valid_entry
-  - RR formula / heat / breakout 判定
-  - DB schema / RLS / grant / policy / write path
-  - live Telegram delivery
-  - replay/backfill
-  - holding state machine
+- 未改買賣 / 加減碼 / 停損停利 / 持倉狀態機 / strategy decision。
+- 未改 DB schema、RLS、grant、policy、role、index、constraint。
+- 未做 production DB write、正式 backfill、live Telegram delivery。
 
-  ## 已跑自檢命令
+## 已跑自檢命令
 
-  - pytest tests/test_generator_report.py -k 'v20_4_42_postmarket_unheld_gate_attribution_readability_message_list_replay or v20_4_43_evidence_chain_decision_judgments_cover_eligibility_layers or
-    v20_4_43_evidence_chain_missing_error_conflict_fail_closed or v20_4_43_holding_hard_stop_judgment_is_visible_and_non_bypass' -q -> 4 passed
-  - pytest tests/test_generator_report.py -k 'v20_4_43 or v20_4_42_postmarket_unheld_gate_attribution_readability_message_list_replay or confirmed_evidence_preserves_limit_lock_chase_hard_blocker or
-    v20_4_39_post_market_mixed_trend_and_prepare_keeps_trend_actionable or v20_0_14_post_market_fixture_uses_next_day_plan_semantics or v20_4_18_structural_artifacts_cover_three_fail_closed_cases or
-    v20_4_20_maturity_report or v20_4_25_strategy_sample_source_error_blocks_action_without_hiding_available_price or v20_4_16_unheld_card_fails_closed_when_ohlcv_missing or
-    trend_continuation_official_report_has_separate_small_buy_bucket' -q -> 14 passed
-  - pytest tests/test_generator_report.py -k 'eight_day_confirmed_market_theme_is_decision_eligible' -q -> 1 passed
-  - py_compile core/generator.py presentation/report.py tests/test_generator_report.py -> passed
-  - git diff --check -> passed
+- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/v20_4_45_future_watch_seed_pytest arch -arm64 ./.venv/bin/python -m pytest tests/test_generator_report.py -k 'v20_4_45_future' -q` -> 3 passed。
+- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/v20_4_45_future_watch_seed_wide arch -arm64 ./.venv/bin/python -m pytest tests/test_generator_report.py -k 'v20_4_45' -q` -> 4 passed。
+- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/v20_4_45_future_watch_seed_pycompile arch -arm64 ./.venv/bin/python -m py_compile core/future_watch.py core/generator.py presentation/report.py tests/test_generator_report.py` -> passed。
+- `git diff --check` -> passed。
 
-  ## 殘留風險
+## 覆蓋層級
 
-  未跑 full pytest、production runner artifact、production DB source artifact、DB read/write、live Telegram。Tech 自檢不代表 QA 通過。
+- helper：global seed collection / date range / max 5 covered。
+- formatter：future-watch message covered。
+- official generator/message-list：`generate_report` default 第 4 則 covered。
+- runner artifact / production source：未覆蓋。
 
-  ## 旁支待辦
+## 殘留風險
 
-  - 全量文案 redesign 不在本輪。
-  - production source artifact / live Telegram 需另走授權流程。
-  - 若未來要更細分 prepare/buy evidence line 排序，可另開報文 wording 任務。
+- Global seed 是固定 snapshot；若官方日程改期，需要更新 seed 或接 live official adapter。
+- MOPS 與 historical analogy 仍 fail-closed，尚未提供 live official data。
+- 未跑 full pytest、production runner artifact、production DB source artifact、live Telegram。
+
+## 旁支待辦
+
+- 補 live official global event adapters。
+- 補 MOPS official adapter 與跨月 production-safe replay artifact。
+- 補 historical analogy official timeline source 與 similarity evidence artifact。

@@ -16,6 +16,14 @@
 
 ## Completed
 
+- `telegram_future_30d_watch_v20_4_45`:
+  - 問題：Owner 要新增未來 1 個月關注時間點推送：台股歷史崩盤類比、股票法說會、全球大事件。風險是資料源不足時假造崩盤時間線 / 法說會 / 全球事件，或第 4 則被手機讀成今日交易指令。
+  - 結果：VERSION 升 `v20.4.45`；新增 `core/future_watch.py`，`generate_report()` 預設 append 第 4 則 `【未來30日關注】`；前三則報文不混入未來關注內容。歷史類比缺樣本 fail closed；MOPS 法說會 adapter fail closed；全球事件預設顯示 2026-06-04 起 30 日官方 seed/snapshot，最多 5 筆，支援多日日期 label。
+  - 可重跑補強：main v20.4.45 focused 4 passed、future slice 3 passed、py_compile / diff check passed；QA 補 official `generate_report(dry_run=True)` consumer probe，確認 message_count 4、前三則無污染、第 4 則 5 筆全球事件、06/18 / 06/25 不超量顯示、無可買 / 可下單 / 崩盤預測字眼。
+  - QA 狀態：`通過`。
+  - 流程復盤：根因分類為 `feature` + `mobile_reading` + `證據鏈`。新增資訊型推送必須把「可顯示事件」與「不能推論的資料缺口」分開；沒有 official adapter 時只能 fail closed 或固定標明 snapshot，不能讓 formatter 自動補故事。
+  - 邊界：未改交易策略、RR、heat/breakout、持倉風控、DB schema/write、production backfill、live Telegram。
+  - 後續：另開 live official global event adapters、MOPS official adapter、historical analogy official timeline source 與 production-safe read-only artifact；未完成前不得假造法說會或歷史崩盤類比。
 - `telegram_card_evidence_wording_v20_4_44`:
   - 問題：v20.4.43 evidence-chain 接通後，可見卡片把內部推理直接吐出，包含 `決策證據：來源可追溯`、raw hard gate、prepare 似乎買點已過、差距描述不夠量化；Owner 要顯示語意易懂、不要模糊。
   - 結果：VERSION 升 `v20.4.44`；未持倉卡保留 `卡關主因` / `量化差距` 並補 `解鎖` / `依據`；可用數字時優先顯示 RR / 距突破 / 熱度 / 警戒停損距離，無數字時才寫事件型 blocker；prepare 改 `明日準備｜不可下單`；持倉觀察不刷 generic evidence，停損 / 減碼顯示人話風險與距離。

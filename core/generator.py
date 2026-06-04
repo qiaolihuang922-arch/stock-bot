@@ -19,6 +19,11 @@ from presentation.report import (
     format_brief_data_evidence_message as presentation_format_brief_data_evidence_message,
     render_telegram_messages,
 )
+from core.future_watch import (
+    build_future_watch_payload,
+    default_future_watch_sources,
+    format_future_watch_message,
+)
 
 from services.stock_api import (
     get_twse,
@@ -70,7 +75,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.44"
+VERSION = "v20.4.45"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -8322,7 +8327,33 @@ def format_details_backup_messages(full_msg):
     return split_message(detail_text)
 
 
-def formatTelegramMessages(results_map, full_msg, best, score, market_summary, now, position_warning=None, include_detail=False, daily_write_warning=None, strategy_evidence_summary=None, report_phase=None):
+def formatTelegramMessages(
+    results_map,
+    full_msg,
+    best,
+    score,
+    market_summary,
+    now,
+    position_warning=None,
+    include_detail=False,
+    daily_write_warning=None,
+    strategy_evidence_summary=None,
+    report_phase=None,
+    future_watch_payload=None,
+    future_watch_sources=None,
+):
+    future_watch_message = None
+    if future_watch_payload is None and future_watch_sources:
+        future_watch_payload = build_future_watch_payload(
+            results_map,
+            now,
+            today_features=future_watch_sources.get("today_features"),
+            historical_source=future_watch_sources.get("historical_source"),
+            mops_adapter=future_watch_sources.get("mops_adapter"),
+            global_event_source=future_watch_sources.get("global_event_source"),
+        )
+    if future_watch_payload is not None:
+        future_watch_message = format_future_watch_message(future_watch_payload, now, VERSION)
     return render_telegram_messages(
         results_map,
         full_msg,
@@ -8337,6 +8368,7 @@ def formatTelegramMessages(results_map, full_msg, best, score, market_summary, n
         daily_write_warning=daily_write_warning,
         strategy_evidence_summary=strategy_evidence_summary,
         report_phase=report_phase,
+        future_watch_message=future_watch_message,
     )
 
 
@@ -8939,7 +8971,8 @@ def generate_report(dry_run=False, return_write_results=False):
         position_warning,
         daily_write_warning=daily_write_warning,
         strategy_evidence_summary=strategy_evidence_summary,
-        report_phase=report_phase
+        report_phase=report_phase,
+        future_watch_sources=default_future_watch_sources(),
     )
 
     return _generate_report_output(

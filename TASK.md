@@ -1,196 +1,353 @@
-# TASK: v20.4.44 Telegram card evidence wording clarity
+# TASK: 新增可選第 4 則 Telegram「未來30日關注」推送
 
 ## 任務狀態
 
-- task_id: telegram_card_evidence_wording_v20_4_44
-- 任務類型: normal_patch
+- task_id: telegram_future_30d_watch_v20_4_45
+- 任務類型: minor
 - 狀態: ready_for_tech
-- 任務尺寸判斷: normal_patch。這是 Telegram 使用者可見顯示語意修正，會改 official message list wording / card lines，但不得改策略 decision、RR 公式、DB、持倉狀態機或 live delivery。
-- 版本建議: 使用者可見報文升版到 v20.4.44；若實際 VERSION 不是 v20.4.43，Tech 必須 blocked 回報。
-- QA 分級建議: L2
+- 建議版本: v20.4.45
+- QA 分級建議: L3
+- 原因: 新增使用者可見 Telegram message，涉及官方資料源、跨月 30 日查詢、message list 契約與手機閱讀風險；不改策略決策、不改 DB schema。
 
 ## Owner 問題
 
-Owner 接受 v20.4.43 evidence-chain 方向，但 Telegram 卡片的「決策證據」語意太內部、重複且不夠具體。
+Owner 要在既有 Telegram 推送中新增「未來 30 日要關注的時間點」，但不能污染既有決策簡報。新增內容需涵蓋：
 
-v20.4.43 post-market failure specimen 中可見問題包括：
+1. 今天盤勢很像台灣曾經哪一次崩盤的時間線。
+2. 哪些股票準備法說會。
+3. 全球未來 30 日大事件。
 
-- 顯示「決策證據：來源可追溯」這類 source availability，像交易證據但實際不是交易理由。
-- 外露或半外露內部詞：hard stop / 持倉風控、持倉硬風控、既有買點與倉位規則通過。
-- 卡片同時寫明日準備不可買，又用像已通過買點的文字，造成語意衝突。
-- 解鎖 / 量化差距可顯示數字時仍使用籠統詞，讀者看不出差多少、要等什麼。
+本功能必須以手機閱讀為第一視角，資料不足時 fail closed，不得假造事件或主觀硬套崩盤類比。
 
 ## 使用者可見結果
 
-手機 Telegram 卡片要把 evidence-chain 改成人能直接理解的交易語意：
-
-- 不顯示「來源可追溯」作為交易依據。
-- 不顯示 raw/internal hard gate 名稱。
-- 未持倉卡片能看出：現在結論、主因、目前差距、如何解鎖、輔助依據。
-- 有可信數字時優先顯示數字差距，例如 RR、距突破、熱度、停損 / 警戒距離、確認門檻。
-- 沒有可信數字時，明確說明 blocker 是事件型，例如「盤後待開盤確認」。
-- 明日準備卡仍清楚不可下單，且解鎖條件是開盤後確認，不是買點已通過。
-- 持倉卡不再刷 generic evidence；只有停損 / 減碼等硬風險需要人話原因時才顯示。
+- Telegram 推送可選新增第 4 則 message。
+- Header 使用同一份報文版本，標題為：
+【未來30日關注】
+- 既有第 1-3 則決策簡報、持倉、候選、風控內容不得被插入、重排或語意污染。
+- 若三個區塊都無可信資料，該第 4 則可不產生；若只部分區塊有資料，只顯示有資料區塊與必要 fail-closed 狀態。
+- 手機閱讀路徑：使用者打開 Telegram 後，先讀既有決策簡報；若要看未來事件，往下讀第 4 則，能在 1 屏內先看到「是否有高相似崩盤樣本、法說會提醒、全球事件」。
 
 ## 非目標
 
-- 不改 strategy decision、can_buy、is_valid_entry、RR 計算、heat 判定、breakout 判定或持倉主行動。
-- 不改 DB schema / RLS / grant / policy / role / index / constraint。
-- 不做 DB write、backfill、manual DML 或 live Telegram delivery。
-- 不重新設計 Telegram 卡片版型。
-- 不新增 evidence-chain 架構。
-- 不全量清理報文文案。
-- 不把本輪擴成策略準備層、持倉風控或資料治理工程。
+- 不改既有買賣、加減碼、停損停利、持倉狀態機或策略 decision。
+- 不改 DB schema、RLS、grant、policy、role、index、constraint。
+- 不寫 production DB。
+- 不 live Telegram delivery。
+- 不新增主觀市場預測模型。
+- 不把歷史崩盤類比寫成預測或警報。
+- 不列全市場所有法說會，只列持倉、watchlist、未持倉候選相關股票。
+- 不把全球事件混入既有 Summary 或候選推薦區塊。
 
 ## 影響模組與直接消費者
 
 影響模組：
 
-- Telegram card wording / reason builder。
-- evidence-chain decision wording formatter。
-- official formatTelegramMessages 或等價 full message-list generation path。
-- 版本字串所在報文 header / VERSION 常量。
-- focused regression tests / replay fixtures。
+- Telegram official generator。
+- Telegram message list 組裝流程。
+- 報文版本/header 常量或 formatter。
+- 未來 30 日事件資料組裝 helper。
+- MOPS 法說會資料讀取 adapter。
+- 全球事件資料讀取/fixture adapter。
+- 歷史崩盤類比 helper。
+- official generator/message-list tests。
 
 直接消費者：
 
-- Owner 手機 Telegram 閱讀路徑。
-- official report generator / runner artifact consumer。
-- QA official message-list replay。
-- Summary / funnel / card 一致性檢查者。
+- Telegram 手機閱讀使用者。
+- 既有 Telegram runner/message sender 的 message list。
+- QA replay / official generator 測試。
+- 之後可能消費相同 future-watch payload 的 CLI/report artifact。
 
 ## 輸出契約
 
-未持倉卡片契約：
+### Message List 契約
 
-- 買點 = 結論 + primary reason。不得塞 source availability。
-- 卡關 或 卡關主因 = 最大 blocker，只顯示一個主 blocker，避免次因搶焦點。
-- 量化差距 = 有可信數字時顯示 current -> threshold / diff。
-- 解鎖 = 要變成可行動必須發生什麼；有數字就顯示數字，沒有數字就說事件型原因。
-- 依據 = 輔助 evidence；不得重複已在買點 / 卡關 / 量化差距 / 解鎖出現的 RR、突破、熱度主 gate。
+- 新增 message 為可選第 4 則。
+- 既有 message 1-3 的順序、內容、header、版本不得回退。
+- 第 4 則只有在至少一個區塊有可顯示內容或明確 fail-closed 狀態需要提示時產生。
+- 第 4 則不得影響既有 summary 決策文字。
 
-數字格式示例：
+### Header 契約
 
-- RR 0.98 -> 需 >=1.5 / 差 0.52
-- 距突破 6% -> 需 <=4% / 差 2%
-- 熱度 Lv.3 -> 需降至 Lv.1/觀察以下
-- 突破失敗 -> 需重新站回突破區；若有距離，補距離。
-- 停損 / 警戒距離存在且對持倉風險有用時，顯示具體距離，不寫 raw hard stop label。
+第 4 則 header 形狀：
 
-Prepare 卡契約：
+台股策略速報 v20.4.45
+【未來30日關注】
 
-- 光寶科類明日準備卡不得顯示 既有買點與倉位規則通過。
-- 應表達：盤後訊號達準備層，但 開盤確認未完成 / 不可下單。
-- 解鎖 應表達：明日開盤後仍守突破區 / 不追價。
-- RR / volume / backtest 只能作為 依據，且不得重複 gate lines。
+若 repo 既有 header 格式不同，Tech 必須沿用既有正式 header 格式，只新增同版本與 【未來30日關注】 標題，不得回退版本。
 
-持倉卡契約：
+### 區塊順序
 
-- 建準類持倉觀察卡不得顯示 generic 決策證據：來源可追溯。
-- 一般續抱 / 觀察卡可不顯示決策證據行。
-- 停損 / 減碼 / 硬風險卡若要顯示 evidence，必須是人話原因，例如跌破警戒、距停損多少、結構轉弱；不得顯示 raw hard stop、持倉硬風控。
+第 4 則固定區塊順序：
+
+1. 歷史類比
+2. 法說會提醒
+3. 全球事件
+
+空資料區塊處理：
+
+- 法說會查無資料：不占版、不顯示 0-count。
+- 全球事件查無資料或 source-error：顯示 fail-closed 狀態，不得假造事件。
+- 歷史類比資料不足或相似度低：必須顯示無高相似樣本，不得空白造成誤讀。
+
+### 歷史類比契約
+
+輸入：
+
+- today market features：可得欄位包含跌幅、量能、market_grade、breadth/limit-down、連跌、遠離均線等。
+- historical timeline source：優先 repo 既有 market_theme_index_daily_bars / TWSE official index source；若本輪環境無法取得，可使用可注入 fixture。
+- 必須量化相似度與門檻。
+
+輸出：
+
+- 若有高相似樣本：
+- 日期或事件短名。
+- 相似度。
+- 主要相似特徵，最多 3 個。
+- 明確標示「類比不是預測」。
+- 若資料不足或相似度低於門檻：
+- 固定文案：
+歷史類比：無高相似崩盤樣本｜依據不足/相似度低
+
+禁止：
+
+- 不得用主觀描述硬套歷史崩盤。
+- 不得出現「即將崩盤」「重演」等預測式文字。
+
+### 法說會契約
+
+資料來源：
+
+- 官方 MOPS endpoint:
+https://mopsov.twse.com.tw/mops/web/ajax_t100sb02_1
+- Method: POST
+- 欄位：
+- TYPEK: sii / otc / rotc / pub
+- year: 民國年，例如 2026 年為 115
+- month: 月份
+- co_id: 股票代號
+- Owner 提供研究摘要：
+- 實測可回 115/06 光寶科 2301 法說會資料。
+- 115/07 查無資料。
+- TWSE WebPro schedule 顯示法人說明會 / MOPS 法說會 / 公司自辦法說會入口。
+
+查詢範圍：
+
+- 未來 30 日，必須支援跨月。
+- 只查持倉 + watchlist / 未持倉候選相關股票。
+- 最多顯示 5 筆。
+- 日期升冪排序。
+- 查無資料不占版。
+
+每筆顯示欄位：
+
+- 日期。
+- 股票代號與名稱。
+- 事件短名。
+- 關注原因：持倉 / 候選 / 同產業。
+- source=MOPS
+
+source-error / 被擋：
+
+- 不得使用非官方資料補假資料。
+- 若 MOPS 被擋或解析失敗，顯示 fail-closed 狀態，例如：
+法說會提醒：source-error（MOPS），本次不列事件
+
+### 全球事件契約
+
+資料來源優先官方，Owner 已提供可用來源：
+
+- Fed FOMC 2026 calendar：2026/06/16-17 SEP meeting。
+- BLS CPI schedule：May 2026 CPI 2026/06/10 08:30 ET。
+- BEA schedule：2026/06/25 GDP third estimate + Personal Income and Outlays May 2026。
+- ECB calendar：2026/06/10-11 monetary policy meeting / press conference。
+- BOJ release calendar：2026/06/15-16 MPM。
+- BoE MPC calendar：2026/06/18 next due。
+- G7 official France interior page：Evian 2026/06/15-17。
+
+查詢範圍：
+
+- 未來 30 日。
+- 最多顯示 5 筆。
+- 日期升冪排序。
+- 每筆必須有官方 source 標記。
+- 若同日多事件，排序需穩定，優先顯示影響面更直接者：利率、通膨、匯率、能源、政治風險。
+
+每筆顯示欄位：
+
+- 日期。
+- 事件。
+- 影響面：利率 / 通膨 / 匯率 / 能源 / 政治風險。
+- source。
+
+source-error / 查無資料：
+
+- 不得假造事件。
+- 顯示 fail-closed 狀態：
+全球事件：source-error，本次不列未確認事件
+或
+全球事件：未查到未來30日官方事件
 
 ## 版本契約
 
-已存在且不得回退：
+- 使用者可見報文版本建議升為 v20.4.45。
+- 若 repo 已有更高版本，Tech 必須不得回退，應沿用或升至下一個合理版本，並在 CHANGELOG.md 記錄實際版本。
+- 第 4 則 header 版本需與正式 Telegram header 常量一致。
+- 測試必須驗證 header 實際輸出版本與常量一致。
 
-- v20.4.42 的 卡關主因 / 量化差距 可讀性不得退回單行或 vague 文案。
-- v20.4.43 evidence-chain hard-gate fail-closed 行為不得移除。
-- 可買、可準備、僅追蹤、淘汰 / 不可行動分組語意不得混淆。
-- 無可買時不得使用推薦語氣。
-- 盤後 ordinary prepare 不得寫成可買或可下單。
-- trend_continuation 小倉 BUY 契約不得變成一般 BUY。
-- source-error / missing-source / conflicting evidence 必須 fail closed。
-- official Telegram path 優先於 helper-only fixture。
+## 已存在且不得回退的契約
+
+- 既有 Telegram message 1-3 的順序不得改變。
+- 既有 Summary 只回答決策，不得混入未來 30 日全球事件或法說會清單。
+- 可買、可準備、僅追蹤、淘汰 / 不可行動仍須分開。
+- 無可買時不得使用像推薦的文案。
+- 同一持倉在同一份既有報文只能有一個主行動。
+- 空區塊、0-count、無新增下單占位預設不顯示。
+- live Telegram delivery 仍需 Owner 單獨批准。
+
+若 Tech 發現上述契約在 repo 中無法確認，需在 CHANGELOG.md 標記 blocked/partial，不得自行假設已保留。
 
 ## 驗收條件
 
-- official formatTelegramMessages 或等價 full message-list replay 顯示 header/version 為 v20.4.44。
-- Owner v20.4.43 post-market failure specimen 等價 replay 中，不再出現：
-- 決策證據：來源可追溯
-- hard stop
-- 持倉硬風控
-- 既有買點與倉位規則通過
-- 把明日準備寫成可下單的語意
-- 光寶科 prepare：顯示盤後準備但不可下單；解鎖為開盤後守突破區 / 不追價；RR / volume / backtest 不重複搶主 gate。
-- 華邦電 / 群創等 overheat 或 failed breakout 卡：只顯示與 卡關主因 一致的 primary blocker；有可信 RR、距突破、熱度差距時顯示數字 gap。
-- 建準 holding observation：不顯示 generic evidence wording。
-- hard stop / reduce holding cards：顯示人話風險原因；有 stop/warning distance 時顯示距離。
-- QA 必須補一個 Tech 未覆蓋的手機閱讀反證路徑，不得只重跑 Tech 命令。
+Tech 必須補 official generator / message-list 層級測試，不可只測 helper。
+
+至少驗收：
+
+1. Message list
+- 有未來 30 日資料時，產生可選第 4 則。
+- 第 4 則 header 含實際版本與 【未來30日關注】。
+- 既有 message 1-3 順序與內容不被第 4 則污染。
+2. 手機閱讀
+- 第 4 則依序顯示歷史類比、法說會提醒、全球事件。
+- 每區塊短句、最多 5 筆，不出現長段資料流水。
+- 空法說會不顯示 0-count。
+3. 歷史類比
+- 無足夠歷史資料時輸出：
+歷史類比：無高相似崩盤樣本｜依據不足/相似度低
+- 相似度低於門檻時同樣不得硬套崩盤。
+- 有 fixture 高相似樣本時，顯示相似度與最多 3 個相似特徵，且含「類比不是預測」。
+4. 法說會跨月 30 日
+- 以 2026/06 中下旬日期作 fixture 時，查詢需涵蓋 115/06 與 115/07。
+- 115/06 2301 光寶科 fixture 可顯示。
+- 115/07 查無資料不占版。
+- source-error 時 fail closed，不假造資料。
+5. 全球事件
+- 官方 fixture 中事件按日期升冪排序。
+- 最多 5 筆。
+- 每筆顯示影響面與 source。
+- source-error 時 fail closed，不列未確認事件。
+6. 禁止副作用
+- 不改 DB schema。
+- 不寫 production DB。
+- 不觸發 live Telegram。
+- 不改策略 decision 結果。
+
+QA 必須反證：
+
+- 手機閱讀是否會誤讀為買賣建議。
+- source-error fail closed。
+- 無高相似樣本不硬套崩盤。
+- 法說會跨月 30 日。
+- 全球事件排序與來源標記。
+- Tech 是否真的測到 official generator/message-list，而非只測 helper。
 
 ## 範例或 Fixture
 
-手機閱讀輸出形狀示例，實際股票與數字以 replay fixture 為準：
+### 示例輸出形狀
 
-未持倉 RR 不足：
+台股策略速報 v20.4.45
+【未來30日關注】
 
-買點：不可買｜RR 未達門檻
-卡關主因：RR 不足
-量化差距：RR 0.98 -> 需 >=1.5 / 差 0.52
-解鎖：風險報酬比修復到 >=1.5
-依據：量能達標；回測僅輔助
+歷史類比
+歷史類比：無高相似崩盤樣本｜依據不足/相似度低
 
-盤後 prepare：
+法說會提醒
+06/xx 2301 光寶科｜法人說明會｜關注原因：持倉｜source=MOPS
 
-買點：明日準備｜不可下單
-卡關主因：開盤確認未完成
-量化差距：盤後待開盤確認
-解鎖：明日開盤後仍守突破區 / 不追價
-依據：RR 達標；量能達標；回測僅輔助
+全球事件
+06/10 美國 CPI（May 2026）｜影響面：通膨/利率｜source=BLS
+06/10-11 ECB 利率會議/記者會｜影響面：利率/匯率｜source=ECB
+06/15-16 BOJ MPM｜影響面：利率/匯率｜source=BOJ
+06/16-17 Fed FOMC SEP｜影響面：利率/匯率｜source=Fed
+06/18 BoE MPC｜影響面：利率/匯率｜source=BoE
 
-突破失敗：
+### Fixture 要求
 
-買點：不可買｜突破失敗
-卡關主因：未站回突破區
-量化差距：距突破區 6% -> 需 <=4% / 差 2%
-解鎖：重新站回突破區後再評估
-依據：不重複 RR / 突破主 gate
+- MOPS fixture:
+- TYPEK=sii
+- year=115
+- month=06
+- co_id=2301
+- 含一筆光寶科法說會。
+- MOPS 查無 fixture:
+- year=115
+- month=07
+- 回傳查無資料。
+- MOPS source-error fixture:
+- 模擬 blocked / timeout / parse error。
+- 全球事件 fixture:
+- 包含 Owner 提供官方事件，測最多 5 筆與日期排序。
+- 歷史類比 fixture:
+- 一組資料不足。
+- 一組相似度低。
+- 一組高相似樣本。
 
-持倉風險：
+## 失敗標本與驗收路由
 
-行動：減碼｜跌破警戒
-原因：距停損線 1.8%，結構轉弱
+失敗標本：
 
-失敗標本與驗收路由：
+- 本輪無 Owner 貼出的完整既有報文；Tech 需用 official generator replay artifact 建立等價驗收標本。
+- 驗收標本必須覆蓋正式 message list，而非只覆蓋 formatter/helper。
 
-- failure specimen: Owner v20.4.43 post-market report。
-- 若原文 artifact 不在 worktree，Tech 必須建立等價 official replay fixture，至少覆蓋光寶科 prepare、華邦電 / 群創 blocker priority、建準 holding observation、hard stop / reduce holding。
-- 驗收路由：production-like payload -> official formatTelegramMessages -> message list / mobile-readable text -> QA 反證。
+驗收路由：
+
+1. helper：future-watch payload 組裝。
+2. data adapter：MOPS / global events / historical timeline fixture。
+3. formatter：第 4 則文字。
+4. official generator：正式 Telegram 報文產出。
+5. message list：第 4 則可選追加且不污染第 1-3 則。
+6. runner artifact：若 repo 已有 dry-run/replay 入口，需產出可檢視 artifact；若無入口，CHANGELOG 寫明未覆蓋 runner artifact。
 
 ## 明確禁止事項
 
-- 禁止改策略 decision 或 hard gate 判斷。
-- 禁止改 DB schema/write/backfill/manual DML。
+- 禁止改 DB schema。
+- 禁止 production DB write。
 - 禁止 live Telegram delivery。
-- 禁止把 source availability 顯示成交易 evidence。
-- 禁止 raw internal label 外露。
-- 禁止只驗 helper 就宣稱手機報文完成。
-- 禁止為了文案簡化而移除 v20.4.42 卡關主因 / 量化差距 數字可讀性。
-- 禁止 overheat / failed breakout 卡列多個次要 blocker 造成主因失焦。
+- 禁止假造 MOPS 或全球事件。
+- 禁止使用非官方全球事件來源取代 Owner 指定官方來源，除非 PM/Architect 另開研究任務確認。
+- 禁止把歷史類比寫成預測。
+- 禁止把第 4 則內容插入既有決策簡報。
+- 禁止只測 helper 就宣稱完成。
+- 禁止超過 5 筆法說會或 5 筆全球事件。
+- 禁止查無資料顯示空 0-count 區塊。
+- 禁止回退既有 Telegram 版本/header 契約。
 
 ## 阻塞條件
 
-- 找不到 Owner v20.4.43 specimen，且無法產生等價 official replay fixture。
-- 現有 payload 沒有可信數字來源，卻需求要求顯示數字；此時只能顯示事件型 blocker，不能捏造數字。
-- 實際 VERSION/header 不是 v20.4.43 基準。
-- 需要 DB write、schema change、live delivery 或策略變更才可驗收。
-- Tech 發現 卡關主因 / 量化差距 既有契約與本任務輸出契約衝突。
+Tech 遇到以下情況需 blocked 或 partial，不得宣稱完成：
+
+- 找不到 official generator/message-list 測試入口，且無法建立等價 replay artifact。
+- 無法確認既有 Telegram header/version 常量。
+- 無法取得或 fixture 化 MOPS source contract。
+- 無法建立跨月 30 日查詢測試。
+- 歷史資料源不足且未能使用可注入 fixture 驗證 fail-closed。
+- 全球事件官方來源無法解析且無 source-error fail-closed 測試。
+- 任何實作需要 DB schema change、production DB write 或 live Telegram。
 
 ## 本輪停止條件
 
-驗到 official Telegram message-list replay 層即停止。完成定義：
+本輪完成定義：
 
-- v20.4.44 header/version 正確。
-- failure specimen 等價 replay 中的 vague/internal wording 全部消失。
-- 光寶科 prepare、華邦電 / 群創 blocker priority、建準 holding observation、hard stop / reduce holding 四條手機閱讀路徑通過。
-- 可用數字 gap 已顯示；不可用數字時有明確事件型 blocker。
-- QA 結論為 通過，或若 artifact / 權限不足則只能 conditional pass / 阻塞 並列出缺口。
+- TASK.md、CHANGELOG.md、QA_REPORT.md 均符合標題與契約。
+- Tech 已實作可選第 4 則 Telegram message，且補 official generator/message-list 測試。
+- QA 結論為 通過 或明確 conditional pass 並列出未覆蓋 runner/production 層。
+- Architect 後續依流程更新 DISPATCH.md / CURRENT_STATE.md，QA 通過後再 commit/push/gate。
 
-旁支只記待辦，不納入本輪：
+本輪不處理：
 
-- 新策略閾值。
-- 全量文案 redesign。
-- production DB source artifact。
-- live Telegram。
-- 全市場資料品質治理。
-- unrelated card ordering cleanup。
+- 擴大為完整經濟日曆平台。
+- 全市場法說會搜尋 UI。
+- 歷史崩盤模型優化或策略重設。
+- DB 持久化事件快取。
+- live Telegram 實際發送。

@@ -6,7 +6,7 @@
 
 - 專案：台股策略 Telegram 報文機器人。
 - 正式結果以 git / runner 產生報文為準。
-- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.44`。
+- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.45`。
 - 固定 8 份 Markdown 不刪：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 - Architect 是總控；產品 / 策略 / 報文 bug 或 feature 預設走 PM -> Tech -> QA。
 - 跨日狀態、已執行交易、歷史 evidence 必須來自 production DB 或 Owner 指定持久來源；local/runtime/worktree 不能當跨日記憶。
@@ -14,24 +14,23 @@
 
 ## Latest Completed Work
 
-- task_id：`telegram_card_evidence_wording_v20_4_44`
-- 狀態：code done / QA 通過；報文版本升 `v20.4.44`。
-- 問題：v20.4.43 已接上 evidence-chain，但手機卡片把內部推理直接吐出，出現 `決策證據：來源可追溯`、raw hard gate、prepare 看似買點已通過、差距說明模糊等問題。
+- task_id：`telegram_future_30d_watch_v20_4_45`
+- 狀態：code done / QA 通過；報文版本升 `v20.4.45`。
+- 問題：Owner 要 Telegram 推送新增未來 1 個月需關注的時間點，包含今日市場像哪段台股歷史時間線、哪些股票準備法說會、全球大事件；同時不能把未確認資訊寫成交易建議或崩盤預測。
 - 關鍵行為：
-  - 只改 Telegram 顯示語意；未改策略 decision、RR、heat/breakout 判定、持倉狀態機、DB/write/live。
-  - 未持倉非可買卡保留 `卡關主因` / `量化差距`，並新增清楚 `解鎖` / `依據`。
-  - 有可信數字時優先顯示數字 gap：RR、距突破、熱度等；沒有可信數字時明確寫事件型 blocker，例如盤後待開盤確認。
-  - 光寶科 prepare 改為 `買點：明日準備｜不可下單`，卡關是 `開盤確認未完成`，解鎖是 `明日開盤後仍守突破區 / 不追價`。
-  - `決策證據：來源可追溯`、`hard stop`、`持倉硬風控`、`既有買點與倉位規則通過` 不再外露到 covered official cards。
-  - 建準類持倉觀察不刷 generic evidence；停損 / 減碼持倉顯示人話風險與距警戒 / 停損距離。
+  - 新增 `core/future_watch.py`，由 `generate_report()` 預設建立第 4 則 `【未來30日關注】`，append 在持倉 / 未持倉 / 決策簡報三則之後。
+  - 第 4 則固定順序：`歷史類比` -> `法說會提醒` -> `全球事件`。
+  - 歷史類比缺可靠樣本時 fail closed：`無高相似崩盤樣本｜依據不足/相似度低`，不寫「即將崩盤 / 重演」。
+  - MOPS 法說會 adapter 預設 fail closed：`source-error（MOPS），本次不列事件`，不假造公司法說會。
+  - 全球事件預設加入 2026-06-04 起 30 日官方日程 seed/snapshot；支援日期區間 label，最多顯示 5 筆，前 5 筆為 ECB、CPI、BOJ、G7、Fed；06/18 BoE / 06/25 BEA 因 max 5 不顯示。
+  - 第 4 則不使用 `可買 / 可準備 / 今日下單 / 新倉建議` 等交易語意；前三則不混入未來關注內容。
 - 驗證：
-  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/v20_4_44_main_core arch -arm64 ./.venv/bin/python -m pytest tests/test_generator_report.py -k 'v20_4_42_postmarket_unheld_gate_attribution_readability_message_list_replay or v20_4_43_evidence_chain_decision_judgments_cover_eligibility_layers or v20_4_43_evidence_chain_missing_error_conflict_fail_closed or v20_4_43_holding_hard_stop_judgment_is_visible_and_non_bypass' -q` -> 4 passed。
-  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/v20_4_44_main_wide arch -arm64 ./.venv/bin/python -m pytest tests/test_generator_report.py -k 'v20_4_43 or v20_4_42_postmarket_unheld_gate_attribution_readability_message_list_replay or confirmed_evidence_preserves_limit_lock_chase_hard_blocker or v20_4_39_post_market_mixed_trend_and_prepare_keeps_trend_actionable or v20_0_14_post_market_fixture_uses_next_day_plan_semantics or v20_4_18_structural_artifacts_cover_three_fail_closed_cases or v20_4_20_maturity_report or v20_4_25_strategy_sample_source_error_blocks_action_without_hiding_available_price or v20_4_16_unheld_card_fails_closed_when_ohlcv_missing or trend_continuation_official_report_has_separate_small_buy_bucket' -q` -> 14 passed。
-  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/v20_4_44_main_pycompile arch -arm64 ./.venv/bin/python -m py_compile core/generator.py presentation/report.py tests/test_generator_report.py` -> passed。
-  - `git diff --check` -> passed。
-  - QA 補 official mobile replay：建準持倉觀察不刷 generic evidence、硬風控減碼顯示距警戒線 / 停損線數字、光寶科 prepare 不可下單 -> passed；QA 結論 `通過`。
-- 殘留風險：未跑 full pytest、production runner artifact、production DB source artifact、DB read/write、live Telegram；全市場所有 wording 矩陣未驗。
-- 邊界：未改策略 decision、RR 公式、heat / breakout 判定、DB schema/write、live Telegram。
+  - Main focused：`PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/main_v20_4_45_future_watch_seed arch -arm64 ./.venv/bin/python -m pytest tests/test_generator_report.py -k 'v20_4_45' -q` -> 4 passed。
+  - Main py_compile：`core/future_watch.py core/generator.py presentation/report.py tests/test_generator_report.py` -> passed。
+  - `git diff --check` / `git diff --check --cached` -> passed。
+  - QA focused future slice 3 passed、wider v20.4.45 4 passed、QA official `generate_report(dry_run=True)` probe -> `message_count 4`、global lines 5、前三則無污染；QA 結論 `通過`。
+- 殘留風險：global default 是固定 official seed/snapshot；若日程改期需更新 seed 或另接 live official adapters。MOPS live adapter、historical analogy official timeline source、production runner artifact、live Telegram 未做。
+- 邊界：未改交易策略、RR、持倉風控、DB schema/write、production backfill、live Telegram。
 
 ## Previous Completed Work
 

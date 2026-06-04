@@ -1617,6 +1617,7 @@ def render_telegram_messages(
     daily_write_warning=None,
     strategy_evidence_summary=None,
     report_phase=None,
+    future_watch_message=None,
 ):
     ordered_items = deps["ordered_result_items"](results_map)
     if report_phase is None:
@@ -1748,6 +1749,8 @@ def render_telegram_messages(
         unheld_message,
         f"{telegram_header}\n{evidence_message}",
     ]
+    if future_watch_message:
+        messages.append(future_watch_message)
 
     if include_detail:
         for chunk in deps["format_details_backup_messages"](full_msg):

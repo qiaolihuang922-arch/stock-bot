@@ -1,104 +1,56 @@
 # QA_REPORT:
 
-  ## 測試範圍
+## 測試範圍
 
-  本輪 QA 風險預算：normal_patch / L2，停止於 official formatTelegramMessages message-list replay，不擴成 full pytest / production DB / live Telegram。
+- 任務：telegram_future_30d_watch_v20_4_45，TASK 為 minor / L3；本輪驗證聚焦官方 `generate_report` message-list、第 4 則 future watch、手機閱讀順序與 fail-closed，不擴成 full pytest / replay / backfill。
+- 讀取：`TASK.md`、`CHANGELOG.md`、`git status --short`、`git diff`、`core/future_watch.py`、`core/generator.py`、`presentation/report.py`、`tests/test_generator_report.py`。
+- 可吸收 diff：`CHANGELOG.md`、`core/future_watch.py`、`core/generator.py`、`presentation/report.py`、`tests/test_generator_report.py`，均屬本輪 future-watch / version / test 範圍。
+- worktree 殘留：`git status --short` 只顯示上述 5 個 tracked path；未看到無關 tracked 殘留。
 
-  已讀取並比對：
+## 風險預算與停止條件
 
-  - TASK.md
-  - CHANGELOG.md
-  - git diff
-  - core/generator.py
-  - presentation/report.py
-  - tests/test_generator_report.py
+- 風險 1：第 4 則混入前三則或改變手機閱讀順序。驗證：official `generate_report(dry_run=True)` 與 focused tests 檢查 4 則順序。停止條件：前三則含 `【未來30日關注】`、全球事件、法說會提醒 即阻塞。
+- 風險 2：預設全球事件 seed 顯示超量、無官方 source、日期區間錯誤，導致 06/18 或 06/25 擠入前 5 筆。驗證：focused tests + QA probe 檢查 5 lines、source、排序與 label。停止條件：超過 5 筆、缺 source、06/18/06/25 出現即阻塞。
+- 風險 3：MOPS / 歷史類比資料不足時假造事件或把未來關注讀成今日可下單。驗證：fail-closed test + 手機閱讀 forbidden words probe。停止條件：出現假 MOPS、崩盤預測字眼、可買/可準備/可下單/今日下單 進入第 4 則即阻塞。
 
-  可吸收 diff：
+## 關聯風險掃描
 
-  - core/generator.py：VERSION v20.4.44
-  - presentation/report.py：Telegram card wording / evidence rendering
-  - tests/test_generator_report.py：focused official message-list regressions
-  - CHANGELOG.md：本輪 Tech 摘要
+- `core/generator.py` 將 `VERSION` 升為 `v20.4.45`，`generate_report()` 預設注入 `default_future_watch_sources()`；未見買賣、加減碼、停損停利或 DB write path 變更。
+- `presentation/report.py` 只在既有 3 則後 append `future_watch_message`；`include_detail` 仍於其後追加 detail，未重排前三則。
+- `core/future_watch.py` 預設 MOPS adapter 為 fail-closed，歷史類比預設 insufficient-data，全球事件為固定官方 seed snapshot。
+- 清理 / 瘦身 / refactor 證據表要求不適用，本輪不是清理任務。
 
-  worktree 殘留：
+## 跨區塊語意一致性
 
-  - git status --short 只顯示上述 4 個 modified tracked files。
-  - QA 未修改 tracked file；.qa_tmp/ 暫存未出現在 git status。
+- `TASK.md` 要求第 4 則可選追加、不污染前三則；`CHANGELOG.md` 宣告相同，diff 實作符合 append-only。
+- TASK 原尺寸 minor / L3，CHANGELOG 寫本輪 Re-Tech 為 normal_patch；QA 視為修補範圍說明，不降低 QA 驗證口徑，仍按 L3 使用者可見路徑驗證。
+- 第 4 則區塊順序已反證：歷史類比 -> 法說會提醒 -> 全球事件。
+- 版本一致：`generator.VERSION == v20.4.45`，focused tests 覆蓋 header / evidence version 更新。
 
-  執行命令：
+## 使用者誤讀風險
 
-  - Tech focused slice：4 passed
-  - v20.4.42 / v20.4.43 regression slice：14 passed
-  - QA-only inline mobile replay：passed
-  - py_compile core/generator.py presentation/report.py tests/test_generator_report.py：passed after PYTHONPYCACHEPREFIX=.qa_tmp/pycache
-  - git diff --check：passed
+- QA 額外 probe 直接跑 official `generate_report(dry_run=True)`：回傳 4 則，前三則分別為持倉、未持倉、決策簡報，第 4 則才是 `【未來30日關注】`。
+- 第 4 則未出現 可買、可準備、新倉建議、今日下單、可下單、即將崩盤、重演。
+- MOPS 顯示 `法說會提醒：source-error（MOPS），本次不列事件`；歷史類比顯示 `無高相似崩盤樣本｜依據不足/相似度低`，不會被讀成今天交易指令。
 
-  第一次 pytest / py_compile 曾因環境寫入或架構問題失敗：pytest 用預設 x86_64 撞到 arm64 pydantic_core，py_compile 嘗試寫入 ~/Library/Caches 被 sandbox 擋下；改用 arch -arm64 與 .qa_tmp 後通過，不列為產品阻塞。
+## 質疑與反證
 
-  ## 風險預算與停止條件
+- Tech 自檢不是唯一證據：QA 另補 official consumer probe，檢查 `generate_report` 預設 message-list 的手機閱讀順序、前三則污染、future watch forbidden wording、global event 前 5 筆。
+- focused tests：
+  - `arch -arm64 ./.venv/bin/python -m pytest tests/test_generator_report.py -k 'v20_4_45_future' -q` -> 3 passed。
+  - `arch -arm64 ./.venv/bin/python -m pytest tests/test_generator_report.py -k 'v20_4_45' -q` -> 4 passed。
+  - `arch -arm64 ./.venv/bin/python -m py_compile core/future_watch.py core/generator.py presentation/report.py tests/test_generator_report.py` -> passed。
+  - `git diff --check` -> passed。
+- QA probe 結果：`QA_PROBE_OK`；`message_count 4`；`future_watch_global_lines 5`；第 4 則首行 `【06/04 未來30日關注｜v20.4.45】`。
+- 預設全球事件前 5 筆為 06/10-11 ECB、06/10 CPI、06/15-16 BOJ、06/15-17 G7、06/16-17 Fed；06/18 BoE 與 06/25 BEA 未因 seed 超量顯示。
 
-  最值得抓的風險：
+## 未測項目
 
-  1. 手機卡片仍外露 generic/internal wording：決策證據：來源可追溯、hard stop、持倉硬風控、既有買點與倉位規則通過。
-     驗證：official message-list replay 與 QA-only mobile replay 全文反查。
-     停止條件：任一 raw/internal 詞出現在 Owner 可讀卡片即阻塞。
-  2. 光寶科 prepare 被誤讀成可下單或買點已通過。
-     驗證：盤後 official unheld card 必須顯示 明日準備｜不可下單、開盤確認未完成、盤後待開盤確認、明日開盤後仍守突破區 / 不追價。
-     停止條件：出現可下單語意或 既有買點與倉位規則通過 即阻塞。
-  3. 持倉 hard stop / reduce 只剩 raw gate 或無數字距離。
-     驗證：QA-only replay 補測硬風控減碼卡，確認顯示 距警戒線 2.04%，距停損線 1.05%，結構轉弱，且不顯示 raw hard-stop wording。
-     停止條件：減碼 / 停損卡缺人話原因或可用距離即阻塞。
+- 未跑 full pytest，避免把本輪驗證擴成全專案。
+- 未跑 live Telegram delivery、production DB read/write、正式 runner artifact。
+- 未驗 live official global adapters、live MOPS adapter、historical analogy official timeline source；本輪 diff 也明確維持 MOPS / history fail-closed。
+- 未驗官方來源是否在未來改期；目前只驗 2026-06-04 起 30 日固定 seed snapshot 的輸出契約。
 
-  ## 關聯風險掃描
+## QA 結論
 
-  TASK.md、CHANGELOG.md、diff 一致：本輪是 Telegram formatter wording / version / focused tests，未看到策略 decision、RR formula、DB schema/write、live Telegram diff。
-
-  v20.4.43 hard-gate fail-closed 未回退：missing/source-error/conflict focused cases 仍 blocked，summary 不升格新倉建議；v20.4.42 卡關主因 / 量化差距 readability regression 仍通過。
-
-  掃描到 raw 詞仍存在於內部 payload / generator decision_judgment / 舊測試 fixture，例如 core/generator.py 內部 blocking reason 與舊測試 note。這些不是本輪阻塞，因 TASK 禁的是使用者可見 Telegram card 外露；official
-  rendered output 已反證未外露於本輪覆蓋路徑。
-
-  ## 跨區塊語意一致性
-
-  按手機閱讀順序檢查 position -> unheld -> summary：
-
-  - Summary header/version 為 v20.4.44。
-  - 光寶科 unheld prepare card：標題仍是 明日準備｜不可買｜開盤後確認，買點行是 明日準備｜不可下單，未與 summary 的不可下單語意衝突。
-  - 華邦電 / 技嘉 overheat、旺宏 failed breakout：卡關主因與量化差距一致，且 primary blocker 沒被 RR / entry quality 搶焦點。
-  - 建準 holding observation：沒有 generic 決策證據：來源可追溯 或硬風險 evidence 行。
-  - 硬風控減碼：position card 的主行動、原因、距警戒/停損數字一致，沒有 raw hard stop 外露。
-
-  ## 使用者誤讀風險
-
-  已反證主要手機誤讀路徑：
-
-  - Prepare 不會被讀成可下單：明日準備｜不可下單 + 開盤確認未完成 + 盤後待開盤確認。
-  - Generic evidence 不再像交易依據：rendered output 未出現 決策證據：來源可追溯。
-  - Holding observation 不會被刷成新倉 evidence：建準續抱觀察卡只保留持倉決策與風控條件。
-  - Reduce/stop 不再用 raw gate 命名：QA-only 減碼卡顯示人話與數字距離。
-
-  殘留可讀性風險：部分既有持倉 note 仍可能在舊 fixture 中含 raw 字樣，若未來那些舊路徑被納入 v20.4.44 使用者可見 specimen，需另開 focused wording 任務。本輪 official covered path 未外露。
-
-  ## 質疑與反證
-
-  主動質疑 1：Tech 測了停損，但 Owner 也要求 hard stop / reduce holding card。
-  反證：QA-only replay 建立 華邦電 硬風控減碼卡，確認 風險依據：距警戒線 2.04%，距停損線 1.05%，結構轉弱，且無 hard stop / 持倉硬風控。
-
-  主動質疑 2：建準 holding observation 是否仍會顯示 generic evidence。
-  反證：QA-only replay 建立 建準 續抱觀察卡，確認無 決策證據：來源可追溯、無 風險依據：卡關。
-
-  主動質疑 3：prepare basis 會不會蓋過不可下單語意。
-  反證：光寶科卡片先顯示 買點：明日準備｜不可下單、卡關主因：開盤確認未完成、量化差距：盤後待開盤確認、解鎖：明日開盤後仍守突破區 / 不追價，RR / 量能 / 回測只在 依據，未搶主 gate。
-
-  ## 未測項目
-
-  - 未跑 full pytest，符合 normal_patch / L2 風險預算。
-  - 未跑 production runner artifact。
-  - 未讀 production DB source artifact。
-  - 未做 DB write/backfill/manual DML。
-  - 未做 live Telegram delivery。
-  - 未驗全市場所有卡片 wording 矩陣。
-
-  ## QA 結論
-
-  通過
+通過
