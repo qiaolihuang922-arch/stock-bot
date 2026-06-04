@@ -44,7 +44,7 @@
 
 ## Next Action
 
-- 本輪 v20.4.37 generate 報文手機閱讀一致性修復已 QA 通過；下一步收口 commit / push / git completion gate。
+- 本輪 v20.4.37 generate 報文手機閱讀一致性修復已 QA 通過並完成 git 收口；下一步只剩 Render freshness production log follow-up。
 - 前一輪 Render freshness 仍需部署後看 Render 5 分鐘觸發 log，確認 freshness preflight 真實 runtime output。
 - 開新任務前先看 `task_md_holds`，不要用 `TASK.md` 內部舊狀態反推當前看板。
 - 報文 / 策略 / 產品修復仍走 PM -> Tech -> QA；流程治理文件可由 Architect 直接改。

@@ -15,7 +15,7 @@
 ## Latest Completed Work
 
 - task_id：`2026-06-04-v20.4.37-generate-mobile-consistency`
-- 狀態：code done / QA 通過 / pending commit-push gate。
+- 狀態：code done / QA 通過 / committed; git completion gate passed。
 - 結論：06/04 真實 `generate()` 報文首屏、漏斗、詳情索引與卡片分類已收斂到同源一致；版本升 `v20.4.37`。
 - 關鍵行為：
   - 首屏未持倉括號納入 prepare bucket count，`不可追高觀察 1` 不再只出現在漏斗 / 索引。
