@@ -6,7 +6,7 @@
 
 - 專案：台股策略 Telegram 報文機器人。
 - 正式結果以 git / runner 產生報文為準。
-- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.45`。
+- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.46`。
 - 固定 8 份 Markdown 不刪：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 - Architect 是總控；產品 / 策略 / 報文 bug 或 feature 預設走 PM -> Tech -> QA。
 - 跨日狀態、已執行交易、歷史 evidence 必須來自 production DB 或 Owner 指定持久來源；local/runtime/worktree 不能當跨日記憶。
@@ -14,23 +14,22 @@
 
 ## Latest Completed Work
 
-- task_id：`telegram_future_30d_watch_v20_4_45`
-- 狀態：code done / QA 通過；報文版本升 `v20.4.45`。
-- 問題：Owner 要 Telegram 推送新增未來 1 個月需關注的時間點，包含今日市場像哪段台股歷史時間線、哪些股票準備法說會、全球大事件；同時不能把未確認資訊寫成交易建議或崩盤預測。
+- task_id：`future_30d_watch_live_readonly_sources_v20_4_46`
+- 狀態：code done / QA conditional pass with closeout fixed；報文版本升 `v20.4.46`。
+- 問題：Owner 要未來 30 日關注功能先走即時資料試行，不做資料庫方向；需要查 TWSE / MOPS / 全球官方頁，且 source 不可靠時必須 fail closed，不能假造法說會、崩盤類比或交易建議。
 - 關鍵行為：
-  - 新增 `core/future_watch.py`，由 `generate_report()` 預設建立第 4 則 `【未來30日關注】`，append 在持倉 / 未持倉 / 決策簡報三則之後。
-  - 第 4 則固定順序：`歷史類比` -> `法說會提醒` -> `全球事件`。
-  - 歷史類比缺可靠樣本時 fail closed：`無高相似崩盤樣本｜依據不足/相似度低`，不寫「即將崩盤 / 重演」。
-  - MOPS 法說會 adapter 預設 fail closed：`source-error（MOPS），本次不列事件`，不假造公司法說會。
-  - 全球事件預設加入 2026-06-04 起 30 日官方日程 seed/snapshot；支援日期區間 label，最多顯示 5 筆，前 5 筆為 ECB、CPI、BOJ、G7、Fed；06/18 BoE / 06/25 BEA 因 max 5 不顯示。
-  - 第 4 則不使用 `可買 / 可準備 / 今日下單 / 新倉建議` 等交易語意；前三則不混入未來關注內容。
+  - `default_future_watch_sources(now)` 每次 `generate_report()` 建立 live readonly sources，不讀寫 DB。
+  - TWSE OpenAPI 今日 / 近月 TAIEX source 可讀時仍保守顯示 `歷史類比：無高相似崩盤樣本｜依據不足/相似度低｜source=TWSE`，不硬套崩盤時間線。
+  - MOPS official POST adapter 只有解析出日期 / 公司 / 法說會欄位才列事件；SPA shell、無 table、欄位不可辨識或空 rows 都回 `source-error`，第 4 則顯示 `法說會提醒：source-error（MOPS），本次不列事件`。
+  - 全球事件嘗試讀 Fed / BLS / BOJ / BEA / ECB 官方頁；全部解析失敗時保留 seed fallback，仍只在第 4 則顯示。
+  - 第 4 則仍 append 在持倉 / 未持倉 / 決策簡報三則之後，前三則不混入未來關注內容。
 - 驗證：
-  - Main focused：`PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/main_v20_4_45_future_watch_seed arch -arm64 ./.venv/bin/python -m pytest tests/test_generator_report.py -k 'v20_4_45' -q` -> 4 passed。
-  - Main py_compile：`core/future_watch.py core/generator.py presentation/report.py tests/test_generator_report.py` -> passed。
-  - `git diff --check` / `git diff --check --cached` -> passed。
-  - QA focused future slice 3 passed、wider v20.4.45 4 passed、QA official `generate_report(dry_run=True)` probe -> `message_count 4`、global lines 5、前三則無污染；QA 結論 `通過`。
-- 殘留風險：global default 是固定 official seed/snapshot；若日程改期需更新 seed 或另接 live official adapters。MOPS live adapter、historical analogy official timeline source、production runner artifact、live Telegram 未做。
-- 邊界：未改交易策略、RR、持倉風控、DB schema/write、production backfill、live Telegram。
+  - Focused tests：`PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/v20_4_46_live_future_watch arch -arm64 ./.venv/bin/python -m pytest tests/test_generator_report.py -k 'v20_4_46_future or v20_4_46_live or v20_4_46_generate_report_appends_live' -q` -> 9 passed, 173 deselected。
+  - `py_compile core/future_watch.py core/generator.py presentation/report.py tests/test_generator_report.py` -> passed。
+  - `git diff --check` -> passed。
+  - QA 補 official message-list probe：`qa_probe_pass message_count=4 malformed_mops=source-error first_three_clean=true no_db_client_requested=true`；QA 結論 `conditional pass`，條件為收口文件仍停 v20.4.45，本文件與 `DISPATCH.md` 已更新。
+- 殘留風險：未跑 full pytest / production runner artifact / live Telegram；未驗真實 MOPS live 長期可解析；全球 official HTML 改版仍可能 fallback seed；TWSE 歷史類比尚未做多年 deterministic similarity。
+- 邊界：未改交易策略、RR、持倉風控、DB schema/write/backfill、production source-of-truth、live Telegram。
 
 ## Previous Completed Work
 

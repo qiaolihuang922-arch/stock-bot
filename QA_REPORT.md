@@ -2,55 +2,62 @@
 
 ## 測試範圍
 
-- 任務：telegram_future_30d_watch_v20_4_45，TASK 為 minor / L3；本輪驗證聚焦官方 `generate_report` message-list、第 4 則 future watch、手機閱讀順序與 fail-closed，不擴成 full pytest / replay / backfill。
-- 讀取：`TASK.md`、`CHANGELOG.md`、`git status --short`、`git diff`、`core/future_watch.py`、`core/generator.py`、`presentation/report.py`、`tests/test_generator_report.py`。
-- 可吸收 diff：`CHANGELOG.md`、`core/future_watch.py`、`core/generator.py`、`presentation/report.py`、`tests/test_generator_report.py`，均屬本輪 future-watch / version / test 範圍。
-- worktree 殘留：`git status --short` 只顯示上述 5 個 tracked path；未看到無關 tracked 殘留。
+- 任務：`future_30d_watch_live_readonly_sources_v20_4_46`，normal_patch / L2。
+- 範圍：第 4 則 `【未來30日關注】` live readonly source 試行；不擴成 full pytest、production replay、backfill 或 live delivery。
+- 可吸收 diff：`core/future_watch.py`、`core/generator.py`、`tests/test_generator_report.py`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`、收口文件。
+- 邊界：未做 DB read/write/backfill，未做 live Telegram。
 
 ## 風險預算與停止條件
 
-- 風險 1：第 4 則混入前三則或改變手機閱讀順序。驗證：official `generate_report(dry_run=True)` 與 focused tests 檢查 4 則順序。停止條件：前三則含 `【未來30日關注】`、全球事件、法說會提醒 即阻塞。
-- 風險 2：預設全球事件 seed 顯示超量、無官方 source、日期區間錯誤，導致 06/18 或 06/25 擠入前 5 筆。驗證：focused tests + QA probe 檢查 5 lines、source、排序與 label。停止條件：超過 5 筆、缺 source、06/18/06/25 出現即阻塞。
-- 風險 3：MOPS / 歷史類比資料不足時假造事件或把未來關注讀成今日可下單。驗證：fail-closed test + 手機閱讀 forbidden words probe。停止條件：出現假 MOPS、崩盤預測字眼、可買/可準備/可下單/今日下單 進入第 4 則即阻塞。
+- 風險 1：MOPS malformed / SPA / 安全頁被誤判成「無事件」或假法說會。停止條件：malformed MOPS 列出公司事件，或法說會段消失。
+- 風險 2：第 4 則污染前三則或手機閱讀像交易建議。停止條件：前三則出現未來關注內容，或第 4 則出現可買、可準備、今日下單、新倉建議、停損、停利、即將崩盤、重演。
+- 風險 3：新增 DB read/write 或 live Telegram path。停止條件：future-watch adapter 需要 DB client、write path、credential 或 live Telegram。
 
 ## 關聯風險掃描
 
-- `core/generator.py` 將 `VERSION` 升為 `v20.4.45`，`generate_report()` 預設注入 `default_future_watch_sources()`；未見買賣、加減碼、停損停利或 DB write path 變更。
-- `presentation/report.py` 只在既有 3 則後 append `future_watch_message`；`include_detail` 仍於其後追加 detail，未重排前三則。
-- `core/future_watch.py` 預設 MOPS adapter 為 fail-closed，歷史類比預設 insufficient-data，全球事件為固定官方 seed snapshot。
-- 清理 / 瘦身 / refactor 證據表要求不適用，本輪不是清理任務。
+- `live_mops_adapter()` 在無 rows / 欄位不可辨識時回 `source-error`，不是 available empty。
+- `collect_mops_events()` 遇 adapter `source-error` 立即 fail closed。
+- `format_future_watch_message()` 在 MOPS `source-error` 時輸出 `法說會提醒：source-error（MOPS），本次不列事件`。
+- `generate_report()` 只把 `default_future_watch_sources(now)` 接進第 4 則 source 建立；未新增交易 decision、DB write 或 Telegram send。
 
 ## 跨區塊語意一致性
 
-- `TASK.md` 要求第 4 則可選追加、不污染前三則；`CHANGELOG.md` 宣告相同，diff 實作符合 append-only。
-- TASK 原尺寸 minor / L3，CHANGELOG 寫本輪 Re-Tech 為 normal_patch；QA 視為修補範圍說明，不降低 QA 驗證口徑，仍按 L3 使用者可見路徑驗證。
-- 第 4 則區塊順序已反證：歷史類比 -> 法說會提醒 -> 全球事件。
-- 版本一致：`generator.VERSION == v20.4.45`，focused tests 覆蓋 header / evidence version 更新。
+- QA probe 結果：`message_count=4`，前三則依序為持倉、未持倉、決策簡報，第 4 則為 `【未來30日關注】`。
+- malformed MOPS table 沒有被列成 `2301 光寶科｜法人說明會`，而是顯示 `source-error（MOPS）`。
+- 歷史類比保持 `無高相似崩盤樣本｜依據不足/相似度低｜source=TWSE`，未寫成崩盤預測。
+- 全球事件只在第 4 則，不污染 summary / 漏斗 / 索引。
 
 ## 使用者誤讀風險
 
-- QA 額外 probe 直接跑 official `generate_report(dry_run=True)`：回傳 4 則，前三則分別為持倉、未持倉、決策簡報，第 4 則才是 `【未來30日關注】`。
-- 第 4 則未出現 可買、可準備、新倉建議、今日下單、可下單、即將崩盤、重演。
-- MOPS 顯示 `法說會提醒：source-error（MOPS），本次不列事件`；歷史類比顯示 `無高相似崩盤樣本｜依據不足/相似度低`，不會被讀成今天交易指令。
+- 手機閱讀順序已檢查：前三則沒有未來關注段落；第 4 則只呈現關注 / 提醒 / source 狀態。
+- 第 4 則未出現可買、可準備、今日下單、新倉建議、停損、停利、即將崩盤、重演。
+- 殘留誤讀風險：global seed fallback 可見行仍顯示事件 source，不另外標 seed-fallback；本輪不阻塞，後續若要完全 live-only 可另開。
 
 ## 質疑與反證
 
-- Tech 自檢不是唯一證據：QA 另補 official consumer probe，檢查 `generate_report` 預設 message-list 的手機閱讀順序、前三則污染、future watch forbidden wording、global event 前 5 筆。
-- focused tests：
-  - `arch -arm64 ./.venv/bin/python -m pytest tests/test_generator_report.py -k 'v20_4_45_future' -q` -> 3 passed。
-  - `arch -arm64 ./.venv/bin/python -m pytest tests/test_generator_report.py -k 'v20_4_45' -q` -> 4 passed。
-  - `arch -arm64 ./.venv/bin/python -m py_compile core/future_watch.py core/generator.py presentation/report.py tests/test_generator_report.py` -> passed。
+- Focused tests：
+  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/v20_4_46_live_future_watch arch -arm64 ./.venv/bin/python -m pytest tests/test_generator_report.py -k 'v20_4_46_future or v20_4_46_live or v20_4_46_generate_report_appends_live' -q` -> 9 passed, 173 deselected。
+- QA 補充 official message-list probe：
+  - malformed MOPS HTML：`<table>...<td>-</td><td>2301 光寶科</td>...`
+  - 結果：`qa_probe_pass message_count=4 malformed_mops=source-error first_three_clean=true no_db_client_requested=true`。
+- Syntax / hygiene：
+  - `py_compile core/future_watch.py core/generator.py presentation/report.py tests/test_generator_report.py` -> passed。
   - `git diff --check` -> passed。
-- QA probe 結果：`QA_PROBE_OK`；`message_count 4`；`future_watch_global_lines 5`；第 4 則首行 `【06/04 未來30日關注｜v20.4.45】`。
-- 預設全球事件前 5 筆為 06/10-11 ECB、06/10 CPI、06/15-16 BOJ、06/15-17 G7、06/16-17 Fed；06/18 BoE 與 06/25 BEA 未因 seed 超量顯示。
+- DB / live Telegram 掃描：
+  - `core/future_watch.py` 未見 DB write / Telegram send 入口。
+  - 本輪未執行 live Telegram、未做 DB write/backfill。
 
 ## 未測項目
 
-- 未跑 full pytest，避免把本輪驗證擴成全專案。
-- 未跑 live Telegram delivery、production DB read/write、正式 runner artifact。
-- 未驗 live official global adapters、live MOPS adapter、historical analogy official timeline source；本輪 diff 也明確維持 MOPS / history fail-closed。
-- 未驗官方來源是否在未來改期；目前只驗 2026-06-04 起 30 日固定 seed snapshot 的輸出契約。
+- 未跑 full pytest。
+- 未跑 production runner artifact。
+- 未做 live Telegram delivery。
+- 未做 live production DB read/write smoke。
+- 未驗真實 MOPS live 長期可解析；目前只驗 malformed / blocked fail closed 與 mock parsed rows。
+- 未驗全球官方頁真實 HTML 改版後的全部 parser，只驗 mock live / fallback focused path。
 
 ## QA 結論
 
-通過
+conditional pass。
+
+產品行為對本輪核心風險通過：MOPS malformed table 會 source-error 並顯示法說會提醒段；第 4 則不污染前三則；QA probe 未觸發 DB client；未見新增 live Telegram / write path。conditional 原因是 QA runner 初次指出收口文件仍停在 v20.4.45；Architect 收口已更新 `DISPATCH.md` / `CURRENT_STATE.md` 後再進 completion gate。

@@ -75,7 +75,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.45"
+VERSION = "v20.4.46"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -8972,7 +8972,7 @@ def generate_report(dry_run=False, return_write_results=False):
         daily_write_warning=daily_write_warning,
         strategy_evidence_summary=strategy_evidence_summary,
         report_phase=report_phase,
-        future_watch_sources=default_future_watch_sources(),
+        future_watch_sources=default_future_watch_sources(now),
     )
 
     return _generate_report_output(

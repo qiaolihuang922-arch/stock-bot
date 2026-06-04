@@ -16,6 +16,13 @@
 
 ## Completed
 
+- `future_30d_watch_live_readonly_sources_v20_4_46`:
+  - 問題：Owner 要未來 30 日關注功能改為查即時資料試行，不走 DB；來源包含 TWSE、MOPS、全球官方事件頁。核心風險是 source 不穩時把「抓不到」誤顯成無事件，或把資訊提醒讀成交易建議 / 崩盤預測。
+  - 結果：VERSION 升 `v20.4.46`；`default_future_watch_sources(now)` 建立即時 readonly source；TWSE OpenAPI 可讀但歷史相似度不足時 fail closed 為 `source=TWSE`；MOPS 欄位不可辨識 / empty / blocked 一律 `source-error` 並在第 4 則顯示法說會提醒段；全球事件嘗試 official live parser，全部失敗時保留 seed fallback。
+  - 可重跑補強：focused v20.4.46 tests 9 passed、py_compile / diff check passed；QA 補 official message-list probe `message_count=4 malformed_mops=source-error first_three_clean=true no_db_client_requested=true`。
+  - QA 狀態：conditional pass；條件是 `DISPATCH.md` / `CURRENT_STATE.md` 收口殘留 v20.4.45，本輪已在收口修正後進 completion gate。
+  - 流程復盤：根因分類為 `feature` + `證據鏈` + `mobile_reading` + `runner_gap`。PM/Tech/QA online runners 多次卡在互動層；QA 第一次有效攔住 MOPS malformed table 被當 available empty 的真風險。後續應補 runner noninteractive timeout / stale worktree sync / final-output 卡住處理。
+  - 邊界：未改策略、RR、持倉風控、DB schema/write/backfill、live Telegram。
 - `telegram_future_30d_watch_v20_4_45`:
   - 問題：Owner 要新增未來 1 個月關注時間點推送：台股歷史崩盤類比、股票法說會、全球大事件。風險是資料源不足時假造崩盤時間線 / 法說會 / 全球事件，或第 4 則被手機讀成今日交易指令。
   - 結果：VERSION 升 `v20.4.45`；新增 `core/future_watch.py`，`generate_report()` 預設 append 第 4 則 `【未來30日關注】`；前三則報文不混入未來關注內容。歷史類比缺樣本 fail closed；MOPS 法說會 adapter fail closed；全球事件預設顯示 2026-06-04 起 30 日官方 seed/snapshot，最多 5 筆，支援多日日期 label。

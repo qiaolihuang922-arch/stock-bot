@@ -1,7 +1,13 @@
 """Future 30-day Telegram watch payload helpers."""
 
 import re
+from html import unescape
 from datetime import date, datetime, timedelta
+
+try:
+    import requests
+except ImportError:
+    requests = None
 
 
 CRASH_ANALOGY_FALLBACK = "歷史類比：無高相似崩盤樣本｜依據不足/相似度低"
@@ -11,6 +17,10 @@ MOPS_SOURCE_ERROR = "法說會提醒：source-error（MOPS），本次不列事�
 MOPS_ENDPOINT = "https://mopsov.twse.com.tw/mops/web/ajax_t100sb02_1"
 MOPS_METHOD = "POST"
 MOPS_TYPEKS = ("sii", "otc", "rotc", "pub")
+TWSE_MI_INDEX_ENDPOINT = "https://openapi.twse.com.tw/v1/exchangeReport/MI_INDEX"
+TWSE_TAIEX_HISTORY_ENDPOINT = "https://openapi.twse.com.tw/v1/exchangeReport/MI_5MINS_HIST"
+TWSE_TAIEX_HISTORY_RWD_ENDPOINT = "https://www.twse.com.tw/rwd/zh/TAIEX/MI_5MINS_HIST"
+HTTP_HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 _EVENT_PRIORITY = {
     "利率": 0,
@@ -66,6 +76,21 @@ _DEFAULT_GLOBAL_EVENT_SEED = (
 )
 
 _FULL_DATE_RE = re.compile(r"(?P<year>\d{4})[/-](?P<month>\d{1,2})[/-](?P<day>\d{1,2})")
+_ROC_DATE_RE = re.compile(r"(?P<year>\d{2,3})[/-](?P<month>\d{1,2})[/-](?P<day>\d{1,2})")
+_MONTHS = {
+    "january": 1,
+    "february": 2,
+    "march": 3,
+    "april": 4,
+    "may": 5,
+    "june": 6,
+    "july": 7,
+    "august": 8,
+    "september": 9,
+    "october": 10,
+    "november": 11,
+    "december": 12,
+}
 
 
 def _safe_date(year, month, day):
@@ -134,6 +159,121 @@ def _roc_year(value):
     return value.year - 1911
 
 
+def _parse_number(value):
+    try:
+        text = str(value).replace(",", "").replace("%", "").strip()
+        if text in {"", "-", "--", "N/A"}:
+            return None
+        return float(text)
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_official_date(value, default_year=None):
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    text = str(value or "").strip()
+    if not text:
+        return None
+    compact_roc = re.fullmatch(r"(?P<year>\d{3})(?P<month>\d{2})(?P<day>\d{2})", text)
+    if compact_roc:
+        return _safe_date(
+            int(compact_roc.group("year")) + 1911,
+            compact_roc.group("month"),
+            compact_roc.group("day"),
+        )
+    start = _as_date(text)
+    if start:
+        return start
+    match = _ROC_DATE_RE.search(text)
+    if match:
+        year = int(match.group("year"))
+        if year < 1911:
+            year += 1911
+        return _safe_date(year, match.group("month"), match.group("day"))
+    short = re.search(r"(?P<month>\d{1,2})[/-](?P<day>\d{1,2})", text)
+    if short and default_year:
+        return _safe_date(default_year, short.group("month"), short.group("day"))
+    month_name = re.search(
+        r"(?P<month>January|February|March|April|May|June|July|August|September|October|November|December)"
+        r"\s+(?P<day>\d{1,2})(?:\s*,\s*(?P<year>\d{4}))?",
+        text,
+        flags=re.I,
+    )
+    if month_name:
+        year = int(month_name.group("year") or default_year or datetime.now().year)
+        month = _MONTHS[month_name.group("month").lower()]
+        return _safe_date(year, month, month_name.group("day"))
+    return None
+
+
+def _normalize_official_event_date(raw_date, default_year):
+    text = str(raw_date or "").strip()
+    month_range = re.search(
+        r"(?P<month>January|February|March|April|May|June|July|August|September|October|November|December)"
+        r"\s+(?P<start>\d{1,2})\s*[-–]\s*(?P<end>\d{1,2})(?:\s*,\s*(?P<year>\d{4}))?",
+        text,
+        flags=re.I,
+    )
+    if month_range:
+        year = int(month_range.group("year") or default_year)
+        month = _MONTHS[month_range.group("month").lower()]
+        return f"{year:04d}/{month:02d}/{int(month_range.group('start')):02d}-{int(month_range.group('end')):02d}"
+    numeric_range = re.search(
+        r"(?P<month>\d{1,2})[/-](?P<start>\d{1,2})\s*[-–]\s*(?P<end>\d{1,2})(?:[/-](?P<year>\d{4}))?",
+        text,
+    )
+    if numeric_range:
+        year = int(numeric_range.group("year") or default_year)
+        return f"{year:04d}/{int(numeric_range.group('month')):02d}/{int(numeric_range.group('start')):02d}-{int(numeric_range.group('end')):02d}"
+    parsed = _parse_official_date(text, default_year=default_year)
+    return parsed.isoformat() if parsed else None
+
+
+def _request_get_json(url, requester=None, timeout=6):
+    if requester is None:
+        if requests is None:
+            raise RuntimeError("requests unavailable")
+        requester = requests.get
+    response = requester(url, headers=HTTP_HEADERS, timeout=timeout)
+    if hasattr(response, "raise_for_status"):
+        response.raise_for_status()
+    return response.json()
+
+
+def _request_get_text(url, requester=None, timeout=6):
+    if requester is None:
+        if requests is None:
+            raise RuntimeError("requests unavailable")
+        requester = requests.get
+    response = requester(url, headers=HTTP_HEADERS, timeout=timeout)
+    if hasattr(response, "raise_for_status"):
+        response.raise_for_status()
+    return response.text
+
+
+def _request_post_text(url, data, requester=None, timeout=6):
+    if requester is None:
+        if requests is None:
+            raise RuntimeError("requests unavailable")
+        requester = requests.post
+    response = requester(
+        url,
+        data=data,
+        headers={
+            **HTTP_HEADERS,
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Referer": "https://mops.twse.com.tw/mops/web/t100sb02_1",
+        },
+        timeout=timeout,
+    )
+    if hasattr(response, "raise_for_status"):
+        response.raise_for_status()
+    return response.text
+
+
 def _month_keys(start, end):
     keys = []
     current = date(start.year, start.month, 1)
@@ -173,6 +313,8 @@ def _similarity_percent(value):
 
 def build_historical_analogy(today_features=None, historical_source=None, threshold=0.78):
     source = historical_source or {}
+    if source.get("line"):
+        return {"status": source.get("status") or "available", "line": source["line"]}
     if source.get("status") in {"source-error", "missing-source", "insufficient-data"}:
         return {"status": "insufficient-data", "line": CRASH_ANALOGY_FALLBACK}
 
@@ -212,6 +354,183 @@ def build_historical_analogy(today_features=None, historical_source=None, thresh
         parts.append(f"相似：{feature_text}")
     parts.append("類比不是預測")
     return {"status": "available", "line": "｜".join(item for item in parts if item)}
+
+
+def build_live_twse_historical_source(now=None, get_json=None):
+    try:
+        today_rows = _request_get_json(TWSE_MI_INDEX_ENDPOINT, requester=get_json)
+        taiex = None
+        for row in today_rows or []:
+            if row.get("指數") == "發行量加權股價指數":
+                taiex = row
+                break
+        if not taiex:
+            return {
+                "status": "insufficient-data",
+                "line": f"{CRASH_ANALOGY_FALLBACK}｜source=TWSE",
+                "source_url": TWSE_MI_INDEX_ENDPOINT,
+            }
+
+        history_rows = _request_get_json(TWSE_TAIEX_HISTORY_ENDPOINT, requester=get_json)
+        parsed_history = []
+        for row in history_rows or []:
+            trade_date = _parse_official_date(row.get("Date"))
+            close = _parse_number(row.get("ClosingIndex"))
+            if trade_date and close is not None:
+                parsed_history.append((trade_date, close))
+        parsed_history.sort(key=lambda item: item[0])
+
+        change_pct = _parse_number(taiex.get("漲跌百分比"))
+        close = _parse_number(taiex.get("收盤指數"))
+        line = f"{CRASH_ANALOGY_FALLBACK}｜source=TWSE"
+        return {
+            "status": "insufficient-data",
+            "line": line,
+            "source_url": TWSE_MI_INDEX_ENDPOINT,
+            "today_features": {
+                "index": "發行量加權股價指數",
+                "close": close,
+                "change_pct": change_pct,
+                "history_rows": len(parsed_history),
+            },
+        }
+    except Exception as exc:
+        return {
+            "status": "source-error",
+            "line": f"{CRASH_ANALOGY_FALLBACK}｜source=TWSE source-error",
+            "error": str(exc)[:120],
+            "source_url": TWSE_MI_INDEX_ENDPOINT,
+        }
+
+
+def _extract_html_table_rows(html):
+    if not html or "location.href" in html or "<table" not in html.lower():
+        return []
+    rows = []
+    for row_html in re.findall(r"<tr[^>]*>(.*?)</tr>", html, flags=re.I | re.S):
+        cells = []
+        for cell_html in re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", row_html, flags=re.I | re.S):
+            text = re.sub(r"<[^>]+>", " ", cell_html)
+            text = re.sub(r"\s+", " ", unescape(text)).strip()
+            if text:
+                cells.append(text)
+        if cells:
+            rows.append(cells)
+    return rows
+
+
+def _parse_mops_rows(html, fallback_code=None, fallback_name=None):
+    parsed = []
+    for cells in _extract_html_table_rows(html):
+        joined = " ".join(cells)
+        event_date = None
+        for cell in cells:
+            event_date = _parse_official_date(cell)
+            if event_date:
+                break
+        if not event_date:
+            continue
+        code = str(fallback_code or "")
+        for cell in cells:
+            match = re.search(r"\b\d{4}\b", cell)
+            if match:
+                code = match.group(0)
+                break
+        if fallback_code and code != str(fallback_code):
+            continue
+        if "法" not in joined and "說明會" not in joined and "法人" not in joined:
+            continue
+        parsed.append({
+            "date": event_date,
+            "co_id": code or fallback_code,
+            "name": fallback_name or "",
+            "event": "法人說明會",
+        })
+    return parsed
+
+
+def live_mops_adapter(params, post_text=None):
+    try:
+        body = _request_post_text(MOPS_ENDPOINT, params, requester=post_text)
+        rows = _parse_mops_rows(body, fallback_code=params.get("co_id"))
+        if not rows:
+            return {"status": "source-error", "source": "MOPS", "reason": "unparseable-or-empty"}
+        return {"rows": rows}
+    except Exception as exc:
+        return {"status": "source-error", "source": "MOPS", "reason": str(exc)[:120]}
+
+
+def _event_from_pattern(html, pattern, event, impact, source, default_year):
+    match = re.search(pattern, html, flags=re.I | re.S)
+    if not match:
+        return None
+    raw_date = match.group("date") if "date" in match.groupdict() else match.group(0)
+    event_date = _normalize_official_event_date(raw_date, default_year)
+    if not event_date:
+        return None
+    return {"date": event_date, "event": event, "impact": impact, "source": source}
+
+
+def build_live_global_event_source(now=None, get_text=None):
+    base_date = _as_date(now or datetime.now()) or datetime.now().date()
+    year = base_date.year
+    events = []
+    sources = [
+        (
+            "Fed",
+            "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+            r"(?P<date>June\s+16\s*-\s*17)",
+            "Fed FOMC SEP",
+            "利率/匯率",
+        ),
+        (
+            "BLS",
+            "https://www.bls.gov/schedule/news_release/cpi.htm",
+            r"(?P<date>06/10/2026|June\s+10,\s+2026)",
+            "美國 CPI",
+            "通膨/利率",
+        ),
+        (
+            "BOJ",
+            "https://www.boj.or.jp/en/about/calendar/",
+            r"(?P<date>June\s+15\s*[-–]\s*16|06/15\s*[-–]\s*16)",
+            "BOJ MPM",
+            "利率/匯率",
+        ),
+        (
+            "BEA",
+            "https://www.bea.gov/news/schedule",
+            r"(?P<date>June\s+25,\s+2026|06/25/2026)",
+            "BEA GDP third estimate / Personal Income and Outlays",
+            "通膨/利率",
+        ),
+        (
+            "ECB",
+            "https://www.ecb.europa.eu/press/calendars/mgcgc/html/index.en.html",
+            r"(?P<date>June\s+10\s*[-–]\s*11|10\s+June\s+2026)",
+            "ECB monetary policy meeting/press conference",
+            "利率/匯率",
+        ),
+    ]
+    source_errors = []
+    for source, url, pattern, event, impact in sources:
+        try:
+            html = _request_get_text(url, requester=get_text)
+            item = _event_from_pattern(html, pattern, event, impact, source, year)
+            if item:
+                events.append(item)
+        except Exception as exc:
+            source_errors.append(f"{source}:{str(exc)[:40]}")
+            continue
+
+    if events:
+        return {"status": "available", "events": events, "source": "official-live", "errors": source_errors}
+    return {
+        "status": "available",
+        "events": list(_DEFAULT_GLOBAL_EVENT_SEED),
+        "source": "seed-fallback",
+        "errors": source_errors,
+    }
 
 
 def collect_mops_events(results_map, now, mops_adapter=None, max_items=5):
@@ -296,11 +615,12 @@ def fail_closed_mops_adapter(_params):
     return {"status": "source-error", "source": "MOPS", "reason": "official-adapter-not-configured"}
 
 
-def default_future_watch_sources():
+def default_future_watch_sources(now=None):
     return {
-        "historical_source": {"status": "insufficient-data", "source": "official-history-not-configured"},
-        "mops_adapter": fail_closed_mops_adapter,
-        "global_event_source": {"status": "available", "events": list(_DEFAULT_GLOBAL_EVENT_SEED)},
+        "today_features": None,
+        "historical_source": build_live_twse_historical_source(now),
+        "mops_adapter": live_mops_adapter,
+        "global_event_source": build_live_global_event_source(now),
     }
 
 
