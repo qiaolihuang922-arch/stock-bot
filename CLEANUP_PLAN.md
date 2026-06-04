@@ -16,6 +16,14 @@
 
 ## Completed
 
+- `fix-v20-4-37-rr-insufficient-message-readability`:
+  - 問題：Owner v20.4.37 報文中，光寶科卡片是 `等RR修復｜RR不足`，但數據行寫 `證據：資料不足`，手機會誤讀成資料源缺失；summary 同時顯示 `回測（光寶科）...偏弱`，讓僅追蹤 / RR未達標的標的看起來像候選。
+  - 結果：VERSION 升 `v20.4.38`；RR不足卡片改顯示 `原因：RR不足，等待RR修復`；summary 回測摘要排除僅追蹤 / 等RR修復標的，但保留建準類候選回測；新增 official message-list replay。
+  - 可重跑補強：focused pytest 4 passed；py_compile / diff check passed；actual `generate()` passed；QA 額外 official formatter probe 通過，反證光寶科卡片不含 `證據：資料不足`、summary 不含 `回測（光寶科）`、非 RR 低量卡仍保留量能 evidence 文案，避免全域替換。
+  - QA 狀態：`通過`。
+  - 流程復盤：auto runner 第一次被 stale Tech worktree 擋住；重跑後 Tech agent 再次卡在互動提示，Architect 吸收候選並補齊 CHANGELOG / QA；第一次 QA conditional 抓到 CHANGELOG 修改檔案 metadata 不一致，修正後重跑通過。
+  - 規則治理：`mobile_reading` + `QA反證` + `runner_gap`。後續需改善 reusable tech worktree stale diff 與 agent interactive prompt 的處理；報文原因分流任務要補負面案例，避免把所有 evidence 文案全域替換。
+  - 邊界：未改 RR、strategy decision、DB schema/write、production backfill、live Telegram；交易執行排序另開。
 - `2026-06-04-v20.4.37-generate-mobile-consistency`:
   - 問題：Owner 重跑真實 `generate()` 後，上一輪 v20.4.36 降噪仍留下跨區塊一致性錯誤：首屏 `未持倉 8` 只列 `僅追蹤5/淘汰2` 漏 `不可追高觀察1`；`今日已買 3｜風控中 2` 無法追溯；普通 observe 歷史仍可能刷屏；回測摘要把建準、緯創聚合成同一行，破壞單檔可追溯。
   - 結果：VERSION 升 `v20.4.37`；首屏未持倉括號改吃同源 prepare bucket；今日已買改為 `今日已買 N（已風控 M/觀察 K）`；回測摘要取消跨股票聚合，改單檔 `回測（name）：...`；新增 v20.4.37 official message-list replay。

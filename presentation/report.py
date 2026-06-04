@@ -366,8 +366,11 @@ def _hidden_score_reason(rr_text, funnel_state, state):
 def _unheld_score_text_for_state(score_text, rr_text, valid_entry, funnel_state, state, stock_result=None, data=None):
     if valid_entry or funnel_state in {"趨勢延續", "隔日確認"} or state == "隔日確認":
         return score_text
+    reason = _hidden_score_reason(rr_text, funnel_state, state)
+    if reason == "RR不足":
+        return "不適用（RR不足）｜原因：RR不足，等待RR修復"
     evidence_text = _evidence_unavailable_text(stock_result or {}, data or {})
-    return f"不適用（{_hidden_score_reason(rr_text, funnel_state, state)}）｜證據：{evidence_text}"
+    return f"不適用（{reason}）｜證據：{evidence_text}"
 
 
 def _weak_buy_backtest_line(name, data, deps):

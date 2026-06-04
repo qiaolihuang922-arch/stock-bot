@@ -70,7 +70,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.37"
+VERSION = "v20.4.38"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -7050,6 +7050,9 @@ def format_backtest_groups(watch_items, report_context=None):
         return []
     lines = []
     for name, data in (watch_items or []):
+        state = unheld_funnel_state(name, data, report_context=report_context)
+        if state not in {"可買", "趨勢延續", "可準備"}:
+            continue
         line = compact_backtest_line((data or {}).get("backtest_context"))
         if not line or line == "回測：-" or "不可用" in line or "樣本不足" in line:
             continue

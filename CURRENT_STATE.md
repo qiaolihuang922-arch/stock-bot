@@ -6,13 +6,31 @@
 
 - 專案：台股策略 Telegram 報文機器人。
 - 正式結果以 git / runner 產生報文為準。
-- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.37`。
+- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.38`。
 - 固定 8 份 Markdown 不刪：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 - Architect 是總控；產品 / 策略 / 報文 bug 或 feature 預設走 PM -> Tech -> QA。
 - 跨日狀態、已執行交易、歷史 evidence 必須來自 production DB 或 Owner 指定持久來源；local/runtime/worktree 不能當跨日記憶。
 - 缺資料、source-error、欄位不足或可信度不足時 fail closed。
 
 ## Latest Completed Work
+
+- task_id：`fix-v20-4-37-rr-insufficient-message-readability`
+- 狀態：code done / QA 通過 / pending commit-push gate。
+- 結論：v20.4.37 報文中 `等RR修復｜RR不足` 被寫成 `證據：資料不足`、以及僅追蹤標的進 summary 回測的手機誤讀已修復；版本升 `v20.4.38`。
+- 關鍵行為：
+  - 光寶科類 `等RR修復｜RR不足` 卡片數據行改為 `不適用（RR不足）｜原因：RR不足，等待RR修復`，不再像資料源缺失。
+  - summary 回測摘要只列入可買 / 趨勢延續 / 可準備候選語境；僅追蹤 / 等RR修復標的不再顯示 `回測（光寶科）`。
+  - 建準類候選回測仍保留，避免修光寶科時誤刪候選回測。
+- 驗證：
+  - `arch -arm64 ./.venv/bin/python -m pytest tests/test_generator_report.py -k 'v20_4_38_rr_wait_card_reason_and_backtest_summary_readability or 0604_v20_4_37_generate_mobile_consistency_message_list_replay or v20_4_37_single_backtest_lines_are_not_aggregated or v20_4_36_non_actionable_unheld_hides_score_numbers' -q` -> 4 passed。
+  - `PYTHONPYCACHEPREFIX=/private/tmp/v20_4_38_pycache arch -arm64 ./.venv/bin/python -m py_compile core/generator.py presentation/report.py tests/test_generator_report.py` -> passed。
+  - `git diff --check` -> passed。
+  - actual `generate()` -> `v20.4.38`，summary 不含 `回測（光寶科）`，光寶科卡片顯示 RR不足原因。
+  - QA 補 official formatter probe -> `通過`。
+- 殘留風險：未跑 full pytest、production runner artifact、live Telegram、DB read/write；交易執行排序仍屬旁支未處理。
+- 邊界：未改 RR 公式、strategy decision、DB schema/write、live Telegram。
+
+## Previous Completed Work
 
 - task_id：`2026-06-04-v20.4.37-generate-mobile-consistency`
 - 狀態：code done / QA 通過 / committed; git completion gate passed。

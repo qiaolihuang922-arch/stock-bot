@@ -1,10 +1,10 @@
-# QA_REPORT: v20.4.37 generate() 報文手機閱讀一致性修復
+# QA_REPORT:
 
   ## 測試範圍
 
-  本輪任務尺寸為 normal_patch、QA level L2。驗收聚焦使用者可見 Telegram final message-list / summary formatter，不擴成 full pytest、DB、write path、backfill 或 live Telegram。
+  本輪任務尺寸：normal_patch，QA level：L2。驗收範圍限定在 v20.4.38 使用者可見 Telegram final message-list / official formatTelegramMessages，未擴成 full pytest、production replay、DB/write/live Telegram。
 
-  讀取與比對：
+  讀取並比對：
 
   - TASK.md
   - CHANGELOG.md
@@ -22,95 +22,83 @@
 
   worktree 殘留：
 
-  - 仍有上述 4 個 tracked modified file。
-  - TASK.md、QA_REPORT.md 無 diff；上一輪 conditional 指出的 CHANGELOG 列 TASK.md 但 QA worktree 無 TASK diff 問題已移除。
-
-  執行驗證：
-
-  - pytest tests/test_generator_report.py -k 'v20_4_37 or 0604_v20_4_36_mobile_readability or single_backtest or unheld_funnel_hides_zero_count_buckets or evidence_sample_count' -q：4 passed。
-  - py_compile core/generator.py presentation/report.py tests/test_generator_report.py：passed。第一次未設 PYTHONPYCACHEPREFIX 時被 sandbox 擋寫 macOS cache，改用 .qa_tmp/pycache 後通過。
-  - QA 補充 final message-list 手機讀序 parser：passed，打到 official formatTelegramMessages replay 產物。
+  - git status --short 僅顯示上述 4 個 modified tracked files。
+  - 未發現額外 untracked 測試產物；QA 只使用 .qa_tmp/ 作暫存。
 
   ## 風險預算與停止條件
 
   本輪最值得抓的風險：
 
-  1. 首屏未持倉總數與子分類、漏斗、詳情索引不同源，手機第一屏仍誤讀。
-     驗證：解析 final message-list 的市場行、未持倉漏斗行、詳情索引、未持倉卡片標題。
-     停止條件：未持倉 8 != 不可追高觀察 1 + 僅追蹤 5 + 淘汰 2 或任一區塊分類缺漏。
-  2. 今日已買文案仍出現舊 風控中，造成今日買入與持倉風控口徑混淆。
-     驗證：首屏 market line 必須為 今日已買 3（已風控 2/觀察 1），且不含 風控中。
-  3. 回測摘要仍把建準、緯創聚合成同一行，或普通 observe 歷史噪音仍刷屏。
-     驗證：final rendered text 不含 回測（建準、緯創）；含單檔 回測（建準）：、回測（緯創）：；修復股卡片不含 修復中｜連續觀察 1 天｜權重 +1。
-
-  停止條件未觸發。
+  1. final header 未實際升到 v20.4.38。
+      - 驗證：official formatter replay 與 focused tests 檢查 header。
+      - 停止條件：header 仍是 v20.4.37 或版本來源不可確認。
+  2. 等RR修復｜RR不足 卡片仍顯示 證據：資料不足，造成資料源缺失誤讀。
+      - 驗證：光寶科卡片連讀，檢查狀態與數據行。
+      - 停止條件：同一卡片仍含 證據：資料不足 或狀態被改成可買/不可追高來掩蓋。
+  3. summary 仍把光寶科列為 回測（光寶科），讓手機閱讀誤以為接近可買。
+      - 驗證：按手機閱讀順序檢查 summary 再讀未持倉卡片。
+      - 停止條件：summary 出現 回測（光寶科） 且未明確標成僅追蹤/等RR修復。
 
   ## 關聯風險掃描
 
-  TASK.md、CHANGELOG.md、git diff 一致：本輪是 v20.4.37 報文 formatter/message-list 修復，不是清理、瘦身或 refactor 任務，因此不適用 path / claim / evidence / risk / action 清理證據表。
+  TASK / CHANGELOG / git diff 一致：任務為 v20.4.38 RR不足 / 等RR修復可讀性修復，修改檔案清單與實際 diff 一致；上一輪 conditional 提到的 TASK.md 修改檔案不一致已不存在。
 
-  版本檢查：
+  程式 diff 符合邊界：
 
-  - core/generator.py 的 VERSION = "v20.4.37"。
-  - official replay summary 含 【06/04 盤中｜v20.4.37】。
-  - core/generator.py、presentation/report.py 未殘留 v20.4.36、風控中、回測（建準、緯創）。
+  - core/generator.py：VERSION 升為 v20.4.38；format_backtest_groups() 依未持倉狀態過濾 summary 回測。
+  - presentation/report.py：只針對 hidden score reason 為 RR不足 時改顯示 原因：RR不足，等待RR修復。
+  - 未見 DB schema/write、RR 公式、strategy decision、live Telegram、交易排序改動。
 
-  未見 DB schema/write、RR 公式、strategy decision 相關 diff。
+  注意：format_backtest_groups() 白名單為 可買 / 趨勢延續 / 可準備。TASK 文字提到可買 / 不可追高等實際候選語境；本輪指定硬驗收要求「建準候選回測保留」，已由測試證明建準保留。若 Owner 後續要求所有不可追高觀察都保留回測，
+  需要另開契約澄清，不阻塞本輪光寶科修復。
 
   ## 跨區塊語意一致性
 
-  QA 補充 parser 從 official formatTelegramMessages final message-list 讀到：
+  驗證命令：
 
-  - 首屏 market line：
-    市場：進攻偏熱 R3｜執行動作 2（停損/減碼）｜今日已買 3（已風控 2/觀察 1）｜持倉風控 3｜未持倉 8（不可追高觀察1/僅追蹤5/淘汰2）
-  - 漏斗：
-    未持倉 8｜不可追高觀察 1（不可買）｜僅追蹤 5（等冷卻3/等RR修復1/等量能1）｜淘汰 2
-  - 詳情索引：
-    📎 詳情索引：持倉 聯電、華邦電、仁寶｜交易執行 2｜不可追高觀察 1｜僅追蹤 5｜淘汰 2
-  - 未持倉卡片中 不可追高觀察 卡片數為 1，且為 【建準 2421】👀 不可追高觀察。
-
-  合計一致：8 = 1 + 5 + 2。首屏、漏斗、詳情索引、卡片分類一致。
-
-  ## 使用者誤讀風險
-
-  手機第一屏不再把 不可追高觀察 1 藏到漏斗才出現；首屏括號已直接顯示。
-
-  今日買入不再裸露 風控中 舊口徑；改成 今日已買 3（已風控 2/觀察 1），能追溯今日買入中哪些已進風控、哪些仍觀察。
-
-  回測摘要改為單檔行，避免把建準與緯創讀成同一檔或同一結論。
-
-  ## 失敗標本反證
-
-  TASK 要求使用 Owner v20.4.36 generate 報文等價 replay artifact，並打到 actual generate 或 official formatTelegramMessages final message-list。Tech 新增的 official replay 覆蓋 failure shape；QA 補充 parser 直接解析該
-  final message-list 的手機閱讀順序。
+  - pytest tests/test_generator_report.py -k 'v20_4_38_rr_wait_card_reason_and_backtest_summary_readability or 0604_v20_4_37_generate_mobile_consistency_message_list_replay or
+    v20_4_37_single_backtest_lines_are_not_aggregated or v20_4_36_non_actionable_unheld_hides_score_numbers' -q：4 passed。
+  - pytest tests/test_generator_report.py -k 'v20_4_38_rr_wait_card_reason_and_backtest_summary_readability' -q：1 passed。
+  - py_compile core/generator.py presentation/report.py tests/test_generator_report.py && git diff --check：passed。
+  - QA 自補 official formatter 反證：passed。
 
   反證結果：
 
-  - header 為 v20.4.37。
-  - 首屏、漏斗、索引、卡片分類一致。
-  - 不含舊 風控中 market line。
-  - 不含普通 observe 歷史噪音 修復中｜連續觀察 1 天｜權重 +1。
-  - 不含 回測（建準、緯創） 聚合。
-  - 保留單檔 回測（建準）： 與 回測（緯創）：。
+  - summary header 含 【06/04 盤中｜v20.4.38】。
+  - summary 保留 回測（建準）。
+  - summary 不含 回測（光寶科）。
+  - 光寶科卡片仍為 【光寶科 2301】👀 等RR修復｜RR不足。
+  - 光寶科數據行為 數據：RR 0.98｜不適用（RR不足）｜原因：RR不足，等待RR修復｜V 0.86x。
+  - 光寶科卡片不含 證據：資料不足。
+  - QA 自補負面案例確認非 RR 低量卡片仍保留 證據：量能不適用，修正不是全域替換 evidence 文案。
+
+  ## 使用者誤讀風險
+
+  按手機閱讀順序檢查：
+
+  1. 先讀 summary：建準可見 回測（建準），光寶科不出現在回測摘要。
+  2. 再讀未持倉卡片：光寶科狀態是 等RR修復｜RR不足。
+  3. 同一卡片數據行明確寫 原因：RR不足，等待RR修復，不再把 RR 不足表述成資料源缺失。
+
+  結論：本輪 Owner 指出的兩個誤讀路徑已被 official formatter replay 覆蓋。
 
   ## 質疑與反證
 
-  質疑：首屏用了新 _prepare_count_parts 後，是否只修首屏、不修漏斗與索引？
-  反證：QA parser 同時讀 market line、funnel line、detail index、unheld card title，數字與分類一致。
+  主動質疑：是否只是把所有不可行動 evidence 全域改成 RR不足原因？
 
-  質疑：Tech 測試是否只驗自己新增斷言？
-  反證：QA 補了獨立 parser，按手機閱讀順序解析 final message-list，而不是只重跑單一 assert。
+  反證：QA 自補 official formatter 同時放入 RR不足光寶科與非 RR 低量標的。結果光寶科顯示 RR 原因，低量標的仍顯示 evidence 類文案 證據：量能不適用，未發現全域替換。
 
-  質疑：回測不聚合是否只在 helper 層成立？
-  反證：final rendered message-list 同時出現單檔建準與緯創回測，不出現聚合行。
+  主動質疑：是否只驗 helper 而未打到 final message-list？
+
+  反證：新增與 QA 自補驗證都走 generator.formatTelegramMessages(...)，取得 summary / unheld message / card block，不是 helper-only。
 
   ## 未測項目
 
-  - 未跑 full pytest；符合 normal_patch/L2 風險預算，且 CHANGELOG 已揭露 legacy generator tests 仍有舊契約失敗。
-  - 未驗 production runner artifact。
-  - 未跑 live Telegram。
-  - 未驗 DB read/write、backfill、schema、RLS、grant、policy、role。
-  - 未驗即時 generate() production source 輸出的最新行情分類；本輪已用 official formatTelegramMessages final message-list replay 覆蓋 TASK 要求層級。
+  - 未跑 full pytest；符合 normal_patch / L2 風險預算。
+  - 未跑 production runner artifact。
+  - 未跑 actual live Telegram。
+  - 未做 DB read/write/backfill。
+  - 未驗 RR 數值隨即時價變動的完整 generate production output；本輪驗證的是 formatter 語意與 summary 納入規則。
 
   ## QA 結論
 
