@@ -142,93 +142,21 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
     def test_workflow_dispatch_supports_git_runner_may_backfill(self):
         workflow_text = WORKFLOW.read_text(encoding="utf-8")
 
-        self.assertIn("push:", workflow_text)
-        self.assertIn("branches:", workflow_text)
-        self.assertIn("- main", workflow_text)
+        self.assertNotIn("push:", workflow_text)
         self.assertIn("schedule:", workflow_text)
         self.assertIn('cron: "0 6 * * 1-5"', workflow_text)
         self.assertIn("run_mode:", workflow_text)
         self.assertIn("- daily_evidence", workflow_text)
-        self.assertIn("- backfill_may", workflow_text)
-        self.assertIn("- backfill_and_bot", workflow_text)
-        self.assertIn('default: "2026-05-01"', workflow_text)
-        self.assertIn('default: "2026-05-29"', workflow_text)
-        self.assertIn("python scripts/backfill_signals.py \\", workflow_text)
-        self.assertIn("python scripts/backfill_market_theme_sources.py \\", workflow_text)
-        self.assertIn("--historical-range", workflow_text)
-        self.assertIn('--start-date "$BACKFILL_START_DATE"', workflow_text)
-        self.assertIn('--end-date "$BACKFILL_END_DATE"', workflow_text)
-        self.assertIn('--version "$BACKFILL_VERSION"', workflow_text)
-        self.assertIn("--allow-partial", workflow_text)
-        self.assertIn("--write", workflow_text)
-        self.assertIn("--confirm-write", workflow_text)
+        self.assertNotIn("- backfill_may", workflow_text)
+        self.assertNotIn("- backfill_and_bot", workflow_text)
+        self.assertNotIn("Backfill start date", workflow_text)
+        self.assertNotIn("Backfill end date", workflow_text)
+        self.assertNotIn("Backfill May signal and strategy evidence", workflow_text)
+        self.assertNotIn("Backfill official market/theme evidence", workflow_text)
         self.assertIn('Run bot skipped for run_mode=$RUN_MODE', workflow_text)
         self.assertIn("Run Phase 3 evidence automation", workflow_text)
         self.assertIn("python scripts/run_phase3_evidence_automation.py --require-market-theme-payload $payload_arg", workflow_text)
         self.assertIn("github.event_name == 'schedule' && 'daily_evidence'", workflow_text)
-
-    def _run_market_theme_backfill_step(self, run_mode, fake_python_exit=0):
-        script = _workflow_run_script("Backfill official market/theme evidence (retry 3 times)")
-        runtime_env = os.environ.copy()
-        runtime_env["RUN_MODE"] = run_mode
-        runtime_env["BACKFILL_START_DATE"] = "2026-06-01"
-        runtime_env["BACKFILL_END_DATE"] = "2026-06-03"
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmp_path = Path(tmpdir)
-            bin_path = tmp_path / "bin"
-            bin_path.mkdir()
-            calls_path = tmp_path / "python_calls.txt"
-            fake_python = bin_path / "python"
-            fake_python.write_text(
-                textwrap.dedent(
-                    f"""\
-                    #!/usr/bin/env bash
-                    echo "$@" >> "{calls_path}"
-                    echo "ValueError: market_theme_confirmed_evidence blocked: source date outside requested range" >&2
-                    exit {fake_python_exit}
-                    """
-                ),
-                encoding="utf-8",
-            )
-            fake_python.chmod(0o755)
-            fake_sleep = bin_path / "sleep"
-            fake_sleep.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
-            fake_sleep.chmod(0o755)
-            runtime_env["PATH"] = f"{bin_path}{os.pathsep}{runtime_env.get('PATH', '')}"
-            completed = subprocess.run(
-                ["bash", "-e", "-c", script],
-                cwd=tmpdir,
-                text=True,
-                capture_output=True,
-                check=False,
-                env=runtime_env,
-            )
-            calls = calls_path.read_text(encoding="utf-8") if calls_path.exists() else ""
-        return completed, calls
-
-    def test_bot_mode_skips_may_market_theme_backfill_write_step(self):
-        completed, calls = self._run_market_theme_backfill_step("bot", fake_python_exit=1)
-
-        self.assertEqual(completed.returncode, 0, completed.stderr)
-        self.assertIn("May market/theme evidence backfill skipped for run_mode=bot", completed.stdout)
-        self.assertEqual(calls, "")
-        self.assertNotIn("--write --confirm-write", calls)
-
-    def test_backfill_modes_execute_may_market_theme_backfill_and_preserve_guard_failure(self):
-        for run_mode in ("backfill_may", "backfill_and_bot"):
-            with self.subTest(run_mode=run_mode):
-                completed, calls = self._run_market_theme_backfill_step(run_mode, fake_python_exit=1)
-
-                self.assertNotEqual(completed.returncode, 0)
-                self.assertIn(
-                    f"May market/theme evidence backfill enabled for run_mode={run_mode}",
-                    completed.stdout,
-                )
-                self.assertEqual(calls.count("scripts/backfill_market_theme_sources.py"), 3)
-                self.assertIn("--write --confirm-write", calls)
-                self.assertIn("--start-date 2026-06-01", calls)
-                self.assertIn("--end-date 2026-06-03", calls)
-                self.assertIn("source date outside requested range", completed.stderr)
 
     def test_scheduled_daily_evidence_mode_skips_live_bot_delivery(self):
         script = _workflow_run_script("Run bot (retry 3 times)")

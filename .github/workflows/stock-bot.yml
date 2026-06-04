@@ -1,35 +1,18 @@
 name: Stock Bot Pro
 
 "on":
-  push:
-    branches:
-      - main
   schedule:
     - cron: "0 6 * * 1-5"
   workflow_dispatch:
     inputs:
       run_mode:
-        description: "bot, daily_evidence, backfill_may, or backfill_and_bot"
+        description: "bot or daily_evidence"
         required: false
         default: "bot"
         type: choice
         options:
           - bot
           - daily_evidence
-          - backfill_may
-          - backfill_and_bot
-      start_date:
-        description: "Backfill start date, YYYY-MM-DD"
-        required: false
-        default: "2026-05-01"
-      end_date:
-        description: "Backfill end date, YYYY-MM-DD"
-        required: false
-        default: "2026-05-29"
-      backfill_version:
-        description: "Strategy version for signal/evidence backfill"
-        required: false
-        default: "v20.4.5"
 
 jobs:
   run-bot:
@@ -121,61 +104,12 @@ jobs:
               raise SystemExit(f"Missing runtime config: {', '.join(required)}")
           PY
 
-      - name: Backfill official market/theme evidence (retry 3 times)
-        env:
-          RUN_MODE: ${{ github.event.inputs.run_mode || 'bot' }}
-          BACKFILL_START_DATE: ${{ github.event.inputs.start_date || '2026-05-01' }}
-          BACKFILL_END_DATE: ${{ github.event.inputs.end_date || '2026-05-29' }}
-        run: |
-          if [ "$RUN_MODE" = "backfill_may" ] || [ "$RUN_MODE" = "backfill_and_bot" ]; then
-            echo "May market/theme evidence backfill enabled for run_mode=$RUN_MODE"
-          else
-            echo "May market/theme evidence backfill skipped for run_mode=$RUN_MODE"
-            exit 0
-          fi
-          success=0
-          for i in 1 2 3
-          do
-            if python scripts/backfill_market_theme_sources.py \
-              --historical-range \
-              --start-date "$BACKFILL_START_DATE" \
-              --end-date "$BACKFILL_END_DATE" \
-              --write \
-              --confirm-write; then
-              success=1
-              break
-            fi
-            echo "Market/theme evidence backfill retry $i failed..."
-            sleep 5
-          done
-          test "$success" -eq 1
-
-      - name: Backfill May signal and strategy evidence
-        env:
-          RUN_MODE: ${{ github.event.inputs.run_mode || 'bot' }}
-          BACKFILL_START_DATE: ${{ github.event.inputs.start_date || '2026-05-01' }}
-          BACKFILL_END_DATE: ${{ github.event.inputs.end_date || '2026-05-29' }}
-          BACKFILL_VERSION: ${{ github.event.inputs.backfill_version || 'v20.4.5' }}
-        run: |
-          if [ "$RUN_MODE" != "backfill_may" ] && [ "$RUN_MODE" != "backfill_and_bot" ]; then
-            echo "May backfill skipped for run_mode=$RUN_MODE"
-            exit 0
-          fi
-          python scripts/backfill_signals.py \
-            --start-date "$BACKFILL_START_DATE" \
-            --end-date "$BACKFILL_END_DATE" \
-            --version "$BACKFILL_VERSION" \
-            --source twse \
-            --allow-partial \
-            --write \
-            --confirm-write
-
       - name: Run Phase 3 evidence automation
         env:
           RUN_MODE: ${{ github.event.inputs.run_mode || (github.event_name == 'schedule' && 'daily_evidence') || 'bot' }}
           MARKET_THEME_APPROVED_PAYLOAD: ${{ secrets.MARKET_THEME_APPROVED_PAYLOAD }}
         run: |
-          if [ "$RUN_MODE" != "daily_evidence" ] && [ "$RUN_MODE" != "backfill_and_bot" ]; then
+          if [ "$RUN_MODE" != "daily_evidence" ]; then
             echo "Phase 3 evidence automation skipped for run_mode=$RUN_MODE"
             exit 0
           fi
@@ -190,7 +124,7 @@ jobs:
         env:
           RUN_MODE: ${{ github.event.inputs.run_mode || (github.event_name == 'schedule' && 'daily_evidence') || 'bot' }}
         run: |
-          if [ "$RUN_MODE" != "bot" ] && [ "$RUN_MODE" != "backfill_and_bot" ]; then
+          if [ "$RUN_MODE" != "bot" ]; then
             echo "Run bot skipped for run_mode=$RUN_MODE"
             exit 0
           fi
