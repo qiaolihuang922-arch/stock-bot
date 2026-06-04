@@ -14,6 +14,24 @@
 
 ## Latest Completed Work
 
+- task_id：`future_watch_mops_fundamentals_context_20260604`
+- 狀態：code done / QA 通過；報文版本維持 `v20.4.47`。
+- 問題：Owner 要在法說會段增加股票 EPS 與營收年增；營收用當月，當月沒有用上一個官方公告月；同時法說會要顯示 conference 名稱，避免同公司多場看起來像重複。
+- 關鍵行為：
+  - 新增 TWSE/TPEX 官方 OpenAPI 月營收與 EPS source。
+  - `build_live_stock_fundamentals_source()` 合併上市 / 上櫃最新月營收與最新季 EPS snapshot。
+  - `collect_mops_events()` 將 fundamentals attach 到 MOPS 法說會 event。
+  - 法說會行改成 `日期 代號 名稱｜conference｜EPS ...｜營收YoY ...｜關注原因：...`，不再顯示 `source=MOPS`。
+  - MOPS summary 會清理 `本公司受邀參加...說明...` 這類模板字；有引號的 conference 名稱優先取引號內容。
+- 驗證：
+  - Focused future-watch tests：11 passed。
+  - py_compile：passed。
+  - `git diff --check`：passed。
+  - Official `generate()` read-only smoke：光寶科 / 聯電 / 英業達等法說會顯示 conference、`EPS 2026Q1`、`營收YoY 2026/04`。
+- 邊界：未改策略、RR、持倉風控、DB schema/write/backfill、live Telegram；EPS 是最新季，不是月資料；營收是官方最新月 snapshot。
+
+## Previous Completed Work
+
 - task_id：`future_watch_event_impact_explanation_20260604`
 - 狀態：code done / QA 通過；報文版本維持 `v20.4.47`。
 - 問題：Owner 問歷史類比目前怎麼查數據，並要求第三段相關事件去除來源、增加為什麼影響台股的說明。

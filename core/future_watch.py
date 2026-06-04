@@ -31,6 +31,10 @@ MOPS_TYPEK_PRIORITY = {
 TWSE_MI_INDEX_ENDPOINT = "https://openapi.twse.com.tw/v1/exchangeReport/MI_INDEX"
 TWSE_TAIEX_HISTORY_ENDPOINT = "https://openapi.twse.com.tw/v1/exchangeReport/MI_5MINS_HIST"
 TWSE_TAIEX_HISTORY_RWD_ENDPOINT = "https://www.twse.com.tw/rwd/zh/TAIEX/MI_5MINS_HIST"
+TWSE_MONTHLY_REVENUE_ENDPOINT = "https://openapi.twse.com.tw/v1/opendata/t187ap05_L"
+TPEX_MONTHLY_REVENUE_ENDPOINT = "https://www.tpex.org.tw/openapi/v1/t187ap05_R"
+TWSE_EPS_ENDPOINT = "https://openapi.twse.com.tw/v1/opendata/t187ap14_L"
+TPEX_EPS_ENDPOINT = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap14_O"
 HTTP_HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 _EVENT_PRIORITY = {
@@ -185,6 +189,43 @@ def _fmt_pct(value):
         return f"{float(value):+.2f}%"
     except (TypeError, ValueError):
         return "-"
+
+
+def _fmt_compact_pct(value):
+    try:
+        return f"{float(value):+.1f}%"
+    except (TypeError, ValueError):
+        return "-"
+
+
+def _fmt_compact_number(value):
+    try:
+        number = float(str(value).replace(",", "").strip())
+    except (TypeError, ValueError):
+        return "-"
+    return f"{number:.2f}".rstrip("0").rstrip(".")
+
+
+def _financial_period_label(year, quarter=None, month=None):
+    try:
+        ad_year = int(year)
+        if ad_year < 1911:
+            ad_year += 1911
+    except (TypeError, ValueError):
+        ad_year = None
+    if quarter not in (None, "") and ad_year:
+        return f"{ad_year}Q{quarter}"
+    if month:
+        text = str(month)
+        if len(text) >= 5:
+            roc_year = text[:-2]
+            try:
+                ad_year = int(roc_year) + 1911
+            except (TypeError, ValueError):
+                ad_year = None
+            return f"{ad_year}/{text[-2:]}" if ad_year else text
+        return text
+    return str(year or "")
 
 
 def _parse_official_date(value, default_year=None):
@@ -668,6 +709,110 @@ def live_mops_adapter(params, post_text=None):
         return {"status": "source-error", "source": "MOPS", "reason": str(exc)[:120]}
 
 
+def _stock_code_from_financial_row(row):
+    return str(
+        row.get("公司代號")
+        or row.get("SecuritiesCompanyCode")
+        or row.get("stock_code")
+        or ""
+    ).strip()
+
+
+def _merge_monthly_revenue_rows(target, rows):
+    for row in rows or []:
+        code = _stock_code_from_financial_row(row)
+        if not code:
+            continue
+        target.setdefault(code, {})
+        target[code].update({
+            "revenue_month": row.get("資料年月"),
+            "revenue_yoy": row.get("營業收入-去年同月增減(%)"),
+            "revenue_cumulative_yoy": row.get("累計營業收入-前期比較增減(%)"),
+            "revenue_source_date": row.get("出表日期"),
+        })
+
+
+def _merge_eps_rows(target, rows):
+    for row in rows or []:
+        code = _stock_code_from_financial_row(row)
+        if not code:
+            continue
+        target.setdefault(code, {})
+        target[code].update({
+            "eps": row.get("基本每股盈餘(元)") or row.get("基本每股盈餘") or row.get("EPS"),
+            "eps_year": row.get("年度") or row.get("Year"),
+            "eps_quarter": row.get("季別") or row.get("Season"),
+            "eps_source_date": row.get("出表日期") or row.get("Date"),
+        })
+
+
+def build_live_stock_fundamentals_source(now=None, get_json=None):
+    endpoints = (
+        ("twse_revenue", TWSE_MONTHLY_REVENUE_ENDPOINT, _merge_monthly_revenue_rows),
+        ("tpex_revenue", TPEX_MONTHLY_REVENUE_ENDPOINT, _merge_monthly_revenue_rows),
+        ("twse_eps", TWSE_EPS_ENDPOINT, _merge_eps_rows),
+        ("tpex_eps", TPEX_EPS_ENDPOINT, _merge_eps_rows),
+    )
+    rows_by_code = {}
+    errors = []
+    for label, url, merger in endpoints:
+        try:
+            rows = _request_get_json(url, requester=get_json)
+            merger(rows_by_code, rows)
+        except Exception as exc:
+            errors.append(f"{label}:{str(exc)[:60]}")
+    if not rows_by_code:
+        return {"status": "source-error", "items_by_code": {}, "errors": errors}
+    return {
+        "status": "available",
+        "items_by_code": rows_by_code,
+        "errors": errors,
+        "source": "TWSE/TPEX OpenAPI",
+    }
+
+
+def _fundamentals_for_code(fundamentals_source, code):
+    if not isinstance(fundamentals_source, dict):
+        return {}
+    items = fundamentals_source.get("items_by_code") or fundamentals_source.get("items") or {}
+    return items.get(str(code)) or {}
+
+
+def _fundamentals_label(fundamentals):
+    if not fundamentals:
+        return ""
+    parts = []
+    eps = fundamentals.get("eps")
+    if eps not in (None, ""):
+        eps_period = _financial_period_label(fundamentals.get("eps_year"), quarter=fundamentals.get("eps_quarter"))
+        eps_label = f"EPS {eps_period} {_fmt_compact_number(eps)}" if eps_period else f"EPS {_fmt_compact_number(eps)}"
+        parts.append(eps_label)
+    revenue_yoy = fundamentals.get("revenue_yoy")
+    if revenue_yoy not in (None, ""):
+        revenue_period = _financial_period_label(None, month=fundamentals.get("revenue_month"))
+        revenue_label = (
+            f"營收YoY {revenue_period} {_fmt_compact_pct(revenue_yoy)}"
+            if revenue_period else f"營收YoY {_fmt_compact_pct(revenue_yoy)}"
+        )
+        parts.append(revenue_label)
+    return "｜".join(parts)
+
+
+def _mops_event_title(row):
+    summary = str(row.get("summary") or row.get("event_summary") or "").strip()
+    if summary:
+        quoted = re.search(r"[「\"]([^」\"]+)[」\"]", summary)
+        if quoted:
+            return quoted.group(1).strip()
+        title = re.split(r"[，,；;。]\s*說明", summary, maxsplit=1)[0].strip()
+        title = re.sub(r"^本公司受邀參加", "", title).strip()
+        title = re.sub(r"^本公司受邀", "", title).strip()
+        title = re.sub(r"^受邀參加", "", title).strip()
+        title = title.replace("舉辦之法人說明會", "法人說明會")
+        return title[:60] if len(title) > 60 else title
+    return row.get("event") or row.get("event_name") or row.get("事件") or "法人說明會"
+
+
 def _event_from_pattern(html, pattern, event, impact, source, default_year):
     match = re.search(pattern, html, flags=re.I | re.S)
     if not match:
@@ -776,6 +921,7 @@ def collect_mops_events(
     results_map,
     now,
     mops_adapter=None,
+    fundamentals_source=None,
     max_items=MOPS_DEFAULT_MAX_ITEMS,
     max_targets=MOPS_DEFAULT_MAX_TARGETS,
     max_queries=MOPS_DEFAULT_MAX_QUERIES,
@@ -852,12 +998,16 @@ def collect_mops_events(
                         if not _in_window(event_date, start, end) or code not in target_by_code:
                             continue
                         target_info = target_by_code[code]
+                        fundamentals = _fundamentals_for_code(fundamentals_source, code)
                         rows.append({
                             "date": _as_date(event_date),
                             "code": code,
                             "name": row.get("name") or row.get("stock_name") or row.get("公司簡稱") or target_info["name"],
-                            "event": row.get("event") or row.get("event_name") or row.get("事件") or "法人說明會",
+                            "event": _mops_event_title(row),
+                            "summary": row.get("summary") or row.get("event_summary") or "",
                             "reason": target_info["reason"],
+                            "fundamentals": fundamentals,
+                            "fundamentals_label": _fundamentals_label(fundamentals),
                             "source": "MOPS",
                         })
                 if budget_exhausted:
@@ -943,6 +1093,7 @@ def default_future_watch_sources(now=None):
         "today_features": None,
         "historical_source": build_live_twse_historical_source(now),
         "mops_adapter": live_mops_adapter,
+        "fundamentals_source": build_live_stock_fundamentals_source(now),
         "global_event_source": build_live_global_event_source(now),
     }
 
@@ -954,11 +1105,17 @@ def build_future_watch_payload(
     today_features=None,
     historical_source=None,
     mops_adapter=None,
+    fundamentals_source=None,
     global_event_source=None,
 ):
     return {
         "historical_analogy": build_historical_analogy(today_features, historical_source),
-        "mops_events": collect_mops_events(results_map, now, mops_adapter=mops_adapter),
+        "mops_events": collect_mops_events(
+            results_map,
+            now,
+            mops_adapter=mops_adapter,
+            fundamentals_source=fundamentals_source,
+        ),
         "global_events": collect_global_events(now, global_event_source=global_event_source),
     }
 
@@ -982,10 +1139,14 @@ def format_future_watch_message(payload, now, version):
     elif mops_items:
         lines.extend(["", "未來30日法說會"])
         for item in mops_items[:MOPS_DEFAULT_MAX_ITEMS]:
-            lines.append(
-                f"{_date_label(item.get('date'))} {item.get('code')} {item.get('name')}｜"
-                f"{item.get('event')}｜關注原因：{item.get('reason')}｜source=MOPS"
-            )
+            parts = [
+                f"{_date_label(item.get('date'))} {item.get('code')} {item.get('name')}",
+                item.get("event"),
+            ]
+            if item.get("fundamentals_label"):
+                parts.append(item.get("fundamentals_label"))
+            parts.append(f"關注原因：{item.get('reason')}")
+            lines.append("｜".join(part for part in parts if part))
 
     global_events = payload.get("global_events") or {}
     global_items = global_events.get("items") or []

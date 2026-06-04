@@ -3,7 +3,7 @@
 依 `AGENTS.md` 啟動順序閱讀；本文件只保留任務看板、handoff 指針與固定啟動命令。
 
 - task_md_holds: `recently_done`
-- task_md_task_id: `future_watch_event_impact_explanation_20260604`
+- task_md_task_id: `future_watch_mops_fundamentals_context_20260604`
 - task_md_note: `TASK.md / CHANGELOG.md / QA_REPORT.md 目前是最近完成任務的滾動 handoff，不代表仍在 Tech/QA。`
 
 ## Active
@@ -16,6 +16,7 @@
 
 ## Recently Done
 
+- `future_watch_mops_fundamentals_context_20260604`｜normal_patch/L2｜強化第 4 則 `未來30日法說會`：MOPS summary / conference 名稱取代泛稱 `法人說明會`，並補 TWSE/TPEX 官方 OpenAPI 最新季 EPS 與最新官方月營收 YoY；月營收採 snapshot 最新公告月，2026-06-04 official smoke 顯示 2026/04，符合當月未公告則用上一個官方公告月。法說會行不再顯示 `source=MOPS`。focused future-watch tests 11 passed、py_compile / diff check passed、official `generate()` read-only smoke passed，例：光寶科 `Citi 2026 Taiwan Conference｜EPS 2026Q1 1.66｜營收YoY 2026/04 +24.5%`。未改策略、RR、DB schema/write/backfill、live Telegram。
 - `future_watch_event_impact_explanation_20260604`｜tiny_patch/L1｜修正第 4 則 `未來30日台股影響事件` 顯示：第三段不再顯示 `來源：...`，改顯示 `說明：...`，用事件 `impact` 轉成人話解釋為什麼影響台股；利率/匯率對應外資風險偏好、台股估值、美元/台幣與外資流向，通膨對應 Fed 路徑與科技股估值，政治風險對應避險情緒與供應鏈不確定性。focused future-watch tests 11 passed、py_compile / diff check passed、official `generate()` read-only smoke passed。歷史類比算法未改，現況是 TWSE 即時大盤 / 近月 OHLC + 壓力模板，不是多年歷史資料庫模型。未改策略、RR、DB schema/write/backfill、live Telegram。
 - `future_watch_mops_breadth_query_fix_20260604`｜normal_patch/L2｜修復第 4 則 `未來30日法說會` 只剩一筆聯電的漏查：MOPS 查詢由單檔深度優先改成廣度優先，所有標的先查第一優先 TYPEK 再進 fallback；預設 target/query budget 提到 12/32，法說會顯示上限提到 10。新增 regression 反證 12 檔 / 24 query budget 下第 12 檔仍可被查到；focused future-watch tests 11 passed、py_compile / diff check passed；official `generate()` read-only smoke 已恢復多檔法說會，包含 06/04 緯創 / 群創、06/05 光寶科 / 聯電 / 仁寶 / 英業達、06/08 英業達、06/09 仁寶、06/22 光寶科。未改策略、RR、DB schema/write/backfill、live Telegram。
 - `future_watch_30d_section_semantics_20260604`｜tiny_patch/L1｜修正第 4 則 `【未來30日關注】` 的手機可見語意，不升版仍維持 `v20.4.47`：除 `歷史類比` 外，另外兩段改為 `未來30日法說會`、`未來30日台股影響事件`；source-error / empty 文案同步使用新標題，不再顯示舊 `法說會提醒` / `全球事件` 段落標題。focused future-watch tests 10 passed、py_compile / diff check passed、read-only live smoke passed 且仍列 2301 光寶科 06/05 / 06/22 法說會。未改查詢邏輯、策略、RR、DB schema/write/backfill、live Telegram。

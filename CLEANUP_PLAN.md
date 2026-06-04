@@ -16,6 +16,13 @@
 
 ## Completed
 
+- `future_watch_mops_fundamentals_context_20260604`:
+  - 問題：Owner 要法說會段增加股票 EPS 與營收年增，且同檔多場法說會要看得出 conference 差異。
+  - 結果：新增 TWSE/TPEX 官方 OpenAPI readonly fundamentals source；法說會行顯示 conference 名稱、最新季 EPS、最新官方月營收 YoY；不再顯示 `source=MOPS`。
+  - 可重跑補強：focused future-watch 11 passed、py_compile / diff check passed、official `generate()` read-only smoke 顯示光寶科 / 聯電 / 英業達等 conference + EPS + 營收YoY。
+  - QA 狀態：通過。
+  - 流程復盤：根因分類為 `mobile_reading` + `source_context`。同檔多場法說會不是重複資料，但只顯示 `法人說明會` 會造成誤讀；應外露 conference 名稱與基本面上下文。
+  - 邊界：未改策略、RR、DB schema/write/backfill、live Telegram；EPS 是最新季資料，營收 YoY 是官方最新月 snapshot。
 - `future_watch_event_impact_explanation_20260604`:
   - 問題：Owner 問歷史類比目前怎麼查數據，並要求第三段相關事件去除來源、增加為什麼影響台股的說明。
   - 結果：第三段 `未來30日台股影響事件` 不再顯示 `來源：...`，改顯示 `說明：...`；說明由 `impact` 對應外資風險偏好、台股估值、美元/台幣、Fed 路徑、避險情緒、供應鏈等台股影響語意。

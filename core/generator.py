@@ -8350,6 +8350,7 @@ def formatTelegramMessages(
             today_features=future_watch_sources.get("today_features"),
             historical_source=future_watch_sources.get("historical_source"),
             mops_adapter=future_watch_sources.get("mops_adapter"),
+            fundamentals_source=future_watch_sources.get("fundamentals_source"),
             global_event_source=future_watch_sources.get("global_event_source"),
         )
     if future_watch_payload is not None:

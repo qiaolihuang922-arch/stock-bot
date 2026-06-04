@@ -1492,6 +1492,7 @@ class GeneratorReportTest(unittest.TestCase):
                         "co_id": "2301",
                         "name": "光寶科",
                         "event": "法人說明會",
+                        "summary": "J.P. Morgan Asia Pacific All Star Forum - London",
                     }]
                 }
             return {"rows": []}
@@ -1527,6 +1528,18 @@ class GeneratorReportTest(unittest.TestCase):
                     }]
                 },
                 "mops_adapter": mops_adapter,
+                "fundamentals_source": {
+                    "status": "available",
+                    "items_by_code": {
+                        "2301": {
+                            "eps": "1.23",
+                            "eps_year": "115",
+                            "eps_quarter": "1",
+                            "revenue_month": "11504",
+                            "revenue_yoy": "12.34",
+                        }
+                    },
+                },
                 "global_event_source": global_events,
             },
         )
@@ -1546,7 +1559,12 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("歷史類比：03/12 疫情急跌時間線｜相似度 84%｜相似：跌幅擴大、量能放大、市場廣度轉弱｜類比不是預測", messages[3])
         self.assertNotIn("即將崩盤", messages[3])
         self.assertNotIn("重演", messages[3])
-        self.assertIn("06/20 2301 光寶科｜法人說明會｜關注原因：持倉｜source=MOPS", messages[3])
+        self.assertIn(
+            "06/20 2301 光寶科｜J.P. Morgan Asia Pacific All Star Forum - London｜"
+            "EPS 2026Q1 1.23｜營收YoY 2026/04 +12.3%｜關注原因：持倉",
+            messages[3],
+        )
+        self.assertNotIn("source=MOPS", messages[3])
         self.assertNotIn("0-count", messages[3])
         self.assertNotIn("查無資料", messages[3].split("未來30日台股影響事件", 1)[0])
         global_lines = [
