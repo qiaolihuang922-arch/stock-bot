@@ -16,6 +16,14 @@
 
 ## Completed
 
+- `v20_4_36_0604_report_readability_convergence`:
+  - 問題：Owner 06/04 完整報文仍有手機閱讀誤讀：正常 source 行逐卡刷屏、普通 cross-day 歷史刷屏、量能不足被寫成資料不足、突破失敗 / 淘汰被過熱原因覆蓋、建準可買但回測偏弱缺同卡解釋、首屏裸寫 `今日新建倉 3` 易被讀成積極建倉。
+  - 結果：正常 source 行改為異常才顯示；普通 `observe / 修復中 / 連續觀察 1 天 / 權重 +1` 歷史行隱藏但高風險 / execution memory 保留；原因優先級改為淘汰 / 突破失敗 / 風控優先於過熱；量能不足顯示 `量能不適用`；建準類可買弱回測同卡補 `回測僅輔助，分批小倉、不追價`；首屏改 `今日已買 N｜風控中 M`。
+  - 可重跑補強：official `formatTelegramMessages` message-list replay 覆蓋六個 Owner failure specimen；QA 額外 probe 驗證普通 history 隱藏但 `position_events` / sold execution memory 保留；focused 9 passed、py_compile / diff check passed。
+  - QA 狀態：`通過`。
+  - 流程復盤：第一輪 QA conditional pass 抓到 main `CHANGELOG.md` 與 Tech answer 不一致；runner 會在 QA 前把 main handoff 複製到 tech worktree，因此只修 worktree 無效。已由 Architect 同步 Tech answer 到 main `CHANGELOG.md` 後重跑 QA 通過。
+  - 規則治理：`mobile_reading` + `QA反證` + `runner_gap`。不是新增死規則；下一步應補 runner handoff sync 檢查，避免 Tech answer 產生後 main `CHANGELOG.md` 仍 stale，讓 QA 讀錯輪。
+  - 邊界：未改 RR、strategy decision、DB schema/write、production backfill、live Telegram；未跑 production runner artifact；full generator legacy failures 另開。
 - `report-score-evidence-display-20260603`:
   - 問題：既有持倉非加碼仍顯示新倉品質分，`綜合` 可能超過 100；證據不可用原因一律資料不足；低量盤後仍可能顯示 `極強`。
   - 結果：VERSION 升 `v20.4.35`；非加碼持倉數據行整段 `不適用（既有持倉）`；加碼 / 新倉保留分數；`final_confidence` 封頂 100；過熱 / 風控 / 資料不足文案分流；盤後縮量整理改 `待確認｜縮量`；低分顯示 `微幅`。

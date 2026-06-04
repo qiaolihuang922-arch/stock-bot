@@ -14,6 +14,27 @@
 
 ## Latest Completed Work
 
+- task_id：`v20_4_36_0604_report_readability_convergence`
+- 狀態：code done / QA 通過 / committed; Git completion gate passed。
+- commit：`bbee321`。
+- 結論：06/04 v20.4.36 報文手機閱讀誤讀已收斂到 focused L2 範圍；版本維持 `v20.4.36`。
+- 關鍵行為：
+  - 正常 source 狀態不再逐卡顯示「持倉與現價已確認」或「現價與 OHLCV 已確認」。
+  - 普通 `前次 observe / 修復中 / 連續觀察 1 天 / 權重 +1` 歷史行不再逐卡刷屏；高風險 / execution memory 類歷史仍保留。
+  - 未持倉原因優先級改為淘汰 / 突破失敗 / 風控優先於過熱；量能不足顯示 `證據：量能不適用`。
+  - 建準類 BUY 若同卡回測偏弱 / 無明顯優勢 / 樣本不足，補 `回測僅輔助，分批小倉、不追價`。
+  - 首屏今日買入摘要改為 `今日已買 N｜風控中 M`，避免裸寫 `今日新建倉 3`。
+- 驗證：
+  - `arch -arm64 ./.venv/bin/python -m pytest tests/test_generator_report.py -k '0604_v20_4_36_mobile_readability or v20_4_36_non_actionable or v20_4_36_failed_unheld or v20_4_36_single_backtest or structural_artifacts_cover_three_fail_closed_cases or presentation_noise' -q` -> 9 passed。
+  - `arch -arm64 ./.venv/bin/python -m py_compile core/generator.py presentation/report.py tests/test_generator_report.py` -> passed。
+  - `git diff --check` -> passed。
+  - QA 額外 official `formatTelegramMessages` probe 通過，確認普通 history 隱藏但 `position_events` / sold execution memory 仍保留。
+- QA 狀態：`通過`。
+- 殘留風險：未跑 production runner artifact / live Telegram / DB read-write；full `tests/test_generator_report.py -q` 仍有 26 個 legacy contract failures，本輪不宣稱全量修復。
+- 邊界：未改 RR 公式、strategy decision、DB schema/write、live Telegram。
+
+## Previous Completed Work
+
 - task_id：`trend_continuation_v20_4_36_validation_monitor_report_noise_20260603`
 - 狀態：code done / local focused validation passed / QA conditional pass due runner_gap / committed / pushed。
 - commits：
@@ -34,7 +55,7 @@
 - QA 狀態：`conditional pass`。原因：QA agent 兩次報告舊測試狀態（聲稱 6240-6310 仍為 v20.4.35 / visible data basis），但主 repo 文件與同一命令輸出均顯示已修；列為 runner_gap follow-up。
 - 邊界：未改 RR 公式、DB schema/write、live Telegram；版本維持 `v20.4.36`。
 
-## Previous Completed Work
+## Earlier Completed Work
 
 - task_id：`trend_continuation_buy_path_phase2_20260603`
 - 狀態：code done / QA 通過 / committed / pushed。

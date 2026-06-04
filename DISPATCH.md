@@ -3,7 +3,7 @@
 依 `AGENTS.md` 啟動順序閱讀；本文件只保留任務看板、handoff 指針與固定啟動命令。
 
 - task_md_holds: `recently_done`
-- task_md_task_id: `trend_continuation_buy_path_phase2_20260603`
+- task_md_task_id: `v20_4_36_0604_report_readability_convergence`
 - task_md_note: `TASK.md / CHANGELOG.md / QA_REPORT.md 目前是最近完成任務的滾動 handoff，不代表仍在 Tech/QA。`
 
 ## Active
@@ -16,6 +16,7 @@
 
 ## Recently Done
 
+- `bbee321`｜`v20_4_36_0604_report_readability_convergence`｜normal_patch｜收斂 06/04 v20.4.36 手機閱讀誤讀：正常資料行與普通 cross-day 歷史不再逐卡刷屏；未持倉原因優先級改為風控/淘汰優先於過熱，量能不足顯示 `量能不適用`；建準可買但回測偏弱時同卡補 `回測僅輔助，分批小倉、不追價`；首屏 `今日新建倉 3` 改為 `今日已買 N｜風控中 M`；official message-list replay 9 passed、py_compile / diff check passed；QA `通過`；未改 RR 公式、strategy decision、DB schema/write、live Telegram，版本維持 `v20.4.36`。
 - `900d107`｜`trend_continuation_buy_path_phase2_20260603`｜major/risk_patch｜Owner 授權只在 trend_continuation 路徑放開「證據可開 BUY」邊界；新增回踩站回同源判定、positive evidence gate、`decision_type="trend_continuation"` / `trend_observation`、小倉 `<=15%`、回踩低點下方止損、5 日 edge 退出；official report 新增 `🟢 趨勢延續買入｜小倉` 與獨立 funnel，版本升 `v20.4.36`；資料依據在 trend_continuation BUY 時強制顯示同源策略樣本與候選資料 basis，避免 BUY 卡缺證據鏈；focused tests 6 passed、py_compile / diff check passed；QA `通過`；未改 RR 公式、DB schema/write、live Telegram。
 - `9eea5c4`｜`trend_continuation_v20_4_36_validation_monitor_report_noise_20260603`｜mixed_patch｜補 v20.4.36 trend_continuation 觸發驗證、只讀 monitor、資料依據預設隱藏、manifest/source_status QA probe、同 setup_key 回測行去重；主 repo focused command `17 passed`，monitor 缺 source fail closed `source-error`，py_compile / diff check passed；QA_REPORT `conditional pass`，原因是 QA agent 兩次報舊測試狀態，已列 runner_gap；未改 RR 公式、DB schema/write、live Telegram，版本維持 `v20.4.36`。
 - `caab930` / `83fd163`｜`research_daily_price_backfill_and_trend_sample_expansion_20260603`｜risk_patch/research｜Owner 明確要求「直接回填」後，已用 `scripts/backfill_daily_price_history.py --write --confirm-write --years 2 --skip-existing --read-after-write` 逐檔走既有 approved write path 回填 watchlist 12 檔 `daily_price`；12/12 read-after-write `ok`，合計新增 5,218 rows，日期範圍 2024-06-03..2026-06-03；重跑 `scripts/research_trend_continuation.py` 後 `total_hit_count=232`、`meets_min_sample_count=true`，5 日勝率 55.17%、5 日平均 +2.26%，`pullback_continuation_edge=positive`；本輪仍未改策略 / 報文 / DB schema / live Telegram，階段二 `trend_continuation` 買路需另開 major 任務並由 Owner 授權。
@@ -42,7 +43,7 @@
 
 ## Next Action
 
-- trend_continuation v20.4.36 驗證 / monitor / 報文降噪已 commit / pushed；下一步是跑 git completion gate 與 Architect closeout gate。
+- 本輪 06/04 v20.4.36 報文手機閱讀收斂已 QA 通過；Git completion gate passed；下一步只剩 Render freshness production log follow-up。
 - 前一輪 Render freshness 仍需部署後看 Render 5 分鐘觸發 log，確認 freshness preflight 真實 runtime output。
 - 開新任務前先看 `task_md_holds`，不要用 `TASK.md` 內部舊狀態反推當前看板。
 - 報文 / 策略 / 產品修復仍走 PM -> Tech -> QA；流程治理文件可由 Architect 直接改。
