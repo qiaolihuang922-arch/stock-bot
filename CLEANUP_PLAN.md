@@ -16,6 +16,13 @@
 
 ## Completed
 
+- `github_actions_manual_workflow_clean_inputs_20260604`:
+  - 問題：Owner 手動執行 GitHub Actions 時，手機端仍顯示已廢棄的 backfill 欄位 `start_date` / `end_date` / `backfill_version`，送出後 GitHub 後端以 current schema 拒絕並報 `Unexpected inputs provided`。
+  - 結果：刪除舊 `.github/workflows/stock-bot.yml`，新增 `.github/workflows/stock-bot-clean.yml`；workflow 名稱改 `Stock Bot`，manual inputs 只留 `run_mode` with `bot` / `daily_evidence`。
+  - 可重跑補強：`tests/test_workflow_runtime_config.py` 9 passed、`git diff --check` passed、workflow directory only contains `.github/workflows/stock-bot-clean.yml`。
+  - QA 狀態：`通過`。
+  - 流程復盤：根因分類為 `runner_gap` + `mobile_ui_cache`。當 GitHub mobile app 顯示舊 dispatch form 但後端已更新 schema，單純刪欄位不一定清 cache；換 workflow path/name 可讓使用者改點新 workflow。
+  - 邊界：未改 Telegram 報文版本、策略、DB schema/write/backfill、live Telegram。
 - `future_30d_watch_live_readonly_sources_v20_4_46`:
   - 問題：Owner 要未來 30 日關注功能改為查即時資料試行，不走 DB；來源包含 TWSE、MOPS、全球官方事件頁。核心風險是 source 不穩時把「抓不到」誤顯成無事件，或把資訊提醒讀成交易建議 / 崩盤預測。
   - 結果：VERSION 升 `v20.4.46`；`default_future_watch_sources(now)` 建立即時 readonly source；TWSE OpenAPI 可讀但歷史相似度不足時 fail closed 為 `source=TWSE`；MOPS 欄位不可辨識 / empty / blocked 一律 `source-error` 並在第 4 則顯示法說會提醒段；全球事件嘗試 official live parser，全部失敗時保留 seed fallback。

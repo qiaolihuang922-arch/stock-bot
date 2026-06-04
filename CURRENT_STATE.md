@@ -14,6 +14,24 @@
 
 ## Latest Completed Work
 
+- task_id：`github_actions_manual_workflow_clean_inputs_20260604`
+- 狀態：code done / QA 通過；不升 Telegram 報文版本。
+- 問題：Owner 手動執行 GitHub Actions 時，手機畫面仍顯示舊 `start_date` / `end_date` / `backfill_version` 欄位，送出後 GitHub 回 `Unexpected inputs provided`。
+- 關鍵行為：
+  - 刪除舊 `.github/workflows/stock-bot.yml`。
+  - 新增 `.github/workflows/stock-bot-clean.yml`。
+  - workflow 名稱改為 `Stock Bot`，避免手機端沿用舊 `Stock Bot Pro` / old path dispatch form cache。
+  - manual workflow inputs 只保留 `run_mode`，choices 只保留 `bot` / `daily_evidence`。
+  - `tests/test_workflow_runtime_config.py` 改讀新 workflow，並反證舊 workflow file / 舊 backfill inputs 不存在。
+- 驗證：
+  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/workflow_clean_inputs_pytest arch -arm64 ./.venv/bin/python -m pytest tests/test_workflow_runtime_config.py -q` -> 9 passed。
+  - `git diff --check` -> passed。
+  - `.github/workflows` 只剩 `.github/workflows/stock-bot-clean.yml`。
+- 殘留風險：未直接操作 GitHub mobile app；push 後需從 Actions list 選新的 `Stock Bot` workflow。若仍看到舊 `Stock Bot Pro`，關閉重開 app 或刷新 workflow list。
+- 邊界：未改 Telegram 報文版本、策略、RR、DB schema/write/backfill、live Telegram。
+
+## Previous Completed Work
+
 - task_id：`future_30d_watch_live_readonly_sources_v20_4_46`
 - 狀態：code done / QA conditional pass with closeout fixed；報文版本升 `v20.4.46`。
 - 問題：Owner 要未來 30 日關注功能先走即時資料試行，不做資料庫方向；需要查 TWSE / MOPS / 全球官方頁，且 source 不可靠時必須 fail closed，不能假造法說會、崩盤類比或交易建議。

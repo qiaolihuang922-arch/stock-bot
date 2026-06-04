@@ -3,7 +3,7 @@
 依 `AGENTS.md` 啟動順序閱讀；本文件只保留任務看板、handoff 指針與固定啟動命令。
 
 - task_md_holds: `recently_done`
-- task_md_task_id: `future_30d_watch_live_readonly_sources_v20_4_46`
+- task_md_task_id: `github_actions_manual_workflow_clean_inputs_20260604`
 - task_md_note: `TASK.md / CHANGELOG.md / QA_REPORT.md 目前是最近完成任務的滾動 handoff，不代表仍在 Tech/QA。`
 
 ## Active
@@ -16,6 +16,7 @@
 
 ## Recently Done
 
+- `github_actions_manual_workflow_clean_inputs_20260604`｜normal_patch/L2｜修正 GitHub Actions 手動執行手機端顯示舊 backfill inputs 後送出 `Unexpected inputs provided: ["start_date", "end_date", "backfill_version"]`：刪除舊 `.github/workflows/stock-bot.yml`，新增 `.github/workflows/stock-bot-clean.yml`，workflow 名稱改 `Stock Bot` 以重置 GitHub mobile dispatch form identity；manual inputs 只保留 `run_mode`，choices 只保留 `bot` / `daily_evidence`；tests 改讀新 workflow 並反證舊 file / 舊欄位不存在。`tests/test_workflow_runtime_config.py` 9 passed、`git diff --check` passed。未改 Telegram 報文版本、策略、DB、live Telegram。
 - `v20.4.46`｜`future_30d_watch_live_readonly_sources_v20_4_46`｜normal_patch/L2｜未來 30 日關注第 4 則改為「即時讀取、不進 DB」試行：`default_future_watch_sources(now)` 每次報文建立 TWSE / MOPS / global live readonly sources；TWSE OpenAPI 可讀時仍保守 fail closed 為 `無高相似崩盤樣本｜依據不足/相似度低｜source=TWSE`，不硬套崩盤類比；MOPS official POST adapter 只有解析出日期 / 公司 / 法說會欄位才列事件，SPA shell、無 table、欄位不可辨識或空 rows 都顯示 `source-error（MOPS）`，不靜默消失；全球事件嘗試 Fed / BLS / BOJ / BEA / ECB 官方頁，全部解析失敗時保留 seed fallback。focused tests v20.4.46 9 passed、py_compile / diff check passed；QA 補 official message-list probe：`message_count=4 malformed_mops=source-error first_three_clean=true no_db_client_requested=true`，QA `conditional pass`，條件為收口文件需更新；本收口已更新。未改策略 decision、RR、持倉風控、DB schema/write/backfill、live Telegram。
 - `v20.4.45`｜`telegram_future_30d_watch_v20_4_45`｜minor/L3｜新增可選第 4 則 Telegram `【未來30日關注】`，由 `generate_report()` 預設追加在持倉 / 未持倉 / 決策簡報三則之後，不污染前三則；區塊固定為 `歷史類比`、`法說會提醒`、`全球事件`。歷史類比在資料不足時顯示 `無高相似崩盤樣本｜依據不足/相似度低`；MOPS 法說會 adapter 維持 fail-closed 並明示 source-error；全球事件預設加入 2026-06-04 起 30 日官方日程 seed/snapshot，最多顯示 5 筆，支援 `06/10-11`、`06/15-16` 等多日區間 label，前 5 筆為 ECB、CPI、BOJ、G7、Fed，06/18 BoE / 06/25 BEA 因 max 5 不顯示。focused tests v20.4.45 4 passed、future slice 3 passed、py_compile / diff check passed；QA 補 official `generate_report(dry_run=True)` 手機閱讀 probe，確認 4 則順序、前三則無污染、第 4 則無可買 / 可下單 / 崩盤預測語意，QA `通過`。未改交易策略、RR、持倉風控、DB schema/write、live Telegram；live official adapters / MOPS / historical timeline source 仍是後續任務。
 - `v20.4.44`｜`telegram_card_evidence_wording_v20_4_44`｜normal_patch｜只改 Telegram 卡片顯示語意：證據鏈不再把 `決策證據：來源可追溯` 當交易依據外露，不顯示 raw `hard stop` / `持倉硬風控` / `既有買點與倉位規則通過`；未持倉非可買卡維持 `卡關主因` / `量化差距`，新增更清楚的 `解鎖` / `依據`，有可信數字時優先顯示 RR、距突破、熱度、警戒/停損距離，沒有數字才寫事件型 blocker；光寶科類 prepare 改 `買點：明日準備｜不可下單`、`卡關主因：開盤確認未完成`、`量化差距：盤後待開盤確認`、`解鎖：明日開盤後仍守突破區 / 不追價`；建準類持倉觀察不刷 generic evidence，停損/減碼持倉顯示人話風險與距警戒/停損距離；QA `通過`，core 4 passed、wide regression 14 passed、QA-only mobile replay passed、py_compile / diff check passed；未改策略 decision、RR、heat/breakout 判定、DB/write、live Telegram。
@@ -55,6 +56,7 @@
 
 ## Next Action
 
+- GitHub Actions 手動執行請從新的 `Stock Bot` workflow 進入；若手機仍顯示舊 `Stock Bot Pro` 或日期/version 欄位，關閉重開 GitHub app 或從 Actions workflow list 重新選新 workflow。
 - v20.4.46 未來 30 日關注已接 live readonly source 試行；下一步若 Owner 要深化，優先做 MOPS 穩定解析與 global live parser 可見 fallback 標記，不改 DB。
 - v20.4.44 卡片證據語意已 QA 通過；若 Owner 要更細的全市場 wording 矩陣或排序，另開顯示文案任務，不在本輪改策略。
 - 前一輪 Render freshness 仍需部署後看 Render 5 分鐘觸發 log，確認 freshness preflight 真實 runtime output。

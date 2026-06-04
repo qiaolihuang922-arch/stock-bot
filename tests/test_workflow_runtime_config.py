@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-WORKFLOW = ROOT / ".github/workflows/stock-bot.yml"
+WORKFLOW = ROOT / ".github/workflows/stock-bot-clean.yml"
 
 
 def _create_runtime_config_script():
@@ -142,13 +142,18 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
     def test_workflow_dispatch_supports_git_runner_may_backfill(self):
         workflow_text = WORKFLOW.read_text(encoding="utf-8")
 
+        self.assertIn("name: Stock Bot", workflow_text)
         self.assertNotIn("push:", workflow_text)
         self.assertIn("schedule:", workflow_text)
         self.assertIn('cron: "0 6 * * 1-5"', workflow_text)
         self.assertIn("run_mode:", workflow_text)
         self.assertIn("- daily_evidence", workflow_text)
+        self.assertNotIn("stock-bot.yml", "\n".join(str(path) for path in (ROOT / ".github/workflows").glob("*")))
         self.assertNotIn("- backfill_may", workflow_text)
         self.assertNotIn("- backfill_and_bot", workflow_text)
+        self.assertNotIn("start_date:", workflow_text)
+        self.assertNotIn("end_date:", workflow_text)
+        self.assertNotIn("backfill_version:", workflow_text)
         self.assertNotIn("Backfill start date", workflow_text)
         self.assertNotIn("Backfill end date", workflow_text)
         self.assertNotIn("Backfill May signal and strategy evidence", workflow_text)
