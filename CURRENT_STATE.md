@@ -14,6 +14,18 @@
 
 ## Latest Completed Work
 
+- task_id：`20260604_144316_6186_online_research_pair`
+- 狀態：research done / fixed docs updated；本輪未改產品代碼、未改 DB、未發 Telegram。
+- 結論：策略寬度不是全域放寬，而是條件分層：
+  - `可準備`：報文 / 漏斗層升格，仍不可買；用來標出差一條件的候選。
+  - `趨勢延續小倉`：只限回踩站回同源 setup，daily_price evidence positive，樣本 >=30，5D win >=55%，5D avg >0，倉位 <=15%，回踩低點下方停損。
+  - 一般 `可買`：仍走既有 BUY / RR / can_buy / source gate，不因 evidence、題材、分數、回測摘要單獨放寬。
+- 硬邊界：RR不足未解除、HOT/EXTREME、LIMIT_LOCK / LIMIT_REBOUND / WEAK_REBOUND、FAILED_BREAKOUT / fake breakout、market_grade D、NO_VOLUME、source-error / unresolved-conflict 都不得升級可買。
+- 建議下一步：若 Owner 要進實作，先做 Phase A `可準備（不可買）` 分組與 gate attribution；不新增 BUY。Phase B 才補 `趨勢延續小倉` portfolio cap / forward monitor。
+- 研究文件：`RESEARCH.md` 已壓縮保存本輪方案。
+
+## Previous Completed Work
+
 - task_id：`fix-v20-4-37-rr-insufficient-message-readability`
 - 狀態：code done / QA 通過 / committed; git completion gate passed。
 - 結論：v20.4.37 報文中 `等RR修復｜RR不足` 被寫成 `證據：資料不足`、以及僅追蹤標的進 summary 回測的手機誤讀已修復；版本升 `v20.4.38`。

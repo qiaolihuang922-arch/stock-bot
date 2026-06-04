@@ -16,6 +16,7 @@
 
 ## Recently Done
 
+- `20260604_144316_6186_online_research_pair`｜research｜完成「條件性放寬」策略寬度研究：結論不是全域放寬，而是拆成 `可準備（不可買）`、`趨勢延續小倉<=15%`、一般 `可買` 三層；RR不足未解除、HOT/EXTREME、漲停/弱反彈、突破失敗、source-error 不得被 evidence 覆蓋；建議若進開發先做 Phase A `可準備` / gate attribution，不新增 BUY；詳見 `RESEARCH.md`。
 - `v20.4.38`｜`fix-v20-4-37-rr-insufficient-message-readability`｜normal_patch｜修復 RR不足 / 等RR修復 報文誤讀：光寶科類卡片不再把 RR不足寫成 `證據：資料不足`，改為 `原因：RR不足，等待RR修復`；summary 回測摘要排除僅追蹤 / 等RR修復標的，不再顯示 `回測（光寶科）`，但保留建準候選回測；版本升 `v20.4.38`；official message-list replay 4 passed、py_compile / diff check passed、QA 補 formatter probe `通過`；未改 RR 公式、strategy decision、DB schema/write、live Telegram；git completion gate passed。
 - `v20.4.37`｜`2026-06-04-v20.4.37-generate-mobile-consistency`｜normal_patch｜升版修復 06/04 真實 `generate()` 報文跨區塊一致性：首屏未持倉括號改吃同源 prepare bucket，`不可追高觀察 1` 不再漏於首屏；今日已買改為 `今日已買 N（已風控 M/觀察 K）`，移除不可追溯 `風控中`；未持倉回測取消跨股票聚合，改單檔 `回測（建準）` / `回測（緯創）`；actual `generate()` 已輸出 `v20.4.37` 且首屏 / 漏斗 / 索引合計一致；focused tests 4 passed、py_compile passed、QA 補 final message-list parser `通過`；未改策略 decision、RR、DB schema/write、live Telegram；未跑 production runner artifact。
 - `bbee321`｜`v20_4_36_0604_report_readability_convergence`｜normal_patch｜收斂 06/04 v20.4.36 手機閱讀誤讀：正常資料行與普通 cross-day 歷史不再逐卡刷屏；未持倉原因優先級改為風控/淘汰優先於過熱，量能不足顯示 `量能不適用`；建準可買但回測偏弱時同卡補 `回測僅輔助，分批小倉、不追價`；首屏 `今日新建倉 3` 改為 `今日已買 N｜風控中 M`；official message-list replay 9 passed、py_compile / diff check passed；QA `通過`；未改 RR 公式、strategy decision、DB schema/write、live Telegram，版本維持 `v20.4.36`。
@@ -45,6 +46,7 @@
 
 ## Next Action
 
+- 條件性放寬研究已完成；若 Owner 要進實作，建議先開 Phase A：`可準備（不可買）` 分組與 gate attribution，產品 / 報文 / 策略仍走 PM -> Tech -> QA。
 - 本輪 v20.4.38 RR不足 / 等RR修復 報文可讀性修復已 QA 通過並完成 git 收口；下一步只剩 Render freshness production log follow-up。
 - 前一輪 Render freshness 仍需部署後看 Render 5 分鐘觸發 log，確認 freshness preflight 真實 runtime output。
 - 開新任務前先看 `task_md_holds`，不要用 `TASK.md` 內部舊狀態反推當前看板。
