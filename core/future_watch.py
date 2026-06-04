@@ -90,6 +90,113 @@ _DEFAULT_GLOBAL_EVENT_SEED = (
     },
 )
 
+TAIWAN_CRASH_TEMPLATE_LIBRARY = (
+    {
+        "event": "1990 台股萬點泡沫崩跌",
+        "change_band": (-6.0, -2.5),
+        "pullback_band": (-20.0, -6.0),
+        "base_similarity": 0.24,
+        "difference": "泡沫破裂型長空，需連續跌破月線/季線才接近",
+        "watch": "觀察融資退潮、月線失守與量能失控",
+    },
+    {
+        "event": "1995 台海飛彈危機急跌",
+        "change_band": (-4.5, -1.8),
+        "pullback_band": (-9.0, -3.0),
+        "base_similarity": 0.26,
+        "difference": "地緣政治壓力型，需事件風險升溫才接近",
+        "watch": "留意台海/政治風險與外資連續賣超",
+    },
+    {
+        "event": "1997 亞洲金融風暴",
+        "change_band": (-5.5, -2.0),
+        "pullback_band": (-12.0, -4.0),
+        "base_similarity": 0.28,
+        "difference": "區域金融壓力型，需匯率與金融股同步轉弱",
+        "watch": "留意台幣、金融股與外資賣超擴大",
+    },
+    {
+        "event": "2000 網路泡沫/政權輪替壓力",
+        "change_band": (-5.0, -2.0),
+        "pullback_band": (-12.0, -4.0),
+        "base_similarity": 0.27,
+        "difference": "科技泡沫估值修正型，需電子權值股同步轉弱",
+        "watch": "觀察電子權值與高估值題材是否續弱",
+    },
+    {
+        "event": "2003 SARS 台股急跌",
+        "change_band": (-4.5, -1.8),
+        "pullback_band": (-10.0, -3.0),
+        "base_similarity": 0.28,
+        "difference": "疫情/需求衝擊型，需基本面預期同步下修才接近",
+        "watch": "留意消費、運輸與景氣預期是否惡化",
+    },
+    {
+        "event": "2004 319選舉事件急跌",
+        "change_band": (-7.0, -3.0),
+        "pullback_band": (-8.0, -2.0),
+        "base_similarity": 0.30,
+        "difference": "單一政治事件急殺型，需隔日是否止跌確認",
+        "watch": "留意事件釐清、政策訊號與隔日開盤承接",
+    },
+    {
+        "event": "2008 金融海嘯",
+        "change_band": (-6.5, -2.8),
+        "pullback_band": (-18.0, -6.0),
+        "base_similarity": 0.31,
+        "difference": "系統性信用風險型，需金融/出口鏈同步惡化才接近",
+        "watch": "留意金融壓力、信用風險與出口權值股",
+    },
+    {
+        "event": "2011 歐債/美國信評急跌",
+        "change_band": (-5.5, -2.2),
+        "pullback_band": (-12.0, -4.0),
+        "base_similarity": 0.29,
+        "difference": "主權債與風險偏好收縮型，需美元與外資同步確認",
+        "watch": "留意美元、外資與電子權值修正幅度",
+    },
+    {
+        "event": "2015 台股急跌/中國股災外溢",
+        "change_band": (-3.0, -1.2),
+        "pullback_band": (-6.0, -1.2),
+        "base_similarity": 0.30,
+        "difference": "屬壓力前段，不是崩盤等級",
+        "watch": "未來3-5日是否跌破本月低點",
+    },
+    {
+        "event": "2018 美股波動/貿易戰急跌",
+        "change_band": (-6.5, -2.5),
+        "pullback_band": (-10.0, -3.0),
+        "base_similarity": 0.29,
+        "difference": "外部風險偏好收縮型，需美股與外資賣壓同步確認",
+        "watch": "留意美股科技股、美元/台幣與外資賣超",
+    },
+    {
+        "event": "2020 台股疫情急跌",
+        "change_band": (-5.0, -3.0),
+        "pullback_band": (-14.0, -5.0),
+        "base_similarity": 0.32,
+        "difference": "急跌情境，但仍需連續性確認",
+        "watch": "留意是否連續跌破前低與量能放大",
+    },
+    {
+        "event": "2022 升息通膨修正",
+        "change_band": (-4.5, -1.8),
+        "pullback_band": (-14.0, -4.0),
+        "base_similarity": 0.28,
+        "difference": "利率估值修正型，需殖利率/美元與科技股同步壓力",
+        "watch": "留意Fed路徑、美元與電子權值估值修正",
+    },
+    {
+        "event": "2024/08/05 台股日圓套利平倉急殺",
+        "change_band": (-10.0, -5.5),
+        "pullback_band": (-12.0, -5.0),
+        "base_similarity": 0.36,
+        "difference": "急殺等級，需看隔日是否止跌",
+        "watch": "留意外資/匯率與隔日開盤承接",
+    },
+)
+
 _FULL_DATE_RE = re.compile(r"(?P<year>\d{4})[/-](?P<month>\d{1,2})[/-](?P<day>\d{1,2})")
 _ROC_DATE_RE = re.compile(r"(?P<year>\d{2,3})[/-](?P<month>\d{1,2})[/-](?P<day>\d{1,2})")
 _MONTHS = {
@@ -510,43 +617,72 @@ def build_historical_analogy(today_features=None, historical_source=None, thresh
     return {"status": "available", "line": "｜".join(item for item in parts if item)}
 
 
-def _historical_pressure_template(change_pct, pullback_from_high_pct):
-    change = change_pct if change_pct is not None else 0
-    pullback = pullback_from_high_pct if pullback_from_high_pct is not None else 0
-    if change <= -6:
+def _value_or_zero(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _band_similarity(value, band):
+    low, high = band
+    if low <= value <= high:
+        return 1.0
+    width = max(abs(high - low), 0.1)
+    distance = min(abs(value - low), abs(value - high))
+    return max(0.0, 1.0 - (distance / width))
+
+
+def _score_taiwan_crash_template(template, features):
+    change = _value_or_zero(features.get("change_pct"))
+    pullback = _value_or_zero(features.get("pullback_from_high_pct"))
+    intraday = _value_or_zero(features.get("intraday_range_pct"))
+    change_score = _band_similarity(change, template["change_band"])
+    pullback_score = _band_similarity(pullback, template["pullback_band"])
+    intraday_score = min(abs(intraday) / 5.0, 1.0) if intraday else 0.0
+    score = (
+        template["base_similarity"]
+        + (0.24 * change_score)
+        + (0.12 * pullback_score)
+        + (0.04 * intraday_score)
+    )
+    return min(max(score, 0.0), 0.92)
+
+
+def _historical_pressure_template(features):
+    if not features:
         return {
-            "event": "2024/08/05 台股日圓套利平倉急殺",
-            "similarity": 0.86,
-            "difference": "急殺等級，需看隔日是否止跌",
-            "watch": "留意外資/匯率與隔日開盤承接",
+            "event": "一般高檔震盪回測",
+            "similarity": 0.35,
+            "difference": "TWSE特徵不足，僅能低信心觀察",
+            "watch": "觀察是否重新站回短線高點",
+            "library_size": len(TAIWAN_CRASH_TEMPLATE_LIBRARY),
         }
-    if change <= -3.5:
+    best = None
+    for template in TAIWAN_CRASH_TEMPLATE_LIBRARY:
+        score = _score_taiwan_crash_template(template, features)
+        if best is None or score > best[0]:
+            best = (score, template)
+    if not best or best[0] < 0.48:
         return {
-            "event": "2020/03/12 台股疫情急跌",
-            "similarity": 0.78,
-            "difference": "急跌情境，但仍需連續性確認",
-            "watch": "留意是否連續跌破前低與量能放大",
+            "event": "一般高檔震盪回測",
+            "similarity": 0.45,
+            "difference": "未達台股急跌樣本相似門檻",
+            "watch": "觀察是否重新站回短線高點",
+            "library_size": len(TAIWAN_CRASH_TEMPLATE_LIBRARY),
         }
-    if change <= -1.5 or pullback <= -1.5:
-        return {
-            "event": "2015/08/20-24 台股急跌前段",
-            "similarity": 0.62,
-            "difference": "屬壓力前段，不是崩盤等級",
-            "watch": "未來3-5日是否跌破本月低點",
-        }
+    template = best[1]
     return {
-        "event": "一般高檔震盪回測",
-        "similarity": 0.45,
-        "difference": "未達歷史急跌相似門檻",
-        "watch": "觀察是否重新站回短線高點",
+        "event": template["event"],
+        "similarity": best[0],
+        "difference": template["difference"],
+        "watch": template["watch"],
+        "library_size": len(TAIWAN_CRASH_TEMPLATE_LIBRARY),
     }
 
 
 def _build_twse_pressure_line(features):
-    template = _historical_pressure_template(
-        features.get("change_pct"),
-        features.get("pullback_from_high_pct"),
-    )
+    template = _historical_pressure_template(features)
     matched = [
         f"單日跌幅 {_fmt_pct(features.get('change_pct'))}",
         f"高檔回落 {_fmt_pct(features.get('pullback_from_high_pct'))}",
@@ -559,7 +695,7 @@ def _build_twse_pressure_line(features):
     return (
         f"歷史類比：{template['event']}｜相似度 {percent}%｜"
         f"相似：{'、'.join(matched[:4])}｜差異：{template['difference']}｜"
-        f"關注：{template['watch']}｜source=TWSE"
+        f"關注：{template['watch']}｜樣本庫 台股歷史急跌 {template['library_size']}件｜source=TWSE"
     )
 
 

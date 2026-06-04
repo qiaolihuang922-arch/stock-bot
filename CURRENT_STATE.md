@@ -14,6 +14,23 @@
 
 ## Latest Completed Work
 
+- task_id：`future_watch_taiwan_crash_template_library_20260604`
+- 狀態：code done / QA 通過；報文版本維持 `v20.4.47`。
+- 問題：Owner 認為歷史類比模板太少，要求把台股歷史股災模板都加入並做分析。
+- 關鍵行為：
+  - 新增 `TAIWAN_CRASH_TEMPLATE_LIBRARY` 13 件台股歷史急跌 / 股災樣本庫。
+  - 事件涵蓋 1990、1995、1997、2000、2003、2004、2008、2011、2015、2018、2020、2022、2024。
+  - TWSE live features 用單日跌幅 / 高檔回落 / 盤中震盪對樣本庫 deterministic scoring。
+  - 第 4 則顯示 `樣本庫 台股歷史急跌 13件`。
+- 驗證：
+  - Focused future-watch tests：12 passed。
+  - py_compile：passed。
+  - `git diff --check`：passed。
+  - Official `generate()` read-only smoke：第 4 則顯示 `2015 台股急跌/中國股災外溢｜相似度 67%` 與 `樣本庫 台股歷史急跌 13件`，且 `CHECK_LIBRARY=True`、`CHECK_NO_GLOBAL_CRASH=True`。
+- 邊界：未改 DB、策略、RR、MOPS、EPS/營收、台股影響事件、live Telegram；仍不是多年 OHLC 統計模型。
+
+## Previous Completed Work
+
 - task_id：`future_watch_taiwan_crash_analogy_20260604`
 - 狀態：code done / QA 通過；報文版本維持 `v20.4.47`。
 - 問題：Owner 指出歷史類比不用全球股災模型，只要做台灣股災 / 台股急跌時間線；全球股災口徑可能不準、參考性不足。

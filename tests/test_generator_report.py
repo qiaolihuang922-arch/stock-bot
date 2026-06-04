@@ -7,6 +7,7 @@ from datetime import datetime
 
 from core import generator
 from core.future_watch import (
+    TAIWAN_CRASH_TEMPLATE_LIBRARY,
     build_live_global_event_source,
     build_live_twse_historical_source,
     collect_mops_events,
@@ -1634,12 +1635,38 @@ class GeneratorReportTest(unittest.TestCase):
         source = build_live_twse_historical_source(datetime(2026, 6, 4), get_json=fake_get_json)
 
         self.assertEqual(source["status"], "available")
-        self.assertIn("2015/08/20-24 台股急跌前段", source["line"])
+        self.assertEqual(len(TAIWAN_CRASH_TEMPLATE_LIBRARY), 13)
+        self.assertIn("2015 台股急跌/中國股災外溢", source["line"])
+        self.assertIn("相似度 67%", source["line"])
+        self.assertIn("樣本庫 台股歷史急跌 13件", source["line"])
         self.assertNotIn("全球股災", source["line"])
         self.assertIn("差異：屬壓力前段，不是崩盤等級", source["line"])
         self.assertIn("source=TWSE", source["line"])
         self.assertEqual(source["today_features"]["change_pct"], -1.68)
         self.assertEqual(source["today_features"]["history_rows"], 4)
+
+    def test_v20_4_47_live_twse_source_uses_severe_taiwan_crash_template(self):
+        responses = {
+            "MI_INDEX": [
+                {"指數": "發行量加權股價指數", "收盤指數": "19,830.88", "漲跌百分比": "-8.35"},
+            ],
+            "MI_5MINS_HIST": [
+                {"Date": "1130801", "OpeningIndex": "22100.00", "HighestIndex": "22400.00", "LowestIndex": "21800.00", "ClosingIndex": "21638.00"},
+                {"Date": "1130802", "OpeningIndex": "21500.00", "HighestIndex": "21638.00", "LowestIndex": "20500.00", "ClosingIndex": "20100.00"},
+                {"Date": "1130805", "OpeningIndex": "19900.00", "HighestIndex": "20050.00", "LowestIndex": "19662.00", "ClosingIndex": "19830.88"},
+            ],
+        }
+
+        def fake_get_json(url, **_kwargs):
+            key = "MI_INDEX" if "MI_INDEX" in url else "MI_5MINS_HIST"
+            return SimpleNamespace(json=lambda: responses[key], raise_for_status=lambda: None)
+
+        source = build_live_twse_historical_source(datetime(2024, 8, 5), get_json=fake_get_json)
+
+        self.assertEqual(source["status"], "available")
+        self.assertIn("2024/08/05 台股日圓套利平倉急殺", source["line"])
+        self.assertIn("樣本庫 台股歷史急跌 13件", source["line"])
+        self.assertNotIn("全球股災", source["line"])
 
     def test_v20_4_47_live_mops_adapter_blocks_unparseable_spa_shell(self):
         def blocked_post(_url, **_kwargs):
@@ -1893,7 +1920,7 @@ class GeneratorReportTest(unittest.TestCase):
             return {
                 "historical_source": {
                     "status": "insufficient-data",
-                    "line": "歷史類比：2015/08/20-24 台股急跌前段｜相似度 62%｜相似：單日跌幅 -1.68%、高檔回落 -1.88%、盤中震盪 +1.50%｜差異：屬壓力前段，不是崩盤等級｜關注：未來3-5日是否跌破本月低點｜source=TWSE",
+                    "line": "歷史類比：2015 台股急跌/中國股災外溢｜相似度 67%｜相似：單日跌幅 -1.68%、高檔回落 -1.88%、盤中震盪 +1.50%｜差異：屬壓力前段，不是崩盤等級｜關注：未來3-5日是否跌破本月低點｜樣本庫 台股歷史急跌 13件｜source=TWSE",
                 },
                 "mops_adapter": lambda _params: {"status": "source-error"},
                 "global_event_source": {
@@ -1926,7 +1953,8 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIs(messages[2], summary_message(messages))
         watch = messages[3]
         self.assertIn(f"【06/04 未來30日關注｜{generator.VERSION}】", watch)
-        self.assertIn("歷史類比：2015/08/20-24 台股急跌前段", watch)
+        self.assertIn("歷史類比：2015 台股急跌/中國股災外溢", watch)
+        self.assertIn("樣本庫 台股歷史急跌 13件", watch)
         self.assertNotIn("全球股災", watch)
         self.assertIn("未來30日法說會：MOPS 官方來源暫時不可解析，本次不列未確認事件", watch)
         global_lines = [

@@ -16,6 +16,13 @@
 
 ## Completed
 
+- `future_watch_taiwan_crash_template_library_20260604`:
+  - 問題：Owner 認為台股歷史類比模板太少，要求加入歷史股災模板並做分析。
+  - 結果：新增 13 件台股歷史急跌 / 股災樣本庫與 deterministic scoring；第 4 則顯示 `樣本庫 台股歷史急跌 13件`，06/04 official smoke 配到 `2015 台股急跌/中國股災外溢｜相似度 67%`。
+  - 可重跑補強：focused future-watch 12 passed、py_compile / diff check passed、official `generate()` read-only smoke `CHECK_LIBRARY=True` / `CHECK_NO_GLOBAL_CRASH=True`。
+  - QA 狀態：通過。
+  - 流程復盤：根因分類為 `evidence_chain` + `display_semantics`。只有三段模板會讓歷史類比缺乏寬度；樣本庫應外露件數，但仍只顯示最相近事件避免手機爆長。
+  - 邊界：未改 DB、策略、RR、MOPS、EPS/營收、台股影響事件、live Telegram；不是多年 OHLC 統計模型。
 - `future_watch_taiwan_crash_analogy_20260604`:
   - 問題：Owner 指出歷史類比不應使用全球股災模型，只要台灣股災 / 台股急跌口徑。
   - 結果：fallback 改 `無高相似台股急跌樣本`；壓力模板事件改成 `台股日圓套利平倉急殺`、`台股疫情急跌`、`台股急跌前段`；測試反證報文不再出現 `全球股災`。
