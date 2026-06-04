@@ -1,6 +1,9 @@
 name: Stock Bot Pro
 
 "on":
+  push:
+    branches:
+      - main
   schedule:
     - cron: "0 6 * * 1-5"
   workflow_dispatch:

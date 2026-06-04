@@ -142,6 +142,9 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
     def test_workflow_dispatch_supports_git_runner_may_backfill(self):
         workflow_text = WORKFLOW.read_text(encoding="utf-8")
 
+        self.assertIn("push:", workflow_text)
+        self.assertIn("branches:", workflow_text)
+        self.assertIn("- main", workflow_text)
         self.assertIn("schedule:", workflow_text)
         self.assertIn('cron: "0 6 * * 1-5"', workflow_text)
         self.assertIn("run_mode:", workflow_text)
