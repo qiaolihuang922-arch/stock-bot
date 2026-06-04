@@ -15,7 +15,7 @@
 ## Latest Completed Work
 
 - task_id：`fix-v20-4-37-rr-insufficient-message-readability`
-- 狀態：code done / QA 通過 / pending commit-push gate。
+- 狀態：code done / QA 通過 / committed; git completion gate passed。
 - 結論：v20.4.37 報文中 `等RR修復｜RR不足` 被寫成 `證據：資料不足`、以及僅追蹤標的進 summary 回測的手機誤讀已修復；版本升 `v20.4.38`。
 - 關鍵行為：
   - 光寶科類 `等RR修復｜RR不足` 卡片數據行改為 `不適用（RR不足）｜原因：RR不足，等待RR修復`，不再像資料源缺失。
