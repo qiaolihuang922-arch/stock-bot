@@ -6,13 +6,34 @@
 
 - 專案：台股策略 Telegram 報文機器人。
 - 正式結果以 git / runner 產生報文為準。
-- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.42`。
+- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.43`。
 - 固定 8 份 Markdown 不刪：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 - Architect 是總控；產品 / 策略 / 報文 bug 或 feature 預設走 PM -> Tech -> QA。
 - 跨日狀態、已執行交易、歷史 evidence 必須來自 production DB 或 Owner 指定持久來源；local/runtime/worktree 不能當跨日記憶。
 - 缺資料、source-error、欄位不足或可信度不足時 fail closed。
 
 ## Latest Completed Work
+
+- task_id：`evidence_chain_decision_layers_v20_4_43`
+- 狀態：code done / QA conditional pass；報文版本升 `v20.4.43`。
+- 問題：Owner 要保留目前顯示方式，但把 evidence-chain 接入所有主判斷；證據達標要有不同展示方式，hard gate 未解時不能只靠文字說明，summary / funnel / card 仍誤顯可買。
+- 關鍵行為：
+  - 新增每檔 `decision_judgment` 聚合，寫入 `stock.*.decision_judgment` 與 `report_context["stock_judgments"]`。
+  - judgment 包含 `eligibility_state`、`primary_action`、`evidence_status`、`evidence_refs`、`blocking_reasons`、`progress_reasons`。
+  - Telegram 既有 reason slot 追加 `決策證據：...`，不重設卡片版型。
+  - RR不足、過熱 / EXTREME、突破失敗、source missing/error/conflict、量能、追高/漲停、持倉 hard stop 等 hard gates 會讓 judgment / summary / funnel / card 同步 fail closed。
+  - 低 RR `trend_continuation` 不再顯示綠卡 / 小倉買點 / 新倉建議，改為 `等RR修復` 並保留 `卡關主因` / `量化差距`。
+  - DB/live non-bypass restriction 只留在 context / manifest blocking reasons，不顯示成可見買入授權。
+- 驗證：
+  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/v20_4_43_main_focused arch -arm64 ./.venv/bin/python -m pytest tests/test_generator_report.py -k 'v20_4_43 or v20_4_42_postmarket_unheld_gate_attribution_readability_message_list_replay or confirmed_evidence_preserves_limit_lock_chase_hard_blocker or v20_4_39_post_market_mixed_trend_and_prepare_keeps_trend_actionable or v20_0_14_post_market_fixture_uses_next_day_plan_semantics or v20_4_18_structural_artifacts_cover_three_fail_closed_cases or v20_4_20_maturity_report or v20_4_25_strategy_sample_source_error_blocks_action_without_hiding_available_price or v20_4_16_unheld_card_fails_closed_when_ohlcv_missing or trend_continuation_official_report_has_separate_small_buy_bucket' -q` -> 14 passed。
+  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/v20_4_43_main_pycompile arch -arm64 ./.venv/bin/python -m py_compile core/generator.py presentation/report.py tests/test_generator_report.py` -> passed。
+  - `git diff --check` -> passed。
+  - 補充 mixed official probe：一檔真正 BUY + 一檔低 RR trend_continuation 時，summary 只列真正 BUY；低 RR 標的為 `等RR修復`，含 `決策證據` 且不含小倉買點 -> passed。
+- QA 狀態：`conditional pass`。正式 `run_qa_code.sh` 與直接 `codex exec --model gpt-5.4-mini` 均遇 Codex usage limit；本地 official replay / direct consumer probe 已反證主要風險，但未取得正式 QA agent pass。
+- 殘留風險：未跑 full pytest、production runner artifact、production DB source artifact、DB read/write、live Telegram。
+- 邊界：未改 RR、strategy threshold、can_buy/is_valid_entry 核心、持倉狀態機、DB schema/write、live Telegram。
+
+## Previous Completed Work
 
 - task_id：`pm-20260604-v20.4.42-unheld-attribution-readable-gap`
 - 狀態：code done / QA 通過；報文版本升 `v20.4.42`。

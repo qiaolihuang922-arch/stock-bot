@@ -70,7 +70,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.42"
+VERSION = "v20.4.43"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -4585,11 +4585,21 @@ def _source_status_line(report_context, name, holding=False):
 def _stock_decision_source_status(report_context, name):
     if not report_context:
         return "available"
-    statuses = [
-        _stock_field(report_context, name, "price").get("source_status", "missing-source"),
-        _stock_field(report_context, name, "daily_ohlcv").get("source_status", "missing-source"),
-        _stock_field(report_context, name, "rr").get("source_status", "missing-source"),
-    ]
+    price_field = _stock_field(report_context, name, "price")
+    daily_field = _stock_field(report_context, name, "daily_ohlcv")
+    rr_field = _stock_field(report_context, name, "rr")
+    if not any([price_field, daily_field, rr_field]):
+        data = ((report_context or {}).get("results_map") or {}).get(name) or {}
+        price_status = _price_source_status(data)
+        daily_status = _daily_source_status(data)
+        rr_status = _derived_status(price_status, daily_status)
+        statuses = [price_status, daily_status, rr_status]
+    else:
+        statuses = [
+            price_field.get("source_status", "missing-source"),
+            daily_field.get("source_status", "missing-source"),
+            rr_field.get("source_status", "missing-source"),
+        ]
     if all(status in {"available", "derived"} for status in statuses):
         return "available"
     if "unresolved-conflict" in statuses:
@@ -4647,6 +4657,146 @@ def _unheld_source_status_from_fields(price_status, daily_status, rr_status, str
     if "missing-source" in statuses:
         return "missing-source"
     return "insufficient-data"
+
+
+def _decision_evidence_status(*statuses):
+    normalized = [_manifest_status(status) for status in statuses if status]
+    if "unresolved-conflict" in normalized:
+        return "conflicting"
+    if "source-error" in normalized:
+        return "source_error"
+    if "missing-source" in normalized:
+        return "missing"
+    if "insufficient-data" in normalized:
+        return "insufficient"
+    return "ok"
+
+
+def _append_unique(items, value):
+    if value and value not in items:
+        items.append(value)
+
+
+DECISION_NON_BYPASS_RESTRICTION = "DB/live restriction: evidence cannot authorize DB write/live Telegram delivery"
+
+
+def _unheld_hard_gate_reasons(result, source_status="available"):
+    blockers = entry_blockers(result or {})
+    blocker_text = "、".join(str(item) for item in blockers)
+    reasons = []
+    if source_status != "available":
+        reasons.append({
+            "missing-source": "missing-source",
+            "source-error": "source-error",
+            "unresolved-conflict": "conflicting evidence",
+            "insufficient-data": "insufficient-data",
+        }.get(source_status, source_status))
+    for token, reason in [
+        ("RR不足", "unresolved RR不足"),
+        ("過熱", "overheat / EXTREME"),
+        ("突破失敗", "failed breakout"),
+        ("漲停", "漲跌停 / 追高 hard gate"),
+        ("量能不足", "volume hard gate"),
+    ]:
+        if token in blocker_text:
+            reasons.append(reason)
+    if (result or {}).get("heat_state") in {"HOT", "EXTREME"}:
+        reasons.append("overheat / EXTREME")
+    if (result or {}).get("decision") == "FAIL" or (result or {}).get("structure_phase") == "FAILED_BREAKOUT":
+        reasons.append("failed breakout")
+    return list(dict.fromkeys(reasons))
+
+
+def _stock_judgment_from_sources(
+    name,
+    data,
+    *,
+    holding,
+    funnel_state,
+    displayed_funnel_state,
+    price_status,
+    daily_status,
+    rr_status,
+    strategy_status,
+    risk_status,
+    execution_status,
+    position_conflict="none",
+):
+    result = (data or {}).get("result") or {}
+    stock_key = f"stock.{name}"
+    blocking_reasons = []
+    progress_reasons = []
+    evidence_refs = [
+        f"{stock_key}.price",
+        f"{stock_key}.daily_ohlcv",
+        f"{stock_key}.rr",
+        f"{stock_key}.risk",
+        "evidence.strategy_sample",
+        "evidence.market_theme",
+    ]
+
+    if holding:
+        primary_action = position_summary_action(name, data)
+        decision = ensure_holding_decision(name, data) or {}
+        level = decision.get("level")
+        action_text = str(decision.get("action") or primary_action or "")
+        eligibility_state = "non_buy"
+        evidence_status = _decision_evidence_status(price_status, risk_status, execution_status)
+        evidence_refs.extend([f"{stock_key}.position", f"{stock_key}.execution_memory"])
+        if execution_status in STRUCTURAL_EVIDENCE_BLOCKING_STATUSES:
+            _append_unique(blocking_reasons, f"execution_memory {execution_status}")
+        if position_conflict and position_conflict != "none":
+            _append_unique(blocking_reasons, f"ledger conflict: {position_conflict}")
+        if level == "STOP_100":
+            _append_unique(blocking_reasons, "hard stop / holding risk")
+        elif level in {"REDUCE_25", "REDUCE_50"} or action_text.startswith("硬風控"):
+            _append_unique(blocking_reasons, "holding hard risk")
+        _append_unique(blocking_reasons, DECISION_NON_BYPASS_RESTRICTION)
+        _append_unique(progress_reasons, "既有持倉依持倉 / ledger / 價格來源判斷，不列新倉 eligibility")
+        return {
+            "symbol": (data or {}).get("stock_code"),
+            "eligibility_state": eligibility_state,
+            "primary_action": primary_action,
+            "evidence_status": evidence_status,
+            "evidence_refs": evidence_refs,
+            "blocking_reasons": blocking_reasons,
+            "progress_reasons": progress_reasons,
+        }
+
+    source_status = _unheld_source_status_from_fields(price_status, daily_status, rr_status, strategy_status)
+    evidence_status = _decision_evidence_status(price_status, daily_status, rr_status, strategy_status)
+    state_map = {
+        "可買": "buy",
+        "趨勢延續": "trend_continuation",
+        "可準備": "prepare",
+        "淘汰": "blocked",
+    }
+    eligibility_state = state_map.get(funnel_state, "non_buy")
+    for reason in _unheld_hard_gate_reasons(result, source_status):
+        _append_unique(blocking_reasons, reason)
+    if blocking_reasons:
+        eligibility_state = "blocked"
+    _append_unique(blocking_reasons, DECISION_NON_BYPASS_RESTRICTION)
+    if result.get("decision_type") == "trend_continuation" and funnel_state == "趨勢延續":
+        _append_unique(progress_reasons, "trend_continuation 同源證據達標，仍限小倉契約")
+    if result.get("decision") == "BUY" and result.get("action", 0) > 0:
+        _append_unique(progress_reasons, "既有買點與倉位規則通過")
+    if data.get("evidence_adjustment_reason"):
+        _append_unique(progress_reasons, data.get("evidence_adjustment_reason"))
+    if displayed_funnel_state and displayed_funnel_state != funnel_state:
+        _append_unique(progress_reasons, f"顯示為 {displayed_funnel_state}，不升格可買")
+    if not progress_reasons and source_status == "available":
+        _append_unique(progress_reasons, f"來源可追溯，現狀維持 {funnel_state}")
+
+    return {
+        "symbol": (data or {}).get("stock_code"),
+        "eligibility_state": eligibility_state,
+        "primary_action": funnel_state,
+        "evidence_status": evidence_status,
+        "evidence_refs": evidence_refs,
+        "blocking_reasons": blocking_reasons,
+        "progress_reasons": progress_reasons,
+    }
 
 
 def build_report_context(
@@ -4782,6 +4932,7 @@ def build_report_context(
     unheld_source_eligible_count = 0
     missing_slots = []
     conflict_slots = []
+    stock_judgments = {}
     for name, data in ordered_result_items(results_map):
         apply_evidence_confidence(interim_context, name, data)
         section = "持倉" if data.get("holding") else "新倉"
@@ -4818,14 +4969,44 @@ def build_report_context(
         stock_key = f"stock.{name}"
         if data.get("holding"):
             risk_value = position_summary_action(name, data)
+            judgment = _stock_judgment_from_sources(
+                name,
+                data,
+                holding=True,
+                funnel_state=None,
+                displayed_funnel_state=None,
+                price_status=price_status,
+                daily_status=daily_status,
+                rr_status=rr_status,
+                strategy_status=strategy_status,
+                risk_status=risk_status,
+                execution_status=execution_status,
+                position_conflict=position_conflict,
+            )
         else:
             funnel_state = unheld_funnel_state(name, data, report_context=interim_context)
             display_funnel_state = unheld_artifact_display_funnel_state(funnel_state, data)
+            judgment = _stock_judgment_from_sources(
+                name,
+                data,
+                holding=False,
+                funnel_state=funnel_state,
+                displayed_funnel_state=display_funnel_state,
+                price_status=price_status,
+                daily_status=daily_status,
+                rr_status=rr_status,
+                strategy_status=strategy_status,
+                risk_status=rr_status,
+                execution_status=event_status,
+                position_conflict=position_conflict,
+            )
             risk_value = {
                 "funnel_state": display_funnel_state,
                 "strategy_funnel_state": funnel_state,
                 "evidence_adjustment_reason": data.get("evidence_adjustment_reason"),
+                "decision_judgment": judgment,
             }
+        stock_judgments[name] = judgment
         stock_fields = [
             _manifest_field(
                 f"{stock_key}.price",
@@ -4960,6 +5141,31 @@ def build_report_context(
                 conflict=position_conflict,
                 visible_refs=[f"message:{0 if data.get('holding') else 1}:card:{name}", "message:2:資料依據"],
             ),
+            _manifest_field(
+                f"{stock_key}.decision_judgment",
+                "持倉" if data.get("holding") else section,
+                judgment,
+                {
+                    "ok": "derived",
+                    "missing": "missing-source",
+                    "source_error": "source-error",
+                    "conflicting": "unresolved-conflict",
+                    "insufficient": "insufficient-data",
+                }.get(judgment["evidence_status"], "insufficient-data"),
+                "report evidence manifest aggregate",
+                db_table="none",
+                as_of_date=as_of_date,
+                trade_date=trade_date,
+                decision_eligible=judgment["eligibility_state"] in {"buy", "trend_continuation", "prepare"},
+                fallback_rule="evidence judgment describes eligibility only; hard gates still fail closed",
+                input_fields=judgment["evidence_refs"],
+                layer="funnel-classification",
+                target=name,
+                use="每檔主判斷映射到 evidence-chain eligibility state",
+                limit="不新增策略門檻，不覆蓋 RR / overheat / failed breakout / source-error / hard stop",
+                conflict="unresolved-conflict" if judgment["evidence_status"] == "conflicting" else "none",
+                visible_refs=[f"message:{0 if data.get('holding') else 1}:card:{name}", "message:2:資料依據"],
+            ),
         ]
         manifest.extend(stock_fields)
         for field in stock_fields:
@@ -5087,6 +5293,7 @@ def build_report_context(
         "evidence": interim_context["evidence"],
         "evidence_status": interim_context["evidence"],
         "per_stock_evidence": interim_context["per_stock_evidence"],
+        "stock_judgments": stock_judgments,
         "market_theme_evidence": market_evidence,
         "strategy_evidence_summary": strategy_evidence_summary if isinstance(strategy_evidence_summary, dict) else {},
         "strategy_sample_structured_status": strategy_structured,
@@ -5503,6 +5710,24 @@ def unheld_funnel_state(name, data, market_mode=None, report_context=None):
         market_mode=market_mode,
         report_context=report_context,
     )
+    source_status = _unheld_decision_source_status(report_context, name)
+    hard_gate_reasons = _unheld_hard_gate_reasons((data or {}).get("result") or {}, source_status)
+    if hard_gate_reasons and state in {"可買", "趨勢延續", "可準備"}:
+        if "unresolved RR不足" in hard_gate_reasons:
+            fallback_state = "等RR修復"
+        elif "overheat / EXTREME" in hard_gate_reasons:
+            fallback_state = "等冷卻"
+        elif "volume hard gate" in hard_gate_reasons:
+            fallback_state = "等量能"
+        else:
+            fallback_state = tomorrow_watch_state(name, data)
+        state = fallback_state if fallback_state in {
+            "等冷卻",
+            "等回測",
+            "等RR修復",
+            "等量能",
+            "隔日確認",
+        } else "淘汰"
     if reason:
         data["evidence_adjustment_reason"] = reason
     else:

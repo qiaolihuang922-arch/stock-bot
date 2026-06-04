@@ -3,7 +3,7 @@
 依 `AGENTS.md` 啟動順序閱讀；本文件只保留任務看板、handoff 指針與固定啟動命令。
 
 - task_md_holds: `recently_done`
-- task_md_task_id: `pm-20260604-v20.4.42-unheld-attribution-readable-gap`
+- task_md_task_id: `evidence_chain_decision_layers_v20_4_43`
 - task_md_note: `TASK.md / CHANGELOG.md / QA_REPORT.md 目前是最近完成任務的滾動 handoff，不代表仍在 Tech/QA。`
 
 ## Active
@@ -16,6 +16,7 @@
 
 ## Recently Done
 
+- `v20.4.43`｜`evidence_chain_decision_layers_v20_4_43`｜risk_patch｜保留 v20.4.42 卡片顯示風格，新增每檔 `decision_judgment` evidence-chain 聚合與 `決策證據：...` reason slot；`stock.*.decision_judgment` / `report_context["stock_judgments"]` 可追溯 eligibility、evidence_status、blocking/progress reasons；RR不足、過熱/EXTREME、突破失敗、source missing/error/conflict、量能、追高/漲停、持倉 hard stop 等 hard gates 會讓 judgment / summary / funnel / card 同步 fail closed，不再只做文字說明；低 RR `trend_continuation` 降 `等RR修復` 並保留 `卡關主因` / `量化差距`；focused official replay 14 passed、py_compile / diff check passed、混合 direct consumer probe passed；QA `conditional pass`，原因是正式 QA runner 遇 Codex usage limit，但本地 official message-list 反證通過；未改 RR 公式、strategy threshold、DB schema/write、live Telegram。
 - `v20.4.42`｜`pm-20260604-v20.4.42-unheld-attribution-readable-gap`｜normal_patch｜未持倉非可買卡片 attribution 由單行 `到達可買差距` 改為兩行 `卡關主因` / `量化差距`：RR不足顯示 RR 現值、門檻與差值；距突破 >4% 顯示差值，<=4% 不列；過熱 / Lv.3、盤後待確認、突破失敗、資料來源缺失、策略樣本、漲跌停鎖定、弱反彈皆人話化；真正可買與 `trend_continuation` 小倉 BUY 不顯示卡關兩行；版本升 `v20.4.42`，tests current-version `v20.4.41` 殘留已清空；focused official replay 12 passed、py_compile / diff check passed、QA `通過`；未改策略、RR、can_buy/is_valid_entry、持倉、DB、live Telegram。
 - `v20.4.41`｜`v20.4.41-post-market-unheld-gate-attribution-readability`｜tiny_patch｜盤後未持倉 gate attribution 可讀性修正：真正可買與 `trend_continuation` 小倉 BUY 不顯示 `到達可買差距`；未達可買卡仍顯示可信差距；`FAILED_BREAKOUT` 只顯示 `突破失敗/需重新轉強` 且不顯示假 RR 0；盤後 ordinary prepare 顯示 `盤後訊號/需開盤後重新確認` 與 `盤後待確認` 原因；`EXTREME/HOT` 冷卻前只顯示極熱 / 過熱主因；`LIMIT_LOCK/LIMIT_REBOUND/WEAK_REBOUND` 人話化；QA 曾抓到 `距突破 2%/需<=4%` 已達標仍被列為差距，已修為距離 >4 才列入 gap；focused official message-list replay 4 passed、py_compile / diff check passed、QA `通過`；未改策略、RR、can_buy/is_valid_entry、DB、live Telegram。
 - `v20.4.40`｜`telegram-unheld-gate-attribution-v20.4.40`｜normal_patch｜未持倉非可買卡片新增 `到達可買差距` 單行 gate attribution，最多顯示 1-3 個可信阻擋條件，例如 RR、heat、source、突破距離、entry quality、LIMIT_LOCK；真正 `可買` 與 `trend_continuation` 小倉 BUY 不顯示差距行；修正 QA 抓到的 `LIMIT_LOCK/AVOID + heat NORMAL` 不再誤顯 `heat NORMAL/需降溫`，改以開板回測 / 追高風險解除方向呈現；focused official message-list replay 4 passed、py_compile / diff check passed、QA `通過`；未改 RR 公式、strategy decision、can_buy/is_valid_entry、DB schema/write、live Telegram。
@@ -50,8 +51,7 @@
 
 ## Next Action
 
-- v20.4.42 兩層 attribution 已 QA 通過；若 Owner 要更精細的 gate 排名或所有 AVOID+NORMAL 文案一致性，另開 attribution ranking/wording 任務，不在本輪改策略。
-- v20.4.42 本輪報文可讀性修復已 QA 通過並完成收口；下一步只剩 Render freshness production log follow-up。
+- v20.4.43 evidence-chain hard-gate fail-closed 已本地 official replay 通過；正式 QA runner 因 Codex usage limit 只能 conditional pass。若 Owner 要更細的 `決策證據` wording / blocker 排序，另開文案任務，不在本輪改策略。
 - 前一輪 Render freshness 仍需部署後看 Render 5 分鐘觸發 log，確認 freshness preflight 真實 runtime output。
 - 開新任務前先看 `task_md_holds`，不要用 `TASK.md` 內部舊狀態反推當前看板。
 - 報文 / 策略 / 產品修復仍走 PM -> Tech -> QA；流程治理文件可由 Architect 直接改。

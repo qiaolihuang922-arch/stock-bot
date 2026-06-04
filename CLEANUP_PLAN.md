@@ -16,6 +16,13 @@
 
 ## Completed
 
+- `evidence_chain_decision_layers_v20_4_43`:
+  - 問題：Owner 要「顯示保持目前樣子，但把證據鏈加入」，且所有判斷都要能被 evidence 推敲；前一版 risk 是只加可見說明，低 RR / hard-gate 標的仍可能在 summary / funnel / card 被列成可買或趨勢延續。
+  - 結果：VERSION 升 `v20.4.43`；新增每檔 `decision_judgment` manifest/context 聚合與 `決策證據：...` 可見 reason slot；RR不足、過熱/EXTREME、突破失敗、source missing/error/conflict、量能、追高/漲停、持倉 hard stop 會同步 fail closed；低 RR `trend_continuation` 降為 `等RR修復` 並保留 `卡關主因` / `量化差距`。
+  - 可重跑補強：focused official replay 14 passed；py_compile / diff check passed；Architect 補 mixed official direct consumer probe，確認一檔真 BUY + 一檔低 RR trend_continuation 時，summary 只列真 BUY，低 RR 標的不污染可買計數。
+  - QA 狀態：conditional pass；正式 QA runner 與直接 `codex exec --model gpt-5.4-mini` 均被 Codex usage limit 阻塞，沒有正式 agent QA pass。本地 official replay 覆蓋主要手機閱讀風險，但不能宣稱 production runner / DB source 完成。
+  - 流程復盤：根因分類為 `證據鏈` + `手機閱讀` + `runner_gap`。QA runner usage-limit 互動提示會讓只讀驗收卡住；後續應補 runner 對 usage prompt / model fallback / noninteractive failure 的處理，避免 Architect 手動補 local probe。
+  - 邊界：未改 RR、strategy threshold、can_buy/is_valid_entry 核心、持倉狀態機、DB schema/write、production backfill、live Telegram。
 - `fix-v20-4-37-rr-insufficient-message-readability`:
   - 問題：Owner v20.4.37 報文中，光寶科卡片是 `等RR修復｜RR不足`，但數據行寫 `證據：資料不足`，手機會誤讀成資料源缺失；summary 同時顯示 `回測（光寶科）...偏弱`，讓僅追蹤 / RR未達標的標的看起來像候選。
   - 結果：VERSION 升 `v20.4.38`；RR不足卡片改顯示 `原因：RR不足，等待RR修復`；summary 回測摘要排除僅追蹤 / 等RR修復標的，但保留建準類候選回測；新增 official message-list replay。

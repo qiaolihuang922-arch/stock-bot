@@ -403,7 +403,7 @@ def _gate_gap_text(value, threshold):
 
 def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source_status, strategy_source_blocked):
     stock_result = data.get("result") or {}
-    is_actionable = valid_entry or funnel_state == "趨勢延續" or stock_result.get("decision_type") == "trend_continuation"
+    is_actionable = valid_entry or funnel_state == "趨勢延續"
     post_market_prepare = (
         _report_phase((data or {}).get("report_context")) == "盤後"
         and stock_result.get("decision") == "BUY"
@@ -484,6 +484,71 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
     if extra_gaps:
         primary_gap = f"{primary_gap}｜" + "｜".join(extra_gaps)
     return two_line(primary_reason, primary_gap)
+
+
+def _stock_decision_judgment(report_context, name):
+    judgments = (report_context or {}).get("stock_judgments") or {}
+    judgment = judgments.get(name)
+    if judgment:
+        return judgment
+    field = None
+    for item in (report_context or {}).get("evidence_manifest") or []:
+        if item.get("field_name") == f"stock.{name}.decision_judgment":
+            field = item
+            break
+    value = (field or {}).get("value") or {}
+    return value if isinstance(value, dict) else {}
+
+
+def _decision_reason_text(report_context, name):
+    judgment = _stock_decision_judgment(report_context, name)
+    if not judgment:
+        return None
+    def visible_blocker(item):
+        return {
+            "unresolved RR不足": "RR不足",
+            "overheat / EXTREME": "過熱 / 熱度硬閘門",
+            "failed breakout": "突破失敗",
+            "漲跌停 / 追高 hard gate": "漲跌停 / 追高硬閘門",
+            "volume hard gate": "量能硬閘門",
+            "hard stop / holding risk": "hard stop / 持倉風控",
+            "holding hard risk": "持倉硬風控",
+            "conflicting evidence": "證據衝突",
+            "missing-source": "missing-source",
+            "source-error": "source-error",
+            "insufficient-data": "insufficient-data",
+        }.get(str(item), str(item))
+
+    blockers = [
+        visible_blocker(item)
+        for item in judgment.get("blocking_reasons") or []
+        if str(item) != "DB/live restriction: evidence cannot authorize DB write/live Telegram delivery"
+    ]
+    progress = [str(item) for item in judgment.get("progress_reasons") or []]
+    status = judgment.get("evidence_status")
+    status_text = {
+        "ok": "來源可追溯",
+        "missing": "missing-source fail closed",
+        "source_error": "source-error fail closed",
+        "conflicting": "conflicting evidence fail closed",
+        "insufficient": "insufficient-data fail closed",
+    }.get(status, f"evidence {status or 'unknown'}")
+    if blockers:
+        return "決策證據：" + "；".join([status_text, "阻塞 " + "、".join(blockers[:2])])
+    if progress:
+        return "決策證據：" + "；".join([status_text, *progress[:2]])
+    return f"決策證據：{status_text}"
+
+
+def _append_decision_reason(existing_line, report_context, name, *, default_prefix="理由"):
+    reason = _decision_reason_text(report_context, name)
+    if not reason:
+        return existing_line
+    if not existing_line:
+        return f"{default_prefix}：{reason}"
+    if reason in existing_line:
+        return existing_line
+    return f"{existing_line.rstrip('。；')}；{reason}"
 
 
 def _weak_buy_backtest_line(name, data, deps, include_all=False):
@@ -623,8 +688,14 @@ def formatTelegramPositionCard(name, data, *, deps, report_context=None):
     lines = [line for line in lines if line is not None]
     lines = [_afterhours_card_text(line, report_context) for line in lines]
 
+    reason_line = _append_decision_reason(
+        f"原因：{reason_line}" if reason_line else None,
+        report_context,
+        name,
+        default_prefix="原因",
+    )
     if reason_line:
-        lines.insert(6, f"原因：{reason_line}")
+        lines.insert(6, reason_line)
     history_line = deps["cross_day_detail_line"](data)
     if history_line:
         lines.insert(-1, history_line)
@@ -663,8 +734,13 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
             if funnel_state == "淘汰"
             else (blockers[0] if blockers else deps["final_label"](stock_result))
         )
+    if not valid_entry and funnel_state in ["等冷卻", "等回測", "等RR修復", "等量能", "隔日確認", "淘汰"]:
+        state = funnel_state
     if deps["is_valid_entry"](stock_result) and strategy_source_blocked:
-        title_label = "策略樣本證據不足" if strategy_source_status != "source-error" else "策略樣本來源異常"
+        title_label = {
+            "source-error": "策略樣本來源異常",
+            "unresolved-conflict": "策略樣本來源衝突",
+        }.get(strategy_source_status, "策略樣本證據不足")
     elif deps["is_valid_entry"](stock_result) and not source_eligible:
         title_label = "資料來源缺失" if source_status in {"missing-source", "insufficient-data"} else "資料來源異常"
     elif state == "弱勢淘汰":
@@ -698,7 +774,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     elif state in ["等RR修復", "等量能", "隔日確認"]:
         title_icon = "👀"
         title_action = state
-    elif state == "弱勢淘汰":
+    elif state in ["弱勢淘汰", "淘汰"]:
         title_icon = "⛔"
         title_action = "淘汰"
     else:
@@ -725,6 +801,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
             "missing-source": "策略樣本來源缺失",
             "insufficient-data": "策略樣本樣本不足",
             "source-error": "策略樣本來源讀取異常",
+            "unresolved-conflict": "策略樣本來源衝突",
         }.get(strategy_source_status, "策略樣本不可用")
         buy_line = f"買點：不可買，{strategy_reason}"
         data_line = f"數據：{rr_data_text}｜S 證據不足｜V {data.get('volume_ratio', '-')}x"
@@ -793,6 +870,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         if deps["is_valid_entry"](stock_result) and not source_eligible
         else f"理由：{data.get('evidence_adjustment_reason')}" if data.get("evidence_adjustment_reason") else deps["rejected_transition_reason_line"](stock_result) if funnel_state == "淘汰" else None
     )
+    reason_line = _append_decision_reason(reason_line, report_context, name)
     trend_control_lines = []
     if valid_entry and funnel_state == "趨勢延續":
         trend_control_lines = [
