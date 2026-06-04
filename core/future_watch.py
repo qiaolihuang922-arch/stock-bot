@@ -12,9 +12,9 @@ except ImportError:
 
 
 CRASH_ANALOGY_FALLBACK = "歷史類比：無高相似崩盤樣本｜依據不足/相似度低"
-GLOBAL_SOURCE_ERROR = "全球事件：官方來源暫時不可用，本次不列未確認事件"
-GLOBAL_EMPTY = "全球事件：未查到未來30日官方事件"
-MOPS_SOURCE_ERROR = "法說會提醒：MOPS 官方來源暫時不可解析，本次不列未確認事件"
+TAIWAN_MARKET_EVENT_SOURCE_ERROR = "未來30日台股影響事件：官方來源暫時不可用，本次不列未確認事件"
+TAIWAN_MARKET_EVENT_EMPTY = "未來30日台股影響事件：未查到未來30日官方事件"
+MOPS_SOURCE_ERROR = "未來30日法說會：MOPS 官方來源暫時不可解析，本次不列未確認事件"
 MOPS_ENDPOINT = "https://mopsov.twse.com.tw/mops/web/ajax_t100sb02_1"
 MOPS_METHOD = "POST"
 MOPS_TYPEKS = ("sii", "otc", "rotc", "pub")
@@ -947,9 +947,9 @@ def format_future_watch_message(payload, now, version):
     mops = payload.get("mops_events") or {}
     mops_items = mops.get("items") or []
     if mops.get("status") == "source-error":
-        lines.extend(["", "法說會提醒", MOPS_SOURCE_ERROR])
+        lines.extend(["", "未來30日法說會", MOPS_SOURCE_ERROR])
     elif mops_items:
-        lines.extend(["", "法說會提醒"])
+        lines.extend(["", "未來30日法說會"])
         for item in mops_items[:5]:
             lines.append(
                 f"{_date_label(item.get('date'))} {item.get('code')} {item.get('name')}｜"
@@ -958,9 +958,9 @@ def format_future_watch_message(payload, now, version):
 
     global_events = payload.get("global_events") or {}
     global_items = global_events.get("items") or []
-    lines.extend(["", "全球事件"])
+    lines.extend(["", "未來30日台股影響事件"])
     if global_events.get("status") == "source-error":
-        lines.append(GLOBAL_SOURCE_ERROR)
+        lines.append(TAIWAN_MARKET_EVENT_SOURCE_ERROR)
     elif global_items:
         for item in global_items[:5]:
             lines.append(
@@ -968,7 +968,7 @@ def format_future_watch_message(payload, now, version):
                 f"影響面：{item.get('impact')}｜來源：{item.get('source_label') or item.get('source')}"
             )
     else:
-        lines.append(GLOBAL_EMPTY)
+        lines.append(TAIWAN_MARKET_EVENT_EMPTY)
 
     has_visible = (
         bool(analogy)

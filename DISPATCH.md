@@ -3,7 +3,7 @@
 依 `AGENTS.md` 啟動順序閱讀；本文件只保留任務看板、handoff 指針與固定啟動命令。
 
 - task_md_holds: `recently_done`
-- task_md_task_id: `future_watch_query_interface_optimization_20260604`
+- task_md_task_id: `future_watch_30d_section_semantics_20260604`
 - task_md_note: `TASK.md / CHANGELOG.md / QA_REPORT.md 目前是最近完成任務的滾動 handoff，不代表仍在 Tech/QA。`
 
 ## Active
@@ -16,6 +16,7 @@
 
 ## Recently Done
 
+- `future_watch_30d_section_semantics_20260604`｜tiny_patch/L1｜修正第 4 則 `【未來30日關注】` 的手機可見語意，不升版仍維持 `v20.4.47`：除 `歷史類比` 外，另外兩段改為 `未來30日法說會`、`未來30日台股影響事件`；source-error / empty 文案同步使用新標題，不再顯示舊 `法說會提醒` / `全球事件` 段落標題。focused future-watch tests 10 passed、py_compile / diff check passed、read-only live smoke passed 且仍列 2301 光寶科 06/05 / 06/22 法說會。未改查詢邏輯、策略、RR、DB schema/write/backfill、live Telegram。
 - `future_watch_query_interface_optimization_20260604`｜normal_patch/L2｜優化未來 30 日關注的即時查詢接口，不升報文版本仍維持 `v20.4.47`：MOPS `collect_mops_events()` 新增 `max_targets` / `max_queries` / `max_seconds`、`query_count` / `target_count` / `budget_exhausted` / `source_error_count` diagnostics；POST 參數補 `encodeURIComponent=1`、`off=1` 並保留 `step=1` / `firstin=1`；上市 / 上櫃 / 興櫃 / 公開發行市場別會優先查對應 TYPEK，已知市場別查完即停止橫向掃描；持倉與候選優先，淘汰 / blocked 後置。focused future-watch tests 10 passed、py_compile / diff check passed、read-only live smoke 2301 `mops_query_count=2` 且仍列 06/05 / 06/22 光寶科法說會。未改策略、RR、DB schema/write/backfill、live Telegram。
 - `v20.4.47`｜`future_watch_complete_v20_4_47`｜normal_patch/L2｜把 `【未來30日關注】` 從 v20.4.46 保守試行版做成完成版：TWSE 歷史類比改為壓力情境線，輸出 `2015/08/20-24 全球股災前段`、相似度、相似點、差異與關注條件；MOPS adapter 補正確 `step/firstin` 參數並解析官方 t100sb02_1 表格，2301 live smoke 可列 06/05、06/22 光寶科法說會；全球事件中文化並改 `來源：...官方/備援`，不再顯示 raw `source=`。focused future-watch tests 9 passed、py_compile / diff check passed、read-only live smoke passed；QA `conditional pass`，原因是全量 `tests/test_generator_report.py` 仍有既有未持倉漏斗 / legacy snapshot failures，本輪未修旁支。未改策略、RR、DB schema/write/backfill、live Telegram。
 - `github_actions_manual_workflow_clean_inputs_20260604`｜normal_patch/L2｜修正 GitHub Actions 手動執行手機端顯示舊 backfill inputs 後送出 `Unexpected inputs provided: ["start_date", "end_date", "backfill_version"]`：刪除舊 `.github/workflows/stock-bot.yml`，新增 `.github/workflows/stock-bot-clean.yml`，workflow 名稱改 `Stock Bot` 以重置 GitHub mobile dispatch form identity；manual inputs 只保留 `run_mode`，choices 只保留 `bot` / `daily_evidence`；tests 改讀新 workflow 並反證舊 file / 舊欄位不存在。`tests/test_workflow_runtime_config.py` 9 passed、`git diff --check` passed。未改 Telegram 報文版本、策略、DB、live Telegram。

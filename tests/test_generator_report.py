@@ -1537,16 +1537,18 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIs(messages[2], summary_message(messages))
         self.assertIn(f"【06/04 未來30日關注｜{generator.VERSION}】", messages[3])
         self.assertIn("【未來30日關注】", messages[3])
-        self.assertNotIn("全球事件", summary_message(messages))
-        self.assertNotIn("法說會提醒", summary_message(messages))
-        self.assertLess(messages[3].index("歷史類比"), messages[3].index("法說會提醒"))
-        self.assertLess(messages[3].index("法說會提醒"), messages[3].index("全球事件"))
+        self.assertNotIn("未來30日台股影響事件", summary_message(messages))
+        self.assertNotIn("未來30日法說會", summary_message(messages))
+        self.assertLess(messages[3].index("歷史類比"), messages[3].index("未來30日法說會"))
+        self.assertLess(messages[3].index("未來30日法說會"), messages[3].index("未來30日台股影響事件"))
+        self.assertNotIn("\n全球事件\n", messages[3])
+        self.assertNotIn("\n法說會提醒\n", messages[3])
         self.assertIn("歷史類比：03/12 疫情急跌時間線｜相似度 84%｜相似：跌幅擴大、量能放大、市場廣度轉弱｜類比不是預測", messages[3])
         self.assertNotIn("即將崩盤", messages[3])
         self.assertNotIn("重演", messages[3])
         self.assertIn("06/20 2301 光寶科｜法人說明會｜關注原因：持倉｜source=MOPS", messages[3])
         self.assertNotIn("0-count", messages[3])
-        self.assertNotIn("查無資料", messages[3].split("全球事件", 1)[0])
+        self.assertNotIn("查無資料", messages[3].split("未來30日台股影響事件", 1)[0])
         global_lines = [
             line for line in messages[3].splitlines()
             if "｜影響面：" in line and "來源：" in line
@@ -1655,7 +1657,7 @@ class GeneratorReportTest(unittest.TestCase):
             generator.VERSION,
         )
 
-        self.assertIn("法說會提醒", message)
+        self.assertIn("未來30日法說會", message)
         self.assertIn("MOPS 官方來源暫時不可解析", message)
 
     def test_v20_4_47_live_mops_adapter_parses_future_official_table_rows(self):
@@ -1801,8 +1803,8 @@ class GeneratorReportTest(unittest.TestCase):
 
         self.assertEqual(len(messages), 4)
         self.assertIn("歷史類比：無高相似崩盤樣本｜依據不足/相似度低", watch)
-        self.assertIn("法說會提醒：MOPS 官方來源暫時不可解析，本次不列未確認事件", watch)
-        self.assertIn("全球事件：官方來源暫時不可用，本次不列未確認事件", watch)
+        self.assertIn("未來30日法說會：MOPS 官方來源暫時不可解析，本次不列未確認事件", watch)
+        self.assertIn("未來30日台股影響事件：官方來源暫時不可用，本次不列未確認事件", watch)
         self.assertNotIn("金融海嘯急跌", watch)
         self.assertNotIn("即將崩盤", watch)
         self.assertNotIn("重演", watch)
@@ -1867,7 +1869,7 @@ class GeneratorReportTest(unittest.TestCase):
         watch = messages[3]
         self.assertIn(f"【06/04 未來30日關注｜{generator.VERSION}】", watch)
         self.assertIn("歷史類比：2015/08/20-24 全球股災前段", watch)
-        self.assertIn("法說會提醒：MOPS 官方來源暫時不可解析，本次不列未確認事件", watch)
+        self.assertIn("未來30日法說會：MOPS 官方來源暫時不可解析，本次不列未確認事件", watch)
         global_lines = [
             line for line in watch.splitlines()
             if "｜影響面：" in line and "來源：" in line
@@ -1878,14 +1880,14 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("06/15-16 日本央行 BOJ 利率會議｜影響面：利率/匯率｜來源：BOJ官方", global_lines)
         self.assertIn("06/15-17 G7 領袖峰會｜影響面：政治風險｜來源：G7官方", global_lines)
         self.assertIn("06/16-17 Fed FOMC 利率決策/SEP｜影響面：利率/匯率｜來源：Fed官方", global_lines)
-        self.assertNotIn("全球事件：官方來源暫時不可用", watch)
+        self.assertNotIn("未來30日台股影響事件：官方來源暫時不可用", watch)
         self.assertNotIn("06/18 BoE MPC", watch)
         self.assertNotIn("06/25 BEA GDP", watch)
         first_three = "\n\n".join(messages[:3])
         self.assertIn("建準", first_three)
         self.assertNotIn("【未來30日關注】", first_three)
-        self.assertNotIn("法說會提醒", first_three)
-        self.assertNotIn("全球事件", first_three)
+        self.assertNotIn("未來30日法說會", first_three)
+        self.assertNotIn("未來30日台股影響事件", first_three)
         self.assertNotIn("即將崩盤", watch)
         self.assertNotIn("重演", watch)
 

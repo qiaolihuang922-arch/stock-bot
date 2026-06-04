@@ -14,6 +14,23 @@
 
 ## Latest Completed Work
 
+- task_id：`future_watch_30d_section_semantics_20260604`
+- 狀態：code done / QA 通過；報文版本維持 `v20.4.47`。
+- 問題：Owner 指出除了歷史類比外，其他兩個大項都只是未來 30 天；第三點應改為會影響台灣股市的事件，不要泛稱全球事件。
+- 關鍵行為：
+  - 第 4 則段落維持三段，但標題改為 `歷史類比`、`未來30日法說會`、`未來30日台股影響事件`。
+  - MOPS source-error 文案改為 `未來30日法說會：MOPS 官方來源暫時不可解析，本次不列未確認事件`。
+  - 台股影響事件 source-error / empty 文案同步使用 `未來30日台股影響事件`。
+  - 舊段落標題 `法說會提醒` / `全球事件` 不再出現在第 4 則。
+- 驗證：
+  - Focused future-watch tests：10 passed。
+  - py_compile：passed。
+  - `git diff --check`：passed。
+  - Read-only live smoke with 2301：第 4 則顯示新標題，仍列 MOPS 06/05 / 06/22 光寶科法說會。
+- 邊界：未改資料查詢邏輯、策略、RR、持倉風控、DB schema/write/backfill、live Telegram。
+
+## Previous Completed Work
+
 - task_id：`future_watch_query_interface_optimization_20260604`
 - 狀態：code done / QA 通過；報文版本維持 `v20.4.47`。
 - 問題：Owner 擔心未來 30 日關注的即時接口查詢會久，需要多增加查詢參數與範圍控制，不走 DB/cache 方向。

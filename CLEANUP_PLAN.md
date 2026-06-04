@@ -16,6 +16,13 @@
 
 ## Completed
 
+- `future_watch_30d_section_semantics_20260604`:
+  - 問題：Owner 指出第 4 則除歷史類比外，其他兩個大項都應明示未來 30 日；第三區塊應是會影響台灣股市的事件，不是泛稱全球事件。
+  - 結果：第 4 則段落改為 `歷史類比` / `未來30日法說會` / `未來30日台股影響事件`；source-error / empty 文案同步更新，不再回退到舊 `法說會提醒` / `全球事件` 標題。
+  - 可重跑補強：focused future-watch 10 passed、py_compile / diff check passed、read-only live smoke 2301 顯示新標題且仍列 06/05 / 06/22 法說會。
+  - QA 狀態：通過。
+  - 流程復盤：根因分類為 `mobile_reading` + `display_semantics`。資料窗口已是未來 30 日，但標題沒有把窗口與台股影響範圍講清楚，容易被讀成泛全球日曆。
+  - 邊界：未改查詢邏輯、策略、RR、DB schema/write/backfill、live Telegram。
 - `future_watch_query_interface_optimization_20260604`:
   - 問題：Owner 擔心未來 30 日關注查即時接口會久，希望優化查詢接口並增加查詢參數，不走資料庫方向。
   - 結果：MOPS 查詢新增 `max_targets` / `max_queries` / `max_seconds` 預算；POST 補 `encodeURIComponent` / `off`；市場別正規化後優先查對應 TYPEK；已知市場別每月查完即停止橫向掃描；回傳 `query_count` / `target_count` / `budget_exhausted` / `source_error_count` diagnostics。
