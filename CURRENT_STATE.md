@@ -14,6 +14,23 @@
 
 ## Latest Completed Work
 
+- task_id：`future_watch_mops_breadth_query_fix_20260604`
+- 狀態：code done / QA 通過；報文版本維持 `v20.4.47`。
+- 問題：Owner 貼出的第 4 則 `未來30日法說會` 只剩 `06/05 2303 聯電` 一筆；改版前查詢資料是對的。
+- 根因：MOPS 查詢優化後採單檔深度優先，前面標的會先掃完所有 TYPEK / 月份，在 query budget 下後排標的被漏查。
+- 關鍵行為：
+  - MOPS 查詢改為廣度優先：所有標的先查第一優先 TYPEK，再進 fallback。
+  - `MOPS_DEFAULT_MAX_TARGETS` 8 -> 12，`MOPS_DEFAULT_MAX_QUERIES` 24 -> 32。
+  - 法說會顯示上限 5 -> 10，避免查到的後段事件被截掉。
+- 驗證：
+  - Focused future-watch tests：11 passed。
+  - py_compile：passed。
+  - `git diff --check`：passed。
+  - Official `generate()` read-only smoke：未來30日法說會恢復多檔，包含 06/04 緯創 / 群創、06/05 光寶科 / 聯電 / 仁寶 / 英業達、06/08 英業達、06/09 仁寶、06/22 光寶科。
+- 邊界：未改策略、RR、持倉風控、DB schema/write/backfill、live Telegram。
+
+## Previous Completed Work
+
 - task_id：`future_watch_30d_section_semantics_20260604`
 - 狀態：code done / QA 通過；報文版本維持 `v20.4.47`。
 - 問題：Owner 指出除了歷史類比外，其他兩個大項都只是未來 30 天；第三點應改為會影響台灣股市的事件，不要泛稱全球事件。

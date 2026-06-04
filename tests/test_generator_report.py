@@ -1705,6 +1705,43 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertEqual(len(calls), 3)
         self.assertLessEqual(len({call["co_id"] for call in calls}), 2)
 
+    def test_v20_4_47_mops_query_budget_checks_all_targets_first_market_before_fallback(self):
+        results = {
+            f"股票{i}": {
+                "stock_code": f"23{i:02d}",
+                "result": {"trade_state": "OBSERVE"},
+            }
+            for i in range(12)
+        }
+        calls = []
+
+        def adapter(params):
+            calls.append(dict(params))
+            if params["co_id"] == "2311" and params["TYPEK"] == "sii" and params["month"] == "06":
+                return {
+                    "rows": [{
+                        "date": "2026-06-20",
+                        "co_id": "2311",
+                        "name": "股票11",
+                        "event": "法人說明會",
+                    }]
+                }
+            return {"status": "available", "rows": []}
+
+        mops = collect_mops_events(
+            results,
+            datetime(2026, 6, 4),
+            mops_adapter=adapter,
+            max_targets=12,
+            max_queries=24,
+        )
+
+        self.assertEqual(mops["items"][0]["code"], "2311")
+        self.assertEqual(calls[0]["TYPEK"], "sii")
+        self.assertEqual(calls[-1]["co_id"], "2311")
+        self.assertTrue(all(call["TYPEK"] == "sii" for call in calls))
+        self.assertLessEqual(mops["query_count"], 24)
+
     def test_v20_4_47_mops_uses_exchange_typek_first_and_stops_after_rows(self):
         calls = []
 

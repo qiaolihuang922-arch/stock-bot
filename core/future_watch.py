@@ -18,9 +18,10 @@ MOPS_SOURCE_ERROR = "未來30日法說會：MOPS 官方來源暫時不可解析�
 MOPS_ENDPOINT = "https://mopsov.twse.com.tw/mops/web/ajax_t100sb02_1"
 MOPS_METHOD = "POST"
 MOPS_TYPEKS = ("sii", "otc", "rotc", "pub")
-MOPS_DEFAULT_MAX_TARGETS = 8
-MOPS_DEFAULT_MAX_QUERIES = 24
+MOPS_DEFAULT_MAX_TARGETS = 12
+MOPS_DEFAULT_MAX_QUERIES = 32
 MOPS_DEFAULT_MAX_SECONDS = 8
+MOPS_DEFAULT_MAX_ITEMS = 10
 MOPS_TYPEK_PRIORITY = {
     "sii": ("sii", "otc", "rotc", "pub"),
     "otc": ("otc", "sii", "rotc", "pub"),
@@ -753,7 +754,7 @@ def collect_mops_events(
     results_map,
     now,
     mops_adapter=None,
-    max_items=5,
+    max_items=MOPS_DEFAULT_MAX_ITEMS,
     max_targets=MOPS_DEFAULT_MAX_TARGETS,
     max_queries=MOPS_DEFAULT_MAX_QUERIES,
     max_seconds=MOPS_DEFAULT_MAX_SECONDS,
@@ -779,10 +780,19 @@ def collect_mops_events(
     started_at = monotonic()
     budget_exhausted = False
     try:
-        for target in targets:
-            for year, month in _month_keys(start, end):
-                market_resolved = False
-                for typek in _mops_typek_order(target):
+        month_keys = _month_keys(start, end)
+        resolved_markets = set()
+        max_typek_passes = max(len(_mops_typek_order(target)) for target in targets) if targets else 0
+        for typek_pass in range(max_typek_passes):
+            for target in targets:
+                typek_order = _mops_typek_order(target)
+                if typek_pass >= len(typek_order):
+                    continue
+                typek = typek_order[typek_pass]
+                for year, month in month_keys:
+                    resolved_key = (target["code"], year, month)
+                    if resolved_key in resolved_markets:
+                        continue
                     if len(queried) >= max_queries or (monotonic() - started_at) >= max_seconds:
                         budget_exhausted = True
                         break
@@ -806,14 +816,14 @@ def collect_mops_events(
                     if isinstance(response, dict) and response.get("status") == "source-error":
                         source_errors.append(params)
                         if target.get("typek") == typek:
-                            market_resolved = True
-                            break
+                            resolved_markets.add(resolved_key)
+                            continue
                         continue
                     data_rows = response.get("rows", []) if isinstance(response, dict) else response
                     if target.get("typek") == typek:
-                        market_resolved = True
+                        resolved_markets.add(resolved_key)
                     if data_rows:
-                        market_resolved = True
+                        resolved_markets.add(resolved_key)
                     for row in data_rows or []:
                         event_date = row.get("date") or row.get("event_date") or row.get("日期")
                         code = str(row.get("co_id") or row.get("stock_code") or row.get("公司代號") or target["code"])
@@ -828,8 +838,6 @@ def collect_mops_events(
                             "reason": target_info["reason"],
                             "source": "MOPS",
                         })
-                    if market_resolved:
-                        break
                 if budget_exhausted:
                     break
             if budget_exhausted:
@@ -950,7 +958,7 @@ def format_future_watch_message(payload, now, version):
         lines.extend(["", "未來30日法說會", MOPS_SOURCE_ERROR])
     elif mops_items:
         lines.extend(["", "未來30日法說會"])
-        for item in mops_items[:5]:
+        for item in mops_items[:MOPS_DEFAULT_MAX_ITEMS]:
             lines.append(
                 f"{_date_label(item.get('date'))} {item.get('code')} {item.get('name')}｜"
                 f"{item.get('event')}｜關注原因：{item.get('reason')}｜source=MOPS"

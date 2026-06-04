@@ -1,22 +1,23 @@
-# TASK: future_watch_30d_section_semantics_20260604
+# TASK: future_watch_mops_breadth_query_fix_20260604
 
 ## 任務狀態
 
-- task_id：`future_watch_30d_section_semantics_20260604`
-- 任務類型：tiny_patch
+- task_id：`future_watch_mops_breadth_query_fix_20260604`
+- 任務類型：normal_patch
 - 狀態：ready_for_qa
 - 版本建議：維持 `v20.4.47`
-- QA 分級：L1
+- QA 分級：L2
 
 ## Owner 問題
 
-Owner 指出第 4 則語意需要更精準：除了歷史類比外，另外兩個大項都只看未來 30 天；第三點不要泛稱全球事件，改成會影響台灣股市的事件。
+Owner 貼出正式第 4 則後發現 `未來30日法說會` 只剩 1 筆聯電；改版前查詢資料是對的。根因是 MOPS 查詢優化改成單檔深度優先，在 query budget 下前面標的吃掉查詢額度，後面標的被漏查。
 
 ## 使用者可見結果
 
-- 第 4 則三段語意改為：`歷史類比`、`未來30日法說會`、`未來30日台股影響事件`。
-- 法說會與台股影響事件標題直接說明只看未來 30 日。
-- source-error / empty 文案同步使用新標題，不再顯示 `全球事件` 或 `法說會提醒`。
+- MOPS 查詢改為廣度優先：所有標的先查第一優先市場別，再進 fallback TYPEK。
+- 預設查詢目標擴到 12 檔，查詢預算擴到 32 次。
+- 法說會可見上限擴到 10 筆，避免查到但被 formatter 截掉。
+- 正式 `generate()` 第 4 則恢復多檔法說會，包含光寶科、聯電、仁寶、英業達、緯創、群創等。
 
 ## 非目標
 
@@ -24,7 +25,7 @@ Owner 指出第 4 則語意需要更精準：除了歷史類比外，另外兩�
 - 不做 DB 方向，不新增 DB read/write/backfill。
 - 不發 live Telegram。
 - 不改全球事件完整官方 calendar parser。
-- 不改查詢範圍與資料來源，只改使用者可見標題 / 錯誤文案。
+- 不改 DB 方向或加 cache。
 
 ## 影響模組與直接消費者
 
@@ -34,24 +35,24 @@ Owner 指出第 4 則語意需要更精準：除了歷史類比外，另外兩�
 
 ## 輸出契約
 
-- 第 4 則標題順序：`歷史類比` -> `未來30日法說會` -> `未來30日台股影響事件`。
-- MOPS source-error：`未來30日法說會：MOPS 官方來源暫時不可解析，本次不列未確認事件`。
-- 台股影響事件 source-error：`未來30日台股影響事件：官方來源暫時不可用，本次不列未確認事件`。
+- MOPS query order 不得讓單一標的先掃完所有 TYPEK 後才換下一檔。
+- 在 `max_queries=24`、`max_targets=12` 下，第 12 檔第一優先市場別仍必須被查到。
+- formatter 最多顯示 10 筆 MOPS 法說會。
 
 ## 驗收條件
 
 - Focused future-watch tests 通過。
 - py_compile 通過。
 - `git diff --check` 通過。
-- Read-only live smoke：光寶科 2301 仍列 MOPS 06/05 / 06/22 法說會，且第 4 則使用新標題。
+- Read-only official `generate()` smoke：未來30日法說會不只 1 筆，且包含 06/22 光寶科。
 
 ## 失敗標本與驗收路由
 
-- 失敗標本：Owner 指出的「除了歷史類比外，其他兩個大項都是未來三十天而已；第三點改成會影響台灣股市的事件」。
-- 驗收路由：future_watch formatter -> focused tests -> read-only live smoke。
+- 失敗標本：Owner 貼出的第 4 則只剩 `06/05 2303 聯電` 一筆法說會。
+- 驗收路由：MOPS helper query order regression -> focused tests -> official `generate()` read-only smoke。
 
 ## 禁止事項與阻塞條件
 
-- 不得改資料查詢語意來掩蓋顯示問題。
-- 不得假造 MOPS 事件或台股影響事件。
+- 不得用 DB cache 解決本輪問題。
+- 不得假造 MOPS 事件。
 - 不得把 source-error 靜默顯示成無事件。

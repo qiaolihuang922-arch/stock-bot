@@ -16,6 +16,13 @@
 
 ## Completed
 
+- `future_watch_mops_breadth_query_fix_20260604`:
+  - 問題：Owner 貼出的正式第 4 則 `未來30日法說會` 只剩聯電一筆，與改版前資料明顯不一致。
+  - 結果：MOPS 查詢由單檔深度優先改為廣度優先；預設目標 / 查詢預算提到 12 / 32；法說會顯示上限提到 10。
+  - 可重跑補強：focused future-watch 11 passed、py_compile / diff check passed、official `generate()` read-only smoke 恢復多檔法說會並包含 06/22 光寶科。
+  - QA 狀態：通過。
+  - 流程復盤：根因分類為 `performance_budget` + `source_query_order` + `mobile_reading`。查詢優化不能只降低 query count，必須防止 budget starvation；驗收應用 Owner 貼出的完整報文或 official generate，而不是只用單檔 helper smoke。
+  - 邊界：未改策略、RR、DB schema/write/backfill、live Telegram。
 - `future_watch_30d_section_semantics_20260604`:
   - 問題：Owner 指出第 4 則除歷史類比外，其他兩個大項都應明示未來 30 日；第三區塊應是會影響台灣股市的事件，不是泛稱全球事件。
   - 結果：第 4 則段落改為 `歷史類比` / `未來30日法說會` / `未來30日台股影響事件`；source-error / empty 文案同步更新，不再回退到舊 `法說會提醒` / `全球事件` 標題。
