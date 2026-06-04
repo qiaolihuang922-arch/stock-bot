@@ -373,6 +373,74 @@ def _unheld_score_text_for_state(score_text, rr_text, valid_entry, funnel_state,
     return f"不適用（{reason}）｜證據：{evidence_text}"
 
 
+def _gate_value_text(value):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number.is_integer():
+        return str(int(number))
+    return f"{number:.2f}".rstrip("0").rstrip(".")
+
+
+def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source_status, strategy_source_blocked):
+    stock_result = data.get("result") or {}
+    if valid_entry or funnel_state == "趨勢延續" or stock_result.get("decision_type") == "trend_continuation":
+        return None
+
+    gates = []
+    if strategy_source_blocked:
+        gates.append("strategy sample/需可用")
+    source_blocked = source_status in {"missing-source", "insufficient-data", "source-error", "unresolved-conflict"}
+    if source_blocked and not strategy_source_blocked:
+        gates.append(f"{source_status}/需可用")
+
+    blocker_text = "、".join(str(item) for item in blockers)
+    phase = stock_result.get("structure_phase")
+    if "突破失敗" in blocker_text or phase == "FAILED_BREAKOUT":
+        gates.append("突破失敗/需重新轉強")
+
+    behavior = stock_result.get("price_behavior")
+    if behavior in {"LIMIT_LOCK", "LIMIT_REBOUND"} or "漲停" in blocker_text or "不可追高" in blocker_text:
+        gates.append(f"{behavior or '不可追高'}/需開板回測")
+
+    heat = stock_result.get("heat_state")
+    if heat in {"HOT", "EXTREME"} or "過熱" in blocker_text:
+        gates.append(f"heat {heat}/需降溫")
+
+    rr_text = _gate_value_text(stock_result.get("rr"))
+    if rr_text and ("RR不足" in blocker_text or float(rr_text) < 1.5):
+        gates.append(f"RR {rr_text}/需>=1.5")
+
+    distance_text = _gate_value_text(dist)
+    if distance_text and float(distance_text) > 4:
+        gates.append(f"距突破 {distance_text}%/需<=4%")
+
+    quality = stock_result.get("entry_quality")
+    if quality and quality not in {"A+", "A", "B"}:
+        gates.append(f"entry quality {quality}/需B以上")
+
+    if not gates and funnel_state == "可準備":
+        gates.append("買點尚未成立/需觸發")
+    elif not gates and funnel_state == "等回測":
+        gates.append("回測未確認/需回測不破")
+    elif not gates and funnel_state == "等RR修復":
+        gates.append("RR 不可用/需>=1.5")
+    elif not gates and funnel_state == "等量能":
+        gates.append("量能不足/需回升")
+    elif not gates and funnel_state == "隔日確認":
+        gates.append("隔日確認/需轉強")
+    elif not gates and funnel_state == "淘汰":
+        gates.append("重新轉強/需確認")
+    if not gates:
+        if blockers:
+            gates.append(f"{blockers[0]}/需解除")
+        else:
+            gates.append("資料不足/需可用")
+
+    return f"到達可買差距：{'; '.join(list(dict.fromkeys(gates))[:3])}"
+
+
 def _weak_buy_backtest_line(name, data, deps, include_all=False):
     line = deps["compact_backtest_line"]((data or {}).get("backtest_context"))
     if not line or line == "回測：-":
@@ -681,6 +749,15 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
             "持有：對齊 5 日 edge，5 日內未續漲或跌破回踩低點即了結",
         ]
     low_volume_limit_up_risk = deps["low_volume_limit_up_risk_text"](data)
+    buy_gap_line = _unheld_buy_gap_line(
+        data,
+        dist,
+        blockers,
+        valid_entry,
+        funnel_state,
+        source_status,
+        strategy_source_blocked,
+    )
     lines = [
         f"【{deps['stock_title'](name, data)}】{title_icon} {title_action}｜{title_label}",
         (
@@ -689,6 +766,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
             else _score_gated_market_line(report_context, name, data, dist, deps)
         ),
         buy_line,
+        buy_gap_line,
     ]
 
     weak_buy_backtest_line = _weak_buy_backtest_line(

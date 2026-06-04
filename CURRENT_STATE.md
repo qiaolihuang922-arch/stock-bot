@@ -6,13 +6,31 @@
 
 - 專案：台股策略 Telegram 報文機器人。
 - 正式結果以 git / runner 產生報文為準。
-- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.39`。
+- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.40`。
 - 固定 8 份 Markdown 不刪：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 - Architect 是總控；產品 / 策略 / 報文 bug 或 feature 預設走 PM -> Tech -> QA。
 - 跨日狀態、已執行交易、歷史 evidence 必須來自 production DB 或 Owner 指定持久來源；local/runtime/worktree 不能當跨日記憶。
 - 缺資料、source-error、欄位不足或可信度不足時 fail closed。
 
 ## Latest Completed Work
+
+- task_id：`telegram-unheld-gate-attribution-v20.4.40`
+- 狀態：code done / QA 通過；報文版本升 `v20.4.40`。
+- 問題：Owner 看不到「哪種情況真的會變可買」，只看到 `等冷卻 / 等RR修復 / 可準備` 等狀態；需要先試行未持倉卡片 gate attribution，顯示距離可買還差哪幾條。
+- 關鍵行為：
+  - 未持倉非可買卡片新增 `到達可買差距：...`。
+  - 最多顯示 1-3 個可信 gate：RR、heat、source、突破距離、entry quality、LIMIT_LOCK / 不可追高、突破失敗等。
+  - 真正 `可買` 卡與 `trend_continuation` 小倉 BUY 卡不顯示差距行，避免可買卡噪音。
+  - `LIMIT_LOCK / LIMIT_REBOUND / 不可追高` 優先顯示開板回測方向；`trade_state=AVOID/EXTENDED` 但 `heat_state=NORMAL` 不再誤顯 `heat NORMAL/需降溫`。
+- 驗證：
+  - `arch -arm64 ./.venv/bin/python -m pytest tests/test_generator_report.py -k 'v20_4_40_unheld_non_buy_cards_show_gate_attribution_only or confirmed_evidence_preserves_limit_lock_chase_hard_blocker or v20_4_39_post_market_mixed_trend_and_prepare_keeps_trend_actionable or v20_0_14_post_market_fixture_uses_next_day_plan_semantics' -q` -> 4 passed。
+  - `PYTHONPYCACHEPREFIX=/private/tmp/v20_4_40_pycache_main arch -arm64 ./.venv/bin/python -m py_compile core/generator.py presentation/report.py tests/test_generator_report.py` -> passed。
+  - `git diff --check` -> passed。
+  - QA 補充 official replay：`LIMIT_LOCK + AVOID + heat NORMAL` 顯示 `LIMIT_LOCK/需開板回測`，未顯示 `heat NORMAL/需降溫`；QA 結論 `通過`。
+- 殘留風險：未跑 full pytest、production runner artifact、live Telegram、DB read/write；`AVOID + heat NORMAL + price_behavior NORMAL` 的細部 wording / gate ranking 仍可另開任務優化。
+- 邊界：未改 RR 公式、strategy decision、can_buy/is_valid_entry、DB schema/write、live Telegram。
+
+## Previous Completed Work
 
 - task_id：`phase_a_after_close_unheld_buy_prepare_v20_4_39`
 - 狀態：code done / QA 通過；報文版本升 `v20.4.39`。

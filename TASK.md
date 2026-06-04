@@ -1,197 +1,206 @@
-# TASK: Phase A 盤後未持倉普通 BUY 改為可準備不可買
+# TASK: 未持仓卡片 gate attribution 试行
 
 ## 任務狀態
 
-- task_id: phase_a_after_close_unheld_buy_prepare_v20_4_39
+- task_id: telegram-unheld-gate-attribution-v20.4.40
 - 任務類型: normal_patch
 - 狀態: ready_for_tech
-- 版本建議: 使用者可見報文版本需由 v20.4.38 升至 v20.4.39
+- 版本建議: 使用者可見 Telegram 報文版本從 v20.4.39 升至 v20.4.40
 - QA 分級建議: L2
-- 主 bug: 盤後未持倉普通 BUY / 明日追蹤候選在 summary、漏斗、卡片被寫成「可買 / 新倉建議 / 新增有效進場 / 40%倉 / 買點成立」，手機閱讀時容易誤讀成已可下單或明日必買。
+- 本輪主 bug: 未持仓非可买卡片缺少「距离可买还差哪条 gate」的可读解释，用户无法判断下一步观察重点。
 
 ## Owner 問題
 
-Owner 要先試行 Phase A 條件性放寬 / 分層，不是全域放寬。
+Owner 要先试行 Telegram 未持仓卡片的 gate attribution，让用户在手机上看得到一档股票为什么还没有真的变可买，以及目前最关键的 1-3 个阻挡 gate。
 
-2026-06-04 盤後 v20.4.38 報文中，未持倉光寶科仍需「明日開盤後確認」，但多個使用者可見區塊呈現為可執行買進：
-
-- 卡片顯示：🟢 明日追蹤｜40%倉｜買點成立
-- 卡片買點顯示：買點：盤後追蹤｜開盤後確認｜不追價
-- summary 顯示：新倉建議 1
-- summary 顯示：新增有效進場 1 檔需明日開盤前確認
-- summary 顯示：光寶科 可買（分批，不追價）｜尚未買入｜建議分批｜明日開盤後確認
-
-問題不是 RR 或策略分數錯，而是「盤後未持倉普通 BUY / 明日追蹤候選」的使用者可見語氣與分組錯誤。
+当前目标不是改变股票是否可买，而是在既有未持仓卡片 / summary 语义下增强可读性，避免「可准备」「等冷却」「等 RR 修复」「不可追高」「淘汰」等状态被误读成推荐买入。
 
 ## 使用者可見結果
 
-手機閱讀盤後報文時，未持倉且仍需明日開盤後確認的普通 BUY / 明日追蹤候選，必須被歸為「可準備、不可買」或等價明確不可執行語氣。
+Telegram 未持仓卡片中，若股票不是「真正可买」且不是 trend_continuation 小仓 BUY，在卡片内增加一行简短文案，例如：
 
-光寶科這類卡片仍可保留 RR、技術條件、回測摘要與觀察理由，但不得讓使用者在 summary、漏斗或卡片第一眼讀成已可下單。
+到達可買差距：RR 0.98/需>=1.5；heat HOT/需降温
 
-示例輸出形狀：
+或等价短句：
 
-Summary:
-新倉：無有效進場
-可準備：1 檔需明日開盤後確認，未確認前不可下單
-光寶科 可準備（不可買）｜尚未買入｜明日開盤後確認｜不追價
+可買差距：距突破 6%/需<=4%；entry quality C/需B以上
 
-未持倉卡片:
-🟡 明日準備｜不可買｜開盤後確認
-光寶科
-買點：尚未成立｜盤後僅追蹤｜明日開盤後確認｜不追價
-RR / 技術 / 回測資訊照常顯示
+手机阅读路径：
 
-實際文案可依現有報文風格調整，但語意必須同時滿足：
-
-- 不是新倉建議。
-- 不是新增有效進場。
-- 不是可買。
-- 不顯示 40%倉。
-- 不顯示 買點成立。
-- 明確指出未經明日開盤後確認前不可下單。
+- 用户先看 summary，仍只能判断「新仓能不能买」与「哪些只是准备 / 冷却 / 追踪 / 淘汰」。
+- 用户再看未持仓卡片，每档非可买股票只看到一行 gate 差距，不新增长段解释。
+- 该行不得让「不可买」卡片看起来像推荐；必须和卡片状态、分组标题、summary 语义一致。
 
 ## 非目標
 
+- 不改 strategy decision。
 - 不改 RR 公式。
-- 不改策略核心買賣判斷。
-- 不改 trend_continuation 小倉 BUY 的可買路徑。
-- 不改盤中有效 BUY 的可買路徑。
-- 不改 DB schema、RLS、grant、policy、role、index、constraint。
-- 不新增或修改 production write path。
+- 不改 can_buy / is_valid_entry 语义。
+- 不改仓位、买卖建议、加减码、停损停利逻辑。
+- 不改 DB schema、RLS、grant、policy、role、write path。
 - 不做 live Telegram delivery。
-- 不重設整體推薦分組規則。
-- 不做全量報文清理或策略重構。
+- 不重构全量 formatter、策略状态机或候选排序。
+- 不新增大段解释型报文，不把卡片变成诊断报告。
 
 ## 影響模組與直接消費者
 
-影響模組由 Tech 依現有 repo 定位，但範圍限於 official generator / message-list / formatter 中「盤後未持倉普通 BUY / 明日追蹤候選」的使用者可見分類與文案。
+影響模組：
+
+- Telegram official message formatter。
+- 未持仓 card/message-list 生成路径。
+- summary 与 card 的可读性一致性检查。
+- 与 version/header 常量相关的使用者可见版本位置。
 
 直接消費者：
 
-- Telegram 盤後報文手機閱讀者。
-- official generator 產出的 message list。
-- summary / 漏斗 / 未持倉卡片三個報文區塊。
-- 既有測試或 replay artifact 中覆蓋報文生成的 consumer。
+- Telegram 手机端阅读用户。
+- official formatTelegramMessages / message-list replay。
+- QA 用于验证最终 Telegram 报文形状的 replay artifact。
 
 ## 輸出契約
 
-單一輸出契約：盤後未持倉普通 BUY / 明日追蹤候選，在尚需明日開盤後確認時，必須在 summary、漏斗、卡片三層一致呈現為「可準備不可買」。
+对未持仓卡片新增单一输出契约：到達可買差距 行。
 
-必須排除的既有可見詞：
+显示条件：
 
-- 新倉建議
-- 新增有效進場
-- 可買
-- 40%倉
-- 買點成立
+- 显示：未持仓且当前不是可买的卡片，包括但不限于：
+- 等 RR 修复
+- 等冷却 / 过热
+- 不可追高
+- 可准备但尚未触发买入
+- 淘汰 / 不可行动
+- source-error / insufficient-data / missing-source
+- 突破失败 / 需重新转强
+- 不显示：
+- 已经是真正可买的未持仓 BUY 卡。
+- trend_continuation 小仓 BUY 卡。
+- 持仓卡片。
 
-必須保留的資訊類型：
+内容规则：
 
-- RR / 風報比資訊。
-- 技術條件資訊。
-- 回測資訊。
-- 明日開盤後確認 / 不追價提醒。
+- 每张卡最多列 1-3 个最关键 gate。
+- 每个 gate 用短格式表达：当前值/所需条件。
+- 建议候选 gate 文案：
+- RR 0.98/需>=1.5
+- heat HOT/需降温
+- 距突破 6%/需<=4%
+- entry quality C/需B以上
+- source-error/需可用
+- 突破失败/需重新转强
+- gate 排序由既有 payload / formatter 可稳定取得的信息决定；若多个 gate 同时存在，优先呈现最能解释「为什么现在不能买」的 gate。
+- 若某卡没有可可靠取得的 gate attribution，不得编造；应显示既有不可行动原因或 fail closed 文案，例如 可買差距：資料不足/需可用。
 
-已存在且不得回退的契約：
+已存在且不得回退的契约：
 
-- 真正 trend_continuation 小倉 BUY 仍可保留既有小倉 BUY / 可買路徑。
-- 盤中有效 BUY 仍可保留既有可買路徑。
-- 無可買時 summary 不得使用像推薦的文案，應呈現 新倉：無有效進場 或等價不可買表述。
-- 同一標的在同一份報文的 summary、漏斗、卡片狀態必須一致。
-- 使用者可見報文版本需同步顯示 v20.4.39，不得停留在 v20.4.38。
-
-若 Tech 無法從現有 payload 判斷普通 BUY、trend_continuation BUY、盤中有效 BUY、盤後明日追蹤候選的差異，需 blocked，不得用全域 BUY 降級替代。
+- Summary 只回答决策，不把无可买写成推荐。
+- 可买、可准备、仅追踪、淘汰 / 不可行动必须分开。
+- 无可买时不得使用像推荐的文案。
+- 分组标题、卡片状态、漏斗、索引、详情必须一致。
+- 同一行動不得在多个区块重复长句。
+- 空区块、0-count、无新增下单占位默认不显示。
+- 使用者可见版本不得停留在 v20.4.39；本轮应同步为 v20.4.40。
 
 ## 版本契約
 
-- 報文 header / 版本常量 / 使用者可見版本需升至 v20.4.39。
-- 不得只改測試期待值而漏改實際報文版本。
-- 不得把 v20.4.39 套用成策略核心版本變更；本輪只代表報文分類與語氣修正。
+- Telegram 使用者可见报文版本建议升为 v20.4.40。
+- 若代码内存在 header/version constant，Tech 必须同步实际输出与常量。
+- 若本 repo 当前版本不是 v20.4.39 或版本位置不明，Tech 必须在 CHANGELOG.md 标明实际发现；不能静默跳过版本同步。
 
 ## 驗收條件
 
-1. 使用 2026-06-04 盤後 v20.4.38 光寶科 failure specimen，透過 official generator/message-list 或等價 replay artifact 驗證：
-- summary 不再出現 新倉建議 1 指向光寶科。
-- summary 不再出現 新增有效進場 1 檔需明日開盤前確認 指向光寶科。
-- summary 不再出現 光寶科 可買（分批，不追價）。
-- 光寶科卡片不再出現 40%倉、買點成立。
-- 光寶科被呈現為可準備 / 明日追蹤 / 不可買 / 開盤後確認的等價語氣。
-- RR、技術、回測資訊仍保留。
-2. 補一個保護案例驗證不得全域放寬：
-- 真正 trend_continuation 小倉 BUY 或盤中有效 BUY 仍可進入既有可買路徑。
-- 不得因本輪修正被降成「可準備不可買」。
-3. 手機閱讀路徑驗收：
-- 只看 summary 第一屏，不會讀到光寶科是今日可買或明日必買。
-- 只看卡片標題與買點行，不會讀到 40%倉、買點成立 或可立即下單。
-- summary、漏斗、卡片對光寶科的狀態一致。
+必须用 official formatTelegramMessages / message-list replay 验证最终用户可见报文，不得只测 helper fixture。
+
+1. 等 RR 修复案例：
+- 卡片仍不可买。
+- 显示 RR 差距，例如 RR 0.98/需>=1.5。
+- Summary 不把该档写成可买推荐。
+2. 等冷却 / 过热案例：
+- 卡片仍不可买。
+- 显示降温差距，例如 heat HOT/需降温。
+- Summary 与卡片状态一致，不出现推荐误读。
+3. 真正可买案例：
+- 卡片仍为可买。
+- 不显示 到達可買差距 或等价差距行。
+4. trend_continuation 小仓 BUY 案例：
+- 卡片仍为小仓 BUY。
+- 不显示差距行，避免噪音。
+5. 手机阅读误读检查：
+- 非可买卡片新增行不得包含「建议买入」「可立即买」等推荐式措辞。
+- Summary/card/lists 不出现「summary 说不可买、card 像推荐」的冲突。
 
 ## 範例或 Fixture
 
-Failure specimen 來源：2026-06-04 盤後 v20.4.38 報文，未持倉光寶科。
+示例输出形状：
 
-需保留的關鍵摘錄：
+2330 台積電｜等RR修復
+...
+到達可買差距：RR 0.98/需>=1.5；距突破 6%/需<=4%
 
-🟢 明日追蹤｜40%倉｜買點成立
-買點：盤後追蹤｜開盤後確認｜不追價
-新倉建議 1
-新增有效進場 1 檔需明日開盤前確認
-光寶科 可買（分批，不追價）｜尚未買入｜建議分批｜明日開盤後確認
+NVDA｜等冷卻
+...
+到達可買差距：heat HOT/需降温
 
-期望等價輸出形狀：
+AAPL｜可買
+...
 
-新倉：無有效進場
-可準備：1 檔需明日開盤後確認，未確認前不可下單
-光寶科 可準備（不可買）｜尚未買入｜明日開盤後確認｜不追價
+可买卡不得出现：
 
-🟡 明日準備｜不可買｜開盤後確認
-買點：尚未成立｜盤後僅追蹤｜明日開盤後確認｜不追價
+到達可買差距：...
+
+trend_continuation 小仓 BUY 不得出现：
+
+到達可買差距：...
 
 ## 失敗標本與驗收路由
 
-失敗層級：使用者可見 official report/message-list，不是單一 helper fixture。
+失敗標本：
 
-驗收路由優先順序：
+- 当前 official Telegram 未持仓卡片中，非可买股票只显示状态或原因，未显示「到达可买还差哪条 gate」。
+- Owner 指定的五类 replay 场景即为本轮验收标本。
 
-1. official generator 以 2026-06-04 盤後等價 payload/replay artifact 產出 message list。
-2. 若不能取得完整 official replay，Tech 必須產出等價 replay artifact，包含足以重現 summary、漏斗、未持倉光寶科卡片的 payload 欄位。
-3. 若只能測 helper 或局部 formatter，CHANGELOG 必須標記 partial，QA 結論不得直接通過。
+驗收路由：
+
+- 必须从 official formatTelegramMessages / message-list replay 产生最终 Telegram 报文文本。
+- Tech 自检必须覆盖 formatter / official generator 或 message-list replay 层。
+- QA 必须沿相同 official replay 路径反证，并额外检查 summary/card 是否造成推荐误读。
+- 若只能测 helper 或局部 formatter，结论只能是 partial，不得宣称用户可见问题完成。
 
 ## 明確禁止事項
 
-- 禁止全域放寬 BUY 或把所有 BUY 都降成可準備。
-- 禁止改 RR 公式。
-- 禁止改策略核心買賣判斷。
-- 禁止改 DB schema/write path。
-- 禁止 live Telegram。
-- 禁止用 synthetic helper fixture 取代 Owner failure specimen 後宣稱完成。
-- 禁止只改卡片但 summary / 漏斗仍顯示可買。
-- 禁止只改 summary 但卡片仍顯示 40%倉 或 買點成立。
-- 禁止回退 trend_continuation 小倉 BUY 與盤中有效 BUY 的既有可買路徑。
-- 禁止把本輪擴成策略重設、全量清理或 L3 大驗證。
+- 禁止改变策略买卖判断。
+- 禁止改变 RR、heat、entry quality、突破距离等计算公式。
+- 禁止改变 can_buy / is_valid_entry contract。
+- 禁止新增 DB schema/write/live delivery。
+- 禁止为了显示差距而伪造 gate。
+- 禁止让不可买卡片出现推荐式文案。
+- 禁止把本轮扩成全量 Telegram 报文重构或策略解释系统。
+- 禁止只用 synthetic helper fixture 宣告通过。
 
 ## 阻塞條件
 
-- 找不到或無法重建 2026-06-04 盤後 v20.4.38 光寶科等價 replay artifact。
-- 現有 payload 無法區分盤後普通 BUY / 明日追蹤候選與真正 trend_continuation 小倉 BUY、盤中有效 BUY。
-- official generator/message-list 路徑無法執行，且沒有可接受的等價 replay artifact。
-- 報文版本來源不明，無法確認 v20.4.39 實際會顯示在使用者可見報文。
-- 需要 DB schema/write 或 live Telegram 才能完成時，本輪 blocked。
+若出现以下情况，Tech/QA 必须 blocked 或 partial，不得硬过：
+
+- official message-list replay 无法运行，且没有等价最终报文 artifact。
+- payload 中没有足够信息判断任何 gate，且无法稳定从既有 formatter inputs 取得。
+- 当前版本来源不明，无法确认 v20.4.40 是否已同步到用户可见 header。
+- 新增差距行会迫使改变 strategy decision、RR 公式或 DB contract。
+- replay 无法覆盖 Owner 指定的 5 个场景。
 
 ## 本輪停止條件
 
-完成條件：
+完成条件：
 
-- 2026-06-04 盤後光寶科 failure specimen 在 official generator/message-list 或等價 replay 中，summary、漏斗、卡片一致改為可準備不可買。
-- 新倉建議 / 新增有效進場 / 可買 / 40%倉 / 買點成立 不再套用到該盤後未持倉普通 BUY 候選。
-- RR、技術、回測資訊保留。
-- trend_continuation 小倉 BUY 或盤中有效 BUY 保護案例未回退。
-- 使用者可見版本為 v20.4.39。
+- official replay 中，非可买未持仓卡片显示 1-3 个关键 gate 差距。
+- 可买与 trend_continuation 小仓 BUY 不显示差距。
+- Summary/card 在手机阅读路径下不产生推荐误读。
+- 版本输出同步到 v20.4.40。
+- Tech 提供可重跑命令，QA 使用 official replay 路径完成 L2 反证。
 
-旁支問題只記待辦，不納入本輪：
+旁支问题不纳入本轮：
 
-- 其他標的的策略門檻重新設計。
-- RR / 回測模型調整。
-- DB 持久化或跨日狀態補強。
-- Telegram 全報文版面整理。
-- Phase B / Phase C 條件放寬策略。
+- gate 排名算法优化。
+- 新增更多策略诊断字段。
+- 调整候选排序、仓位、买卖建议。
+- production DB 回补。
+- live Telegram 发送。
+- 全量报文视觉重排。

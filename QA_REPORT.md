@@ -2,72 +2,96 @@
 
 ## 測試範圍
 
-本輪任務 `phase_a_after_close_unheld_buy_prepare_v20_4_39` 為 normal_patch / QA L2。驗收聚焦 official `formatTelegramMessages` message-list、summary、未持倉漏斗、未持倉卡片，不擴大到 full pytest、production runner artifact、backfill 或 live Telegram。
+本輪任務 `telegram-unheld-gate-attribution-v20.4.40` 是 normal_patch / L2，QA 範圍控制在 `TASK.md` 指定的 official `formatTelegramMessages` / message-list replay 與 formatter 契約，不擴成 full pytest、production replay、DB/backfill 或 live Telegram。
 
-已檢查：
+已讀取並比對：
 
-- `TASK.md` / `CHANGELOG.md` / `git diff` 一致。
-- 可吸收 diff：`CHANGELOG.md`、`core/generator.py`、`presentation/report.py`、`tests/test_generator_report.py`。
-- worktree 殘留：同上 4 個 modified tracked files；未發現其他 tracked 殘留。QA 未修改 tracked file。
+- `TASK.md`
+- `CHANGELOG.md`
+- `git status --short`
+- `git diff --stat`
+- `git diff -- CHANGELOG.md core/generator.py presentation/report.py tests/test_generator_report.py`
+- 相關 formatter / generator 局部源碼
+
+可吸收 diff：
+
+- `CHANGELOG.md`
+- `core/generator.py`
+- `presentation/report.py`
+- `tests/test_generator_report.py`
 
 ## 風險預算與停止條件
 
 本輪最值得抓的風險：
 
-1. 盤後 ordinary BUY 只改卡片、summary / 漏斗仍像可買。
-   - 驗證：focused official replay 與 QA 自補 explicit `report_phase='盤後'` probe。
-   - 停止條件：summary 出現光寶科可買、新倉建議指向 ordinary prepare、卡片出現 `40%倉` / `買點成立`。
-2. mixed 盤後同時有 trend 小倉 BUY + ordinary prepare 時，summary 誤寫 `新倉：無有效進場` 或 `新增有效進場：無`。
-   - 驗證：Tech mixed test + QA 自補 direct consumer probe。
-   - 停止條件：trend card 可行動但 summary 第一屏說無有效進場。
-3. ordinary prepare 保留回測行、但盤中 ordinary BUY 與 `trend_continuation` 不被全域降級。
-   - 驗證：盤中 BUY 保護 test、trend official bucket test、QA probe 檢查 ordinary prepare card 含回測行。
-   - 停止條件：盤中 BUY 或 trend BUY 被降為不可買，或 ordinary prepare 卡片缺回測行。
+1. 非可買未持倉卡片新增差距行後，被手機讀成推薦買入。
+   - 驗證：沿 summary -> 未持倉列表 -> card 順序檢查 RR、HOT/source missing/LIMIT_LOCK 案例；檢查不可買卡無 `建議買入` / `可立即買`。
+   - 停止條件：summary 說不可買但 card 顯示可買語氣，或不可買卡缺差距行。
+2. gate attribution 錯因，尤其 `LIMIT_LOCK/AVOID + heat NORMAL` 誤顯 `heat NORMAL/需降溫`。
+   - 驗證：Tech focused test + QA 補充 official replay。
+   - 停止條件：`LIMIT_LOCK/AVOID+NORMAL` 顯示 `heat NORMAL` 或沒有開板回測 / 追高解除方向。
+3. 版本與 handoff 文件錯輪。
+   - 驗證：`CHANGELOG.md` diff 與版本掃描。
+   - 停止條件：`CHANGELOG.md` 仍是 v20.4.39 Phase A，或使用者可見 header / constant 未升 v20.4.40。
 
 ## 關聯風險掃描
 
-diff 顯示 `core/generator.py` 新增 `post_market_unheld_buy_requires_open_confirmation()`，條件為非盤中 report phase、valid entry、且非 `trend_continuation`；符合「ordinary post-market prepare 降級，不全域降級 BUY」邊界。
+`TASK.md`、`CHANGELOG.md`、diff 大致一致：本輪只碰 Telegram 未持倉 card attribution、版本常量與 focused replay 測試；未看到策略 decision、RR 公式、DB schema/write、live delivery、runner/backfill 變更。
 
-`presentation/report.py` 同步 summary / afterhours brief / card title / buy line / backtest line。`tests/test_generator_report.py` 補 official final message-list replay，覆蓋單一 ordinary prepare、mixed trend + prepare、盤中 BUY 保護與版本 `v20.4.39`。
+`presentation/report.py` 新增 `_unheld_buy_gap_line`，插入未持倉卡 buy_line 後。顯示條件排除 `valid_entry`、`funnel_state == "趨勢延續"`、`decision_type == "trend_continuation"`，符合真正可買與 trend continuation 小倉 BUY 不顯示差距的契約。
 
-未發現 DB schema/write、RR 公式、策略核心 decision、live delivery 相關 diff。
+`core/generator.py` 只升 `VERSION` 到 `v20.4.40`。
+
+`tests/test_generator_report.py` 新增 / 調整 focused official replay，覆蓋 RR不足、HOT、source missing、可買、trend continuation、LIMIT_LOCK/AVOID+NORMAL。
 
 ## 跨區塊語意一致性
 
-通過。驗證結果支持：
+Tech replay 通過：
 
-- ordinary post-market prepare：summary 有 `新倉：無有效進場`、`可準備：1 檔需明日開盤後確認，未確認前不可下單`；漏斗為可準備；卡片為 `🟡 明日準備｜不可買｜開盤後確認`。
-- 卡片買點行改為 `買點：尚未成立｜盤後僅追蹤｜明日開盤後確認｜不追價`，未見 `40%倉` / `買點成立`。
-- mixed trend + ordinary prepare：summary 保留 trend 小倉可行動，未同時出現 `新倉：無有效進場` / `新增有效進場：無`。
-- 使用者可見版本為 `v20.4.39`。
+- RR 案例：卡片仍是 `等RR修復｜RR不足`，顯示 `到達可買差距：RR 0.98/需>=1.5; 距突破 6%/需<=4%`。
+- HOT 案例：卡片仍是 `等冷卻｜過熱觀察`，顯示 `heat HOT/需降溫`。
+- source missing：卡片仍是不可行動，顯示 `missing-source/需可用`。
+- 真正可買卡：不顯示 `到達可買差距`。
+- `trend_continuation` 小倉 BUY：不顯示 `到達可買差距`。
+- summary 保留可買 / 趨勢延續 / 僅追蹤 / 淘汰分組，不把 RR/HOT/source missing 寫成推薦。
+
+QA 補充 replay：
+
+- `LIMIT_LOCK + trade_state=AVOID + heat_state=NORMAL` 卡片為 `等回測｜漲停不追`，差距行為 `LIMIT_LOCK/需開板回測; RR 1.4/需>=1.5`，沒有 `heat NORMAL/需降溫`。
+- Summary 首屏仍寫 `新倉：無有效進場`，手機閱讀順序未形成「summary 不可買、card 像推薦」衝突。
 
 ## 使用者誤讀風險
 
-按手機閱讀順序檢查：
+本輪主要手機誤讀風險已被覆蓋：不可買卡新增的是 `到達可買差距` 而不是下單建議；focused replay 明確檢查不可買卡不含 `建議買入` / `可立即買`。
 
-- summary 第一屏不會把 ordinary prepare 讀成今日可買或明日必買。
-- mixed case summary 第一屏仍可讀到 trend 小倉 BUY 是可行動，不被 ordinary prepare-only 文案覆蓋。
-- 未持倉卡片標題與買點行不再給 ordinary prepare `40%倉`、`買點成立` 或可立即下單語氣。
-- 殘留風險：mixed case 仍使用 `新增有效進場：1 檔需明日開盤前確認` 描述 `trend_continuation`；`CHANGELOG.md` 已標旁支，非本輪 blocker。
+殘留風險：QA 補充的相鄰案例 `trade_state=AVOID + heat_state=NORMAL + price_behavior=NORMAL` 會顯示 `等冷卻`，但差距行退成 `資料不足/需可用`，同卡下一步仍說過熱降溫且回測不破。這不是 TASK 指定五類主驗收，也不是 `LIMIT_LOCK/AVOID+NORMAL` 的開板回測路徑；後續若 Owner 要把所有 `AVOID+NORMAL` 都解釋為追高風險解除，需另開 gate attribution ranking / wording 任務。
 
 ## 質疑與反證
 
-執行命令：
+主動質疑 1：Tech 是否只驗 helper，而未打到使用者可見報文？
 
-- `pytest tests/test_generator_report.py -k 'test_v20_0_14_message_list_uses_single_report_phase_when_phase_drifts or test_v20_0_14_post_market_fixture_uses_next_day_plan_semantics or test_v20_4_39_post_market_mixed_trend_and_prepare_keeps_trend_actionable' -q`：3 passed。
-- `pytest tests/test_generator_report.py -k 'test_trend_continuation_official_report_has_separate_small_buy_bucket' -q`：1 passed。
-- `PYTHONPYCACHEPREFIX=.qa_tmp/pycache python -m py_compile core/generator.py presentation/report.py tests/test_generator_report.py`：passed。
-- `git diff --check`：passed。
-- QA 自補 probe：explicit `report_phase='盤後'` 的 mixed official message-list，確認 trend actionable、ordinary prepare 不可買、ordinary prepare card 保留回測行：passed。
+反證：新增測試與 QA 補充都走 `generator.formatTelegramMessages`，再取 summary / unheld message / card block 驗最終 Telegram message-list 文本。
 
-第一次 py_compile 未設 `PYTHONPYCACHEPREFIX` 時因 sandbox 無法寫入使用者 cache 失敗；改用 `.qa_tmp/pycache` 後通過，非程式語法錯誤。
+主動質疑 2：`LIMIT_LOCK/AVOID+NORMAL` 是否仍被 heat gate 誤歸因？
+
+反證：QA 補充 replay 實際卡片為 `到達可買差距：LIMIT_LOCK/需開板回測; RR 1.4/需>=1.5`，未出現 `heat NORMAL/需降溫`。
+
+主動質疑 3：`CHANGELOG.md` 是否仍殘留 v20.4.39 Phase A？
+
+反證：`CHANGELOG.md` 標題與內容已是 v20.4.40 gate attribution；diff 顯示 Phase A 舊內容被替換。版本掃描中 v20.4.39 僅出現在 `TASK.md` 的升版背景，不是本輪 `CHANGELOG.md` 殘留。
+
+## 驗證命令
+
+- `arch -arm64 ./.venv/bin/python -m pytest tests/test_generator_report.py -k 'v20_4_40_unheld_non_buy_cards_show_gate_attribution_only or confirmed_evidence_preserves_limit_lock_chase_hard_blocker or v20_4_39_post_market_mixed_trend_and_prepare_keeps_trend_actionable or v20_0_14_post_market_fixture_uses_next_day_plan_semantics' -q` -> 4 passed, 165 deselected。
+- `PYTHONPYCACHEPREFIX=.qa_tmp/pycache arch -arm64 ./.venv/bin/python -m py_compile core/generator.py presentation/report.py tests/test_generator_report.py` -> passed。
+- `git diff --check` -> passed。
+- QA 補充 official replay：`LIMIT_LOCK + AVOID + heat NORMAL`，以及相鄰 `AVOID + heat NORMAL` 無 LIMIT 負面讀法。
 
 ## 未測項目
 
-- 未跑 full pytest，符合 normal_patch / L2 風險預算。
-- 未取 production runner artifact。
-- 未做 production DB read/write、backfill 或 live Telegram。
-- 未重新命名 `trend_continuation` 的 `新增有效進場` summary 詞彙，列為旁支風險。
+- 未跑 full pytest；本輪 L2 focused validation 足夠覆蓋指定 Telegram formatter/message-list 契約。
+- 未跑 production runner artifact、read-only production smoke、DB read/write、backfill、live Telegram delivery。
+- 未驗 gate ranking 的完整策略診斷最佳排序；TASK 明確列為旁支，不納入本輪。
 
 ## QA 結論
 
