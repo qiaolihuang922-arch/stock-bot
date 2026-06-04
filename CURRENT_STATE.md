@@ -14,6 +14,23 @@
 
 ## Latest Completed Work
 
+- task_id：`future_watch_event_impact_explanation_20260604`
+- 狀態：code done / QA 通過；報文版本維持 `v20.4.47`。
+- 問題：Owner 問歷史類比目前怎麼查數據，並要求第三段相關事件去除來源、增加為什麼影響台股的說明。
+- 關鍵行為：
+  - `未來30日台股影響事件` 行由 `來源：...` 改為 `說明：...`。
+  - 新增 `_taiwan_market_impact_note()`：利率/匯率 -> 外資風險偏好、台股估值、美元/台幣與外資流向；通膨 -> Fed 路徑與科技股估值；政治風險 -> 避險情緒與供應鏈不確定性。
+  - `collect_global_events()` 保留內部 source/source_label，但 formatter 不顯示來源。
+  - 歷史類比算法未改：目前讀 TWSE 即時大盤與近月 OHLC，計算單日跌幅、高檔回落、盤中震盪、TWSE樣本天數，再套固定壓力情境模板；不是多年歷史資料庫相似度模型。
+- 驗證：
+  - Focused future-watch tests：11 passed。
+  - py_compile：passed。
+  - `git diff --check`：passed。
+  - Official `generate()` read-only smoke：第三段無 `來源：`，每筆有 `說明：...`。
+- 邊界：未改資料查詢邏輯、策略、RR、持倉風控、DB schema/write/backfill、live Telegram。
+
+## Previous Completed Work
+
 - task_id：`future_watch_mops_breadth_query_fix_20260604`
 - 狀態：code done / QA 通過；報文版本維持 `v20.4.47`。
 - 問題：Owner 貼出的第 4 則 `未來30日法說會` 只剩 `06/05 2303 聯電` 一筆；改版前查詢資料是對的。

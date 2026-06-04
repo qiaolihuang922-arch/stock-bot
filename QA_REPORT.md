@@ -2,15 +2,15 @@
 
 ## 測試範圍
 
-- 任務：`future_watch_mops_breadth_query_fix_20260604`。
-- 範圍：future-watch 第 4 則 MOPS 查詢完整性、query budget starvation regression、official `generate()` smoke。
+- 任務：`future_watch_event_impact_explanation_20260604`。
+- 範圍：future-watch 第 4 則台股影響事件來源移除、影響說明、official `generate()` smoke。
 - 未擴大到策略、DB、live Telegram。
 
 ## 關聯風險掃描
 
-- `core/future_watch.py` 只改 readonly MOPS collection / formatter item cap，不含 DB client、upsert、delete 或 Telegram send。
+- `core/future_watch.py` 只改 global event formatter / impact note，不含 DB client、upsert、delete 或 Telegram send。
 - `core/generator.py` 未改，報文版本維持 `v20.4.47`。
-- 資料查詢窗口仍是未來 30 日；本輪修正查詢順序，不改資料來源。
+- 資料查詢窗口仍是未來 30 日；本輪不改資料來源。
 
 ## 跨區塊語意一致性
 
@@ -21,15 +21,15 @@
 
 ## 使用者誤讀風險
 
-- 原單檔深度優先會讓使用者誤以為「只有聯電有法說會」；已改成所有標的先查第一優先市場別，避免後排標的被漏查。
-- 法說會顯示上限提高到 10，避免 06/22 類較晚事件查到後又被截掉。
+- 第三段原本顯示 `來源：...`，手機閱讀價值低；已改為 `說明：...`，直接回答為什麼影響台股。
+- 歷史類比現況不改算法：目前是 TWSE 即時大盤 / 近月 OHLC + 壓力模板，不是多年歷史資料庫相似度模型。
 
 ## 失敗標本反證
 
-- 原風險：Owner 貼出的正式第 4 則 `未來30日法說會` 只剩 `06/05 2303 聯電` 一筆。
-- 反證 1：focused regression 在 12 檔 / 24 query budget 下，第 12 檔第一優先市場別仍能查到事件。
-- 反證 2：official `generate()` read-only smoke 不再只有 1 筆，恢復多檔法說會。
-- 反證 3：official `generate()` read-only smoke 包含 06/22 光寶科，證明顯示上限不再截掉後段事件。
+- 原風險：Owner 指出第三段來源可以去除，應增加為什麼影響台股的說明。
+- 反證 1：focused tests 檢查第三段沒有 `來源：`。
+- 反證 2：focused tests 檢查第三段每筆有 `說明：`。
+- 反證 3：official `generate()` read-only smoke 第三段不再顯示 source，改顯示台股影響說明。
 
 ## 質疑與反證
 
@@ -37,8 +37,10 @@
 - py_compile：passed。
 - `git diff --check`：passed。
 - Official `generate()` read-only smoke：
-  - 法說會不再只有聯電一筆。
-  - 顯示 06/04 緯創 / 群創、06/05 光寶科 / 聯電 / 仁寶 / 英業達、06/08 英業達、06/09 仁寶、06/22 光寶科。
+  - 第三段不含 `來源：`。
+  - 利率/匯率事件顯示 `影響外資風險偏好與台股估值；牽動美元/台幣與外資流向`。
+  - 通膨事件顯示 `牽動Fed路徑與科技股估值；影響外資風險偏好與台股估值`。
+  - 政治風險事件顯示 `提高避險情緒與供應鏈不確定性`。
   - 無 DB write、無 Telegram delivery。
 
 ## 未測項目
@@ -54,4 +56,4 @@
 
 通過。
 
-本輪 MOPS 漏查修復通過：query budget 不再讓前排標的吃掉後排標的查詢機會，official `generate()` 已從只剩聯電一筆恢復為多檔法說會。
+本輪台股影響事件顯示修正通過：第三段去除來源欄位，改用說明直接交代事件為什麼影響台股。

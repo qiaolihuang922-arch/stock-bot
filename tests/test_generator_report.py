@@ -1551,13 +1551,14 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("查無資料", messages[3].split("未來30日台股影響事件", 1)[0])
         global_lines = [
             line for line in messages[3].splitlines()
-            if "｜影響面：" in line and "來源：" in line
+            if "｜影響面：" in line and "說明：" in line
         ]
         self.assertEqual(len(global_lines), 5)
-        self.assertEqual(global_lines[0], "06/10-11 ECB 利率會議/記者會｜影響面：利率/匯率｜來源：ECB官方")
-        self.assertIn("06/10 美國 CPI（May 2026）｜影響面：通膨/利率｜來源：BLS官方", global_lines[1])
-        self.assertIn("06/15-16 日本央行 BOJ 利率會議｜影響面：利率/匯率｜來源：BOJ官方", global_lines)
-        self.assertIn("06/16-17 Fed FOMC 利率決策/SEP｜影響面：利率/匯率｜來源：Fed官方", global_lines)
+        self.assertEqual(global_lines[0], "06/10-11 ECB 利率會議/記者會｜影響面：利率/匯率｜說明：影響外資風險偏好與台股估值；牽動美元/台幣與外資流向")
+        self.assertIn("06/10 美國 CPI（May 2026）｜影響面：通膨/利率｜說明：牽動Fed路徑與科技股估值；影響外資風險偏好與台股估值", global_lines[1])
+        self.assertIn("06/15-16 日本央行 BOJ 利率會議｜影響面：利率/匯率｜說明：影響外資風險偏好與台股估值；牽動美元/台幣與外資流向", global_lines)
+        self.assertIn("06/16-17 Fed FOMC 利率決策/SEP｜影響面：利率/匯率｜說明：影響外資風險偏好與台股估值；牽動美元/台幣與外資流向", global_lines)
+        self.assertNotIn("來源：", messages[3])
         self.assertNotIn("Invalid official row", messages[3])
         self.assertTrue(any(call["year"] == 115 and call["month"] == "06" and call["co_id"] == "2301" for call in mops_calls))
         self.assertTrue(any(call["year"] == 115 and call["month"] == "07" and call["co_id"] == "2301" for call in mops_calls))
@@ -1583,14 +1584,15 @@ class GeneratorReportTest(unittest.TestCase):
         message = format_future_watch_message(payload, datetime(2026, 6, 4), generator.VERSION)
         global_lines = [
             line for line in message.splitlines()
-            if "｜影響面：" in line and "來源：" in line
+            if "｜影響面：" in line and "說明：" in line
         ]
 
-        self.assertEqual(global_lines[0], "06/10-11 ECB 利率會議/記者會｜影響面：利率/匯率｜來源：ECB官方")
-        self.assertEqual(global_lines[1], "06/10 美國 CPI（May 2026）｜影響面：通膨/利率｜來源：BLS官方")
-        self.assertEqual(global_lines[2], "06/15-16 日本央行 BOJ 利率會議｜影響面：利率/匯率｜來源：BOJ官方")
-        self.assertIn("06/15-17 G7 領袖峰會｜影響面：政治風險｜來源：G7官方", global_lines)
-        self.assertIn("06/16-17 Fed FOMC 利率決策/SEP｜影響面：利率/匯率｜來源：Fed官方", global_lines)
+        self.assertEqual(global_lines[0], "06/10-11 ECB 利率會議/記者會｜影響面：利率/匯率｜說明：影響外資風險偏好與台股估值；牽動美元/台幣與外資流向")
+        self.assertEqual(global_lines[1], "06/10 美國 CPI（May 2026）｜影響面：通膨/利率｜說明：牽動Fed路徑與科技股估值；影響外資風險偏好與台股估值")
+        self.assertEqual(global_lines[2], "06/15-16 日本央行 BOJ 利率會議｜影響面：利率/匯率｜說明：影響外資風險偏好與台股估值；牽動美元/台幣與外資流向")
+        self.assertIn("06/15-17 G7 領袖峰會｜影響面：政治風險｜說明：提高避險情緒與供應鏈不確定性", global_lines)
+        self.assertIn("06/16-17 Fed FOMC 利率決策/SEP｜影響面：利率/匯率｜說明：影響外資風險偏好與台股估值；牽動美元/台幣與外資流向", global_lines)
+        self.assertNotIn("來源：", message)
         self.assertNotIn("Invalid official row", message)
         self.assertNotIn("Bad date", message)
 
@@ -1909,14 +1911,15 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("未來30日法說會：MOPS 官方來源暫時不可解析，本次不列未確認事件", watch)
         global_lines = [
             line for line in watch.splitlines()
-            if "｜影響面：" in line and "來源：" in line
+            if "｜影響面：" in line and "說明：" in line
         ]
         self.assertEqual(len(global_lines), 5)
-        self.assertEqual(global_lines[0], "06/10-11 ECB 利率決策/記者會｜影響面：利率/匯率｜來源：ECB官方")
-        self.assertEqual(global_lines[1], "06/10 美國 CPI（May 2026）｜影響面：通膨/利率｜來源：BLS官方")
-        self.assertIn("06/15-16 日本央行 BOJ 利率會議｜影響面：利率/匯率｜來源：BOJ官方", global_lines)
-        self.assertIn("06/15-17 G7 領袖峰會｜影響面：政治風險｜來源：G7官方", global_lines)
-        self.assertIn("06/16-17 Fed FOMC 利率決策/SEP｜影響面：利率/匯率｜來源：Fed官方", global_lines)
+        self.assertEqual(global_lines[0], "06/10-11 ECB 利率決策/記者會｜影響面：利率/匯率｜說明：影響外資風險偏好與台股估值；牽動美元/台幣與外資流向")
+        self.assertEqual(global_lines[1], "06/10 美國 CPI（May 2026）｜影響面：通膨/利率｜說明：牽動Fed路徑與科技股估值；影響外資風險偏好與台股估值")
+        self.assertIn("06/15-16 日本央行 BOJ 利率會議｜影響面：利率/匯率｜說明：影響外資風險偏好與台股估值；牽動美元/台幣與外資流向", global_lines)
+        self.assertIn("06/15-17 G7 領袖峰會｜影響面：政治風險｜說明：提高避險情緒與供應鏈不確定性", global_lines)
+        self.assertIn("06/16-17 Fed FOMC 利率決策/SEP｜影響面：利率/匯率｜說明：影響外資風險偏好與台股估值；牽動美元/台幣與外資流向", global_lines)
+        self.assertNotIn("來源：", watch)
         self.assertNotIn("未來30日台股影響事件：官方來源暫時不可用", watch)
         self.assertNotIn("06/18 BoE MPC", watch)
         self.assertNotIn("06/25 BEA GDP", watch)

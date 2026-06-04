@@ -16,6 +16,14 @@
 
 ## Completed
 
+- `future_watch_event_impact_explanation_20260604`:
+  - 問題：Owner 問歷史類比目前怎麼查數據，並要求第三段相關事件去除來源、增加為什麼影響台股的說明。
+  - 結果：第三段 `未來30日台股影響事件` 不再顯示 `來源：...`，改顯示 `說明：...`；說明由 `impact` 對應外資風險偏好、台股估值、美元/台幣、Fed 路徑、避險情緒、供應鏈等台股影響語意。
+  - 歷史類比現況：讀 TWSE 即時大盤 / 近月 OHLC，計算單日跌幅、高檔回落、盤中震盪、TWSE樣本天數後套固定壓力模板；不是多年歷史資料庫模型。
+  - 可重跑補強：focused future-watch 11 passed、py_compile / diff check passed、official `generate()` read-only smoke 第三段無 `來源：` 且每筆有 `說明：`。
+  - QA 狀態：通過。
+  - 流程復盤：根因分類為 `display_semantics` + `mobile_reading`。來源可留在內部 evidence，不一定要外露；使用者更需要看到事件與台股資金/估值/風險偏好的關聯。
+  - 邊界：未改查詢邏輯、策略、RR、DB schema/write/backfill、live Telegram。
 - `future_watch_mops_breadth_query_fix_20260604`:
   - 問題：Owner 貼出的正式第 4 則 `未來30日法說會` 只剩聯電一筆，與改版前資料明顯不一致。
   - 結果：MOPS 查詢由單檔深度優先改為廣度優先；預設目標 / 查詢預算提到 12 / 32；法說會顯示上限提到 10。

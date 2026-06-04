@@ -688,6 +688,28 @@ def _source_label(source, source_kind=None):
     return f"{source}{suffix}"
 
 
+def _taiwan_market_impact_note(impact):
+    text = str(impact or "")
+    parts = []
+    if "通膨" in text:
+        parts.append("牽動Fed路徑與科技股估值")
+    if "利率" in text:
+        parts.append("影響外資風險偏好與台股估值")
+    if "匯率" in text:
+        parts.append("牽動美元/台幣與外資流向")
+    if "政治風險" in text:
+        parts.append("提高避險情緒與供應鏈不確定性")
+    if "能源" in text:
+        parts.append("影響成本、通膨與航運/製造族群")
+    if not parts:
+        return "可能改變外資風險偏好與台股資金面"
+    deduped = []
+    for part in parts:
+        if part not in deduped:
+            deduped.append(part)
+    return "；".join(deduped[:2])
+
+
 def build_live_global_event_source(now=None, get_text=None):
     base_date = _as_date(now or datetime.now()) or datetime.now().date()
     year = base_date.year
@@ -902,6 +924,7 @@ def collect_global_events(now, global_event_source=None, max_items=5):
             "date_label": _date_label(event_date),
             "event": row.get("event") or row.get("name"),
             "impact": impact,
+            "impact_note": row.get("impact_note") or row.get("reason") or _taiwan_market_impact_note(impact),
             "source": row.get("source"),
             "source_label": _source_label(row.get("source"), source_kind),
             "priority": _EVENT_PRIORITY.get(first_impact, 9),
@@ -973,7 +996,7 @@ def format_future_watch_message(payload, now, version):
         for item in global_items[:5]:
             lines.append(
                 f"{item.get('date_label') or _date_label(item.get('date'))} {item.get('event')}｜"
-                f"影響面：{item.get('impact')}｜來源：{item.get('source_label') or item.get('source')}"
+                f"影響面：{item.get('impact')}｜說明：{item.get('impact_note')}"
             )
     else:
         lines.append(TAIWAN_MARKET_EVENT_EMPTY)

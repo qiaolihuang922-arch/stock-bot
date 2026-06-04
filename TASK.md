@@ -1,23 +1,22 @@
-# TASK: future_watch_mops_breadth_query_fix_20260604
+# TASK: future_watch_event_impact_explanation_20260604
 
 ## 任務狀態
 
-- task_id：`future_watch_mops_breadth_query_fix_20260604`
-- 任務類型：normal_patch
+- task_id：`future_watch_event_impact_explanation_20260604`
+- 任務類型：tiny_patch
 - 狀態：ready_for_qa
 - 版本建議：維持 `v20.4.47`
-- QA 分級：L2
+- QA 分級：L1
 
 ## Owner 問題
 
-Owner 貼出正式第 4 則後發現 `未來30日法說會` 只剩 1 筆聯電；改版前查詢資料是對的。根因是 MOPS 查詢優化改成單檔深度優先，在 query budget 下前面標的吃掉查詢額度，後面標的被漏查。
+Owner 問歷史類比現在怎麼查數據，並要求第三段 `未來30日台股影響事件` 去除來源顯示，改成說明為什麼影響台股。
 
 ## 使用者可見結果
 
-- MOPS 查詢改為廣度優先：所有標的先查第一優先市場別，再進 fallback TYPEK。
-- 預設查詢目標擴到 12 檔，查詢預算擴到 32 次。
-- 法說會可見上限擴到 10 筆，避免查到但被 formatter 截掉。
-- 正式 `generate()` 第 4 則恢復多檔法說會，包含光寶科、聯電、仁寶、英業達、緯創、群創等。
+- 第三段事件行不再顯示 `來源：...`。
+- 第三段事件行改顯示 `說明：...`，用影響面轉成人話解釋台股影響。
+- 歷史類比現況要在交付中說清楚：目前讀 TWSE 即時大盤 / 近月 OHLC，計算單日跌幅、高檔回落、盤中震盪、樣本天數，再套固定壓力情境模板，不是多年歷史資料庫相似度模型。
 
 ## 非目標
 
@@ -25,6 +24,7 @@ Owner 貼出正式第 4 則後發現 `未來30日法說會` 只剩 1 筆聯電�
 - 不做 DB 方向，不新增 DB read/write/backfill。
 - 不發 live Telegram。
 - 不改全球事件完整官方 calendar parser。
+- 不改歷史類比算法。
 - 不改 DB 方向或加 cache。
 
 ## 影響模組與直接消費者
@@ -35,24 +35,23 @@ Owner 貼出正式第 4 則後發現 `未來30日法說會` 只剩 1 筆聯電�
 
 ## 輸出契約
 
-- MOPS query order 不得讓單一標的先掃完所有 TYPEK 後才換下一檔。
-- 在 `max_queries=24`、`max_targets=12` 下，第 12 檔第一優先市場別仍必須被查到。
-- formatter 最多顯示 10 筆 MOPS 法說會。
+- 第三段格式：`日期 事件｜影響面：...｜說明：...`。
+- 第三段不得出現 `來源：`。
+- `說明` 可由 `impact_note` / `reason` 覆蓋；缺省時由 `impact` 產生台股影響說明。
 
 ## 驗收條件
 
 - Focused future-watch tests 通過。
 - py_compile 通過。
 - `git diff --check` 通過。
-- Read-only official `generate()` smoke：未來30日法說會不只 1 筆，且包含 06/22 光寶科。
+- Read-only official `generate()` smoke：第三段不含 `來源：`，每筆含 `說明：`。
 
 ## 失敗標本與驗收路由
 
-- 失敗標本：Owner 貼出的第 4 則只剩 `06/05 2303 聯電` 一筆法說會。
-- 驗收路由：MOPS helper query order regression -> focused tests -> official `generate()` read-only smoke。
+- 失敗標本：Owner 指出的 `來源可以去除，應該要增加說明為什麼影響`。
+- 驗收路由：future_watch formatter -> focused tests -> official `generate()` read-only smoke。
 
 ## 禁止事項與阻塞條件
 
-- 不得用 DB cache 解決本輪問題。
-- 不得假造 MOPS 事件。
+- 不得假造台股影響事件。
 - 不得把 source-error 靜默顯示成無事件。
