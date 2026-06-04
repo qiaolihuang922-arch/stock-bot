@@ -1,174 +1,197 @@
-# TASK: 修正 v20.4.37 RR不足/等RR修復 報文可讀性
+# TASK: Phase A 盤後未持倉普通 BUY 改為可準備不可買
 
 ## 任務狀態
 
-- task_id: fix-v20-4-37-rr-insufficient-message-readability
+- task_id: phase_a_after_close_unheld_buy_prepare_v20_4_39
 - 任務類型: normal_patch
 - 狀態: ready_for_tech
-- 版本建議: 使用者可見報文契約有變更，建議升版 v20.4.38；不得回退 v20.4.37
+- 版本建議: 使用者可見報文版本需由 v20.4.38 升至 v20.4.39
 - QA 分級建議: L2
+- 主 bug: 盤後未持倉普通 BUY / 明日追蹤候選在 summary、漏斗、卡片被寫成「可買 / 新倉建議 / 新增有效進場 / 40%倉 / 買點成立」，手機閱讀時容易誤讀成已可下單或明日必買。
 
 ## Owner 問題
 
-Owner 貼出的 2026-06-04 盤中 v20.4.37 完整報文中，光寶科卡片狀態是：
+Owner 要先試行 Phase A 條件性放寬 / 分層，不是全域放寬。
 
-👀 等RR修復｜RR不足
+2026-06-04 盤後 v20.4.38 報文中，未持倉光寶科仍需「明日開盤後確認」，但多個使用者可見區塊呈現為可執行買進：
 
-但同一卡片數據行顯示：
+- 卡片顯示：🟢 明日追蹤｜40%倉｜買點成立
+- 卡片買點顯示：買點：盤後追蹤｜開盤後確認｜不追價
+- summary 顯示：新倉建議 1
+- summary 顯示：新增有效進場 1 檔需明日開盤前確認
+- summary 顯示：光寶科 可買（分批，不追價）｜尚未買入｜建議分批｜明日開盤後確認
 
-RR 0.98｜不適用（RR不足）｜證據：資料不足｜V 0.86x
-
-手機閱讀時會把「證據：資料不足」誤讀成資料源缺失，而實際主因是 RR 不足 / 等 RR 修復。
-
-同一份 summary 又列出：
-
-- 回測（建準）...偏弱
-- 回測（光寶科）...偏弱
-
-但光寶科目前是 等RR修復 / 僅追蹤，不是可買或不可追高候選。summary 的回測句會讓使用者誤以為光寶科接近可買。
+問題不是 RR 或策略分數錯，而是「盤後未持倉普通 BUY / 明日追蹤候選」的使用者可見語氣與分組錯誤。
 
 ## 使用者可見結果
 
-手機閱讀 v20.4.38 報文時：
+手機閱讀盤後報文時，未持倉且仍需明日開盤後確認的普通 BUY / 明日追蹤候選，必須被歸為「可準備、不可買」或等價明確不可執行語氣。
 
-- 光寶科若狀態為 等RR修復｜RR不足，同一卡片 evidence/reason 不得顯示成像資料源缺失的 證據：資料不足
-- RR 不足原因要明確指向「RR不足 / 等RR修復」，不是資料缺漏
-- summary 回測摘要不得把 等RR修復 / 僅追蹤 標的寫得像可買候選或接近可買候選
-- 可買、不可追高、僅追蹤/等RR修復 的語意在 summary 與卡片內一致
-
-## 非目標
-
-- 不改策略 decision
-- 不改 RR 公式
-- 不改篩選門檻
-- 不改 DB schema / RLS / grant / policy / role
-- 不新增或修改 DB write path
-- 不 live Telegram delivery
-- 不處理交易執行排序，除非該排序直接阻塞本輪 replay 驗收
-- 不做全量報文重構
-- 不清理 unrelated formatter 文案
-
-## 影響模組與直接消費者
-
-影響模組：
-
-- Telegram 報文 formatter
-- final message-list 組裝路徑
-- summary 回測摘要輸出路徑
-- 版本字串/header 常量，如本 repo 有集中版本定義
-
-直接消費者：
-
-- Owner 手機 Telegram 報文
-- formatTelegramMessages 的 official output
-- actual generate() final message-list
-- QA replay artifact / snapshot 類驗收輸出
-
-## 輸出契約
-
-已存在且不得回退的契約：
-
-- 報文不得回退到低於 v20.4.37
-- 光寶科原 decision/state 不得被本任務改成可買、不可追高、淘汰或其他策略結果
-- RR 0.98、V 0.86x 等既有數值不得因 formatter 修正被重新計算
-- 👀 等RR修復｜RR不足 這類狀態語意必須保留
-- 無可買時不得用像推薦的 summary 文案
-- 空區塊、0-count、無新增下單占位預設不顯示
-
-本輪可改的使用者可見契約：
-
-- 當標的狀態為 等RR修復｜RR不足 時，卡片 evidence/reason 文案需改為明確 RR 原因，例如形狀：
-- RR 0.98｜不適用（RR不足）｜原因：RR不足，等待RR修復｜V 0.86x
-- 或等價短句，但不得出現會被理解為資料源缺失的 證據：資料不足
-- summary 回測摘要只可列入可買 / 不可追高等實際候選語境；若列入僅追蹤標的，必須明確標成僅追蹤，不得像候選建議
-- 若光寶科仍屬 等RR修復 / 僅追蹤，summary 示例形狀應偏向：
-- 僅追蹤：光寶科 RR不足，等待RR修復
-- 不應是：
-- 回測（光寶科）...偏弱
-
-## 版本契約
-
-- 若 Tech 修改任何使用者可見報文文案、summary 行為或 header 顯示，版本需升為 v20.4.38
-- 不得回退 v20.4.37
-- 若 repo 內存在多處版本常量，Tech 必須同步到 final Telegram header 實際輸出；若無法確認版本來源，需 blocked
-
-## 驗收條件
-
-1. 使用 Owner 2026-06-04 盤中 v20.4.37 完整報文的等價 replay payload，打到 official formatTelegramMessages 或 actual generate() final message-list；不得 helper-only。
-2. replay 後光寶科卡片仍為 👀 等RR修復｜RR不足 或等價狀態，但同一卡片不得再出現 證據：資料不足 這種資料源缺失語意。
-3. replay 後 summary 不得把 回測（光寶科）...偏弱 放在會被手機閱讀成可買/不可追高候選的位置；若保留光寶科，必須明確標為僅追蹤 / 等RR修復。
-4. replay 後建準既有 summary 回測語意不得被本任務誤刪或改成光寶科同類錯誤；只修本輪主 bug。
-5. final message-list/header 顯示版本為 v20.4.38，或 Tech 明確證明本 repo 報文版本不由該 formatter 控制並 blocked 給 Architect。
-6. QA 必須至少補一個手機閱讀路徑反證：檢查 summary 與光寶科卡片連讀時，不會把光寶科誤讀成接近可買或資料缺失。
-
-## 範例或 Fixture
-
-失敗標本：
-
-- Owner 貼出的 2026-06-04 盤中 v20.4.37 完整報文
-- 關鍵可見矛盾：
-- 光寶科卡片：👀 等RR修復｜RR不足
-- 光寶科數據行：RR 0.98｜不適用（RR不足）｜證據：資料不足｜V 0.86x
-- summary：回測（光寶科）...偏弱
-
-最小 replay fixture 要求：
-
-- 必須能產生 final Telegram message-list
-- 必須包含光寶科的 RR不足/等RR修復狀態
-- 必須包含 summary 回測摘要資料
-- 必須包含建準與光寶科，避免只驗單一卡片 formatter
+光寶科這類卡片仍可保留 RR、技術條件、回測摘要與觀察理由，但不得讓使用者在 summary、漏斗或卡片第一眼讀成已可下單。
 
 示例輸出形狀：
 
-- 光寶科卡片：
-- 👀 等RR修復｜RR不足
-- RR 0.98｜不適用（RR不足）｜原因：RR不足，等待RR修復｜V 0.86x
-- summary：
-- 可買/不可追高候選只列真正候選
-- 光寶科若出現，只能在僅追蹤語境：僅追蹤：光寶科 RR不足，等待RR修復
+Summary:
+新倉：無有效進場
+可準備：1 檔需明日開盤後確認，未確認前不可下單
+光寶科 可準備（不可買）｜尚未買入｜明日開盤後確認｜不追價
+
+未持倉卡片:
+🟡 明日準備｜不可買｜開盤後確認
+光寶科
+買點：尚未成立｜盤後僅追蹤｜明日開盤後確認｜不追價
+RR / 技術 / 回測資訊照常顯示
+
+實際文案可依現有報文風格調整，但語意必須同時滿足：
+
+- 不是新倉建議。
+- 不是新增有效進場。
+- 不是可買。
+- 不顯示 40%倉。
+- 不顯示 買點成立。
+- 明確指出未經明日開盤後確認前不可下單。
+
+## 非目標
+
+- 不改 RR 公式。
+- 不改策略核心買賣判斷。
+- 不改 trend_continuation 小倉 BUY 的可買路徑。
+- 不改盤中有效 BUY 的可買路徑。
+- 不改 DB schema、RLS、grant、policy、role、index、constraint。
+- 不新增或修改 production write path。
+- 不做 live Telegram delivery。
+- 不重設整體推薦分組規則。
+- 不做全量報文清理或策略重構。
+
+## 影響模組與直接消費者
+
+影響模組由 Tech 依現有 repo 定位，但範圍限於 official generator / message-list / formatter 中「盤後未持倉普通 BUY / 明日追蹤候選」的使用者可見分類與文案。
+
+直接消費者：
+
+- Telegram 盤後報文手機閱讀者。
+- official generator 產出的 message list。
+- summary / 漏斗 / 未持倉卡片三個報文區塊。
+- 既有測試或 replay artifact 中覆蓋報文生成的 consumer。
+
+## 輸出契約
+
+單一輸出契約：盤後未持倉普通 BUY / 明日追蹤候選，在尚需明日開盤後確認時，必須在 summary、漏斗、卡片三層一致呈現為「可準備不可買」。
+
+必須排除的既有可見詞：
+
+- 新倉建議
+- 新增有效進場
+- 可買
+- 40%倉
+- 買點成立
+
+必須保留的資訊類型：
+
+- RR / 風報比資訊。
+- 技術條件資訊。
+- 回測資訊。
+- 明日開盤後確認 / 不追價提醒。
+
+已存在且不得回退的契約：
+
+- 真正 trend_continuation 小倉 BUY 仍可保留既有小倉 BUY / 可買路徑。
+- 盤中有效 BUY 仍可保留既有可買路徑。
+- 無可買時 summary 不得使用像推薦的文案，應呈現 新倉：無有效進場 或等價不可買表述。
+- 同一標的在同一份報文的 summary、漏斗、卡片狀態必須一致。
+- 使用者可見報文版本需同步顯示 v20.4.39，不得停留在 v20.4.38。
+
+若 Tech 無法從現有 payload 判斷普通 BUY、trend_continuation BUY、盤中有效 BUY、盤後明日追蹤候選的差異，需 blocked，不得用全域 BUY 降級替代。
+
+## 版本契約
+
+- 報文 header / 版本常量 / 使用者可見版本需升至 v20.4.39。
+- 不得只改測試期待值而漏改實際報文版本。
+- 不得把 v20.4.39 套用成策略核心版本變更；本輪只代表報文分類與語氣修正。
+
+## 驗收條件
+
+1. 使用 2026-06-04 盤後 v20.4.38 光寶科 failure specimen，透過 official generator/message-list 或等價 replay artifact 驗證：
+- summary 不再出現 新倉建議 1 指向光寶科。
+- summary 不再出現 新增有效進場 1 檔需明日開盤前確認 指向光寶科。
+- summary 不再出現 光寶科 可買（分批，不追價）。
+- 光寶科卡片不再出現 40%倉、買點成立。
+- 光寶科被呈現為可準備 / 明日追蹤 / 不可買 / 開盤後確認的等價語氣。
+- RR、技術、回測資訊仍保留。
+2. 補一個保護案例驗證不得全域放寬：
+- 真正 trend_continuation 小倉 BUY 或盤中有效 BUY 仍可進入既有可買路徑。
+- 不得因本輪修正被降成「可準備不可買」。
+3. 手機閱讀路徑驗收：
+- 只看 summary 第一屏，不會讀到光寶科是今日可買或明日必買。
+- 只看卡片標題與買點行，不會讀到 40%倉、買點成立 或可立即下單。
+- summary、漏斗、卡片對光寶科的狀態一致。
+
+## 範例或 Fixture
+
+Failure specimen 來源：2026-06-04 盤後 v20.4.38 報文，未持倉光寶科。
+
+需保留的關鍵摘錄：
+
+🟢 明日追蹤｜40%倉｜買點成立
+買點：盤後追蹤｜開盤後確認｜不追價
+新倉建議 1
+新增有效進場 1 檔需明日開盤前確認
+光寶科 可買（分批，不追價）｜尚未買入｜建議分批｜明日開盤後確認
+
+期望等價輸出形狀：
+
+新倉：無有效進場
+可準備：1 檔需明日開盤後確認，未確認前不可下單
+光寶科 可準備（不可買）｜尚未買入｜明日開盤後確認｜不追價
+
+🟡 明日準備｜不可買｜開盤後確認
+買點：尚未成立｜盤後僅追蹤｜明日開盤後確認｜不追價
 
 ## 失敗標本與驗收路由
 
-- 失敗層級: final Telegram 報文可讀性，不是 helper 層
-- 驗收路由優先序:
-1. actual generate() final message-list replay
-2. official formatTelegramMessages replay
-3. 若 1/2 缺必要 runtime source，Tech 必須產出等價 replay artifact，並標明缺哪個 source；QA 結論最多 conditional pass
-- 禁止只用 synthetic helper fixture 宣告完成
+失敗層級：使用者可見 official report/message-list，不是單一 helper fixture。
+
+驗收路由優先順序：
+
+1. official generator 以 2026-06-04 盤後等價 payload/replay artifact 產出 message list。
+2. 若不能取得完整 official replay，Tech 必須產出等價 replay artifact，包含足以重現 summary、漏斗、未持倉光寶科卡片的 payload 欄位。
+3. 若只能測 helper 或局部 formatter，CHANGELOG 必須標記 partial，QA 結論不得直接通過。
 
 ## 明確禁止事項
 
-- 禁止修改策略 decision 讓光寶科變成可買或不可追高來掩蓋文案問題
-- 禁止修改 RR 計算或門檻
-- 禁止把所有 資料不足 全域替換，需限定 RR不足/等RR修復 語境
-- 禁止改 DB schema/write
-- 禁止 live Telegram
-- 禁止將 Owner 的「直接修」解讀為跳過 Tech / QA
-- 禁止把 unrelated 交易排序、全量清理、報文重構納入本輪
+- 禁止全域放寬 BUY 或把所有 BUY 都降成可準備。
+- 禁止改 RR 公式。
+- 禁止改策略核心買賣判斷。
+- 禁止改 DB schema/write path。
+- 禁止 live Telegram。
+- 禁止用 synthetic helper fixture 取代 Owner failure specimen 後宣稱完成。
+- 禁止只改卡片但 summary / 漏斗仍顯示可買。
+- 禁止只改 summary 但卡片仍顯示 40%倉 或 買點成立。
+- 禁止回退 trend_continuation 小倉 BUY 與盤中有效 BUY 的既有可買路徑。
+- 禁止把本輪擴成策略重設、全量清理或 L3 大驗證。
 
 ## 阻塞條件
 
-- 找不到 Owner 完整報文或等價 replay payload，且無法打到 final message-list
-- 無法確認 final Telegram 版本字串來源
-- replay 只能打 helper，無法覆蓋 official formatter 或 actual generate path
-- 修正必須改策略 decision、RR 公式或 DB schema 才能達成
-- 測試環境缺依賴且無法補齊
+- 找不到或無法重建 2026-06-04 盤後 v20.4.38 光寶科等價 replay artifact。
+- 現有 payload 無法區分盤後普通 BUY / 明日追蹤候選與真正 trend_continuation 小倉 BUY、盤中有效 BUY。
+- official generator/message-list 路徑無法執行，且沒有可接受的等價 replay artifact。
+- 報文版本來源不明，無法確認 v20.4.39 實際會顯示在使用者可見報文。
+- 需要 DB schema/write 或 live Telegram 才能完成時，本輪 blocked。
 
 ## 本輪停止條件
 
-完成定義：
+完成條件：
 
-- Tech 修正 formatter/message-list
-- replay 打到 official formatTelegramMessages 或 actual generate() final message-list
-- QA 以 Owner 等價 replay 反證通過
-- commit / push 完成
-- git completion gate 通過
+- 2026-06-04 盤後光寶科 failure specimen 在 official generator/message-list 或等價 replay 中，summary、漏斗、卡片一致改為可準備不可買。
+- 新倉建議 / 新增有效進場 / 可買 / 40%倉 / 買點成立 不再套用到該盤後未持倉普通 BUY 候選。
+- RR、技術、回測資訊保留。
+- trend_continuation 小倉 BUY 或盤中有效 BUY 保護案例未回退。
+- 使用者可見版本為 v20.4.39。
 
-旁支不納入本輪：
+旁支問題只記待辦，不納入本輪：
 
-- 其他股票的回測品質判斷
-- 交易執行排序
-- 歷史資料補洞
-- DB 持久化設計
-- 報文整體資訊架構重設
-- 全 repo 清理或重構
+- 其他標的的策略門檻重新設計。
+- RR / 回測模型調整。
+- DB 持久化或跨日狀態補強。
+- Telegram 全報文版面整理。
+- Phase B / Phase C 條件放寬策略。

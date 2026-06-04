@@ -70,7 +70,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.38"
+VERSION = "v20.4.39"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -5416,6 +5416,17 @@ def unheld_non_actionable_prepare_label(data):
     return "不可追高觀察"
 
 
+def post_market_unheld_buy_requires_open_confirmation(data, report_context=None):
+
+    result = (data or {}).get("result") or {}
+    report_phase = (report_context or {}).get("report_context", {}).get("report_phase")
+    return (
+        report_phase not in (None, "盤中")
+        and is_valid_entry(result)
+        and result.get("decision_type") != "trend_continuation"
+    )
+
+
 def unheld_funnel_assessment(name, data, market_mode=None, report_context=None):
     result = data.get("result") or {}
     state = tomorrow_watch_state(name, data)
@@ -5431,6 +5442,8 @@ def unheld_funnel_assessment(name, data, market_mode=None, report_context=None):
     if is_valid_entry(result):
         if result.get("decision_type") == "trend_continuation":
             return "趨勢延續", None
+        if post_market_unheld_buy_requires_open_confirmation(data, report_context=report_context):
+            return "可準備", None
         return "可買", None
 
     if state == "弱勢淘汰":
@@ -5520,7 +5533,10 @@ def unheld_prepare_bucket_counts(watch_items, funnel=None, market_mode=None, rep
     for name, data in watch_items:
         if name not in prepare_names:
             continue
-        if data.get("evidence_adjustment_reason"):
+        if data.get("evidence_adjustment_reason") or post_market_unheld_buy_requires_open_confirmation(
+            data,
+            report_context=report_context,
+        ):
             counts["可準備"] += 1
         else:
             counts["不可追高觀察"] += 1
@@ -6640,6 +6656,7 @@ def _telegram_presentation_deps():
         "_strategy_sample_decision_source_status": _strategy_sample_decision_source_status,
         "_unheld_decision_source_status": _unheld_decision_source_status,
         "is_valid_entry": is_valid_entry,
+        "post_market_unheld_buy_requires_open_confirmation": post_market_unheld_buy_requires_open_confirmation,
         "final_label": final_label,
         "tomorrow_watch_state": tomorrow_watch_state,
         "unheld_funnel_state": unheld_funnel_state,

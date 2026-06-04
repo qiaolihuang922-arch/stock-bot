@@ -6,13 +6,34 @@
 
 - 專案：台股策略 Telegram 報文機器人。
 - 正式結果以 git / runner 產生報文為準。
-- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.38`。
+- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.39`。
 - 固定 8 份 Markdown 不刪：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 - Architect 是總控；產品 / 策略 / 報文 bug 或 feature 預設走 PM -> Tech -> QA。
 - 跨日狀態、已執行交易、歷史 evidence 必須來自 production DB 或 Owner 指定持久來源；local/runtime/worktree 不能當跨日記憶。
 - 缺資料、source-error、欄位不足或可信度不足時 fail closed。
 
 ## Latest Completed Work
+
+- task_id：`phase_a_after_close_unheld_buy_prepare_v20_4_39`
+- 狀態：code done / QA 通過；報文版本升 `v20.4.39`。
+- 問題：2026-06-04 盤後 v20.4.38 光寶科類未持倉 ordinary BUY 仍需明日開盤後確認，但 summary / 漏斗 / 卡片寫成 `新倉建議`、`可買`、`40%倉`、`買點成立`、`新增有效進場`，手機閱讀容易誤讀成可下單。
+- 關鍵行為：
+  - 盤後未持倉 ordinary `BUY` 且非 `trend_continuation` 時，改歸 `可準備（不可買）`。
+  - 卡片標題改為 `🟡 明日準備｜不可買｜開盤後確認`。
+  - 買點行改為 `買點：尚未成立｜盤後僅追蹤｜明日開盤後確認｜不追價`。
+  - Summary 在 prepare-only case 顯示 `新倉：無有效進場` 與 `可準備：N 檔需明日開盤後確認，未確認前不可下單`。
+  - RR / 技術 / 單檔回測輔助行仍保留。
+  - mixed 盤後 `trend_continuation` 小倉 BUY + ordinary prepare 時，trend 小倉仍可行動，不被 `新倉：無有效進場` 覆蓋。
+  - 盤中 ordinary BUY 與既有 `trend_continuation` 可買路徑未回退。
+- 驗證：
+  - `arch -arm64 ./.venv/bin/python -m pytest tests/test_generator_report.py -k 'test_v20_0_14_message_list_uses_single_report_phase_when_phase_drifts or test_v20_0_14_post_market_fixture_uses_next_day_plan_semantics or test_v20_4_39_post_market_mixed_trend_and_prepare_keeps_trend_actionable or test_trend_continuation_official_report_has_separate_small_buy_bucket' -q` -> 4 passed。
+  - `PYTHONPYCACHEPREFIX=/private/tmp/v20_4_39_pycache_main arch -arm64 ./.venv/bin/python -m py_compile core/generator.py presentation/report.py tests/test_generator_report.py` -> passed。
+  - `git diff --check` -> passed。
+  - QA 自補 explicit `report_phase='盤後'` mixed official message-list probe -> `通過`。
+- 殘留風險：未跑 full pytest、production runner artifact、live Telegram、DB read/write；`trend_continuation` 盤後 summary 仍沿用 `新增有效進場` 詞彙，若要細分命名需另開任務。
+- 邊界：未改 RR 公式、strategy decision、DB schema/write、live Telegram。
+
+## Previous Completed Work
 
 - task_id：`20260604_144316_6186_online_research_pair`
 - 狀態：research done / fixed docs updated；本輪未改產品代碼、未改 DB、未發 Telegram。
@@ -21,7 +42,7 @@
   - `趨勢延續小倉`：只限回踩站回同源 setup，daily_price evidence positive，樣本 >=30，5D win >=55%，5D avg >0，倉位 <=15%，回踩低點下方停損。
   - 一般 `可買`：仍走既有 BUY / RR / can_buy / source gate，不因 evidence、題材、分數、回測摘要單獨放寬。
 - 硬邊界：RR不足未解除、HOT/EXTREME、LIMIT_LOCK / LIMIT_REBOUND / WEAK_REBOUND、FAILED_BREAKOUT / fake breakout、market_grade D、NO_VOLUME、source-error / unresolved-conflict 都不得升級可買。
-- 建議下一步：若 Owner 要進實作，先做 Phase A `可準備（不可買）` 分組與 gate attribution；不新增 BUY。Phase B 才補 `趨勢延續小倉` portfolio cap / forward monitor。
+- 建議下一步：Phase A `可準備（不可買）` 已於 v20.4.39 落地；Phase B 才補 `趨勢延續小倉` portfolio cap / forward monitor。
 - 研究文件：`RESEARCH.md` 已壓縮保存本輪方案。
 
 ## Previous Completed Work
@@ -358,7 +379,7 @@
 ## Latest Process Review
 
 - 觸發：Owner 指出「在討論流程優化時，Architect 又退回去解釋產品 diff」。
-- 根因分類：`runner_gap` + `文件不足` + `post-cycle closeout`。產品修復已 push，但 `DISPATCH.md` / `CURRENT_STATE.md` 仍殘留 `待 push / completion gate`，重開或被追問時容易把焦點帶回上一輪 diff，而不是處理流程失效本身。
+- 根因分類：`runner_gap` + `文件不足` + `post-cycle closeout`。產品修復已 push，但 `DISPATCH.md` / `CURRENT_STATE.md` 曾殘留未收口語句，重開或被追問時容易把焦點帶回上一輪 diff，而不是處理流程失效本身。
 - 流程補強：新增 `tools/cao_agent/check_architect_closeout_gate.sh`，在 git completion passed 後掃描 `DISPATCH.md` / `CURRENT_STATE.md` 是否仍有未收口語句，並要求 Recently Done 與 Git completion gate 狀態一致。
 - 新收口順序：產品或流程任務完成後，先跑 git completion gate，再更新 closeout docs，最後跑 architect closeout gate；任一 gate fail，不得 final 寫完成。
 - 這不是新增死規則；它把「不要靠記憶判斷是否已推」改成可重跑檢查。
@@ -641,7 +662,7 @@
 
 ## Runner Gaps To Fix Later
 
-- CAO auto wrapper QA conclusion parser 已在工作樹修正，待 commit。
+- CAO auto wrapper QA conclusion parser 屬歷史 runner gap，若再處理需另開流程任務並以當前 git 狀態取證。
 - Tech worktree 曾殘留舊 candidate diff；新任務前應自動清理或阻塞並明確提示。
 - QA production-read 任務已可用 `CAO_QA_USE_REPO_CONFIG=1` 避免 dummy config；QA sandbox DNS 仍可能失敗，可用 `scripts/smoke_market_theme_evidence_readonly.py --auxiliary-render-artifact-json` 生成 safe read-only artifact。
 - QA worktree handoff sync 已補：每次 QA runner 啟動前從主 repo 同步固定 handoff Markdown，避免 stale TASK/CHANGELOG/QA_REPORT 造成反覆 conditional。

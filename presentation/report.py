@@ -373,12 +373,12 @@ def _unheld_score_text_for_state(score_text, rr_text, valid_entry, funnel_state,
     return f"不適用（{reason}）｜證據：{evidence_text}"
 
 
-def _weak_buy_backtest_line(name, data, deps):
+def _weak_buy_backtest_line(name, data, deps, include_all=False):
     line = deps["compact_backtest_line"]((data or {}).get("backtest_context"))
     if not line or line == "回測：-":
         return None
     weak_tokens = ["偏弱", "無明顯優勢", "樣本不足", "不可用", "判讀不足"]
-    if not any(token in line for token in weak_tokens):
+    if not include_all and not any(token in line for token in weak_tokens):
         return None
     body = line.replace("回測：", "", 1)
     return f"回測（{name}）：{body}；回測僅輔助，分批小倉、不追價"
@@ -535,6 +535,10 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     state = deps["tomorrow_watch_state"](name, data)
     funnel_state = deps["unheld_funnel_state"](name, data, market_mode=market_mode, report_context=report_context)
     prepare_label, prepare_action = deps["strong_prepare_bucket"](data)
+    post_market_prepare = (
+        source_eligible
+        and deps["post_market_unheld_buy_requires_open_confirmation"](data, report_context=report_context)
+    )
     if valid_entry and funnel_state not in ["可買", "趨勢延續"]:
         valid_entry = False
         title_label = (
@@ -550,6 +554,8 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         title_label = "source missing" if source_status in {"missing-source", "insufficient-data"} else source_status
     elif state == "弱勢淘汰":
         title_label = deps["rejected_primary_reason"](stock_result)
+    elif post_market_prepare:
+        title_label = "開盤後確認"
     elif funnel_state == "可準備" and prepare_label:
         title_label = prepare_label
 
@@ -565,6 +571,9 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     elif deps["is_valid_entry"](stock_result) and not source_eligible:
         title_icon = "⛔"
         title_action = "不可行動"
+    elif post_market_prepare:
+        title_icon = "🟡"
+        title_action = "明日準備｜不可買"
     elif funnel_state == "可準備":
         title_icon = "👀"
         title_action = "可準備" if data.get("evidence_adjustment_reason") else deps["unheld_non_actionable_prepare_label"](data)
@@ -616,6 +625,10 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     elif valid_entry and report_phase not in (None, "盤中"):
         buy_line = "買點：盤後追蹤｜開盤後確認｜不追價"
         data_line = f"數據：{rr_data_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
+        price_line = deps["price_change_line"](data.get("price"), data.get("change"))
+    elif post_market_prepare:
+        buy_line = "買點：尚未成立｜盤後僅追蹤｜明日開盤後確認｜不追價"
+        data_line = f"數據：{rr_data_text}｜{display_score_text}｜V {data.get('volume_ratio', '-')}x"
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
     elif valid_entry and detail_size_text != raw_size_text:
         buy_line = f"買點：可買｜{detail_size_text}｜分批，不追價"
@@ -678,7 +691,12 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         buy_line,
     ]
 
-    weak_buy_backtest_line = _weak_buy_backtest_line(name, data, deps) if valid_entry else None
+    weak_buy_backtest_line = _weak_buy_backtest_line(
+        name,
+        data,
+        deps,
+        include_all=post_market_prepare,
+    ) if (valid_entry or post_market_prepare) else None
     if weak_buy_backtest_line:
         lines.append(weak_buy_backtest_line)
 
@@ -724,6 +742,9 @@ def _brief_new_position_line(watch_items, report_context, deps, market_mode=None
     actionable = len(funnel.get("可買") or []) + len(funnel.get("趨勢延續") or [])
     if actionable:
         return f"新倉：可行動候選 {actionable} 檔，以第二則卡片為準。"
+    prepare_count = len(funnel.get("可準備") or []) if funnel else 0
+    if prepare_count:
+        return f"新倉：無有效進場；可準備 {prepare_count} 檔需明日開盤後確認，未確認前不可下單。"
     return "新倉：目前沒有可行動候選。"
 
 
@@ -853,7 +874,8 @@ def _compact_market_overview_line(holding_items, watch_items, report_context, de
 
 def _afterhours_brief_lines(holding_items, watch_items, report_context, deps, market_mode=None, daily_write_warning=None):
     funnel = deps["build_unheld_funnel"](watch_items, market_mode=market_mode, report_context=report_context) if watch_items else {"可買": []}
-    actionable = len(funnel.get("可買") or [])
+    actionable = len(funnel.get("可買") or []) + len(funnel.get("趨勢延續") or [])
+    prepare_count = len(funnel.get("可準備") or [])
     has_holding = bool(holding_items)
     today_buy_names = _today_buy_holding_names(holding_items, deps)
     if actionable and today_buy_names:
@@ -872,6 +894,8 @@ def _afterhours_brief_lines(holding_items, watch_items, report_context, deps, ma
         checks.append("觀察持倉是否跌破警戒")
     if actionable:
         checks.append("新倉候選需開盤後重新確認有效進場")
+    elif prepare_count:
+        checks.append("可準備候選需明日開盤後確認，未確認前不可下單")
     elif watch_items:
         checks.append("未持倉標的重新等待有效進場")
     if not checks:
@@ -886,6 +910,18 @@ def _afterhours_brief_lines(holding_items, watch_items, report_context, deps, ma
         lines.extend([
             f"今日交易：已建立新倉 {len(today_buy_names)} 檔（{'、'.join(today_buy_names)}）",
             f"新增有效進場：{actionable} 檔需明日開盤前確認" if actionable else "新增有效進場：無",
+        ])
+        if prepare_count:
+            lines.append(f"可準備：{prepare_count} 檔需明日開盤後確認，未確認前不可下單")
+    elif actionable:
+        lines.append(f"新增有效進場：{actionable} 檔需明日開盤前確認")
+        if prepare_count:
+            lines.append(f"可準備：{prepare_count} 檔需明日開盤後確認，未確認前不可下單")
+    elif prepare_count:
+        lines.extend([
+            "新倉：無有效進場",
+            f"可準備：{prepare_count} 檔需明日開盤後確認，未確認前不可下單",
+            "新增有效進場：無",
         ])
     elif not actionable:
         lines.append("新增有效進場：無")
