@@ -5505,11 +5505,11 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("🧾 v20.4.36 簡報", summary_message(messages))
         self.assertNotIn("Source：核心價格 available；持倉 available；策略樣本 missing-source；market/theme available", summary_message(messages))
         self.assertNotIn("📊 策略證據 v20.0", summary_message(messages))
-        self.assertIn("資料：持倉與現價已確認；風控由持倉成本/停損推算", position_message(messages))
+        self.assertNotIn("資料：持倉與現價已確認；風控由持倉成本/停損推算", position_message(messages))
         self.assertIn("數據：不適用（既有持倉）", position_message(messages))
         self.assertNotIn("Source：position available｜price available｜risk derived｜RR derived", position_message(messages))
         self.assertNotRegex(position_message(messages), r"數據：RR [0-9]")
-        self.assertIn("資料：現價與 OHLCV 已確認；RR/分數/量能為模型推算", unheld_message(messages))
+        self.assertNotIn("資料：現價與 OHLCV 已確認；RR/分數/量能為模型推算", unheld_message(messages))
         self.assertNotIn("Source：price available｜OHLCV available｜RR derived｜score derived｜volume derived", unheld_message(messages))
         self.assertNotIn("Source：漏斗 count", summary_message(messages))
         self.assertNotIn("資料依據", evidence_message(messages))
@@ -6651,6 +6651,149 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("淘汰", card)
         self.assertIn("證據：風控不適用", card)
         self.assertNotIn("證據：過熱不適用", card)
+
+    def test_0604_v20_4_36_mobile_readability_message_list_replay(self):
+        today_stop = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 94],
+            {"shares": 100, "avg_price": 100},
+            price=94,
+            change=-6.0,
+        )
+        today_stop["stock_code"] = "2303"
+        today_stop["position_events"] = {"event_count": 1, "bought_shares": 100, "buy_price": 100}
+        today_stop["holding_decision"] = {
+            "action": "停損",
+            "level": "STOP_100",
+            "shares": 100,
+            "note": "同日建倉後跌破 hard_stop",
+            "hard_stop_price": 95,
+            "warning_price": 97,
+        }
+        today_reduce = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 96],
+            {"shares": 100, "avg_price": 100},
+            price=96,
+            change=-4.0,
+        )
+        today_reduce["stock_code"] = "2408"
+        today_reduce["position_events"] = {"event_count": 1, "bought_shares": 100, "buy_price": 100}
+        today_reduce["holding_decision"] = {
+            "action": "減碼",
+            "level": "REDUCE_25",
+            "shares": 25,
+            "note": "同日建倉後跌破快速止損",
+            "hard_stop_price": 92,
+            "warning_price": 98,
+        }
+        today_watch = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 101],
+            {"shares": 100, "avg_price": 100},
+            price=101,
+            change=1.0,
+        )
+        today_watch["stock_code"] = "2324"
+        today_watch["position_events"] = {"event_count": 1, "bought_shares": 100, "buy_price": 100}
+        today_watch["holding_decision"] = {
+            "action": "續抱",
+            "level": "NEW_POSITION_RISK_WATCH",
+            "shares": 0,
+            "note": "新倉風控觀察",
+            "hard_stop_price": 94,
+            "warning_price": 98,
+        }
+
+        low_volume = self.evidence_payload(confidence=93, decision="WAIT", action=0, rr=1.8, distance=1)
+        low_volume["stock_code"] = "2301"
+        low_volume["volume_ratio"] = 0.6
+        low_volume["result"].update({
+            "trade_state": "NO_VOLUME",
+            "volume_state": "WEAK",
+            "confidence_score": 93,
+        })
+        failed_hot = self.evidence_payload(confidence=80, decision="FAIL", action=0, rr=1.8, distance=0.5, heat="HOT")
+        failed_hot["stock_code"] = "3481"
+        failed_hot["result"].update({
+            "structure_phase": "FAILED_BREAKOUT",
+            "price_behavior": "LIMIT_LOCK",
+            "market_grade": "D",
+        })
+        failed_gigabyte = self.evidence_payload(confidence=79, decision="FAIL", action=0, rr=1.5, distance=0.8, heat="HOT")
+        failed_gigabyte["stock_code"] = "2376"
+        failed_gigabyte["result"].update({
+            "structure_phase": "FAILED_BREAKOUT",
+            "price_behavior": "WEAK_REBOUND",
+            "market_grade": "D",
+        })
+        buyable_weak = self.evidence_payload(confidence=82, decision="BUY", action=0.1, rr=1.8, distance=0.5)
+        buyable_weak["stock_code"] = "2421"
+        buyable_weak["backtest_context"] = {
+            "sample": 38,
+            "reference": "高",
+            "win_rate": 42,
+            "avg_return": -0.8,
+        }
+        ordinary_history = self.evidence_payload(confidence=64, decision="WAIT", action=0, rr=1.2, distance=2, heat="HOT")
+        ordinary_history["stock_code"] = "9991"
+        ordinary_history["cross_day_context"] = {
+            "source_status": "ready",
+            "source_of_truth": ["daily_signal_snapshot"],
+            "previous_state": "observe",
+            "previous_action": "observe",
+            "repair_status": "improving",
+            "consecutive_observe_days": 1,
+            "historical_evidence_weight": 1,
+            "weight_reason": ["修復中", "連續觀察 1 天"],
+        }
+
+        with patch.object(generator, "market_theme_summary_evidence", return_value=self.confirmed_market_evidence()):
+            messages = generator.formatTelegramMessages(
+                {
+                    "聯電": today_stop,
+                    "華邦電": today_reduce,
+                    "仁寶": today_watch,
+                    "光寶科": low_volume,
+                    "群創": failed_hot,
+                    "技嘉": failed_gigabyte,
+                    "建準": buyable_weak,
+                    "修復股": ordinary_history,
+                },
+                "FULL DETAIL",
+                None,
+                None,
+                {"trade_date": "2026-06-04"},
+                datetime(2026, 6, 4),
+                strategy_evidence_summary=structured_strategy_evidence("available", row_count=30),
+                report_phase="盤中",
+            )
+
+        summary = summary_message(messages)
+        position = position_message(messages)
+        unheld = unheld_message(messages)
+        rendered = "\n\n".join(messages)
+        low_volume_card = card_block(unheld, "【光寶科 2301】")
+        failed_card = card_block(unheld, "【群創 3481】")
+        gigabyte_card = card_block(unheld, "【技嘉 2376】")
+        buyable_card = card_block(unheld, "【建準 2421】")
+        history_card = card_block(unheld, "【修復股 9991】")
+
+        self.assertIn("今日已買 3｜風控中 2", summary)
+        self.assertNotIn("今日新建倉 3", summary)
+        self.assertNotIn("資料：持倉與現價已確認；風控由持倉成本/停損推算", position)
+        self.assertNotIn("資料：現價與 OHLCV 已確認；RR/分數/量能為模型推算", unheld)
+        self.assertIn("等量能", low_volume_card)
+        self.assertIn("RR -（量能不足）", low_volume_card)
+        self.assertIn("不適用（量能不足）｜證據：量能不適用", low_volume_card)
+        self.assertIn("淘汰", failed_card)
+        self.assertIn("不適用（不可行動）｜證據：風控不適用", failed_card)
+        self.assertNotIn("不適用（過熱）", failed_card)
+        self.assertIn("淘汰", gigabyte_card)
+        self.assertIn("證據：風控不適用", gigabyte_card)
+        self.assertNotIn("證據：過熱不適用", gigabyte_card)
+        self.assertIn("回測（建準）：樣本38｜參考度高｜3日勝率42%｜相對-0.8%｜偏弱", rendered)
+        self.assertIn("回測僅輔助，分批小倉、不追價", buyable_card)
+        self.assertNotIn("前次 observe", history_card)
+        self.assertNotIn("修復中｜連續觀察 1 天｜權重 +1", history_card)
+        self.assertIn(f"🧾 {generator.VERSION} 簡報", summary)
 
     def test_v20_4_36_unheld_funnel_hides_zero_count_buckets(self):
         cooldown = self.evidence_payload(confidence=70, decision="WAIT", action=0, rr=1.2, distance=2, heat="HOT")

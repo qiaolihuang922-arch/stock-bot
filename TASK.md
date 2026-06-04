@@ -1,373 +1,187 @@
-# TASK: v20.4.36 trend_continuation 驗證、監控與報文降噪
+# TASK: v20.4.36 06/04 報文手機閱讀一致性收斂
 
 ## 任務狀態
 
-- task_id: trend_continuation_v20_4_36_validation_monitor_report_noise_20260603
-- 任務類型: mixed_patch
-- 1/2: risk_patch
-- 3/4/5: normal_patch
+- task_id: v20_4_36_0604_report_mobile_readability_convergence
+- 任務尺寸: normal_patch
 - 狀態: ready_for_tech
-- QA 分級建議: L3
-- 版本建議: 預設不升版；若使用者可見 header / 報文結構常量要求同步，Tech 必須在 CHANGELOG.md 說明是否維持 v20.4.36 或升版。
-- Owner 指令順序: Tech 必須先做第 1 項驗證；若 trend_continuation BUY fixture 不通過，先修階段二實裝，再做 2/3/4/5。
+- QA 分級建議: L2
+- 版本建議: 維持 v20.4.36；不得回退版本。
+- 本輪主 bug: 06/04 報文在手機閱讀時，未持倉卡片原因、正常資料提示、普通歷史提示、可買但回測偏弱、首屏今日新建倉摘要彼此造成誤讀。
+- 範圍收斂: 只修報文可讀性與 message-list replay 驗收，不改策略、不改 RR、不改 DB。
 
 ## Owner 問題
 
-Owner 要確認 v20.4.36 的 trend_continuation 不是只出現在文字或 helper，而是正式策略真的能在「回踩延續」條件下觸發小倉 BUY，且同時補上實盤 vs 回測監控、資料依據降噪、QA probe 改讀 manifest、未持倉回測行去重。
+Owner 要處理 v20.4.36 06/04 報文手機閱讀一致性，嚴格覆蓋六個 failure specimen：
 
-本輪不是重設策略，也不是擴大追高授權；核心是驗證與收斂既有 trend_continuation 實裝，並修掉報文與 QA 路由的噪音 / 漂移風險。
+1. 原因優先級混亂：RR 原因 / 不適用原因 / 證據原因 / 主狀態互相搶主因。
+2. 正常資料行刷屏：每卡重複「資料：...已確認...」。
+3. 普通歷史行刷屏：多卡重複「前次 observe｜修復中｜連續觀察 1 天｜權重 +1」。
+4. 建準可買但回測偏弱並列，缺手機可讀解釋。
+5. 首屏裸寫「今日新建倉 3」，與停損 / 減碼並列時容易誤讀成仍積極建倉。
+6. 回測單檔契約不得回退，仍需顯示「回測（建準）：...」並與可買解釋一致。
 
 ## 使用者可見結果
 
-手機報文中：
+手機 Telegram 報文應變成：
 
-- 符合回踩延續且 evidence positive 的標的，可顯示：
-- 🟢 趨勢延續買入｜小倉
-- 倉位仍為小倉，<=15%
-- 依據可被 manifest / source_status / evidence_status 追溯
-- 一般情境下第三則「資料依據」文字段預設不顯示，避免手機閱讀噪音。
-- 隱藏只影響文字段，不影響內部 manifest、source_status、evidence_status、compute_evidence_score、fail-closed、過熱、減碼或其他風控邏輯。
-- 未持倉卡片中，同一 setup_key 的回測行不重複刷屏；不同 setup_key 或不同決策含義不得被誤合併。
+- 首屏清楚區分：持倉要處理什麼、新倉是否可買、今日已買標的是否已有風控。
+- 未持倉卡片的主狀態、RR 不適用原因、證據不適用原因一致。
+- 正常來源時不逐卡顯示資料已確認句。
+- 普通 cross-day 歷史不逐卡刷屏，只保留高風險或 execution memory 類歷史。
+- 建準若仍是可買但回測偏弱，需一句短文案降低誤讀，例如「回測偏弱僅輔助，分批小倉、不追價」。
+- 回測單檔格式維持「回測（建準）：...」。
 
-手機閱讀示例形狀：
+手機示例輸出形狀：
 
-台股策略日報 v20.4.36
+今日已買3｜風控中2｜新倉建議1
 
-新倉：趨勢延續小倉 1｜僅追蹤 2｜淘汰 3
+🟢 可買｜建準
+回測（建準）：...偏弱；回測僅輔助，分批小倉、不追價
 
-3231 緯創
-🟢 趨勢延續買入｜小倉
-策略：回踩 ma5/ma10 後放量站回
-倉位：小倉 <=15%
-風控：回踩低點下方停損
+👀 等量能｜量能不足
+RR -（量能不足）｜不適用（量能不足）｜證據：量能不適用
 
-預設不再額外露出第三則長段：
-
-資料依據：...
-
-但 report_context / manifest 仍必須保留可供 QA 讀取的來源狀態。
+⛔ 淘汰｜突破失敗
+RR -（風控）｜不適用（突破失敗）｜證據：風控不適用
 
 ## 非目標
 
 - 不改 RR 公式。
-- 不改 DB schema、RLS、grant、policy、role、index、constraint。
-- 不做 live Telegram delivery。
-- 不新增 production write / backfill。
-- 不把 extended spike、無回踩、單純創新高追價改成 BUY。
-- 不把其他 decision_type 放開為「證據可開 BUY」。
-- 不重寫整體 strategy tree、condition engine 或報文架構。
-- 不移除 manifest / source_status / evidence_status。
-- 不用 helper-only 測試替代 official generator / report 驗收。
-- 不把「資料依據預設隱藏」做成 source fail-closed 豁免。
+- 不改 strategy decision。
+- 不改買賣 / 加減碼 / 停損 / 停利決策。
+- 不改 DB schema / RLS / grant / policy / role / index / constraint。
+- 不改 DB write path。
+- 不新增 production backfill / production write。
+- 不觸發 live Telegram。
+- 不把建準可買改成不可買來消除文案矛盾。
+- 不進行全量報文重構、策略重設或 L3 production 驗證。
 
-## 影響模組
+## 影響模組與直接消費者
 
-- tests/test_trend_continuation.py
-- services/analysis.py
-- core/condition_engine.py
-- scripts/research_trend_continuation.py
-- scripts/monitor_trend_continuation.py
-- presentation/report.py
-- core/generator.py
-- report_context / manifest / source_status / evidence_status 相關 fixture 與 QA probe
-- official generator / report replay artifact
+影響模組：
 
-## 直接消費者
+- presentation/report.py: 首屏摘要、卡片資料行、歷史行、回測顯示若在此層生成。
+- core/generator.py: message list、原因顯示、evidence unavailable reason、funnel / card formatter 若在此層生成。
+- tests/test_generator_report.py 或等價新增測試: 06/04 failure specimen 的 official generator / report message-list replay。
 
-- Owner 手機 Telegram 報文讀者
-- official generator / report runner
-- strategy decision payload 消費者
-- report_context manifest / source_status / evidence_status 消費者
-- QA replay / probe
-- scripts/monitor_trend_continuation.py 的人工或 runner 只讀監控消費者
+直接消費者：
+
+- Owner 手機 Telegram 報文。
+- official generator / report runner 產出的 message list。
+- QA message-list replay / mobile readability probe。
 
 ## 輸出契約
 
-### 1. trend_continuation 驗證測試契約
+已存在且不得回退的契約：
 
-新增 tests/test_trend_continuation.py，至少覆蓋：
+- 使用者可見版本不得低於 v20.4.36。
+- 回測單檔行必須保留「回測（建準）：...」。
+- 可買、可準備、僅追蹤、淘汰 / 不可行動仍需分開。
+- 無可買時不得使用像推薦的語氣。
+- 同一持倉在同一份報文只能有一個主行動。
+- 不得用刪除卡片、刪除證據或刪除回測來掩蓋矛盾。
 
-- 回踩延續正向 fixture：
-- 趨勢成立
-- 回踩 ma5 / ma10
-- 回踩後放量站回
-- evidence positive
-- strategy 輸出 decision_type="trend_continuation"
-- action 為 BUY
-- 倉位為小倉且 <=15%
-- official generator / report 報文出現 趨勢延續 與 小倉
-- extended spike 無回踩 fixture：
-- 不得 BUY
-- 不得輸出 decision_type="trend_continuation" 的 BUY
-- 負證據 fixture：
-- win_rate < 55% 或 avg_return_5d <= 0 時不得 BUY
-- 同源判定 fixture：
-- 正式策略形態判定與 scripts/research_trend_continuation.py 共用同一函數或同一抽出 helper
-- 同一 OHLCV fixture 的 research_match 與 production_match 必須一致
+原因優先級：
 
-若第 1 項測試不通過，Tech 必須先修 v20.4.36 階段二實裝，不得只改測試期待值。
+1. 淘汰 / FAIL / 突破失敗 / 弱勢 / 風控優先，顯示風控或突破失敗，不得被過熱覆蓋。
+2. 純過熱 / 等冷卻 / 不可追高且非淘汰時，才顯示過熱不適用。
+3. 等量能 / 量能不足且非淘汰時，顯示量能不足或條件未滿不適用，不得寫資料不足。
+4. 真缺資料 / source-error / insufficient-data 時，才顯示資料不足。
 
-### 2. 監控腳本契約
+正常資料行降噪：
 
-新增 scripts/monitor_trend_continuation.py，只讀、可重跑、不得 live delivery。
+- 正常來源時，逐卡不得重複顯示「資料：持倉與現價已確認；風控由持倉成本/停損推算」。
+- 正常來源時，逐卡不得重複顯示「資料：現價與 OHLCV 已確認；RR/分數/量能為模型推算」。
+- 只在 source missing、source-error、insufficient-data、stale、execution memory conflict、QA/debug 顯示模式時保留。
 
-輸出至少包含：
+普通歷史行降噪：
 
-{
-"status": "ok | alert | insufficient-data | source-error",
-"trade_date": "YYYY-MM-DD",
-"source": "production-read-only",
-"setup_key": "trend_continuation",
-"live_hit_count": 0,
-"evaluated_trade_count": 0,
-"live_win_rate_5d": null,
-"backtest_win_rate_5d": 0.5517,
-"backtest_avg_return_5d": 0.0226,
-"win_rate_diff": null,
-"consecutive_below_threshold": 0,
-"alert_threshold_win_rate": 0.45,
-"alert_after_trades": "N",
-"alert": false
-}
+- 普通歷史不得逐卡刷屏「前次 observe｜修復中｜連續觀察 1 天｜權重 +1」。
+- 只保留連續失效、高風險歷史、已買 / 已賣 / 已停利 / 已減碼、source conflict、達到策略門檻的歷史提示。
 
-契約：
+建準可買 + 回測偏弱：
 
-- 只讀既有 production source-of-truth。
-- 若缺少可驗證的實盤命中 / outcome source，輸出 source-error 或 insufficient-data，不得用 runtime cache 或自造 fixture 當實盤勝率。
-- 低於 45% 連續 N 筆才告警；N 必須是明確 CLI 參數或常量，並在 help / output 中可見。
-- 監控只產生 stdout / artifact，不發 Telegram，不寫 DB。
-- 回測基準需讀既有 trend_continuation artifact 或同源研究輸出，不得硬寫一份會漂移的邏輯。
+- 若策略仍輸出建準可買，但單檔回測摘要為偏弱 / 無明顯優勢 / 樣本不足，必須在同卡以短句解釋：回測僅輔助、分批、小倉、不追價或等價語意。
+- 不得因此改變 strategy decision。
 
-### 3. 資料依據預設隱藏契約
+首屏今日新建倉：
 
-presentation/report.py 新增或使用：
-
-SHOW_DATA_BASIS = False
-
-契約：
-
-- 預設隱藏第三則「資料依據」文字段。
-- 只隱藏文字呈現，不刪 report_context。
-- 不改 manifest。
-- 不改 source_status。
-- 不改 evidence_status。
-- 不改 compute_evidence_score。
-- 不改 fail-closed。
-- 不改過熱、減碼、停損、停利、持倉主行動邏輯。
-- 若 SHOW_DATA_BASIS=True，原資料依據段可恢復顯示。
-
-### 4. QA probe 改讀 manifest 契約
-
-原本驗「資料依據」文案的測試 / probe，改讀：
-
-- report_context.manifest
-- report_context.source_status
-- report_context.evidence_status
-
-驗收重點從「手機文字有沒有資料依據」改為「內部來源狀態是否仍完整、沒有被隱藏文字一起刪掉」。
-
-### 5. 未持倉回測行降噪契約
-
-core/generator.py 對未持倉回測行做同 setup_key 重複降噪。
-
-契約：
-
-- 同一卡片 / 同一未持倉報文區塊內，相同 setup_key 的回測摘要最多顯示一次。
-- 不同 setup_key 不得被合併。
-- 不得刪除 manifest / evidence payload。
-- 不得影響持倉區塊的風控、減碼、停損、停利。
-- 不得讓 trend_continuation 小倉依據消失到無法追溯；手機文字可短，manifest 必須完整。
+- 不得裸寫「今日新建倉 3」。
+- 當今日買入標的已有停損 / 減碼 / 硬風控，需改成風險-aware 摘要，例如「今日已買3｜風控中2｜執行動作3（停損/減碼）」。
 
 ## 版本契約
 
-- 目前已存在使用者可見版本 v20.4.36，不得回退。
-- 若本輪只做驗證、只讀監控、預設隱藏文字與降噪，可維持 v20.4.36，但 Tech 必須在 CHANGELOG.md 明確說明。
-- 若實際改動新增或改變使用者可見 header / 報文結構常量，需同步升版或更新版本字串。
-- QA 必須核對實際 header / 常量與 CHANGELOG.md 說法一致。
-
-## 已存在且不得回退的契約
-
-- trend_continuation BUY 僅限回踩站回，不包含 extended spike 無回踩。
-- trend_continuation 倉位小倉且 <=15%。
-- 負證據、缺證據、source-error 不得 BUY。
-- 形態判定需與 scripts/research_trend_continuation.py 同源。
-- 其他 setup 不得因 evidence 單獨轉 BUY。
-- RR 公式不得變。
-- DB schema/write path 不得變。
-- live Telegram 不得觸發。
-- 無可買標的時不得使用像推薦的文案。
-- 分組標題、卡片狀態、漏斗、索引、詳情必須一致。
-- 同一持倉在同一份報文只能有一個主行動。
-- 資料依據文字可隱藏，但 manifest / source_status / evidence_status 不得消失。
-- fail-closed、過熱、減碼、同日入場即錯風控不得被資料依據隱藏影響。
+- 使用者可見版本維持 v20.4.36。
+- 不得回退版本。
+- 若 Tech 實際改動 header / VERSION 常量，CHANGELOG 必須明確說明升版理由與新版本。
+- 若只改報文文字 / formatter 且不改 VERSION，CHANGELOG 必須寫「版本維持 v20.4.36」。
 
 ## 驗收條件
 
-1. tests/test_trend_continuation.py 存在，且正向回踩延續 fixture 能讓正式 strategy 產生 trend_continuation BUY 小倉。
-2. 同一正向 fixture 經 official generator / report 路由後，手機報文出現 趨勢延續 與 小倉。
-3. extended spike 無回踩 fixture 不 BUY。
-4. 負證據 fixture 不 BUY。
-5. 形態判定與 scripts/research_trend_continuation.py 共用函數或同源 helper；測試需能防止研究 / 實盤判定漂移。
-6. scripts/monitor_trend_continuation.py 只讀執行，能輸出實盤命中數、勝率、與回測差異、連續低於 45% N 筆告警欄位。
-7. monitor 在缺 source-of-truth 時 fail closed 為 source-error / insufficient-data，不得產生假勝率。
-8. presentation/report.py 預設不顯示第三則資料依據文字段。
-9. SHOW_DATA_BASIS=True 時資料依據文字可恢復。
-10. 隱藏資料依據後，manifest / source_status / evidence_status 仍存在且內容不漂移。
-11. 原驗資料依據文案的 QA probe 已改讀 report_context manifest / source_status / evidence_status。
-12. 未持倉回測行同 setup_key 不重複顯示；不同 setup_key 保留。
-13. official generator / report replay 驗證手機報文無資料依據噪音、無回測行重複、仍有 trend_continuation 小倉可讀路徑。
-14. QA 必須補至少一個 Tech 未覆蓋的反證：手機報文誤讀、manifest 漂移、source-error fail-closed、或 duplicate setup_key 降噪邊界。
-15. QA 結論若拿不到 official generator / report artifact，只能是 conditional pass 或 阻塞，不得用 helper-only fixture 直接通過。
+1. official generator / report message-list replay 覆蓋 Owner 06/04 六個 failure specimen。
+2. 光寶科「等量能｜量能不足」不再顯示「證據：資料不足」。
+3. 群創 / 技嘉「淘汰｜突破失敗」主不適用原因不得顯示為過熱。
+4. 正常來源持倉卡不逐卡顯示持倉與現價已確認句。
+5. 正常來源未持倉卡不逐卡顯示現價與 OHLCV 已確認句。
+6. 普通「前次 observe｜修復中｜連續觀察 1 天｜權重 +1」不逐卡刷屏。
+7. 建準可買但回測偏弱時，同卡有分批 / 小倉 / 不追價或回測僅輔助短句。
+8. 首屏不再裸寫「今日新建倉 3」；需反映今日已買標的中的風控數量。
+9. 回測單檔格式「回測（建準）：...」保留。
+10. 不改 RR 公式、strategy decision、DB schema/write、live Telegram。
 
 ## 範例或 Fixture
 
-### 正向回踩延續 fixture
+必須以 Owner 06/04 完整報文或等價 replay payload 建立 message-list fixture，最少包含：
 
-條件：
-
-- 趨勢成立。
-- 回踩 ma5 / ma10 不破。
-- 回踩後放量站回。
-- evidence:
-- sample_n >= 30
-- win_rate_5d >= 55%
-- avg_return_5d > 0
-- polarity = positive
-
-期望：
-
-{
-"decision_type": "trend_continuation",
-"action": "BUY",
-"position_size_max": 0.15,
-"card_status_contains": ["趨勢延續", "小倉"]
-}
-
-### extended spike 無回踩 fixture
-
-條件：
-
-- 創新高或 extended spike。
-- 無 ma5 / ma10 回踩站回。
-
-期望：
-
-{
-"action": "WAIT",
-"must_not_have_buy_decision_type": "trend_continuation"
-}
-
-### 負證據 fixture
-
-條件：
-
-- 形態近似成立。
-- win_rate_5d < 55% 或 avg_return_5d <= 0。
-
-期望：
-
-{
-"action": "WAIT",
-"reason_contains": "證據不足"
-}
-
-### 資料依據隱藏 fixture
-
-條件：
-
-- report_context 有 manifest / source_status / evidence_status。
-- SHOW_DATA_BASIS=False。
-
-期望：
-
-{
-"visible_text_not_contains": "資料依據",
-"manifest_exists": true,
-"source_status_exists": true,
-"evidence_status_exists": true
-}
-
-### 回測行降噪 fixture
-
-條件：
-
-- 未持倉候選含兩筆相同 setup_key="trend_continuation" 回測摘要。
-- 另有一筆不同 setup_key。
-
-期望：
-
-{
-"trend_continuation_backtest_line_count": 1,
-"different_setup_key_line_preserved": true
-}
+- 光寶科：等量能｜量能不足 + 原失敗「證據：資料不足」。
+- 群創：淘汰｜突破失敗 + 原失敗「不適用（過熱）｜證據：風控不適用」。
+- 技嘉：同類突破失敗淘汰卡，用來反證原因一致性。
+- 正常持倉卡：原本會顯示「資料：持倉與現價已確認...」。
+- 正常未持倉卡：原本會顯示「資料：現價與 OHLCV 已確認...」。
+- 建準：可買 +「回測（建準）：...偏弱」。
+- 首屏：原本「執行動作 3（停損/減碼）｜新倉建議 1｜今日新建倉 3」。
 
 ## 失敗標本與驗收路由
 
-失敗標本：
+驗收路由必須打到 official generator / report final message list，例如 formatTelegramMessages、render_telegram_messages 或專案現有等價官方報文入口。
 
-- trend_continuation 實裝後，正向回踩延續 fixture 仍無法 BUY。
-- 報文只出現文字，但 strategy payload 沒有 decision_type="trend_continuation"。
-- extended spike 無回踩被 BUY。
-- 負證據仍 BUY。
-- 研究腳本與正式策略各自判定，導致同一 fixture 結果不同。
-- 隱藏「資料依據」時，把 manifest / source_status / evidence_status 一起刪掉。
-- QA probe 仍依賴可見文案，導致資料依據隱藏後誤判。
-- 同一 setup_key 回測行在未持倉卡片重複刷屏。
-- 降噪誤刪不同 setup_key 或誤刪 trend_continuation 可追溯依據。
-
-官方驗收路由：
-
-1. research/shared pattern function fixture
-2. strategy / condition engine payload
-3. tests/test_trend_continuation.py
-4. scripts/monitor_trend_continuation.py read-only CLI output
-5. core/generator.py message list
-6. presentation/report.py report_context
-7. official generator / report replay artifact
-8. 手機閱讀路徑反證
-9. manifest / source_status / evidence_status 不漂移反證
+- Tech 不得只測 private helper。
+- 若因環境限制只能測 helper 層，CHANGELOG 必須標 partial，列出未覆蓋的 official generator / runner artifact 層。
+- QA 必須沿同一 message-list replay 反證，並額外檢查一個手機誤讀路徑或契約風險。
 
 ## 明確禁止事項
 
+- 禁止 Architect 或 PM 直接改產品代碼；本卡交給 Tech 實作，QA 驗收。
+- 禁止用 helper-only 測試宣稱完成。
+- 禁止刪卡片、刪證據、刪回測來掩蓋矛盾。
+- 禁止改買賣策略結果來解決文案問題。
 - 禁止改 RR 公式。
-- 禁止改 DB schema / RLS / grant / policy / role / index / constraint。
-- 禁止 live Telegram delivery。
-- 禁止新增 production write。
-- 禁止把 extended spike 無回踩改成 BUY。
-- 禁止把負證據或 source-error 改成 BUY。
-- 禁止只改測試期待值來通過 trend_continuation 正向 fixture。
-- 禁止另寫一套與研究腳本不同的 trend_continuation 形態判定。
-- 禁止刪 manifest / source_status / evidence_status 來達成資料依據隱藏。
-- 禁止讓 QA probe 只看手機文字。
-- 禁止用 synthetic helper fixture 取代 official generator / report 驗收。
-- 禁止把同 setup_key 降噪擴成全量刪除不同 setup 或不同卡片資訊。
+- 禁止改 DB schema/write 或 live Telegram。
+- 禁止擴成全量報文重構、策略回測重設或 production write 任務。
 
 ## 阻塞條件
 
-- 找不到 v20.4.36 trend_continuation 正式決策路徑，且無法在本輪修到 strategy payload 層。
-- 找不到可共用的研究形態判定函數，且抽出同源 helper 會超出本輪範圍。
-- monitor 缺可驗證的實盤命中 / outcome source-of-truth；此時監控部分應輸出 source-error / insufficient-data，不得偽造勝率。
-- official generator / report replay 無法產生，且任務仍宣稱手機報文完成。
-- 隱藏資料依據會破壞 manifest / source_status / evidence_status。
-- 需要 DB schema、production write 或 live Telegram 才能完成；本輪不得越權，需 blocked 回 Architect / Owner。
+- 拿不到 Owner 06/04 完整報文或等價 replay payload，且無法構造同層 official message-list fixture。
+- 修復需要改 strategy decision、RR 公式、DB schema/write、live Telegram。
+- 現有 official generator/report 入口無法在測試環境產出 message list，且沒有可接受的 runner artifact。
+- 現有版本常量 / header 位置不明，無法確認是否維持 v20.4.36。
+- Tech 只能做到 helper 層驗證時，不得宣稱完成；最多標 partial。
 
 ## 本輪停止條件
 
-完成到以下範圍即停止：
+完成定義：
 
-- tests/test_trend_continuation.py 覆蓋正向 BUY、extended spike 不 BUY、負證據不 BUY、研究 / 實盤同源判定。
-- 若第 1 項不通過，已先修到正式 strategy + official generator / report 路由可重跑通過。
-- scripts/monitor_trend_continuation.py 只讀輸出命中數、勝率、回測差異與 45% 連續 N 筆告警欄位；缺 source 時 fail closed。
-- SHOW_DATA_BASIS=False 預設隱藏第三則資料依據文字，且 manifest/source_status/evidence_status 不漂移。
-- QA probe 改讀 manifest/source_status/evidence_status。
-- 未持倉同 setup_key 回測行已降噪。
-- QA 完成手機報文與 manifest 不漂移反證。
+- 六個 06/04 failure specimen 均由 official generator / report message-list replay 覆蓋。
+- 驗收條件 1-10 全部通過。
+- CHANGELOG 明確列出覆蓋層級為 message-list replay，或若不足則標 partial。
+- QA 至少補一個 Tech 未覆蓋的手機誤讀反證或契約風險檢查。
 
-旁支問題不納入本輪，只能記待辦：
+不納入本輪，只記待辦：
 
-- 重新設計 trend_continuation 門檻。
-- 擴大到其他 setup 的 evidence BUY。
-- 新增 DB outcome ledger 或 schema。
-- production backfill / write。
-- live Telegram 發送。
-- 全報文重排或策略樹重構。
+- 任何新的策略買賣問題。
+- RR 數值合理性或公式調整。
+- production DB evidence source 補資料。
+- live Telegram 實送。
+- 全量報文資訊架構重設。
+- 觀察天數跨日持久來源治理。

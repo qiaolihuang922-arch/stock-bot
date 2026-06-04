@@ -1,86 +1,90 @@
-# QA_REPORT: trend_continuation_v20_4_36_validation_monitor_report_noise_20260603
+# QA_REPORT:
 
-## 測試範圍
+  ## 測試範圍
 
-- 任務尺寸：mixed_patch；1/2 為 risk_patch，3/4/5 為 normal_patch。
-- QA 分級：L3。
-- 本輪驗證範圍：
-  - trend_continuation 正向觸發、反例、研究 / 實盤判定 parity。
-  - official generator / report 手機路徑。
-  - monitor 只讀與 fail-closed。
-  - `SHOW_DATA_BASIS=False` 預設隱藏資料依據，`SHOW_DATA_BASIS=True` 可恢復。
-  - QA probe 改讀 manifest/source_status/evidence_status。
-  - 同 setup_key 回測行去重。
-  - 禁止項：RR 公式、DB schema/write、live Telegram、VERSION 回退。
+  本輪依 TASK.md 判定為 normal_patch / QA L2，驗證範圍收斂在 v20.4.36 06/04 Telegram 手機閱讀一致性、official message-list replay、formatter diff 與 handoff 一致性；未擴成 production runner artifact、live Telegram、DB、
+  RR 公式或策略決策驗證。
 
-## 關聯風險掃描
+  已讀取：TASK.md、CHANGELOG.md、git status --short、git diff --stat、core/generator.py diff、presentation/report.py diff、tests/test_generator_report.py diff。
 
-- 未見 RR 公式變更。
-- 未見 DB schema/RLS/grant/policy/role/index/constraint 變更。
-- 未見 DB write path 或 live Telegram delivery。
-- `core/generator.py` 仍為 `VERSION = "v20.4.36"`。
-- `scripts/monitor_trend_continuation.py` 只讀 production tables，無 write / Telegram path。
+  目前 worktree modified：
 
-## 跨區塊語意一致性
+  - 可吸收產品 / 測試 diff：core/generator.py、presentation/report.py、tests/test_generator_report.py
+  - handoff 文件殘留：CHANGELOG.md
+  - 無 untracked 檔案；未建議整包合併。
 
-- `tests/test_trend_continuation.py` 覆蓋正式 `strategy()`：
-  - 正向 pullback continuation fixture -> `decision_type="trend_continuation"`、BUY、小倉 `<=15%`。
-  - official report 出現「趨勢延續」與「小倉」。
-  - extended spike 無回踩不開 trend_continuation BUY。
-  - 負 evidence 不 BUY，降級 `trend_observation` / WAIT。
-  - research helper 與 production detector 對同一 OHLCV fixture 命中一致。
-- `tests/test_generator_report.py` 已將本輪相關 data_basis / presentation_noise probe 改成：
-  - 使用 `generator.VERSION`，不硬編 `v20.4.35`。
-  - 預設不期待可見「資料依據」。
-  - source-error case 改讀 `evidence_manifest["evidence.strategy_sample"].source_status == "source-error"` 與 `decision_eligible == False`。
-- structural / maturity report 改讀 manifest required keys，不再靠可見「資料依據」短文案通過。
+  執行命令：
 
-## 使用者誤讀風險
+  - arch -arm64 ./.venv/bin/python -m pytest tests/test_generator_report.py -k '0604_v20_4_36_mobile_readability or v20_4_36_non_actionable or v20_4_36_failed_unheld or v20_4_36_single_backtest or
+    structural_artifacts_cover_three_fail_closed_cases or presentation_noise' -q：9 passed
+  - arch -arm64 ./.venv/bin/python -m py_compile core/generator.py presentation/report.py tests/test_generator_report.py：passed
+  - git diff --check：passed
+  - 額外 official formatTelegramMessages probe：passed
 
-- 手機第三則預設只顯示「簡報」，不顯示長段「資料依據」。
-- 來源狀態沒有被刪掉；manifest/source_status/evidence_status 仍在內部 context，供 QA / debug 讀。
-- 同 setup_key 的未持倉回測行不再多檔重複刷屏；不同 setup_key 仍保留。
-- trend_continuation 小倉買入仍在 summary/card 可見，不被資料依據隱藏影響。
+  ## 風險預算與停止條件
 
-## 失敗標本反證
+  本輪最值得抓的 3 個風險：
 
-- 正向觸發：`tests/test_trend_continuation.py` 內的回踩延續 fixture 產出 BUY / 小倉。
-- 反追高：extended spike 無回踩不產生 trend_continuation BUY。
-- 反證據：負 evidence 不產生 BUY。
-- 反隱藏誤刪：`SHOW_DATA_BASIS=False` 時 summary 不含資料依據，但 context manifest/source_status/evidence_status 存在。
-- source-error：不顯示資料依據文字，但 manifest 中 `evidence.strategy_sample` 為 `source-error` 且不可決策。
-- monitor fail-closed：無 Supabase read credentials 時 `status="source-error"`、`live_win_rate_5d=null`、不造假勝率。
+  1. TASK.md / CHANGELOG.md / diff 不一致，尤其上一輪 conditional pass 的 CHANGELOG 自述矛盾是否仍存在。
+      - 驗證：比對 handoff、diff 檔案、版本聲明與未影響模組。
+      - 停止條件：若 CHANGELOG 仍描述舊任務或 diff 不屬本輪，結論 blocked / conditional pass。
+  2. 手機首屏與卡片由上往下閱讀時仍互相打架。
+      - 驗證：focused official message-list replay 覆蓋六個 06/04 failure specimen。
+      - 停止條件：若仍有裸「今日新建倉 3」、正常資料行刷屏、突破失敗被過熱覆蓋、建準回測偏弱缺解釋，結論 blocked。
+  3. 降噪過度刪掉該保留的 execution memory / 高風險歷史。
+      - 驗證：QA 額外用 official formatTelegramMessages 建立普通 observe 與已賣記憶對照；普通歷史需隱藏，execution memory 需保留。
+      - 停止條件：若兩者都被隱藏或都刷屏，結論 blocked / conditional pass。
 
-## 已跑命令
+  ## 關聯風險掃描
 
-- `PYTHONPYCACHEPREFIX=/private/tmp/final_validate_pycache python3 -m py_compile core/generator.py presentation/report.py scripts/monitor_trend_continuation.py tests/test_generator_report.py tests/test_trend_continuation.py`
-  - 結果：passed。
-- `arch -arm64 ./.venv/bin/python -m pytest tests/test_trend_continuation.py tests/test_generator_report.py -k 'trend_continuation or data_basis or presentation_noise or v20_4_18_structural_artifacts or v20_4_20_maturity_report' -q`
-  - 結果：17 passed，150 deselected，41 warnings。
-- `python3 scripts/monitor_trend_continuation.py --no-config --trade-date 2026-06-03`
-  - 結果：exit 2；JSON `status="source-error"`，`live_win_rate_5d=null`，無 fake live rate。
-- `git diff --check`
-  - 結果：passed。
+  TASK.md 要求不改策略、RR、DB schema/write、live Telegram。diff 只落在 formatter、source-status/cross-day display、summary 文案與 replay 測試；未看到 services/analysis.py、DB、runner、Telegram live delivery 變更。
 
-## QA Runner Discrepancy
+  版本契約一致：core/generator.py 仍為 VERSION = "v20.4.36"，CHANGELOG 也寫版本維持 v20.4.36。
 
-`run_qa_code.sh` 的最後兩次 agent 報告仍聲稱 `tests/test_generator_report.py` 6240-6310 保留 `v20.4.35` 與可見「資料依據」期待，但主 repo 實際文件與同一命令輸出相反：
+  清理 / 瘦身 / refactor 證據表要求不適用；本輪不是清理任務。
 
-- 6240-6310 已使用 `generator.VERSION`。
-- source-error case 已改讀 manifest/source_status。
-- 同一 expanded pytest command 在主 repo 回傳 `17 passed`。
+  ## 跨區塊語意一致性
 
-因此本輪最終 QA 以主 repo 同層命令與可見文件片段作為 evidence，並把 QA agent 報舊狀態列為 runner_gap follow-up；不把該 agent 報告升格為產品 blocker。
+  official replay 覆蓋並通過：
 
-## 未測項目
+  - 首屏含 今日已買 3｜風控中 2，不再裸寫 今日新建倉 3。
+  - 正常持倉卡不再逐卡顯示 資料：持倉與現價已確認...。
+  - 正常未持倉卡不再逐卡顯示 資料：現價與 OHLCV 已確認...。
+  - 光寶科等量能卡顯示 RR -（量能不足） 與 證據：量能不適用。
+  - 群創 / 技嘉淘汰突破失敗卡顯示風控不可用，不被過熱文案覆蓋。
+  - 建準可買且回測偏弱時保留 回測（建準）：...，同卡補 回測僅輔助，分批小倉、不追價。
 
-- 未跑 full pytest。
-- 未跑正式 runner artifact / live Telegram replay。
-- 未讀 production DB。
-- monitor 真實 `ok/alert` 路徑未用 production outcomes 驗證；本輪只驗缺 source fail-closed。
+  CHANGELOG 現在描述本輪 06/04 手機閱讀收斂，已不再混入上一輪 trend_continuation monitor / data basis 任務內容；與 diff 一致。
 
-## QA 結論
+  ## 使用者誤讀風險
 
-conditional pass
+  手機閱讀順序檢查結果可吸收：首屏先交代今日已買與風控數，再列新倉建議；卡片內 RR / 不適用原因 / 證據不適用原因 對量能不足與突破失敗維持同一主因。
 
-理由：主 repo 同層 focused 驗證已通過，核心 strategy/report/monitor/manifest 契約符合 TASK；但 QA agent 兩次報舊狀態，屬 runner_gap，需另開流程修復或 runner 同步檢查，避免後續 QA 報告與主 repo 實際文件/命令相互矛盾。
+  QA 額外反證：普通 observe / 修復中 / 連續觀察 1 天 / 權重 +1 已被隱藏；但 source_of_truth=position_events 且 previous_action=sold 的 execution memory 仍保留歷史行。這降低了「降噪把重要已賣/風控記憶一併消掉」的契約風
+  險。
+
+  ## 質疑與反證
+
+  質疑 1：Tech 是否只測 helper？
+  反證：新增測試與 QA 額外 probe 都使用 official generator.formatTelegramMessages final message list，不是 private helper-only。
+
+  質疑 2：CHANGELOG 是否仍與本輪任務矛盾？
+  反證：目前 CHANGELOG 標題、任務尺寸、修改檔案、契約影響、覆蓋層級都指向 06/04 mobile readability；不再描述舊 trend_continuation monitor 作為本輪修改。
+
+  質疑 3：全量 tests/test_generator_report.py 有 26 failed 是否阻塞本輪？
+  判斷：不阻塞本輪 L2。CHANGELOG 已明列 full generator suite 仍有 26 個 legacy 舊契約失敗，且本輪 focused replay / contract tests 通過。這是旁支 legacy 測試整理風險，不應擴成本輪 full-suite 修復；但 Architect 收口時不得
+  把它描述成全量測試通過。
+
+  ## 未測項目
+
+  - 未取得 Owner 06/04 原始完整 production 報文；本輪使用等價 official message-list fixture。
+  - 未跑 production runner artifact、live Telegram、DB read/write、backfill。
+  - 未重跑全量 pytest；已知 tests/test_generator_report.py -q 仍有 26 個 legacy contract failures，列為後續風險。
+  - 未驗 RR 數值合理性與策略 decision，符合 TASK 非目標。
+
+  ## QA 結論
+
+  通過
+
+  本輪 TASK / CHANGELOG / diff 已一致；focused official message-list replay 與 QA 額外手機誤讀反證通過。可吸收範圍限 core/generator.py、presentation/report.py、tests/test_generator_report.py 的本輪 formatter / replay
+  diff，以及 CHANGELOG.md handoff 修正；不要把已知 full generator legacy failures 宣稱為已解決。

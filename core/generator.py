@@ -2880,8 +2880,44 @@ def cross_day_detail_line(data):
     if not cross_day_ready(data):
         return None
 
-    parts = []
+    sources = context.get("source_of_truth") or []
+    if isinstance(sources, str):
+        sources = [sources]
     previous_state = context.get("previous_state")
+    previous_action = context.get("previous_action")
+    repair_status = context.get("repair_status")
+    guard = context.get("dedupe_guard")
+    weight = context.get("historical_evidence_weight")
+    high_risk_or_execution_memory = (
+        repair_status in ["failed", "deteriorating"]
+        or previous_state in ["eliminated", "failed", "weak"]
+        or previous_action in [
+            "buy",
+            "sold",
+            "sell",
+            "take_profit",
+            "reduce",
+            "stop",
+            "已買",
+            "已賣",
+            "已停利",
+            "已減碼",
+            "停損",
+        ]
+        or guard
+        in [
+            "prior_take_profit_completed",
+            "prior_reduce_completed",
+            "same_day_executed",
+            "new_position_guard",
+        ]
+        or any(source in {"positions", "position_events"} for source in sources)
+        or (weight not in [None, 0] and abs(weight) >= 2)
+    )
+    if not high_risk_or_execution_memory:
+        return None
+
+    parts = []
     if previous_state and previous_state != "unknown":
         parts.append(f"前次 {previous_state}")
     repair = cross_day_repair_label(data)
@@ -4530,7 +4566,7 @@ def _source_status_line(report_context, name, holding=False):
         if position != "available" or price != "available":
             return "資料：缺持倉或現價，停止持倉建議"
         if risk in {"available", "derived"}:
-            return "資料：持倉與現價已確認；風控由持倉成本/停損推算"
+            return None
         return "資料：持倉與現價已確認；風控推算不足，停止持倉建議"
     score = _stock_field(report_context, name, "score").get("source_status", "missing-source")
     volume = _stock_field(report_context, name, "volume").get("source_status", "missing-source")
@@ -4542,7 +4578,7 @@ def _source_status_line(report_context, name, holding=False):
     if missing:
         return f"資料：缺{'/'.join(missing)}，停止新倉判斷"
     if all(status in {"available", "derived"} for status in [rr, score, volume]):
-        return "資料：現價與 OHLCV 已確認；RR/分數/量能為模型推算"
+        return None
     return "資料：現價與 OHLCV 已確認；模型推算不足，停止新倉判斷"
 
 

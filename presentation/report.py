@@ -316,11 +316,32 @@ def _is_risk_blocked(stock_result, data):
     )
 
 
+def _is_volume_blocked(stock_result, data):
+    text = " ".join(
+        str(value or "")
+        for value in [
+            stock_result.get("trade_state"),
+            stock_result.get("volume_state"),
+            stock_result.get("wait_reason"),
+            stock_result.get("reason"),
+            stock_result.get("reject_family"),
+            (data or {}).get("funnel_state"),
+        ]
+    )
+    return (
+        stock_result.get("trade_state") == "NO_VOLUME"
+        or "量能不足" in text
+        or "NO_VOLUME" in text
+    )
+
+
 def _evidence_unavailable_text(stock_result, data):
     if _is_risk_blocked(stock_result, data):
         return "風控不適用"
     if _is_heat_blocked(stock_result):
         return "過熱不適用"
+    if _is_volume_blocked(stock_result, data):
+        return "量能不適用"
     return "資料不足"
 
 
@@ -347,6 +368,17 @@ def _unheld_score_text_for_state(score_text, rr_text, valid_entry, funnel_state,
         return score_text
     evidence_text = _evidence_unavailable_text(stock_result or {}, data or {})
     return f"不適用（{_hidden_score_reason(rr_text, funnel_state, state)}）｜證據：{evidence_text}"
+
+
+def _weak_buy_backtest_line(name, data, deps):
+    line = deps["compact_backtest_line"]((data or {}).get("backtest_context"))
+    if not line or line == "回測：-":
+        return None
+    weak_tokens = ["偏弱", "無明顯優勢", "樣本不足", "不可用", "判讀不足"]
+    if not any(token in line for token in weak_tokens):
+        return None
+    body = line.replace("回測：", "", 1)
+    return f"回測（{name}）：{body}；回測僅輔助，分批小倉、不追價"
 
 
 def _confidence_data_text(report_context, name, data, deps):
@@ -413,8 +445,6 @@ def _score_gated_market_line(report_context, name, data, dist, deps):
 
 
 def _unheld_rr_text(stock_result, funnel_state, valid_entry, deps):
-    if funnel_state == "等冷卻" or deps["should_show_overheat_rr_blocker"](stock_result, holding=False):
-        return "-（過熱）"
     weak_structure = (
         stock_result.get("decision") in {"NO_TRADE", "FAIL"}
         or stock_result.get("structure_phase") in {"FAILED_BREAKOUT", "WEAK", "DISTRIBUTION", "WEAK_REBOUND"}
@@ -423,6 +453,8 @@ def _unheld_rr_text(stock_result, funnel_state, valid_entry, deps):
     )
     if not valid_entry and (funnel_state == "淘汰" or weak_structure):
         return "-（不可行動）"
+    if funnel_state == "等冷卻" or deps["should_show_overheat_rr_blocker"](stock_result, holding=False):
+        return "-（過熱）"
     return deps["rr_display_text"](stock_result, holding=False)
 
 
@@ -643,6 +675,10 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         buy_line,
     ]
 
+    weak_buy_backtest_line = _weak_buy_backtest_line(name, data, deps) if valid_entry else None
+    if weak_buy_backtest_line:
+        lines.append(weak_buy_backtest_line)
+
     if reason_line:
         lines.append(reason_line)
 
@@ -733,6 +769,12 @@ def _compact_market_overview_line(holding_items, watch_items, report_context, de
         report_context=report_context,
     ))
     today_new_entry_count = len(_today_buy_holding_names(holding_items, deps))
+    today_buy_risk_count = sum(
+        1
+        for name, data in holding_items
+        if deps["is_today_buy_holding"](data)
+        and deps["position_summary_action"](name, data) in {"停損", "減碼", "硬風控減碼"}
+    )
     executed_actions = deps["executed_trade_items"](
         holding_items,
         watch_items,
@@ -773,7 +815,12 @@ def _compact_market_overview_line(holding_items, watch_items, report_context, de
     parts = [
         f"市場：{market_mode} {risk_level}",
         f"執行動作 {pending_count}{action_suffix}",
-        f"今日新建倉 {today_new_entry_count}",
+        (
+            f"今日已買 {today_new_entry_count}"
+            + (f"｜風控中 {today_buy_risk_count}" if today_buy_risk_count else "")
+        )
+        if today_new_entry_count
+        else f"今日新建倉 {today_new_entry_count}",
         f"持倉風控 {len(holding_items)}",
         f"未持倉 {unheld_count}（{'/'.join(unheld_parts)}）",
     ]
