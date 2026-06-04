@@ -1,161 +1,198 @@
-# TASK: v20.4.41 修正 2026-06-04 盤後 v20.4.40 未持倉 gate attribution 可讀性
+# TASK: v20.4.42 未持倉非可買卡片 attribution 兩層可讀化
 
 ## 任務狀態
 
-- task_id: v20.4.41-post-market-unheld-gate-attribution-readability
-- 任務類型: tiny_patch
+- task_id: pm-20260604-v20.4.42-unheld-attribution-readable-gap
+- 任務類型: normal_patch
 - 狀態: ready_for_tech
-- 版本建議: v20.4.41
-- QA 分級: L1
-- 任務日期: 2026-06-04
+- 版本建議: 使用者可見報文版本升至 v20.4.42
+- QA 分級: L2
+- 失敗標本: 2026-06-04 盤後 v20.4.41 未持倉報文中，非可買卡片只顯示單行「到達可買差距」，Owner 無法知道卡在哪裡、差多少。
 
 ## Owner 問題
 
-2026-06-04 盤後 v20.4.40 未持倉報文中，gate attribution 的手機閱讀語意不清：
-
-- 真正可買卡與 trend_continuation 小倉 BUY 卡仍顯示「到達可買差距」，造成可行動狀態被誤讀成仍未達標。
-- FAILED_BREAKOUT 顯示 RR 0/需>=1.5，但此狀態真正原因是突破失敗，應要求重新轉強。
-- post-market ordinary prepare 顯示「證據：資料不足」，與盤後情境不符，應表達為盤後待確認。
-- EXTREME / HOT 過熱狀態同時列 RR 或 entry quality 次因，手機閱讀上會稀釋主因。
-- raw enum EXTREME / HOT / LIMIT_LOCK / LIMIT_REBOUND / WEAK_REBOUND 外露，降低報文可讀性。
+06/04 盤後 v20.4.41 未持倉報文中，非可買未持倉卡片的 attribution 單行「到達可買差距」太抽象。Owner 在手機上看不出是 RR 不足、距突破太遠、過熱、盤後待確認、突破失敗，或其他 source / 策略限制，也不知道量化上差多少。
 
 ## 使用者可見結果
 
-在 v20.4.41 official Telegram message list replay 中：
-
-- 只有未達可買條件的未持倉卡片可顯示「到達可買差距」。
-- 真正可買卡與 trend_continuation 小倉 BUY 卡不得顯示「到達可買差距」。
-- FAILED_BREAKOUT 卡片不顯示 RR 0/需>=1.5，只顯示「突破失敗/需重新轉強」或等價可讀文案。
-- post-market ordinary prepare 卡片顯示「盤後訊號/需開盤後重新確認」；數據行不得顯示「證據：資料不足」，改為「盤後待確認/需開盤後重新確認」或等價文案。
-- EXTREME / HOT 過熱解除前只顯示「極熱/需降溫」或「過熱/需降溫」，不得再列 RR / entry quality 次因。
-- raw enum EXTREME / HOT / LIMIT_LOCK / LIMIT_REBOUND / WEAK_REBOUND 不得出現在使用者可見報文。
+- 非可買未持倉卡片的 attribution 改為兩層可讀輸出：
+  - 卡關主因：...
+  - 量化差距：...
+- 真正可買卡片與 trend_continuation 小倉 BUY 卡片不顯示這兩行。
+- 手機閱讀時，Owner 能直接看到「不能買的主要原因」與「離可買條件差多少 / 下一步要等什麼」。
 
 ## 非目標
 
 - 不改策略決策。
-- 不改 RR 計算。
-- 不改 can_buy。
-- 不改 is_valid_entry。
-- 不改 DB schema、DB read/write、RLS、grant、policy、role。
+- 不改 RR 公式。
+- 不改 can_buy / is_valid_entry 判定。
+- 不改持倉建議、持倉狀態機、買賣 / 加減碼 / 停損停利邏輯。
+- 不改 DB schema、DB read/write、production source-of-truth。
 - 不做 live Telegram delivery。
-- 不調整持倉建議、買賣 / 加減碼、停損停利策略。
-- 不新增新的候選分類或交易行動。
+- 不新增人工 DML 或繞過既有介面。
+- 不把 raw enum 直接搬到報文中。
 
 ## 影響模組與直接消費者
 
 影響模組：
 
-- official Telegram formatter / message list 產生路徑。
-- 未持倉卡片 gate attribution 顯示邏輯。
-- post-market prepare 顯示文案。
-- enum-to-user-facing-label 顯示轉換。
+- 未持倉報文 formatter / card attribution formatter。
+- official Telegram message generator 路徑。
+- formatTelegramMessages / message-list replay 相關測試或 fixture。
+- 報文版本字串 / header 常量。
 
 直接消費者：
 
-- Owner 手機閱讀的 Telegram 盤後報文。
-- formatTelegramMessages official message list replay。
-- QA replay artifact / message-list assertion。
+- Owner 手機閱讀 Telegram 盤後報文。
+- official formatTelegramMessages 產出的 message list。
+- QA replay artifact / message-list snapshot。
 
 ## 輸出契約
 
-報文版本：
+對「非可買未持倉卡片」輸出兩行 attribution，順序固定：
 
-- 使用者可見版本必須為 v20.4.41。
+1. 卡關主因：{human_readable_primary_blocker}
+2. 量化差距：{human_readable_gap_or_next_confirmation}
 
-message list contract：
+對真正可買卡片與 trend_continuation 小倉 BUY：
 
-- 驗收必須走 official formatTelegramMessages / message-list replay，不得只驗 helper fixture。
-- replay output 必須能檢查每張未持倉卡的 title/status/reason/data lines。
+- 不輸出 卡關主因：
+- 不輸出 量化差距：
 
-gate attribution contract：
+RR不足：
 
-- 「到達可買差距」只允許出現在非可買、可準備、僅追蹤、淘汰等未達可買條件卡片。
-- BUY / 真正可買 / trend_continuation 小倉 BUY 卡片不得出現「到達可買差距」。
+- 卡關主因：RR不足
+- 量化差距：RR {current_rr}｜需>=1.5｜差{delta}
+- 範例：量化差距：RR 0.98｜需>=1.5｜差0.52
 
-failed breakout contract：
+距突破太遠：
 
-- FAILED_BREAKOUT 可見主因只呈現突破失敗與需重新轉強。
-- 不得顯示 RR 0/需>=1.5 或等價 RR failure 文案。
+- 量化差距：距突破 {distance_pct}%｜需<=4%｜差{delta_pct}%
+- 範例：量化差距：距突破 6%｜需<=4%｜差2%
+- 若距離 <=4%，不得列為「距突破太遠」差距。
 
-post-market ordinary prepare contract：
+過熱：
 
-- 主狀態顯示「盤後訊號/需開盤後重新確認」。
-- 數據行不得顯示「證據：資料不足」。
-- 數據行改顯示「盤後待確認/需開盤後重新確認」或等價清楚文案。
+- 卡關主因：熱度 Lv.3 或 卡關主因：過熱觀察
+- 量化差距：需降至 Lv.1/觀察以下 或 量化差距：需降溫至可評估
+- 不列 RR / entry quality 次因。
 
-overheat contract：
+post-market ordinary prepare：
 
-- EXTREME 顯示「極熱/需降溫」。
-- HOT 顯示「過熱/需降溫」。
-- 過熱解除前不得列 RR / entry quality 次因。
+- 卡關主因：盤後待確認
+- 量化差距：明日開盤站穩才算成立 或 量化差距：需開盤後重新確認
+- 不得寫成資料不足。
 
-enum visibility contract：
+FAILED_BREAKOUT：
 
-- 使用者可見報文不得包含 raw enum：
-  - EXTREME
-  - HOT
-  - LIMIT_LOCK
-  - LIMIT_REBOUND
-  - WEAK_REBOUND
+- 卡關主因：突破失敗
+- 量化差距：需重新站回突破區
+- 不得顯示 RR 0 或 RR需>=1.5。
+
+source missing / strategy sample / limit lock / weak rebound：
+
+- 必須人話化，不得顯示 raw enum。
+- 建議映射：
+  - source missing: 卡關主因：資料來源缺失；量化差距：需補齊有效行情 / 策略來源
+  - strategy sample: 卡關主因：樣本不足；量化差距：需更多有效策略樣本確認
+  - limit lock: 卡關主因：漲跌停鎖定；量化差距：需解除鎖定後重新評估
+  - weak rebound: 卡關主因：反彈力道不足；量化差距：需放量轉強後重新評估
+- 禁止輸出 raw enum，例如 FAILED_BREAKOUT、source_missing、strategy_sample、limit_lock、weak_rebound。
 
 ## 版本契約
 
-- 必須升版至 v20.4.41。
-- Telegram header / formatter version constant / replay artifact 中的可見版本必須一致。
-- 不得回退至 v20.4.40 或其他版本。
-- 本輪是可見報文文案與 attribution 顯示修正，不代表策略版本或 DB 契約變更。
+- 使用者可見報文版本必須由 v20.4.41 升至 v20.4.42。
+- QA 必須核對 official message header / version constant / replay output 實際顯示 v20.4.42。
+- 不得回退既有 v20.4.x 報文結構中與本任務無關的欄位、分組、排序。
 
 ## 驗收條件
 
-1. official formatTelegramMessages / message-list replay 產出版本為 v20.4.41。
-2. replay 中真正可買卡與 trend_continuation 小倉 BUY 卡不含「到達可買差距」。
-3. replay 中至少一張未達可買條件卡仍可在合適情境顯示「到達可買差距」，證明不是全域刪除。
-4. FAILED_BREAKOUT replay 卡不含 RR 0/需>=1.5 或等價 RR failure 文案，且含「突破失敗/需重新轉強」或等價文案。
-5. post-market ordinary prepare replay 卡含「盤後訊號/需開盤後重新確認」，且不含「證據：資料不足」。
-6. post-market ordinary prepare 的數據行含「盤後待確認/需開盤後重新確認」或等價文案。
-7. EXTREME / HOT replay 卡只顯示「極熱/需降溫」或「過熱/需降溫」，且不列 RR / entry quality 次因。
-8. replay 完整輸出不含 raw enum EXTREME / HOT / LIMIT_LOCK / LIMIT_REBOUND / WEAK_REBOUND。
-9. QA 必須從手機閱讀路徑檢查跨區塊語意：分組標題、卡片狀態、漏斗 / 詳情不得互相矛盾。
-10. Tech 自檢不得只測 helper；若只能測到 helper 或局部 formatter，CHANGELOG 必須標 partial 並列出未覆蓋 official message-list replay。
+- 使用 official formatTelegramMessages / message-list replay 驗收，不可只測 helper。
+- replay 中至少覆蓋以下未持倉卡片：
+  - RR 不足。
+  - 距突破太遠，且距離 >4%。
+  - 距突破 <=4% 的負面案例，確認不得列為距突破差距。
+  - 過熱。
+  - post-market ordinary prepare。
+  - FAILED_BREAKOUT。
+  - source missing。
+  - strategy sample。
+  - limit lock。
+  - weak rebound。
+  - 真正可買。
+  - trend_continuation 小倉 BUY。
+- 非可買未持倉卡片必須出現兩行：
+  - 卡關主因：...
+  - 量化差距：...
+- 真正可買與 trend_continuation 小倉 BUY 不得出現這兩行。
+- RR 不足案例必須顯示 RR 現值、門檻 需>=1.5、差值。
+- FAILED_BREAKOUT 案例不得出現 RR 0、RR需>=1.5 或等價誤導。
+- 過熱案例不得列 RR / entry quality 作次因。
+- post-market ordinary prepare 不得被寫成資料不足。
+- replay output 不得出現 raw enum。
+- 手機閱讀路徑需確認：兩行 attribution 不應造成卡片主結論與分組標題矛盾。
 
 ## 範例或 Fixture
 
+RR不足：
+
+- 卡關主因：RR不足
+- 量化差距：RR 0.98｜需>=1.5｜差0.52
+
+距突破太遠：
+
+- 卡關主因：距突破太遠
+- 量化差距：距突破 6%｜需<=4%｜差2%
+
+過熱：
+
+- 卡關主因：熱度 Lv.3
+- 量化差距：需降至 Lv.1/觀察以下
+
+盤後待確認：
+
+- 卡關主因：盤後待確認
+- 量化差距：明日開盤站穩才算成立
+
+突破失敗：
+
+- 卡關主因：突破失敗
+- 量化差距：需重新站回突破區
+
+## 失敗標本與驗收路由
+
 失敗標本：
 
-- 2026-06-04 盤後 v20.4.40 未持倉 official Telegram 報文。
+- 2026-06-04 盤後 v20.4.41 未持倉報文，非可買卡片單行「到達可買差距」導致 Owner 不知道差多少。
 
-最小 replay fixture 需覆蓋：
+驗收路由：
 
-- 真正可買卡。
-- trend_continuation 小倉 BUY 卡。
-- 非可買 / 可準備 / 僅追蹤 / 淘汰中至少一張未達可買條件卡。
-- FAILED_BREAKOUT 卡。
-- post-market ordinary prepare 卡。
-- EXTREME 卡。
-- HOT 卡。
-- 含 LIMIT_LOCK / LIMIT_REBOUND / WEAK_REBOUND 原始分類輸入但輸出不得外露 raw enum 的卡。
+- 必須建立或使用等價 replay payload，經 official formatTelegramMessages 產出 message list。
+- QA 直接檢查 official message-list output 的文字、版本、卡片分組與手機閱讀風險。
+- helper-level 測試只能作補充，不得作為本任務唯一驗收證據。
 
 ## 明確禁止事項
 
-- 禁止修改策略決策、RR、can_buy、is_valid_entry。
-- 禁止修改 DB schema / RLS / grant / policy / role / DB write path。
-- 禁止 live Telegram delivery。
-- 禁止用 synthetic helper fixture 取代 official formatTelegramMessages / message-list replay 作為完成證據。
-- 禁止把「到達可買差距」全域刪除；它仍應出現在未達可買條件的卡片。
-- 禁止讓 raw enum 出現在任何使用者可見 Telegram 報文。
-- 禁止把缺資料、缺 replay artifact 或 source-error 宣告為通過。
+- 不改策略結果，只改使用者可見 attribution 文案與差距呈現。
+- 不改 RR 計算、entry quality 計算、突破距離計算、過熱判定。
+- 不改 can-buy gate、valid-entry gate。
+- 不碰持倉、DB、runner live delivery、Telegram live send。
+- 不輸出 raw enum。
+- 不用 synthetic helper fixture 直接宣告完成。
+- 不把 post-market ordinary prepare 寫成資料不足。
+- 不讓 FAILED_BREAKOUT 顯示 RR 0 或 RR 門檻差距。
+- 不讓真正可買與 trend_continuation 小倉 BUY 顯示兩層卡關 attribution。
 
 ## 阻塞條件
 
-- 找不到 2026-06-04 盤後 v20.4.40 等價 replay payload 或 official message-list replay route。
-- official formatTelegramMessages / message-list replay 無法執行，且無等價 artifact 可驗。
-- 無法判定哪些卡是真正可買 / trend_continuation 小倉 BUY / 未達可買條件。
-- 修正需要改策略決策、RR、can_buy、is_valid_entry、DB 或 live delivery。
-- 版本常量與 Telegram header 無法同步到 v20.4.41。
+- 找不到 official formatTelegramMessages / message-list replay 路徑。
+- 無法取得或建立等價 06/04 盤後未持倉 replay payload。
+- 現有資料沒有足夠欄位顯示 RR 現值、突破距離、熱度等量化差距，且不能在不改策略 / DB 的前提下取得。
+- 版本字串來源不明，無法保證 official output 顯示 v20.4.42。
+- QA 只能測 helper，無法驗 official message-list output。
 
 ## 本輪停止條件
 
-- TASK.md 已完整定義 v20.4.41 報文可讀性修正範圍。
-- Tech 可依本任務卡修改 formatter / message-list 顯示邏輯與測試。
-- QA 可用 official formatTelegramMessages / message-list replay 反證 Owner failure specimen。
-- 若 replay route 或 failure specimen 缺失，本輪不得進入實作通過結論，必須回報 blocked。
+- Tech 完成 scoped formatter / version / replay test 修改並輸出 CHANGELOG.md。
+- QA 以 official message-list replay 反證通過、conditional pass 或阻塞並輸出 QA_REPORT.md。
+- 若 QA 通過，Architect 後續仍需依 git completion gate 收口；未 commit / push 前不得宣告 repo 落地完成。

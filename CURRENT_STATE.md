@@ -6,13 +6,34 @@
 
 - 專案：台股策略 Telegram 報文機器人。
 - 正式結果以 git / runner 產生報文為準。
-- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.41`。
+- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.42`。
 - 固定 8 份 Markdown 不刪：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 - Architect 是總控；產品 / 策略 / 報文 bug 或 feature 預設走 PM -> Tech -> QA。
 - 跨日狀態、已執行交易、歷史 evidence 必須來自 production DB 或 Owner 指定持久來源；local/runtime/worktree 不能當跨日記憶。
 - 缺資料、source-error、欄位不足或可信度不足時 fail closed。
 
 ## Latest Completed Work
+
+- task_id：`pm-20260604-v20.4.42-unheld-attribution-readable-gap`
+- 狀態：code done / QA 通過；報文版本升 `v20.4.42`。
+- 問題：v20.4.41 修掉假差距後，未持倉非可買卡片只剩單行主因，Owner 仍看不出「差多少」或下一步要等什麼。
+- 關鍵行為：
+  - 非可買未持倉卡片 attribution 由 `到達可買差距：...` 改成固定兩行：`卡關主因：...`、`量化差距：...`。
+  - RR不足顯示 RR 現值、門檻與差值，例如 `RR 0.98｜需>=1.5｜差0.52`；距突破 >4% 才追加 `距突破 ...｜差...%`，距突破 <=4% 不列。
+  - EXTREME / HOT 顯示熱度主因與降溫條件，不列 RR / entry quality 次因。
+  - post-market ordinary prepare 顯示盤後待確認與開盤後確認要求，不寫成資料不足。
+  - FAILED_BREAKOUT 顯示突破失敗與需重新站回突破區，不顯示 RR 0 / RR 門檻。
+  - source missing、strategy sample、limit lock、weak rebound 人話化；真正可買與 `trend_continuation` 小倉 BUY 不顯示卡關兩行。
+  - `tests/test_generator_report.py` current-version `v20.4.41` 硬編碼已清空並同步 v20.4.42。
+- 驗證：
+  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/v20_4_42_pytest_main3 arch -arm64 ./.venv/bin/python -m pytest tests/test_generator_report.py -k 'test_0604_v20_4_37_generate_mobile_consistency_message_list_replay or test_v20_4_42_postmarket_unheld_gate_attribution_readability_message_list_replay or test_v20_4_10_mixed_valid_and_source_ineligible_buy_like_stays_consistent or test_v20_4_25_strategy_sample_source_error_blocks_action_without_hiding_available_price or test_confirmed_evidence_preserves_limit_lock_chase_hard_blocker or v20_4_39_post_market_mixed_trend_and_prepare_keeps_trend_actionable or v20_0_14_post_market_fixture_uses_next_day_plan_semantics or market_theme_source_error_supporting_payload_fails_closed_before_supporting or post_market_add_plan_is_not_labeled_as_risk_control or afterhours_brief_counts_today_buy_holdings_as_executed_new_positions or v20_4_10_summary_hides_strongest_when_candidate_source_missing or v20_4_16_unheld_card_fails_closed_when_ohlcv_missing' -q` -> 12 passed。
+  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/v20_4_42_pycache_main3 arch -arm64 ./.venv/bin/python -m py_compile core/generator.py presentation/report.py tests/test_generator_report.py` -> passed。
+  - `rg 'v20\\.4\\.41' tests/test_generator_report.py` -> no matches；`git diff --check` -> passed。
+  - QA 補 source-missing direct consumer 與 official replay 反證；QA 結論 `通過`。
+- 殘留風險：未跑 full pytest、production runner artifact、production source artifact、DB read/write、live Telegram。
+- 邊界：未改策略、RR、can_buy/is_valid_entry、持倉、DB schema/write、live Telegram。
+
+## Previous Completed Work
 
 - task_id：`v20.4.41-post-market-unheld-gate-attribution-readability`
 - 狀態：code done / QA 通過；報文版本升 `v20.4.41`。

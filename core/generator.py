@@ -70,7 +70,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.41"
+VERSION = "v20.4.42"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -5694,7 +5694,7 @@ def dominant_reject_reasons(watch_items, market_mode=None, report_context=None):
             continue
 
         source_status = _stock_decision_source_status(report_context, name)
-        reason = "source missing" if source_status != "available" else rejected_primary_reason(data.get("result") or {})
+        reason = "資料來源缺失" if source_status != "available" else rejected_primary_reason(data.get("result") or {})
         if not reason:
             reason = "條件不足"
         reason_counts[reason] = reason_counts.get(reason, 0) + 1

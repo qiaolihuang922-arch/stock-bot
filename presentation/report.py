@@ -391,6 +391,16 @@ def _gate_value_text(value):
     return f"{number:.2f}".rstrip("0").rstrip(".")
 
 
+def _gate_gap_text(value, threshold):
+    try:
+        gap = float(threshold) - float(value)
+    except (TypeError, ValueError):
+        return None
+    if gap < 0:
+        gap = 0
+    return _gate_value_text(gap)
+
+
 def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source_status, strategy_source_blocked):
     stock_result = data.get("result") or {}
     is_actionable = valid_entry or funnel_state == "趨勢延續" or stock_result.get("decision_type") == "trend_continuation"
@@ -403,72 +413,77 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
     if is_actionable:
         return None
 
-    def human_enum(value):
-        return {
-            "EXTREME": "極熱",
-            "HOT": "過熱",
-            "LIMIT_LOCK": "漲停鎖價",
-            "LIMIT_REBOUND": "漲停反彈",
-            "WEAK_REBOUND": "弱反彈",
-        }.get(value, value)
+    def two_line(reason, gap):
+        return f"卡關主因：{reason}\n量化差距：{gap}"
 
     gates = []
     if strategy_source_blocked:
-        gates.append("strategy sample/需可用")
+        gates.append(("樣本不足", "需更多有效策略樣本確認"))
     source_blocked = source_status in {"missing-source", "insufficient-data", "source-error", "unresolved-conflict"}
     if source_blocked and not strategy_source_blocked:
-        gates.append(f"{source_status}/需可用")
+        gates.append(("資料來源缺失", "需補齊有效行情 / 策略來源"))
 
     blocker_text = "、".join(str(item) for item in blockers)
     phase = stock_result.get("structure_phase")
     if "突破失敗" in blocker_text or phase == "FAILED_BREAKOUT":
-        return "到達可買差距：突破失敗/需重新轉強"
+        return two_line("突破失敗", "需重新站回突破區")
     if post_market_prepare:
-        return "到達可買差距：盤後訊號/需開盤後重新確認"
+        return two_line("盤後待確認", "需開盤後重新確認")
 
     behavior = stock_result.get("price_behavior")
     if behavior in {"LIMIT_LOCK", "LIMIT_REBOUND"} or "漲停" in blocker_text or "不可追高" in blocker_text:
-        gates.append(f"{human_enum(behavior) if behavior else '不可追高'}/需開板回測")
+        gates.append(("漲跌停鎖定", "需解除鎖定後重新評估"))
+    if behavior == "WEAK_REBOUND" or phase == "WEAK_REBOUND" or "弱反彈" in blocker_text:
+        gates.append(("反彈力道不足", "需放量轉強後重新評估"))
 
     heat = stock_result.get("heat_state")
     if heat == "EXTREME":
-        return "到達可買差距：極熱/需降溫"
+        return two_line("熱度 Lv.3", "需降至 Lv.1/觀察以下")
     if heat == "HOT" or "過熱" in blocker_text:
-        return "到達可買差距：過熱/需降溫"
+        return two_line("過熱觀察", "需降溫至可評估")
 
     rr_text = _gate_value_text(stock_result.get("rr"))
     if not is_actionable and rr_text and ("RR不足" in blocker_text or float(rr_text) < 1.5):
-        gates.append(f"RR {rr_text}/需>=1.5")
+        rr_gap = f"RR {rr_text}｜需>=1.5｜差{_gate_gap_text(rr_text, 1.5)}"
+        gates.append(("RR不足", rr_gap))
 
     distance_text = _gate_value_text(dist)
     if distance_text and float(distance_text) > 4:
-        gates.append(f"距突破 {distance_text}%/需<=4%")
+        distance_gap = _gate_value_text(float(distance_text) - 4)
+        gates.append(("距突破太遠", f"距突破 {distance_text}%｜需<=4%｜差{distance_gap}%"))
 
     quality = stock_result.get("entry_quality")
     if not is_actionable and quality and quality not in {"A+", "A", "B"}:
-        gates.append(f"進場品質 {quality}/需B以上")
+        gates.append(("進場品質不足", f"進場品質 {quality}｜需B以上"))
 
     if not gates and post_market_prepare:
-        gates.append("盤後訊號/需開盤後重新確認")
+        gates.append(("盤後待確認", "需開盤後重新確認"))
     elif not gates and funnel_state == "可準備":
-        gates.append("買點尚未成立/需觸發")
+        gates.append(("買點尚未成立", "需觸發後重新評估"))
     elif not gates and funnel_state == "等回測":
-        gates.append("回測未確認/需回測不破")
+        gates.append(("回測未確認", "需回測不破後重新評估"))
     elif not gates and funnel_state == "等RR修復":
-        gates.append("RR 不可用/需>=1.5")
+        gates.append(("RR不足", "RR 不可用｜需>=1.5"))
     elif not gates and funnel_state == "等量能":
-        gates.append("量能不足/需回升")
+        gates.append(("量能不足", "需量能回升後重新評估"))
     elif not gates and funnel_state == "隔日確認":
-        gates.append("隔日確認/需轉強")
+        gates.append(("隔日確認", "需轉強後重新評估"))
     elif not gates and funnel_state == "淘汰":
-        gates.append("重新轉強/需確認")
+        gates.append(("重新轉強", "需確認後重新評估"))
     if not gates:
         if blockers:
-            gates.append(f"{blockers[0]}/需解除")
+            gates.append((str(blockers[0]), "需解除後重新評估"))
         else:
-            gates.append("資料不足/需可用")
+            gates.append(("資料來源缺失", "需補齊有效行情 / 策略來源"))
 
-    return f"到達可買差距：{'; '.join(list(dict.fromkeys(gates))[:3])}"
+    primary_reason, primary_gap = gates[0]
+    extra_gaps = []
+    for reason, gap in gates[1:3]:
+        if reason != primary_reason:
+            extra_gaps.append(gap)
+    if extra_gaps:
+        primary_gap = f"{primary_gap}｜" + "｜".join(extra_gaps)
+    return two_line(primary_reason, primary_gap)
 
 
 def _weak_buy_backtest_line(name, data, deps, include_all=False):
@@ -651,7 +666,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     if deps["is_valid_entry"](stock_result) and strategy_source_blocked:
         title_label = "策略樣本證據不足" if strategy_source_status != "source-error" else "策略樣本來源異常"
     elif deps["is_valid_entry"](stock_result) and not source_eligible:
-        title_label = "source missing" if source_status in {"missing-source", "insufficient-data"} else source_status
+        title_label = "資料來源缺失" if source_status in {"missing-source", "insufficient-data"} else "資料來源異常"
     elif state == "弱勢淘汰":
         title_label = deps["rejected_primary_reason"](stock_result)
     elif post_market_prepare:
@@ -715,9 +730,14 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         data_line = f"數據：{rr_data_text}｜S 證據不足｜V {data.get('volume_ratio', '-')}x"
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
     elif deps["is_valid_entry"](stock_result) and not source_eligible:
-        buy_line = f"買點：不可買，source {source_status}"
+        source_reason = (
+            "資料來源缺失"
+            if source_status in {"missing-source", "insufficient-data"}
+            else "資料來源異常"
+        )
+        buy_line = f"買點：不可買，{source_reason}"
         data_line = "數據：RR 不可用｜S 不可用｜V 不可用"
-        price_line = "價格：不可用（source missing）"
+        price_line = f"價格：不可用（{source_reason}）"
     elif valid_entry and funnel_state == "趨勢延續":
         buy_line = "買點：趨勢延續買入｜小倉 <=15%｜回測 55% 勝 / +2.26%"
         data_line = f"數據：{rr_data_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
@@ -768,7 +788,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         (
             "原因：策略樣本不可用，高置信 S 分數 / 強弱分類暫不採用"
             if strategy_source_blocked
-            else f"原因：price/OHLCV/RR source {source_status}，不作新倉決策"
+            else "原因：資料來源缺失，不作新倉決策"
         )
         if deps["is_valid_entry"](stock_result) and not source_eligible
         else f"理由：{data.get('evidence_adjustment_reason')}" if data.get("evidence_adjustment_reason") else deps["rejected_transition_reason_line"](stock_result) if funnel_state == "淘汰" else None

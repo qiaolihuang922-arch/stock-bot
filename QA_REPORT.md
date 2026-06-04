@@ -1,58 +1,100 @@
-# QA_REPORT: v20.4.41 盤後未持倉 gate attribution 可讀性修正
+# QA_REPORT: v20.4.42 未持倉非可買卡片 attribution 兩層可讀化
 
 ## 測試範圍
 
-- QA 風險預算：tiny_patch / L1，只驗 formatter / message-list replay、版本、禁止變更面，不擴成 full pytest / production replay / DB smoke。
-- 本輪最值得抓的風險：
-  - 距突破 gate 修正不完整：RR不足 distance=2 或其他 blocker distance=2 仍外露。
-  - 手機閱讀誤讀：可買 / trend_continuation / 盤後準備 / 過熱 / 突破失敗卡片主因被次因稀釋。
-  - 契約越界：策略、RR、can_buy / is_valid_entry、DB / live Telegram 被改動。
-- 停止條件：TASK / CHANGELOG / diff 不一致、official message-list replay 無法執行、版本不一致，或任一 blocker 復現即 blocked。
+任務尺寸為 normal_patch、QA L2；本輪驗收限制在 formatter / visible attribution / version / official message-list replay，不擴成 full pytest、production replay、DB 或 live Telegram。
+
+讀取並比對：
+
+- TASK.md
+- CHANGELOG.md
+- git diff
+- core/generator.py
+- presentation/report.py
+- tests/test_generator_report.py
+
+可吸收 diff：
+
+- CHANGELOG.md
+- core/generator.py
+- presentation/report.py
+- tests/test_generator_report.py
+
+worktree tracked 狀態只有上述 4 檔修改；未看到本輪範圍外 tracked 殘留。QA 只建立 / 使用 .qa_tmp/ 作暫存，未修改 tracked file。
+
+## 風險預算與停止條件
+
+本輪最值得抓的風險：
+
+1. CHANGELOG.md 與實際 diff 再次不一致。
+   - 驗證：比對 diff 中 VERSION、formatter、人話化 source、test rename / assertions。
+   - 停止條件：若 CHANGELOG 宣稱不存在的檔案、行為或覆蓋層級，直接阻塞。
+2. 官方 message-list 手機閱讀仍混淆可買 / 不可買。
+   - 驗證：跑 targeted official replay，檢查 summary -> unheld card 順序、非可買兩行、可買與 trend_continuation 不出兩行。
+   - 停止條件：若只 helper 通過、official replay 失敗或卡片主結論互相矛盾，阻塞。
+3. raw enum / 舊版字串殘留。
+   - 驗證：rg 搜 v20.4.41，並用 replay assertion 反證 FAILED_BREAKOUT、LIMIT_LOCK、WEAK_REBOUND、source missing 類 raw wording 不外露。
+   - 停止條件：使用者可見 output 或 current-version test expectation 有殘留，阻塞。
 
 ## 關聯風險掃描
 
-- 已讀 TASK.md、CHANGELOG.md、git diff。
-- 可吸收 diff：
-  - core/generator.py：版本 v20.4.40 -> v20.4.41。
-  - presentation/report.py：未持倉卡 formatter attribution / 盤後文案 / enum 顯示轉換。
-  - tests/test_generator_report.py：focused official formatTelegramMessages replay assertion。
-  - CHANGELOG.md：本輪 Tech 摘要。
-- worktree 殘留：目前只有上述 tracked modified，未見本輪外無關 tracked diff。
-- 靜態掃描 diff 未見策略計算、RR 計算、can_buy、is_valid_entry、DB schema / read-write、live Telegram delivery 變更。
+CHANGELOG.md 與 diff 對齊：有準確列出 core/generator.py 的 VERSION v20.4.42 與 dominant_reject_reasons() source wording 變更；有列出 presentation/report.py 的兩行 attribution、人話化 source、可買 / trend_continuation 不輸出 attribution；有列出 tests/test_generator_report.py 的 v20.4.42 replay rename / assertions 與 version expectation 更新。
+
+實際 diff 未碰策略核心、RR 公式、can_buy / is_valid_entry 判定、持倉狀態機、DB write / read path、live Telegram。core/generator.py 只有版本與 rejected summary wording 變更。
+
+注意：CHANGELOG.md 的自檢命令區仍有一條歷史 command string 帶 v20_4_41 的 -k 名稱與 pycache path；QA 不列 blocker，因為後續同段已列正確 test_v20_4_42...，且實際相關 source / test 檔 rg v20.4.41 無殘留。
 
 ## 跨區塊語意一致性
 
-- Tech focused replay 通過：4 passed。
-- py_compile 通過。
-- git diff --check 通過。
-- 版本確認：generator.VERSION == v20.4.41。
-- replay 覆蓋結果：
-  - RR不足且 distance=2 卡只顯示 RR gap，不顯示 距突破 2%/需<=4%。
-  - RR不足且 distance=6 仍顯示 距突破 6%/需<=4%，不是全域刪除。
-  - 真正可買與 trend_continuation 小倉 BUY 不顯示 到達可買差距。
-  - FAILED_BREAKOUT 不顯示 RR 0/需>=1.5，改顯示突破失敗需重新轉強。
-  - post-market ordinary prepare 顯示 盤後訊號 / 需開盤後重新確認，且卡片內不顯示 證據：資料不足。
-  - EXTREME / HOT 只保留降溫主因，不列 RR / entry quality 次因。
-  - replay output 不外露 EXTREME / HOT / LIMIT_LOCK / LIMIT_REBOUND / WEAK_REBOUND raw enum。
+官方 replay 通過後，summary 與未持倉卡片一致：
+
+- RR 不足卡片顯示 卡關主因：RR不足 與 RR 差值。
+- 距突破 6% 顯示 需<=4%｜差2%；距突破 2% 負例不列距突破差距。
+- 過熱 / Lv.3 / FAILED_BREAKOUT / 盤後待確認 / limit lock / weak rebound 皆優先顯示人話化主因，不混入誤導 RR 或 entry quality 次因。
+- 真正可買與 trend_continuation 小倉 BUY 卡片不顯示 卡關主因： / 量化差距：。
+- v20.4.42 出現在 official header / summary expectations。
 
 ## 使用者誤讀風險
 
-- 依手機閱讀順序檢查 summary -> 未持倉卡：summary 的新倉 / 可準備 / 僅追蹤 / 淘汰統計與卡片狀態一致，未把不可買卡寫成可立即買。
-- 盤後 prepare 卡從標題、買點、到達可買差距、數據原因都指向「需開盤後重新確認」，沒有混入 RR不足或資料不足語意。
-- 過熱與突破失敗卡片主因明確，未被 RR 0 或 entry quality 次因干擾。
+按 Owner 手機閱讀順序檢查：summary 先給新倉是否可行動，未持倉卡片再列主因與量化差距。非可買卡片沒有「建議買入」「可立即買」等像推薦的文案；source missing 路徑仍 fail closed，summary 顯示無有效進場，卡片顯示資料來源缺失，不把缺資料候選放成可買。
+
+## 失敗標本反證
+
+失敗標本是 v20.4.41 盤後非可買卡片只有單行 到達可買差距。本輪 official replay 反證結果：
+
+- 非可買卡片改為兩行 卡關主因：... / 量化差距：...。
+- Replay output 不再含 到達可買差距。
+- version 升為 v20.4.42。
+- post-market ordinary prepare 不是資料不足，而是盤後待確認。
 
 ## 質疑與反證
 
-- 補驗 Tech 未覆蓋的反例：official route 建立 source missing 且 distance=2 的 BUY payload。結果卡片只顯示 missing-source / 需可用，HAS_DISTANCE_2=False，未復現上一輪 blocker。
-- 主動質疑 _unheld_buy_gap_line 是否仍可能因 source blocker 帶出近距離突破；official message-list route 中 source missing 會使距離不可用，使用者可見輸出未外露 距突破 2%/需<=4%。
-- 旁支風險：若未來有 source blocked 但仍保留有效 dist 的新路徑，應補一個 focused test；本輪現有 official route 未觸發，不阻塞。
+QA 未只重跑 Tech 自檢；補跑 source-missing direct consumer 路徑：
+
+- test_v20_4_10_summary_hides_strongest_when_candidate_source_missing：1 passed。
+- 反證 source missing 可買候選不會被 summary 當最強 / 可買，不會在未持倉卡外露 raw Source line。
+
+執行命令結果：
+
+- git diff --check：passed。
+- rg 'v20\\.4\\.41' tests/test_generator_report.py core/generator.py presentation/report.py：無匹配。
+- targeted L2 pytest：
+  - test_v20_4_42_postmarket_unheld_gate_attribution_readability_message_list_replay
+  - test_confirmed_evidence_preserves_limit_lock_chase_hard_blocker
+  - test_0604_v20_4_37_generate_mobile_consistency_message_list_replay
+  - 結果：3 passed。
+- py_compile core/generator.py presentation/report.py tests/test_generator_report.py：passed。
+- 曾誤跑一條不存在的 pytest -k，結果 169 deselected、exit 5；已更正，不納入通過證據。
 
 ## 未測項目
 
-- 未跑 full pytest，符合 tiny_patch / L1 風險預算。
-- 未跑 production runner artifact、read-only production smoke、DB read/write、live Telegram。
-- 未驗證真實 2026-06-04 production payload 全矩陣，只驗等價 official message-list replay fixture。
+- 未跑 full pytest，符合 normal_patch / L2 範圍控制。
+- 未跑 production runner artifact。
+- 未讀 production source artifact。
+- 未做 DB read/write。
+- 未做 live Telegram delivery。
+- 未驗證 commit / push gate，這是 Architect 收口責任。
 
 ## QA 結論
 
-通過。TASK、CHANGELOG、diff 與 focused replay 證據一致；上一輪 blocker 已反證，未見策略 / RR / can_buy / is_valid_entry / DB / live Telegram 越界。
+通過
