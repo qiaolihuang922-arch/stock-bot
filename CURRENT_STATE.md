@@ -14,6 +14,22 @@
 
 ## Latest Completed Work
 
+- task_id：`future_watch_taiwan_crash_analogy_20260604`
+- 狀態：code done / QA 通過；報文版本維持 `v20.4.47`。
+- 問題：Owner 指出歷史類比不用全球股災模型，只要做台灣股災 / 台股急跌時間線；全球股災口徑可能不準、參考性不足。
+- 關鍵行為：
+  - `CRASH_ANALOGY_FALLBACK` 改為 `無高相似台股急跌樣本`。
+  - 歷史壓力模板事件改為台股口徑：`台股日圓套利平倉急殺`、`台股疫情急跌`、`台股急跌前段`。
+  - 測試新增 `全球股災` 不得出現在 TWSE helper / final future-watch fixture 的反證。
+- 驗證：
+  - Focused future-watch tests：11 passed。
+  - py_compile：passed。
+  - `git diff --check`：passed。
+  - Official `generate()` read-only smoke：第 4 則顯示 `2015/08/20-24 台股急跌前段`，且 `CHECK_NO_GLOBAL_CRASH=True`。
+- 邊界：未改歷史資料來源 / 演算法、MOPS、EPS、營收、台股影響事件、策略、RR、持倉風控、DB schema/write/backfill、live Telegram。
+
+## Previous Completed Work
+
 - task_id：`future_watch_mops_fundamentals_context_20260604`
 - 狀態：code done / QA 通過；報文版本維持 `v20.4.47`。
 - 問題：Owner 要在法說會段增加股票 EPS 與營收年增；營收用當月，當月沒有用上一個官方公告月；同時法說會要顯示 conference 名稱，避免同公司多場看起來像重複。
@@ -143,7 +159,7 @@
 - 問題：Owner 要未來 30 日關注功能先走即時資料試行，不做資料庫方向；需要查 TWSE / MOPS / 全球官方頁，且 source 不可靠時必須 fail closed，不能假造法說會、崩盤類比或交易建議。
 - 關鍵行為：
   - `default_future_watch_sources(now)` 每次 `generate_report()` 建立 live readonly sources，不讀寫 DB。
-  - TWSE OpenAPI 今日 / 近月 TAIEX source 可讀時仍保守顯示 `歷史類比：無高相似崩盤樣本｜依據不足/相似度低｜source=TWSE`，不硬套崩盤時間線。
+  - TWSE OpenAPI 今日 / 近月 TAIEX source 可讀時 fail closed；目前新版本 fallback 已收斂為 `歷史類比：無高相似台股急跌樣本｜依據不足/相似度低｜source=TWSE`，不硬套崩盤時間線。
   - MOPS official POST adapter 只有解析出日期 / 公司 / 法說會欄位才列事件；SPA shell、無 table、欄位不可辨識或空 rows 都回 `source-error`，第 4 則顯示 `法說會提醒：source-error（MOPS），本次不列事件`。
   - 全球事件嘗試讀 Fed / BLS / BOJ / BEA / ECB 官方頁；全部解析失敗時保留 seed fallback，仍只在第 4 則顯示。
   - 第 4 則仍 append 在持倉 / 未持倉 / 決策簡報三則之後，前三則不混入未來關注內容。

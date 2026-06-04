@@ -16,6 +16,13 @@
 
 ## Completed
 
+- `future_watch_taiwan_crash_analogy_20260604`:
+  - 問題：Owner 指出歷史類比不應使用全球股災模型，只要台灣股災 / 台股急跌口徑。
+  - 結果：fallback 改 `無高相似台股急跌樣本`；壓力模板事件改成 `台股日圓套利平倉急殺`、`台股疫情急跌`、`台股急跌前段`；測試反證報文不再出現 `全球股災`。
+  - 可重跑補強：focused future-watch 11 passed、py_compile / diff check passed、official `generate()` read-only smoke 顯示 `2015/08/20-24 台股急跌前段` 且 `CHECK_NO_GLOBAL_CRASH=True`。
+  - QA 狀態：通過。
+  - 流程復盤：根因分類為 `display_semantics` + `mobile_reading`。TWSE source 對應的是台股報文，歷史類比主事件不應用全球股災命名造成參考軸錯位。
+  - 邊界：未改歷史資料來源 / 演算法、MOPS、基本面 source、台股影響事件、策略、RR、DB、live Telegram。
 - `future_watch_mops_fundamentals_context_20260604`:
   - 問題：Owner 要法說會段增加股票 EPS 與營收年增，且同檔多場法說會要看得出 conference 差異。
   - 結果：新增 TWSE/TPEX 官方 OpenAPI readonly fundamentals source；法說會行顯示 conference 名稱、最新季 EPS、最新官方月營收 YoY；不再顯示 `source=MOPS`。

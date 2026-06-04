@@ -11,7 +11,7 @@ except ImportError:
     requests = None
 
 
-CRASH_ANALOGY_FALLBACK = "歷史類比：無高相似崩盤樣本｜依據不足/相似度低"
+CRASH_ANALOGY_FALLBACK = "歷史類比：無高相似台股急跌樣本｜依據不足/相似度低"
 TAIWAN_MARKET_EVENT_SOURCE_ERROR = "未來30日台股影響事件：官方來源暫時不可用，本次不列未確認事件"
 TAIWAN_MARKET_EVENT_EMPTY = "未來30日台股影響事件：未查到未來30日官方事件"
 MOPS_SOURCE_ERROR = "未來30日法說會：MOPS 官方來源暫時不可解析，本次不列未確認事件"
@@ -515,21 +515,21 @@ def _historical_pressure_template(change_pct, pullback_from_high_pct):
     pullback = pullback_from_high_pct if pullback_from_high_pct is not None else 0
     if change <= -6:
         return {
-            "event": "2024/08/05 日圓套利平倉急殺",
+            "event": "2024/08/05 台股日圓套利平倉急殺",
             "similarity": 0.86,
             "difference": "急殺等級，需看隔日是否止跌",
             "watch": "留意外資/匯率與隔日開盤承接",
         }
     if change <= -3.5:
         return {
-            "event": "2020/03/12 疫情急跌",
+            "event": "2020/03/12 台股疫情急跌",
             "similarity": 0.78,
             "difference": "急跌情境，但仍需連續性確認",
             "watch": "留意是否連續跌破前低與量能放大",
         }
     if change <= -1.5 or pullback <= -1.5:
         return {
-            "event": "2015/08/20-24 全球股災前段",
+            "event": "2015/08/20-24 台股急跌前段",
             "similarity": 0.62,
             "difference": "屬壓力前段，不是崩盤等級",
             "watch": "未來3-5日是否跌破本月低點",

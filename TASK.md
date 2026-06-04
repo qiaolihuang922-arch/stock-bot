@@ -1,32 +1,30 @@
-# TASK: future_watch_mops_fundamentals_context_20260604
+# TASK: future_watch_taiwan_crash_analogy_20260604
 
 ## 任務狀態
 
-- task_id：`future_watch_mops_fundamentals_context_20260604`
-- 任務類型：normal_patch
-- 狀態：ready_for_qa
+- task_id：`future_watch_taiwan_crash_analogy_20260604`
+- 任務類型：tiny_patch
+- 狀態：done
 - 版本建議：維持 `v20.4.47`
-- QA 分級：L2
+- QA 分級：L1
 
 ## Owner 問題
 
-Owner 要在法說會段增加股票 EPS 與營收年增；營收資料用當月，當月沒有就用上一個官方已公告月份。同時法說會不應只顯示泛稱 `法人說明會`，要顯示 conference / 說明會名稱。
+Owner 指出歷史類比不需要用全球股災模型；未來 30 日關注裡的歷史類比只要做台灣股災 / 台股急跌時間線。全球股災口徑可能不準、參考性不足。
 
 ## 使用者可見結果
 
-- `未來30日法說會` 行顯示 MOPS summary / conference 名稱，不再只顯示 `法人說明會`。
-- 每檔法說會補 `EPS {年度Q季}` 與 `營收YoY {年月}`；缺資料不硬編。
-- 營收來源使用 TWSE/TPEX 官方 OpenAPI 最新月營收 snapshot；若當月尚未公告，自然使用上一個官方已公告月份。
-- EPS 來源使用 TWSE/TPEX 官方 OpenAPI 最新季 EPS snapshot。
+- `歷史類比` 顯示的壓力模板改為台股口徑。
+- 不再顯示 `2015/08/20-24 全球股災前段`。
+- fallback 改為 `無高相似台股急跌樣本`，避免資料不足時仍像在找泛全球崩盤。
 
 ## 非目標
 
-- 不改交易策略、RR、持倉風控、買賣決策。
-- 不做 DB 方向，不新增 DB read/write/backfill。
-- 不發 live Telegram。
-- 不改全球事件完整官方 calendar parser。
-- 不改歷史類比算法。
-- 不改 DB 方向或加 cache。
+- 不改歷史類比資料來源與演算法。
+- 不建立多年歷史資料庫。
+- 不改 MOPS、EPS、營收、台股影響事件查詢。
+- 不改策略、RR、持倉風控、買賣決策。
+- 不改 DB schema/write/backfill，不發 live Telegram。
 
 ## 影響模組與直接消費者
 
@@ -36,23 +34,30 @@ Owner 要在法說會段增加股票 EPS 與營收年增；營收資料用當月
 
 ## 輸出契約
 
-- 法說會格式：`日期 代號 名稱｜conference｜EPS ...｜營收YoY ...｜關注原因：...`。
-- 不顯示 `source=MOPS`。
-- fundamentals source fail-closed：無 EPS / 營收資料時不顯示假值。
+- 台股壓力模板事件：
+  - `2024/08/05 台股日圓套利平倉急殺`
+  - `2020/03/12 台股疫情急跌`
+  - `2015/08/20-24 台股急跌前段`
+- 無高相似樣本時：`歷史類比：無高相似台股急跌樣本｜依據不足/相似度低`。
+- 第 4 則報文不得出現 `全球股災`。
+
+## 版本契約
+
+- 使用者可見報文版本維持 `v20.4.47`，本輪只修正第 4 則歷史類比語意。
 
 ## 驗收條件
 
 - Focused future-watch tests 通過。
 - py_compile 通過。
 - `git diff --check` 通過。
-- Read-only official `generate()` smoke：法說會段包含 conference 名稱、EPS、營收YoY。
+- Official `generate()` read-only smoke 的第 4 則歷史類比不得出現 `全球股災`，若有壓力類比應顯示台股口徑。
 
 ## 失敗標本與驗收路由
 
-- 失敗標本：Owner 指出同檔股票多場法說會要能看出差別，並要求補 EPS / 年收增長。
-- 驗收路由：MOPS parser / fundamentals source -> future_watch formatter -> focused tests -> official `generate()` read-only smoke。
+- 失敗標本：Owner 指出 `全球股災` 參考性不足，歷史類比應只做台灣股災 / 台股急跌。
+- 驗收路由：TWSE historical source helper -> future-watch formatter -> official `generate()` read-only smoke。
 
 ## 禁止事項與阻塞條件
 
-- 不得假造台股影響事件。
-- 不得把 source-error 靜默顯示成無事件。
+- 不得把全球事件或全球股災當作台股歷史類比主事件。
+- 不得宣稱已完成多年歷史相似度模型；目前仍是 TWSE 即時 / 近月資料加壓力模板。

@@ -1583,7 +1583,7 @@ class GeneratorReportTest(unittest.TestCase):
 
     def test_v20_4_47_future_watch_global_event_ranges_sort_and_fail_closed(self):
         payload = {
-            "historical_analogy": {"line": "歷史類比：無高相似崩盤樣本｜依據不足/相似度低"},
+            "historical_analogy": {"line": "歷史類比：無高相似台股急跌樣本｜依據不足/相似度低"},
             "mops_events": {"status": "available", "items": []},
             "global_events": collect_global_events(
                 datetime(2026, 6, 4),
@@ -1634,7 +1634,8 @@ class GeneratorReportTest(unittest.TestCase):
         source = build_live_twse_historical_source(datetime(2026, 6, 4), get_json=fake_get_json)
 
         self.assertEqual(source["status"], "available")
-        self.assertIn("2015/08/20-24 全球股災前段", source["line"])
+        self.assertIn("2015/08/20-24 台股急跌前段", source["line"])
+        self.assertNotIn("全球股災", source["line"])
         self.assertIn("差異：屬壓力前段，不是崩盤等級", source["line"])
         self.assertIn("source=TWSE", source["line"])
         self.assertEqual(source["today_features"]["change_pct"], -1.68)
@@ -1669,7 +1670,7 @@ class GeneratorReportTest(unittest.TestCase):
         )
         message = format_future_watch_message(
             {
-                "historical_analogy": {"line": "歷史類比：無高相似崩盤樣本｜依據不足/相似度低｜source=TWSE"},
+                "historical_analogy": {"line": "歷史類比：無高相似台股急跌樣本｜依據不足/相似度低｜source=TWSE"},
                 "mops_events": mops,
                 "global_events": {"status": "available", "items": []},
             },
@@ -1859,7 +1860,7 @@ class GeneratorReportTest(unittest.TestCase):
         watch = future_watch_message(messages)
 
         self.assertEqual(len(messages), 4)
-        self.assertIn("歷史類比：無高相似崩盤樣本｜依據不足/相似度低", watch)
+        self.assertIn("歷史類比：無高相似台股急跌樣本｜依據不足/相似度低", watch)
         self.assertIn("未來30日法說會：MOPS 官方來源暫時不可解析，本次不列未確認事件", watch)
         self.assertIn("未來30日台股影響事件：官方來源暫時不可用，本次不列未確認事件", watch)
         self.assertNotIn("金融海嘯急跌", watch)
@@ -1892,7 +1893,7 @@ class GeneratorReportTest(unittest.TestCase):
             return {
                 "historical_source": {
                     "status": "insufficient-data",
-                    "line": "歷史類比：2015/08/20-24 全球股災前段｜相似度 62%｜相似：單日跌幅 -1.68%、高檔回落 -1.88%、盤中震盪 +1.50%｜差異：屬壓力前段，不是崩盤等級｜關注：未來3-5日是否跌破本月低點｜source=TWSE",
+                    "line": "歷史類比：2015/08/20-24 台股急跌前段｜相似度 62%｜相似：單日跌幅 -1.68%、高檔回落 -1.88%、盤中震盪 +1.50%｜差異：屬壓力前段，不是崩盤等級｜關注：未來3-5日是否跌破本月低點｜source=TWSE",
                 },
                 "mops_adapter": lambda _params: {"status": "source-error"},
                 "global_event_source": {
@@ -1925,7 +1926,8 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIs(messages[2], summary_message(messages))
         watch = messages[3]
         self.assertIn(f"【06/04 未來30日關注｜{generator.VERSION}】", watch)
-        self.assertIn("歷史類比：2015/08/20-24 全球股災前段", watch)
+        self.assertIn("歷史類比：2015/08/20-24 台股急跌前段", watch)
+        self.assertNotIn("全球股災", watch)
         self.assertIn("未來30日法說會：MOPS 官方來源暫時不可解析，本次不列未確認事件", watch)
         global_lines = [
             line for line in watch.splitlines()
