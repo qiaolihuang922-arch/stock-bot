@@ -22,13 +22,14 @@ def already_sent(tag):
     else:
         tags = []
 
-    if tag in tags:
-        return True
+    return tag in tags
 
+
+def mark_sent(tag):
+    today = datetime.now(tz).strftime("%Y%m%d")
+    filename = f"sent_{today}.txt"
     with open(filename, "a") as f:
         f.write(tag + "\n")
-
-    return False
 
 
 def run_market_theme_freshness_preflight():
@@ -99,8 +100,12 @@ def home():
             return "⏭️ Skip"
 
         freshness_status = run_market_theme_freshness_preflight()
+        freshness_note = ""
         if freshness_status != 0:
-            return f"❌ freshness check failed {freshness_status}"
+            # Freshness is a data-quality preflight. It must not prevent the
+            # delivery pipeline from dispatching; the report itself fails
+            # closed when evidence is stale or missing.
+            freshness_note = f" | freshness warning {freshness_status}"
 
         if already_sent(tag):
             return f"⏭️ 已發 {tag}"
@@ -125,7 +130,8 @@ def home():
         if r.status_code != 204:
             return f"❌ GitHub錯誤 {r.status_code}: {r.text[:100]}"
 
-        return f"✅ {reason} | {tag} | {now.strftime('%H:%M:%S')}"
+        mark_sent(tag)
+        return f"✅ {reason} | {tag} | {now.strftime('%H:%M:%S')}{freshness_note}"
 
     except Exception as e:
         return f"❌ ERROR: {str(e)}"

@@ -2,12 +2,17 @@ import os
 
 # Runtime duplicate-send guard.
 
-def already_sent(tag):
+def sent_tag_exists(tag):
     path = f"/tmp/{tag}"
+    return os.path.exists(path)
 
-    # 中文註釋：同一個 tag 只允許送一次，避免排程重入造成重複通知。
-    if os.path.exists(path):
-        return True
 
+def mark_sent(tag):
+    path = f"/tmp/{tag}"
     open(path, "w").close()
-    return False
+
+
+def already_sent(tag):
+    # Backward-compatible helper: check only. Call mark_sent() after the
+    # protected action succeeds so failed delivery can retry.
+    return sent_tag_exists(tag)
