@@ -16,6 +16,13 @@
 
 ## Completed
 
+- `telegram_card_evidence_wording_v20_4_44`:
+  - 問題：v20.4.43 evidence-chain 接通後，可見卡片把內部推理直接吐出，包含 `決策證據：來源可追溯`、raw hard gate、prepare 似乎買點已過、差距描述不夠量化；Owner 要顯示語意易懂、不要模糊。
+  - 結果：VERSION 升 `v20.4.44`；未持倉卡保留 `卡關主因` / `量化差距` 並補 `解鎖` / `依據`；可用數字時優先顯示 RR / 距突破 / 熱度 / 警戒停損距離，無數字時才寫事件型 blocker；prepare 改 `明日準備｜不可下單`；持倉觀察不刷 generic evidence，停損 / 減碼顯示人話風險與距離。
+  - 可重跑補強：main focused 4 passed、wide regression 14 passed、py_compile / diff check passed；QA 補 mobile replay，反證建準持倉觀察、硬風控減碼距警戒/停損、光寶科 prepare 三條手機閱讀路徑。
+  - QA 狀態：`通過`。
+  - 流程復盤：根因分類為 `手機閱讀` + `證據鏈`。證據鏈應驅動判斷，不應把 source availability 或 internal labels 當作交易證據顯示；顯示任務要在 TASK 明確要求「可量化 gap 優先，事件型 blocker 才用文字」。
+  - 邊界：未改策略 decision、RR 公式、heat/breakout 判定、DB schema/write、production backfill、live Telegram。
 - `evidence_chain_decision_layers_v20_4_43`:
   - 問題：Owner 要「顯示保持目前樣子，但把證據鏈加入」，且所有判斷都要能被 evidence 推敲；前一版 risk 是只加可見說明，低 RR / hard-gate 標的仍可能在 summary / funnel / card 被列成可買或趨勢延續。
   - 結果：VERSION 升 `v20.4.43`；新增每檔 `decision_judgment` manifest/context 聚合與 `決策證據：...` 可見 reason slot；RR不足、過熱/EXTREME、突破失敗、source missing/error/conflict、量能、追高/漲停、持倉 hard stop 會同步 fail closed；低 RR `trend_continuation` 降為 `等RR修復` 並保留 `卡關主因` / `量化差距`。

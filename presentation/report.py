@@ -401,6 +401,28 @@ def _gate_gap_text(value, threshold):
     return _gate_value_text(gap)
 
 
+def _supporting_basis_text(data, primary_reason):
+    stock_result = (data or {}).get("result") or {}
+    basis = []
+    primary = str(primary_reason or "")
+    try:
+        rr = float(stock_result.get("rr"))
+    except (TypeError, ValueError):
+        rr = None
+    if rr is not None and rr >= 1.5 and "RR" not in primary:
+        basis.append("RR 達標")
+    try:
+        volume = float((data or {}).get("volume_ratio"))
+    except (TypeError, ValueError):
+        volume = None
+    if volume is not None and volume >= 1:
+        basis.append("量能達標")
+    backtest = (data or {}).get("backtest_context") or {}
+    if backtest:
+        basis.append("回測僅輔助")
+    return "；".join(dict.fromkeys(basis))
+
+
 def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source_status, strategy_source_blocked):
     stock_result = data.get("result") or {}
     is_actionable = valid_entry or funnel_state == "趨勢延續"
@@ -413,8 +435,14 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
     if is_actionable:
         return None
 
-    def two_line(reason, gap):
-        return f"卡關主因：{reason}\n量化差距：{gap}"
+    def evidence_lines(reason, gap, unlock=None, basis=None):
+        lines = [f"卡關主因：{reason}", f"量化差距：{gap}"]
+        if unlock:
+            lines.append(f"解鎖：{unlock}")
+        basis = basis if basis is not None else _supporting_basis_text(data, reason)
+        if basis:
+            lines.append(f"依據：{basis}")
+        return "\n".join(lines)
 
     gates = []
     if strategy_source_blocked:
@@ -426,9 +454,18 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
     blocker_text = "、".join(str(item) for item in blockers)
     phase = stock_result.get("structure_phase")
     if "突破失敗" in blocker_text or phase == "FAILED_BREAKOUT":
-        return two_line("突破失敗", "需重新站回突破區")
+        distance_text = _gate_value_text(dist)
+        gap = "需重新站回突破區"
+        if distance_text and float(distance_text) > 4:
+            distance_gap = _gate_value_text(float(distance_text) - 4)
+            gap = f"距突破區 {distance_text}%｜需<=4%｜差{distance_gap}%"
+        return evidence_lines("未站回突破區", gap, "重新站回突破區後再評估", basis="")
     if post_market_prepare:
-        return two_line("盤後待確認", "需開盤後重新確認")
+        return evidence_lines(
+            "開盤確認未完成",
+            "盤後待開盤確認",
+            "明日開盤後仍守突破區 / 不追價",
+        )
 
     behavior = stock_result.get("price_behavior")
     if behavior in {"LIMIT_LOCK", "LIMIT_REBOUND"} or "漲停" in blocker_text or "不可追高" in blocker_text:
@@ -438,9 +475,9 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
 
     heat = stock_result.get("heat_state")
     if heat == "EXTREME":
-        return two_line("熱度 Lv.3", "需降至 Lv.1/觀察以下")
+        return evidence_lines("熱度 Lv.3", "熱度 Lv.3｜需降至 Lv.1/觀察以下", "降溫後重新評估")
     if heat == "HOT" or "過熱" in blocker_text:
-        return two_line("過熱觀察", "需降溫至可評估")
+        return evidence_lines("過熱觀察", "熱度 Lv.2｜需降至 Lv.1/觀察以下", "降溫後重新評估")
 
     rr_text = _gate_value_text(stock_result.get("rr"))
     if not is_actionable and rr_text and ("RR不足" in blocker_text or float(rr_text) < 1.5):
@@ -483,7 +520,15 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
             extra_gaps.append(gap)
     if extra_gaps:
         primary_gap = f"{primary_gap}｜" + "｜".join(extra_gaps)
-    return two_line(primary_reason, primary_gap)
+    unlock = {
+        "RR不足": "風險報酬比修復到 >=1.5",
+        "距突破太遠": "接近突破區後再評估",
+        "漲跌停鎖定": "解除鎖定後重新評估",
+        "反彈力道不足": "放量轉強後重新評估",
+        "樣本不足": "補齊有效策略樣本後重新評估",
+        "資料來源缺失": "補齊有效行情 / 策略來源後重新評估",
+    }.get(primary_reason, "解除主 blocker 後重新評估")
+    return evidence_lines(primary_reason, primary_gap, unlock)
 
 
 def _stock_decision_judgment(report_context, name):
@@ -507,48 +552,122 @@ def _decision_reason_text(report_context, name):
     def visible_blocker(item):
         return {
             "unresolved RR不足": "RR不足",
-            "overheat / EXTREME": "過熱 / 熱度硬閘門",
+            "overheat / EXTREME": "過熱未降溫",
             "failed breakout": "突破失敗",
-            "漲跌停 / 追高 hard gate": "漲跌停 / 追高硬閘門",
-            "volume hard gate": "量能硬閘門",
-            "hard stop / holding risk": "hard stop / 持倉風控",
-            "holding hard risk": "持倉硬風控",
+            "漲跌停 / 追高 hard gate": "漲跌停鎖定 / 不追高",
+            "volume hard gate": "量能不足",
+            "hard stop / holding risk": "跌破停損線",
+            "holding hard risk": "跌破警戒或結構轉弱",
             "conflicting evidence": "證據衝突",
-            "missing-source": "missing-source",
-            "source-error": "source-error",
-            "insufficient-data": "insufficient-data",
+            "missing-source": "資料來源缺失",
+            "source-error": "資料來源異常",
+            "insufficient-data": "資料不足",
         }.get(str(item), str(item))
+
+    def visible_progress(item):
+        text = str(item)
+        return {
+            "既有買點與倉位規則通過": "買點成立，倉位規則通過",
+            "trend_continuation 同源證據達標，仍限小倉契約": "趨勢延續同源證據達標，仍限小倉",
+            "來源可追溯，現狀維持 可準備": "維持可準備，不升格可買",
+            "來源可追溯，現狀維持 等RR修復": "維持等 RR 修復",
+            "來源可追溯，現狀維持 等冷卻": "維持等冷卻",
+            "來源可追溯，現狀維持 淘汰": "維持不可行動",
+            "既有持倉依持倉 / ledger / 價格來源判斷，不列新倉 eligibility": "",
+        }.get(text, text.replace("技術 setup ", "技術條件").replace("技術 setup", "技術條件"))
 
     blockers = [
         visible_blocker(item)
         for item in judgment.get("blocking_reasons") or []
         if str(item) != "DB/live restriction: evidence cannot authorize DB write/live Telegram delivery"
     ]
-    progress = [str(item) for item in judgment.get("progress_reasons") or []]
+    progress = [
+        text for text in (visible_progress(item) for item in judgment.get("progress_reasons") or [])
+        if text
+    ]
+    if judgment.get("eligibility_state") == "prepare":
+        progress = [
+            text for text in progress
+            if "買點成立" not in text and "倉位規則通過" not in text
+        ]
+    if _report_phase(report_context) != "盤中":
+        progress = [
+            text for text in progress
+            if "買點成立" not in text and "倉位規則通過" not in text
+        ]
     status = judgment.get("evidence_status")
     status_text = {
-        "ok": "來源可追溯",
-        "missing": "missing-source fail closed",
-        "source_error": "source-error fail closed",
-        "conflicting": "conflicting evidence fail closed",
-        "insufficient": "insufficient-data fail closed",
-    }.get(status, f"evidence {status or 'unknown'}")
+        "missing": "資料來源缺失，停止新倉",
+        "source_error": "資料來源異常，停止新倉",
+        "conflicting": "證據衝突，停止新倉",
+        "insufficient": "資料不足，停止新倉",
+    }.get(status)
     if blockers:
-        return "決策證據：" + "；".join([status_text, "阻塞 " + "、".join(blockers[:2])])
+        is_holding = any(".position" in str(ref) for ref in judgment.get("evidence_refs") or [])
+        if not status_text:
+            return "風險依據：卡關 " + "、".join(blockers[:2]) if is_holding else None
+        prefix = "風險依據" if is_holding else "決策依據"
+        parts = [part for part in [status_text, "卡關 " + "、".join(blockers[:2])] if part]
+        return f"{prefix}：" + "；".join(parts)
     if progress:
-        return "決策證據：" + "；".join([status_text, *progress[:2]])
-    return f"決策證據：{status_text}"
+        return "依據：" + "；".join(progress[:2])
+    if status_text:
+        return f"決策依據：{status_text}"
+    return None
 
 
 def _append_decision_reason(existing_line, report_context, name, *, default_prefix="理由"):
     reason = _decision_reason_text(report_context, name)
     if not reason:
         return existing_line
+    if existing_line:
+        existing_line = existing_line.replace("技術 setup ", "技術條件").replace("技術 setup", "技術條件")
     if not existing_line:
+        if "：" in reason:
+            return reason
         return f"{default_prefix}：{reason}"
+    reason_body = reason.split("：", 1)[1] if "：" in reason else reason
+    if reason_body and reason_body in existing_line:
+        return existing_line
     if reason in existing_line:
         return existing_line
     return f"{existing_line.rstrip('。；')}；{reason}"
+
+
+def _percent_distance(current, target):
+    try:
+        current_value = float(current)
+        target_value = float(target)
+    except (TypeError, ValueError):
+        return None
+    if target_value <= 0:
+        return None
+    return _gate_value_text(abs(current_value - target_value) / target_value * 100)
+
+
+def _holding_visible_risk_reason(data, decision):
+    if not decision:
+        return None
+    level = decision.get("level")
+    price = (data or {}).get("price")
+    hard_stop = decision.get("hard_stop_price")
+    warning = decision.get("warning_price")
+    if level == "STOP_100":
+        distance = _percent_distance(price, hard_stop)
+        if distance:
+            return f"跌破停損線 {distance}%，避免虧損擴大"
+        return "跌破停損線，避免虧損擴大"
+    if level in {"REDUCE_25", "REDUCE_50"} or str(decision.get("action") or "").startswith("硬風控"):
+        stop_distance = _percent_distance(price, hard_stop)
+        warning_distance = _percent_distance(price, warning)
+        distances = []
+        if warning_distance:
+            distances.append(f"距警戒線 {warning_distance}%")
+        if stop_distance:
+            distances.append(f"距停損線 {stop_distance}%")
+        prefix = "，".join(distances)
+        return f"{prefix}，結構轉弱" if prefix else "跌破警戒或結構轉弱"
+    return None
 
 
 def _weak_buy_backtest_line(name, data, deps, include_all=False):
@@ -688,12 +807,18 @@ def formatTelegramPositionCard(name, data, *, deps, report_context=None):
     lines = [line for line in lines if line is not None]
     lines = [_afterhours_card_text(line, report_context) for line in lines]
 
-    reason_line = _append_decision_reason(
-        f"原因：{reason_line}" if reason_line else None,
-        report_context,
-        name,
-        default_prefix="原因",
-    )
+    risk_reason = _holding_visible_risk_reason(data, decision)
+    if risk_reason and reason_line:
+        reason_line = f"原因：{reason_line}；風險依據：{risk_reason}"
+    elif risk_reason:
+        reason_line = f"原因：{risk_reason}"
+    else:
+        reason_line = _append_decision_reason(
+            f"原因：{reason_line}" if reason_line else None,
+            report_context,
+            name,
+            default_prefix="原因",
+        )
     if reason_line:
         lines.insert(6, reason_line)
     history_line = deps["cross_day_detail_line"](data)
@@ -824,7 +949,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         data_line = f"數據：{rr_data_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
     elif post_market_prepare:
-        buy_line = "買點：盤後訊號｜需開盤後重新確認｜不追價"
+        buy_line = "買點：明日準備｜不可下單"
         data_line = f"數據：{rr_data_text}｜{display_score_text}｜V {data.get('volume_ratio', '-')}x"
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
     elif valid_entry and detail_size_text != raw_size_text:
