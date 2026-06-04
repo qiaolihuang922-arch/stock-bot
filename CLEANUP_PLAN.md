@@ -16,6 +16,14 @@
 
 ## Completed
 
+- `2026-06-04-v20.4.37-generate-mobile-consistency`:
+  - 問題：Owner 重跑真實 `generate()` 後，上一輪 v20.4.36 降噪仍留下跨區塊一致性錯誤：首屏 `未持倉 8` 只列 `僅追蹤5/淘汰2` 漏 `不可追高觀察1`；`今日已買 3｜風控中 2` 無法追溯；普通 observe 歷史仍可能刷屏；回測摘要把建準、緯創聚合成同一行，破壞單檔可追溯。
+  - 結果：VERSION 升 `v20.4.37`；首屏未持倉括號改吃同源 prepare bucket；今日已買改為 `今日已買 N（已風控 M/觀察 K）`；回測摘要取消跨股票聚合，改單檔 `回測（name）：...`；新增 v20.4.37 official message-list replay。
+  - 可重跑補強：focused pytest 4 passed；py_compile passed；actual `generate()` passed；QA 額外 final message-list parser 通過，反證首屏 / 漏斗 / 詳情索引 / 卡片分類一致、`風控中` 不殘留、`回測（建準、緯創）` 不殘留。
+  - QA 狀態：`通過`。
+  - 流程復盤：第一次 auto runner 因 stale Tech worktree candidate diff 擋住；第二次 Tech agent 卡在互動提示，Architect 吸收有效候選後補齊測試與 handoff；第一次 QA 驗到 stale Tech worktree，需手動同步主 repo diff 到 QA worktree 後重跑；第二次 QA conditional 抓到 CHANGELOG 修改檔案摘要不一致；修正後第三次 QA 通過。
+  - 規則治理：`mobile_reading` + `QA反證` + `runner_gap`。這不是新增死規則；後續應補 runner 對 stale reusable worktree diff / interactive prompt 的自動處理，並讓 QA 使用最新主 repo diff 或明確同步後再驗。
+  - 邊界：未改 RR、strategy decision、DB schema/write、production backfill、live Telegram；未跑 production runner artifact；`RR不足 -> 證據：資料不足` 另開。
 - `v20_4_36_0604_report_readability_convergence`:
   - 問題：Owner 06/04 完整報文仍有手機閱讀誤讀：正常 source 行逐卡刷屏、普通 cross-day 歷史刷屏、量能不足被寫成資料不足、突破失敗 / 淘汰被過熱原因覆蓋、建準可買但回測偏弱缺同卡解釋、首屏裸寫 `今日新建倉 3` 易被讀成積極建倉。
   - 結果：正常 source 行改為異常才顯示；普通 `observe / 修復中 / 連續觀察 1 天 / 權重 +1` 歷史行隱藏但高風險 / execution memory 保留；原因優先級改為淘汰 / 突破失敗 / 風控優先於過熱；量能不足顯示 `量能不適用`；建準類可買弱回測同卡補 `回測僅輔助，分批小倉、不追價`；首屏改 `今日已買 N｜風控中 M`。

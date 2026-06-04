@@ -70,7 +70,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.36"
+VERSION = "v20.4.37"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -6605,6 +6605,7 @@ def _telegram_presentation_deps():
         "format_unheld_funnel": format_unheld_funnel,
         "unheld_prepare_bucket_label": unheld_prepare_bucket_label,
         "unheld_prepare_bucket_counts": unheld_prepare_bucket_counts,
+        "_prepare_count_parts": _prepare_count_parts,
         "unheld_prepare_funnel_text": unheld_prepare_funnel_text,
         "detail_index_text": detail_index_text,
         "rejected_trace_line": rejected_trace_line,
@@ -7044,30 +7045,21 @@ def compact_backtest_line(context):
 
 
 def format_backtest_groups(watch_items, report_context=None):
-    # 未持倉回測按簽名分組、點名到股：每個回測結果只顯示一次，並列出屬於該組的標的，
-    # 避免逐卡重複（噪音）又不丟資訊。樣本不足 / 不可用的不列入。
+    # 單檔回測不可跨股票聚合；手機閱讀需要每一行能直接回溯到單一股票。
     if _strategy_sample_unavailable_card_line(report_context):
         return []
-    groups = {}
-    order = []
+    lines = []
     for name, data in (watch_items or []):
         line = compact_backtest_line((data or {}).get("backtest_context"))
         if not line or line == "回測：-" or "不可用" in line or "樣本不足" in line:
             continue
         body = line.replace("回測：", "", 1)
-        if body not in groups:
-            groups[body] = []
-            order.append(body)
-        groups[body].append(name)
-    if not order:
+        lines.append(f"回測（{name}）：{body}")
+    if not lines:
         return []
-    if len(order) == 1:
-        body = order[0]
-        return ["", f"回測（{'、'.join(groups[body])}）：{body}"]
-    out = ["", "回測分組"]
-    for body in order:
-        out.append(f"{body}：{'、'.join(groups[body])}")
-    return out
+    if len(lines) == 1:
+        return ["", lines[0]]
+    return ["", "回測摘要", *lines]
 
 
 def formatTelegramUnheldCard(name, data, report_phase=None, market_mode=None, report_context=None):

@@ -803,6 +803,12 @@ def _compact_market_overview_line(holding_items, watch_items, report_context, de
     action_suffix = f"（{'/'.join(action_labels[:3])}）" if action_labels else ""
     actionable_count = len(funnel.get("可買") or []) if funnel else 0
     trend_count = len(funnel.get("趨勢延續") or []) if funnel else 0
+    prepare_counts = deps["unheld_prepare_bucket_counts"](
+        watch_items,
+        funnel=funnel,
+        market_mode=market_mode,
+        report_context=report_context,
+    ) if funnel else {}
     tracking_only_count = deps["unheld_tracking_only_count"](funnel) if funnel else 0
     rejected_count = len(funnel.get("淘汰") or []) if funnel else 0
     unheld_count = sum(len(items) for items in funnel.values()) if funnel else len(watch_items)
@@ -811,16 +817,27 @@ def _compact_market_overview_line(holding_items, watch_items, report_context, de
         unheld_parts.append(f"可買{actionable_count}")
     if trend_count:
         unheld_parts.append(f"趨勢延續{trend_count}")
+    unheld_parts.extend(
+        f"{label}{count}"
+        for label, count in deps["_prepare_count_parts"](prepare_counts)
+    )
     unheld_parts.extend([f"僅追蹤{tracking_only_count}", f"淘汰{rejected_count}"])
+    if today_new_entry_count:
+        today_observe_count = max(today_new_entry_count - today_buy_risk_count, 0)
+        today_parts = []
+        if today_buy_risk_count:
+            today_parts.append(f"已風控 {today_buy_risk_count}")
+        if today_observe_count:
+            today_parts.append(f"觀察 {today_observe_count}")
+        today_entry_text = f"今日已買 {today_new_entry_count}"
+        if today_parts:
+            today_entry_text += f"（{'/'.join(today_parts)}）"
+    else:
+        today_entry_text = f"今日新建倉 {today_new_entry_count}"
     parts = [
         f"市場：{market_mode} {risk_level}",
         f"執行動作 {pending_count}{action_suffix}",
-        (
-            f"今日已買 {today_new_entry_count}"
-            + (f"｜風控中 {today_buy_risk_count}" if today_buy_risk_count else "")
-        )
-        if today_new_entry_count
-        else f"今日新建倉 {today_new_entry_count}",
+        today_entry_text,
         f"持倉風控 {len(holding_items)}",
         f"未持倉 {unheld_count}（{'/'.join(unheld_parts)}）",
     ]

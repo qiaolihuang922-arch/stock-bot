@@ -3,7 +3,7 @@
 依 `AGENTS.md` 啟動順序閱讀；本文件只保留任務看板、handoff 指針與固定啟動命令。
 
 - task_md_holds: `recently_done`
-- task_md_task_id: `v20_4_36_0604_report_readability_convergence`
+- task_md_task_id: `2026-06-04-v20.4.37-generate-mobile-consistency`
 - task_md_note: `TASK.md / CHANGELOG.md / QA_REPORT.md 目前是最近完成任務的滾動 handoff，不代表仍在 Tech/QA。`
 
 ## Active
@@ -16,6 +16,7 @@
 
 ## Recently Done
 
+- `v20.4.37`｜`2026-06-04-v20.4.37-generate-mobile-consistency`｜normal_patch｜升版修復 06/04 真實 `generate()` 報文跨區塊一致性：首屏未持倉括號改吃同源 prepare bucket，`不可追高觀察 1` 不再漏於首屏；今日已買改為 `今日已買 N（已風控 M/觀察 K）`，移除不可追溯 `風控中`；未持倉回測取消跨股票聚合，改單檔 `回測（建準）` / `回測（緯創）`；actual `generate()` 已輸出 `v20.4.37` 且首屏 / 漏斗 / 索引合計一致；focused tests 4 passed、py_compile passed、QA 補 final message-list parser `通過`；未改策略 decision、RR、DB schema/write、live Telegram；未跑 production runner artifact。
 - `bbee321`｜`v20_4_36_0604_report_readability_convergence`｜normal_patch｜收斂 06/04 v20.4.36 手機閱讀誤讀：正常資料行與普通 cross-day 歷史不再逐卡刷屏；未持倉原因優先級改為風控/淘汰優先於過熱，量能不足顯示 `量能不適用`；建準可買但回測偏弱時同卡補 `回測僅輔助，分批小倉、不追價`；首屏 `今日新建倉 3` 改為 `今日已買 N｜風控中 M`；official message-list replay 9 passed、py_compile / diff check passed；QA `通過`；未改 RR 公式、strategy decision、DB schema/write、live Telegram，版本維持 `v20.4.36`。
 - `900d107`｜`trend_continuation_buy_path_phase2_20260603`｜major/risk_patch｜Owner 授權只在 trend_continuation 路徑放開「證據可開 BUY」邊界；新增回踩站回同源判定、positive evidence gate、`decision_type="trend_continuation"` / `trend_observation`、小倉 `<=15%`、回踩低點下方止損、5 日 edge 退出；official report 新增 `🟢 趨勢延續買入｜小倉` 與獨立 funnel，版本升 `v20.4.36`；資料依據在 trend_continuation BUY 時強制顯示同源策略樣本與候選資料 basis，避免 BUY 卡缺證據鏈；focused tests 6 passed、py_compile / diff check passed；QA `通過`；未改 RR 公式、DB schema/write、live Telegram。
 - `9eea5c4`｜`trend_continuation_v20_4_36_validation_monitor_report_noise_20260603`｜mixed_patch｜補 v20.4.36 trend_continuation 觸發驗證、只讀 monitor、資料依據預設隱藏、manifest/source_status QA probe、同 setup_key 回測行去重；主 repo focused command `17 passed`，monitor 缺 source fail closed `source-error`，py_compile / diff check passed；QA_REPORT `conditional pass`，原因是 QA agent 兩次報舊測試狀態，已列 runner_gap；未改 RR 公式、DB schema/write、live Telegram，版本維持 `v20.4.36`。
@@ -43,7 +44,7 @@
 
 ## Next Action
 
-- 本輪 06/04 v20.4.36 報文手機閱讀收斂已 QA 通過；Git completion gate passed；下一步只剩 Render freshness production log follow-up。
+- 本輪 v20.4.37 generate 報文手機閱讀一致性修復已 QA 通過；下一步收口 commit / push / git completion gate。
 - 前一輪 Render freshness 仍需部署後看 Render 5 分鐘觸發 log，確認 freshness preflight 真實 runtime output。
 - 開新任務前先看 `task_md_holds`，不要用 `TASK.md` 內部舊狀態反推當前看板。
 - 報文 / 策略 / 產品修復仍走 PM -> Tech -> QA；流程治理文件可由 Architect 直接改。

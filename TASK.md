@@ -1,187 +1,176 @@
-# TASK: v20.4.36 06/04 報文手機閱讀一致性收斂
+# TASK: v20.4.37 06/04 generate() 手機閱讀一致性修復
 
 ## 任務狀態
 
-- task_id: v20_4_36_0604_report_mobile_readability_convergence
-- 任務尺寸: normal_patch
+- task_id: v20_4_37_0604_generate_mobile_consistency
+- 任務類型: normal_patch
 - 狀態: ready_for_tech
+- 版本建議: 升小版本到 v20.4.37
 - QA 分級建議: L2
-- 版本建議: 維持 v20.4.36；不得回退版本。
-- 本輪主 bug: 06/04 報文在手機閱讀時，未持倉卡片原因、正常資料提示、普通歷史提示、可買但回測偏弱、首屏今日新建倉摘要彼此造成誤讀。
-- 範圍收斂: 只修報文可讀性與 message-list replay 驗收，不改策略、不改 RR、不改 DB。
+- 本輪判斷: 使用者可見 Telegram 報文 formatter / message-list / generator 修復；不是策略重設或全量清理。
 
 ## Owner 問題
 
-Owner 要處理 v20.4.36 06/04 報文手機閱讀一致性，嚴格覆蓋六個 failure specimen：
+Owner 要修復 2026-06-04 盤中真實 generate() 產出的完整 v20.4.36 報文在手機閱讀上的一致性錯誤。
 
-1. 原因優先級混亂：RR 原因 / 不適用原因 / 證據原因 / 主狀態互相搶主因。
-2. 正常資料行刷屏：每卡重複「資料：...已確認...」。
-3. 普通歷史行刷屏：多卡重複「前次 observe｜修復中｜連續觀察 1 天｜權重 +1」。
-4. 建準可買但回測偏弱並列，缺手機可讀解釋。
-5. 首屏裸寫「今日新建倉 3」，與停損 / 減碼並列時容易誤讀成仍積極建倉。
-6. 回測單檔契約不得回退，仍需顯示「回測（建準）：...」並與可買解釋一致。
+failure specimen 是 Owner 貼出的完整 v20.4.36 generate() 報文，關鍵矛盾如下：
+
+- 首屏寫「未持倉 8」，但只列「僅追蹤 5 / 淘汰 2」，漏掉「不可追高觀察 1」。
+- 未持倉漏斗又有「不可追高觀察 1 / 僅追蹤 5 / 淘汰 2」，與首屏不一致。
+- 「風控中 2」定義不可追溯，且與「執行動作 3 / 今日已買 3 / 持倉風控 4」造成閱讀混亂。
+- 普通 observe 卡片仍逐卡出現「修復中 / 連續觀察1天 / 權重+1」歷史噪音。
+- 回測摘要錯把建準、緯創聚合成同一行；既有契約要求「單檔 回測（建準）」不得回退。
+- 詳情索引、首屏、漏斗、卡片分類需要一致。
 
 ## 使用者可見結果
 
-手機 Telegram 報文應變成：
+v20.4.37 報文在手機上應能直接看出：
 
-- 首屏清楚區分：持倉要處理什麼、新倉是否可買、今日已買標的是否已有風控。
-- 未持倉卡片的主狀態、RR 不適用原因、證據不適用原因一致。
-- 正常來源時不逐卡顯示資料已確認句。
-- 普通 cross-day 歷史不逐卡刷屏，只保留高風險或 execution memory 類歷史。
-- 建準若仍是可買但回測偏弱，需一句短文案降低誤讀，例如「回測偏弱僅輔助，分批小倉、不追價」。
-- 回測單檔格式維持「回測（建準）：...」。
+- 未持倉總數與子分類合計一致。
+- 首屏、漏斗、詳情索引、卡片分類對同一檔股票給出同一分類。
+- 「不可追高觀察 1」不再只出現在漏斗、卻從首屏消失。
+- 持倉摘要不再讓「風控中 / 今日已買 / 執行動作 / 持倉風控」互相像不同口徑。
+- 普通 observe 歷史權重噪音不再逐卡刷屏。
+- 建準與緯創回測摘要保持單檔，不得聚合成同一行。
 
-手機示例輸出形狀：
+手機閱讀示例形狀：
 
-今日已買3｜風控中2｜新倉建議1
+未持倉 8
+不可追高觀察 1
+僅追蹤 5
+淘汰 2
 
-🟢 可買｜建準
-回測（建準）：...偏弱；回測僅輔助，分批小倉、不追價
+未持倉漏斗
+不可追高觀察 1 / 僅追蹤 5 / 淘汰 2
 
-👀 等量能｜量能不足
-RR -（量能不足）｜不適用（量能不足）｜證據：量能不適用
-
-⛔ 淘汰｜突破失敗
-RR -（風控）｜不適用（突破失敗）｜證據：風控不適用
+實際文案可沿用現有報文風格，但數字、分類、索引與卡片狀態必須同源一致。
 
 ## 非目標
 
+- 不改策略 decision。
 - 不改 RR 公式。
-- 不改 strategy decision。
-- 不改買賣 / 加減碼 / 停損 / 停利決策。
 - 不改 DB schema / RLS / grant / policy / role / index / constraint。
-- 不改 DB write path。
-- 不新增 production backfill / production write。
-- 不觸發 live Telegram。
-- 不把建準可買改成不可買來消除文案矛盾。
-- 不進行全量報文重構、策略重設或 L3 production 驗證。
+- 不改 DB write path，不做 production DML 或 backfill。
+- 不發 live Telegram。
+- 不重設整份報文架構。
+- 不做全量文案瘦身。
+- 不處理本輪 failure specimen 以外的新策略爭議。
 
 ## 影響模組與直接消費者
 
 影響模組：
 
-- presentation/report.py: 首屏摘要、卡片資料行、歷史行、回測顯示若在此層生成。
-- core/generator.py: message list、原因顯示、evidence unavailable reason、funnel / card formatter 若在此層生成。
-- tests/test_generator_report.py 或等價新增測試: 06/04 failure specimen 的 official generator / report message-list replay。
+- generate() 報文輸出層。
+- official formatTelegramMessages final message-list 層。
+- Telegram formatter / message-list 組裝。
+- 版本常量與報文 header。
+- 對應 replay fixture 與 regression tests。
 
 直接消費者：
 
-- Owner 手機 Telegram 報文。
-- official generator / report runner 產出的 message list。
-- QA message-list replay / mobile readability probe。
+- Owner 手機 Telegram 閱讀路徑。
+- generate() final message-list。
+- official formatTelegramMessages final message-list。
+- QA replay / regression 驗收。
 
 ## 輸出契約
 
+v20.4.37 final message-list 必須滿足：
+
+- 使用者可見版本顯示 v20.4.37。
+- 首屏未持倉總數等於所有未持倉子分類合計。
+- 未持倉首屏、漏斗、詳情索引、卡片分類使用同一份分類結果。
+- 「不可追高觀察」數量為 1 時，首屏與漏斗都必須可見。
+- 「不可追高觀察 1 / 僅追蹤 5 / 淘汰 2」合計必須對齊「未持倉 8」。
+- 持倉摘要不得讓同一持倉在同一份報文中出現多個互相衝突主行動。
+- 普通 observe 卡片不得輸出「修復中 / 連續觀察1天 / 權重+1」這類歷史權重噪音。
+- 回測摘要保持單檔輸出，不得把建準、緯創聚合成同一行。
+- 詳情索引的股票順序與分類必須能回溯到首屏與卡片分組。
+
 已存在且不得回退的契約：
 
-- 使用者可見版本不得低於 v20.4.36。
-- 回測單檔行必須保留「回測（建準）：...」。
-- 可買、可準備、僅追蹤、淘汰 / 不可行動仍需分開。
-- 無可買時不得使用像推薦的語氣。
-- 同一持倉在同一份報文只能有一個主行動。
-- 不得用刪除卡片、刪除證據或刪除回測來掩蓋矛盾。
-
-原因優先級：
-
-1. 淘汰 / FAIL / 突破失敗 / 弱勢 / 風控優先，顯示風控或突破失敗，不得被過熱覆蓋。
-2. 純過熱 / 等冷卻 / 不可追高且非淘汰時，才顯示過熱不適用。
-3. 等量能 / 量能不足且非淘汰時，顯示量能不足或條件未滿不適用，不得寫資料不足。
-4. 真缺資料 / source-error / insufficient-data 時，才顯示資料不足。
-
-正常資料行降噪：
-
-- 正常來源時，逐卡不得重複顯示「資料：持倉與現價已確認；風控由持倉成本/停損推算」。
-- 正常來源時，逐卡不得重複顯示「資料：現價與 OHLCV 已確認；RR/分數/量能為模型推算」。
-- 只在 source missing、source-error、insufficient-data、stale、execution memory conflict、QA/debug 顯示模式時保留。
-
-普通歷史行降噪：
-
-- 普通歷史不得逐卡刷屏「前次 observe｜修復中｜連續觀察 1 天｜權重 +1」。
-- 只保留連續失效、高風險歷史、已買 / 已賣 / 已停利 / 已減碼、source conflict、達到策略門檻的歷史提示。
-
-建準可買 + 回測偏弱：
-
-- 若策略仍輸出建準可買，但單檔回測摘要為偏弱 / 無明顯優勢 / 樣本不足，必須在同卡以短句解釋：回測僅輔助、分批、小倉、不追價或等價語意。
-- 不得因此改變 strategy decision。
-
-首屏今日新建倉：
-
-- 不得裸寫「今日新建倉 3」。
-- 當今日買入標的已有停損 / 減碼 / 硬風控，需改成風險-aware 摘要，例如「今日已買3｜風控中2｜執行動作3（停損/減碼）」。
+- 使用者可見版本必須與實際版本常量同步。
+- 「單檔 回測（建準）」契約不得回退。
+- 可買、可準備、僅追蹤、淘汰 / 不可行動必須分開。
+- 無可買時不得使用像推薦的文案。
+- 空區塊、0-count、無新增下單占位預設不顯示，除非既有契約明確要求保留。
+- Owner 啟動語不得解讀為跳過 Tech / QA。
 
 ## 版本契約
 
-- 使用者可見版本維持 v20.4.36。
-- 不得回退版本。
-- 若 Tech 實際改動 header / VERSION 常量，CHANGELOG 必須明確說明升版理由與新版本。
-- 若只改報文文字 / formatter 且不改 VERSION，CHANGELOG 必須寫「版本維持 v20.4.36」。
+- 本輪必須升小版本到 v20.4.37。
+- 報文 header、版本常量、測試預期若引用版本，必須同步。
+- 不得仍顯示 v20.4.36 或回退到更舊版本。
 
 ## 驗收條件
 
-1. official generator / report message-list replay 覆蓋 Owner 06/04 六個 failure specimen。
-2. 光寶科「等量能｜量能不足」不再顯示「證據：資料不足」。
-3. 群創 / 技嘉「淘汰｜突破失敗」主不適用原因不得顯示為過熱。
-4. 正常來源持倉卡不逐卡顯示持倉與現價已確認句。
-5. 正常來源未持倉卡不逐卡顯示現價與 OHLCV 已確認句。
-6. 普通「前次 observe｜修復中｜連續觀察 1 天｜權重 +1」不逐卡刷屏。
-7. 建準可買但回測偏弱時，同卡有分批 / 小倉 / 不追價或回測僅輔助短句。
-8. 首屏不再裸寫「今日新建倉 3」；需反映今日已買標的中的風控數量。
-9. 回測單檔格式「回測（建準）：...」保留。
-10. 不改 RR 公式、strategy decision、DB schema/write、live Telegram。
+- 必須使用 Owner 完整 v20.4.36 generate() 報文的等價 replay artifact 作 failure specimen。
+- 驗收必須打到 actual generate() 或 official formatTelegramMessages final message-list 層。
+- 不接受 helper-only 驗收；若只能驗 helper，Tech/QA 結論只能是 partial、conditional pass 或 blocked。
+- replay 後 final message-list 必須顯示 v20.4.37。
+- replay 後首屏 / 漏斗 / 詳情索引 / 卡片分類必須對齊「未持倉 8 = 不可追高觀察 1 + 僅追蹤 5 + 淘汰 2」。
+- replay 後不得再出現普通 observe 卡片的「修復中 / 連續觀察1天 / 權重+1」逐卡歷史噪音。
+- replay 後建準、緯創不得被聚合成同一回測行，且「回測（建準）」契約仍存在。
+- QA 必須補一個 Tech 未覆蓋的反證路徑，例如手機首屏閱讀順序、final message-list 分類合計、或「不可追高觀察 = 1」不得漏列的負面案例。
 
 ## 範例或 Fixture
 
-必須以 Owner 06/04 完整報文或等價 replay payload 建立 message-list fixture，最少包含：
+必要 fixture：
 
-- 光寶科：等量能｜量能不足 + 原失敗「證據：資料不足」。
-- 群創：淘汰｜突破失敗 + 原失敗「不適用（過熱）｜證據：風控不適用」。
-- 技嘉：同類突破失敗淘汰卡，用來反證原因一致性。
-- 正常持倉卡：原本會顯示「資料：持倉與現價已確認...」。
-- 正常未持倉卡：原本會顯示「資料：現價與 OHLCV 已確認...」。
-- 建準：可買 +「回測（建準）：...偏弱」。
-- 首屏：原本「執行動作 3（停損/減碼）｜新倉建議 1｜今日新建倉 3」。
+- failure_specimen_2026_06_04_v20_4_36_generate
+- 來源: Owner 貼出的完整真實 v20.4.36 generate() 報文，或 Architect 提供的等價 replay payload。
+- 層級: 必須能產出 official final message-list。
 
-## 失敗標本與驗收路由
+最小可驗形狀：
 
-驗收路由必須打到 official generator / report final message list，例如 formatTelegramMessages、render_telegram_messages 或專案現有等價官方報文入口。
+首屏:
+未持倉 8
+不可追高觀察 1
+僅追蹤 5
+淘汰 2
 
-- Tech 不得只測 private helper。
-- 若因環境限制只能測 helper 層，CHANGELOG 必須標 partial，列出未覆蓋的 official generator / runner artifact 層。
-- QA 必須沿同一 message-list replay 反證，並額外檢查一個手機誤讀路徑或契約風險。
+漏斗:
+不可追高觀察 1 / 僅追蹤 5 / 淘汰 2
+
+詳情:
+同一檔股票分類不得與首屏或漏斗不同。
 
 ## 明確禁止事項
 
-- 禁止 Architect 或 PM 直接改產品代碼；本卡交給 Tech 實作，QA 驗收。
-- 禁止用 helper-only 測試宣稱完成。
-- 禁止刪卡片、刪證據、刪回測來掩蓋矛盾。
-- 禁止改買賣策略結果來解決文案問題。
+- 禁止改策略 decision。
 - 禁止改 RR 公式。
-- 禁止改 DB schema/write 或 live Telegram。
-- 禁止擴成全量報文重構、策略回測重設或 production write 任務。
+- 禁止改 DB schema 或 DB write path。
+- 禁止 production DML、backfill、live Telegram delivery。
+- 禁止只用 helper fixture 宣告完成。
+- 禁止把本輪擴成全量報文重構。
+- 禁止合併不同股票的單檔回測摘要。
+- 禁止用「看起來一致」取代 replay evidence。
+- 禁止把 Owner 的「開始 / 繼續 / 處理 / 修復 / 檢查 / 清理 / 直接來」解讀成跳過 Tech / QA。
 
 ## 阻塞條件
 
-- 拿不到 Owner 06/04 完整報文或等價 replay payload，且無法構造同層 official message-list fixture。
-- 修復需要改 strategy decision、RR 公式、DB schema/write、live Telegram。
-- 現有 official generator/report 入口無法在測試環境產出 message list，且沒有可接受的 runner artifact。
-- 現有版本常量 / header 位置不明，無法確認是否維持 v20.4.36。
-- Tech 只能做到 helper 層驗證時，不得宣稱完成；最多標 partial。
+- 找不到 Owner 完整 v20.4.36 generate() 報文，且無法建立等價 replay artifact。
+- 無法打到 actual generate() 或 official formatTelegramMessages final message-list 層。
+- 版本來源不明，無法可靠同步 v20.4.37。
+- 修復需要改策略 decision、RR、DB schema/write 或 live Telegram。
+- replay artifact 無法保留首屏、漏斗、詳情索引、卡片分類與回測摘要的同層輸出。
 
 ## 本輪停止條件
 
-完成定義：
+完成條件：
 
-- 六個 06/04 failure specimen 均由 official generator / report message-list replay 覆蓋。
-- 驗收條件 1-10 全部通過。
-- CHANGELOG 明確列出覆蓋層級為 message-list replay，或若不足則標 partial。
-- QA 至少補一個 Tech 未覆蓋的手機誤讀反證或契約風險檢查。
+- v20.4.37 版本同步完成。
+- failure specimen replay 在 final message-list 層通過。
+- 首屏 / 漏斗 / 詳情索引 / 卡片分類一致性通過。
+- 普通 observe 歷史噪音移除通過。
+- 單檔回測契約未回退通過。
+- QA 完成 L2 反證並輸出 QA_REPORT.md。
+- Architect 後續完成 commit / push / git completion gate。
 
 不納入本輪，只記待辦：
 
-- 任何新的策略買賣問題。
-- RR 數值合理性或公式調整。
-- production DB evidence source 補資料。
-- live Telegram 實送。
-- 全量報文資訊架構重設。
-- 觀察天數跨日持久來源治理。
+- 新策略分數或買賣建議爭議。
+- RR 公式調整。
+- DB 持久化或跨日狀態補強。
+- 報文全量文案瘦身。
+- production runner / live Telegram delivery 驗證。

@@ -6,13 +6,31 @@
 
 - 專案：台股策略 Telegram 報文機器人。
 - 正式結果以 git / runner 產生報文為準。
-- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.36`。
+- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.37`。
 - 固定 8 份 Markdown 不刪：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 - Architect 是總控；產品 / 策略 / 報文 bug 或 feature 預設走 PM -> Tech -> QA。
 - 跨日狀態、已執行交易、歷史 evidence 必須來自 production DB 或 Owner 指定持久來源；local/runtime/worktree 不能當跨日記憶。
 - 缺資料、source-error、欄位不足或可信度不足時 fail closed。
 
 ## Latest Completed Work
+
+- task_id：`2026-06-04-v20.4.37-generate-mobile-consistency`
+- 狀態：code done / QA 通過 / pending commit-push gate。
+- 結論：06/04 真實 `generate()` 報文首屏、漏斗、詳情索引與卡片分類已收斂到同源一致；版本升 `v20.4.37`。
+- 關鍵行為：
+  - 首屏未持倉括號納入 prepare bucket count，`不可追高觀察 1` 不再只出現在漏斗 / 索引。
+  - 今日已買摘要改為 `今日已買 N（已風控 M/觀察 K）`，不再使用不可追溯的 `風控中`。
+  - 未持倉回測摘要取消跨股票聚合；多檔同回測 body 時改為單檔行，例如 `回測（建準）：...`、`回測（緯創）：...`。
+  - actual `generate()` 實跑輸出 `v20.4.37`；即時價會讓未持倉分類數在 `1/6/1`、`2/5/1` 等形狀間變動，但首屏 / 漏斗 / 索引合計保持同源一致；分類數與 Owner 原 specimen 的 `1/5/2` 不同是即時價變動，不是 formatter 漂移。
+- 驗證：
+  - `arch -arm64 ./.venv/bin/python -m pytest tests/test_generator_report.py -k 'v20_4_37 or 0604_v20_4_36_mobile_readability or single_backtest or unheld_funnel_hides_zero_count_buckets or evidence_sample_count' -q` -> 4 passed。
+  - `PYTHONPYCACHEPREFIX=/private/tmp/v20_4_37_pycache arch -arm64 ./.venv/bin/python -m py_compile core/generator.py presentation/report.py tests/test_generator_report.py` -> passed。
+  - `arch -arm64 ./.venv/bin/python - <<'PY' ... generate() ... PY` -> passed；輸出 `v20.4.37`。
+  - QA 補 official final message-list parser -> `通過`。
+- 殘留風險：未跑 full pytest、production runner artifact、live Telegram、DB read/write；光寶科 `RR不足` 顯示 `證據：資料不足` 屬旁支原因分流風險，本輪未處理。
+- 邊界：未改 RR 公式、strategy decision、DB schema/write、live Telegram。
+
+## Previous Completed Work
 
 - task_id：`v20_4_36_0604_report_readability_convergence`
 - 狀態：code done / QA 通過 / committed; Git completion gate passed。
