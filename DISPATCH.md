@@ -3,7 +3,7 @@
 依 `AGENTS.md` 啟動順序閱讀；本文件只保留任務看板、handoff 指針與固定啟動命令。
 
 - task_md_holds: `recently_done`
-- task_md_task_id: `telegram-unheld-gate-attribution-v20.4.40`
+- task_md_task_id: `v20.4.41-post-market-unheld-gate-attribution-readability`
 - task_md_note: `TASK.md / CHANGELOG.md / QA_REPORT.md 目前是最近完成任務的滾動 handoff，不代表仍在 Tech/QA。`
 
 ## Active
@@ -16,6 +16,7 @@
 
 ## Recently Done
 
+- `v20.4.41`｜`v20.4.41-post-market-unheld-gate-attribution-readability`｜tiny_patch｜盤後未持倉 gate attribution 可讀性修正：真正可買與 `trend_continuation` 小倉 BUY 不顯示 `到達可買差距`；未達可買卡仍顯示可信差距；`FAILED_BREAKOUT` 只顯示 `突破失敗/需重新轉強` 且不顯示假 RR 0；盤後 ordinary prepare 顯示 `盤後訊號/需開盤後重新確認` 與 `盤後待確認` 原因；`EXTREME/HOT` 冷卻前只顯示極熱 / 過熱主因；`LIMIT_LOCK/LIMIT_REBOUND/WEAK_REBOUND` 人話化；QA 曾抓到 `距突破 2%/需<=4%` 已達標仍被列為差距，已修為距離 >4 才列入 gap；focused official message-list replay 4 passed、py_compile / diff check passed、QA `通過`；未改策略、RR、can_buy/is_valid_entry、DB、live Telegram。
 - `v20.4.40`｜`telegram-unheld-gate-attribution-v20.4.40`｜normal_patch｜未持倉非可買卡片新增 `到達可買差距` 單行 gate attribution，最多顯示 1-3 個可信阻擋條件，例如 RR、heat、source、突破距離、entry quality、LIMIT_LOCK；真正 `可買` 與 `trend_continuation` 小倉 BUY 不顯示差距行；修正 QA 抓到的 `LIMIT_LOCK/AVOID + heat NORMAL` 不再誤顯 `heat NORMAL/需降溫`，改以開板回測 / 追高風險解除方向呈現；focused official message-list replay 4 passed、py_compile / diff check passed、QA `通過`；未改 RR 公式、strategy decision、can_buy/is_valid_entry、DB schema/write、live Telegram。
 - `v20.4.39`｜`phase_a_after_close_unheld_buy_prepare_v20_4_39`｜normal_patch｜Phase A 盤後未持倉 ordinary BUY 改為 `可準備（不可買）`：光寶科類需明日開盤後確認的候選不再在 summary / 漏斗 / 卡片顯示 `新倉建議`、`可買`、`40%倉`、`買點成立` 或 `新增有效進場`；卡片改 `🟡 明日準備｜不可買｜開盤後確認` 與 `買點：尚未成立｜盤後僅追蹤｜明日開盤後確認｜不追價`，RR / 技術 / 單檔回測仍保留；mixed 盤後 trend_continuation 小倉 BUY + ordinary prepare 不再被 prepare-only summary 覆蓋，盤中 ordinary BUY 與 trend_continuation 既有可行動路徑未回退；focused message-list tests 4 passed、py_compile / diff check passed、QA `通過`；未改 RR 公式、strategy decision、DB schema/write、live Telegram。
 - `20260604_144316_6186_online_research_pair`｜research｜完成「條件性放寬」策略寬度研究：結論不是全域放寬，而是拆成 `可準備（不可買）`、`趨勢延續小倉<=15%`、一般 `可買` 三層；RR不足未解除、HOT/EXTREME、漲停/弱反彈、突破失敗、source-error 不得被 evidence 覆蓋；建議若進開發先做 Phase A `可準備` / gate attribution，不新增 BUY；詳見 `RESEARCH.md`。
@@ -48,8 +49,8 @@
 
 ## Next Action
 
-- v20.4.40 gate attribution 已落地；若 Owner 要更精細的 gate 排名或所有 AVOID+NORMAL 文案一致性，另開 attribution ranking/wording 任務，不在本輪改策略。
-- v20.4.40 本輪報文可讀性修復已 QA 通過並完成收口；下一步只剩 Render freshness production log follow-up。
+- v20.4.41 gate attribution 可讀性修正已 QA 通過；若 Owner 要更精細的 gate 排名或所有 AVOID+NORMAL 文案一致性，另開 attribution ranking/wording 任務，不在本輪改策略。
+- v20.4.41 本輪報文可讀性修復已 QA 通過並完成收口；下一步只剩 Render freshness production log follow-up。
 - 前一輪 Render freshness 仍需部署後看 Render 5 分鐘觸發 log，確認 freshness preflight 真實 runtime output。
 - 開新任務前先看 `task_md_holds`，不要用 `TASK.md` 內部舊狀態反推當前看板。
 - 報文 / 策略 / 產品修復仍走 PM -> Tech -> QA；流程治理文件可由 Architect 直接改。

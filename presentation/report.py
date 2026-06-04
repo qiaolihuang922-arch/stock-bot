@@ -366,6 +366,14 @@ def _hidden_score_reason(rr_text, funnel_state, state):
 def _unheld_score_text_for_state(score_text, rr_text, valid_entry, funnel_state, state, stock_result=None, data=None):
     if valid_entry or funnel_state in {"趨勢延續", "隔日確認"} or state == "隔日確認":
         return score_text
+    if (
+        data
+        and _report_phase((data or {}).get("report_context")) == "盤後"
+        and stock_result
+        and stock_result.get("decision") == "BUY"
+        and funnel_state == "可準備"
+    ):
+        return "不適用（盤後待確認）｜原因：盤後待確認，需開盤後重新確認"
     reason = _hidden_score_reason(rr_text, funnel_state, state)
     if reason == "RR不足":
         return "不適用（RR不足）｜原因：RR不足，等待RR修復"
@@ -385,8 +393,24 @@ def _gate_value_text(value):
 
 def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source_status, strategy_source_blocked):
     stock_result = data.get("result") or {}
-    if valid_entry or funnel_state == "趨勢延續" or stock_result.get("decision_type") == "trend_continuation":
+    is_actionable = valid_entry or funnel_state == "趨勢延續" or stock_result.get("decision_type") == "trend_continuation"
+    post_market_prepare = (
+        _report_phase((data or {}).get("report_context")) == "盤後"
+        and stock_result.get("decision") == "BUY"
+        and not is_actionable
+        and funnel_state == "可準備"
+    )
+    if is_actionable:
         return None
+
+    def human_enum(value):
+        return {
+            "EXTREME": "極熱",
+            "HOT": "過熱",
+            "LIMIT_LOCK": "漲停鎖價",
+            "LIMIT_REBOUND": "漲停反彈",
+            "WEAK_REBOUND": "弱反彈",
+        }.get(value, value)
 
     gates = []
     if strategy_source_blocked:
@@ -398,18 +422,22 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
     blocker_text = "、".join(str(item) for item in blockers)
     phase = stock_result.get("structure_phase")
     if "突破失敗" in blocker_text or phase == "FAILED_BREAKOUT":
-        gates.append("突破失敗/需重新轉強")
+        return "到達可買差距：突破失敗/需重新轉強"
+    if post_market_prepare:
+        return "到達可買差距：盤後訊號/需開盤後重新確認"
 
     behavior = stock_result.get("price_behavior")
     if behavior in {"LIMIT_LOCK", "LIMIT_REBOUND"} or "漲停" in blocker_text or "不可追高" in blocker_text:
-        gates.append(f"{behavior or '不可追高'}/需開板回測")
+        gates.append(f"{human_enum(behavior) if behavior else '不可追高'}/需開板回測")
 
     heat = stock_result.get("heat_state")
-    if heat in {"HOT", "EXTREME"} or "過熱" in blocker_text:
-        gates.append(f"heat {heat}/需降溫")
+    if heat == "EXTREME":
+        return "到達可買差距：極熱/需降溫"
+    if heat == "HOT" or "過熱" in blocker_text:
+        return "到達可買差距：過熱/需降溫"
 
     rr_text = _gate_value_text(stock_result.get("rr"))
-    if rr_text and ("RR不足" in blocker_text or float(rr_text) < 1.5):
+    if not is_actionable and rr_text and ("RR不足" in blocker_text or float(rr_text) < 1.5):
         gates.append(f"RR {rr_text}/需>=1.5")
 
     distance_text = _gate_value_text(dist)
@@ -417,10 +445,12 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
         gates.append(f"距突破 {distance_text}%/需<=4%")
 
     quality = stock_result.get("entry_quality")
-    if quality and quality not in {"A+", "A", "B"}:
-        gates.append(f"entry quality {quality}/需B以上")
+    if not is_actionable and quality and quality not in {"A+", "A", "B"}:
+        gates.append(f"進場品質 {quality}/需B以上")
 
-    if not gates and funnel_state == "可準備":
+    if not gates and post_market_prepare:
+        gates.append("盤後訊號/需開盤後重新確認")
+    elif not gates and funnel_state == "可準備":
         gates.append("買點尚未成立/需觸發")
     elif not gates and funnel_state == "等回測":
         gates.append("回測未確認/需回測不破")
@@ -607,6 +637,8 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         source_eligible
         and deps["post_market_unheld_buy_requires_open_confirmation"](data, report_context=report_context)
     )
+    data_with_context = dict(data)
+    data_with_context["report_context"] = report_context
     if valid_entry and funnel_state not in ["可買", "趨勢延續"]:
         valid_entry = False
         title_label = (
@@ -671,7 +703,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         funnel_state,
         state,
         stock_result=stock_result,
-        data=data,
+        data=data_with_context,
     )
     if deps["is_valid_entry"](stock_result) and strategy_source_blocked:
         strategy_reason = {
@@ -695,7 +727,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         data_line = f"數據：{rr_data_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
     elif post_market_prepare:
-        buy_line = "買點：尚未成立｜盤後僅追蹤｜明日開盤後確認｜不追價"
+        buy_line = "買點：盤後訊號｜需開盤後重新確認｜不追價"
         data_line = f"數據：{rr_data_text}｜{display_score_text}｜V {data.get('volume_ratio', '-')}x"
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
     elif valid_entry and detail_size_text != raw_size_text:
@@ -750,7 +782,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         ]
     low_volume_limit_up_risk = deps["low_volume_limit_up_risk_text"](data)
     buy_gap_line = _unheld_buy_gap_line(
-        data,
+        data_with_context,
         dist,
         blockers,
         valid_entry,

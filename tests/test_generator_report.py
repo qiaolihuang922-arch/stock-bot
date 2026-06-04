@@ -373,7 +373,7 @@ class GeneratorReportTest(unittest.TestCase):
         unheld = unheld_message(messages)
         liteon_card = card_block(unheld, "【光寶科 2301】")
 
-        self.assertIn("【06/04 盤中｜v20.4.40】", summary)
+        self.assertIn("【06/04 盤中｜v20.4.41】", summary)
         self.assertIn("【光寶科 2301】👀 等RR修復｜RR不足", liteon_card)
         self.assertIn("數據：RR 0.98｜不適用（RR不足）｜原因：RR不足，等待RR修復｜V 0.86x", liteon_card)
         self.assertNotIn("證據：資料不足", liteon_card)
@@ -602,7 +602,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertEqual(len(messages), 3)
         self.assertIn("【持倉標的】", messages[0])
         self.assertIn("【未持倉標的】", messages[1])
-        self.assertIn("｜v20.4.40】", summary)
+        self.assertIn("｜v20.4.41】", summary)
         self.assertIn(f"🧾 {generator.VERSION} 簡報", summary)
         self.assertIn("新倉：無有效進場", summary)
         self.assertNotIn("資料依據", summary)
@@ -1764,7 +1764,7 @@ class GeneratorReportTest(unittest.TestCase):
         )
         self.assertNotIn("📊 策略證據 v20.0", summary)
         self.assertNotIn("策略樣本 / 分類回測", summary)
-        self.assertIn("v20.4.40 簡報", evidence)
+        self.assertIn("v20.4.41 簡報", evidence)
         self.assertNotIn("資料依據", evidence)
         self.assertEqual(context["source_status"]["strategy_sample"], "insufficient-data")
         self.assertTrue(context["evidence_status"]["strategy_sample"])
@@ -2059,7 +2059,7 @@ class GeneratorReportTest(unittest.TestCase):
                 datetime(2026, 5, 26),
             )
 
-        self.assertIn("v20.4.40", summary_message(messages))
+        self.assertIn("v20.4.41", summary_message(messages))
         self.assertIn("📡 資料：即時價 realtime｜日線 yahoo", summary_message(messages))
         self.assertIn("市場：進攻偏熱 R3｜執行動作 0｜今日新建倉 0｜持倉風控 5｜未持倉 7（僅追蹤6/淘汰1）", summary_message(messages))
         self.assertNotIn("市場/結論：進攻偏熱｜R3；R3 進攻偏熱", summary_message(messages))
@@ -2603,7 +2603,7 @@ class GeneratorReportTest(unittest.TestCase):
 
         summary = summary_message(messages)
         unheld = unheld_message(messages)
-        self.assertIn("【05/29 盤中｜v20.4.40】", summary)
+        self.assertIn("【05/29 盤中｜v20.4.41】", summary)
         self.assertNotIn("僅追蹤：\n- 旺宏（修復中｜連續觀察 4 天，未達進場條件）", summary)
         self.assertNotIn("追蹤最強", summary)
         self.assertIn("未持倉 1｜可買 0｜不可追高觀察 1（不可買）｜淘汰 0", summary)
@@ -2979,7 +2979,7 @@ class GeneratorReportTest(unittest.TestCase):
         )
 
         summary = summary_message(messages)
-        self.assertIn("【05/28 盤後｜v20.4.40】", summary)
+        self.assertIn("【05/28 盤後｜v20.4.41】", summary)
         self.assertIn("📌 盤後簡報", summary)
         self.assertIn("結論：今日無有效新倉；既有持倉以收盤後風控觀察為主。", summary)
         self.assertIn("新增有效進場：無", summary)
@@ -3143,7 +3143,7 @@ class GeneratorReportTest(unittest.TestCase):
         )
 
         summary = summary_message(messages)
-        self.assertIn("【05/28 盤後｜v20.4.40】", summary)
+        self.assertIn("【05/28 盤後｜v20.4.41】", summary)
         self.assertIn("📌 盤後簡報", summary)
         self.assertIn("結論：今日交易已建立新倉 2 檔；新增有效進場：無。", summary)
         self.assertIn("今日交易：已建立新倉 2 檔（智原、緯創）", summary)
@@ -3368,7 +3368,7 @@ class GeneratorReportTest(unittest.TestCase):
             report_phase="盤後",
         )
 
-        self.assertIn("v20.4.40", summary_message(messages))
+        self.assertIn("v20.4.41", summary_message(messages))
         self.assertEqual(payload["holding_decision"]["level"], "POST_PROFIT_WATCH")
         self.assertIn("【智原 3035】📌 停利後觀察", card)
         self.assertIn("決策：停利後觀察，暫不加碼", card)
@@ -3405,7 +3405,7 @@ class GeneratorReportTest(unittest.TestCase):
         card = position_message(messages)
         summary = summary_message(messages)
 
-        self.assertIn("【05/29 盤中｜v20.4.40】", summary)
+        self.assertIn("【05/29 盤中｜v20.4.41】", summary)
         self.assertEqual(payload["holding_decision"]["level"], "POST_PROFIT_WATCH")
         self.assertIn("【英業達 2356】📌 停利後觀察", card)
         self.assertIn("倉位：188股", card)
@@ -3487,7 +3487,7 @@ class GeneratorReportTest(unittest.TestCase):
         executed_context = "今日已賣 75 股｜剩餘 225 股｜第二段已執行"
 
         self.assertEqual(generator.position_summary_action("英業達", payload), "第二段停利後觀察")
-        self.assertIn("【05/29 盤中｜v20.4.40】", summary)
+        self.assertIn("【05/29 盤中｜v20.4.41】", summary)
         self.assertIn("【英業達 2356】📌 第二段停利後觀察", card)
         self.assertIn("今日 賣 75股", card)
         self.assertIn(f"決策：第二段停利後觀察，{executed_context}", card)
@@ -3554,7 +3554,7 @@ class GeneratorReportTest(unittest.TestCase):
         )
 
         self.assertEqual(generator.position_summary_action("英業達", payload), "第二段停利後觀察")
-        self.assertIn("【05/31 假日｜v20.4.40】", summary)
+        self.assertIn("【05/31 假日｜v20.4.41】", summary)
         self.assertIn("【英業達 2356】📌 第二段停利後觀察", card)
         self.assertIn("今日 最近交易日賣 187股", card)
         self.assertIn(context, card)
@@ -3743,7 +3743,7 @@ class GeneratorReportTest(unittest.TestCase):
         position = position_message(messages)
         unheld = unheld_message(messages)
 
-        self.assertIn("【05/28 盤中｜v20.4.40】", summary)
+        self.assertIn("【05/28 盤中｜v20.4.41】", summary)
         self.assertIn("✅ 今日盤中交易執行", summary)
         self.assertNotIn("明日執行", summary)
         self.assertIn("市場：中性觀察 R2｜執行動作 1（停利）｜新倉建議 1｜今日新建倉 0｜持倉風控 1｜未持倉 2（可買1/僅追蹤0/淘汰1）", summary)
@@ -3839,7 +3839,7 @@ class GeneratorReportTest(unittest.TestCase):
         position = position_message(messages)
         unheld = unheld_message(messages)
 
-        self.assertIn("【05/28 盤中｜v20.4.40】", summary)
+        self.assertIn("【05/28 盤中｜v20.4.41】", summary)
         self.assertIn("市場：進攻偏熱 R3｜執行動作 1（停利）｜今日新建倉 0｜持倉風控 1｜未持倉 3（僅追蹤1/淘汰2）", summary)
         self.assertIn("新倉：無有效進場", summary)
         self.assertNotIn("無新增下單", summary)
@@ -3967,7 +3967,7 @@ class GeneratorReportTest(unittest.TestCase):
         position = position_message(messages)
         unheld = unheld_message(messages)
 
-        self.assertIn("【05/28 盤中｜v20.4.40】", summary)
+        self.assertIn("【05/28 盤中｜v20.4.41】", summary)
         self.assertNotIn("資料依據", summary)
         self.assertNotIn("證據：production 來源不足，不作確認。", summary)
         self.assertNotIn("詳情：runtime 觀察僅供診斷，非確認來源。", summary)
@@ -4169,7 +4169,7 @@ class GeneratorReportTest(unittest.TestCase):
         summary = summary_message(messages)
         unheld = unheld_message(messages)
 
-        self.assertIn("【05/29 盤中｜v20.4.40】", summary)
+        self.assertIn("【05/29 盤中｜v20.4.41】", summary)
         self.assertIn("市場：進攻偏熱 R3｜執行動作 0｜今日新建倉 0｜持倉風控 0｜未持倉 5（僅追蹤3/淘汰1）", summary)
         self.assertNotIn("市場/結論：進攻偏熱｜R3；R3 進攻偏熱", summary)
         self.assertNotIn("資料依據", summary)
@@ -4365,7 +4365,7 @@ class GeneratorReportTest(unittest.TestCase):
         summary = summary_message(messages)
         unheld = unheld_message(messages)
 
-        self.assertIn("【05/29 盤中｜v20.4.40】", summary)
+        self.assertIn("【05/29 盤中｜v20.4.41】", summary)
         self.assertIn("市場：進攻偏熱 R3｜執行動作 0｜今日新建倉 0｜持倉風控 0｜未持倉 8（僅追蹤5/淘汰1）", summary)
         self.assertNotIn("市場/結論：進攻偏熱｜R3；R3 進攻偏熱", summary)
         self.assertIn(
@@ -4616,7 +4616,7 @@ class GeneratorReportTest(unittest.TestCase):
 
         summary = summary_message(messages)
 
-        self.assertIn("【05/29 盤後｜v20.4.40】", summary)
+        self.assertIn("【05/29 盤後｜v20.4.41】", summary)
         self.assertIn("📌 盤後簡報", summary)
         self.assertIn("結論：今日無有效新倉；既有持倉以收盤後風控觀察為主。", summary)
         self.assertIn("明日前確認：觀察持倉是否跌破警戒；未持倉標的重新等待有效進場。", summary)
@@ -4661,7 +4661,7 @@ class GeneratorReportTest(unittest.TestCase):
 
         summary = summary_message(messages)
 
-        self.assertIn("【05/28 盤中｜v20.4.40】", summary)
+        self.assertIn("【05/28 盤中｜v20.4.41】", summary)
         self.assertIn("🧭 主線：市場偏多但買點未成立。", summary)
         self.assertIn("新倉：無有效進場", summary)
         self.assertIn("買點未成立", summary)
@@ -4744,7 +4744,7 @@ class GeneratorReportTest(unittest.TestCase):
         unheld = unheld_message(messages)
 
         self.assertEqual(phase_mock.call_count, 1)
-        self.assertIn("【05/28 盤中｜v20.4.40】", summary)
+        self.assertIn("【05/28 盤中｜v20.4.41】", summary)
         self.assertIn("市場：中性觀察 R2｜執行動作 0｜新倉建議 1｜今日新建倉 0", summary)
         self.assertNotIn("✅ 今日盤中交易執行\n光寶科 可買（分批，不追價）", summary)
         self.assertIn("新倉建議\n光寶科 可買（分批，不追價）｜尚未買入｜建議分批｜盤中觸發", summary)
@@ -4793,7 +4793,7 @@ class GeneratorReportTest(unittest.TestCase):
         summary = summary_message(messages)
         unheld = unheld_message(messages)
 
-        self.assertIn("【05/28 盤後｜v20.4.40】", summary)
+        self.assertIn("【05/28 盤後｜v20.4.41】", summary)
         self.assertIn("📌 盤後簡報", summary)
         self.assertIn("新倉：無有效進場", summary)
         self.assertIn("可準備：1 檔需明日開盤後確認，未確認前不可下單", summary)
@@ -4803,8 +4803,10 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("新增有效進場 1", summary)
         self.assertNotIn("光寶科 可買（分批，不追價）", summary)
         self.assertIn("【光寶科 2301】🟡 明日準備｜不可買｜開盤後確認", unheld)
-        self.assertIn("買點：尚未成立｜盤後僅追蹤｜明日開盤後確認｜不追價", unheld)
-        self.assertIn("到達可買差距：買點尚未成立/需觸發", unheld)
+        self.assertIn("買點：盤後訊號｜需開盤後重新確認｜不追價", unheld)
+        self.assertIn("到達可買差距：盤後訊號/需開盤後重新確認", unheld)
+        self.assertIn("原因：盤後待確認，需開盤後重新確認", unheld)
+        self.assertNotIn("證據：資料不足", unheld)
         self.assertIn("明日觸發：", unheld)
         self.assertIn("RR 1.8", unheld)
         self.assertIn("突破確認", unheld)
@@ -4858,7 +4860,7 @@ class GeneratorReportTest(unittest.TestCase):
         trend_card = card_block(unheld, "【智原 3231】")
         ordinary_card = card_block(unheld, "【光寶科 2301】")
 
-        self.assertIn("【06/03 盤後｜v20.4.40】", summary)
+        self.assertIn("【06/03 盤後｜v20.4.41】", summary)
         self.assertIn("趨勢延續買入 1 檔小倉", summary)
         self.assertIn("新增有效進場：1 檔需明日開盤前確認", summary)
         self.assertIn("可準備：1 檔需明日開盤後確認，未確認前不可下單", summary)
@@ -4871,8 +4873,10 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【智原 3231】🟢 趨勢延續買入｜小倉", trend_card)
         self.assertIn("買點：趨勢延續買入｜小倉 <=15%｜回測 55% 勝 / +2.26%", trend_card)
         self.assertIn("【光寶科 2301】🟡 明日準備｜不可買｜開盤後確認", ordinary_card)
-        self.assertIn("買點：尚未成立｜盤後僅追蹤｜明日開盤後確認｜不追價", ordinary_card)
-        self.assertIn("到達可買差距：買點尚未成立/需觸發", ordinary_card)
+        self.assertIn("買點：盤後訊號｜需開盤後重新確認｜不追價", ordinary_card)
+        self.assertIn("到達可買差距：盤後訊號/需開盤後重新確認", ordinary_card)
+        self.assertIn("原因：盤後待確認，需開盤後重新確認", ordinary_card)
+        self.assertNotIn("證據：資料不足", ordinary_card)
         self.assertIn("回測（光寶科）：樣本36｜參考度高｜3日勝率58%｜相對+1.2%｜略優；回測僅輔助，分批小倉、不追價", ordinary_card)
         self.assertNotIn("明日追蹤｜10%倉", ordinary_card)
         self.assertNotIn("買點成立", ordinary_card)
@@ -4899,7 +4903,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("FULL DETAIL", detail_message(messages))
         self.assertIn("【持倉標的】", position_message(messages))
         self.assertIn("【未持倉標的】", unheld_message(messages))
-        self.assertIn("｜v20.4.40】", summary_message(messages))
+        self.assertIn("｜v20.4.41】", summary_message(messages))
         self.assertIs(messages[0], position_message(messages))
         self.assertIs(messages[1], unheld_message(messages))
         self.assertIs(messages[2], summary_message(messages))
@@ -4948,16 +4952,16 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【持倉標的】", messages[0])
         self.assertIn("【未持倉標的】", messages[1])
         self.assertTrue(messages[3].startswith("【Details Backup】"))
-        self.assertIn("【06/01 盤中｜v20.4.40】", messages[0])
-        self.assertIn("【06/01 盤中｜v20.4.40】", messages[1])
-        self.assertIn("【06/01 盤中｜v20.4.40】", messages[2])
+        self.assertIn("【06/01 盤中｜v20.4.41】", messages[0])
+        self.assertIn("【06/01 盤中｜v20.4.41】", messages[1])
+        self.assertIn("【06/01 盤中｜v20.4.41】", messages[2])
         self.assertNotIn("v20.4.11", "\n\n".join(messages))
         self.assertIn("智原", messages[0])
         self.assertIn("續抱", messages[0])
         self.assertIn("建準", messages[1])
         self.assertNotIn("智原", messages[1])
         self.assertNotIn("建準", messages[0])
-        self.assertIn("🧾 v20.4.40 簡報", messages[2])
+        self.assertIn("🧾 v20.4.41 簡報", messages[2])
         self.assertEqual(messages[2].count("\n決策簡報\n"), 1)
         self.assertNotIn("\n資料依據\n", messages[2])
         self.assertIn("持倉：依第一則既有卡片處理，不新增第二個主行動。", messages[2])
@@ -5573,7 +5577,7 @@ class GeneratorReportTest(unittest.TestCase):
         )
         fields = {item["field_name"]: item for item in context["evidence_manifest"]}
 
-        self.assertEqual(context["report_context"]["version"], "v20.4.40")
+        self.assertEqual(context["report_context"]["version"], "v20.4.41")
         self.assertEqual(context["report_context"]["trade_date"], "2026-05-29")
         for key in [
             "report.version",
@@ -5619,7 +5623,7 @@ class GeneratorReportTest(unittest.TestCase):
             report_phase="盤中",
         )
 
-        self.assertIn("🧾 v20.4.40 簡報", summary_message(messages))
+        self.assertIn("🧾 v20.4.41 簡報", summary_message(messages))
         self.assertNotIn("Source：核心價格 available；持倉 available；策略樣本 missing-source；market/theme available", summary_message(messages))
         self.assertNotIn("📊 策略證據 v20.0", summary_message(messages))
         self.assertNotIn("資料：持倉與現價已確認；風控由持倉成本/停損推算", position_message(messages))
@@ -5853,7 +5857,7 @@ class GeneratorReportTest(unittest.TestCase):
         unheld = unheld_message(messages)
 
         self.assertIs(messages[2], summary)
-        self.assertIn("【05/31 盤中｜v20.4.40】", summary)
+        self.assertIn("【05/31 盤中｜v20.4.41】", summary)
         self.assertNotIn("Source：核心價格 insufficient-data", summary)
         self.assertIn("新倉：無有效進場", summary)
         self.assertNotIn("🔥 最強", summary)
@@ -6656,7 +6660,7 @@ class GeneratorReportTest(unittest.TestCase):
         unstable_card = card_block(unheld, "【光寶科 2301】")
         reason_lines = [line for line in summary.splitlines() if line.startswith("原因：")]
 
-        self.assertIn("【06/03 盤中｜v20.4.40】", summary)
+        self.assertIn("【06/03 盤中｜v20.4.41】", summary)
         self.assertIn("【聯電 2303】📌 減碼", umc_card)
         self.assertIn("均價 138.08", umc_card)
         self.assertIn("價格：132.75（-3.86%）", umc_card)
@@ -7028,7 +7032,7 @@ class GeneratorReportTest(unittest.TestCase):
         rendered = "\n\n".join(messages)
         first_market_line = first_line_for_prefix(summary, "市場：")
 
-        self.assertIn("【06/04 盤中｜v20.4.40】", summary)
+        self.assertIn("【06/04 盤中｜v20.4.41】", summary)
         self.assertIn("今日已買 3（已風控 2/觀察 1）", first_market_line)
         self.assertNotIn("風控中", first_market_line)
         self.assertIn("未持倉 8（不可追高觀察1/僅追蹤5/淘汰2）", first_market_line)
@@ -7217,7 +7221,7 @@ class GeneratorReportTest(unittest.TestCase):
         low_volume_card = card_block(unheld, "【低量標的 0002】")
         low_score_card = card_block(unheld, "【低分股 0003】")
 
-        self.assertIn("【06/03 盤後｜v20.4.40】", rendered)
+        self.assertIn("【06/03 盤後｜v20.4.41】", rendered)
         self.assertIn("數據：不適用（既有持倉）｜V 1.4x", non_add_card)
         self.assertNotIn("綜合", non_add_card)
         self.assertNotIn("技術", non_add_card)
@@ -7344,7 +7348,7 @@ class GeneratorReportTest(unittest.TestCase):
 
         market = generator._market_theme_evidence_payload(context)
 
-        self.assertEqual(generator.VERSION, "v20.4.40")
+        self.assertEqual(generator.VERSION, "v20.4.41")
         self.assertEqual(market["status"], "confirmed")
         self.assertEqual(market["score"], 1.0)
         self.assertTrue(market["decision_eligible"])
@@ -7458,7 +7462,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotEqual(winbond["result"]["final_confidence"], winbond["result"]["technical_confidence"])
         self.assertLessEqual(weak["result"]["evidence_modifier"], 1.0)
         rendered = "\n\n".join(messages)
-        self.assertIn("【06/03 盤中｜v20.4.40】", rendered)
+        self.assertIn("【06/03 盤中｜v20.4.41】", rendered)
         self.assertIn("【緯創 3231】", rendered)
         self.assertIn("綜合 84｜技術 78｜證據 +8%（supporting）", rendered)
         self.assertIn("回測（緯創）：樣本36｜參考度高｜3日勝率58%｜相對+1.2%｜略優", rendered)
@@ -7922,19 +7926,33 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("證據 +", card)
         self.assertNotIn("證據：partial", card)
 
-    def test_v20_4_40_unheld_non_buy_cards_show_gate_attribution_only(self):
-        rr_wait = self.evidence_payload(confidence=78, decision="WAIT", action=0, rr=0.98, distance=6)
+    def test_v20_4_41_postmarket_unheld_gate_attribution_readability_message_list_replay(self):
+        rr_wait = self.evidence_payload(confidence=78, decision="BUY", action=0.1, rr=0.98, distance=6)
         rr_wait["stock_code"] = "2330"
+        rr_wait_near_breakout = self.evidence_payload(confidence=78, decision="WAIT", action=0, rr=0.99, distance=2)
+        rr_wait_near_breakout["stock_code"] = "2324"
         hot_wait = self.evidence_payload(confidence=78, decision="WAIT", action=0, rr=1.4, distance=2, heat="HOT")
         hot_wait["stock_code"] = "2376"
-        source_missing = self.evidence_payload(confidence=88, decision="BUY", action=0.1, rr=2.1, distance=0.5)
-        source_missing["stock_code"] = "2421"
-        source_missing["price_source"] = "runtime-cache"
-        source_missing["daily_source"] = "runtime-cache"
-        source_missing["closes"] = []
-        source_missing["volumes"] = []
+        extreme_wait = self.evidence_payload(confidence=78, decision="WAIT", action=0, rr=0.7, distance=8, heat="EXTREME")
+        extreme_wait["stock_code"] = "2344"
+        extreme_wait["result"]["entry_quality"] = "D"
+        failed = self.evidence_payload(confidence=72, decision="FAIL", action=0, rr=0, distance=9)
+        failed["stock_code"] = "2337"
+        failed["result"]["structure_phase"] = "FAILED_BREAKOUT"
+        failed["result"]["entry_quality"] = "D"
+        limit_rebound = self.evidence_payload(confidence=70, decision="WAIT", action=0, rr=1.4, distance=2)
+        limit_rebound["stock_code"] = "2303"
+        limit_rebound["result"]["price_behavior"] = "LIMIT_REBOUND"
+        weak_rebound = self.evidence_payload(confidence=70, decision="WAIT", action=0, rr=1.4, distance=2)
+        weak_rebound["stock_code"] = "3481"
+        weak_rebound["result"]["price_behavior"] = "WEAK_REBOUND"
+        weak_rebound["result"]["structure_phase"] = "WEAK_REBOUND"
+        weak_rebound["result"]["entry_quality"] = "D"
+        prepare = self.evidence_payload(confidence=86, decision="BUY", action=0.1, rr=1.8, distance=0.5)
+        prepare["stock_code"] = "2301"
+        prepare["backtest_context"] = {"sample": 36, "reference": "高", "win_rate": 58, "avg_return": 1.2}
         buyable = self.evidence_payload(confidence=86, decision="BUY", action=0.1, rr=1.8, distance=0.5)
-        buyable["stock_code"] = "2301"
+        buyable["stock_code"] = "2421"
         buyable["backtest_context"] = {"sample": 36, "reference": "高", "win_rate": 58, "avg_return": 1.2}
         trend = trend_continuation_payload()
 
@@ -7942,13 +7960,31 @@ class GeneratorReportTest(unittest.TestCase):
             messages = generator.formatTelegramMessages(
                 {
                     "台積電": rr_wait,
+                    "仁寶": rr_wait_near_breakout,
                     "技嘉": hot_wait,
-                    "建準": source_missing,
-                    "光寶科": buyable,
+                    "華邦電": extreme_wait,
+                    "旺宏": failed,
+                    "聯電": limit_rebound,
+                    "群創": weak_rebound,
+                    "光寶科": prepare,
                     "智原": trend,
                 },
                 "FULL DETAIL",
-                "光寶科",
+                "建準",
+                88,
+                {"trade_date": "2026-06-04"},
+                datetime(2026, 6, 4),
+                strategy_evidence_summary=structured_strategy_evidence("available", row_count=30),
+                report_phase="盤後",
+            )
+        with patch.object(generator, "market_theme_summary_evidence", return_value=self.confirmed_market_evidence()):
+            actionable_messages = generator.formatTelegramMessages(
+                {
+                    "建準": buyable,
+                    "智原": trend_continuation_payload(),
+                },
+                "FULL DETAIL",
+                "建準",
                 88,
                 {"trade_date": "2026-06-04"},
                 datetime(2026, 6, 4),
@@ -7958,27 +7994,63 @@ class GeneratorReportTest(unittest.TestCase):
 
         summary = summary_message(messages)
         unheld = unheld_message(messages)
+        rendered = "\n\n".join(messages)
+        actionable_unheld = unheld_message(actionable_messages)
         rr_card = card_block(unheld, "【台積電 2330】")
+        rr_near_card = card_block(unheld, "【仁寶 2324】")
         hot_card = card_block(unheld, "【技嘉 2376】")
-        source_card = card_block(unheld, "【建準 2421】")
-        buyable_card = card_block(unheld, "【光寶科 2301】")
+        extreme_card = card_block(unheld, "【華邦電 2344】")
+        failed_card = card_block(unheld, "【旺宏 2337】")
+        limit_card = card_block(unheld, "【聯電 2303】")
+        weak_card = card_block(unheld, "【群創 3481】")
+        prepare_card = card_block(unheld, "【光寶科 2301】")
+        buyable_card = card_block(actionable_unheld, "【建準 2421】")
         trend_card = card_block(unheld, "【智原 3231】")
+        actionable_trend_card = card_block(actionable_unheld, "【智原 3231】")
 
-        self.assertIn("【06/04 盤中｜v20.4.40】", summary)
-        self.assertIn("新倉建議 2", summary)
-        self.assertIn("未持倉 5｜可買 1｜趨勢延續 1", summary)
-        self.assertIn("僅追蹤 2（等冷卻1/等RR修復1）", summary)
-        self.assertIn("淘汰 1", summary)
+        self.assertIn("【06/04 盤後｜v20.4.41】", summary)
+        self.assertIn("新倉建議 1", summary)
+        self.assertIn("未持倉 9｜趨勢延續 1｜可準備 1（不可買）", summary)
+        self.assertIn("僅追蹤 5", summary)
+        self.assertIn("淘汰 2", summary)
         self.assertIn("【台積電 2330】👀 等RR修復｜RR不足", rr_card)
         self.assertIn("到達可買差距：RR 0.98/需>=1.5; 距突破 6%/需<=4%", rr_card)
+        self.assertIn("原因：RR不足，等待RR修復", rr_card)
+        self.assertNotIn("盤後待確認", rr_card)
+        self.assertIn("【仁寶 2324】👀 等RR修復｜RR不足", rr_near_card)
+        self.assertIn("到達可買差距：RR 0.99/需>=1.5", rr_near_card)
+        self.assertNotIn("距突破 2%/需<=4%", rr_near_card)
+        self.assertNotIn("盤後待確認", rr_near_card)
         self.assertIn("【技嘉 2376】⏳ 等冷卻｜過熱觀察", hot_card)
-        self.assertIn("到達可買差距：heat HOT/需降溫; RR 1.4/需>=1.5", hot_card)
-        self.assertIn("【建準 2421】⛔ 不可行動｜source missing", source_card)
-        self.assertIn("到達可買差距：missing-source/需可用", source_card)
+        self.assertIn("到達可買差距：過熱/需降溫", hot_card)
+        self.assertNotIn("RR 1.4/需>=1.5", hot_card)
+        self.assertNotIn("進場品質", hot_card)
+        self.assertIn("【華邦電 2344】⏳ 等冷卻｜過熱 Lv.3", extreme_card)
+        self.assertIn("到達可買差距：極熱/需降溫", extreme_card)
+        self.assertNotIn("RR 0.7/需>=1.5", extreme_card)
+        self.assertNotIn("進場品質 D/需B以上", extreme_card)
+        self.assertIn("【旺宏 2337】⛔ 淘汰｜突破失敗", failed_card)
+        self.assertIn("到達可買差距：突破失敗/需重新轉強", failed_card)
+        self.assertNotIn("RR 0/需>=1.5", failed_card)
+        self.assertNotIn("RR不可用 / 不作主因", failed_card)
+        self.assertIn("【光寶科 2301】🟡 明日準備｜不可買｜開盤後確認", prepare_card)
+        self.assertIn("買點：盤後訊號｜需開盤後重新確認｜不追價", prepare_card)
+        self.assertIn("到達可買差距：盤後訊號/需開盤後重新確認", prepare_card)
+        self.assertIn("原因：盤後待確認，需開盤後重新確認", prepare_card)
+        self.assertNotIn("買點尚未成立/需觸發", prepare_card)
+        self.assertNotIn("證據：資料不足", prepare_card)
         self.assertNotIn("到達可買差距", buyable_card)
+        self.assertNotIn("距突破 0.5%/需<=4%", buyable_card)
+        self.assertNotIn("買點距離已觸發/不追價", buyable_card)
         self.assertNotIn("到達可買差距", trend_card)
-        self.assertNotIn("建議買入", rr_card + hot_card + source_card)
-        self.assertNotIn("可立即買", rr_card + hot_card + source_card)
+        self.assertNotIn("到達可買差距", actionable_trend_card)
+        self.assertNotIn("買點距離已觸發/不追價", actionable_trend_card)
+        self.assertIn("漲停反彈/需開板回測", limit_card)
+        self.assertIn("進場品質 D/需B以上", weak_card)
+        for raw in ["EXTREME", "HOT", "LIMIT_LOCK", "LIMIT_REBOUND", "WEAK_REBOUND", "entry quality"]:
+            self.assertNotIn(raw, rendered)
+        self.assertNotIn("建議買入", rr_card + hot_card + extreme_card + failed_card)
+        self.assertNotIn("可立即買", rr_card + hot_card + extreme_card + failed_card)
 
     def test_confirmed_evidence_preserves_limit_lock_chase_hard_blocker(self):
         payload = self.evidence_payload(confidence=78, decision="WAIT", action=0, rr=1.4, distance=2)
@@ -8030,7 +8102,8 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("可準備 1（不可買）", summary)
         self.assertIn("【追高 9999】⏳ 等回測｜漲停不追", card)
         self.assertIn("買點：不買，等回測", card)
-        self.assertIn("到達可買差距：LIMIT_LOCK/需開板回測", card)
+        self.assertIn("到達可買差距：漲停鎖價/需開板回測", card)
+        self.assertNotIn("LIMIT_LOCK", card)
         self.assertNotIn("heat NORMAL/需降溫", card)
         self.assertNotIn("【追高 9999】🟢 可買", card)
         self.assertEqual(payload["result"]["evidence_modifier"], 1.0)

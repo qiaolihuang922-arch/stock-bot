@@ -6,13 +6,33 @@
 
 - 專案：台股策略 Telegram 報文機器人。
 - 正式結果以 git / runner 產生報文為準。
-- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.40`。
+- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.41`。
 - 固定 8 份 Markdown 不刪：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 - Architect 是總控；產品 / 策略 / 報文 bug 或 feature 預設走 PM -> Tech -> QA。
 - 跨日狀態、已執行交易、歷史 evidence 必須來自 production DB 或 Owner 指定持久來源；local/runtime/worktree 不能當跨日記憶。
 - 缺資料、source-error、欄位不足或可信度不足時 fail closed。
 
 ## Latest Completed Work
+
+- task_id：`v20.4.41-post-market-unheld-gate-attribution-readability`
+- 狀態：code done / QA 通過；報文版本升 `v20.4.41`。
+- 問題：v20.4.40 盤後未持倉 gate attribution 仍有手機閱讀誤讀：真正可買 / trend_continuation 小倉 BUY 也顯示 `到達可買差距`；FAILED_BREAKOUT 顯示假 RR 0；盤後 prepare 像資料不足；過熱卡列太多次因；raw enum 外露。
+- 關鍵行為：
+  - 真正 `可買` 與 `trend_continuation` 小倉 BUY 卡不顯示 `到達可買差距`。
+  - 未達可買條件卡仍保留可信 gap；RR不足且距突破未達標如 6% 才顯示 `距突破 6%/需<=4%`。
+  - QA 抓到 `距突破 2%/需<=4%` 已達標卻列入 gap 的 blocker，已修為距離 >4 才列入差距。
+  - FAILED_BREAKOUT 顯示 `突破失敗/需重新轉強`，不顯示 RR 0 / `需>=1.5` 作主因。
+  - post-market ordinary prepare 顯示 `盤後訊號｜需開盤後重新確認`，數據行顯示 `盤後待確認，需開盤後重新確認`，不再顯示 `證據：資料不足`。
+  - EXTREME / HOT 冷卻前只顯示 `極熱/需降溫` 或 `過熱/需降溫`；LIMIT_LOCK / LIMIT_REBOUND / WEAK_REBOUND 人話化。
+- 驗證：
+  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/v20_4_41_pytest_pycache_main2 arch -arm64 ./.venv/bin/python -m pytest tests/test_generator_report.py -k 'v20_4_41_postmarket_unheld_gate_attribution_readability_message_list_replay or confirmed_evidence_preserves_limit_lock_chase_hard_blocker or v20_4_39_post_market_mixed_trend_and_prepare_keeps_trend_actionable or v20_0_14_post_market_fixture_uses_next_day_plan_semantics' -q` -> 4 passed。
+  - `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/v20_4_41_pycache_main2 arch -arm64 ./.venv/bin/python -m py_compile core/generator.py presentation/report.py tests/test_generator_report.py` -> passed。
+  - `git diff --check` -> passed。
+  - QA 補 official replay smoke 與 source missing / distance=2 反證；QA 結論 `通過`。
+- 殘留風險：未跑 full pytest、production runner artifact、live Telegram、DB read/write；若未來新增 source blocked 但仍保留有效 distance 的新路徑，需補 focused test。
+- 邊界：未改策略、RR、can_buy/is_valid_entry、DB schema/write、live Telegram。
+
+## Previous Completed Work
 
 - task_id：`telegram-unheld-gate-attribution-v20.4.40`
 - 狀態：code done / QA 通過；報文版本升 `v20.4.40`。
