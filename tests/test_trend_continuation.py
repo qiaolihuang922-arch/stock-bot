@@ -288,8 +288,9 @@ class TrendContinuationValidationTest(unittest.TestCase):
         summary = summary_message(messages)
 
         self.assertNotIn("回測：樣本35", unheld)
-        self.assertEqual(summary.count("回測分組"), 1)
-        self.assertIn("樣本35｜參考度高｜3日勝率60%｜相對+1.2%｜略優：", summary)
+        self.assertNotIn("回測分組", summary)
+        self.assertIn("回測（", summary)
+        self.assertIn("）：樣本35｜參考度高｜3日勝率60%｜相對+1.2%｜略優", summary)
         for name in ["緯創", "建準", "智原"]:
             self.assertIn(name, summary)
 

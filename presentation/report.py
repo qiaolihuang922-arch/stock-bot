@@ -310,16 +310,43 @@ def _is_risk_blocked(stock_result, data):
         stock_result.get("decision") == "FAIL"
         or stock_result.get("structure_phase") in {"FAILED_BREAKOUT", "WEAK", "DISTRIBUTION", "WEAK_REBOUND"}
         or stock_result.get("price_behavior") == "WEAK_REBOUND"
+        or (data or {}).get("funnel_state") == "淘汰"
+        or stock_result.get("funnel_state") == "淘汰"
         or any(token in decision_text for token in ["減碼", "停損", "硬風控", "結構弱"])
     )
 
 
 def _evidence_unavailable_text(stock_result, data):
-    if _is_heat_blocked(stock_result):
-        return "過熱不適用"
     if _is_risk_blocked(stock_result, data):
         return "風控不適用"
+    if _is_heat_blocked(stock_result):
+        return "過熱不適用"
     return "資料不足"
+
+
+def _hidden_score_reason(rr_text, funnel_state, state):
+    for value in [rr_text or "", funnel_state or "", state or ""]:
+        text = str(value)
+        if "量能不足" in text:
+            return "量能不足"
+        if "過熱" in text or "等冷卻" in text or "不可追高" in text:
+            return "過熱"
+        if "不可行動" in text or "淘汰" in text:
+            return "不可行動"
+        if "弱勢" in text:
+            return "弱勢"
+        if "RR" in text or "RR修復" in text or "不足" in text:
+            return "RR不足"
+        if "回測" in text:
+            return "等回測"
+    return funnel_state or state or "不可行動"
+
+
+def _unheld_score_text_for_state(score_text, rr_text, valid_entry, funnel_state, state, stock_result=None, data=None):
+    if valid_entry or funnel_state in {"趨勢延續", "隔日確認"} or state == "隔日確認":
+        return score_text
+    evidence_text = _evidence_unavailable_text(stock_result or {}, data or {})
+    return f"不適用（{_hidden_score_reason(rr_text, funnel_state, state)}）｜證據：{evidence_text}"
 
 
 def _confidence_data_text(report_context, name, data, deps):
@@ -525,6 +552,15 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     raw_size_text = deps["entry_size_text"](stock_result)
     score_text = _confidence_data_text(report_context, name, data, deps)
     rr_data_text = f"RR：{rr_text}" if rr_text == "-（不可行動）" else f"RR {rr_text}"
+    display_score_text = _unheld_score_text_for_state(
+        score_text,
+        rr_text,
+        valid_entry,
+        funnel_state,
+        state,
+        stock_result=stock_result,
+        data=data,
+    )
     if deps["is_valid_entry"](stock_result) and strategy_source_blocked:
         strategy_reason = {
             "missing-source": "策略樣本來源缺失",
@@ -556,19 +592,19 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
     elif funnel_state == "可準備" and prepare_action:
         buy_line = f"買點：{prepare_action}"
-        data_line = f"數據：{rr_data_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
+        data_line = f"數據：{rr_data_text}｜{display_score_text}｜V {data.get('volume_ratio', '-')}x"
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
     elif funnel_state == "等回測":
         buy_line = "買點：不買，等回測"
-        data_line = f"數據：{rr_data_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
+        data_line = f"數據：{rr_data_text}｜{display_score_text}｜V {data.get('volume_ratio', '-')}x"
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
     elif funnel_state == "淘汰":
         buy_line = f"買點：不可買，{wait_text}"
-        data_line = f"數據：{rr_data_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
+        data_line = f"數據：{rr_data_text}｜{display_score_text}｜V {data.get('volume_ratio', '-')}x"
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
     else:
         buy_line = f"買點：不買，{wait_text}"
-        data_line = f"數據：{rr_data_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
+        data_line = f"數據：{rr_data_text}｜{display_score_text}｜V {data.get('volume_ratio', '-')}x"
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
     trigger_label = "盤中觸發" if report_phase == "盤中" else "明日觸發"
     if valid_entry and funnel_state == "趨勢延續":

@@ -6088,19 +6088,27 @@ def format_unheld_funnel(watch_items, market_mode=None, report_context=None):
     else:
         track_text = f"僅追蹤 {tracking_only_count}"
 
-    prepare_funnel_text = unheld_prepare_funnel_text(prepare_counts) or "不可追高觀察 0"
-    parts = [f"可買 {len(funnel['可買'])}"]
+    prepare_funnel_text = unheld_prepare_funnel_text(prepare_counts)
+    parts = []
+    buy_count = len(funnel["可買"])
+    if buy_count:
+        parts.append(f"可買 {buy_count}")
     if trend_count:
         parts.append(f"趨勢延續 {trend_count}")
-    for part in prepare_funnel_text.split("｜"):
-        parts.append(f"{part}（不可買）")
+    if prepare_funnel_text:
+        for part in prepare_funnel_text.split("｜"):
+            parts.append(f"{part}（不可買）")
     if next_day_count:
         parts.append(f"隔日確認 {next_day_count}")
     if tracking_only_count:
         parts.append(track_text)
-    parts.append(f"淘汰 {len(funnel['淘汰'])}")
+    rejected_count = len(funnel["淘汰"])
+    if rejected_count:
+        parts.append(f"淘汰 {rejected_count}")
 
     # 單行匯總：總數 + 各分類，去掉原本的總數行 / 拆分行 / 合計行重複。
+    if not parts:
+        return f"未持倉 {total_count}"
     return f"未持倉 {total_count}｜" + "｜".join(parts)
 
 
@@ -7017,6 +7025,9 @@ def format_backtest_groups(watch_items, report_context=None):
         groups[body].append(name)
     if not order:
         return []
+    if len(order) == 1:
+        body = order[0]
+        return ["", f"回測（{'、'.join(groups[body])}）：{body}"]
     out = ["", "回測分組"]
     for body in order:
         out.append(f"{body}：{'、'.join(groups[body])}")

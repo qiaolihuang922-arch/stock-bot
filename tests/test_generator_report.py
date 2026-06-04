@@ -3819,7 +3819,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("待執行｜減碼 25%", summary)
         self.assertNotIn("明日未修復", position)
         self.assertNotIn("隔日未修復", position)
-        self.assertIn("未持倉 3｜可買 0｜不可追高觀察 0（不可買）｜僅追蹤 1（等RR修復）｜淘汰 2", summary)
+        self.assertIn("未持倉 3｜僅追蹤 1（等RR修復）｜淘汰 2", summary)
         self.assertIn("淘汰 2 檔｜主因：突破失敗｜詳情見未持倉卡", summary)
         self.assertIn("【群創 3481】⛔ 淘汰｜突破失敗", unheld)
         self.assertIn("原因：前次可買條件已失效：突破失敗或跌破進場條件｜補充：追價風險 / 過熱、RR不可用，不作主因", unheld)
@@ -6590,6 +6590,103 @@ class GeneratorReportTest(unittest.TestCase):
             "volumes": [1000, 1100, 1200],
         }
 
+    def test_v20_4_36_non_actionable_unheld_hides_score_numbers(self):
+        low_volume = self.evidence_payload(confidence=93, decision="WAIT", action=0, rr=1.8, distance=1)
+        low_volume["stock_code"] = "2301"
+        low_volume["volume_ratio"] = 0.6
+        low_volume["result"].update({
+            "trade_state": "NO_VOLUME",
+            "volume_state": "WEAK",
+            "confidence_score": 93,
+        })
+        buyable = self.evidence_payload(confidence=82, decision="BUY", action=0.1, rr=1.8, distance=0.5)
+        buyable["stock_code"] = "2421"
+        buyable["backtest_context"] = {"sample": 38, "reference": "高", "win_rate": 58, "avg_return": 1.2}
+
+        with patch.object(generator, "market_theme_summary_evidence", return_value=self.confirmed_market_evidence()):
+            messages = generator.formatTelegramMessages(
+                {"光寶科": low_volume, "建準": buyable},
+                "",
+                None,
+                None,
+                {"trade_date": "2026-06-04"},
+                datetime(2026, 6, 4),
+                strategy_evidence_summary=structured_strategy_evidence("available", row_count=30),
+                report_phase="盤中",
+            )
+
+        unheld = unheld_message(messages)
+        low_volume_card = card_block(unheld, "【光寶科 2301】")
+        buyable_card = card_block(unheld, "【建準 2421】")
+
+        self.assertIn("等量能", low_volume_card)
+        self.assertIn("RR -（量能不足）", low_volume_card)
+        self.assertIn("不適用（量能不足）", low_volume_card)
+        self.assertNotIn("綜合 100", low_volume_card)
+        self.assertNotIn("技術 93", low_volume_card)
+        self.assertIn("綜合", buyable_card)
+
+    def test_v20_4_36_failed_unheld_uses_risk_unavailable_before_heat(self):
+        failed_hot = self.evidence_payload(confidence=80, decision="FAIL", action=0, rr=1.8, distance=0.5, heat="HOT")
+        failed_hot["stock_code"] = "3481"
+        failed_hot["result"].update({
+            "structure_phase": "FAILED_BREAKOUT",
+            "price_behavior": "LIMIT_LOCK",
+            "market_grade": "D",
+        })
+
+        with patch.object(generator, "market_theme_summary_evidence", return_value=self.confirmed_market_evidence()):
+            messages = generator.formatTelegramMessages(
+                {"群創": failed_hot},
+                "",
+                None,
+                None,
+                {"trade_date": "2026-06-04"},
+                datetime(2026, 6, 4),
+                strategy_evidence_summary=structured_strategy_evidence("available", row_count=30),
+                report_phase="盤中",
+            )
+
+        card = card_block(unheld_message(messages), "【群創 3481】")
+        self.assertIn("淘汰", card)
+        self.assertIn("證據：風控不適用", card)
+        self.assertNotIn("證據：過熱不適用", card)
+
+    def test_v20_4_36_unheld_funnel_hides_zero_count_buckets(self):
+        cooldown = self.evidence_payload(confidence=70, decision="WAIT", action=0, rr=1.2, distance=2, heat="HOT")
+        cooldown["result"]["trade_state"] = "EXTENDED"
+        low_volume = self.evidence_payload(confidence=70, decision="WAIT", action=0, rr=1.4, distance=1)
+        low_volume["result"].update({"trade_state": "NO_VOLUME", "volume_state": "WEAK"})
+        rejected = self.evidence_payload(confidence=40, decision="FAIL", action=0, rr=1.4, distance=1)
+        rejected["result"].update({"structure_phase": "FAILED_BREAKOUT", "market_grade": "D"})
+
+        text = generator.format_unheld_funnel([
+            ("冷卻", cooldown),
+            ("量能", low_volume),
+            ("淘汰", rejected),
+        ])
+
+        self.assertIn("未持倉 3", text)
+        self.assertIn("僅追蹤 2", text)
+        self.assertIn("等冷卻1/等量能1", text)
+        self.assertIn("淘汰 1", text)
+        self.assertNotIn("可買 0", text)
+        self.assertNotIn("不可追高觀察 0", text)
+
+    def test_v20_4_36_single_backtest_group_uses_inline_label(self):
+        payload = self.evidence_payload(confidence=80)
+        payload["backtest_context"] = {"sample": 38, "win_rate": 58, "avg_return": 1.2}
+        context = {
+            "evidence_manifest": [
+                {"field_name": "evidence.strategy_sample", "source_status": "available"},
+            ],
+        }
+
+        lines = generator.format_backtest_groups([("建準", payload)], report_context=context)
+
+        self.assertEqual(lines, ["", "回測（建準）：樣本38｜參考度高｜3日勝率58%｜相對+1.2%｜略優"])
+        self.assertNotIn("回測分組", "\n".join(lines))
+
     def confirmed_market_evidence(
         self,
         trend_status="confirmed_trend",
@@ -7477,7 +7574,8 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【追高 9999】👀 不可追高觀察｜漲停鎖價", card)
         self.assertIn("買點：不可追高，待開板回測", card)
         self.assertEqual(payload["result"]["evidence_modifier"], 1.0)
-        self.assertIn("RR -（過熱）｜綜合 78｜技術 78｜證據：過熱不適用", card)
+        self.assertIn("RR -（過熱）｜不適用（過熱）｜證據：過熱不適用", card)
+        self.assertNotIn("綜合 78｜技術 78", card)
         self.assertNotIn("證據 +", card)
         self.assertNotIn("證據僅調整邊界，不放寬RR/過熱限制", rendered)
         self.assertNotIn("【追高 9999】👀 可準備", rendered)
