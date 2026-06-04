@@ -3,21 +3,26 @@
 ## 任務尺寸與風險
 
 - 任務尺寸：normal_patch。
-- 風險：GitHub Actions 手動入口清理；不影響 Telegram 報文、策略、DB、live delivery。
+- 風險：使用者可見第 4 則 `【未來30日關注】` 完成版；不改交易策略、DB、live Telegram。
 
 ## 修改內容
 
-- 刪除舊 workflow file：`.github/workflows/stock-bot.yml`。
-- 新增乾淨 workflow file：`.github/workflows/stock-bot-clean.yml`。
-- workflow 顯示名稱改為 `Stock Bot`，避免手機端沿用舊 `Stock Bot Pro` / old path 的 dispatch form cache。
-- workflow_dispatch inputs 只保留 `run_mode`，choices 只保留 `bot`、`daily_evidence`。
-- `tests/test_workflow_runtime_config.py` 改讀新 workflow file，並新增舊欄位 / 舊 workflow file 不存在的反證。
+- `core/generator.py`：版本升 `v20.4.47`。
+- `core/future_watch.py`：
+  - TWSE 歷史類比由單純 insufficient 改成壓力情境線：情境、相似度、相似點、差異、關注條件。
+  - MOPS adapter 補 `step=1` / `firstin=1`，解析官方 `t100sb02_1` 真實表格。
+  - MOPS parser 改用欄位標題判定法說會資料列；資料列不必重複出現 `法人說明會` 四字。
+  - MOPS 多市場查詢不再讓單一 TYPEK source-error 覆蓋已成功查到的事件。
+  - 全球事件中文化，來源改為 `來源：ECB官方` / `來源：G7備援`。
+- `tests/test_generator_report.py`：
+  - 更新 v20.4.47 focused future-watch tests。
+  - 更新全球事件來源格式與 MOPS / TWSE 完成版預期。
 
 ## 修改檔案
 
-- `.github/workflows/stock-bot-clean.yml`
-- `.github/workflows/stock-bot.yml`
-- `tests/test_workflow_runtime_config.py`
+- `core/future_watch.py`
+- `core/generator.py`
+- `tests/test_generator_report.py`
 - `TASK.md`
 - `CHANGELOG.md`
 - `QA_REPORT.md`
@@ -27,31 +32,32 @@
 
 ## 契約影響
 
-- GitHub Actions 手動執行入口只接受 `run_mode`。
-- 舊 `start_date` / `end_date` / `backfill_version` / `backfill_may` / `backfill_and_bot` 不再是 workflow contract。
-- scheduled daily evidence 與 bot run steps 保持原行為。
+- 第 4 則歷史類比不再只顯示 `無高相似崩盤樣本`，除 source-error 外會給出最接近的壓力情境與差異。
+- MOPS 查到未來 30 日法說會時列事件；查得到官方表格但無事件時不顯示法說會段；不可解析時顯示人話錯誤。
+- 全球事件可見行不再使用 raw `source=`，改 `來源：...官方/備援`。
 
 ## 未影響模組
 
-- 未改 `core/generator.py` VERSION。
-- 未改策略 decision、RR、持倉風控。
-- 未改 DB schema / write path。
-- 未做 live Telegram。
+- 未改交易策略、RR、加減碼、停損停利、持倉狀態機。
+- 未改 DB schema / RLS / grant / policy / write path。
+- 未做 live Telegram delivery。
 
 ## 自檢命令與結果
 
-- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/workflow_clean_inputs_pytest arch -arm64 ./.venv/bin/python -m pytest tests/test_workflow_runtime_config.py -q` -> 9 passed。
+- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/v20_4_47_future_watch2 arch -arm64 ./.venv/bin/python -m pytest tests/test_generator_report.py -k 'v20_4_47_future or v20_4_47_live or v20_4_47_generate_report' -q` -> 9 passed。
+- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/v20_4_47_pycompile arch -arm64 ./.venv/bin/python -m py_compile core/future_watch.py core/generator.py tests/test_generator_report.py` -> passed。
 - `git diff --check` -> passed。
-- `find .github/workflows -maxdepth 1 -type f -print` -> only `.github/workflows/stock-bot-clean.yml`。
+- Read-only live smoke with 光寶科 2301 -> TWSE 壓力情境、MOPS 06/05 / 06/22 法說會、中文全球事件 lines。
 
 ## 覆蓋層級
 
-- workflow yaml：covered。
-- runtime config shell script extraction：covered。
-- manual UI schema text contract：covered by workflow text assertions。
-- GitHub mobile app live UI：未直接操作；需 push 後在 GitHub app 重新開新的 `Stock Bot` workflow 驗證。
+- helper：TWSE / MOPS / global source helpers covered。
+- formatter：第 4 則完成版 wording covered。
+- official report message-list：focused `formatTelegramMessages` / `generate_report(dry_run=True)` covered。
+- live smoke：read-only source path covered；無 DB write、無 Telegram delivery。
 
 ## 殘留風險
 
-- GitHub mobile app 可能仍暫時顯示已刪除的舊 workflow 歷史項目；應改點新的 `Stock Bot` workflow。
-- 若 GitHub app 本地 cache 未刷新，需關閉重開 app 或從 Actions workflow list 選新名稱。
+- `tests/test_generator_report.py -q` 仍有 30 個 legacy snapshot / funnel failures，集中在既有未持倉分類與舊契約，不屬本輪 future-watch 完成版；本輪未宣稱全檔清零。
+- 全球事件 live parser 若官方 HTML 改版或被擋，會顯示備援 source；後續可另開 official calendar parser hardening。
+- TWSE 歷史類比目前是壓力情境 template，不是完整多年統計模型；已明示差異與不是崩盤等級。

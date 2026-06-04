@@ -16,6 +16,13 @@
 
 ## Completed
 
+- `future_watch_complete_v20_4_47`:
+  - 問題：v20.4.46 第 4 則仍呈現 TWSE insufficient、MOPS source-error、全球 raw 英文事件，Owner 要直接做成完成版。
+  - 結果：VERSION 升 `v20.4.47`；TWSE 顯示壓力情境 / 相似點 / 差異 / 關注條件；MOPS 正確 POST `step=1` / `firstin=1` 並解析官方表格，可列光寶科 06/05 / 06/22 法說會；全球事件中文化並顯示 `來源：官方/備援`。
+  - 可重跑補強：focused future-watch 9 passed、py_compile / diff check passed、read-only live smoke passed。
+  - QA 狀態：conditional pass；full generator file 仍有 30 個既有未持倉漏斗 / legacy snapshot failures，本輪未修旁支。
+  - 流程復盤：根因分類為 `feature` + `mobile_reading` + `source_parser`。MOPS source-error 根因不是官方不可用，而是少送 step/firstin 且 parser 要求資料列重複 `法人說明會`；完成版應先用 live smoke 打到真實官方表格。
+  - 邊界：未改策略、RR、DB schema/write/backfill、live Telegram。
 - `github_actions_manual_workflow_clean_inputs_20260604`:
   - 問題：Owner 手動執行 GitHub Actions 時，手機端仍顯示已廢棄的 backfill 欄位 `start_date` / `end_date` / `backfill_version`，送出後 GitHub 後端以 current schema 拒絕並報 `Unexpected inputs provided`。
   - 結果：刪除舊 `.github/workflows/stock-bot.yml`，新增 `.github/workflows/stock-bot-clean.yml`；workflow 名稱改 `Stock Bot`，manual inputs 只留 `run_mode` with `bot` / `daily_evidence`。

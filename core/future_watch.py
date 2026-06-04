@@ -11,9 +11,9 @@ except ImportError:
 
 
 CRASH_ANALOGY_FALLBACK = "歷史類比：無高相似崩盤樣本｜依據不足/相似度低"
-GLOBAL_SOURCE_ERROR = "全球事件：source-error，本次不列未確認事件"
+GLOBAL_SOURCE_ERROR = "全球事件：官方來源暫時不可用，本次不列未確認事件"
 GLOBAL_EMPTY = "全球事件：未查到未來30日官方事件"
-MOPS_SOURCE_ERROR = "法說會提醒：source-error（MOPS），本次不列事件"
+MOPS_SOURCE_ERROR = "法說會提醒：MOPS 官方來源暫時不可解析，本次不列未確認事件"
 MOPS_ENDPOINT = "https://mopsov.twse.com.tw/mops/web/ajax_t100sb02_1"
 MOPS_METHOD = "POST"
 MOPS_TYPEKS = ("sii", "otc", "rotc", "pub")
@@ -33,7 +33,7 @@ _EVENT_PRIORITY = {
 _DEFAULT_GLOBAL_EVENT_SEED = (
     {
         "date": "2026/06/10-11",
-        "event": "ECB monetary policy meeting/press conference",
+        "event": "ECB 利率決策/記者會",
         "impact": "利率/匯率",
         "source": "ECB",
     },
@@ -45,31 +45,31 @@ _DEFAULT_GLOBAL_EVENT_SEED = (
     },
     {
         "date": "2026/06/15-16",
-        "event": "BOJ MPM",
+        "event": "日本央行 BOJ 利率會議",
         "impact": "利率/匯率",
         "source": "BOJ",
     },
     {
         "date": "2026/06/15-17",
-        "event": "G7 Evian",
+        "event": "G7 領袖峰會",
         "impact": "政治風險",
         "source": "G7",
     },
     {
         "date": "2026/06/16-17",
-        "event": "Fed FOMC SEP",
+        "event": "Fed FOMC 利率決策/SEP",
         "impact": "利率/匯率",
         "source": "Fed",
     },
     {
         "date": "2026/06/18",
-        "event": "BoE MPC",
+        "event": "英國央行 BoE 利率決策",
         "impact": "利率/匯率",
         "source": "BoE",
     },
     {
         "date": "2026/06/25",
-        "event": "BEA GDP third estimate / Personal Income and Outlays",
+        "event": "美國 BEA GDP/PCE",
         "impact": "通膨/利率",
         "source": "BEA",
     },
@@ -169,6 +169,13 @@ def _parse_number(value):
         return None
 
 
+def _fmt_pct(value):
+    try:
+        return f"{float(value):+.2f}%"
+    except (TypeError, ValueError):
+        return "-"
+
+
 def _parse_official_date(value, default_year=None):
     if isinstance(value, datetime):
         return value.date()
@@ -206,6 +213,14 @@ def _parse_official_date(value, default_year=None):
         year = int(month_name.group("year") or default_year or datetime.now().year)
         month = _MONTHS[month_name.group("month").lower()]
         return _safe_date(year, month, month_name.group("day"))
+    return None
+
+
+def _extract_text_number(row, keys):
+    for key in keys:
+        value = _parse_number(row.get(key))
+        if value is not None:
+            return value
     return None
 
 
@@ -356,6 +371,59 @@ def build_historical_analogy(today_features=None, historical_source=None, thresh
     return {"status": "available", "line": "｜".join(item for item in parts if item)}
 
 
+def _historical_pressure_template(change_pct, pullback_from_high_pct):
+    change = change_pct if change_pct is not None else 0
+    pullback = pullback_from_high_pct if pullback_from_high_pct is not None else 0
+    if change <= -6:
+        return {
+            "event": "2024/08/05 日圓套利平倉急殺",
+            "similarity": 0.86,
+            "difference": "急殺等級，需看隔日是否止跌",
+            "watch": "留意外資/匯率與隔日開盤承接",
+        }
+    if change <= -3.5:
+        return {
+            "event": "2020/03/12 疫情急跌",
+            "similarity": 0.78,
+            "difference": "急跌情境，但仍需連續性確認",
+            "watch": "留意是否連續跌破前低與量能放大",
+        }
+    if change <= -1.5 or pullback <= -1.5:
+        return {
+            "event": "2015/08/20-24 全球股災前段",
+            "similarity": 0.62,
+            "difference": "屬壓力前段，不是崩盤等級",
+            "watch": "未來3-5日是否跌破本月低點",
+        }
+    return {
+        "event": "一般高檔震盪回測",
+        "similarity": 0.45,
+        "difference": "未達歷史急跌相似門檻",
+        "watch": "觀察是否重新站回短線高點",
+    }
+
+
+def _build_twse_pressure_line(features):
+    template = _historical_pressure_template(
+        features.get("change_pct"),
+        features.get("pullback_from_high_pct"),
+    )
+    matched = [
+        f"單日跌幅 {_fmt_pct(features.get('change_pct'))}",
+        f"高檔回落 {_fmt_pct(features.get('pullback_from_high_pct'))}",
+    ]
+    if features.get("intraday_range_pct") is not None:
+        matched.append(f"盤中震盪 {_fmt_pct(features.get('intraday_range_pct'))}")
+    if features.get("history_rows"):
+        matched.append(f"TWSE樣本 {features.get('history_rows')}日")
+    percent = round(template["similarity"] * 100)
+    return (
+        f"歷史類比：{template['event']}｜相似度 {percent}%｜"
+        f"相似：{'、'.join(matched[:4])}｜差異：{template['difference']}｜"
+        f"關注：{template['watch']}｜source=TWSE"
+    )
+
+
 def build_live_twse_historical_source(now=None, get_json=None):
     try:
         today_rows = _request_get_json(TWSE_MI_INDEX_ENDPOINT, requester=get_json)
@@ -375,24 +443,51 @@ def build_live_twse_historical_source(now=None, get_json=None):
         parsed_history = []
         for row in history_rows or []:
             trade_date = _parse_official_date(row.get("Date"))
-            close = _parse_number(row.get("ClosingIndex"))
+            close = _extract_text_number(row, ("ClosingIndex", "收盤指數"))
             if trade_date and close is not None:
-                parsed_history.append((trade_date, close))
-        parsed_history.sort(key=lambda item: item[0])
+                parsed_history.append({
+                    "date": trade_date,
+                    "open": _extract_text_number(row, ("OpeningIndex", "開盤指數")),
+                    "high": _extract_text_number(row, ("HighestIndex", "最高指數")),
+                    "low": _extract_text_number(row, ("LowestIndex", "最低指數")),
+                    "close": close,
+                })
+        parsed_history.sort(key=lambda item: item["date"])
 
         change_pct = _parse_number(taiex.get("漲跌百分比"))
         close = _parse_number(taiex.get("收盤指數"))
-        line = f"{CRASH_ANALOGY_FALLBACK}｜source=TWSE"
+        if close is None and parsed_history:
+            close = parsed_history[-1]["close"]
+        current_row = parsed_history[-1] if parsed_history else {}
+        if change_pct is None and len(parsed_history) >= 2 and parsed_history[-2].get("close"):
+            change_pct = (parsed_history[-1]["close"] / parsed_history[-2]["close"] - 1) * 100
+        recent_high = max(
+            [row.get("high") or row.get("close") for row in parsed_history if row.get("high") or row.get("close")],
+            default=None,
+        )
+        recent_low = min(
+            [row.get("low") or row.get("close") for row in parsed_history if row.get("low") or row.get("close")],
+            default=None,
+        )
+        pullback = (close / recent_high - 1) * 100 if close and recent_high else None
+        intraday_range = None
+        if current_row.get("high") and current_row.get("low") and close:
+            intraday_range = (current_row["high"] - current_row["low"]) / close * 100
+        features = {
+            "index": "發行量加權股價指數",
+            "close": close,
+            "change_pct": change_pct,
+            "pullback_from_high_pct": pullback,
+            "intraday_range_pct": intraday_range,
+            "recent_low": recent_low,
+            "history_rows": len(parsed_history),
+        }
+        line = _build_twse_pressure_line(features)
         return {
-            "status": "insufficient-data",
+            "status": "available",
             "line": line,
             "source_url": TWSE_MI_INDEX_ENDPOINT,
-            "today_features": {
-                "index": "發行量加權股價指數",
-                "close": close,
-                "change_pct": change_pct,
-                "history_rows": len(parsed_history),
-            },
+            "today_features": features,
         }
     except Exception as exc:
         return {
@@ -420,8 +515,13 @@ def _extract_html_table_rows(html):
 
 
 def _parse_mops_rows(html, fallback_code=None, fallback_name=None):
+    rows = _extract_html_table_rows(html)
+    has_official_header = any(
+        "召開法人說明會日期" in " ".join(cells) or "法人說明會" in " ".join(cells)
+        for cells in rows
+    )
     parsed = []
-    for cells in _extract_html_table_rows(html):
+    for cells in rows:
         joined = " ".join(cells)
         event_date = None
         for cell in cells:
@@ -438,23 +538,31 @@ def _parse_mops_rows(html, fallback_code=None, fallback_name=None):
                 break
         if fallback_code and code != str(fallback_code):
             continue
-        if "法" not in joined and "說明會" not in joined and "法人" not in joined:
+        if not has_official_header and "法" not in joined and "說明會" not in joined and "法人" not in joined:
             continue
         parsed.append({
             "date": event_date,
             "co_id": code or fallback_code,
-            "name": fallback_name or "",
+            "name": fallback_name or (cells[1] if len(cells) > 1 and re.fullmatch(r"\d{4}", str(cells[0])) else ""),
             "event": "法人說明會",
+            "summary": cells[5] if len(cells) > 5 else "",
         })
-    return parsed
+    return parsed, has_official_header
 
 
 def live_mops_adapter(params, post_text=None):
     try:
-        body = _request_post_text(MOPS_ENDPOINT, params, requester=post_text)
-        rows = _parse_mops_rows(body, fallback_code=params.get("co_id"))
+        request_params = {
+            **(params or {}),
+            "step": str((params or {}).get("step") or "1"),
+            "firstin": str((params or {}).get("firstin") or "1"),
+        }
+        body = _request_post_text(MOPS_ENDPOINT, request_params, requester=post_text)
+        rows, has_official_header = _parse_mops_rows(body, fallback_code=request_params.get("co_id"))
         if not rows:
-            return {"status": "source-error", "source": "MOPS", "reason": "unparseable-or-empty"}
+            if has_official_header:
+                return {"status": "available", "rows": []}
+            return {"status": "source-error", "source": "MOPS", "reason": "unparseable"}
         return {"rows": rows}
     except Exception as exc:
         return {"status": "source-error", "source": "MOPS", "reason": str(exc)[:120]}
@@ -471,6 +579,15 @@ def _event_from_pattern(html, pattern, event, impact, source, default_year):
     return {"date": event_date, "event": event, "impact": impact, "source": source}
 
 
+def _source_label(source, source_kind=None):
+    if not source:
+        return ""
+    suffix = "備援" if source_kind == "seed-fallback" else "官方"
+    if str(source).endswith(("官方", "備援")):
+        return str(source)
+    return f"{source}{suffix}"
+
+
 def build_live_global_event_source(now=None, get_text=None):
     base_date = _as_date(now or datetime.now()) or datetime.now().date()
     year = base_date.year
@@ -480,7 +597,7 @@ def build_live_global_event_source(now=None, get_text=None):
             "Fed",
             "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
             r"(?P<date>June\s+16\s*-\s*17)",
-            "Fed FOMC SEP",
+            "Fed FOMC 利率決策/SEP",
             "利率/匯率",
         ),
         (
@@ -494,21 +611,21 @@ def build_live_global_event_source(now=None, get_text=None):
             "BOJ",
             "https://www.boj.or.jp/en/about/calendar/",
             r"(?P<date>June\s+15\s*[-–]\s*16|06/15\s*[-–]\s*16)",
-            "BOJ MPM",
+            "日本央行 BOJ 利率會議",
             "利率/匯率",
         ),
         (
             "BEA",
             "https://www.bea.gov/news/schedule",
             r"(?P<date>June\s+25,\s+2026|06/25/2026)",
-            "BEA GDP third estimate / Personal Income and Outlays",
+            "美國 BEA GDP/PCE",
             "通膨/利率",
         ),
         (
             "ECB",
             "https://www.ecb.europa.eu/press/calendars/mgcgc/html/index.en.html",
             r"(?P<date>June\s+10\s*[-–]\s*11|10\s+June\s+2026)",
-            "ECB monetary policy meeting/press conference",
+            "ECB 利率決策/記者會",
             "利率/匯率",
         ),
     ]
@@ -542,6 +659,7 @@ def collect_mops_events(results_map, now, mops_adapter=None, max_items=5):
     targets = _target_stocks(results_map)
     target_by_code = {item["code"]: item for item in targets}
     queried = []
+    source_errors = []
     rows = []
     try:
         for target in targets:
@@ -556,7 +674,8 @@ def collect_mops_events(results_map, now, mops_adapter=None, max_items=5):
                     queried.append(params)
                     response = mops_adapter(params)
                     if isinstance(response, dict) and response.get("status") == "source-error":
-                        return {"status": "source-error", "items": [], "queried_months": queried}
+                        source_errors.append(params)
+                        continue
                     data_rows = response.get("rows", []) if isinstance(response, dict) else response
                     for row in data_rows or []:
                         event_date = row.get("date") or row.get("event_date") or row.get("日期")
@@ -575,6 +694,9 @@ def collect_mops_events(results_map, now, mops_adapter=None, max_items=5):
     except Exception:
         return {"status": "source-error", "items": [], "queried_months": queried}
 
+    if not rows and source_errors:
+        return {"status": "source-error", "items": [], "queried_months": queried}
+
     rows.sort(key=lambda item: (item["date"], item["code"], item["event"]))
     return {"status": "available", "items": rows[:max_items], "queried_months": queried}
 
@@ -586,8 +708,10 @@ def collect_global_events(now, global_event_source=None, max_items=5):
         if global_event_source.get("status") == "source-error":
             return {"status": "source-error", "items": []}
         source_rows = global_event_source.get("events") or []
+        source_kind = global_event_source.get("source")
     else:
         source_rows = global_event_source or []
+        source_kind = "official-live"
 
     start = _as_date(now)
     end = start + timedelta(days=30)
@@ -604,6 +728,7 @@ def collect_global_events(now, global_event_source=None, max_items=5):
             "event": row.get("event") or row.get("name"),
             "impact": impact,
             "source": row.get("source"),
+            "source_label": _source_label(row.get("source"), source_kind),
             "priority": _EVENT_PRIORITY.get(first_impact, 9),
         })
     rows = [row for row in rows if row["event"] and row["impact"] and row["source"]]
@@ -673,7 +798,7 @@ def format_future_watch_message(payload, now, version):
         for item in global_items[:5]:
             lines.append(
                 f"{item.get('date_label') or _date_label(item.get('date'))} {item.get('event')}｜"
-                f"影響面：{item.get('impact')}｜source={item.get('source')}"
+                f"影響面：{item.get('impact')}｜來源：{item.get('source_label') or item.get('source')}"
             )
     else:
         lines.append(GLOBAL_EMPTY)

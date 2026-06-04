@@ -6,13 +6,31 @@
 
 - 專案：台股策略 Telegram 報文機器人。
 - 正式結果以 git / runner 產生報文為準。
-- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.46`。
+- 使用者可見報文版本在 `core/generator.py` 的 `VERSION`，目前已落地為 `v20.4.47`。
 - 固定 8 份 Markdown 不刪：`AGENTS.md`、`DISPATCH.md`、`RESEARCH.md`、`CURRENT_STATE.md`、`CLEANUP_PLAN.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`。
 - Architect 是總控；產品 / 策略 / 報文 bug 或 feature 預設走 PM -> Tech -> QA。
 - 跨日狀態、已執行交易、歷史 evidence 必須來自 production DB 或 Owner 指定持久來源；local/runtime/worktree 不能當跨日記憶。
 - 缺資料、source-error、欄位不足或可信度不足時 fail closed。
 
 ## Latest Completed Work
+
+- task_id：`future_watch_complete_v20_4_47`
+- 狀態：code done / QA conditional pass；報文版本升 `v20.4.47`。
+- 問題：Owner 認為 v20.4.46 第 4 則仍只是保守試行，不是完成版：歷史類比空泛、MOPS source-error、全球事件 raw/英文。
+- 關鍵行為：
+  - TWSE 歷史類比改為壓力情境線，顯示相似情境、相似度、相似點、差異、關注條件與 `source=TWSE`。
+  - MOPS adapter 補 `step=1` / `firstin=1`，可解析官方 `t100sb02_1` 表格；資料列不必重複出現 `法人說明會`，欄位標題可信即可。
+  - MOPS 多市場查詢不再讓單一 TYPEK source-error 覆蓋已查到事件。
+  - 全球事件中文化，來源改為 `來源：...官方/備援`。
+- 驗證：
+  - Focused future-watch tests：9 passed。
+  - py_compile：passed。
+  - `git diff --check`：passed。
+  - Read-only live smoke with 2301：TWSE 壓力情境、MOPS 06/05 / 06/22 光寶科法說會、中文全球事件。
+- 殘留風險：full `tests/test_generator_report.py -q` 仍有 30 個既有未持倉漏斗 / legacy snapshot failures；全球事件 smoke 走備援 source；TWSE 歷史類比是壓力情境 template，不是多年統計模型。
+- 邊界：未改策略、RR、持倉風控、DB schema/write/backfill、live Telegram。
+
+## Previous Completed Work
 
 - task_id：`github_actions_manual_workflow_clean_inputs_20260604`
 - 狀態：code done / QA 通過；不升 Telegram 報文版本。
