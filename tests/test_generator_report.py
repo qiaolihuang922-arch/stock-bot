@@ -1673,6 +1673,65 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertEqual(result["rows"][0]["co_id"], "2301")
         self.assertEqual(result["rows"][0]["event"], "法人說明會")
 
+    def test_v20_4_47_mops_query_budget_limits_targets_and_calls(self):
+        results = {
+            f"股票{i}": {
+                "stock_code": f"23{i:02d}",
+                "holding": i < 2,
+                "result": {"trade_state": "BUYABLE" if i == 2 else "OBSERVE"},
+            }
+            for i in range(12)
+        }
+        calls = []
+
+        def adapter(params):
+            calls.append(dict(params))
+            return {"status": "available", "rows": []}
+
+        mops = collect_mops_events(
+            results,
+            datetime(2026, 6, 4),
+            mops_adapter=adapter,
+            max_targets=2,
+            max_queries=3,
+        )
+
+        self.assertEqual(mops["status"], "available")
+        self.assertEqual(mops["target_count"], 2)
+        self.assertEqual(mops["query_count"], 3)
+        self.assertTrue(mops["budget_exhausted"])
+        self.assertEqual(len(calls), 3)
+        self.assertLessEqual(len({call["co_id"] for call in calls}), 2)
+
+    def test_v20_4_47_mops_uses_exchange_typek_first_and_stops_after_rows(self):
+        calls = []
+
+        def adapter(params):
+            calls.append(dict(params))
+            if params["TYPEK"] == "otc":
+                return {
+                    "rows": [{
+                        "date": "2026-06-20",
+                        "co_id": "6488",
+                        "name": "環球晶",
+                        "event": "法人說明會",
+                    }]
+                }
+            return {"status": "available", "rows": []}
+
+        mops = collect_mops_events(
+            {"環球晶": {"stock_code": "6488", "exchange": "上櫃"}},
+            datetime(2026, 6, 4),
+            mops_adapter=adapter,
+            max_queries=8,
+        )
+
+        self.assertEqual(calls[0]["TYPEK"], "otc")
+        self.assertEqual(mops["query_count"], 2)
+        self.assertFalse(mops["budget_exhausted"])
+        self.assertEqual(mops["items"][0]["code"], "6488")
+        self.assertEqual(mops["items"][0]["reason"], "候選")
+
     def test_v20_4_47_live_global_events_parse_official_pages_or_seed_fallback(self):
         pages = {
             "federalreserve": "FOMC meeting calendar June 16-17",

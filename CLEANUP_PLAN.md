@@ -16,6 +16,13 @@
 
 ## Completed
 
+- `future_watch_query_interface_optimization_20260604`:
+  - 問題：Owner 擔心未來 30 日關注查即時接口會久，希望優化查詢接口並增加查詢參數，不走資料庫方向。
+  - 結果：MOPS 查詢新增 `max_targets` / `max_queries` / `max_seconds` 預算；POST 補 `encodeURIComponent` / `off`；市場別正規化後優先查對應 TYPEK；已知市場別每月查完即停止橫向掃描；回傳 `query_count` / `target_count` / `budget_exhausted` / `source_error_count` diagnostics。
+  - 可重跑補強：focused future-watch 10 passed、py_compile / diff check passed、read-only live smoke 2301 `mops_query_count=2` 且仍列 06/05 / 06/22 法說會。
+  - QA 狀態：通過。
+  - 流程復盤：根因分類為 `source_parser` + `performance_budget`。即時查詢不能靠無限制掃源；應優先用 payload metadata 限縮市場別，並用 query/time budget fail closed。
+  - 邊界：未改策略、RR、DB schema/write/backfill、live Telegram。
 - `future_watch_complete_v20_4_47`:
   - 問題：v20.4.46 第 4 則仍呈現 TWSE insufficient、MOPS source-error、全球 raw 英文事件，Owner 要直接做成完成版。
   - 結果：VERSION 升 `v20.4.47`；TWSE 顯示壓力情境 / 相似點 / 差異 / 關注條件；MOPS 正確 POST `step=1` / `firstin=1` 並解析官方表格，可列光寶科 06/05 / 06/22 法說會；全球事件中文化並顯示 `來源：官方/備援`。

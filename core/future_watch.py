@@ -3,6 +3,7 @@
 import re
 from html import unescape
 from datetime import date, datetime, timedelta
+from time import monotonic
 
 try:
     import requests
@@ -17,6 +18,15 @@ MOPS_SOURCE_ERROR = "法說會提醒：MOPS 官方來源暫時不可解析，本
 MOPS_ENDPOINT = "https://mopsov.twse.com.tw/mops/web/ajax_t100sb02_1"
 MOPS_METHOD = "POST"
 MOPS_TYPEKS = ("sii", "otc", "rotc", "pub")
+MOPS_DEFAULT_MAX_TARGETS = 8
+MOPS_DEFAULT_MAX_QUERIES = 24
+MOPS_DEFAULT_MAX_SECONDS = 8
+MOPS_TYPEK_PRIORITY = {
+    "sii": ("sii", "otc", "rotc", "pub"),
+    "otc": ("otc", "sii", "rotc", "pub"),
+    "rotc": ("rotc", "otc", "sii", "pub"),
+    "pub": ("pub", "sii", "otc", "rotc"),
+}
 TWSE_MI_INDEX_ENDPOINT = "https://openapi.twse.com.tw/v1/exchangeReport/MI_INDEX"
 TWSE_TAIEX_HISTORY_ENDPOINT = "https://openapi.twse.com.tw/v1/exchangeReport/MI_5MINS_HIST"
 TWSE_TAIEX_HISTORY_RWD_ENDPOINT = "https://www.twse.com.tw/rwd/zh/TAIEX/MI_5MINS_HIST"
@@ -301,7 +311,85 @@ def _month_keys(start, end):
     return keys
 
 
-def _target_stocks(results_map):
+def _pick_first_value(data, keys):
+    for key in keys:
+        if not isinstance(data, dict):
+            continue
+        value = data.get(key)
+        if value not in (None, ""):
+            return value
+    return None
+
+
+def _normalize_mops_typek(value):
+    text = str(value or "").strip().lower()
+    if not text:
+        return None
+    if text in MOPS_TYPEKS:
+        return text
+    if any(token in text for token in ("上市", "twse", "tse", "sii")):
+        return "sii"
+    if any(token in text for token in ("上櫃", "tpex", "otc")):
+        return "otc"
+    if any(token in text for token in ("興櫃", "emerging", "rotc")):
+        return "rotc"
+    if any(token in text for token in ("公開發行", "public", "pub")):
+        return "pub"
+    return None
+
+
+def _target_exchange_typek(data):
+    result = data.get("result") if isinstance(data, dict) and isinstance(data.get("result"), dict) else {}
+    value = _pick_first_value(
+        data,
+        ("mops_typek", "TYPEK", "typek", "exchange", "market", "listed_market", "市場別"),
+    )
+    if value is None:
+        value = _pick_first_value(
+            result,
+            ("mops_typek", "TYPEK", "typek", "exchange", "market", "listed_market", "市場別"),
+        )
+    return _normalize_mops_typek(value)
+
+
+def _target_priority(data):
+    if not isinstance(data, dict):
+        return 90
+    result = data.get("result") if isinstance(data.get("result"), dict) else {}
+    state = str(
+        data.get("decision")
+        or data.get("action")
+        or data.get("status")
+        or result.get("trade_state")
+        or result.get("decision")
+        or ""
+    ).lower()
+    if data.get("holding"):
+        return 0
+    if any(token in state for token in ("buy", "可買", "準備", "prepare", "watch")):
+        return 20
+    if any(token in state for token in ("淘汰", "eliminated", "不可", "blocked")):
+        return 80
+    return 50
+
+
+def _mops_typek_order(target):
+    preferred = target.get("typek")
+    if preferred in MOPS_TYPEK_PRIORITY:
+        return MOPS_TYPEK_PRIORITY[preferred]
+    return MOPS_TYPEKS
+
+
+def _mops_query_key(params):
+    return (
+        params.get("TYPEK"),
+        params.get("year"),
+        params.get("month"),
+        params.get("co_id"),
+    )
+
+
+def _target_stocks(results_map, max_targets=None):
     targets = []
     seen = set()
     for name, data in (results_map or {}).items():
@@ -310,7 +398,16 @@ def _target_stocks(results_map):
             continue
         seen.add(code)
         reason = "持倉" if (data or {}).get("holding") else "候選"
-        targets.append({"code": code, "name": name, "reason": reason})
+        targets.append({
+            "code": code,
+            "name": name,
+            "reason": reason,
+            "typek": _target_exchange_typek(data or {}),
+            "priority": _target_priority(data or {}),
+        })
+    targets.sort(key=lambda item: (item["priority"], item["code"], item["name"]))
+    if max_targets is not None:
+        return targets[:max_targets]
     return targets
 
 
@@ -554,8 +651,10 @@ def live_mops_adapter(params, post_text=None):
     try:
         request_params = {
             **(params or {}),
+            "encodeURIComponent": str((params or {}).get("encodeURIComponent") or "1"),
             "step": str((params or {}).get("step") or "1"),
             "firstin": str((params or {}).get("firstin") or "1"),
+            "off": str((params or {}).get("off") or "1"),
         }
         body = _request_post_text(MOPS_ENDPOINT, request_params, requester=post_text)
         rows, has_official_header = _parse_mops_rows(body, fallback_code=request_params.get("co_id"))
@@ -650,33 +749,71 @@ def build_live_global_event_source(now=None, get_text=None):
     }
 
 
-def collect_mops_events(results_map, now, mops_adapter=None, max_items=5):
+def collect_mops_events(
+    results_map,
+    now,
+    mops_adapter=None,
+    max_items=5,
+    max_targets=MOPS_DEFAULT_MAX_TARGETS,
+    max_queries=MOPS_DEFAULT_MAX_QUERIES,
+    max_seconds=MOPS_DEFAULT_MAX_SECONDS,
+):
     if mops_adapter is None:
-        return {"status": "missing-source", "items": [], "queried_months": []}
+        return {
+            "status": "missing-source",
+            "items": [],
+            "queried_months": [],
+            "query_count": 0,
+            "target_count": 0,
+            "budget_exhausted": False,
+        }
 
     start = _as_date(now)
     end = start + timedelta(days=30)
-    targets = _target_stocks(results_map)
+    targets = _target_stocks(results_map, max_targets=max_targets)
     target_by_code = {item["code"]: item for item in targets}
     queried = []
     source_errors = []
     rows = []
+    cache = {}
+    started_at = monotonic()
+    budget_exhausted = False
     try:
         for target in targets:
             for year, month in _month_keys(start, end):
-                for typek in MOPS_TYPEKS:
+                market_resolved = False
+                for typek in _mops_typek_order(target):
+                    if len(queried) >= max_queries or (monotonic() - started_at) >= max_seconds:
+                        budget_exhausted = True
+                        break
                     params = {
+                        "encodeURIComponent": "1",
+                        "step": "1",
+                        "firstin": "1",
+                        "off": "1",
                         "TYPEK": typek,
                         "year": year,
                         "month": month,
                         "co_id": target["code"],
                     }
-                    queried.append(params)
-                    response = mops_adapter(params)
+                    key = _mops_query_key(params)
+                    if key in cache:
+                        response = cache[key]
+                    else:
+                        queried.append(params)
+                        response = mops_adapter(params)
+                        cache[key] = response
                     if isinstance(response, dict) and response.get("status") == "source-error":
                         source_errors.append(params)
+                        if target.get("typek") == typek:
+                            market_resolved = True
+                            break
                         continue
                     data_rows = response.get("rows", []) if isinstance(response, dict) else response
+                    if target.get("typek") == typek:
+                        market_resolved = True
+                    if data_rows:
+                        market_resolved = True
                     for row in data_rows or []:
                         event_date = row.get("date") or row.get("event_date") or row.get("日期")
                         code = str(row.get("co_id") or row.get("stock_code") or row.get("公司代號") or target["code"])
@@ -691,14 +828,44 @@ def collect_mops_events(results_map, now, mops_adapter=None, max_items=5):
                             "reason": target_info["reason"],
                             "source": "MOPS",
                         })
+                    if market_resolved:
+                        break
+                if budget_exhausted:
+                    break
+            if budget_exhausted:
+                break
     except Exception:
-        return {"status": "source-error", "items": [], "queried_months": queried}
+        return {
+            "status": "source-error",
+            "items": [],
+            "queried_months": queried,
+            "query_count": len(queried),
+            "target_count": len(targets),
+            "budget_exhausted": budget_exhausted,
+            "source_error_count": len(source_errors),
+        }
 
     if not rows and source_errors:
-        return {"status": "source-error", "items": [], "queried_months": queried}
+        return {
+            "status": "source-error",
+            "items": [],
+            "queried_months": queried,
+            "query_count": len(queried),
+            "target_count": len(targets),
+            "budget_exhausted": budget_exhausted,
+            "source_error_count": len(source_errors),
+        }
 
     rows.sort(key=lambda item: (item["date"], item["code"], item["event"]))
-    return {"status": "available", "items": rows[:max_items], "queried_months": queried}
+    return {
+        "status": "available",
+        "items": rows[:max_items],
+        "queried_months": queried,
+        "query_count": len(queried),
+        "target_count": len(targets),
+        "budget_exhausted": budget_exhausted,
+        "source_error_count": len(source_errors),
+    }
 
 
 def collect_global_events(now, global_event_source=None, max_items=5):

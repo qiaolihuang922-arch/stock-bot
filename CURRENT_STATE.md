@@ -14,6 +14,25 @@
 
 ## Latest Completed Work
 
+- task_id：`future_watch_query_interface_optimization_20260604`
+- 狀態：code done / QA 通過；報文版本維持 `v20.4.47`。
+- 問題：Owner 擔心未來 30 日關注的即時接口查詢會久，需要多增加查詢參數與範圍控制，不走 DB/cache 方向。
+- 關鍵行為：
+  - MOPS `collect_mops_events()` 新增 `max_targets`、`max_queries`、`max_seconds`。
+  - 回傳 diagnostics：`query_count`、`target_count`、`budget_exhausted`、`source_error_count`。
+  - MOPS POST 參數包含 `encodeURIComponent=1`、`step=1`、`firstin=1`、`off=1`、`TYPEK`、`year`、`month`、`co_id`。
+  - 市場別正規化：上市/TWSE -> `sii`，上櫃/TPEX/OTC -> `otc`，興櫃 -> `rotc`，公開發行 -> `pub`。
+  - 持倉 / 可買準備候選優先查；淘汰 / blocked 後置。
+  - 已知市場別時每月查對應 TYPEK 後停止，不再盲掃四種市場。
+- 驗證：
+  - Focused future-watch tests：10 passed。
+  - py_compile：passed。
+  - `git diff --check`：passed。
+  - Read-only live smoke with 2301：`mops_query_count=2`、`mops_target_count=1`、`budget_exhausted=False`，仍列 MOPS 06/05 / 06/22 光寶科法說會。
+- 邊界：未改策略、RR、持倉風控、DB schema/write/backfill、live Telegram；第 4 則可見格式不變。
+
+## Previous Completed Work
+
 - task_id：`future_watch_complete_v20_4_47`
 - 狀態：code done / QA conditional pass；報文版本升 `v20.4.47`。
 - 問題：Owner 認為 v20.4.46 第 4 則仍只是保守試行，不是完成版：歷史類比空泛、MOPS source-error、全球事件 raw/英文。

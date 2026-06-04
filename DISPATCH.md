@@ -3,7 +3,7 @@
 依 `AGENTS.md` 啟動順序閱讀；本文件只保留任務看板、handoff 指針與固定啟動命令。
 
 - task_md_holds: `recently_done`
-- task_md_task_id: `future_watch_complete_v20_4_47`
+- task_md_task_id: `future_watch_query_interface_optimization_20260604`
 - task_md_note: `TASK.md / CHANGELOG.md / QA_REPORT.md 目前是最近完成任務的滾動 handoff，不代表仍在 Tech/QA。`
 
 ## Active
@@ -16,6 +16,7 @@
 
 ## Recently Done
 
+- `future_watch_query_interface_optimization_20260604`｜normal_patch/L2｜優化未來 30 日關注的即時查詢接口，不升報文版本仍維持 `v20.4.47`：MOPS `collect_mops_events()` 新增 `max_targets` / `max_queries` / `max_seconds`、`query_count` / `target_count` / `budget_exhausted` / `source_error_count` diagnostics；POST 參數補 `encodeURIComponent=1`、`off=1` 並保留 `step=1` / `firstin=1`；上市 / 上櫃 / 興櫃 / 公開發行市場別會優先查對應 TYPEK，已知市場別查完即停止橫向掃描；持倉與候選優先，淘汰 / blocked 後置。focused future-watch tests 10 passed、py_compile / diff check passed、read-only live smoke 2301 `mops_query_count=2` 且仍列 06/05 / 06/22 光寶科法說會。未改策略、RR、DB schema/write/backfill、live Telegram。
 - `v20.4.47`｜`future_watch_complete_v20_4_47`｜normal_patch/L2｜把 `【未來30日關注】` 從 v20.4.46 保守試行版做成完成版：TWSE 歷史類比改為壓力情境線，輸出 `2015/08/20-24 全球股災前段`、相似度、相似點、差異與關注條件；MOPS adapter 補正確 `step/firstin` 參數並解析官方 t100sb02_1 表格，2301 live smoke 可列 06/05、06/22 光寶科法說會；全球事件中文化並改 `來源：...官方/備援`，不再顯示 raw `source=`。focused future-watch tests 9 passed、py_compile / diff check passed、read-only live smoke passed；QA `conditional pass`，原因是全量 `tests/test_generator_report.py` 仍有既有未持倉漏斗 / legacy snapshot failures，本輪未修旁支。未改策略、RR、DB schema/write/backfill、live Telegram。
 - `github_actions_manual_workflow_clean_inputs_20260604`｜normal_patch/L2｜修正 GitHub Actions 手動執行手機端顯示舊 backfill inputs 後送出 `Unexpected inputs provided: ["start_date", "end_date", "backfill_version"]`：刪除舊 `.github/workflows/stock-bot.yml`，新增 `.github/workflows/stock-bot-clean.yml`，workflow 名稱改 `Stock Bot` 以重置 GitHub mobile dispatch form identity；manual inputs 只保留 `run_mode`，choices 只保留 `bot` / `daily_evidence`；tests 改讀新 workflow 並反證舊 file / 舊欄位不存在。`tests/test_workflow_runtime_config.py` 9 passed、`git diff --check` passed。未改 Telegram 報文版本、策略、DB、live Telegram。
 - `v20.4.46`｜`future_30d_watch_live_readonly_sources_v20_4_46`｜normal_patch/L2｜未來 30 日關注第 4 則改為「即時讀取、不進 DB」試行：`default_future_watch_sources(now)` 每次報文建立 TWSE / MOPS / global live readonly sources；TWSE OpenAPI 可讀時仍保守 fail closed 為 `無高相似崩盤樣本｜依據不足/相似度低｜source=TWSE`，不硬套崩盤類比；MOPS official POST adapter 只有解析出日期 / 公司 / 法說會欄位才列事件，SPA shell、無 table、欄位不可辨識或空 rows 都顯示 `source-error（MOPS）`，不靜默消失；全球事件嘗試 Fed / BLS / BOJ / BEA / ECB 官方頁，全部解析失敗時保留 seed fallback。focused tests v20.4.46 9 passed、py_compile / diff check passed；QA 補 official message-list probe：`message_count=4 malformed_mops=source-error first_three_clean=true no_db_client_requested=true`，QA `conditional pass`，條件為收口文件需更新；本收口已更新。未改策略 decision、RR、持倉風控、DB schema/write/backfill、live Telegram。
