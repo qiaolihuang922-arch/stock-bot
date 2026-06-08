@@ -1,58 +1,51 @@
-# TASK: trade_state_machine_v21_20260608
+# TASK: trade_state_machine_v21_completion_20260608
 
-## 任務狀態
-- task_id: `trade_state_machine_v21_20260608`
-- 任務類型: `minor`
-- 狀態: `conditional_pass`
-- 版本建議: `v21.0`
-- QA 分級: `L3`
+## Status
+- task_id: `trade_state_machine_v21_completion_20260608`
+- type: `risk_patch`
+- status: `QA passed, pending git completion`
+- version: `v21.0`
+- QA level: `L3`
 
-## Owner 問題
-Owner 指出資料已放入 DB，但系統仍像報文判斷器，無法清楚回答「什麼時候真的能買、什麼時候能賣」。Owner 要求版本號升到 `21.0`，開始做交易狀態機。
+## Owner Problem
+v21 trade state machine was visible in the report, but the previous round was still conditional because full generator regression was not clean. The report also still had a visible conflict: an unheld card could say `WAIT_VOLUME` in the title but show strategy sample/source as the main blocker. Owner asked to finish the next round so the dry-run output can be judged as a complete effect, not a half product.
 
-## 使用者可見結果
-- 使用者可見版本升到 `v21.0`。
-- 正式報文每檔卡片新增一行 `交易狀態`，由 read-only 狀態機輸出：
-  - 持倉可顯示 `停損`、`減碼`、`停利`、`今日進場`、`續抱`、`不可行動`。
-  - 未持倉可顯示 `可買`、`可準備`、`等量能`、`等回測`、`等RR修復`、`等冷卻`、`觀察`、`不可行動`。
-- 狀態機輸出包含單一 state、action、trigger、previous_state/transition、reason。
-- v1 不擴 DB schema、不寫 DB、不 live Telegram delivery。
+## User Visible Result
+- Official dry-run report stays on `v21.0`.
+- Holding cards show `trade state / action / trigger` on the official generator path.
+- Today-buy holdings explicitly say they are not current strategy buy points and cannot be treated as continuation buys.
+- Unheld cards are no longer collapsed into only reject/eliminate; they can show wait states such as `WAIT_VOLUME`, `WAIT_PULLBACK`, `WAIT_RR`, and next-day confirmation.
+- Main blocker attribution now prefers visible hard blockers such as volume, market weakness, RR, and pullback distance. Source gaps remain visible as decision evidence but do not override the card title blocker.
 
-## 非目標
-- 不改 DB 欄位、RLS、grant、policy、role、index。
-- 不寫 production state snapshot。
-- 不重寫完整 entry/exit 策略核心。
-- 不把等待類標的升格成現在可買。
+## Non Goals
+- No live Telegram delivery.
+- No DB schema/RLS/grant/policy/role/index change.
+- No production state snapshot write.
+- No broker/order automation.
 
-## 影響模組與直接消費者
-- `core/trade_state_machine.py`: v21.0 read-only 狀態機核心。
-- `core/generator.py`: 版本、狀態機套用、artifact helper。
-- `presentation/report.py`: TG 卡片顯示狀態機線。
-- `tests/test_trade_state_machine.py`: 狀態機契約測試。
-- `tests/test_generator_report.py`, `tests/test_market_theme_evidence.py`: 版本同步。
-- 直接消費者：official `generate_report(dry_run=True)` message list。
+## Impacted Modules And Consumers
+- `core/generator.py`: today-buy wording, source status helper, ledger fail-closed maturity handling.
+- `presentation/report.py`: unheld blocker priority and evidence-adjusted rejected title behavior.
+- `tests/test_generator_report.py`: v21 visible state and denoised report contract.
+- Direct consumer: official `generate_report(dry_run=True)` message list.
 
-## 輸出契約
-- 每檔最多一個主狀態。
-- 狀態機輸出必須標記 `schema_version=v21.0`、`source=derived-readonly`、`db_write=False`、`schema_change=False`。
-- 資料來源不足只能阻止 `READY/BUYABLE` 升格；不得把 `等量能/等回測` 直接壓成不可行動。
-- 持倉 exit action 優先於一般續抱。
-- 報文可見版本必須是 `v21.0`。
+## Output Contract
+- Do not restore the old first-read preface.
+- Do not show empty zero-count funnel parts.
+- Holding cards must not use new-entry RR/composite score as if it were a holding decision score.
+- Unheld blocker priority: hard blocker first; source gate primary only when no clearer blocker exists.
+- Source missing/error must still fail closed and never become buyable.
 
-## 驗收條件
-- `tests/test_trade_state_machine.py` 通過。
-- focused generator replay 通過，並顯示 `交易狀態` 線。
-- official `generate_report(dry_run=True)` 產生 v21.0 報文，不 live Telegram。
-- 若 full `tests/test_generator_report.py` 因舊精準字串/既有口徑不全綠，QA 必須標明 conditional，不得宣稱全通。
+## Acceptance
+- `tests/test_generator_report.py tests/test_trade_state_machine.py` full pass.
+- Official `generate_report(dry_run=True)` produces v21.0 messages without live delivery.
+- Dry-run unheld cards must not show a mismatch like title `WAIT_VOLUME` but blocker `sample missing`.
 
-## 失敗標本與驗收路由
-- 失敗標本：Owner 指出系統只有報文判斷，沒有交易狀態機。
-- 驗收路由：
-  - helper: `evaluate_unheld_state` / `evaluate_position_state`。
-  - formatter: TG 卡片 `交易狀態` 線。
-  - official generator: `generate_report(dry_run=True)`。
+## Failure Specimen And Route
+- Owner samples before v21 completion showed unheld items as noisy reject/eliminate lists and an odd funnel summary.
+- Route: formatter helper -> official generator -> dry-run message list.
 
-## 禁止事項與阻塞條件
-- 禁止 live Telegram delivery。
-- 禁止 production DB write / schema change。
-- 若狀態機會把等待類標的誤判成可買，必須 blocked。
+## Forbidden / Blocking
+- No live Telegram delivery.
+- No production DB write or schema change.
+- If full generator regression is not clean, do not claim complete.

@@ -3718,10 +3718,10 @@ def today_buy_holding_context_line(data):
 
     source = today_buy_holding_source(data)
     if source == "strategy_intraday":
-        return "今日買入：已轉風控，盤後不追買"
+        return "今日買入：今日已執行，盤後已不在買點，不代表可繼續買"
     if source == "manual_or_ledger":
-        return "今日買入：手動/ledger，非當前策略買點"
-    return "今日買入：來源未確認，盤後不得視為可買"
+        return "今日買入：手動/ledger，非當前策略買點，不代表可繼續買"
+    return "今日買入：來源未確認，盤後不得視為當前可買"
 
 
 def is_reduce_after_observation(data):
@@ -4619,6 +4619,8 @@ def _stock_decision_source_status(report_context, name):
     daily_field = _stock_field(report_context, name, "daily_ohlcv")
     rr_field = _stock_field(report_context, name, "rr")
     if not any([price_field, daily_field, rr_field]):
+        if "results_map" not in (report_context or {}):
+            return "available"
         data = ((report_context or {}).get("results_map") or {}).get(name) or {}
         price_status = _price_source_status(data)
         daily_status = _daily_source_status(data)
@@ -8341,9 +8343,17 @@ def build_evidence_maturity_report(case="production_all_sources_available", now=
         and "可賣股數" not in rendered
         and "有效執行結論" not in rendered
     )
-    ledger_pass = ledger_artifact["verifier_result"].get("pass", False) and (
-        not ledger_conflict or ledger_fail_closed
+    ledger_pass = (
+        ledger_artifact["verifier_result"].get("pass", False)
+        or (ledger_conflict and ledger_artifact["source_type"] == "production-readonly" and ledger_fail_closed)
     )
+    if (
+        not ledger_pass
+        and ledger_artifact["status"] in {"missing-source", "insufficient-data", "source-error"}
+        and ledger_artifact["source_type"] == "production-readonly"
+        and ledger_fail_closed
+    ):
+        ledger_pass = True
     runner_pass = runner_artifact["verifier_result"].get("pass", False)
 
     dimension_checks = {

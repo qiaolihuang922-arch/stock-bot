@@ -451,7 +451,6 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
     source_blocked = source_status in {"missing-source", "insufficient-data", "source-error", "unresolved-conflict"}
     if source_blocked and not strategy_source_blocked:
         source_gates.append(("資料來源缺失", "需補齊有效行情 / 策略來源"))
-
     blocker_text = "、".join(str(item) for item in blockers)
     phase = stock_result.get("structure_phase")
     title_text = str(title_label or "")
@@ -503,6 +502,9 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
     if not is_actionable and quality and quality not in {"A+", "A", "B"}:
         gates.append(("進場品質不足", f"進場品質 {quality}｜需B以上"))
 
+    if not gates:
+        gates.extend(source_gates)
+
     if not gates and post_market_prepare:
         gates.append(("盤後待確認", "需開盤後重新確認"))
     elif not gates and funnel_state == "可準備":
@@ -517,7 +519,6 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
         gates.append(("隔日確認", "需轉強後重新評估"))
     elif not gates and funnel_state == "淘汰":
         gates.append(("重新轉強", "需確認後重新評估"))
-    gates.extend(source_gates)
     if not gates:
         if blockers:
             gates.append((str(blockers[0]), "需解除後重新評估"))
@@ -883,7 +884,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         }.get(strategy_source_status, "策略樣本證據不足")
     elif deps["is_valid_entry"](stock_result) and not source_eligible:
         title_label = "資料來源缺失" if source_status in {"missing-source", "insufficient-data"} else "資料來源異常"
-    elif state == "弱勢淘汰" or funnel_state == "淘汰":
+    elif (state == "弱勢淘汰" or funnel_state == "淘汰") and not data.get("evidence_adjustment_reason"):
         title_label = deps["rejected_primary_reason"](stock_result)
     elif post_market_prepare:
         title_label = "開盤後確認"
@@ -914,6 +915,9 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     elif state in ["等RR修復", "等量能", "隔日確認"]:
         title_icon = "👀"
         title_action = state
+    elif funnel_state == "淘汰" and data.get("evidence_adjustment_reason"):
+        title_icon = "⛔"
+        title_action = "不買"
     elif state in ["弱勢淘汰", "淘汰"]:
         title_icon = "⛔"
         title_action = "淘汰"
