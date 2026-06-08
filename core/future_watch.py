@@ -92,6 +92,15 @@ _DEFAULT_GLOBAL_EVENT_SEED = (
 
 TAIWAN_CRASH_TEMPLATE_LIBRARY = (
     {
+        "event": "1987 全球黑色星期一外溢",
+        "pattern": "全球股災外溢",
+        "change_band": (-8.0, -3.5),
+        "pullback_band": (-18.0, -5.0),
+        "base_similarity": 0.31,
+        "difference": "全球同步恐慌型，需美股與亞股連鎖下跌才接近",
+        "watch": "觀察美股隔夜續跌、外資賣超與隔日開盤承接",
+    },
+    {
         "event": "1990 台股萬點泡沫崩跌",
         "pattern": "泡沫長空",
         "change_band": (-6.0, -2.5),
@@ -119,6 +128,15 @@ TAIWAN_CRASH_TEMPLATE_LIBRARY = (
         "watch": "留意台幣、金融股與外資賣超擴大",
     },
     {
+        "event": "1998 俄債/LTCM 新興市場風暴",
+        "pattern": "國際信用緊縮",
+        "change_band": (-5.0, -2.0),
+        "pullback_band": (-12.0, -4.0),
+        "base_similarity": 0.28,
+        "difference": "信用收縮外溢型，需新興市場/金融壓力同步才接近",
+        "watch": "留意美元流動性、新興市場跌勢與金融股壓力",
+    },
+    {
         "event": "2000 網路泡沫/政權輪替壓力",
         "pattern": "科技估值修正",
         "change_band": (-5.0, -2.0),
@@ -126,6 +144,15 @@ TAIWAN_CRASH_TEMPLATE_LIBRARY = (
         "base_similarity": 0.27,
         "difference": "科技泡沫估值修正型，需電子權值股同步轉弱",
         "watch": "觀察電子權值與高估值題材是否續弱",
+    },
+    {
+        "event": "2001 911 恐攻全球風險事件",
+        "pattern": "全球事件風險",
+        "change_band": (-7.0, -2.5),
+        "pullback_band": (-13.0, -4.0),
+        "base_similarity": 0.30,
+        "difference": "突發事件風險型，需事件衝擊與避險同步升溫才接近",
+        "watch": "留意事件釐清、美元/避險資產與隔日流動性",
     },
     {
         "event": "2003 SARS 台股急跌",
@@ -144,6 +171,24 @@ TAIWAN_CRASH_TEMPLATE_LIBRARY = (
         "base_similarity": 0.30,
         "difference": "單一政治事件急殺型，需隔日是否止跌確認",
         "watch": "留意事件釐清、政策訊號與隔日開盤承接",
+    },
+    {
+        "event": "2006 全球升息/雙卡風暴壓力",
+        "pattern": "內需信用與升息壓力",
+        "change_band": (-4.0, -1.5),
+        "pullback_band": (-10.0, -3.0),
+        "base_similarity": 0.25,
+        "difference": "內需信用與全球升息壓力型，需金融/消費同步轉弱才接近",
+        "watch": "留意金融股、內需股與外資風險偏好",
+    },
+    {
+        "event": "2007 次貸風暴前段",
+        "pattern": "信用風險前段",
+        "change_band": (-5.0, -1.8),
+        "pullback_band": (-11.0, -3.5),
+        "base_similarity": 0.29,
+        "difference": "信用風險前段，需金融壓力擴散才升級",
+        "watch": "留意金融股、信用利差與外資連續賣超",
     },
     {
         "event": "2008 金融海嘯",
@@ -189,6 +234,15 @@ TAIWAN_CRASH_TEMPLATE_LIBRARY = (
         "base_similarity": 0.32,
         "difference": "急跌情境，但仍需連續性確認",
         "watch": "留意是否連續跌破前低與量能放大",
+    },
+    {
+        "event": "2021 本土疫情/航運電子高檔回檔",
+        "pattern": "本土疫情與題材退潮",
+        "change_band": (-5.0, -1.8),
+        "pullback_band": (-10.0, -3.0),
+        "base_similarity": 0.27,
+        "difference": "本土疫情與高檔題材退潮型，需類股輪動同步轉弱才接近",
+        "watch": "留意疫情政策、航運/電子權值與融資變化",
     },
     {
         "event": "2022 升息通膨修正",
@@ -678,6 +732,34 @@ def _score_taiwan_crash_template(template, features):
     return min(max(score, 0.0), 0.92)
 
 
+def _historical_module_scores(template, features):
+    change = _value_or_zero(features.get("change_pct"))
+    pullback = _value_or_zero(features.get("pullback_from_high_pct"))
+    intraday = _value_or_zero(features.get("intraday_range_pct"))
+    volume_ratio = _value_or_zero(features.get("turnover_ratio"))
+    high_position = _value_or_zero(features.get("close_position_5d_pct"))
+    price_score = round(
+        (
+            0.65 * _band_similarity(change, template["change_band"])
+            + 0.35 * min(abs(intraday) / 5.0, 1.0)
+        ) * 100
+    )
+    position_score = round(
+        (
+            0.70 * _band_similarity(pullback, template["pullback_band"])
+            + 0.30 * (1.0 - min(abs(high_position - 50.0) / 50.0, 1.0) if high_position else 0.0)
+        ) * 100
+    )
+    liquidity_score = round((min(abs(volume_ratio - 1.0) / 1.0, 1.0) if volume_ratio else 0.0) * 100)
+    context_score = round(float(template.get("base_similarity") or 0) * 100)
+    return {
+        "price": price_score,
+        "position": position_score,
+        "liquidity": liquidity_score,
+        "context": context_score,
+    }
+
+
 def _historical_pressure_template(features):
     if not features:
         return {
@@ -707,6 +789,7 @@ def _historical_pressure_template(features):
         "event": template["event"],
         "pattern": template.get("pattern"),
         "similarity": best[0],
+        "module_scores": _historical_module_scores(template, features),
         "difference": template["difference"],
         "watch": template["watch"],
         "library_size": len(TAIWAN_CRASH_TEMPLATE_LIBRARY),
@@ -738,6 +821,18 @@ def _historical_strength_label(features):
     if change <= -1.2:
         return "壓力前段"
     return "一般回測"
+
+
+def _historical_module_score_line(template):
+    scores = template.get("module_scores") or {}
+    if not scores:
+        return ""
+    return (
+        f"模組分數：價格 {scores.get('price', 0)}｜"
+        f"位置 {scores.get('position', 0)}｜"
+        f"量能 {scores.get('liquidity', 0)}｜"
+        f"情境 {scores.get('context', 0)}"
+    )
 
 
 def _historical_followup_line(template, features):
@@ -788,6 +883,7 @@ def _build_twse_pressure_line(features):
     return "\n".join([
         f"歷史類比：{template['event']}｜相似度 {percent}%｜{context[0]}｜{context[1]}｜source=TWSE",
         f"相似點：{'｜'.join(matched[:5])}",
+        _historical_module_score_line(template),
         f"不相似/限制：{'；'.join(dict.fromkeys(gaps[:3]))}",
         f"下一步觀察：{_historical_followup_line(template, features)}",
         f"資料：TWSE近{features.get('history_rows') or 0}日｜樣本庫台股急跌 {template['library_size']}件",

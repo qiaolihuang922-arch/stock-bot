@@ -1,9 +1,10 @@
-# QA_REPORT: historical_analogy_granularity_20260608
+# QA_REPORT: historical_analogy_library_modules_20260608
 
 ## 測試範圍
 - TWSE historical analogy helper tests。
 - future-watch formatter test。
 - notifier tests。
+- market theme evidence tests。
 - market theme evidence tests。
 - official `generate_report(dry_run=True)` replay。
 
@@ -17,6 +18,7 @@
 - section 內包含：
   - 主類比事件。
   - `相似點`。
+  - `模組分數`。
   - `不相似/限制`。
   - `下一步觀察`。
   - `資料`。
@@ -26,12 +28,12 @@
 - `壓力級別` 使用壓力/急跌語言，不直接下交易命令。
 
 ## 失敗標本反證
-- Owner 指出 v20.4.51 顆粒度不足。
-- v20.4.52 official dry-run 顯示多行細節與資料來源。
+- Owner 指出 v20.4.52 歷史事件庫/模組仍不足。
+- v20.4.53 official dry-run 顯示 19 件樣本庫與價格/位置/量能/情境模組分數。
 
 ## 未測項目
 - live Telegram delivery 未測且禁止。
-- 未新增外部 historical DB。
+- 未新增外部 historical DB；本輪是內建台股事件庫擴充。
 
 ## QA 結論
 通過
