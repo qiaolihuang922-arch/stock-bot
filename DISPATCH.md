@@ -3,7 +3,7 @@
 ## 2026-06-08 Update
 
 - task_md_holds: `telegram_mobile_first_preface_20260608`
-- status: `QA conditional pass, pending commit/push`
+- status: `QA conditional pass, committed/pushed`
 - result: Telegram official dry-run now starts message 1 with `【先看結論】`, so mobile first screen shows `新倉：無有效進場`, today buys moved to risk control, holding risk priority, and that unheld cards are not a buy list.
 - version: `v20.4.48`
 - evidence: focused pytest 5 passed; py_compile passed; `generate_report(dry_run=True)` produced 4 messages with the new first-read preface.
@@ -11,7 +11,7 @@
 
 ## Next Action
 
-- Commit and push `telegram_mobile_first_preface_20260608`; then run git completion gate.
+- Monitor next dry-run / runner artifact only; no live Telegram delivery unless Owner separately approves.
 
 請依 `AGENTS.md` 啟動順序閱讀；本文件只保留當前看板、高信號結果與固定入口。
 

@@ -3,7 +3,7 @@
 ## 2026-06-08 Current
 
 - Active task: `telegram_mobile_first_preface_20260608`
-- Status: `QA conditional pass, pending commit/push`
+- Status: `QA conditional pass, committed/pushed`
 - User-visible change: Telegram report version `v20.4.48`; first message now starts with `【先看結論】` before holding cards.
 - Official dry-run artifact:
   - `MESSAGES 4`
