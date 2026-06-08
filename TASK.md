@@ -3,7 +3,7 @@
 ## Status
 - task_id: `trade_state_machine_v21_completion_20260608`
 - type: `risk_patch`
-- status: `QA passed, pending git completion`
+- status: `complete`
 - version: `v21.0`
 - QA level: `L3`
 

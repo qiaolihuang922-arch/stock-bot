@@ -3,7 +3,7 @@
 ## Active
 
 - task_md_holds: `trade_state_machine_v21_completion_20260608`
-- status: `QA passed, pending git completion`
+- status: `complete`
 - owner_request:
   - Finish the next round and implement a complete v21 effect.
   - Use dry-run/report output, not live Telegram delivery.
@@ -46,4 +46,5 @@ $env:PYTHONIOENCODING='utf-8'
 
 ## Next Action
 
-- Commit and push this completion patch, then run git completion gate.
+- Owner review of v21 dry-run effect.
+- Persisted state snapshots remain a separate future decision.

@@ -3,7 +3,7 @@
 ## Current Task
 
 - task_id: `trade_state_machine_v21_completion_20260608`
-- status: `QA passed, pending git completion`
+- status: `complete`
 - version: `v21.0`
 - no live Telegram delivery.
 
