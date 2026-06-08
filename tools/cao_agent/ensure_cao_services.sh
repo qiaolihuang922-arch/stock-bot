@@ -10,6 +10,7 @@ LOG_DIR="$CAO_LOG_DIR"
 WEB_DIR="$CAO_WEB_DIR"
 API_SESSION="cao_api"
 WEB_SESSION="cao_web"
+NPM_BIN="${NPM_BIN:-npm}"
 
 mkdir -p "$LOG_DIR"
 
@@ -26,7 +27,7 @@ if ! lsof -nP -iTCP:"$WEB_PORT" -sTCP:LISTEN >/dev/null 2>&1; then
   fi
   tmux kill-session -t "$WEB_SESSION" >/dev/null 2>&1 || true
   tmux new-session -d -s "$WEB_SESSION" \
-    "cd '$WEB_DIR' && /usr/bin/arch -arm64 /usr/local/bin/npm run dev -- --host 127.0.0.1 --port $WEB_PORT >> '$LOG_DIR/cao_web_${WEB_PORT}.log' 2>&1"
+    "cd '$WEB_DIR' && '$NPM_BIN' run dev -- --host 127.0.0.1 --port $WEB_PORT >> '$LOG_DIR/cao_web_${WEB_PORT}.log' 2>&1"
 fi
 
 for port in "$API_PORT" "$WEB_PORT"; do

@@ -31,6 +31,40 @@
   - 未改 strategy / RR / DB write / backfill / notifier / GitHub Actions。
   - 未 live Telegram delivery。
 
+## CAO Deployment Status
+
+- Windows 原生 CAO 已確認不可用：`cli-agent-orchestrator` 依賴 Unix `fcntl`。
+- WSL Ubuntu 已安裝並可用。
+- WSL 內已安裝：
+  - `uv`
+  - CAO CLI / server / MCP
+  - `git`
+  - `tmux`
+  - Linux `node` / `npm`
+  - CAO web UI
+  - stock agent profiles
+  - Tech worktree
+- CAO services 已啟動並從 Windows 可連：
+  - API：`http://127.0.0.1:9889/`
+  - UI：`http://127.0.0.1:5173/`
+- WSL Codex CLI：
+  - Windows app 內 `resources/codex` 是 Linux ELF binary，但 WindowsApps 目錄不可執行。
+  - 已複製到 `/root/.local/bin/codex-real` 並可執行，版本 `codex-cli 0.137.0-alpha.4`。
+- repo runner patch：
+  - `.gitattributes` 固定 `tools/cao_agent` shell/wrapper/sandbox 檔為 LF。
+  - `ensure_cao_services.sh` 改用 `NPM_BIN` / `npm`，不再硬寫 macOS `arch -arm64 /usr/local/bin/npm`。
+  - `tools/cao_agent/bin/codex` 在 Linux/WSL 無 `sandbox-exec` 時直接執行 `CODEX_APP_BIN`。
+- WSL 執行入口需帶：
+
+```bash
+export PATH=/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/mnt/d/reserch/stock-bot/tools/cao_agent/bin
+export STOCK_BOT_REPO=/mnt/d/reserch/stock-bot
+export CODEX_APP_BIN=/root/.local/bin/codex-real
+cd /mnt/d/reserch/stock-bot
+bash tools/cao_agent/bootstrap_local.sh
+bash tools/cao_agent/ensure_cao_services.sh
+```
+
 ## Previous Completed Work
 
 - task_id：`github_actions_scheduled_bot_delivery_restore_20260608`
@@ -46,7 +80,7 @@
 
 ## Next Development
 
-- 下輪若再修報文，仍需用 Owner 貼出的 final report 層標本或 official dry-run artifact 驗收，不得只驗 helper fixture。
+- CAO deployment patch commit / push 後，下輪若再修報文，應優先用 WSL 正式 Architect entry；仍需用 Owner 貼出的 final report 層標本或 official dry-run artifact 驗收，不得只驗 helper fixture。
 - 如果 Owner 要再查 DB key / 連線，先用 read-only probe，不輸出 secret。
 - 如果 Owner 要驗 TG 發送，必須先明確批准 live Telegram delivery；否則只用 dry-run/log/artifact。
 

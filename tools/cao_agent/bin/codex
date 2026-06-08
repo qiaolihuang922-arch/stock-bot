@@ -6,6 +6,10 @@ AGENT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$AGENT_DIR/env.sh"
 REAL_CODEX="${CODEX_APP_BIN:-/Applications/Codex.app/Contents/Resources/codex}"
 
+if ! command -v sandbox-exec >/dev/null 2>&1; then
+  exec "$REAL_CODEX" "$@"
+fi
+
 SANDBOX_TEMPLATE="$AGENT_DIR/sandbox/codex_no_network.sb"
 SANDBOX_PROFILE="$(mktemp "${TMPDIR:-/tmp}/stock-bot-codex-sandbox.XXXXXX.sb")"
 trap 'rm -f "$SANDBOX_PROFILE"' EXIT

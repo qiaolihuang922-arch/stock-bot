@@ -1,0 +1,3 @@
+tools/cao_agent/*.sh text eol=lf
+tools/cao_agent/bin/* text eol=lf
+tools/cao_agent/sandbox/*.sb text eol=lf
