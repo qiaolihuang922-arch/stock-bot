@@ -882,7 +882,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         }.get(strategy_source_status, "策略樣本證據不足")
     elif deps["is_valid_entry"](stock_result) and not source_eligible:
         title_label = "資料來源缺失" if source_status in {"missing-source", "insufficient-data"} else "資料來源異常"
-    elif state == "弱勢淘汰":
+    elif state == "弱勢淘汰" or funnel_state == "淘汰":
         title_label = deps["rejected_primary_reason"](stock_result)
     elif post_market_prepare:
         title_label = "開盤後確認"

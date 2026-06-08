@@ -1,41 +1,43 @@
-# QA_REPORT: historical_analogy_library_modules_20260608
+# QA_REPORT: unheld_volume_tracking_reclassification_20260608
 
 ## 測試範圍
-- TWSE historical analogy helper tests。
-- future-watch formatter test。
-- notifier tests。
-- market theme evidence tests。
-- market theme evidence tests。
+- 未持倉量能不足 regression。
+- 弱反彈 / 結構壞掉仍淘汰的負面案例。
+- unheld card title reason fallback。
 - official `generate_report(dry_run=True)` replay。
 
 ## 關聯風險掃描
-- 多行 historical analogy 不改 message order。
-- 類比仍明確包含限制，不升格成預測。
-- 缺量能時顯示為限制，不假裝有量能證據。
+- 量能不足不再無腦淘汰，但仍不可買，避免變成追價訊號。
+- 遠離突破時觸發文字同時要求 `量能回升` 與 `重新接近買點`。
+- 結構性失敗仍維持淘汰，不被本輪改成追蹤。
 
 ## 跨區塊語意一致性
-- `歷史類比` section 在 `未來30日法說會` 前。
-- section 內包含：
-  - 主類比事件。
-  - `相似點`。
-  - `模組分數`。
-  - `不相似/限制`。
-  - `下一步觀察`。
-  - `資料`。
+- Summary 從 `未持倉 7｜淘汰 7` 修正為 `未持倉 7｜僅追蹤 7（等回測1/等量能6）`。
+- 未持倉卡片和 summary 分組一致。
+- 卡片標題、買點、明日觸發沒有把 `等量能` 寫成可買。
 
 ## 使用者誤讀風險
-- `不相似/限制` 保留，避免把歷史類比讀成崩盤預測。
-- `壓力級別` 使用壓力/急跌語言，不直接下交易命令。
+- `👀 等量能` 仍是僅追蹤，不是今日買入。
+- `量能回升且重新接近買點` 防止使用者只看到量能回升就追高。
+- `淘汰` 僅保留給弱反彈、突破失敗、派發、明確 FAIL 等結構壞掉情境。
 
 ## 失敗標本反證
-- Owner 指出 v20.4.52 歷史事件庫/模組仍不足。
-- v20.4.54 official dry-run 顯示 19 件樣本庫與價格/位置/量能/情境模組分數。
-- Owner questioned 3231/2337 revenue growth above 100%; TWSE read-only official rows confirmed 3231 `111.98927364274991%` and 2337 `153.71283899759698%`.
-- Future-watch formatter regression confirms user-visible label is `營收`, not `營收YoY`.
+- Owner v20.4.54 樣本：7 檔未持倉全列淘汰，多數主因為量能不足。
+- v20.4.55 official dry-run 結果：
+  - 緯創、群創、華邦電、南亞科、仁寶、光寶科：`👀 等量能｜量能不足`。
+  - 技嘉：`⏳ 等回測｜市場弱`。
+  - Summary：`未持倉 7｜僅追蹤 7（等回測1/等量能6）`。
+  - 無 `淘汰 7`。
+
+## 質疑與反證
+- 質疑：弱市中量能不足是否應該淘汰？
+- 反證：若 payload 不是弱反彈/突破失敗/FAIL，外部技術分析口徑與本策略都應等待量能確認，而不是永久淘汰。
+- 質疑：是否會誤導成可買？
+- 反證：card 仍顯示 `買點：不可買，等市場轉強` 或等量能/回測觸發，summary 仍歸 `僅追蹤`。
 
 ## 未測項目
 - live Telegram delivery 未測且禁止。
-- 未新增外部 historical DB；本輪是內建台股事件庫擴充。
+- GitHub Actions live artifact 未在本地觸發；同一路徑需以 push 後 runner 產物確認。
 
 ## QA 結論
 通過

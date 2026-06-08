@@ -75,7 +75,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.54"
+VERSION = "v20.4.55"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -2669,6 +2669,24 @@ def derive_market_state(watchlist):
     return "中性觀察", "R2"
 
 
+def _unheld_structural_reject(result, blockers=None):
+
+    result = result or {}
+    blockers = blockers if blockers is not None else entry_blockers(result)
+    phase = result.get("structure_phase")
+    behavior = result.get("price_behavior")
+    label = blockers[0] if blockers else final_label(result)
+
+    return (
+        result.get("decision") == "FAIL"
+        or label in ["弱勢", "弱反彈待確認", "突破失敗"]
+        or "突破失敗" in blockers
+        or "弱反彈待確認" in blockers
+        or behavior == "WEAK_REBOUND"
+        or phase in ["WEAK_REBOUND", "FAILED_BREAKOUT", "DISTRIBUTION"]
+    )
+
+
 def classify_watchlist_group(name, data):
 
     result = data["result"]
@@ -2684,11 +2702,7 @@ def classify_watchlist_group(name, data):
     phase = result.get("structure_phase")
     market_grade = result.get("market_grade")
 
-    if (
-        label in ["市場弱", "弱勢", "弱反彈待確認", "突破失敗"]
-        or market_grade == "D"
-        or phase in ["WEAK", "WEAK_REBOUND"]
-    ):
+    if _unheld_structural_reject(result, blockers):
         return "弱勢淘汰"
 
     if (
@@ -2736,14 +2750,13 @@ def tomorrow_watch_state(name, data):
     phase = result.get("structure_phase")
     market_grade = result.get("market_grade")
 
-    if (
-        label in ["市場弱", "弱勢", "弱反彈待確認", "突破失敗"]
-        or market_grade == "D"
-        or phase in ["WEAK", "WEAK_REBOUND"]
-    ):
+    if _unheld_structural_reject(result, blockers):
         return "弱勢淘汰"
 
-    if label == "遠離觸發":
+    if "量能不足" in blockers:
+        return "等量能"
+
+    if label == "遠離觸發" or "遠離觸發" in blockers:
         return "等回測"
 
     if behavior in ["LIMIT_LOCK", "LIMIT_REBOUND"] or label in ["漲停不追", "漲停反彈待確認"]:
@@ -2754,9 +2767,6 @@ def tomorrow_watch_state(name, data):
 
     if label == "RR不足" or trade == "LATE_ENTRY" or "RR不足" in blockers:
         return "等RR修復"
-
-    if "量能不足" in blockers and market_grade != "D":
-        return "等量能"
 
     return "隔日確認"
 
@@ -2778,12 +2788,21 @@ def tomorrow_trigger_text(state, data):
         return "RR修復至達標，不追高"
 
     if state == "等量能":
+        try:
+            distance = result.get("breakout_distance")
+            if distance is not None and float(distance) > 4:
+                return "量能回升且重新接近買點"
+        except (TypeError, ValueError):
+            pass
         return "量能回升且非追高"
 
     if state == "隔日確認":
         return "站回突破區且量能不失控"
 
     if state == "弱勢淘汰":
+        return "重新轉強前不列優先"
+
+    if state == "淘汰":
         return "重新轉強前不列優先"
 
     if result.get("breakout_distance") is not None:
@@ -5947,6 +5966,9 @@ def rejected_primary_reason(result):
     if phase == "WEAK_REBOUND" or result.get("price_behavior") == "WEAK_REBOUND" or "弱反彈待確認" in blockers:
         return "弱反彈待確認"
 
+    if "量能不足" in blockers:
+        return "量能不足"
+
     if result.get("market_grade") == "D" or "市場弱" in blockers:
         return "市場弱"
 
@@ -5955,6 +5977,9 @@ def rejected_primary_reason(result):
 
     if phase in ["WEAK", "DISTRIBUTION"]:
         return "結構弱"
+
+    if "遠離觸發" in blockers:
+        return "遠離觸發"
 
     for reason in blockers:
         if reason not in ["RR不足", "量能不足", "遠離觸發", "過熱觀察"] and not reason.startswith("過熱"):
@@ -7369,6 +7394,16 @@ def rejected_transition_reason_line(result):
 def unheld_buy_risk_label(result, title_label):
 
     blockers = entry_blockers(result)
+
+    if (
+        title_label == "RR不足"
+        and (
+            result.get("market_grade") == "D"
+            or result.get("structure_phase") in ["WEAK", "WEAK_REBOUND", "DISTRIBUTION"]
+            or "市場弱" in blockers
+        )
+    ):
+        return "市場弱"
 
     if title_label == "RR不足" and result.get("heat_state") not in ["HOT", "EXTREME"]:
         return "RR不足"

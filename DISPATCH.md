@@ -2,32 +2,32 @@
 
 ## Active
 
-- task_md_holds: `historical_analogy_library_modules_20260608`
+- task_md_holds: `unheld_volume_tracking_reclassification_20260608`
 - status: `qa_passed`
 - owner_request:
-  - Expand Taiwan historical crash / stress-event coverage and make analogy modules more precise.
-  - Verify 3231/2337 revenue growth and rename visible `營收YoY` label to `營收`.
+  - v20.4.54 未持倉 `量能不足` 不應全部打成 `淘汰`。
+  - 上網查突破/量能確認口徑後修改。
+  - 不做 live Telegram delivery。
 
 ## Current Result
 
-- Version implemented: `v20.4.54`.
-- Historical analogy now shows:
-  - most similar event / similarity / pattern / pressure level.
-  - `相似點`.
-  - `模組分數`.
-  - `不相似/限制`.
-  - `下一步觀察`.
-  - `資料`.
-- Taiwan historical stress-event library expanded from 13 to 19 entries.
-- Watched-stock fundamentals now render revenue as `營收`; `營收YoY` is hidden from user-visible messages.
-- TWSE official monthly revenue check: 3231 revenue YoY `111.98927364274991`; 2337 revenue YoY `153.71283899759698`.
+- Version implemented: `v20.4.55`.
+- 未持倉重分類：
+  - `量能不足` 且非結構性失敗 -> `等量能`。
+  - 遠離突破且量能不足 -> 觸發 `量能回升且重新接近買點`。
+  - 弱反彈、突破失敗、派發、明確 FAIL -> 仍 `淘汰`。
+- Official dry-run replay:
+  - `未持倉 7｜僅追蹤 7（等回測1/等量能6）`。
+  - no `淘汰 7`。
 - No live Telegram delivery was run.
 
 ## Verification
 
-- `py_compile` passed.
-- focused pytest passed: 8 passed; market theme tests passed: 38 passed.
-- official `generate_report(dry_run=True)` passed with 4 local preview messages.
+- focused pytest passed: 3 passed。
+- broader focused pytest passed: 9 passed。
+- `py_compile` passed。
+- market theme tests passed: 38 passed, 13 subtests passed。
+- official `generate_report(dry_run=True)` passed with 4 local preview messages。
 
 ## Fixed Commands
 
