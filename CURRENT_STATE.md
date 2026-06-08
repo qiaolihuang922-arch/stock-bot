@@ -3,7 +3,7 @@
 ## Current Task
 
 - task_id: `unheld_trade_fsm_contract_20260608`
-- status: `QA passed, pending git completion`
+- status: `complete`
 - version: `v21.0`
 - no live Telegram delivery.
 

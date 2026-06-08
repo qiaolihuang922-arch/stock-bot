@@ -3,7 +3,7 @@
 ## Status
 - task_id: `unheld_trade_fsm_contract_20260608`
 - type: `risk_patch`
-- status: `QA passed, pending git completion`
+- status: `complete`
 - version: `v21.0`
 - QA level: `L3`
 

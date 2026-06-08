@@ -3,7 +3,7 @@
 ## Active
 
 - task_md_holds: `unheld_trade_fsm_contract_20260608`
-- status: `QA passed, pending git completion`
+- status: `complete`
 - owner_request:
   - Start with unheld stocks first.
   - Do not depend on buy-time/order timing yet.
@@ -52,4 +52,5 @@ $env:PYTHONIOENCODING='utf-8'
 
 ## Next Action
 
-- Commit and push this unheld FSM contract patch, then run git completion gate.
+- Owner review of unheld FSM dry-run/artifact effect.
+- Holding/order lifecycle remains a separate future task.
