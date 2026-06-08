@@ -2,30 +2,29 @@
 
 ## Active
 
-- task_md_holds: `report_conflict_future_watch_format_20260608`
+- task_md_holds: `future_fundamentals_and_unheld_status_20260608`
 - status: `qa_passed`
 - owner_request:
-  1. Analyze and fix visible report conflicts in the v20.4.49 dry-run sample.
-  2. Keep future-30-day MOPS meeting filtering, but split EPS / revenue into a per-meeting child line.
+  1. EPS / revenue must appear for every watched stock, not only stocks with upcoming MOPS meetings.
+  2. Scan and fix remaining visible conflicts.
+  3. Replace weird `未持倉漏斗（非執行）` wording.
 
 ## Current Result
 
-- Version target implemented: `v20.4.50`.
-- Summary conflict fixed:
-  - `今日已買` -> `今日買入紀錄`.
-  - `新增有效進場：無` remains the strategy-new-entry conclusion.
-- Unheld card conflict fixed:
-  - title blocker and `卡關主因` now align.
-  - source/sample gaps no longer override visible trading blocker.
-- Future watch format fixed:
-  - meeting main line keeps date/code/name/event/reason.
-  - EPS / revenue appears as indented `財報：...` line under that meeting.
+- Version implemented: `v20.4.51`.
+- Future watch:
+  - `未來30日法說會` remains event-only.
+  - New `關注標的財報` section lists EPS / revenue YoY for watch/holding targets.
+- Summary:
+  - first line now shows `未持倉 7（全部不可行動）`.
+  - detail now shows `未持倉狀態：未持倉 7 檔全部不可行動`.
+  - no `未持倉漏斗（非執行）` wording.
 - No live Telegram delivery was run.
 
 ## Verification
 
 - `py_compile` passed.
-- focused pytest passed.
+- focused pytest + market theme tests passed: 44 passed.
 - official `generate_report(dry_run=True)` passed with 4 local preview messages.
 
 ## Fixed Commands

@@ -1,38 +1,42 @@
-# QA_REPORT: report_conflict_future_watch_format_20260608
+# QA_REPORT: future_fundamentals_and_unheld_status_20260608
 
 ## 測試範圍
-- focused pytest:
-  - `test_afterhours_cards_are_denoised_without_first_read_preface`
-  - `test_v20_4_47_future_30d_watch_optional_fourth_message_official_list`
-  - `test_v20_4_12_complete_message_list_orders_holdings_unheld_summary_evidence_details`
-  - `tests/test_notifier.py`
-- `py_compile` for changed report/future-watch/test modules。
+- focused report tests:
+  - future 30-day message route。
+  - afterhours denoise route。
+  - message order / notifier route。
+- `tests/test_market_theme_evidence.py` full file。
 - official `generate_report(dry_run=True)` replay。
 
 ## 關聯風險掃描
-- Summary 文案只改使用者可見文字，不改交易狀態計數。
-- 未持倉 blocker 排序只影響顯示主因，不改漏斗結果。
-- 法說會財報拆行只改 formatter，不改 MOPS / fundamentals query/filter。
+- `關注標的財報` 使用同一批 watch/holding targets，不擴到全市場。
+- 法說會 section 仍只列實際 MOPS events。
+- 未持倉狀態文案只改顯示，不改 underlying funnel classification。
 
 ## 跨區塊語意一致性
-- 第 3 則 Summary 現在用 `今日買入紀錄`，與 `新增有效進場：無` 不再互相誤導。
-- 第 2 則量能不足卡：title `量能不足`，主因 `量能不足`。
-- 第 4 則法說會：財報子行緊跟該檔法說會，未獨立成全市場清單。
+- Summary 首行與詳情一致：
+  - `未持倉 7（全部不可行動）`
+  - `未持倉 7 檔全部不可行動`
+- Future watch 分成三個語意區塊：
+  - 法說會事件。
+  - 關注標的財報。
+  - 台股影響事件。
+- 沒有法說會的關注股仍出現在財報區塊。
 
 ## 使用者誤讀風險
-- `今日買入紀錄` 明確是已發生交易/ledger，不等於現在可買。
-- `財報：` 子行縮排，手機上可讀成上一行法說會的附屬資料。
+- 不再顯示 `漏斗（非執行）` 這種內部詞。
+- 不再顯示 `僅追蹤0/淘汰7` 這種 0-count 流水。
+- 財報區塊標題明確，不會被誤讀成法說會附屬資料。
 
 ## 失敗標本反證
-- Owner 樣本 v20.4.49：
-  - `今日已買` vs `新增有效進場：無` 改為 `今日買入紀錄`。
-  - `淘汰｜量能不足` vs `卡關主因：樣本不足` 改為量能主因。
-  - 法說會單行財報改為子行。
-- official dry-run v20.4.50 confirmed。
+- Owner 樣本 v20.4.50：
+  - 財報資料只跟法說會出現 -> v20.4.51 改為每檔關注股財報。
+  - `未持倉漏斗（非執行）：未持倉 7｜淘汰 7` -> v20.4.51 改為決策語句。
+- official dry-run v20.4.51 confirmed。
 
 ## 未測項目
 - live Telegram delivery 未測且禁止。
-- Production runner delivery artifact 未跑；本輪驗收為 local official dry-run。
+- 新年度營收 source 未新增；本輪沿用既有 official fundamentals source。
 
 ## QA 結論
 通過

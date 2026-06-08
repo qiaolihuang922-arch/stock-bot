@@ -939,6 +939,25 @@ def _fundamentals_detail_line(fundamentals):
     return f"  財報：{label}" if label else ""
 
 
+def collect_target_fundamentals(results_map, fundamentals_source=None, max_items=MOPS_DEFAULT_MAX_TARGETS):
+    if not isinstance(fundamentals_source, dict):
+        return {"status": "missing-source", "items": []}
+    if fundamentals_source.get("status") in {"source-error", "missing-source", "insufficient-data"}:
+        return {"status": fundamentals_source.get("status"), "items": []}
+
+    items = []
+    for target in _target_stocks(results_map, max_targets=max_items):
+        fundamentals = _fundamentals_for_code(fundamentals_source, target["code"])
+        items.append({
+            "code": target["code"],
+            "name": target["name"],
+            "reason": target["reason"],
+            "fundamentals": fundamentals,
+            "fundamentals_label": _fundamentals_label(fundamentals),
+        })
+    return {"status": "available", "items": items}
+
+
 def _mops_event_title(row):
     summary = str(row.get("summary") or row.get("event_summary") or "").strip()
     if summary:
@@ -1257,6 +1276,10 @@ def build_future_watch_payload(
             mops_adapter=mops_adapter,
             fundamentals_source=fundamentals_source,
         ),
+        "target_fundamentals": collect_target_fundamentals(
+            results_map,
+            fundamentals_source=fundamentals_source,
+        ),
         "global_events": collect_global_events(now, global_event_source=global_event_source),
     }
 
@@ -1286,9 +1309,18 @@ def format_future_watch_message(payload, now, version):
             ]
             parts.append(f"關注原因：{item.get('reason')}")
             lines.append("｜".join(part for part in parts if part))
-            fundamentals_line = _fundamentals_detail_line(item.get("fundamentals") or {})
-            if fundamentals_line:
-                lines.append(fundamentals_line)
+
+    target_fundamentals = payload.get("target_fundamentals") or {}
+    fundamental_items = target_fundamentals.get("items") or []
+    if target_fundamentals.get("status") == "source-error":
+        lines.extend(["", "關注標的財報", "關注標的財報：官方來源暫時不可用，本次不列未確認數據"])
+    elif fundamental_items:
+        lines.extend(["", "關注標的財報"])
+        for item in fundamental_items:
+            label = item.get("fundamentals_label")
+            if not label:
+                label = "財報資料不足"
+            lines.append(f"{item.get('code')} {item.get('name')}｜{label}｜關注原因：{item.get('reason')}")
 
     global_events = payload.get("global_events") or {}
     global_items = global_events.get("items") or []
@@ -1308,6 +1340,8 @@ def format_future_watch_message(payload, now, version):
         bool(analogy)
         or bool(mops_items)
         or mops.get("status") == "source-error"
+        or bool(fundamental_items)
+        or target_fundamentals.get("status") == "source-error"
         or bool(global_items)
         or global_events.get("status") in {"source-error", "available"}
     )

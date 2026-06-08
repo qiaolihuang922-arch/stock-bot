@@ -75,7 +75,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.50"
+VERSION = "v20.4.51"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -5209,7 +5209,7 @@ def build_report_context(
         use="漏斗分類用於第二則未持倉分組與第三則摘要",
         limit="候選來源不足時顯示不可行動或資料不足，不顯示有效進場",
         conflict="unheld-source-conflict" if funnel_status == "unresolved-conflict" else "none",
-        visible_refs=["message:1:未持倉標的", "message:2:未持倉漏斗", "message:2:資料依據"],
+        visible_refs=["message:1:未持倉標的", "message:2:未持倉狀態", "message:2:資料依據"],
     ))
     manifest.append(_manifest_field(
         "execution.plan",
@@ -6389,6 +6389,8 @@ def format_unheld_funnel(watch_items, market_mode=None, report_context=None):
         parts.append(f"淘汰 {rejected_count}")
 
     # 單行匯總：總數 + 各分類，去掉原本的總數行 / 拆分行 / 合計行重複。
+    if rejected_count == total_count:
+        return f"未持倉 {total_count} 檔全部不可行動"
     if not parts:
         return f"未持倉 {total_count}"
     return f"未持倉 {total_count}｜" + "｜".join(parts)
@@ -6612,7 +6614,7 @@ def analyze_report_cross_section_integrity(messages, telegram_header_version=VER
     joined = "\n\n".join(messages)
     summary = messages[-1] if messages else ""
     conflicts = _report_conflicts(messages)
-    has_funnel = "未持倉漏斗" in joined or "Funnel" in joined
+    has_funnel = "未持倉狀態" in joined or "未持倉漏斗" in joined or "Funnel" in joined
     has_cards = "【持倉標的】" in joined or "【未持倉標的】" in joined
     has_checklist = "今日盤中交易執行" in joined or "交易執行" in summary
     version_ok = bool(messages) and telegram_header_version in summary

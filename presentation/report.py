@@ -162,7 +162,7 @@ def formatTelegramSummary(
 
     unheld_funnel_text = deps["format_unheld_funnel"](watch_items, market_mode=market_mode, report_context=report_context)
     if unheld_funnel_text:
-        lines.extend(["", "未持倉漏斗（非執行）：", unheld_funnel_text])
+        lines.extend(["", "未持倉狀態：", unheld_funnel_text])
 
     lines.extend(deps["format_backtest_groups"](watch_items, report_context=report_context))
 
@@ -1198,7 +1198,13 @@ def _compact_market_overview_line(holding_items, watch_items, report_context, de
         f"{label}{count}"
         for label, count in deps["_prepare_count_parts"](prepare_counts)
     )
-    unheld_parts.extend([f"僅追蹤{tracking_only_count}", f"淘汰{rejected_count}"])
+    if rejected_count == unheld_count and unheld_count:
+        unheld_parts.append("全部不可行動")
+    else:
+        if tracking_only_count:
+            unheld_parts.append(f"僅追蹤{tracking_only_count}")
+        if rejected_count:
+            unheld_parts.append(f"淘汰{rejected_count}")
     if today_new_entry_count:
         today_observe_count = max(today_new_entry_count - today_buy_risk_count, 0)
         today_parts = []
@@ -1313,7 +1319,7 @@ def _afterhours_brief_lines(holding_items, watch_items, report_context, deps, ma
         lines.extend(["", "新倉建議", *new_entry_lines])
     unheld_funnel_text = deps["format_unheld_funnel"](watch_items, market_mode=market_mode, report_context=report_context)
     if unheld_funnel_text:
-        lines.extend(["", "未持倉漏斗（非執行）：", unheld_funnel_text])
+        lines.extend(["", "未持倉狀態：", unheld_funnel_text])
     lines.extend(deps["format_backtest_groups"](watch_items, report_context=report_context))
     if daily_write_warning:
         lines.append(f"資料寫入：{daily_write_warning}，明日前確認補寫狀態。")
