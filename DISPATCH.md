@@ -65,7 +65,7 @@
 
 ## Next Action
 
-- 本輪 TG schedule 修復需 commit / push 後才會由 GitHub schedule 生效；push 後下一個 `10 6 * * 1-5` UTC bot schedule 才會進 `python main.py`。不得用 live Telegram delivery 作本地驗證。
+- TG schedule 修復已 commit / push 到 `origin/main`；下一個 `10 6 * * 1-5` UTC bot schedule 會進 `python main.py`。不得用 live Telegram delivery 作本地驗證。
 - v20.4.47 future-watch 完成版已可讀；後續若要更精準，優先做全球 official calendar parser hardening 或 TWSE 多年 deterministic similarity，不改 DB。
 - GitHub Actions 手動執行請從新的 `Stock Bot` workflow 進入；若手機仍顯示舊 `Stock Bot Pro` 或日期/version 欄位，關閉重開 GitHub app 或從 Actions workflow list 重新選新 workflow。
 - v20.4.46 未來 30 日關注已接 live readonly source 試行；下一步若 Owner 要深化，優先做 MOPS 穩定解析與 global live parser 可見 fallback 標記，不改 DB。

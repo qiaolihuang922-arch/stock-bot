@@ -16,6 +16,14 @@
 
 ## Completed
 
+- `github_actions_scheduled_bot_delivery_restore_20260608`:
+  - 問題：Owner 指出 TG 沒有推送，要求不得 live Telegram delivery，先用 runner / dry-run / log / artifact 查推送鏈路。
+  - 根因：`.github/workflows/stock-bot-clean.yml` 只有 `0 6 * * 1-5` schedule，且所有 schedule event 都被 `RUN_MODE` expression 映射為 `daily_evidence`；`Run bot` step 因此 skip，不會呼叫 `python main.py`。
+  - 結果：保留 `0 6 * * 1-5` 作為 daily evidence schedule，新增 `10 6 * * 1-5` 作為 bot schedule，並用 `github.event.schedule` 明確分流。
+  - 可重跑補強：workflow runtime config tests 10 passed、delivery guard / notifier tests 5 passed、py_compile passed；fake-python dry-run 反證 `RUN_MODE=bot` 會呼叫 `main.py` 且不觸發 live Telegram。
+  - QA 狀態：通過。
+  - 流程復盤：根因分類為 `runner_gap` + `schedule_mapping`。證據生產排程與 Telegram bot 排程共用同一 workflow 時，schedule event 不能只用 `github.event_name == 'schedule'` 判斷，必須用 `github.event.schedule` 分流。
+  - 邊界：未改報文版本、策略、RR、DB、`main.py`、`services/notifier.py`；未 live Telegram delivery。
 - `future_watch_taiwan_crash_template_library_20260604`:
   - 問題：Owner 認為台股歷史類比模板太少，要求加入歷史股災模板並做分析。
   - 結果：新增 13 件台股歷史急跌 / 股災樣本庫與 deterministic scoring；第 4 則顯示 `樣本庫 台股歷史急跌 13件`，06/04 official smoke 配到 `2015 台股急跌/中國股災外溢｜相似度 67%`。

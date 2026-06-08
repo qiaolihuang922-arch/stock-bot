@@ -33,7 +33,7 @@
   - py_compile：passed。
   - 全程未 live Telegram delivery。
 - 邊界：未改 `main.py`、`services/notifier.py`、報文內容、策略、RR、DB schema/write/backfill。
-- 下一步：本輪必須 commit / push 後才會讓 GitHub schedule 生效；push 後下一個 `10 6 * * 1-5` UTC 排程才會進 `python main.py`。
+- 下一步：本輪已 commit / push 到 `origin/main`；下一個 `10 6 * * 1-5` UTC 排程才會進 `python main.py`。
 
 ## Previous Completed Work
 
