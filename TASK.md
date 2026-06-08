@@ -3,7 +3,7 @@
 ## Status
 - task_id: `render_git_tg_db_pipeline_check_20260609`
 - type: `risk_patch`
-- status: `QA passed, pending commit/push`
+- status: `complete`
 - version: `v21.0`
 - QA level: `L3`
 

@@ -3,7 +3,7 @@
 ## Current Task
 
 - task_id: `render_git_tg_db_pipeline_check_20260609`
-- status: `QA passed, pending commit/push`
+- status: `complete`
 - version: `v21.0`
 - no live Telegram delivery.
 
@@ -31,5 +31,4 @@
 
 ## Known Follow-ups
 
-- Commit/push and run git completion gate before final completion claim.
 - CAO TUI automation gap remains separate from this product patch.

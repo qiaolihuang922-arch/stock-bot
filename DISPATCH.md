@@ -3,7 +3,7 @@
 ## Active
 
 - task_md_holds: `render_git_tg_db_pipeline_check_20260609`
-- status: `QA passed, pending commit/push`
+- status: `complete`
 - owner_request:
   - Check Render -> git/GitHub -> TG report chain.
   - Check daily DB writes.
@@ -20,6 +20,7 @@
 
 ## Recently Done
 
+- `render_git_tg_db_pipeline_check_20260609`: Render dispatch fixed, daily evidence workflow unblocked, market-theme DB freshness backfilled/verified, dry-run and guard tests passed, no live Telegram delivery.
 - `unheld_transition_table_replay_20260608`: v21.0 unheld transition-table FSM implemented, replayed locally, regression-tested, dry-run verified, no live Telegram delivery.
 
 ## Verification
@@ -57,4 +58,4 @@ $env:PYTHONIOENCODING='utf-8'
 
 ## Next Action
 
-- Commit/push and run git completion gate.
+- Owner review of Render/GitHub/TG/DB pipeline check result.
