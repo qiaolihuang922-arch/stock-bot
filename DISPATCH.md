@@ -2,32 +2,31 @@
 
 ## Active
 
-- task_md_holds: `unheld_volume_tracking_reclassification_20260608`
-- status: `qa_passed`
+- task_md_holds: `trade_state_machine_v21_20260608`
+- status: `conditional_pass`
 - owner_request:
-  - v20.4.54 未持倉 `量能不足` 不應全部打成 `淘汰`。
-  - 上網查突破/量能確認口徑後修改。
-  - 不做 live Telegram delivery。
+  - 版本號 `21.0`。
+  - 開始做交易狀態機。
+  - 不先擴 DB 欄位。
 
 ## Current Result
 
-- Version implemented: `v20.4.55`.
-- 未持倉重分類：
-  - `量能不足` 且非結構性失敗 -> `等量能`。
-  - 遠離突破且量能不足 -> 觸發 `量能回升且重新接近買點`。
-  - 弱反彈、突破失敗、派發、明確 FAIL -> 仍 `淘汰`。
-- Official dry-run replay:
-  - `未持倉 7｜僅追蹤 7（等回測1/等量能6）`。
-  - no `淘汰 7`。
+- Version implemented: `v21.0`.
+- Added read-only `core/trade_state_machine.py`.
+- Official TG cards now show `交易狀態`:
+  - holding example: `交易狀態：停損｜動作：停損｜觸發：清出後等重新買點`。
+  - unheld example: `交易狀態：等量能｜動作：等待｜觸發：量能回升且重新接近買點`。
+- State machine artifact is read-only: no DB write, no schema change.
 - No live Telegram delivery was run.
 
 ## Verification
 
-- focused pytest passed: 3 passed。
-- broader focused pytest passed: 9 passed。
 - `py_compile` passed。
+- `tests/test_trade_state_machine.py` passed: 4 passed。
+- focused generator/state-machine replay passed: 7 passed。
 - market theme tests passed: 38 passed, 13 subtests passed。
-- official `generate_report(dry_run=True)` passed with 4 local preview messages。
+- official `generate_report(dry_run=True)` passed with v21.0 messages。
+- Full generator regression is conditional, not clean: 160 passed / 39 failed due legacy exact-message assertions and v21 visible-state insertion.
 
 ## Fixed Commands
 

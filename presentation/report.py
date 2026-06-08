@@ -806,6 +806,7 @@ def formatTelegramPositionCard(name, data, *, deps, report_context=None):
     is_afterhours = _report_phase(report_context) == "盤後"
     lines = [
         f"【{deps['stock_title'](name, data)}】📌 {summary_action}｜{deps['signed_pct'](deps['stock_pnl'](data))}",
+        deps["trade_state_machine_line"](data),
         execution_line,
         f"風控：{deps['holding_risk_text'](decision)}",
         _score_gated_market_line(report_context, name, data, dist, deps),
@@ -1032,6 +1033,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     is_afterhours_rejected = is_afterhours and funnel_state == "淘汰" and not valid_entry
     lines = [
         f"【{deps['stock_title'](name, data)}】{title_icon} {title_action}｜{title_label}",
+        deps["trade_state_machine_line"](data),
         None if is_afterhours_rejected else (
             "盤面：證據不足｜待確認"
             if strategy_source_blocked
@@ -1682,6 +1684,11 @@ def render_telegram_messages(
         strategy_evidence_summary=strategy_evidence_summary,
         report_phase=report_phase,
         position_warning=position_warning,
+    )
+    deps["apply_trade_state_machine"](
+        results_map,
+        report_context=report_context,
+        market_mode=market_mode,
     )
     holding_items = deps["sort_position_summary"]([
         (name, data)

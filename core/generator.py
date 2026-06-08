@@ -59,6 +59,12 @@ from core.market_theme_evidence import (
     build_market_theme_evidence_provider,
     format_market_theme_summary_lines
 )
+from core.trade_state_machine import (
+    build_state_artifact as build_trade_state_artifact,
+    evaluate_position_state,
+    evaluate_unheld_state,
+    visible_state_line,
+)
 
 from services.signal_store import record_daily_signals
 from services.daily_snapshot_store import (
@@ -75,7 +81,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.55"
+VERSION = "v21.0"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -6842,6 +6848,44 @@ def format_cross_day_tracking_summary(watch_items, limit=3, report_context=None,
     return lines
 
 
+def apply_trade_state_machine(results_map, report_context=None, market_mode=None):
+    for name, data in ordered_result_items(results_map):
+        if data.get("holding"):
+            action = position_summary_action(name, data)
+            data["trade_state_machine"] = evaluate_position_state(
+                name,
+                data,
+                summary_action=action,
+                trigger=holding_tomorrow_trigger(name, data),
+            )
+            continue
+
+        funnel_state = unheld_funnel_state(
+            name,
+            data,
+            market_mode=market_mode,
+            report_context=report_context,
+        )
+        watch_state = tomorrow_watch_state(name, data)
+        data["trade_state_machine"] = evaluate_unheld_state(
+            name,
+            data,
+            funnel_state=funnel_state,
+            watch_state=watch_state,
+            trigger=tomorrow_trigger_text(watch_state, data),
+            source_status=_unheld_decision_source_status(report_context, name),
+        )
+    return results_map
+
+
+def trade_state_machine_line(data):
+    return visible_state_line((data or {}).get("trade_state_machine"))
+
+
+def trade_state_machine_artifact(results_map):
+    return build_trade_state_artifact(results_map)
+
+
 def _telegram_presentation_deps():
     return {
         "ordered_result_items": ordered_result_items,
@@ -6860,6 +6904,9 @@ def _telegram_presentation_deps():
         "today_reason_text": today_reason_text,
         "market_execution_bridge_lines": market_execution_bridge_lines,
         "format_cross_day_tracking_summary": format_cross_day_tracking_summary,
+        "apply_trade_state_machine": apply_trade_state_machine,
+        "trade_state_machine_line": trade_state_machine_line,
+        "trade_state_machine_artifact": trade_state_machine_artifact,
         "format_strong_prepare_summary": format_strong_prepare_summary,
         "format_market_theme_summary_lines": format_market_theme_summary_lines,
         "market_theme_summary_evidence": market_theme_summary_evidence,
