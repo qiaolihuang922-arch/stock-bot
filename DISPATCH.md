@@ -18,6 +18,11 @@
 - Waiting unheld cards no longer show the conflicting internal source-warning line.
 - Official dry-run report remains readable and shows no valid new entry.
 - State machine remains read-only: no DB write, no schema change.
+- Git completion gate passed on `main` at `c0e210c` before closeout doc refresh.
+
+## Recently Done
+
+- `unheld_transition_table_replay_20260608`: v21.0 unheld transition-table FSM implemented, replayed locally, regression-tested, dry-run verified, no live Telegram delivery.
 
 ## Verification
 

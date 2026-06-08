@@ -29,6 +29,7 @@
 - `tests/test_generator_report.py tests/test_trade_state_machine.py`: `196 passed, 145 warnings, 44 subtests passed`.
 - official `generate_report(dry_run=True)`: v21.0 messages generated locally; no live Telegram delivery.
 - local replay covered six routes: wait-volume, volume-to-ready, ready-to-buyable, ready-source-error, RR repair, pullback repair.
+- Git completion gate passed on `main` at `c0e210c` before closeout doc refresh.
 
 ## Known Follow-ups
 
