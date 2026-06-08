@@ -1,6 +1,8 @@
 STATE_LABELS = {
     "UNTRACKED": "未追蹤",
     "WATCH": "觀察",
+    "WAIT_DATA": "等資料",
+    "WAIT_MARKET": "等市場",
     "WAIT_VOLUME": "等量能",
     "WAIT_PULLBACK": "等回測",
     "WAIT_RR": "等RR修復",
@@ -31,6 +33,8 @@ ACTION_LABELS = {
 
 ACTION_BY_STATE = {
     "WATCH": "WATCH",
+    "WAIT_DATA": "WAIT",
+    "WAIT_MARKET": "WAIT",
     "WAIT_VOLUME": "WAIT",
     "WAIT_PULLBACK": "WAIT",
     "WAIT_RR": "WAIT",
@@ -68,6 +72,75 @@ WATCH_STATE_MAP = {
     "隔日確認": "WATCH",
     "弱勢淘汰": "BLOCKED",
     "淘汰": "BLOCKED",
+}
+
+UNHELD_STATE_META = {
+    "UNTRACKED": {
+        "phase": "DISCOVERY",
+        "is_actionable": False,
+        "is_terminal": False,
+        "next_required_event": "ADD_TO_WATCHLIST",
+    },
+    "WATCH": {
+        "phase": "WATCHLIST",
+        "is_actionable": False,
+        "is_terminal": False,
+        "next_required_event": "SETUP_FORMED",
+    },
+    "WAIT_DATA": {
+        "phase": "DATA_GATE",
+        "is_actionable": False,
+        "is_terminal": False,
+        "next_required_event": "DATA_RESTORED",
+    },
+    "WAIT_MARKET": {
+        "phase": "MARKET_GATE",
+        "is_actionable": False,
+        "is_terminal": False,
+        "next_required_event": "MARKET_STRENGTH_CONFIRMED",
+    },
+    "WAIT_VOLUME": {
+        "phase": "ENTRY_GATE",
+        "is_actionable": False,
+        "is_terminal": False,
+        "next_required_event": "VOLUME_CONFIRMED",
+    },
+    "WAIT_PULLBACK": {
+        "phase": "ENTRY_GATE",
+        "is_actionable": False,
+        "is_terminal": False,
+        "next_required_event": "PULLBACK_CONFIRMED",
+    },
+    "WAIT_RR": {
+        "phase": "RISK_REWARD_GATE",
+        "is_actionable": False,
+        "is_terminal": False,
+        "next_required_event": "RR_REPAIRED",
+    },
+    "WAIT_COOLDOWN": {
+        "phase": "COOLDOWN_GATE",
+        "is_actionable": False,
+        "is_terminal": False,
+        "next_required_event": "HEAT_COOLDOWN_CONFIRMED",
+    },
+    "READY": {
+        "phase": "ARMED",
+        "is_actionable": False,
+        "is_terminal": False,
+        "next_required_event": "OPEN_CONFIRMATION",
+    },
+    "BUYABLE": {
+        "phase": "ACTIONABLE",
+        "is_actionable": True,
+        "is_terminal": False,
+        "next_required_event": "SUBMIT_ORDER",
+    },
+    "BLOCKED": {
+        "phase": "BLOCKED",
+        "is_actionable": False,
+        "is_terminal": False,
+        "next_required_event": "BLOCKER_CLEARED",
+    },
 }
 
 POSITION_ACTION_STATE_MAP = {
@@ -125,6 +198,63 @@ def _risk_flags(data):
     if rr is not None and rr < 1:
         flags.append("RR_LT_1")
     return flags
+
+
+def _source_blocker(source_status):
+    if source_status in {"missing-source", "source-error", "insufficient-data", "unresolved-conflict"}:
+        return {
+            "missing-source": "DATA_MISSING",
+            "source-error": "DATA_SOURCE_ERROR",
+            "insufficient-data": "DATA_INSUFFICIENT",
+            "unresolved-conflict": "DATA_CONFLICT",
+        }.get(source_status, "DATA_GATE")
+    return None
+
+
+def _unheld_guard_snapshot(data, source_status=None):
+    result = (data or {}).get("result") or {}
+    guards = []
+    source_blocker = _source_blocker(source_status)
+    if source_blocker:
+        guards.append(source_blocker)
+    if result.get("market_grade") in {"D", "E"} or result.get("market_state") in {"weak", "bear"}:
+        guards.append("MARKET_WEAK")
+    if result.get("volume_state") == "WEAK" or result.get("trade_state") == "NO_VOLUME":
+        guards.append("VOLUME_WEAK")
+    rr = _as_float(result.get("rr"))
+    if rr is None:
+        guards.append("RR_MISSING")
+    elif rr < 1.5:
+        guards.append("RR_BELOW_MIN")
+    if result.get("heat_state") in {"HOT", "EXTREME"} or result.get("trade_state") in {"EXTENDED", "AVOID"}:
+        guards.append("HEAT_NOT_COOL")
+    if result.get("structure_phase") in {"FAILED_BREAKOUT", "WEAK_REBOUND", "DISTRIBUTION"}:
+        guards.append("STRUCTURE_FAILED")
+    distance = _as_float(result.get("breakout_distance") or result.get("distance_to_breakout"))
+    if distance is not None and distance > 4:
+        guards.append("TOO_FAR_FROM_TRIGGER")
+    quality = result.get("entry_quality")
+    if quality and quality not in {"A+", "A", "B"}:
+        guards.append("ENTRY_QUALITY_LOW")
+    return list(dict.fromkeys(guards))
+
+
+def _transition_event_for_state(state, *, source_status=None):
+    if _source_blocker(source_status) and state in {"BUYABLE", "READY", "BLOCKED"}:
+        return "DATA_GATE_FAILED"
+    return {
+        "UNTRACKED": "NOT_IN_WATCHLIST",
+        "WATCH": "WATCHLIST_RETAINED",
+        "WAIT_DATA": "DATA_GATE_FAILED",
+        "WAIT_MARKET": "MARKET_GATE_FAILED",
+        "WAIT_VOLUME": "VOLUME_GATE_FAILED",
+        "WAIT_PULLBACK": "PULLBACK_GATE_FAILED",
+        "WAIT_RR": "RR_GATE_FAILED",
+        "WAIT_COOLDOWN": "COOLDOWN_GATE_FAILED",
+        "READY": "SETUP_READY",
+        "BUYABLE": "BUY_SIGNAL_CONFIRMED",
+        "BLOCKED": "HARD_BLOCKED",
+    }.get(state, "STATE_EVALUATED")
 
 
 def evaluate_position_state(name, data, *, summary_action=None, trigger=None):
@@ -196,6 +326,26 @@ def evaluate_unheld_state(
         reason = "資料來源不足，停止新倉行動"
 
     action = ACTION_BY_STATE.get(state, "WATCH")
+    meta = UNHELD_STATE_META.get(state, UNHELD_STATE_META["WATCH"])
+    guards = _unheld_guard_snapshot(data, source_status)
+    source_blocker = _source_blocker(source_status)
+    blocked_by = []
+    if source_blocker:
+        blocked_by.append(source_blocker)
+    if state == "WAIT_VOLUME":
+        blocked_by.append("VOLUME_WEAK")
+    elif state == "WAIT_PULLBACK":
+        blocked_by.append("PULLBACK_NOT_CONFIRMED")
+    elif state == "WAIT_RR":
+        blocked_by.append("RR_BELOW_MIN")
+    elif state == "WAIT_COOLDOWN":
+        blocked_by.append("HEAT_NOT_COOL")
+    elif state == "BLOCKED" and not blocked_by:
+        blocked_by.extend(
+            guard for guard in guards
+            if guard in {"STRUCTURE_FAILED", "MARKET_WEAK", "DATA_CONFLICT"}
+        )
+    blocked_by = list(dict.fromkeys(blocked_by))
     return {
         "schema_version": "v21.0",
         "stock_name": name,
@@ -203,12 +353,20 @@ def evaluate_unheld_state(
         "scope": "unheld",
         "state": state,
         "state_label": STATE_LABELS[state],
+        "phase": meta["phase"],
         "action": action,
         "action_label": ACTION_LABELS[action],
+        "is_actionable": meta["is_actionable"],
+        "is_terminal": meta["is_terminal"],
         "previous_state": _previous_state(data),
         "transition": f"{_previous_state(data) or 'UNKNOWN'}->{state}",
+        "transition_event": _transition_event_for_state(state, source_status=source_status),
         "reason": reason,
         "trigger": trigger,
+        "next_required_event": meta["next_required_event"],
+        "guards": guards,
+        "blocked_by": blocked_by,
+        "requires_order_lifecycle": False,
         "source": "derived-readonly",
         "db_write": False,
         "schema_change": False,
@@ -240,11 +398,19 @@ def build_state_artifact(results_map):
             "stock_code": state.get("stock_code"),
             "scope": state.get("scope"),
             "state": state.get("state"),
+            "phase": state.get("phase"),
             "action": state.get("action"),
+            "is_actionable": state.get("is_actionable"),
+            "is_terminal": state.get("is_terminal"),
             "previous_state": state.get("previous_state"),
             "transition": state.get("transition"),
+            "transition_event": state.get("transition_event"),
             "reason": state.get("reason"),
             "trigger": state.get("trigger"),
+            "next_required_event": state.get("next_required_event"),
+            "guards": state.get("guards") or [],
+            "blocked_by": state.get("blocked_by") or [],
+            "requires_order_lifecycle": state.get("requires_order_lifecycle", False),
             "source": state.get("source"),
             "db_write": False,
             "schema_change": False,

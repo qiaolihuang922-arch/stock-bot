@@ -70,7 +70,16 @@ class TradeStateMachineTest(unittest.TestCase):
 
         self.assertEqual(state["schema_version"], "v21.0")
         self.assertEqual(state["state"], "WAIT_VOLUME")
+        self.assertEqual(state["phase"], "ENTRY_GATE")
         self.assertEqual(state["action"], "WAIT")
+        self.assertFalse(state["is_actionable"])
+        self.assertFalse(state["is_terminal"])
+        self.assertEqual(state["transition_event"], "VOLUME_GATE_FAILED")
+        self.assertEqual(state["next_required_event"], "VOLUME_CONFIRMED")
+        self.assertIn("DATA_MISSING", state["guards"])
+        self.assertIn("VOLUME_WEAK", state["guards"])
+        self.assertIn("VOLUME_WEAK", state["blocked_by"])
+        self.assertFalse(state["requires_order_lifecycle"])
         self.assertEqual(state["trigger"], "量能回升且重新接近買點")
         self.assertFalse(state["db_write"])
         self.assertFalse(state["schema_change"])
@@ -106,6 +115,36 @@ class TradeStateMachineTest(unittest.TestCase):
         self.assertFalse(artifact["schema_change"])
         self.assertEqual(len(artifact["items"]), 1)
         self.assertEqual(artifact["items"][0]["state"], "WAIT_VOLUME")
+        self.assertEqual(artifact["items"][0]["phase"], "ENTRY_GATE")
+        self.assertEqual(artifact["items"][0]["next_required_event"], "VOLUME_CONFIRMED")
+        self.assertIn("VOLUME_WEAK", artifact["items"][0]["blocked_by"])
+
+    def test_unheld_buyable_with_source_error_fails_closed_before_order_lifecycle(self):
+        payload = _watch_payload()
+        payload["result"].update({
+            "decision": "BUY",
+            "trade_state": "READY",
+            "volume_state": "OK",
+            "rr": 2.0,
+            "entry_quality": "A",
+            "breakout_distance": 1.0,
+        })
+
+        state = evaluate_unheld_state(
+            "可買候選",
+            payload,
+            funnel_state="可買",
+            watch_state="可買",
+            source_status="source-error",
+        )
+
+        self.assertEqual(state["state"], "BLOCKED")
+        self.assertEqual(state["phase"], "BLOCKED")
+        self.assertEqual(state["transition_event"], "DATA_GATE_FAILED")
+        self.assertFalse(state["is_actionable"])
+        self.assertFalse(state["requires_order_lifecycle"])
+        self.assertIn("DATA_SOURCE_ERROR", state["guards"])
+        self.assertIn("DATA_SOURCE_ERROR", state["blocked_by"])
 
     def test_report_cards_include_trade_state_line(self):
         payload = _watch_payload()

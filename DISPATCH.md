@@ -2,30 +2,36 @@
 
 ## Active
 
-- task_md_holds: `trade_state_machine_v21_completion_20260608`
-- status: `complete`
+- task_md_holds: `unheld_trade_fsm_contract_20260608`
+- status: `QA passed, pending git completion`
 - owner_request:
-  - Finish the next round and implement a complete v21 effect.
-  - Use dry-run/report output, not live Telegram delivery.
+  - Start with unheld stocks first.
+  - Do not depend on buy-time/order timing yet.
+  - No live Telegram delivery.
 
 ## Current Result
 
-- Version: `v21.0`.
-- Full generator/state-machine regression passes: `193 passed, 145 warnings, 44 subtests passed`.
-- Official dry-run generated v21.0 messages; no live Telegram delivery.
-- Holding cards show trade state/action/trigger and stronger today-buy wording.
-- Unheld cards now show wait states instead of only reject/eliminate.
-- Blocker attribution is fixed: volume/market/RR/pullback blockers are primary when visible; source gaps stay in decision evidence.
+- Version remains `v21.0`.
+- Unheld FSM now has formal metadata: `phase`, `is_actionable`, `is_terminal`, `transition_event`, `next_required_event`, `guards`, `blocked_by`, `requires_order_lifecycle`.
+- Existing visible report remains stable.
+- Buyable/ready unheld candidates with source errors fail closed before any order lifecycle.
 - State machine remains read-only: no DB write, no schema change.
 
 ## Verification
 
 ```powershell
 $env:PYTHONIOENCODING='utf-8'
+.\.venv\Scripts\python.exe -m pytest tests/test_trade_state_machine.py -q --tb=short
+```
+
+Result: `5 passed, 3 warnings`.
+
+```powershell
+$env:PYTHONIOENCODING='utf-8'
 .\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py tests/test_trade_state_machine.py -q --tb=short
 ```
 
-Result: `193 passed, 145 warnings, 44 subtests passed`.
+Result: `194 passed, 145 warnings, 44 subtests passed`.
 
 ```powershell
 $env:PYTHONIOENCODING='utf-8'
@@ -46,5 +52,4 @@ $env:PYTHONIOENCODING='utf-8'
 
 ## Next Action
 
-- Owner review of v21 dry-run effect.
-- Persisted state snapshots remain a separate future decision.
+- Commit and push this unheld FSM contract patch, then run git completion gate.

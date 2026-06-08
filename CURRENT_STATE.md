@@ -2,35 +2,34 @@
 
 ## Current Task
 
-- task_id: `trade_state_machine_v21_completion_20260608`
-- status: `complete`
+- task_id: `unheld_trade_fsm_contract_20260608`
+- status: `QA passed, pending git completion`
 - version: `v21.0`
 - no live Telegram delivery.
 
 ## Stable Context
 
 - Owner reads Telegram on mobile; visible wording must be decision-first and avoid internal pipeline terms.
-- Current direction is v21 read-only trade state machine, not only report cleanup.
-- Do not expand DB schema unless read-only v1 proves an actual cross-day memory gap.
+- Current direction is v21 read-only trade state machine.
+- Start with unheld FSM first; holding/order lifecycle remains separate.
+- Do not expand DB schema unless read-only behavior proves an actual cross-day memory gap.
 - Production source-of-truth remains Supabase / runner data, not local cache.
 - DB schema/RLS/grant/policy/role/index/constraint changes require Owner approval.
-- Fixed Markdown files must be rewritten/compressed, not removed.
 
 ## Current Changes
 
-- v21 state machine integration completed through official generator regression.
-- `tests/test_generator_report.py tests/test_trade_state_machine.py` now pass fully.
-- TG cards show per-stock trade state/action/trigger on official report path.
-- Unheld cards distinguish wait states such as `WAIT_VOLUME`, `WAIT_PULLBACK`, `WAIT_RR`, and next-day confirmation.
-- Blocker precedence fixed: visible hard blocker first; source gate only primary when no clearer blocker exists.
+- Unheld state machine now has formal pre-order FSM fields.
+- Wait states are non-actionable and non-terminal.
+- Source-error buyable candidates fail closed before order lifecycle.
+- State artifact includes guards/blocked_by/next_required_event for dry-run/log inspection.
 
 ## Verification State
 
-- `tests/test_generator_report.py tests/test_trade_state_machine.py`: `193 passed, 145 warnings, 44 subtests passed`.
+- `tests/test_trade_state_machine.py`: `5 passed, 3 warnings`.
+- `tests/test_generator_report.py tests/test_trade_state_machine.py`: `194 passed, 145 warnings, 44 subtests passed`.
 - official `generate_report(dry_run=True)`: v21.0 messages generated locally; no live Telegram delivery.
-- `.pytest_cache` local permission warning remains but does not block test completion.
 
 ## Known Follow-ups
 
-- After Owner reviews v21 dry-run effect, decide whether to persist state snapshots in DB; that would require a separate approved write/schema task if needed.
+- Next logical layer is persisted unheld state snapshots or order lifecycle, but both should be separate tasks.
 - CAO TUI automation gap remains separate from this product patch.
