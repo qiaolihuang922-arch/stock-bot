@@ -1134,8 +1134,8 @@ def _fundamentals_label(fundamentals):
     if revenue_yoy not in (None, ""):
         revenue_period = _financial_period_label(None, month=fundamentals.get("revenue_month"))
         revenue_label = (
-            f"營收YoY {revenue_period} {_fmt_compact_pct(revenue_yoy)}"
-            if revenue_period else f"營收YoY {_fmt_compact_pct(revenue_yoy)}"
+            f"營收 {revenue_period} {_fmt_compact_pct(revenue_yoy)}"
+            if revenue_period else f"營收 {_fmt_compact_pct(revenue_yoy)}"
         )
         parts.append(revenue_label)
     return "｜".join(parts)

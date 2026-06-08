@@ -29,7 +29,9 @@
 
 ## 失敗標本反證
 - Owner 指出 v20.4.52 歷史事件庫/模組仍不足。
-- v20.4.53 official dry-run 顯示 19 件樣本庫與價格/位置/量能/情境模組分數。
+- v20.4.54 official dry-run 顯示 19 件樣本庫與價格/位置/量能/情境模組分數。
+- Owner questioned 3231/2337 revenue growth above 100%; TWSE read-only official rows confirmed 3231 `111.98927364274991%` and 2337 `153.71283899759698%`.
+- Future-watch formatter regression confirms user-visible label is `營收`, not `營收YoY`.
 
 ## 未測項目
 - live Telegram delivery 未測且禁止。

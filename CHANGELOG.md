@@ -2,7 +2,7 @@
 
 ## 修改內容與修改檔案
 - `core/generator.py`
-  - 版本升至 `v20.4.53`。
+  - 版本升至 `v20.4.54`。
 - `core/future_watch.py`
   - 台股壓力樣本庫由 13 件擴至 19 件。
   - TWSE 歷史類比新增型態標籤與壓力級別。
@@ -16,7 +16,7 @@
 ## 契約影響
 - message list 順序不變。
 - 第 4 則 historical analogy section 可多行。
-- 使用者可見版本為 `v20.4.53`。
+- 使用者可見版本為 `v20.4.54`。
 - 無 DB write、無 live Telegram delivery。
 
 ## 自檢命令與結果
@@ -24,7 +24,7 @@
 - `python -m pytest tests/test_generator_report.py::GeneratorReportTest::test_v20_4_47_live_twse_source_builds_pressure_timeline tests/test_generator_report.py::GeneratorReportTest::test_v20_4_47_live_twse_source_uses_severe_taiwan_crash_template tests/test_generator_report.py::GeneratorReportTest::test_v20_4_47_future_30d_watch_optional_fourth_message_official_list tests/test_generator_report.py::GeneratorReportTest::test_v20_4_47_future_watch_global_event_ranges_sort_and_fail_closed tests/test_generator_report.py::GeneratorReportTest::test_v20_4_47_generate_report_appends_live_readonly_future_watch_sources tests/test_notifier.py -q` -> 8 passed。
 - `python -m pytest tests/test_market_theme_evidence.py -q` -> 38 passed。
 - `python -m pytest tests/test_market_theme_evidence.py -q` -> 38 passed。
-- `generate_report(dry_run=True)` -> 4 messages, header `v20.4.53`, no live Telegram delivery。
+- `generate_report(dry_run=True)` -> 4 messages, header `v20.4.54`, no live Telegram delivery。
 
 ## 覆蓋層級
 - helper: TWSE historical pressure line。
@@ -34,3 +34,10 @@
 ## 殘留風險
 - Historical sample library is expanded but still internal; full research-grade historical DB remains a separate larger task。
 - Volume ratio depends on TWSE fields being available; missing volume is explicitly shown as a limitation。
+
+## Financial Label / Source Check
+- `core/future_watch.py`: watched-stock fundamentals now render monthly revenue as `營收`; internal source field remains TWSE/TPEX revenue YoY.
+- `tests/test_generator_report.py`: future-watch regression now asserts `營收` and rejects `營收YoY`.
+- TWSE read-only official revenue spot-check confirmed:
+  - `3231` revenue YoY `111.98927364274991%`.
+  - `2337` revenue YoY `153.71283899759698%`.
