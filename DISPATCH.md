@@ -2,43 +2,47 @@
 
 ## Active
 
-- task_md_holds: `unheld_trade_fsm_contract_20260608`
-- status: `complete`
+- task_md_holds: `unheld_transition_table_replay_20260608`
+- status: `QA passed, pending commit/push`
 - owner_request:
   - Start with unheld stocks first.
   - Do not depend on buy-time/order timing yet.
+  - Do not only add fields; use real transition logic and run it several times before Owner review.
   - No live Telegram delivery.
 
 ## Current Result
 
 - Version remains `v21.0`.
-- Unheld FSM now has formal metadata: `phase`, `is_actionable`, `is_terminal`, `transition_event`, `next_required_event`, `guards`, `blocked_by`, `requires_order_lifecycle`.
-- Existing visible report remains stable.
-- Buyable/ready unheld candidates with source errors fail closed before any order lifecycle.
+- Unheld FSM now uses an explicit transition table.
+- Local replay covers `WAIT_VOLUME -> READY -> BUYABLE`, plus source-error, RR, and pullback repair routes.
+- Waiting unheld cards no longer show the conflicting internal source-warning line.
+- Official dry-run report remains readable and shows no valid new entry.
 - State machine remains read-only: no DB write, no schema change.
 
 ## Verification
 
 ```powershell
 $env:PYTHONIOENCODING='utf-8'
-.\.venv\Scripts\python.exe -m pytest tests/test_trade_state_machine.py -q --tb=short
-```
-
-Result: `5 passed, 3 warnings`.
-
-```powershell
-$env:PYTHONIOENCODING='utf-8'
 .\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py tests/test_trade_state_machine.py -q --tb=short
 ```
 
-Result: `194 passed, 145 warnings, 44 subtests passed`.
+Result: `196 passed, 145 warnings, 44 subtests passed`.
 
 ```powershell
 $env:PYTHONIOENCODING='utf-8'
-.\.venv\Scripts\python.exe -c "from core.generator import generate_report; messages, _ = generate_report(dry_run=True); print('\\n\\n--- MESSAGE ---\\n\\n'.join(messages))"
+.\.venv\Scripts\python.exe -c "from core.generator import generate_report; messages, _ = generate_report(dry_run=True); print('\\n--- MESSAGE ---\\n'.join(messages))"
 ```
 
 Result: v21.0 dry-run message list generated; no live Telegram delivery.
+
+Local transition replay:
+
+- `volume_missing_label`: `UNKNOWN -> WAIT_VOLUME`.
+- `volume_to_ready`: `WAIT_VOLUME -> READY`.
+- `ready_to_buyable`: `READY -> BUYABLE`.
+- `ready_source_error`: `READY -> WAIT_DATA`.
+- `rr_repair_needed`: `WATCH -> WAIT_RR`.
+- `pullback_needed`: `WATCH -> WAIT_PULLBACK`.
 
 ## Fixed Commands
 
@@ -47,10 +51,10 @@ Local dry-run only:
 ```powershell
 cd D:\reserch\stock-bot
 $env:PYTHONIOENCODING='utf-8'
-.\.venv\Scripts\python.exe -c "from core.generator import generate_report; messages, _ = generate_report(dry_run=True); print('\\n\\n--- MESSAGE ---\\n\\n'.join(messages))"
+.\.venv\Scripts\python.exe -c "from core.generator import generate_report; messages, _ = generate_report(dry_run=True); print('\\n--- MESSAGE ---\\n'.join(messages))"
 ```
 
 ## Next Action
 
-- Owner review of unheld FSM dry-run/artifact effect.
-- Holding/order lifecycle remains a separate future task.
+- Commit/push and run git completion gate.
+- Then Owner reviews v21.0 unheld FSM dry-run output.

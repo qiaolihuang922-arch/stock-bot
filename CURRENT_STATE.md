@@ -2,8 +2,8 @@
 
 ## Current Task
 
-- task_id: `unheld_trade_fsm_contract_20260608`
-- status: `complete`
+- task_id: `unheld_transition_table_replay_20260608`
+- status: `QA passed, pending commit/push`
 - version: `v21.0`
 - no live Telegram delivery.
 
@@ -18,18 +18,20 @@
 
 ## Current Changes
 
-- Unheld state machine now has formal pre-order FSM fields.
-- Wait states are non-actionable and non-terminal.
-- Source-error buyable candidates fail closed before order lifecycle.
-- State artifact includes guards/blocked_by/next_required_event for dry-run/log inspection.
+- Unheld state machine now has a transition table, not only metadata fields.
+- Explicit event paths cover data gate, volume gate, RR gate, pullback gate, setup ready, and buy signal confirmed.
+- Wait states are non-actionable; `BUYABLE` is the only actionable unheld state.
+- Source-error ready/buyable candidates route to `WAIT_DATA`.
+- Wait-state unheld cards no longer show contradictory source-warning text.
 
 ## Verification State
 
-- `tests/test_trade_state_machine.py`: `5 passed, 3 warnings`.
-- `tests/test_generator_report.py tests/test_trade_state_machine.py`: `194 passed, 145 warnings, 44 subtests passed`.
+- `tests/test_generator_report.py tests/test_trade_state_machine.py`: `196 passed, 145 warnings, 44 subtests passed`.
 - official `generate_report(dry_run=True)`: v21.0 messages generated locally; no live Telegram delivery.
+- local replay covered six routes: wait-volume, volume-to-ready, ready-to-buyable, ready-source-error, RR repair, pullback repair.
 
 ## Known Follow-ups
 
+- Commit/push and run git completion gate before final completion claim.
 - Next logical layer is persisted unheld state snapshots or order lifecycle, but both should be separate tasks.
 - CAO TUI automation gap remains separate from this product patch.

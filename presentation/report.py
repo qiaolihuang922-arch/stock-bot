@@ -1014,7 +1014,14 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         if deps["is_valid_entry"](stock_result) and not source_eligible
         else f"理由：{data.get('evidence_adjustment_reason')}" if data.get("evidence_adjustment_reason") else deps["rejected_transition_reason_line"](stock_result) if funnel_state == "淘汰" else None
     )
-    reason_line = _append_decision_reason(reason_line, report_context, name)
+    show_source_decision_reason = (
+        bool(reason_line)
+        or valid_entry
+        or state in ["弱勢淘汰", "淘汰"]
+        or (deps["is_valid_entry"](stock_result) and not source_eligible)
+    )
+    if show_source_decision_reason:
+        reason_line = _append_decision_reason(reason_line, report_context, name)
     trend_control_lines = []
     if valid_entry and funnel_state == "趨勢延續":
         trend_control_lines = [

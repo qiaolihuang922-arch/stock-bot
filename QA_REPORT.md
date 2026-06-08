@@ -1,25 +1,33 @@
-# QA_REPORT: unheld_trade_fsm_contract_20260608
+# QA_REPORT: unheld_transition_table_replay_20260608
 
 ## Scope
-- Unheld pre-order FSM metadata.
-- Source gate fail-closed behavior for buyable candidates.
-- State artifact schema for dry-run/log inspection.
-- Official report regression stability.
+- Unheld transition-table FSM.
+- Guard-to-event routing for data, volume, RR, and pullback repair.
+- User-visible unheld report wording after source-warning suppression.
+- Official generator regression and dry-run message path.
 
 ## Risk Scan
 - BUYABLE must be the only actionable unheld state.
-- WAIT states must not imply an order has been submitted.
-- Source error must stop a buyable candidate before order lifecycle.
-- Existing report wording must not regress.
+- READY must not imply an order.
+- Source-error must stop ready/buyable candidates before order lifecycle.
+- Wait cards must not mix `等量能` with `資料來源缺失，停止新倉`.
+- Real source-blocked buy candidates must still show source-blocked text.
 
 ## Semantic Consistency
 - `WAIT_VOLUME` is `phase=ENTRY_GATE`, `action=WAIT`, `is_actionable=false`, `next_required_event=VOLUME_CONFIRMED`.
-- A buyable candidate with `source-error` becomes `BLOCKED`, `transition_event=DATA_GATE_FAILED`, and `requires_order_lifecycle=false`.
-- Official dry-run still shows wait-volume/wait-pullback report states and no live delivery.
+- `READY` is `phase=ARMED`, `is_actionable=false`, `next_required_event=OPEN_CONFIRMATION`.
+- `BUYABLE` is `phase=ACTIONABLE`, `is_actionable=true`, `next_required_event=SUBMIT_ORDER`.
+- Source-error from `READY/BUYABLE` routes to `WAIT_DATA`, not order lifecycle.
+- Official dry-run unheld section shows only tracking states: `等量能` or `等回測`; no valid new entry.
 
 ## Failure Specimen Countercheck
-- Owner asked whether our FSM matches a real trading FSM. This patch makes the unheld side explicit as a pre-order decision FSM, not an order lifecycle FSM.
-- Probe result included `state=WAIT_VOLUME`, `phase=ENTRY_GATE`, `transition_event=VOLUME_GATE_FAILED`, `guards=[DATA_MISSING,VOLUME_WEAK,...]`.
+- Owner concern: the prior system could not explain when an unheld stock can become buyable.
+- Countercheck: local replay proves explicit progression `WAIT_VOLUME -> READY -> BUYABLE`, and separate repair paths for RR/pullback/source error.
+
+## Additional Challenge
+- QA checked the phone-facing dry-run text after regression passed.
+- Found and fixed a conflict where wait-state cards inherited `決策依據：資料來源缺失，停止新倉`.
+- Re-ran full regression after the fix.
 
 ## Not Tested
 - Live Telegram delivery was not run.
@@ -27,4 +35,4 @@
 - Broker/order lifecycle was not implemented or tested.
 
 ## QA Conclusion
-pass
+通過

@@ -75,6 +75,11 @@ class TradeStateMachineTest(unittest.TestCase):
         self.assertFalse(state["is_actionable"])
         self.assertFalse(state["is_terminal"])
         self.assertEqual(state["transition_event"], "VOLUME_GATE_FAILED")
+        self.assertEqual(state["transition_from"], "UNKNOWN")
+        self.assertEqual(state["transition_to"], "WAIT_VOLUME")
+        self.assertEqual(state["target_state"], "WAIT_VOLUME")
+        self.assertTrue(state["allowed_transition"])
+        self.assertEqual(state["transition_table"], "UNHELD_TRANSITION_TABLE")
         self.assertEqual(state["next_required_event"], "VOLUME_CONFIRMED")
         self.assertIn("DATA_MISSING", state["guards"])
         self.assertIn("VOLUME_WEAK", state["guards"])
@@ -116,8 +121,57 @@ class TradeStateMachineTest(unittest.TestCase):
         self.assertEqual(len(artifact["items"]), 1)
         self.assertEqual(artifact["items"][0]["state"], "WAIT_VOLUME")
         self.assertEqual(artifact["items"][0]["phase"], "ENTRY_GATE")
+        self.assertEqual(artifact["items"][0]["transition_event"], "VOLUME_GATE_FAILED")
+        self.assertEqual(artifact["items"][0]["transition_from"], "UNKNOWN")
+        self.assertEqual(artifact["items"][0]["transition_to"], "WAIT_VOLUME")
+        self.assertTrue(artifact["items"][0]["allowed_transition"])
         self.assertEqual(artifact["items"][0]["next_required_event"], "VOLUME_CONFIRMED")
         self.assertIn("VOLUME_WEAK", artifact["items"][0]["blocked_by"])
+
+    def test_unheld_transition_table_replays_progression_to_buyable(self):
+        payload = _watch_payload()
+        payload["cross_day_context"] = {"previous_state": "WAIT_VOLUME"}
+        ready = evaluate_unheld_state(
+            "緯創",
+            payload,
+            funnel_state="可準備",
+            watch_state="等量能",
+            source_status="available",
+        )
+        self.assertEqual(ready["transition_from"], "WAIT_VOLUME")
+        self.assertEqual(ready["transition_event"], "SETUP_READY")
+        self.assertEqual(ready["state"], "READY")
+        self.assertFalse(ready["is_actionable"])
+
+        payload["cross_day_context"] = {"previous_state": "READY"}
+        buyable = evaluate_unheld_state(
+            "緯創",
+            payload,
+            funnel_state="可買",
+            watch_state="可買",
+            source_status="available",
+        )
+        self.assertEqual(buyable["transition_from"], "READY")
+        self.assertEqual(buyable["transition_event"], "BUY_SIGNAL_CONFIRMED")
+        self.assertEqual(buyable["state"], "BUYABLE")
+        self.assertTrue(buyable["is_actionable"])
+        self.assertEqual(buyable["next_required_event"], "SUBMIT_ORDER")
+
+    def test_unheld_transition_uses_guards_when_labels_are_missing(self):
+        payload = _watch_payload()
+        state = evaluate_unheld_state(
+            "緯創",
+            payload,
+            funnel_state=None,
+            watch_state=None,
+            source_status="available",
+        )
+
+        self.assertEqual(state["transition_event"], "VOLUME_GATE_FAILED")
+        self.assertEqual(state["state"], "WAIT_VOLUME")
+        self.assertEqual(state["target_state"], "WATCH")
+        self.assertIn("VOLUME_WEAK", state["guards"])
+        self.assertIn("VOLUME_WEAK", state["blocked_by"])
 
     def test_unheld_buyable_with_source_error_fails_closed_before_order_lifecycle(self):
         payload = _watch_payload()
@@ -138,8 +192,8 @@ class TradeStateMachineTest(unittest.TestCase):
             source_status="source-error",
         )
 
-        self.assertEqual(state["state"], "BLOCKED")
-        self.assertEqual(state["phase"], "BLOCKED")
+        self.assertEqual(state["state"], "WAIT_DATA")
+        self.assertEqual(state["phase"], "DATA_GATE")
         self.assertEqual(state["transition_event"], "DATA_GATE_FAILED")
         self.assertFalse(state["is_actionable"])
         self.assertFalse(state["requires_order_lifecycle"])

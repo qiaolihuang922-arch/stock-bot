@@ -143,6 +143,141 @@ UNHELD_STATE_META = {
     },
 }
 
+UNHELD_TRANSITION_TABLE = {
+    "UNKNOWN": {
+        "DATA_GATE_FAILED": "WAIT_DATA",
+        "MARKET_GATE_FAILED": "WAIT_MARKET",
+        "VOLUME_GATE_FAILED": "WAIT_VOLUME",
+        "PULLBACK_GATE_FAILED": "WAIT_PULLBACK",
+        "RR_GATE_FAILED": "WAIT_RR",
+        "COOLDOWN_GATE_FAILED": "WAIT_COOLDOWN",
+        "SETUP_READY": "READY",
+        "BUY_SIGNAL_CONFIRMED": "BUYABLE",
+        "HARD_BLOCKED": "BLOCKED",
+        "WATCHLIST_RETAINED": "WATCH",
+    },
+    "WATCH": {
+        "DATA_GATE_FAILED": "WAIT_DATA",
+        "MARKET_GATE_FAILED": "WAIT_MARKET",
+        "VOLUME_GATE_FAILED": "WAIT_VOLUME",
+        "PULLBACK_GATE_FAILED": "WAIT_PULLBACK",
+        "RR_GATE_FAILED": "WAIT_RR",
+        "COOLDOWN_GATE_FAILED": "WAIT_COOLDOWN",
+        "SETUP_READY": "READY",
+        "BUY_SIGNAL_CONFIRMED": "BUYABLE",
+        "HARD_BLOCKED": "BLOCKED",
+        "WATCHLIST_RETAINED": "WATCH",
+    },
+    "WAIT_DATA": {
+        "DATA_GATE_FAILED": "WAIT_DATA",
+        "MARKET_GATE_FAILED": "WAIT_MARKET",
+        "VOLUME_GATE_FAILED": "WAIT_VOLUME",
+        "PULLBACK_GATE_FAILED": "WAIT_PULLBACK",
+        "RR_GATE_FAILED": "WAIT_RR",
+        "COOLDOWN_GATE_FAILED": "WAIT_COOLDOWN",
+        "SETUP_READY": "READY",
+        "BUY_SIGNAL_CONFIRMED": "BUYABLE",
+        "HARD_BLOCKED": "BLOCKED",
+        "WATCHLIST_RETAINED": "WATCH",
+    },
+    "WAIT_MARKET": {
+        "DATA_GATE_FAILED": "WAIT_DATA",
+        "MARKET_GATE_FAILED": "WAIT_MARKET",
+        "VOLUME_GATE_FAILED": "WAIT_VOLUME",
+        "PULLBACK_GATE_FAILED": "WAIT_PULLBACK",
+        "RR_GATE_FAILED": "WAIT_RR",
+        "COOLDOWN_GATE_FAILED": "WAIT_COOLDOWN",
+        "SETUP_READY": "READY",
+        "BUY_SIGNAL_CONFIRMED": "BUYABLE",
+        "HARD_BLOCKED": "BLOCKED",
+        "WATCHLIST_RETAINED": "WATCH",
+    },
+    "WAIT_VOLUME": {
+        "DATA_GATE_FAILED": "WAIT_DATA",
+        "MARKET_GATE_FAILED": "WAIT_MARKET",
+        "VOLUME_GATE_FAILED": "WAIT_VOLUME",
+        "PULLBACK_GATE_FAILED": "WAIT_PULLBACK",
+        "RR_GATE_FAILED": "WAIT_RR",
+        "COOLDOWN_GATE_FAILED": "WAIT_COOLDOWN",
+        "SETUP_READY": "READY",
+        "BUY_SIGNAL_CONFIRMED": "BUYABLE",
+        "HARD_BLOCKED": "BLOCKED",
+        "WATCHLIST_RETAINED": "WATCH",
+    },
+    "WAIT_PULLBACK": {
+        "DATA_GATE_FAILED": "WAIT_DATA",
+        "MARKET_GATE_FAILED": "WAIT_MARKET",
+        "VOLUME_GATE_FAILED": "WAIT_VOLUME",
+        "PULLBACK_GATE_FAILED": "WAIT_PULLBACK",
+        "RR_GATE_FAILED": "WAIT_RR",
+        "COOLDOWN_GATE_FAILED": "WAIT_COOLDOWN",
+        "SETUP_READY": "READY",
+        "BUY_SIGNAL_CONFIRMED": "BUYABLE",
+        "HARD_BLOCKED": "BLOCKED",
+        "WATCHLIST_RETAINED": "WATCH",
+    },
+    "WAIT_RR": {
+        "DATA_GATE_FAILED": "WAIT_DATA",
+        "MARKET_GATE_FAILED": "WAIT_MARKET",
+        "VOLUME_GATE_FAILED": "WAIT_VOLUME",
+        "PULLBACK_GATE_FAILED": "WAIT_PULLBACK",
+        "RR_GATE_FAILED": "WAIT_RR",
+        "COOLDOWN_GATE_FAILED": "WAIT_COOLDOWN",
+        "SETUP_READY": "READY",
+        "BUY_SIGNAL_CONFIRMED": "BUYABLE",
+        "HARD_BLOCKED": "BLOCKED",
+        "WATCHLIST_RETAINED": "WATCH",
+    },
+    "WAIT_COOLDOWN": {
+        "DATA_GATE_FAILED": "WAIT_DATA",
+        "MARKET_GATE_FAILED": "WAIT_MARKET",
+        "VOLUME_GATE_FAILED": "WAIT_VOLUME",
+        "PULLBACK_GATE_FAILED": "WAIT_PULLBACK",
+        "RR_GATE_FAILED": "WAIT_RR",
+        "COOLDOWN_GATE_FAILED": "WAIT_COOLDOWN",
+        "SETUP_READY": "READY",
+        "BUY_SIGNAL_CONFIRMED": "BUYABLE",
+        "HARD_BLOCKED": "BLOCKED",
+        "WATCHLIST_RETAINED": "WATCH",
+    },
+    "READY": {
+        "DATA_GATE_FAILED": "WAIT_DATA",
+        "MARKET_GATE_FAILED": "WAIT_MARKET",
+        "VOLUME_GATE_FAILED": "WAIT_VOLUME",
+        "PULLBACK_GATE_FAILED": "WAIT_PULLBACK",
+        "RR_GATE_FAILED": "WAIT_RR",
+        "COOLDOWN_GATE_FAILED": "WAIT_COOLDOWN",
+        "SETUP_READY": "READY",
+        "BUY_SIGNAL_CONFIRMED": "BUYABLE",
+        "HARD_BLOCKED": "BLOCKED",
+        "WATCHLIST_RETAINED": "WATCH",
+    },
+    "BUYABLE": {
+        "DATA_GATE_FAILED": "WAIT_DATA",
+        "MARKET_GATE_FAILED": "WAIT_MARKET",
+        "VOLUME_GATE_FAILED": "WAIT_VOLUME",
+        "PULLBACK_GATE_FAILED": "WAIT_PULLBACK",
+        "RR_GATE_FAILED": "WAIT_RR",
+        "COOLDOWN_GATE_FAILED": "WAIT_COOLDOWN",
+        "SETUP_READY": "READY",
+        "BUY_SIGNAL_CONFIRMED": "BUYABLE",
+        "HARD_BLOCKED": "BLOCKED",
+        "WATCHLIST_RETAINED": "WATCH",
+    },
+    "BLOCKED": {
+        "DATA_GATE_FAILED": "WAIT_DATA",
+        "MARKET_GATE_FAILED": "WAIT_MARKET",
+        "VOLUME_GATE_FAILED": "WAIT_VOLUME",
+        "PULLBACK_GATE_FAILED": "WAIT_PULLBACK",
+        "RR_GATE_FAILED": "WAIT_RR",
+        "COOLDOWN_GATE_FAILED": "WAIT_COOLDOWN",
+        "SETUP_READY": "READY",
+        "BUY_SIGNAL_CONFIRMED": "BUYABLE",
+        "HARD_BLOCKED": "BLOCKED",
+        "WATCHLIST_RETAINED": "WATCH",
+    },
+}
+
 POSITION_ACTION_STATE_MAP = {
     "停損": "STOP_LOSS",
     "硬風控減碼": "REDUCE",
@@ -257,6 +392,59 @@ def _transition_event_for_state(state, *, source_status=None):
     }.get(state, "STATE_EVALUATED")
 
 
+def _initial_unheld_target_state(data, *, funnel_state=None, watch_state=None):
+    result = (data or {}).get("result") or {}
+    if funnel_state in UNHELD_FUNNEL_STATE_MAP:
+        return UNHELD_FUNNEL_STATE_MAP[funnel_state], f"未持倉漏斗：{funnel_state}"
+    if watch_state in WATCH_STATE_MAP:
+        return WATCH_STATE_MAP[watch_state], f"觀察狀態：{watch_state}"
+    if result.get("decision") == "BUY":
+        return "BUYABLE", "策略買點成立"
+    if result.get("decision") == "FAIL":
+        return "BLOCKED", "策略條件失敗"
+    return "WATCH", "未達可買，保留觀察"
+
+
+def _unheld_event_from_target(target_state, *, source_status=None, guards=None):
+    if _source_blocker(source_status) and target_state in {"BUYABLE", "READY"}:
+        return "DATA_GATE_FAILED"
+    guard_set = set(guards or [])
+    if target_state == "WATCH":
+        if "VOLUME_WEAK" in guard_set:
+            return "VOLUME_GATE_FAILED"
+        if "HEAT_NOT_COOL" in guard_set:
+            return "COOLDOWN_GATE_FAILED"
+        if "RR_BELOW_MIN" in guard_set or "RR_MISSING" in guard_set:
+            return "RR_GATE_FAILED"
+        if "TOO_FAR_FROM_TRIGGER" in guard_set:
+            return "PULLBACK_GATE_FAILED"
+        if "MARKET_WEAK" in guard_set:
+            return "MARKET_GATE_FAILED"
+        if _source_blocker(source_status):
+            return "DATA_GATE_FAILED"
+    return _transition_event_for_state(target_state, source_status=source_status)
+
+
+def _apply_unheld_transition(previous_state, event):
+    origin = previous_state or "UNKNOWN"
+    transitions = UNHELD_TRANSITION_TABLE.get(origin) or UNHELD_TRANSITION_TABLE["UNKNOWN"]
+    if event in transitions:
+        return {
+            "from": origin,
+            "event": event,
+            "to": transitions[event],
+            "allowed": True,
+            "table": "UNHELD_TRANSITION_TABLE",
+        }
+    return {
+        "from": origin,
+        "event": event,
+        "to": "BLOCKED",
+        "allowed": False,
+        "table": "UNHELD_TRANSITION_TABLE",
+    }
+
+
 def evaluate_position_state(name, data, *, summary_action=None, trigger=None):
     summary_action = summary_action or "續抱"
     state = POSITION_ACTION_STATE_MAP.get(summary_action, "HOLD")
@@ -299,35 +487,24 @@ def evaluate_unheld_state(
     source_status=None,
 ):
     result = (data or {}).get("result") or {}
-    if funnel_state in UNHELD_FUNNEL_STATE_MAP:
-        state = UNHELD_FUNNEL_STATE_MAP[funnel_state]
-        reason = f"未持倉漏斗：{funnel_state}"
-    elif watch_state in WATCH_STATE_MAP:
-        state = WATCH_STATE_MAP[watch_state]
-        reason = f"觀察狀態：{watch_state}"
-    elif result.get("decision") == "BUY":
-        state = "BUYABLE"
-        reason = "策略買點成立"
-    elif result.get("decision") == "FAIL":
-        state = "BLOCKED"
-        reason = "策略條件失敗"
-    else:
-        state = "WATCH"
-        reason = "未達可買，保留觀察"
+    target_state, reason = _initial_unheld_target_state(
+        data,
+        funnel_state=funnel_state,
+        watch_state=watch_state,
+    )
 
-    if state == "BUYABLE" and result.get("decision_type") == "trend_continuation":
+    if target_state == "BUYABLE" and result.get("decision_type") == "trend_continuation":
         reason = "趨勢延續買點成立"
 
-    if (
-        state in {"BUYABLE", "READY"}
-        and source_status in {"missing-source", "source-error", "insufficient-data", "unresolved-conflict"}
-    ):
-        state = "BLOCKED"
+    guards = _unheld_guard_snapshot(data, source_status)
+    event = _unheld_event_from_target(target_state, source_status=source_status, guards=guards)
+    transition_result = _apply_unheld_transition(_previous_state(data), event)
+    state = transition_result["to"]
+    if event == "DATA_GATE_FAILED" and target_state in {"BUYABLE", "READY"}:
         reason = "資料來源不足，停止新倉行動"
 
     action = ACTION_BY_STATE.get(state, "WATCH")
     meta = UNHELD_STATE_META.get(state, UNHELD_STATE_META["WATCH"])
-    guards = _unheld_guard_snapshot(data, source_status)
     source_blocker = _source_blocker(source_status)
     blocked_by = []
     if source_blocker:
@@ -359,8 +536,13 @@ def evaluate_unheld_state(
         "is_actionable": meta["is_actionable"],
         "is_terminal": meta["is_terminal"],
         "previous_state": _previous_state(data),
-        "transition": f"{_previous_state(data) or 'UNKNOWN'}->{state}",
-        "transition_event": _transition_event_for_state(state, source_status=source_status),
+        "transition": f"{transition_result['from']}->{state}",
+        "transition_event": event,
+        "transition_from": transition_result["from"],
+        "transition_to": state,
+        "allowed_transition": transition_result["allowed"],
+        "transition_table": transition_result["table"],
+        "target_state": target_state,
         "reason": reason,
         "trigger": trigger,
         "next_required_event": meta["next_required_event"],
@@ -405,6 +587,11 @@ def build_state_artifact(results_map):
             "previous_state": state.get("previous_state"),
             "transition": state.get("transition"),
             "transition_event": state.get("transition_event"),
+            "transition_from": state.get("transition_from"),
+            "transition_to": state.get("transition_to"),
+            "allowed_transition": state.get("allowed_transition"),
+            "transition_table": state.get("transition_table"),
+            "target_state": state.get("target_state"),
             "reason": state.get("reason"),
             "trigger": state.get("trigger"),
             "next_required_event": state.get("next_required_event"),

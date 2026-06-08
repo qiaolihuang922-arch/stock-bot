@@ -2681,7 +2681,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【旺宏 2337】⛔ 淘汰｜弱反彈待確認", unheld_message(messages))
         self.assertIn("交易狀態：續抱｜動作：續抱", position_message(messages))
         self.assertIn("RR -（過熱）", unheld_message(messages))
-        self.assertIn("交易狀態：不可行動｜動作：停止行動", unheld_message(messages))
+        self.assertIn("交易狀態：等資料｜動作：等待", unheld_message(messages))
 
     def test_v19_3_4_backtest_line_explains_confidence_and_verdict(self):
         self.assertEqual(
@@ -6985,7 +6985,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("量化差距：需更多有效策略樣本確認", card)
         self.assertIn("原因：策略樣本不可用，高置信 S 分數 / 強弱分類暫不採用", card)
         self.assertIn("盤中觸發：無有效進場，先補策略樣本證據", card)
-        self.assertIn("交易狀態：不可行動｜動作：停止行動", card)
+        self.assertIn("交易狀態：等資料｜動作：等待", card)
         self.assertIn("數據：RR：-（不可行動）｜S 證據不足｜V 1.5x", card)
         self.assertIn("價格：100.0（+1.20%）", card)
         self.assertNotIn("價格：不可用（資料來源缺失）", card)
