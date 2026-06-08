@@ -28,6 +28,7 @@
 - Render/TG/DB/evidence package: `142 passed, 1 warning, 64 subtests passed`.
 - official `generate_report(dry_run=True, return_write_results=True)`: `messages 4`, `reply_markup True`, `write_results {}`.
 - Production DB read-after-write shows `daily_price`, `signal_runs`, `daily_signal_snapshot`, `market_theme_confirmed_evidence`, and `market_theme_index_daily_bars` rows through 2026-06-08.
+- Git completion gate passed on `main` at `a0ffad2` before closeout doc refresh.
 
 ## Known Follow-ups
 

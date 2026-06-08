@@ -17,6 +17,7 @@
 - Market-theme DB freshness gap was backfilled by the approved repo script for 2026-06-04, 2026-06-05, and 2026-06-08.
 - Official dry-run report returns 4 messages and `write_results {}`.
 - No live Telegram delivery was run.
+- Git completion gate passed on `main` at `a0ffad2` before closeout doc refresh.
 
 ## Recently Done
 
