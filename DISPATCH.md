@@ -41,7 +41,7 @@
 
 ## Next Action
 
-- CAO deployment patch 待 commit / push；完成後下輪可用 WSL 跑正式 Architect entry。
+- CAO deployment patch 已 commit / push；WSL CAO services 可用，但 TUI automation 仍需另修 runner prompt/send gap。
 - 若 Owner 要本地再看報表，可執行：
 
 ```powershell
