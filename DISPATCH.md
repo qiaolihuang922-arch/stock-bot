@@ -3,7 +3,7 @@
 ## Active
 
 - task_md_holds: `unheld_transition_table_replay_20260608`
-- status: `QA passed, pending commit/push`
+- status: `complete`
 - owner_request:
   - Start with unheld stocks first.
   - Do not depend on buy-time/order timing yet.
@@ -56,5 +56,4 @@ $env:PYTHONIOENCODING='utf-8'
 
 ## Next Action
 
-- Commit/push and run git completion gate.
-- Then Owner reviews v21.0 unheld FSM dry-run output.
+- Owner reviews v21.0 unheld FSM dry-run output.

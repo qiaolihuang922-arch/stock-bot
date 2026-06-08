@@ -3,7 +3,7 @@
 ## Status
 - task_id: `unheld_transition_table_replay_20260608`
 - type: `risk_patch`
-- status: `QA passed, pending commit/push`
+- status: `complete`
 - version: `v21.0`
 - QA level: `L3`
 

@@ -3,7 +3,7 @@
 ## Current Task
 
 - task_id: `unheld_transition_table_replay_20260608`
-- status: `QA passed, pending commit/push`
+- status: `complete`
 - version: `v21.0`
 - no live Telegram delivery.
 
@@ -32,6 +32,5 @@
 
 ## Known Follow-ups
 
-- Commit/push and run git completion gate before final completion claim.
 - Next logical layer is persisted unheld state snapshots or order lifecycle, but both should be separate tasks.
 - CAO TUI automation gap remains separate from this product patch.
