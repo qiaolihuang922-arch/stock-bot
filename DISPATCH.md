@@ -2,23 +2,21 @@
 
 ## Active
 
-- task_md_holds: `unheld_transition_table_replay_20260608`
-- status: `complete`
+- task_md_holds: `render_git_tg_db_pipeline_check_20260609`
+- status: `QA passed, pending commit/push`
 - owner_request:
-  - Start with unheld stocks first.
-  - Do not depend on buy-time/order timing yet.
-  - Do not only add fields; use real transition logic and run it several times before Owner review.
+  - Check Render -> git/GitHub -> TG report chain.
+  - Check daily DB writes.
   - No live Telegram delivery.
 
 ## Current Result
 
 - Version remains `v21.0`.
-- Unheld FSM now uses an explicit transition table.
-- Local replay covers `WAIT_VOLUME -> READY -> BUYABLE`, plus source-error, RR, and pullback repair routes.
-- Waiting unheld cards no longer show the conflicting internal source-warning line.
-- Official dry-run report remains readable and shows no valid new entry.
-- State machine remains read-only: no DB write, no schema change.
-- Git completion gate passed on `main` at `c0e210c` before closeout doc refresh.
+- Render dispatch URL was broken and is fixed to `stock-bot-clean.yml`.
+- Daily evidence workflow no longer requires `MARKET_THEME_APPROVED_PAYLOAD`; it can use official TWSE payload generation.
+- Market-theme DB freshness gap was backfilled by the approved repo script for 2026-06-04, 2026-06-05, and 2026-06-08.
+- Official dry-run report returns 4 messages and `write_results {}`.
+- No live Telegram delivery was run.
 
 ## Recently Done
 
@@ -28,26 +26,24 @@
 
 ```powershell
 $env:PYTHONIOENCODING='utf-8'
-.\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py tests/test_trade_state_machine.py -q --tb=short
+.\.venv\Scripts\python.exe -m pytest tests/test_workflow_runtime_config.py::WorkflowRuntimeConfigTest::test_workflow_dispatch_supports_git_runner_may_backfill tests/test_workflow_runtime_config.py::WorkflowRuntimeConfigTest::test_workflow_does_not_echo_service_role_secret_value -q --tb=short
 ```
 
-Result: `196 passed, 145 warnings, 44 subtests passed`.
+Result: `2 passed, 1 warning`.
 
 ```powershell
 $env:PYTHONIOENCODING='utf-8'
-.\.venv\Scripts\python.exe -c "from core.generator import generate_report; messages, _ = generate_report(dry_run=True); print('\\n--- MESSAGE ---\\n'.join(messages))"
+.\.venv\Scripts\python.exe -m pytest tests/test_app_render_preflight.py tests/test_main_delivery_guard.py tests/test_notifier.py tests/test_daily_snapshot_store.py tests/test_phase3_evidence_automation.py tests/test_market_theme_evidence.py tests/test_market_theme_evidence_handoff.py tests/test_strategy_evidence.py tests/test_cross_day_context.py -q --tb=short
 ```
 
-Result: v21.0 dry-run message list generated; no live Telegram delivery.
+Result: `142 passed, 1 warning, 64 subtests passed`.
 
-Local transition replay:
+```powershell
+$env:PYTHONIOENCODING='utf-8'
+.\.venv\Scripts\python.exe -c "from core.generator import generate_report; messages, reply_markup, writes = generate_report(dry_run=True, return_write_results=True); print('messages', len(messages)); print('reply_markup', bool(reply_markup)); print('write_results', writes)"
+```
 
-- `volume_missing_label`: `UNKNOWN -> WAIT_VOLUME`.
-- `volume_to_ready`: `WAIT_VOLUME -> READY`.
-- `ready_to_buyable`: `READY -> BUYABLE`.
-- `ready_source_error`: `READY -> WAIT_DATA`.
-- `rr_repair_needed`: `WATCH -> WAIT_RR`.
-- `pullback_needed`: `WATCH -> WAIT_PULLBACK`.
+Result: `messages 4`, `reply_markup True`, `write_results {}`.
 
 ## Fixed Commands
 
@@ -61,4 +57,4 @@ $env:PYTHONIOENCODING='utf-8'
 
 ## Next Action
 
-- Owner reviews v21.0 unheld FSM dry-run output.
+- Commit/push and run git completion gate.

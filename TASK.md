@@ -1,53 +1,53 @@
-# TASK: unheld_transition_table_replay_20260608
+# TASK: render_git_tg_db_pipeline_check_20260609
 
 ## Status
-- task_id: `unheld_transition_table_replay_20260608`
+- task_id: `render_git_tg_db_pipeline_check_20260609`
 - type: `risk_patch`
-- status: `complete`
+- status: `QA passed, pending commit/push`
 - version: `v21.0`
 - QA level: `L3`
 
 ## Owner Problem
-Owner said adding fields alone is not useful and asked whether the logic learned from real trading state machines. The unheld side must be more than labels: it needs explicit transition events, allowed next states, and local replay proof before Owner reviews the report.
+Owner asked to check whether the Render -> git/GitHub -> Telegram report chain is broken, and whether the daily database writes are working.
 
 ## User Visible Result
-- Unheld cards remain decision-first: wait-volume, wait-pullback, wait-RR, ready, buyable, or wait-data.
-- Waiting cards no longer show conflicting internal source-warning text such as `資料來源缺失，停止新倉` when the visible state is only waiting for volume/pullback.
-- Buyable remains the only actionable unheld state; ready is armed but not an order.
+- Render dispatch now targets the existing GitHub workflow file.
+- GitHub daily evidence workflow no longer blocks daily market-theme DB writes when `MARKET_THEME_APPROVED_PAYLOAD` is absent; it falls back to the existing TWSE official payload builder.
+- Telegram delivery path remains guarded: failed sends do not mark sent, and no live Telegram delivery was run in this task.
+- Official report dry-run still generates the v21.0 message list.
 
 ## Non Goals
 - No live Telegram delivery.
-- No DB schema/write change.
-- No broker/order lifecycle implementation.
-- No holding-side FSM rewrite in this round.
+- No DB schema/RLS/grant/policy/index change.
+- No manual SQL/DML.
+- No strategy or state-machine logic changes.
 
 ## Impacted Modules And Consumers
-- `core/trade_state_machine.py`: unheld transition table, guard-to-event routing, artifact fields.
-- `presentation/report.py`: suppresses internal decision-source noise on non-actionable waiting cards while preserving visible source block reasons for true source-blocked buy candidates.
-- `tests/test_trade_state_machine.py`: transition-table replay and guard fallback coverage.
-- `tests/test_generator_report.py`: updated source-error expected state from broad blocked text to wait-data.
-- Direct consumers: official generator dry-run report, runner/log/artifact inspection.
+- `app.py`: Render web trigger dispatch URL.
+- `.github/workflows/stock-bot-clean.yml`: daily evidence runner command.
+- `tests/test_app_render_preflight.py`: Render dispatch URL regression.
+- `tests/test_workflow_runtime_config.py`: workflow command contract.
+- `tests/test_phase3_evidence_automation.py`: cross-platform CLI path assertion.
+- Direct consumers: Render web app, GitHub Actions workflow dispatch/schedule, Telegram sender, daily DB write scripts.
 
 ## Output Contract
-- Unheld transition table must route events such as `VOLUME_GATE_FAILED`, `RR_GATE_FAILED`, `PULLBACK_GATE_FAILED`, `DATA_GATE_FAILED`, `SETUP_READY`, and `BUY_SIGNAL_CONFIRMED`.
-- `WAIT_*` states are non-actionable and require a repair event.
-- `READY` is armed and non-actionable; it requires open/confirmation.
-- `BUYABLE` is actionable and requires `SUBMIT_ORDER`.
-- Source errors on ready/buyable candidates fail closed to `WAIT_DATA` before any order lifecycle.
-- Artifacts expose `transition_from`, `transition_to`, `allowed_transition`, `transition_table`, and `target_state`.
+- Render must dispatch `.github/workflows/stock-bot-clean.yml`.
+- `run_mode=daily_evidence` must skip live bot delivery.
+- Daily evidence must run `scripts/run_phase3_evidence_automation.py`; if an approved payload secret exists, use it; otherwise use the script's official TWSE payload path.
+- `generate_report(dry_run=True)` must not write DB and must return empty `write_results`.
 
 ## Acceptance
-- State-machine tests pass.
-- Full generator/state-machine regression passes.
-- Official dry-run generates v21.0 messages without live Telegram delivery.
-- Local replay proves at least these routes: volume wait, volume-to-ready, ready-to-buyable, ready-source-error-to-wait-data, RR repair, pullback repair.
-- Dry-run unheld cards do not contain the old conflicting `決策依據：資料來源缺失，停止新倉` line for wait-volume/wait-pullback cards.
+- Render/TG/DB focused tests pass.
+- Workflow static contract tests pass.
+- Official dry-run returns messages and no write results.
+- Production DB read-after-write shows current daily rows for `daily_price`, `signal_runs`, `daily_signal_snapshot`, and market-theme evidence tables.
 
 ## Failure Specimen And Route
-- Owner specimen: unheld cards looked like static elimination labels and did not explain how a stock can later become buyable.
-- Route: `evaluate_unheld_state` -> transition table replay -> `build_state_artifact` -> official dry-run report text.
+- Found failure: `app.py` dispatched `stock-bot.yml`, but the repo workflow file is `stock-bot-clean.yml`.
+- Found daily DB gap: market-theme confirmed evidence was present through 2026-06-03 only before freshness backfill; approved repo script backfilled and verified 2026-06-04, 2026-06-05, and 2026-06-08.
 
 ## Forbidden / Blocking
 - No live Telegram delivery.
-- No production DB write or schema change.
-- If full generator regression fails, do not claim complete.
+- Do not print secrets.
+- Do not hand-write production DML.
+- If git completion gate fails, do not claim complete.

@@ -2,36 +2,34 @@
 
 ## Current Task
 
-- task_id: `unheld_transition_table_replay_20260608`
-- status: `complete`
+- task_id: `render_git_tg_db_pipeline_check_20260609`
+- status: `QA passed, pending commit/push`
 - version: `v21.0`
 - no live Telegram delivery.
 
 ## Stable Context
 
 - Owner reads Telegram on mobile; visible wording must be decision-first and avoid internal pipeline terms.
-- Current direction is v21 read-only trade state machine.
-- Start with unheld FSM first; holding/order lifecycle remains separate.
+- Current direction is v21 read-only trade state machine plus production pipeline hardening.
 - Do not expand DB schema unless read-only behavior proves an actual cross-day memory gap.
 - Production source-of-truth remains Supabase / runner data, not local cache.
 - DB schema/RLS/grant/policy/role/index/constraint changes require Owner approval.
 
 ## Current Changes
 
-- Unheld state machine now has a transition table, not only metadata fields.
-- Explicit event paths cover data gate, volume gate, RR gate, pullback gate, setup ready, and buy signal confirmed.
-- Wait states are non-actionable; `BUYABLE` is the only actionable unheld state.
-- Source-error ready/buyable candidates route to `WAIT_DATA`.
-- Wait-state unheld cards no longer show contradictory source-warning text.
+- Render dispatch URL fixed from missing `stock-bot.yml` to existing `stock-bot-clean.yml`.
+- Daily evidence workflow can write market-theme evidence without requiring `MARKET_THEME_APPROVED_PAYLOAD`.
+- Approved freshness script backfilled and verified market-theme rows for 2026-06-04, 2026-06-05, and 2026-06-08.
+- No live Telegram delivery was run.
 
 ## Verification State
 
-- `tests/test_generator_report.py tests/test_trade_state_machine.py`: `196 passed, 145 warnings, 44 subtests passed`.
-- official `generate_report(dry_run=True)`: v21.0 messages generated locally; no live Telegram delivery.
-- local replay covered six routes: wait-volume, volume-to-ready, ready-to-buyable, ready-source-error, RR repair, pullback repair.
-- Git completion gate passed on `main` at `c0e210c` before closeout doc refresh.
+- Workflow static contract: `2 passed, 1 warning`.
+- Render/TG/DB/evidence package: `142 passed, 1 warning, 64 subtests passed`.
+- official `generate_report(dry_run=True, return_write_results=True)`: `messages 4`, `reply_markup True`, `write_results {}`.
+- Production DB read-after-write shows `daily_price`, `signal_runs`, `daily_signal_snapshot`, `market_theme_confirmed_evidence`, and `market_theme_index_daily_bars` rows through 2026-06-08.
 
 ## Known Follow-ups
 
-- Next logical layer is persisted unheld state snapshots or order lifecycle, but both should be separate tasks.
+- Commit/push and run git completion gate before final completion claim.
 - CAO TUI automation gap remains separate from this product patch.

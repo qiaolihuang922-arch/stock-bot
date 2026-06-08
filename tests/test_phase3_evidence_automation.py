@@ -317,7 +317,9 @@ class Phase3EvidenceAutomationTest(unittest.TestCase):
                 )
 
         self.assertEqual(returncode, 2)
-        self.assertIn("scripts/write_market_theme_confirmed_evidence.py", calls[0][1])
+        self.assertTrue(
+            str(calls[0][1]).replace("\\", "/").endswith("scripts/write_market_theme_confirmed_evidence.py")
+        )
         self.assertIn("--execute", calls[0])
         self.assertIn(
             "EVIDENCE_WRITE_FAILED source=market_theme_confirmed_evidence trading_day=2026-06-02 action=fail_closed",

@@ -115,7 +115,7 @@ def home():
             return "❌ No Token"
 
         # 中文註釋：v19.1.3 改用新的 workflow 檔名，避開 GitHub 舊 workflow ID 無法手動觸發的問題。
-        url = "https://api.github.com/repos/qiaolihuang922-arch/stock-bot/actions/workflows/stock-bot.yml/dispatches"
+        url = "https://api.github.com/repos/qiaolihuang922-arch/stock-bot/actions/workflows/stock-bot-clean.yml/dispatches"
 
         r = requests.post(
             url,

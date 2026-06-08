@@ -126,6 +126,42 @@ class RenderFreshnessPreflightTest(unittest.TestCase):
         self.assertIn("GitHub錯誤 500", response.get_data(as_text=True))
         self.assertEqual(calls, ["dispatch"])
 
+    def test_render_dispatch_targets_existing_workflow_file(self):
+        client = app.app.test_client()
+        dispatch_urls = []
+
+        class Response:
+            status_code = 204
+            text = ""
+
+        def dispatch(url, *args, **kwargs):
+            dispatch_urls.append(url)
+            return Response()
+
+        with patch.object(app, "run_market_theme_freshness_preflight", return_value=0), patch.object(
+            app,
+            "already_sent",
+            lambda tag: False,
+        ), patch.object(
+            app,
+            "mark_sent",
+            lambda tag: None,
+        ), patch.object(
+            app.requests,
+            "post",
+            dispatch,
+        ), patch.dict(
+            app.os.environ,
+            {"GITHUB_TOKEN": "token"},
+            clear=False,
+        ):
+            response = client.get("/?test=1")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(dispatch_urls), 1)
+        self.assertIn("/actions/workflows/stock-bot-clean.yml/dispatches", dispatch_urls[0])
+        self.assertNotIn("stock-bot.yml/dispatches", dispatch_urls[0])
+
 
 if __name__ == "__main__":
     unittest.main()

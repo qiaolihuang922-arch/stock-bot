@@ -1,38 +1,37 @@
-# QA_REPORT: unheld_transition_table_replay_20260608
+# QA_REPORT: render_git_tg_db_pipeline_check_20260609
 
 ## Scope
-- Unheld transition-table FSM.
-- Guard-to-event routing for data, volume, RR, and pullback repair.
-- User-visible unheld report wording after source-warning suppression.
-- Official generator regression and dry-run message path.
+- Render dispatch target.
+- GitHub workflow daily evidence and bot separation.
+- Telegram sender failure guard.
+- Official generator dry-run.
+- Daily DB tables and market-theme evidence freshness.
 
 ## Risk Scan
-- BUYABLE must be the only actionable unheld state.
-- READY must not imply an order.
-- Source-error must stop ready/buyable candidates before order lifecycle.
-- Wait cards must not mix `等量能` with `資料來源缺失，停止新倉`.
-- Real source-blocked buy candidates must still show source-blocked text.
+- Render may call a missing workflow file and never trigger GitHub Actions.
+- Daily evidence may fail before writing DB if a payload secret is absent.
+- Bot mode must not run during daily evidence mode.
+- Dry-run must not write DB.
+- Telegram failure must not mark a message as sent.
 
 ## Semantic Consistency
-- `WAIT_VOLUME` is `phase=ENTRY_GATE`, `action=WAIT`, `is_actionable=false`, `next_required_event=VOLUME_CONFIRMED`.
-- `READY` is `phase=ARMED`, `is_actionable=false`, `next_required_event=OPEN_CONFIRMATION`.
-- `BUYABLE` is `phase=ACTIONABLE`, `is_actionable=true`, `next_required_event=SUBMIT_ORDER`.
-- Source-error from `READY/BUYABLE` routes to `WAIT_DATA`, not order lifecycle.
-- Official dry-run unheld section shows only tracking states: `等量能` or `等回測`; no valid new entry.
+- Render now dispatches `stock-bot-clean.yml`, matching the actual workflow file.
+- Workflow still supports `MARKET_THEME_APPROVED_PAYLOAD`, but no longer requires it for official TWSE payload generation.
+- `generate_report(dry_run=True, return_write_results=True)` returns `write_results {}`.
+- DB read-after-write confirms daily rows exist after backfill.
 
 ## Failure Specimen Countercheck
-- Owner concern: the prior system could not explain when an unheld stock can become buyable.
-- Countercheck: local replay proves explicit progression `WAIT_VOLUME -> READY -> BUYABLE`, and separate repair paths for RR/pullback/source error.
+- Render mismatch: fixed and covered by `test_render_dispatch_targets_existing_workflow_file`.
+- Market-theme gap: before backfill, recent rows stopped at 2026-06-03; after approved freshness script, 2026-06-04, 2026-06-05, and 2026-06-08 are present and verified.
 
 ## Additional Challenge
-- QA checked the phone-facing dry-run text after regression passed.
-- Found and fixed a conflict where wait-state cards inherited `決策依據：資料來源缺失，停止新倉`.
-- Re-ran full regression after the fix.
+- Ran Telegram guard tests to ensure no false success on failed delivery.
+- Ran daily/evidence/cross-day tests to ensure DB source-of-truth paths still fail closed.
 
 ## Not Tested
 - Live Telegram delivery was not run.
-- Production DB write/state snapshot was not run.
-- Broker/order lifecycle was not implemented or tested.
+- Live Render HTTP dispatch to GitHub was not run.
+- GitHub Actions UI status was not queried with authenticated `gh`.
 
 ## QA Conclusion
 通過

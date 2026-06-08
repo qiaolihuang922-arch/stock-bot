@@ -161,7 +161,7 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
         self.assertNotIn("Backfill official market/theme evidence", workflow_text)
         self.assertIn('Run bot skipped for run_mode=$RUN_MODE', workflow_text)
         self.assertIn("Run Phase 3 evidence automation", workflow_text)
-        self.assertIn("python scripts/run_phase3_evidence_automation.py --require-market-theme-payload $payload_arg", workflow_text)
+        self.assertIn("python scripts/run_phase3_evidence_automation.py $payload_arg", workflow_text)
         self.assertIn("github.event.schedule == '0 6 * * 1-5' && 'daily_evidence'", workflow_text)
         self.assertIn("github.event.schedule == '10 6 * * 1-5' && 'bot'", workflow_text)
 
@@ -237,10 +237,9 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("scripts/run_phase3_evidence_automation.py", calls)
-        self.assertIn("--require-market-theme-payload", calls)
         self.assertIn("--market-theme-payload market_theme_approved_payload.json", calls)
 
-    def test_phase3_evidence_step_fails_closed_without_market_theme_payload_secret(self):
+    def test_phase3_evidence_step_uses_official_twse_payload_when_secret_missing(self):
         script = _workflow_run_script("Run Phase 3 evidence automation")
         runtime_env = os.environ.copy()
         runtime_env["RUN_MODE"] = "daily_evidence"
@@ -251,7 +250,7 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
             calls_path = Path(tmpdir) / "python_calls.txt"
             fake_python = bin_path / "python"
             fake_python.write_text(
-                f"#!/usr/bin/env bash\necho \"$@\" >> \"{calls_path}\"\ncase \"$*\" in *--require-market-theme-payload*) exit 2;; *) exit 0;; esac\n",
+                f"#!/usr/bin/env bash\necho \"$@\" >> \"{calls_path}\"\nexit 0\n",
                 encoding="utf-8",
             )
             fake_python.chmod(0o755)
@@ -266,9 +265,10 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
             )
             calls = calls_path.read_text(encoding="utf-8")
 
-        self.assertEqual(completed.returncode, 2)
-        self.assertIn("--require-market-theme-payload", calls)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("scripts/run_phase3_evidence_automation.py", calls)
         self.assertNotIn("--market-theme-payload", calls)
+        self.assertNotIn("--require-market-theme-payload", calls)
 
 
 if __name__ == "__main__":
