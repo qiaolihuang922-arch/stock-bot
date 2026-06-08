@@ -93,6 +93,7 @@ _DEFAULT_GLOBAL_EVENT_SEED = (
 TAIWAN_CRASH_TEMPLATE_LIBRARY = (
     {
         "event": "1990 台股萬點泡沫崩跌",
+        "pattern": "泡沫長空",
         "change_band": (-6.0, -2.5),
         "pullback_band": (-20.0, -6.0),
         "base_similarity": 0.24,
@@ -101,6 +102,7 @@ TAIWAN_CRASH_TEMPLATE_LIBRARY = (
     },
     {
         "event": "1995 台海飛彈危機急跌",
+        "pattern": "地緣政治急跌",
         "change_band": (-4.5, -1.8),
         "pullback_band": (-9.0, -3.0),
         "base_similarity": 0.26,
@@ -109,6 +111,7 @@ TAIWAN_CRASH_TEMPLATE_LIBRARY = (
     },
     {
         "event": "1997 亞洲金融風暴",
+        "pattern": "區域金融壓力",
         "change_band": (-5.5, -2.0),
         "pullback_band": (-12.0, -4.0),
         "base_similarity": 0.28,
@@ -117,6 +120,7 @@ TAIWAN_CRASH_TEMPLATE_LIBRARY = (
     },
     {
         "event": "2000 網路泡沫/政權輪替壓力",
+        "pattern": "科技估值修正",
         "change_band": (-5.0, -2.0),
         "pullback_band": (-12.0, -4.0),
         "base_similarity": 0.27,
@@ -125,6 +129,7 @@ TAIWAN_CRASH_TEMPLATE_LIBRARY = (
     },
     {
         "event": "2003 SARS 台股急跌",
+        "pattern": "疫情需求衝擊",
         "change_band": (-4.5, -1.8),
         "pullback_band": (-10.0, -3.0),
         "base_similarity": 0.28,
@@ -133,6 +138,7 @@ TAIWAN_CRASH_TEMPLATE_LIBRARY = (
     },
     {
         "event": "2004 319選舉事件急跌",
+        "pattern": "事件型急殺",
         "change_band": (-7.0, -3.0),
         "pullback_band": (-8.0, -2.0),
         "base_similarity": 0.30,
@@ -141,6 +147,7 @@ TAIWAN_CRASH_TEMPLATE_LIBRARY = (
     },
     {
         "event": "2008 金融海嘯",
+        "pattern": "系統性信用風險",
         "change_band": (-6.5, -2.8),
         "pullback_band": (-18.0, -6.0),
         "base_similarity": 0.31,
@@ -149,6 +156,7 @@ TAIWAN_CRASH_TEMPLATE_LIBRARY = (
     },
     {
         "event": "2011 歐債/美國信評急跌",
+        "pattern": "主權債風險收縮",
         "change_band": (-5.5, -2.2),
         "pullback_band": (-12.0, -4.0),
         "base_similarity": 0.29,
@@ -157,6 +165,7 @@ TAIWAN_CRASH_TEMPLATE_LIBRARY = (
     },
     {
         "event": "2015 台股急跌/中國股災外溢",
+        "pattern": "高檔壓力前段",
         "change_band": (-3.0, -1.2),
         "pullback_band": (-6.0, -1.2),
         "base_similarity": 0.30,
@@ -165,6 +174,7 @@ TAIWAN_CRASH_TEMPLATE_LIBRARY = (
     },
     {
         "event": "2018 美股波動/貿易戰急跌",
+        "pattern": "外部風險偏好收縮",
         "change_band": (-6.5, -2.5),
         "pullback_band": (-10.0, -3.0),
         "base_similarity": 0.29,
@@ -173,6 +183,7 @@ TAIWAN_CRASH_TEMPLATE_LIBRARY = (
     },
     {
         "event": "2020 台股疫情急跌",
+        "pattern": "疫情急跌",
         "change_band": (-5.0, -3.0),
         "pullback_band": (-14.0, -5.0),
         "base_similarity": 0.32,
@@ -181,6 +192,7 @@ TAIWAN_CRASH_TEMPLATE_LIBRARY = (
     },
     {
         "event": "2022 升息通膨修正",
+        "pattern": "利率估值修正",
         "change_band": (-4.5, -1.8),
         "pullback_band": (-14.0, -4.0),
         "base_similarity": 0.28,
@@ -189,6 +201,7 @@ TAIWAN_CRASH_TEMPLATE_LIBRARY = (
     },
     {
         "event": "2024/08/05 台股日圓套利平倉急殺",
+        "pattern": "槓桿平倉急殺",
         "change_band": (-10.0, -5.5),
         "pullback_band": (-12.0, -5.0),
         "base_similarity": 0.36,
@@ -614,7 +627,17 @@ def build_historical_analogy(today_features=None, historical_source=None, thresh
     if feature_text:
         parts.append(f"相似：{feature_text}")
     parts.append("類比不是預測")
-    return {"status": "available", "line": "｜".join(item for item in parts if item)}
+    line = "｜".join(item for item in parts if item)
+    detail_lines = [line]
+    if feature_text:
+        detail_lines.append(f"相似點：{feature_text}")
+    if sample.get("difference"):
+        detail_lines.append(f"不相似/限制：{sample.get('difference')}")
+    else:
+        detail_lines.append("不相似/限制：事件背景未必相同，類比只作壓力參考")
+    if sample.get("watch"):
+        detail_lines.append(f"下一步觀察：{sample.get('watch')}")
+    return {"status": "available", "line": "\n".join(detail_lines)}
 
 
 def _value_or_zero(value):
@@ -637,14 +660,20 @@ def _score_taiwan_crash_template(template, features):
     change = _value_or_zero(features.get("change_pct"))
     pullback = _value_or_zero(features.get("pullback_from_high_pct"))
     intraday = _value_or_zero(features.get("intraday_range_pct"))
+    volume_ratio = _value_or_zero(features.get("turnover_ratio"))
+    high_position = _value_or_zero(features.get("close_position_5d_pct"))
     change_score = _band_similarity(change, template["change_band"])
     pullback_score = _band_similarity(pullback, template["pullback_band"])
     intraday_score = min(abs(intraday) / 5.0, 1.0) if intraday else 0.0
+    volume_score = min(abs(volume_ratio - 1.0) / 1.0, 1.0) if volume_ratio else 0.0
+    position_score = 1.0 - min(abs(high_position - 50.0) / 50.0, 1.0) if high_position else 0.0
     score = (
         template["base_similarity"]
         + (0.24 * change_score)
         + (0.12 * pullback_score)
         + (0.04 * intraday_score)
+        + (0.04 * volume_score)
+        + (0.03 * position_score)
     )
     return min(max(score, 0.0), 0.92)
 
@@ -653,6 +682,7 @@ def _historical_pressure_template(features):
     if not features:
         return {
             "event": "一般高檔震盪回測",
+            "pattern": "一般震盪",
             "similarity": 0.35,
             "difference": "TWSE特徵不足，僅能低信心觀察",
             "watch": "觀察是否重新站回短線高點",
@@ -666,6 +696,7 @@ def _historical_pressure_template(features):
     if not best or best[0] < 0.48:
         return {
             "event": "一般高檔震盪回測",
+            "pattern": "一般震盪",
             "similarity": 0.45,
             "difference": "未達台股急跌樣本相似門檻",
             "watch": "觀察是否重新站回短線高點",
@@ -674,6 +705,7 @@ def _historical_pressure_template(features):
     template = best[1]
     return {
         "event": template["event"],
+        "pattern": template.get("pattern"),
         "similarity": best[0],
         "difference": template["difference"],
         "watch": template["watch"],
@@ -681,22 +713,85 @@ def _historical_pressure_template(features):
     }
 
 
+def _fmt_ratio(value):
+    try:
+        return f"{float(value):.2f}x"
+    except (TypeError, ValueError):
+        return "-"
+
+
+def _fmt_position_pct(value):
+    try:
+        return f"{float(value):.0f}%"
+    except (TypeError, ValueError):
+        return "-"
+
+
+def _historical_strength_label(features):
+    change = _value_or_zero(features.get("change_pct"))
+    pullback = _value_or_zero(features.get("pullback_from_high_pct"))
+    volume_ratio = _value_or_zero(features.get("turnover_ratio"))
+    if change <= -3.0 or pullback <= -6.0:
+        return "急跌"
+    if change <= -1.2 and volume_ratio >= 1.2:
+        return "帶量轉弱"
+    if change <= -1.2:
+        return "壓力前段"
+    return "一般回測"
+
+
+def _historical_followup_line(template, features):
+    checks = []
+    if _value_or_zero(features.get("change_pct")) <= -1.2:
+        checks.append("隔日是否續破當日低點")
+    if _value_or_zero(features.get("turnover_ratio")) >= 1.2:
+        checks.append("量能是否再放大")
+    if _value_or_zero(features.get("close_position_5d_pct")) <= 35:
+        checks.append("是否跌破5日區間下緣")
+    if _value_or_zero(features.get("pullback_from_high_pct")) <= -4:
+        checks.append("高檔回落是否擴大")
+    if not checks:
+        checks.append("是否重新站回短線高點")
+    checks.append(template["watch"])
+    return "；".join(dict.fromkeys(checks[:4]))
+
+
 def _build_twse_pressure_line(features):
     template = _historical_pressure_template(features)
     matched = [
-        f"單日跌幅 {_fmt_pct(features.get('change_pct'))}",
+        f"跌幅 {_fmt_pct(features.get('change_pct'))}",
         f"高檔回落 {_fmt_pct(features.get('pullback_from_high_pct'))}",
+        f"盤中震盪 {_fmt_pct(features.get('intraday_range_pct'))}",
+        f"量能 {_fmt_ratio(features.get('turnover_ratio'))}",
+        f"5日位置 {_fmt_position_pct(features.get('close_position_5d_pct'))}",
     ]
+    matched = [item for item in matched if not item.endswith(" -") and not item.endswith(" -x")]
+    context = [
+        f"型態 {template.get('pattern') or '-'}",
+        f"壓力級別 {_historical_strength_label(features)}",
+        f"樣本 {features.get('history_rows') or 0}日",
+        f"樣本庫 {template['library_size']}件",
+    ]
+    gaps = [
+        template["difference"],
+    ]
+    if _value_or_zero(features.get("pullback_from_high_pct")) > -4:
+        gaps.append("高檔回落尚未到深度修正")
+    if features.get("turnover_ratio") is None:
+        gaps.append("量能資料不足，未納入主要判斷")
+    elif _value_or_zero(features.get("turnover_ratio")) < 1.2:
+        gaps.append("量能未明顯失控")
     if features.get("intraday_range_pct") is not None:
-        matched.append(f"盤中震盪 {_fmt_pct(features.get('intraday_range_pct'))}")
-    if features.get("history_rows"):
-        matched.append(f"TWSE樣本 {features.get('history_rows')}日")
+        if _value_or_zero(features.get("intraday_range_pct")) < 2:
+            gaps.append("盤中震盪仍有限")
     percent = round(template["similarity"] * 100)
-    return (
-        f"歷史類比：{template['event']}｜相似度 {percent}%｜"
-        f"相似：{'、'.join(matched[:4])}｜差異：{template['difference']}｜"
-        f"關注：{template['watch']}｜樣本庫 台股歷史急跌 {template['library_size']}件｜source=TWSE"
-    )
+    return "\n".join([
+        f"歷史類比：{template['event']}｜相似度 {percent}%｜{context[0]}｜{context[1]}｜source=TWSE",
+        f"相似點：{'｜'.join(matched[:5])}",
+        f"不相似/限制：{'；'.join(dict.fromkeys(gaps[:3]))}",
+        f"下一步觀察：{_historical_followup_line(template, features)}",
+        f"資料：TWSE近{features.get('history_rows') or 0}日｜樣本庫台股急跌 {template['library_size']}件",
+    ])
 
 
 def build_live_twse_historical_source(now=None, get_json=None):
@@ -726,6 +821,7 @@ def build_live_twse_historical_source(now=None, get_json=None):
                     "high": _extract_text_number(row, ("HighestIndex", "最高指數")),
                     "low": _extract_text_number(row, ("LowestIndex", "最低指數")),
                     "close": close,
+                    "turnover": _extract_text_number(row, ("TradingValue", "TradeValue", "成交金額", "成交值")),
                 })
         parsed_history.sort(key=lambda item: item["date"])
 
@@ -744,16 +840,31 @@ def build_live_twse_historical_source(now=None, get_json=None):
             [row.get("low") or row.get("close") for row in parsed_history if row.get("low") or row.get("close")],
             default=None,
         )
+        recent_turnovers = [
+            row.get("turnover")
+            for row in parsed_history[-6:-1]
+            if row.get("turnover") not in (None, 0)
+        ]
         pullback = (close / recent_high - 1) * 100 if close and recent_high else None
         intraday_range = None
         if current_row.get("high") and current_row.get("low") and close:
             intraday_range = (current_row["high"] - current_row["low"]) / close * 100
+        current_turnover = _extract_text_number(taiex, ("成交金額", "TradeValue", "成交值"))
+        if current_turnover is None:
+            current_turnover = current_row.get("turnover")
+        avg_turnover = sum(recent_turnovers) / len(recent_turnovers) if recent_turnovers else None
+        turnover_ratio = current_turnover / avg_turnover if current_turnover and avg_turnover else None
+        close_position_5d = None
+        if close and recent_high and recent_low and recent_high != recent_low:
+            close_position_5d = ((close - recent_low) / (recent_high - recent_low)) * 100
         features = {
             "index": "發行量加權股價指數",
             "close": close,
             "change_pct": change_pct,
             "pullback_from_high_pct": pullback,
             "intraday_range_pct": intraday_range,
+            "turnover_ratio": turnover_ratio,
+            "close_position_5d_pct": close_position_5d,
             "recent_low": recent_low,
             "history_rows": len(parsed_history),
         }

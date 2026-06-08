@@ -1,42 +1,37 @@
-# QA_REPORT: future_fundamentals_and_unheld_status_20260608
+# QA_REPORT: historical_analogy_granularity_20260608
 
 ## 測試範圍
-- focused report tests:
-  - future 30-day message route。
-  - afterhours denoise route。
-  - message order / notifier route。
-- `tests/test_market_theme_evidence.py` full file。
+- TWSE historical analogy helper tests。
+- future-watch formatter test。
+- notifier tests。
+- market theme evidence tests。
 - official `generate_report(dry_run=True)` replay。
 
 ## 關聯風險掃描
-- `關注標的財報` 使用同一批 watch/holding targets，不擴到全市場。
-- 法說會 section 仍只列實際 MOPS events。
-- 未持倉狀態文案只改顯示，不改 underlying funnel classification。
+- 多行 historical analogy 不改 message order。
+- 類比仍明確包含限制，不升格成預測。
+- 缺量能時顯示為限制，不假裝有量能證據。
 
 ## 跨區塊語意一致性
-- Summary 首行與詳情一致：
-  - `未持倉 7（全部不可行動）`
-  - `未持倉 7 檔全部不可行動`
-- Future watch 分成三個語意區塊：
-  - 法說會事件。
-  - 關注標的財報。
-  - 台股影響事件。
-- 沒有法說會的關注股仍出現在財報區塊。
+- `歷史類比` section 在 `未來30日法說會` 前。
+- section 內包含：
+  - 主類比事件。
+  - `相似點`。
+  - `不相似/限制`。
+  - `下一步觀察`。
+  - `資料`。
 
 ## 使用者誤讀風險
-- 不再顯示 `漏斗（非執行）` 這種內部詞。
-- 不再顯示 `僅追蹤0/淘汰7` 這種 0-count 流水。
-- 財報區塊標題明確，不會被誤讀成法說會附屬資料。
+- `不相似/限制` 保留，避免把歷史類比讀成崩盤預測。
+- `壓力級別` 使用壓力/急跌語言，不直接下交易命令。
 
 ## 失敗標本反證
-- Owner 樣本 v20.4.50：
-  - 財報資料只跟法說會出現 -> v20.4.51 改為每檔關注股財報。
-  - `未持倉漏斗（非執行）：未持倉 7｜淘汰 7` -> v20.4.51 改為決策語句。
-- official dry-run v20.4.51 confirmed。
+- Owner 指出 v20.4.51 顆粒度不足。
+- v20.4.52 official dry-run 顯示多行細節與資料來源。
 
 ## 未測項目
 - live Telegram delivery 未測且禁止。
-- 新年度營收 source 未新增；本輪沿用既有 official fundamentals source。
+- 未新增外部 historical DB。
 
 ## QA 結論
 通過
