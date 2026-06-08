@@ -4,7 +4,7 @@
 
 - task_md_holds: `recently_done`
 - task_md_task_id: `today_buy_all_risk_summary_wording_20260608`
-- task_md_note: `TASK.md / CHANGELOG.md / QA_REPORT.md 保存本輪今日買入全部轉風控 Summary wording 修復；已用 dry-run artifact 反證，未 live Telegram delivery。`
+- task_md_note: `TASK.md / CHANGELOG.md / QA_REPORT.md 保存本輪今日買入全部轉風控 Summary wording 修復；已 commit/push 到 origin/main，已用 dry-run artifact 反證，未 live Telegram delivery。`
 
 ## Active
 
@@ -27,7 +27,7 @@
 
 ## Next Action
 
-- 本輪報文 wording 修復待 git commit / push / completion gate 收口。
+- 本輪報文 wording 修復已 commit / push 到 `origin/main`；下一步只需 Owner 本地 dry-run 或等待 GitHub scheduled bot 自然執行，不得未批准 live Telegram delivery。
 - 若 Owner 要本地再看報表，可執行：
 
 ```powershell

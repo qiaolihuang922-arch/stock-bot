@@ -14,7 +14,7 @@
 ## Latest Completed Work
 
 - task_id：`today_buy_all_risk_summary_wording_20260608`
-- 狀態：code done / QA passed；pending commit/push/git completion gate。
+- 狀態：done / QA passed / committed / pushed to `origin/main`。
 - Owner 標本：2026-06-08 dry-run Summary 同時出現 `今日已買 5（已風控 5）` 與 `今日交易已建立新倉 5 檔`，造成「已風控」卻像「新倉成立」的誤讀。
 - 修正：
   - `presentation/report.py` 新增今日買入已風控名稱判斷。
@@ -46,7 +46,7 @@
 
 ## Next Development
 
-- 本輪修復 final 前需完成：`git status --short`、commit、push、`tools/cao_agent/check_git_completion_gate.sh`，若更新本文件與 `DISPATCH.md`，還需跑 `tools/cao_agent/check_architect_closeout_gate.sh`。
+- 下輪若再修報文，仍需用 Owner 貼出的 final report 層標本或 official dry-run artifact 驗收，不得只驗 helper fixture。
 - 如果 Owner 要再查 DB key / 連線，先用 read-only probe，不輸出 secret。
 - 如果 Owner 要驗 TG 發送，必須先明確批准 live Telegram delivery；否則只用 dry-run/log/artifact。
 
