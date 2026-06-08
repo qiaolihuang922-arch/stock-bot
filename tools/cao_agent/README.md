@@ -1,70 +1,69 @@
 # CAO Agent Runners
 
-本目錄保存可遷移的 CAO runner、profile 模板與本機部署說明。clone repo 後可重建 CAO agents；歷史 outputs、臨時 context、worktree 不進 git。
+This directory contains the Architect-controlled runner scripts and agent profile templates for stock-bot.
 
-## Requirements
+## What Lives Here
 
-- CAO CLI / server / MCP server：預設 `$HOME/.local/bin/`
-- Codex app：`/Applications/Codex.app/Contents/Resources/codex`
-- CAO UI：預設 `$HOME/.local/share/cao-web-zh/web`
-- Python / pytest：優先 repo `.venv`，否則 runner 會為隔離 worktree 建立 `.venv`
+- `run_architect_task.sh`: Owner-facing Architect entry.
+- `run_project_research.sh`, `run_tech_plan.sh`, `run_tech_write.sh`, `run_qa_code.sh`, `run_online_agent.sh`: lower-level runner scripts used by Architect.
+- `env.sh`: repo-relative paths and overridable runtime variables.
+- `bin/codex`: Codex wrapper; uses `sandbox-exec` on macOS and direct `CODEX_APP_BIN` on Linux/WSL.
+- `profiles/stock_*.md.template`: PM / Tech / QA / research / security agent profiles.
+- `bootstrap_local.sh`: installs profiles and prepares agent worktree.
+- `ensure_cao_services.sh`: starts or checks CAO API and UI.
 
-詳細下載與重建流程見 `tools/cao_agent/DEPLOYMENT.md`。
+## Required Reading
 
-## Runtime Paths
+Before running CAO locally, read:
 
-- repo root：由腳本位置自動推導，可用 `STOCK_BOT_REPO` 覆蓋。
-- agent context：`<repo>/.cao_agent_context`
-- outputs：`<repo>/.cao_agent_context/outputs`
-- Tech worktree：`<repo_parent>/stock-bot-agent-worktrees/tech_write`
-- profile templates：`tools/cao_agent/profiles/stock_*.md.template`
+```text
+tools/cao_agent/DEPLOYMENT.md
+```
 
-常用覆蓋變數：`CAO_BIN`、`CAO_SERVER_BIN`、`CAO_MCP_SERVER_BIN`、`CAO_WEB_DIR`、`CAO_AGENT_PROFILE_DIR`、`CODEX_APP_BIN`。
+That file is the source of truth for the current Windows + WSL deployment path and the known runner issues.
+
+## Standard WSL Environment
+
+```bash
+export PATH=/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/mnt/d/reserch/stock-bot/tools/cao_agent/bin
+export STOCK_BOT_REPO=/mnt/d/reserch/stock-bot
+export CODEX_APP_BIN=/root/.local/bin/codex-real
+cd /mnt/d/reserch/stock-bot
+```
 
 ## Setup
 
 ```bash
-tools/cao_agent/bootstrap_local.sh
-tools/cao_agent/ensure_cao_services.sh
+bash tools/cao_agent/bootstrap_local.sh
+bash tools/cao_agent/ensure_cao_services.sh
 ```
 
-手動分步：
+Expected URLs:
 
-```bash
-tools/cao_agent/install_agent_profiles.sh
-tools/cao_agent/setup_agent_worktree.sh
-tools/cao_agent/ensure_cao_services.sh
+```text
+CAO API: http://127.0.0.1:9889/
+CAO UI: http://127.0.0.1:5173/
 ```
 
 ## Daily Entry
 
 ```bash
-tools/cao_agent/run_architect_task.sh research "<研究問題>"
-tools/cao_agent/run_architect_task.sh plan "<技術規劃問題>"
-tools/cao_agent/run_architect_task.sh auto "<Owner 任務>"
+bash tools/cao_agent/run_architect_task.sh research "<research question>"
+bash tools/cao_agent/run_architect_task.sh plan "<technical planning question>"
+bash tools/cao_agent/run_architect_task.sh auto "<Owner task>"
 ```
 
-底層腳本只供 Architect 使用：
+## Safety
 
-```bash
-tools/cao_agent/run_project_research.sh "<研究問題>"
-tools/cao_agent/run_tech_plan.sh "<規劃問題>"
-tools/cao_agent/run_tech_write.sh "<實作指令>"
-tools/cao_agent/run_qa_code.sh "<驗證指令>"
-tools/cao_agent/cleanup_agent_worktrees.sh
+- Agents do not commit, push, live Telegram, live Supabase write, or production backfill.
+- Product/report/strategy changes still need PM -> Tech -> QA evidence unless Owner explicitly grants direct-code authority for the current task.
+- If CAO automation hangs, fall back to dry-run/log/artifact evidence and record the runner gap. Do not bypass with live delivery.
+
+## Runtime Cleanup
+
+`.cao_agent_context/` contains local runner context/output and is ignored by git. Remove it when stale or misleading:
+
+```powershell
+cd D:\reserch\stock-bot
+Remove-Item -LiteralPath .\.cao_agent_context -Recurse -Force
 ```
-
-## Agent Rules
-
-- PM 定義需求與驗收，不改檔。
-- Tech write 只寫隔離 worktree，不碰主 repo。
-- QA 只讀驗證候選 diff，只可寫 `.qa_tmp/`。
-- Online agents 只用公開資料與清理後 context，不讀完整 repo。
-- Security agent 只讀安全檢查，不修 code。
-- 所有 agents 不 commit、不 push、不做 live Telegram / Supabase / backfill。
-
-## Frontend
-
-- API: `http://127.0.0.1:9889/`
-- UI: `http://127.0.0.1:5173/`
-- 回覆 Owner 前端地址前，先跑 `ensure_cao_services.sh` 或確認兩個 port 已 listen。

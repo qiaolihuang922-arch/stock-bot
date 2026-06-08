@@ -75,7 +75,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v20.4.48"
+VERSION = "v20.4.49"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -3693,10 +3693,10 @@ def today_buy_holding_context_line(data):
 
     source = today_buy_holding_source(data)
     if source == "strategy_intraday":
-        return "說明：今日已執行；盤後已不在買點，現在不代表可繼續買。"
+        return "今日買入：已轉風控，盤後不追買"
     if source == "manual_or_ledger":
-        return "說明：今日買入來源為手動/ledger，非當前策略買點；現在不代表可繼續買。"
-    return "說明：今日買入來源未確認，且盤後不在買點；不得視為當前可買。"
+        return "今日買入：手動/ledger，非當前策略買點"
+    return "今日買入：來源未確認，盤後不得視為可買"
 
 
 def is_reduce_after_observation(data):
