@@ -3609,6 +3609,50 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("新增有效進場：無", summary)
         self.assertNotIn("今日無有效新倉", summary)
 
+    def test_afterhours_brief_does_not_call_all_risk_today_buys_established_new_positions(self):
+        def today_buy_risk_payload(code, level, action, avg_price, price, hard_stop):
+            payload = render_payload(
+                [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, price],
+                {"shares": 100, "avg_price": avg_price},
+                price=price,
+                change=-4.5,
+            )
+            payload["stock_code"] = code
+            payload["holding_decision"] = {
+                "action": action,
+                "level": level,
+                "note": "同日建倉後跌破快速止損",
+                "warning_price": avg_price * 0.95,
+                "hard_stop_price": hard_stop,
+                "allow_add": False,
+            }
+            payload["position_events"] = {"event_count": 1, "bought_shares": 100, "buy_price": avg_price}
+            payload["today_action"] = "BUY"
+            return payload
+
+        messages = generator.formatTelegramMessages(
+            {
+                "聯電": today_buy_risk_payload("2303", "REDUCE_50", "硬風控減碼 50%", 100, 96, 92),
+                "智原": today_buy_risk_payload("3035", "STOP_100", "停損 100%", 100, 91, 95),
+            },
+            "FULL DETAIL",
+            None,
+            None,
+            "⏳ 觀望",
+            datetime(2026, 6, 8),
+            report_phase="盤後",
+        )
+
+        summary = summary_message(messages)
+
+        self.assertIn("今日已買 2（已風控 2）", summary)
+        self.assertIn("結論：今日已買 2 檔，已全部轉入風控/停損減碼；新增有效進場：無。", summary)
+        self.assertIn("今日買入後風控：2 檔（", summary)
+        self.assertIn("聯電", summary)
+        self.assertIn("智原", summary)
+        self.assertNotIn("結論：今日交易已建立新倉 2 檔", summary)
+        self.assertNotIn("今日交易：已建立新倉 2 檔", summary)
+
     def test_afterhours_today_buy_holding_explains_current_non_buy_by_source(self):
         def today_buy_payload(source):
             payload = render_payload(

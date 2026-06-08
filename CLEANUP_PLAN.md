@@ -16,6 +16,14 @@
 
 ## Completed
 
+- `today_buy_all_risk_summary_wording_20260608`:
+  - 問題：Owner 貼出 2026-06-08 dry-run 報文；市場行已顯示 `今日已買 5（已風控 5）`，但結論/明細仍寫 `今日交易已建立新倉 5 檔`，手機閱讀會誤讀成今日新倉成立。
+  - 根因：盤後 Summary 只看今日買入事件，沒有把今日買入後已停損 / 減碼 / 硬風控的狀態帶入結論文案。
+  - 結果：全部今日買入已轉風控時，結論改 `今日已買 N 檔，已全部轉入風控/停損減碼`，明細改 `今日買入後風控：N 檔（...）`；純新倉風控觀察路徑保留既有 wording。
+  - 可重跑補強：focused generator tests 4 passed + 3 subtests passed、py_compile passed、official `generate_report(dry_run=True)` artifact 顯示 `今日已買 5 檔，已全部轉入風控/停損減碼`。
+  - QA 狀態：通過。
+  - 流程復盤：根因分類為 `mobile_reading` + `evidence_chain`。Summary 同一段內的數字狀態與下一行結論不得互相抵消；Owner 貼出的完整報文應作 final report 層 failure specimen。
+  - 邊界：未改策略、RR、DB write/backfill、notifier、GitHub Actions、live Telegram。
 - `github_actions_scheduled_bot_delivery_restore_20260608`:
   - 問題：Owner 指出 TG 沒有推送，要求不得 live Telegram delivery，先用 runner / dry-run / log / artifact 查推送鏈路。
   - 根因：`.github/workflows/stock-bot-clean.yml` 只有 `0 6 * * 1-5` schedule，且所有 schedule event 都被 `RUN_MODE` expression 映射為 `daily_evidence`；`Run bot` step 因此 skip，不會呼叫 `python main.py`。

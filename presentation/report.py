@@ -1088,6 +1088,14 @@ def _today_buy_holding_names(holding_items, deps):
     ]
 
 
+def _today_buy_risk_names(holding_items, deps):
+    return [
+        name for name, data in holding_items
+        if deps["is_today_buy_holding"](data)
+        and deps["position_summary_action"](name, data) in {"停損", "減碼", "硬風控減碼"}
+    ]
+
+
 def _brief_background_line(report_context, deps):
     market = deps["_field_by_key"](report_context, "evidence.market_theme")
     strategy = deps["_field_by_key"](report_context, "evidence.strategy_sample")
@@ -1126,12 +1134,7 @@ def _compact_market_overview_line(holding_items, watch_items, report_context, de
         report_context=report_context,
     ))
     today_new_entry_count = len(_today_buy_holding_names(holding_items, deps))
-    today_buy_risk_count = sum(
-        1
-        for name, data in holding_items
-        if deps["is_today_buy_holding"](data)
-        and deps["position_summary_action"](name, data) in {"停損", "減碼", "硬風控減碼"}
-    )
+    today_buy_risk_count = len(_today_buy_risk_names(holding_items, deps))
     executed_actions = deps["executed_trade_items"](
         holding_items,
         watch_items,
@@ -1211,12 +1214,27 @@ def _afterhours_brief_lines(holding_items, watch_items, report_context, deps, ma
     prepare_count = len(funnel.get("可準備") or [])
     has_holding = bool(holding_items)
     today_buy_names = _today_buy_holding_names(holding_items, deps)
+    today_buy_risk_names = _today_buy_risk_names(holding_items, deps)
+    today_buy_risk_count = len(today_buy_risk_names)
+    today_buy_observe_count = max(len(today_buy_names) - today_buy_risk_count, 0)
+    all_today_buys_are_risk = bool(today_buy_names) and today_buy_risk_count == len(today_buy_names)
+    mixed_today_buy_risk = bool(today_buy_names) and 0 < today_buy_risk_count < len(today_buy_names)
     if actionable and today_buy_names:
-        conclusion = f"結論：今日交易已建立新倉 {len(today_buy_names)} 檔；新增有效進場 {actionable} 檔需明日開盤前確認。"
+        if all_today_buys_are_risk:
+            conclusion = f"結論：今日已買 {len(today_buy_names)} 檔，已全部轉入風控/停損減碼；新增有效進場 {actionable} 檔需明日開盤前確認。"
+        elif mixed_today_buy_risk:
+            conclusion = f"結論：今日已買 {len(today_buy_names)} 檔（已風控 {today_buy_risk_count}/觀察 {today_buy_observe_count}）；新增有效進場 {actionable} 檔需明日開盤前確認。"
+        else:
+            conclusion = f"結論：今日交易已建立新倉 {len(today_buy_names)} 檔；新增有效進場 {actionable} 檔需明日開盤前確認。"
     elif actionable:
         conclusion = f"結論：新倉候選 {actionable} 檔需明日開盤前確認；既有持倉以收盤後風控觀察為主。"
     elif today_buy_names:
-        conclusion = f"結論：今日交易已建立新倉 {len(today_buy_names)} 檔；新增有效進場：無。"
+        if all_today_buys_are_risk:
+            conclusion = f"結論：今日已買 {len(today_buy_names)} 檔，已全部轉入風控/停損減碼；新增有效進場：無。"
+        elif mixed_today_buy_risk:
+            conclusion = f"結論：今日已買 {len(today_buy_names)} 檔（已風控 {today_buy_risk_count}/觀察 {today_buy_observe_count}）；新增有效進場：無。"
+        else:
+            conclusion = f"結論：今日交易已建立新倉 {len(today_buy_names)} 檔；新增有效進場：無。"
     elif has_holding:
         conclusion = "結論：今日無有效新倉；既有持倉以收盤後風控觀察為主。"
     else:
@@ -1240,8 +1258,14 @@ def _afterhours_brief_lines(holding_items, watch_items, report_context, deps, ma
         conclusion,
     ]
     if today_buy_names:
+        if all_today_buys_are_risk:
+            today_trade_line = f"今日買入後風控：{len(today_buy_names)} 檔（{'、'.join(today_buy_names)}）"
+        elif mixed_today_buy_risk:
+            today_trade_line = f"今日買入狀態：已風控 {today_buy_risk_count}/觀察 {today_buy_observe_count}（{'、'.join(today_buy_names)}）"
+        else:
+            today_trade_line = f"今日交易：已建立新倉 {len(today_buy_names)} 檔（{'、'.join(today_buy_names)}）"
         lines.extend([
-            f"今日交易：已建立新倉 {len(today_buy_names)} 檔（{'、'.join(today_buy_names)}）",
+            today_trade_line,
             f"新增有效進場：{actionable} 檔需明日開盤前確認" if actionable else "新增有效進場：無",
         ])
         if prepare_count:
