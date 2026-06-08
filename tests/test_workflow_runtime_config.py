@@ -146,6 +146,7 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
         self.assertNotIn("push:", workflow_text)
         self.assertIn("schedule:", workflow_text)
         self.assertIn('cron: "0 6 * * 1-5"', workflow_text)
+        self.assertIn('cron: "10 6 * * 1-5"', workflow_text)
         self.assertIn("run_mode:", workflow_text)
         self.assertIn("- daily_evidence", workflow_text)
         self.assertNotIn("stock-bot.yml", "\n".join(str(path) for path in (ROOT / ".github/workflows").glob("*")))
@@ -161,7 +162,8 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
         self.assertIn('Run bot skipped for run_mode=$RUN_MODE', workflow_text)
         self.assertIn("Run Phase 3 evidence automation", workflow_text)
         self.assertIn("python scripts/run_phase3_evidence_automation.py --require-market-theme-payload $payload_arg", workflow_text)
-        self.assertIn("github.event_name == 'schedule' && 'daily_evidence'", workflow_text)
+        self.assertIn("github.event.schedule == '0 6 * * 1-5' && 'daily_evidence'", workflow_text)
+        self.assertIn("github.event.schedule == '10 6 * * 1-5' && 'bot'", workflow_text)
 
     def test_scheduled_daily_evidence_mode_skips_live_bot_delivery(self):
         script = _workflow_run_script("Run bot (retry 3 times)")
@@ -177,6 +179,35 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("Run bot skipped for run_mode=daily_evidence", completed.stdout)
+
+    def test_scheduled_bot_mode_invokes_main_without_live_network(self):
+        script = _workflow_run_script("Run bot (retry 3 times)")
+        runtime_env = os.environ.copy()
+        runtime_env["RUN_MODE"] = "bot"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bin_path = Path(tmpdir) / "bin"
+            bin_path.mkdir()
+            calls_path = Path(tmpdir) / "python_calls.txt"
+            fake_python = bin_path / "python"
+            fake_python.write_text(
+                f"#!/usr/bin/env bash\necho \"$@\" >> \"{calls_path}\"\nexit 0\n",
+                encoding="utf-8",
+            )
+            fake_python.chmod(0o755)
+            runtime_env["PATH"] = f"{bin_path}{os.pathsep}{runtime_env.get('PATH', '')}"
+            completed = subprocess.run(
+                ["bash", "-e", "-c", script],
+                cwd=tmpdir,
+                text=True,
+                capture_output=True,
+                check=False,
+                env=runtime_env,
+            )
+            calls = calls_path.read_text(encoding="utf-8")
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("main.py", calls)
+        self.assertNotIn("Run bot skipped", completed.stdout)
 
     def test_phase3_evidence_step_preserves_market_theme_write_cli_path(self):
         script = _workflow_run_script("Run Phase 3 evidence automation")

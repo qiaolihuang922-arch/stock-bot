@@ -3,64 +3,65 @@
 ## 任務尺寸與風險
 
 - 任務尺寸：normal_patch。
-- 風險：第 4 則 `歷史類比` 樣本庫與相似度選擇；不改策略、DB、live Telegram。
+- 風險：GitHub Actions schedule 分流錯誤會讓 scheduled TG bot 永遠不跑。
 
 ## 修改內容
 
-- `core/future_watch.py`：
-  - 新增 `TAIWAN_CRASH_TEMPLATE_LIBRARY`，共 13 件台股歷史急跌 / 股災模板。
-  - 模板包含事件名稱、單日跌幅區間、高檔回落區間、基礎相似度、差異說明與後續關注條件。
-  - 新增 `_band_similarity()` / `_score_taiwan_crash_template()`，用 TWSE live features 對樣本庫做 deterministic scoring。
-  - `_historical_pressure_template()` 改為從樣本庫挑最高分模板；低於門檻才落一般高檔震盪回測。
-  - `_build_twse_pressure_line()` 顯示 `樣本庫 台股歷史急跌 13件`。
-- `tests/test_generator_report.py`：
-  - 更新 06/04 壓力樣本 expectation：`2015 台股急跌/中國股災外溢`、相似度 67%、樣本庫 13 件。
-  - 新增 2024/08/05 -8.35% 急殺案例，反證 severe day 會配到 `2024/08/05 台股日圓套利平倉急殺`。
-  - 保留 `全球股災` 不得出現在 final future-watch 的反證。
+- `.github/workflows/stock-bot-clean.yml`
+  - 保留 `0 6 * * 1-5` 作為 `daily_evidence` schedule。
+  - 新增 `10 6 * * 1-5` 作為 `bot` schedule。
+  - 三個 workflow step 的 `RUN_MODE` expression 改為依 `github.event.schedule` 明確分流，不再把所有 schedule 都導向 `daily_evidence`。
+- `tests/test_workflow_runtime_config.py`
+  - 反證 workflow 同時存在 daily evidence 與 bot schedule。
+  - 反證 `daily_evidence` 仍 skip `Run bot`。
+  - 新增 fake-python dry-run，確認 `RUN_MODE=bot` 會呼叫 `python main.py`，不觸發 live network。
+- `tools/cao_agent/run_online_agent.sh`
+  - 啟動 online PM/QA runner 前呼叫 `ensure_agent_dirs`，確保 CAO log 目錄存在。
 
 ## 修改檔案
 
-- `core/future_watch.py`
-- `tests/test_generator_report.py`
+- `.github/workflows/stock-bot-clean.yml`
+- `tests/test_workflow_runtime_config.py`
+- `tools/cao_agent/run_online_agent.sh`
 - `TASK.md`
 - `CHANGELOG.md`
 - `QA_REPORT.md`
 - `DISPATCH.md`
 - `CURRENT_STATE.md`
-- `CLEANUP_PLAN.md`
 
 ## 契約影響
 
-- 第 4 則 Telegram 版本維持 `v20.4.47`。
-- 歷史類比仍使用 TWSE 即時大盤 / 近月 OHLC features。
-- 相似事件不再是三段硬判斷，而是台股 13 件樣本庫 scoring。
-- 顯示格式新增 `樣本庫 台股歷史急跌 13件`。
+- Telegram 報文版本維持 `v20.4.47`。
+- scheduled workflow 恢復 bot delivery chain：schedule -> `RUN_MODE=bot` -> `Run bot` -> `python main.py` -> `send_many()`。
+- `daily_evidence` 不要求 Telegram secrets、不跑 live bot delivery。
 
 ## 直接消費者同步
 
-- `format_future_watch_message()` 消費同一條 historical line。
-- `generate_report()` / `generate()` append 的第 4 則同步顯示樣本庫與最佳相似事件。
+- GitHub scheduled runner 可在 daily evidence 之後跑 bot。
+- Manual dispatch `run_mode=bot` 行為不變。
+- CAO online runner 的 log directory preflight 補齊，但本機仍缺 `cao` / `cao-server` binary，正式 agent runner 未在本輪恢復。
 
 ## 未影響模組
 
-- 不改交易策略、RR、加減碼、停損停利、持倉狀態機。
-- 不改 DB schema / write path / backfill / live Telegram。
+- 未改 `main.py`。
+- 未改 `services/notifier.py`。
+- 未改 generator / presentation / strategy / DB write path。
 
 ## 自檢命令與結果
 
-- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/v20_4_47_crash_library arch -arm64 ./.venv/bin/python -m pytest tests/test_generator_report.py -k 'v20_4_47_future or v20_4_47_live or v20_4_47_generate_report or mops_query' -q` -> 12 passed。
-- `PYTHONPATH=. PYTHONPYCACHEPREFIX=/private/tmp/v20_4_47_crash_library_pycompile arch -arm64 ./.venv/bin/python -m py_compile core/future_watch.py core/generator.py tests/test_generator_report.py` -> passed。
-- `git diff --check` -> passed。
-- Official `generate()` read-only smoke：第 4 則顯示 `2015 台股急跌/中國股災外溢｜相似度 67%｜...｜樣本庫 台股歷史急跌 13件｜source=TWSE`，且 `CHECK_LIBRARY=True`、`CHECK_NO_GLOBAL_CRASH=True`。
+- `.venv/Scripts/python.exe -m pytest tests/test_workflow_runtime_config.py -q` -> 10 passed。
+- `.venv/Scripts/python.exe -m pytest tests/test_main_delivery_guard.py tests/test_notifier.py -q` -> 5 passed。
+- `.venv/Scripts/python.exe -m py_compile main.py services/notifier.py tests/test_workflow_runtime_config.py tests/test_main_delivery_guard.py tests/test_notifier.py` -> passed。
 
 ## 覆蓋層級
 
-- helper：13 件 template library、mild pressure、severe 2024 template covered。
-- formatter：future-watch final fixture covered。
-- official generator：read-only `generate()` smoke covered。
-- production source：TWSE / MOPS / fundamentals read-only smoke covered；無 DB write、無 live Telegram。
+- runner artifact / log：本輪先抓到 CAO PM runner log directory missing，已補 preflight；之後確認本機缺 `cao-server` binary，無法使用 CAO agent runner。
+- workflow dry-run：fake-python 驗證 `RUN_MODE=bot` 會進 `python main.py`。
+- delivery guard：`main.py` 失敗不 mark sent、成功才 mark sent。
+- notifier：多則訊息與 reply markup 行為未回退。
 
 ## 殘留風險
 
-- 本輪仍不是多年 OHLC 統計相似度模型；是 deterministic template library + live TWSE features。
-- 各歷史事件的區間是模板化分析用，不是精確回測資料表。
+- 未做 live Telegram delivery。
+- 未讀 GitHub production run log；本輪以 repo workflow 與 dry-run shell step 反證 schedule 分流。
+- 本機 CAO binary 缺失仍是 runner 環境問題，已避免影響本輪產品修復，但後續若要恢復 agent runner 需另補安裝。

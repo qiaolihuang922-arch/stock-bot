@@ -14,6 +14,29 @@
 
 ## Latest Completed Work
 
+- task_id：`github_actions_scheduled_bot_delivery_restore_20260608`
+- 狀態：code done / QA 通過；不升 Telegram 報文版本，維持 `v20.4.47`。
+- 問題：Owner 指出 TG 沒有推送，要求不得 live Telegram delivery，先用 runner/dry-run/log/artifact 查推送鏈路。
+- 根因：
+  - `.github/workflows/stock-bot-clean.yml` 只有 `0 6 * * 1-5` schedule。
+  - workflow 三個 step 的 `RUN_MODE` expression 把所有 schedule event 都映射成 `daily_evidence`。
+  - `Run bot` step 在 `daily_evidence` 會直接輸出 `Run bot skipped for run_mode=daily_evidence`，所以 scheduled runner 不會呼叫 `python main.py`，TG 自然不會推。
+- 關鍵行為：
+  - 保留 `0 6 * * 1-5` 作為 daily evidence schedule。
+  - 新增 `10 6 * * 1-5` 作為 bot schedule。
+  - 用 `github.event.schedule` 明確分流：`0 6` -> `daily_evidence`，`10 6` -> `bot`。
+  - 補 fake-python dry-run，確認 `RUN_MODE=bot` 會呼叫 `main.py`；`RUN_MODE=daily_evidence` 仍 skip bot。
+  - 補 `tools/cao_agent/run_online_agent.sh` 啟動前建立 CAO log dir；但本機仍缺 `cao` / `cao-server` binary，正式 CAO agent runner 尚未恢復。
+- 驗證：
+  - `tests/test_workflow_runtime_config.py`：10 passed。
+  - `tests/test_main_delivery_guard.py tests/test_notifier.py`：5 passed。
+  - py_compile：passed。
+  - 全程未 live Telegram delivery。
+- 邊界：未改 `main.py`、`services/notifier.py`、報文內容、策略、RR、DB schema/write/backfill。
+- 下一步：本輪必須 commit / push 後才會讓 GitHub schedule 生效；push 後下一個 `10 6 * * 1-5` UTC 排程才會進 `python main.py`。
+
+## Previous Completed Work
+
 - task_id：`future_watch_taiwan_crash_template_library_20260604`
 - 狀態：code done / QA 通過；報文版本維持 `v20.4.47`。
 - 問題：Owner 認為歷史類比模板太少，要求把台股歷史股災模板都加入並做分析。

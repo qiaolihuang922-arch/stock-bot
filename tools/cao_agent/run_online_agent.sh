@@ -28,8 +28,9 @@ CTX="$CAO_ONLINE_CONTEXT"
 OUT_DIR="$CAO_AGENT_OUTPUTS"
 LOG_DIR="$CAO_LOG_DIR"
 
-mkdir -p "$CTX" "$OUT_DIR"
-chmod 700 "$CAO_AGENT_CONTEXT" "$CTX" "$OUT_DIR"
+ensure_agent_dirs
+mkdir -p "$CTX"
+chmod 700 "$CAO_AGENT_CONTEXT" "$CTX" "$OUT_DIR" "$LOG_DIR"
 
 # Refresh sanitized context only. Do not copy source, hidden files, or secrets.
 for f in AGENTS.md CURRENT_STATE.md DISPATCH.md RESEARCH.md TASK.md; do

@@ -3,8 +3,8 @@
 依 `AGENTS.md` 啟動順序閱讀；本文件只保留任務看板、handoff 指針與固定啟動命令。
 
 - task_md_holds: `recently_done`
-- task_md_task_id: `future_watch_mops_fundamentals_context_20260604`
-- task_md_note: `TASK.md / CHANGELOG.md / QA_REPORT.md 目前是最近完成任務的滾動 handoff，不代表仍在 Tech/QA。`
+- task_md_task_id: `github_actions_scheduled_bot_delivery_restore_20260608`
+- task_md_note: `TASK.md / CHANGELOG.md / QA_REPORT.md 是本輪 TG scheduled bot delivery 修復 handoff；已 dry-run 驗證，未 live Telegram delivery。`
 
 ## Active
 
@@ -16,6 +16,7 @@
 
 ## Recently Done
 
+- `github_actions_scheduled_bot_delivery_restore_20260608`｜normal_patch/L2｜修復 TG 沒有 scheduled 推送的 runner 鏈路缺口：原 `.github/workflows/stock-bot-clean.yml` 只有 `0 6 * * 1-5` schedule，且所有 schedule event 都被 `RUN_MODE` expression 映射成 `daily_evidence`，因此 `Run bot` step 會輸出 `Run bot skipped for run_mode=daily_evidence`，不會呼叫 `python main.py`。本輪保留 `0 6 * * 1-5` 為 daily evidence，新增 `10 6 * * 1-5` 為 bot schedule，並用 `github.event.schedule` 明確分流；補 workflow fake-python dry-run 反證 `RUN_MODE=bot` 會呼叫 `main.py`，`RUN_MODE=daily_evidence` 仍 skip bot；delivery guard/notifier tests 5 passed、workflow runtime config tests 10 passed、py_compile passed。另補 `tools/cao_agent/run_online_agent.sh` 啟動前建立 CAO log dir；本機仍缺 `cao` / `cao-server` binary，未恢復正式 CAO agent runner。未改報文版本、策略、DB、notifier HTTP 行為；未 live Telegram delivery。
 - `future_watch_taiwan_crash_template_library_20260604`｜normal_patch/L2｜第 4 則 `歷史類比` 從三段硬模板擴為 `TAIWAN_CRASH_TEMPLATE_LIBRARY` 13 件台股歷史急跌 / 股災樣本庫：1990 萬點泡沫、1995 台海飛彈、1997 亞洲金融、2000 網路泡沫/政權輪替、2003 SARS、2004 319、2008 金融海嘯、2011 歐債/美國信評、2015 台股急跌/中國股災外溢、2018 美股波動/貿易戰、2020 疫情、2022 升息通膨、2024/08/05 日圓套利急殺。TWSE live features 以跌幅/高檔回落/盤中震盪對樣本庫 deterministic scoring，報文顯示 `樣本庫 台股歷史急跌 13件`；06/04 official smoke 配到 `2015 台股急跌/中國股災外溢｜相似度 67%`，2024 severe fixture 配到 `2024/08/05 台股日圓套利平倉急殺`。focused future-watch tests 12 passed、py_compile / diff check passed、official `generate()` read-only smoke passed，`CHECK_LIBRARY=True`、`CHECK_NO_GLOBAL_CRASH=True`。未改 DB、策略、RR、MOPS、EPS/營收、live Telegram；仍不是多年 OHLC 統計模型。
 - `future_watch_taiwan_crash_analogy_20260604`｜tiny_patch/L1｜第 4 則 `歷史類比` 收斂為台股急跌 / 台股股災口徑：fallback 改 `無高相似台股急跌樣本`，壓力模板事件改為 `2024/08/05 台股日圓套利平倉急殺`、`2020/03/12 台股疫情急跌`、`2015/08/20-24 台股急跌前段`；測試新增 `全球股災` 不得出現在 helper / final future-watch fixture 的反證。focused future-watch tests 11 passed、py_compile / diff check passed、official `generate()` read-only smoke passed，實際第 4 則顯示 `2015/08/20-24 台股急跌前段` 且 `CHECK_NO_GLOBAL_CRASH=True`。未改歷史資料來源 / 演算法、MOPS、EPS、營收、台股影響事件、策略、RR、DB、live Telegram。
 - `future_watch_mops_fundamentals_context_20260604`｜normal_patch/L2｜強化第 4 則 `未來30日法說會`：MOPS summary / conference 名稱取代泛稱 `法人說明會`，並補 TWSE/TPEX 官方 OpenAPI 最新季 EPS 與最新官方月營收 YoY；月營收採 snapshot 最新公告月，2026-06-04 official smoke 顯示 2026/04，符合當月未公告則用上一個官方公告月。法說會行不再顯示 `source=MOPS`。focused future-watch tests 11 passed、py_compile / diff check passed、official `generate()` read-only smoke passed，例：光寶科 `Citi 2026 Taiwan Conference｜EPS 2026Q1 1.66｜營收YoY 2026/04 +24.5%`。未改策略、RR、DB schema/write/backfill、live Telegram。
@@ -64,6 +65,7 @@
 
 ## Next Action
 
+- 本輪 TG schedule 修復需 commit / push 後才會由 GitHub schedule 生效；push 後下一個 `10 6 * * 1-5` UTC bot schedule 才會進 `python main.py`。不得用 live Telegram delivery 作本地驗證。
 - v20.4.47 future-watch 完成版已可讀；後續若要更精準，優先做全球 official calendar parser hardening 或 TWSE 多年 deterministic similarity，不改 DB。
 - GitHub Actions 手動執行請從新的 `Stock Bot` workflow 進入；若手機仍顯示舊 `Stock Bot Pro` 或日期/version 欄位，關閉重開 GitHub app 或從 Actions workflow list 重新選新 workflow。
 - v20.4.46 未來 30 日關注已接 live readonly source 試行；下一步若 Owner 要深化，優先做 MOPS 穩定解析與 global live parser 可見 fallback 標記，不改 DB。
