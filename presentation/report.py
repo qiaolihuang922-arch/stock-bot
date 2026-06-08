@@ -423,7 +423,7 @@ def _supporting_basis_text(data, primary_reason):
     return "；".join(dict.fromkeys(basis))
 
 
-def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source_status, strategy_source_blocked):
+def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source_status, strategy_source_blocked, title_label=None):
     stock_result = data.get("result") or {}
     is_actionable = valid_entry or funnel_state == "趨勢延續"
     post_market_prepare = (
@@ -445,14 +445,24 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
         return "\n".join(lines)
 
     gates = []
+    source_gates = []
     if strategy_source_blocked:
-        gates.append(("樣本不足", "需更多有效策略樣本確認"))
+        source_gates.append(("樣本不足", "需更多有效策略樣本確認"))
     source_blocked = source_status in {"missing-source", "insufficient-data", "source-error", "unresolved-conflict"}
     if source_blocked and not strategy_source_blocked:
-        gates.append(("資料來源缺失", "需補齊有效行情 / 策略來源"))
+        source_gates.append(("資料來源缺失", "需補齊有效行情 / 策略來源"))
 
     blocker_text = "、".join(str(item) for item in blockers)
     phase = stock_result.get("structure_phase")
+    title_text = str(title_label or "")
+    if "量能不足" in title_text:
+        gates.append(("量能不足", "需量能回升後重新評估"))
+    elif "市場弱" in title_text:
+        gates.append(("市場弱", "等市場轉強後再評估"))
+    elif "量能不足" in blocker_text:
+        gates.append(("量能不足", "需量能回升後重新評估"))
+    elif "市場弱" in blocker_text:
+        gates.append(("市場弱", "等市場轉強後再評估"))
     if "突破失敗" in blocker_text or phase == "FAILED_BREAKOUT":
         distance_text = _gate_value_text(dist)
         gap = "需重新站回突破區"
@@ -507,6 +517,7 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
         gates.append(("隔日確認", "需轉強後重新評估"))
     elif not gates and funnel_state == "淘汰":
         gates.append(("重新轉強", "需確認後重新評估"))
+    gates.extend(source_gates)
     if not gates:
         if blockers:
             gates.append((str(blockers[0]), "需解除後重新評估"))
@@ -525,6 +536,8 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
         "距突破太遠": "接近突破區後再評估",
         "漲跌停鎖定": "解除鎖定後重新評估",
         "反彈力道不足": "放量轉強後重新評估",
+        "市場弱": "市場轉強後重新評估",
+        "量能不足": "量能回升後重新評估",
         "樣本不足": "補齊有效策略樣本後重新評估",
         "資料來源缺失": "補齊有效行情 / 策略來源後重新評估",
     }.get(primary_reason, "解除主 blocker 後重新評估")
@@ -1013,6 +1026,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         funnel_state,
         source_status,
         strategy_source_blocked,
+        title_label=title_label,
     )
     is_afterhours = _report_phase(report_context) == "盤後"
     is_afterhours_rejected = is_afterhours and funnel_state == "淘汰" and not valid_entry
@@ -1192,7 +1206,7 @@ def _compact_market_overview_line(holding_items, watch_items, report_context, de
             today_parts.append(f"已風控 {today_buy_risk_count}")
         if today_observe_count:
             today_parts.append(f"觀察 {today_observe_count}")
-        today_entry_text = f"今日已買 {today_new_entry_count}"
+        today_entry_text = f"今日買入紀錄 {today_new_entry_count}"
         if today_parts:
             today_entry_text += f"（{'/'.join(today_parts)}）"
     else:
@@ -1224,18 +1238,18 @@ def _afterhours_brief_lines(holding_items, watch_items, report_context, deps, ma
     mixed_today_buy_risk = bool(today_buy_names) and 0 < today_buy_risk_count < len(today_buy_names)
     if actionable and today_buy_names:
         if all_today_buys_are_risk:
-            conclusion = f"結論：今日已買 {len(today_buy_names)} 檔，已全部轉入風控/停損減碼；新增有效進場 {actionable} 檔需明日開盤前確認。"
+            conclusion = f"結論：今日買入紀錄 {len(today_buy_names)} 檔，已全部轉入風控/停損減碼；新增有效進場 {actionable} 檔需明日開盤前確認。"
         elif mixed_today_buy_risk:
-            conclusion = f"結論：今日已買 {len(today_buy_names)} 檔（已風控 {today_buy_risk_count}/觀察 {today_buy_observe_count}）；新增有效進場 {actionable} 檔需明日開盤前確認。"
+            conclusion = f"結論：今日買入紀錄 {len(today_buy_names)} 檔（已風控 {today_buy_risk_count}/觀察 {today_buy_observe_count}）；新增有效進場 {actionable} 檔需明日開盤前確認。"
         else:
             conclusion = f"結論：今日交易已建立新倉 {len(today_buy_names)} 檔；新增有效進場 {actionable} 檔需明日開盤前確認。"
     elif actionable:
         conclusion = f"結論：新倉候選 {actionable} 檔需明日開盤前確認；既有持倉以收盤後風控觀察為主。"
     elif today_buy_names:
         if all_today_buys_are_risk:
-            conclusion = f"結論：今日已買 {len(today_buy_names)} 檔，已全部轉入風控/停損減碼；新增有效進場：無。"
+            conclusion = f"結論：今日買入紀錄 {len(today_buy_names)} 檔，已全部轉入風控/停損減碼；新增有效進場：無。"
         elif mixed_today_buy_risk:
-            conclusion = f"結論：今日已買 {len(today_buy_names)} 檔（已風控 {today_buy_risk_count}/觀察 {today_buy_observe_count}）；新增有效進場：無。"
+            conclusion = f"結論：今日買入紀錄 {len(today_buy_names)} 檔（已風控 {today_buy_risk_count}/觀察 {today_buy_observe_count}）；新增有效進場：無。"
         else:
             conclusion = f"結論：今日交易已建立新倉 {len(today_buy_names)} 檔；新增有效進場：無。"
     elif has_holding:
@@ -1262,7 +1276,7 @@ def _afterhours_brief_lines(holding_items, watch_items, report_context, deps, ma
     ]
     if today_buy_names:
         if all_today_buys_are_risk:
-            today_trade_line = f"今日買入後風控：{len(today_buy_names)} 檔（{'、'.join(today_buy_names)}）"
+            today_trade_line = f"今日買入紀錄後風控：{len(today_buy_names)} 檔（{'、'.join(today_buy_names)}）"
         elif mixed_today_buy_risk:
             today_trade_line = f"今日買入狀態：已風控 {today_buy_risk_count}/觀察 {today_buy_observe_count}（{'、'.join(today_buy_names)}）"
         else:

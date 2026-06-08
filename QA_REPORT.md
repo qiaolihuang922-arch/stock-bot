@@ -1,38 +1,38 @@
-# QA_REPORT: telegram_denoise_and_deployment_docs_20260608
+# QA_REPORT: report_conflict_future_watch_format_20260608
 
 ## 測試範圍
 - focused pytest:
   - `test_afterhours_cards_are_denoised_without_first_read_preface`
+  - `test_v20_4_47_future_30d_watch_optional_fourth_message_official_list`
   - `test_v20_4_12_complete_message_list_orders_holdings_unheld_summary_evidence_details`
   - `tests/test_notifier.py`
-- official dry-run: `generate_report(dry_run=True)`。
-- 部署文檔人工核對：Windows + WSL path、已遇到的 runner 問題、安全邊界。
+- `py_compile` for changed report/future-watch/test modules。
+- official `generate_report(dry_run=True)` replay。
 
 ## 關聯風險掃描
-- message order 未重排，降低 notifier reply markup 風險。
-- 盤後降噪限定在顯示層，不改策略/決策資料。
-- 部署文檔更新不改 live delivery / DB policy。
+- Summary 文案只改使用者可見文字，不改交易狀態計數。
+- 未持倉 blocker 排序只影響顯示主因，不改漏斗結果。
+- 法說會財報拆行只改 formatter，不改 MOPS / fundamentals query/filter。
 
 ## 跨區塊語意一致性
-- 第 1 則不再出現 `【先看結論】`。
-- 第 1 則持倉仍保留每檔主行動、風控線、決策、原因、下一步、價格。
-- 第 2 則未持倉淘汰仍明確是 `不可買` / `淘汰`，不會被讀成買入清單。
-- 第 3 則 Summary 仍保留完整決策簡報。
+- 第 3 則 Summary 現在用 `今日買入紀錄`，與 `新增有效進場：無` 不再互相誤導。
+- 第 2 則量能不足卡：title `量能不足`，主因 `量能不足`。
+- 第 4 則法說會：財報子行緊跟該檔法說會，未獨立成全市場清單。
 
 ## 使用者誤讀風險
-- 降噪不能刪掉每檔主行動。
-- 不把「每檔重複」本身視為錯；只刪審計型流水與低價值診斷欄位。
+- `今日買入紀錄` 明確是已發生交易/ledger，不等於現在可買。
+- `財報：` 子行縮排，手機上可讀成上一行法說會的附屬資料。
 
 ## 失敗標本反證
-- Owner 樣本：v20.4.48 報文中 `【先看結論】` 無效，持倉/未持倉卡片過長。
-- official dry-run replay:
-  - 產生 4 則 `v20.4.49` 報文。
-  - 第 1 則持倉無 `【先看結論】`、無 `條件` / `數據`。
-  - 第 2 則未持倉淘汰無 `盤面` / 長 `原因` / `數據`。
+- Owner 樣本 v20.4.49：
+  - `今日已買` vs `新增有效進場：無` 改為 `今日買入紀錄`。
+  - `淘汰｜量能不足` vs `卡關主因：樣本不足` 改為量能主因。
+  - 法說會單行財報改為子行。
+- official dry-run v20.4.50 confirmed。
 
 ## 未測項目
 - live Telegram delivery 未測且禁止。
-- CAO runner e2e 未測，因 TUI automation gap。
+- Production runner delivery artifact 未跑；本輪驗收為 local official dry-run。
 
 ## QA 結論
 通過

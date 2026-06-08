@@ -934,6 +934,11 @@ def _fundamentals_label(fundamentals):
     return "｜".join(parts)
 
 
+def _fundamentals_detail_line(fundamentals):
+    label = _fundamentals_label(fundamentals)
+    return f"  財報：{label}" if label else ""
+
+
 def _mops_event_title(row):
     summary = str(row.get("summary") or row.get("event_summary") or "").strip()
     if summary:
@@ -1279,10 +1284,11 @@ def format_future_watch_message(payload, now, version):
                 f"{_date_label(item.get('date'))} {item.get('code')} {item.get('name')}",
                 item.get("event"),
             ]
-            if item.get("fundamentals_label"):
-                parts.append(item.get("fundamentals_label"))
             parts.append(f"關注原因：{item.get('reason')}")
             lines.append("｜".join(part for part in parts if part))
+            fundamentals_line = _fundamentals_detail_line(item.get("fundamentals") or {})
+            if fundamentals_line:
+                lines.append(fundamentals_line)
 
     global_events = payload.get("global_events") or {}
     global_items = global_events.get("items") or []

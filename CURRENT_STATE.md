@@ -2,40 +2,33 @@
 
 ## Current Task
 
-- task_id: `telegram_denoise_and_deployment_docs_20260608`
+- task_id: `report_conflict_future_watch_format_20260608`
 - status: `qa_passed`
-- version: `v20.4.49`
+- version: `v20.4.50`
 - no live Telegram delivery.
 
 ## Stable Context
 
-- Owner reads Telegram on mobile; Summary must answer decisions, but card details still matter per stock.
-- Do not treat repeated per-stock structure as noise by itself.
+- Owner reads Telegram on mobile; report wording must avoid implying a current buy when only ledger/manual buy records exist.
+- Repetition per stock is acceptable when it carries each stock's decision; conflict/noise is the target, not blind dedupe.
 - Production source-of-truth is Supabase / runner data, not local cache.
 - DB schema/RLS/grant/policy/role/index/constraint changes require Owner approval.
 - Fixed Markdown files must be rewritten/compressed, not removed.
 
 ## Current Changes
 
-- Removed `.cao_agent_context/` stale runtime output.
-- Deployment docs rewritten for WSL path:
-  - Windows native CAO blocked by Unix `fcntl`.
-  - WSL Ubuntu is the supported local path.
-  - Codex binary copied to `/root/.local/bin/codex-real`.
-  - Codex auth/config copied to `/root/.codex`.
-  - Known unresolved gap: CAO/Codex TUI prompt/send automation can hang.
-- Report patch implemented:
-  - remove `【先看結論】`.
-  - afterhours holding cards remove audit-like `條件` / `數據` / history lines.
-  - afterhours rejected unheld cards remove diagnostic `盤面` / long reason / data / history lines.
+- Summary uses `今日買入紀錄` instead of `今日已買`.
+- Unheld rejected cards align title blocker and `卡關主因`.
+- Future 30-day MOPS meetings split finance data into an indented `財報：...` line under each filtered meeting.
+- Version bumped to `v20.4.50`.
 
 ## Verification State
 
-- `py_compile` passed for current changed report files.
-- focused pytest passed: 5 tests.
+- `py_compile` passed.
+- focused pytest passed.
 - official `generate_report(dry_run=True)` passed: 4 local preview messages, no live Telegram delivery.
 
 ## Known Follow-ups
 
 - CAO TUI automation gap still needs a runner-level fix.
-- Historical report suite is not clean; last known broader run had non-task strategy/funnel failures.
+- Historical report suite is not clean; broader baseline cleanup remains separate.
