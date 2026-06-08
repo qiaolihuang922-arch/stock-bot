@@ -1,5 +1,22 @@
 # CURRENT_STATE.md
 
+## 2026-06-08 Current
+
+- Active task: `telegram_mobile_first_preface_20260608`
+- Status: `QA conditional pass, pending commit/push`
+- User-visible change: Telegram report version `v20.4.48`; first message now starts with `【先看結論】` before holding cards.
+- Official dry-run artifact:
+  - `MESSAGES 4`
+  - message 1: `【06/08 盤後｜v20.4.48】` / `【持倉標的】` / `【先看結論】`
+  - message 1 includes `新倉：無有效進場`, `今日買入：5 檔已全部轉入風控`, and `未持倉：僅追蹤/淘汰見第 2 則，不當作買入清單`
+  - message 3 remains `🧾 v20.4.48 簡報`
+- Verification:
+  - py_compile passed for changed Python/test files.
+  - focused pytest passed: 5 passed.
+  - broader report suite remains non-clean: `tests/test_generator_report.py tests/test_notifier.py` -> 160 passed / 34 failed; treat as separate baseline/strategy cleanup, not this task completion evidence.
+- No live Telegram delivery was performed.
+- CAO runner note: WSL services/auth are available, but CAO/Codex TUI automation still has a prompt/send compatibility gap; this round used local dry-run/log evidence instead.
+
 請先讀 `AGENTS.md`、再讀 `DISPATCH.md`，本文件只保留短上下文與穩定狀態。
 
 ## Stable Context

@@ -1,4 +1,53 @@
-# CHANGELOG:
+# CHANGELOG: telegram_mobile_first_preface_20260608
+
+## 修改內容與修改檔案
+- `presentation/report.py`
+  - 新增 `_mobile_first_read_preface(...)`。
+  - 在第 1 則持倉訊息、第一張持倉卡之前插入 `【先看結論】`。
+- `core/generator.py`
+  - 報文版本升至 `v20.4.48`。
+- `tests/test_generator_report.py`
+  - 新增手機首屏 preface 回歸。
+  - 將本輪 touched order 測試改用 `generator.VERSION`，避免下次升版重複破壞。
+- `tests/test_trend_continuation.py` / `tests/test_notifier.py`
+  - 同步 `v20.4.48` 測試版本字串。
+
+## 契約影響
+- 函式回傳: `formatTelegramMessages(...)` message list 長度與順序不變。
+- message list: `messages[0]` 內容增加手機首屏 preface；`messages[1]`、`messages[2]`、future watch 順序不變。
+- DB 寫入: 無。
+- CLI 輸出: dry-run 版本顯示 `v20.4.48`。
+
+## 版本同步
+- `core.generator.VERSION = "v20.4.48"`。
+
+## 直接消費者同步
+- Telegram 手機首屏先看到新倉/今日買入/持倉風控結論。
+- `services.notifier.send_many` 仍依 message list 順序送出，reply markup 契約未改。
+
+## 未影響模組
+- 策略 scoring、RR、持倉狀態機、DB read/write、future watch source、live delivery。
+
+## 自檢命令與結果
+- `python -m py_compile core/generator.py presentation/report.py tests/test_generator_report.py tests/test_trend_continuation.py tests/test_notifier.py` -> passed。
+- focused pytest:
+  `tests/test_generator_report.py::GeneratorReportTest::test_first_holding_message_starts_with_mobile_decision_preface`
+  `tests/test_generator_report.py::GeneratorReportTest::test_v20_4_12_complete_message_list_orders_holdings_unheld_summary_evidence_details`
+  `tests/test_notifier.py`
+  -> 5 passed。
+- official dry-run `generate_report(dry_run=True)` -> 4 messages; message 1 starts with `【先看結論】`; no live Telegram delivery。
+- broader `tests/test_generator_report.py tests/test_notifier.py` -> 160 passed / 34 failed; remaining failures are broader existing strategy/funnel expectation mismatches, not accepted as this task completion evidence.
+
+## 覆蓋層級
+- helper: `_mobile_first_read_preface` via message renderer test。
+- formatter: `formatTelegramMessages` focused replay。
+- official generator: `generate_report(dry_run=True)` artifact。
+- runner artifact: local dry-run stdout。
+- production source: read-only Supabase-backed dry-run only; no write, no live delivery。
+
+## 殘留風險
+- CAO TUI runner still has a separate automation gap; local dry-run and tests were used for this round.
+- Full historical report suite is not clean and should be handled as a separate baseline cleanup/strategy task.
 
 ## 任務尺寸與風險
 

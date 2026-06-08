@@ -1626,6 +1626,38 @@ def format_brief_data_evidence_message(
     return "\n".join(line for line in lines if line is not None)
 
 
+def _mobile_first_read_preface(holding_items, watch_items, report_context, deps, *, market_mode=None):
+    actionable_count = len(deps["new_entry_suggestion_items"](
+        watch_items,
+        market_mode=market_mode,
+        report_context=report_context,
+    ))
+    today_buy_names = _today_buy_holding_names(holding_items, deps)
+    today_buy_risk_count = len(_today_buy_risk_names(holding_items, deps))
+
+    lines = ["【先看結論】"]
+    if actionable_count:
+        lines.append(f"新倉：{actionable_count} 檔需明日前確認")
+    else:
+        lines.append("新倉：無有效進場")
+
+    if today_buy_names:
+        if today_buy_risk_count == len(today_buy_names):
+            lines.append(f"今日買入：{len(today_buy_names)} 檔已全部轉入風控")
+        elif today_buy_risk_count:
+            observe_count = len(today_buy_names) - today_buy_risk_count
+            lines.append(f"今日買入：{len(today_buy_names)} 檔，風控 {today_buy_risk_count}/觀察 {observe_count}")
+        else:
+            lines.append(f"今日買入：{len(today_buy_names)} 檔先觀察警戒/停損")
+
+    if holding_items:
+        lines.append(f"持倉：{len(holding_items)} 檔先看風控，停損/減碼優先")
+    if watch_items:
+        lines.append("未持倉：僅追蹤/淘汰見第 2 則，不當作買入清單")
+    lines.append("完整決策簡報：見第 3 則")
+    return "\n".join(lines)
+
+
 def render_telegram_messages(
     results_map,
     full_msg,
@@ -1688,11 +1720,19 @@ def render_telegram_messages(
             if not data.get("holding")
         ])
     ]
+    first_read_preface = _mobile_first_read_preface(
+        holding_items,
+        watch_items,
+        report_context,
+        deps,
+        market_mode=market_mode,
+    )
 
     telegram_header = f"【{now.strftime('%m/%d')} {report_phase}｜{version}】"
     holdings_message = (
         f"{telegram_header}\n"
         "【持倉標的】\n\n"
+        f"{first_read_preface}\n\n"
         + ("\n\n".join(position_cards) if position_cards else "無持倉")
     )
     unheld_message = (
