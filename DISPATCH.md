@@ -3,7 +3,7 @@
 ## Active
 
 - task_md_holds: `daily_market_evidence_writeback_20260610`
-- status: `QA passed, pending commit/push`
+- status: `complete`
 - owner_request:
   - Fix daily writeback first.
   - Scan global logic and Markdown instructions.
@@ -79,4 +79,4 @@ Freshness verification:
 
 ## Next Action
 
-- Commit and push the workflow/script/test/MD changes, then run git completion gate.
+- Optional: trigger or observe the next GitHub Actions `daily_evidence` run to prove live runner execution after push.

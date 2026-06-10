@@ -3,7 +3,7 @@
 ## Current Task
 
 - task_id: `daily_market_evidence_writeback_20260610`
-- status: `QA passed, pending commit/push`
+- status: `complete`
 - version: `v21.0.2`
 - no live Telegram delivery.
 

@@ -3,7 +3,7 @@
 ## Status
 - task_id: `daily_market_evidence_writeback_20260610`
 - type: `risk_patch`
-- status: `QA passed, pending commit/push`
+- status: `complete`
 - version: `v21.0.2`
 - QA level: `L2`
 
