@@ -1,54 +1,55 @@
-# TASK: unheld_market_overlay_version_20260610
+# TASK: future_watch_fundamental_layout_20260610
 
 ## Status
-- task_id: `unheld_market_overlay_version_20260610`
-- type: `normal_patch`
+- task_id: `future_watch_fundamental_layout_20260610`
+- type: `tiny_patch`
 - status: `complete`
 - version: `v21.0.1`
-- QA level: `L2`
+- QA level: `L1`
 
 ## Owner Problem
-Owner pasted a v21.0 report where all unheld candidates were shown as `等市場｜市場弱`, and asked:
-- where is the analysis,
-- version should be bumped to `21.0.1`.
+Owner requested the `關注標的財報` block to be easier to read on mobile:
 
-The user-visible issue is not fake data. The issue is state attribution: market weakness was treated as every stock card's primary state, hiding the stock-specific next missing gate.
+```text
+3481 群創
+EPS 2026Q1 0.2
+營收 2026/05 +10.3%
+```
+
+and remove `關注原因`.
 
 ## User Visible Result
-- Telegram report header and summary now show `v21.0.1`.
-- Weak market remains visible as the reason/background.
-- Unheld card primary state no longer short-circuits at `等市場` when a more specific stock gate exists.
-- Current dry-run shows far / weak candidates as `等型態｜市場弱`, with state line `還差：出現 setup`.
+- Each stock in `關注標的財報` now renders as stock line plus one line per financial datapoint.
+- `關注原因` is removed from the fundamentals block.
 
 ## Non Goals
+- No data source change.
+- No revenue/EPS calculation change.
 - No live Telegram delivery.
-- No DB schema/RLS/grant/policy/index change.
-- No production DB write/backfill.
-- No holding stop-loss / sell logic change.
+- No DB write/schema change.
 
 ## Impacted Modules And Consumers
-- `core/generator.py`: visible version and unheld state priority.
-- `core/trade_state_machine.py`: schema version aligned to `v21.0.1`.
-- Tests: report header/version expectations and failure specimen regression.
-- Direct consumers: official `generate_report(dry_run=True)`, Telegram message list, runner artifact.
+- `core/future_watch.py`: future-watch Telegram formatter.
+- `tests/test_generator_report.py`: formatter regression expectations.
+- Direct consumers: official `generate_report(dry_run=True)` and Telegram future-watch message.
 
 ## Output Contract
-- Market weak can block buying globally but should not always become the card's primary wait state.
-- If no setup exists, card state is `等型態` even under market weakness.
-- If volume/RR/heat are primary, they keep `等量能` / `等RR修復` / `等冷卻`.
-- Header uses `v21.0.1`.
+- Fundamentals block format:
+  - `code name`
+  - `EPS ...` when available
+  - `營收 ...` when available
+- Do not append `關注原因：...` in the fundamentals block.
 
 ## Acceptance
-- Targeted failure specimen tests pass.
-- Broad generator/FSM/analysis/evidence tests pass.
-- Official `generate_report(dry_run=True)` returns `v21.0.1` messages and no live Telegram delivery.
+- Future-watch revenue/fundamentals tests pass.
+- Full generator report tests pass.
+- Official dry-run shows the requested block format.
 
 ## Failure Specimen And Route
-- Owner specimen: 2026-06-10 v21.0 report with all unheld cards `等市場｜市場弱`.
-- Failure layer: official generator report and unheld formatter.
-- Replay route: official dry-run plus generator/FSM regression tests.
+- Owner specimen: pasted `關注標的財報` one-line rows.
+- Failure layer: `format_future_watch_message()`.
+- Replay route: generator report tests plus official dry-run future-watch block.
 
 ## Forbidden / Blocking
-- Do not fabricate market/volume/setup data.
-- Do not turn weak-market candidates into buyable names.
-- Do not live deliver Telegram without separate Owner approval.
+- Do not fabricate EPS/revenue.
+- Do not remove `關注原因` from the separate MOPS events block unless separately requested.

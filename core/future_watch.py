@@ -1788,7 +1788,9 @@ def format_future_watch_message(payload, now, version):
             label = item.get("fundamentals_label")
             if not label:
                 label = "財報資料不足"
-            lines.append(f"{item.get('code')} {item.get('name')}｜{label}｜關注原因：{item.get('reason')}")
+            detail_lines = [part for part in str(label).split("｜") if part]
+            lines.append(f"{item.get('code')} {item.get('name')}")
+            lines.extend(detail_lines)
 
     global_events = payload.get("global_events") or {}
     global_items = global_events.get("items") or []

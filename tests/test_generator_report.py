@@ -1573,8 +1573,10 @@ class GeneratorReportTest(unittest.TestCase):
             messages[3],
         )
         self.assertIn("關注標的財報", messages[3])
-        self.assertIn("2301 光寶科｜EPS 2026Q1 1.23｜營收 2026/04 +12.3%｜關注原因：持倉", messages[3])
-        self.assertIn("2421 建準｜EPS 2026Q1 2.34｜營收 2026/04 +5.7%｜關注原因：候選", messages[3])
+        self.assertIn("2301 光寶科\nEPS 2026Q1 1.23\n營收 2026/04 +12.3%", messages[3])
+        self.assertIn("2421 建準\nEPS 2026Q1 2.34\n營收 2026/04 +5.7%", messages[3])
+        fundamental_block = messages[3].split("關注標的財報", 1)[1].split("未來30日台股影響事件", 1)[0]
+        self.assertNotIn("關注原因：", fundamental_block)
         self.assertNotIn("營收YoY", messages[3])
         self.assertNotIn("source=MOPS", messages[3])
         self.assertNotIn("0-count", messages[3])
@@ -1636,7 +1638,8 @@ class GeneratorReportTest(unittest.TestCase):
         )
         message = format_future_watch_message(future_payload, datetime(2026, 6, 10), generator.VERSION)
 
-        self.assertIn("3231 緯創｜EPS 2026Q1 3.06｜營收 2026/05 +39.2%｜關注原因：候選", message)
+        self.assertIn("3231 緯創\nEPS 2026Q1 3.06\n營收 2026/05 +39.2%", message)
+        self.assertNotIn("關注原因：", message)
         self.assertNotIn("營收 2026/04", message)
 
     def test_future_watch_revenue_fallback_uses_latest_available_month(self):
@@ -1824,7 +1827,8 @@ class GeneratorReportTest(unittest.TestCase):
         )
         message = format_future_watch_message(future_payload, datetime(2026, 6, 10), generator.VERSION)
 
-        self.assertIn("2344 華邦電｜EPS 2026Q1 2.25｜關注原因：候選", message)
+        self.assertIn("2344 華邦電\nEPS 2026Q1 2.25", message)
+        self.assertNotIn("關注原因：", message)
         self.assertNotIn("2026/03 +91.5%", message)
 
     def test_v20_4_47_future_watch_global_event_ranges_sort_and_fail_closed(self):

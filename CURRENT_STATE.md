@@ -2,8 +2,8 @@
 
 ## Current Task
 
-- task_id: `unheld_market_overlay_version_20260610`
-- status: `complete`
+- task_id: `future_watch_fundamental_layout_20260610`
+- status: `complete, pending commit/push`
 - version: `v21.0.1`
 - no live Telegram delivery.
 
@@ -17,19 +17,16 @@
 
 ## Current Changes
 
-- Report version bumped to `v21.0.1`.
-- Weak market no longer hides stock-specific unheld gates.
-- Current dry-run shows `等型態｜市場弱` and summary `未持倉 7｜僅追蹤 7（等型態）`.
-- No fake data, DB write, schema change, or live Telegram delivery.
+- Future-watch `關注標的財報` block now uses multi-line stock/EPS/revenue layout.
+- `關注原因` removed from fundamentals block only.
+- No data source, calculation, DB write, schema, or live Telegram change.
 
 ## Verification State
 
-- Targeted tests: `2 passed, 5 warnings`.
-- Broad suite: `296 passed, 145 warnings, 57 subtests passed`.
-- Official `generate_report(dry_run=True)`: `4` messages, `v21.0.1`, no live Telegram delivery.
-- Patch commits pushed to `origin/main`; git completion check passed.
+- Targeted future-watch tests: `5 passed, 1 warning`.
+- Full generator tests: `195 passed, 143 warnings, 44 subtests passed`.
+- Official dry-run confirmed requested layout.
 
 ## Known Follow-ups
 
-- Adaptive strategy thresholds from volume calibration remain a separate next strategy tuning task.
-- MOPS/TWSE external sources can still time out; those paths remain fail-closed.
+- None for this formatting task.

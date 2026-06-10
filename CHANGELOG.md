@@ -1,48 +1,36 @@
-# CHANGELOG: unheld_market_overlay_version_20260610
+# CHANGELOG: future_watch_fundamental_layout_20260610
 
 ## Changes
-- `core/generator.py`
-  - Bumped visible report `VERSION` from `v21.0` to `v21.0.1`.
-  - Moved `市場弱` attribution after stock-specific gates in `tomorrow_watch_state()`.
-  - Result: market weakness remains a blocker/background, but it does not hide setup/volume/RR/heat gates.
-- `core/trade_state_machine.py`
-  - Bumped FSM artifact schema version to `v21.0.1`.
-- Tests
-  - Updated visible version expectations to `v21.0.1`.
-  - Updated the v21 weak-market failure specimen to expect `等型態｜市場弱`, not all `等市場`.
-
-## Problem Analysis
-- Previous v21.0.1-pre logic returned immediately when `市場弱` appeared in blockers.
-- That made every unheld card look the same: `等市場｜市場弱`.
-- It was technically fail-closed, but too coarse for decision reading because the user could not see whether the stock itself was missing setup, volume, RR, or cooling.
+- `core/future_watch.py`
+  - Changed `關注標的財報` rows from one-line pipe-separated output to multi-line per stock.
+  - Split `fundamentals_label` by `｜` and renders each part on its own line.
+  - Removed `關注原因` from the fundamentals block.
+- `tests/test_generator_report.py`
+  - Updated fundamentals layout assertions.
+  - Added block-scoped assertion that `關注原因：` is absent from `關注標的財報`.
 
 ## Contract Impact
-- Weak market still blocks new buy actions.
-- Card primary state now reflects the stock-specific next gate when one exists.
-- Current dry-run unheld summary changed from `僅追蹤 7（等市場）` to `僅追蹤 7（等型態）`.
-- No DB schema/write path/live Telegram behavior changed.
+- Only Telegram text layout changed.
+- EPS/revenue values, collectors, source fallbacks, DB reads/writes, and version remain unchanged.
 
 ## Verification
 - Targeted:
   ```powershell
-  .\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py::GeneratorReportTest::test_v21_0_1_far_low_volume_weak_market_waits_setup_not_market_or_volume tests/test_trade_state_machine.py::TradeStateMachineTest::test_report_cards_include_trade_state_line -q --tb=short
+  .\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py::GeneratorReportTest::test_future_watch_refreshes_stale_openapi_revenue_with_mops_month tests/test_generator_report.py::GeneratorReportTest::test_future_watch_revenue_fallback_uses_latest_available_month tests/test_generator_report.py::GeneratorReportTest::test_future_watch_revenue_fallback_never_downgrades_existing_month tests/test_generator_report.py::GeneratorReportTest::test_future_watch_revenue_fallback_does_not_use_revenue_amount_as_yoy tests/test_generator_report.py::GeneratorReportTest::test_future_watch_revenue_fallback_does_not_show_too_old_month -q --tb=short
   ```
-  Result: `2 passed, 5 warnings`.
-- Broad:
+  Result: `5 passed, 1 warning`.
+- Full generator:
   ```powershell
-  .\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py tests/test_trade_state_machine.py tests/test_analysis_engine.py tests/test_strategy_evidence.py tests/test_volume_calibration.py tests/test_market_theme_evidence.py -q --tb=short
+  .\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py -q --tb=short
   ```
-  Result: `296 passed, 145 warnings, 57 subtests passed`.
+  Result: `195 passed, 143 warnings, 44 subtests passed`.
 - Official dry-run:
-  - `messages 4`
-  - headers show `v21.0.1`
-  - unheld summary: `未持倉 7｜僅追蹤 7（等型態）`
-  - no live Telegram delivery.
+  - `關注標的財報` block renders each target as three lines where EPS and revenue are available.
+  - No live Telegram delivery.
 
 ## Coverage Layers
-- Helper/state priority: `tomorrow_watch_state()`.
-- Formatter/generator: visible unheld cards and summary.
-- Official generator: `generate_report(dry_run=True)`.
+- Formatter: `format_future_watch_message()`.
+- Official generator dry-run: future-watch block extraction.
 
 ## Residual Risk
-- This improves visible attribution only. It does not yet add adaptive per-stock thresholds from the calibration artifact into live strategy scoring.
+- Some values may still be omitted if official source data is unavailable; this patch intentionally does not change data availability rules.

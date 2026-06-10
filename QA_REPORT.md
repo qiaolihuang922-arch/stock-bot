@@ -1,32 +1,34 @@
-# QA_REPORT: unheld_market_overlay_version_20260610
+# QA_REPORT: future_watch_fundamental_layout_20260610
 
 ## Scope
-- v21.0.1 visible report version.
-- Unheld state priority under weak market.
-- Telegram card and summary consistency.
+- Future-watch fundamentals block layout.
+- Removal of `關注原因` from the fundamentals block only.
 
 ## Risk Scan
-- Market weakness could be hidden too much and accidentally imply buyability.
-- Version bump could miss some report headers or summary titles.
-- Existing RR/volume/heat gates could be displaced by setup wording.
+- Removing `關注原因` too broadly could affect MOPS event rows.
+- Splitting labels could drop EPS or revenue.
+- Formatter could still pass tests but fail official report path.
 
 ## Semantic Consistency
-- Header and summary use `v21.0.1`.
-- Market weakness remains visible in the card subtitle/reason.
-- Primary card state shows stock-specific next gate when present.
-- Current weak-market dry-run remains non-actionable: no unheld buy signal is introduced.
+- MOPS events can still show their own `關注原因`.
+- Fundamentals block no longer shows `關注原因`.
+- EPS and revenue values are unchanged; only line layout changed.
 
 ## Failure Specimen Countercheck
-- Owner specimen: all unheld cards showed `等市場｜市場弱`.
-- Replay dry-run now shows `等型態｜市場弱` for the same weak/far/no-setup shape.
-- Summary bucket now says `未持倉 7｜僅追蹤 7（等型態）`.
+- Owner requested:
+  ```text
+  3481 群創
+  EPS 2026Q1 0.2
+  營收 2026/05 +10.3%
+  ```
+- Official dry-run produced the requested format for `3481 群創` and the rest of the fundamentals block.
 
 ## Additional Challenge
-- Broad suite included generator, FSM, analysis, strategy evidence, volume calibration, and market theme evidence.
+- Ran full generator report tests after targeted formatter tests.
 
 ## Not Tested
 - Live Telegram delivery.
-- Production DB write/backfill.
+- DB writes/backfill.
 
 ## QA Conclusion
 通過
