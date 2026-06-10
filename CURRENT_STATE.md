@@ -27,7 +27,7 @@
 - Broad suite: `258 passed, 145 warnings, 44 subtests passed`.
 - Official `generate_report(dry_run=True)`: `4` messages, no live Telegram delivery.
 - Read-only DB calibration artifact: `source_status=available`, `db_write=false`, `schema_change=false`.
-- Commit `85159a3` created locally; final push/completion gate follows this closeout.
+- Patch pushed to `origin/main`; git completion check required before final response.
 
 ## Known Follow-ups
 

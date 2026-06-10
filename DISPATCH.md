@@ -58,4 +58,4 @@ $env:PYTHONIOENCODING='utf-8'
 
 ## Next Action
 
-- Push current patch and run git completion check.
+- Run git completion check before final response.
