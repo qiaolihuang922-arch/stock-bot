@@ -2,9 +2,9 @@
 
 ## Current Task
 
-- task_id: `report_state_denoise_followup_20260610`
+- task_id: `future_watch_source_and_card_denoise_20260610`
 - status: `complete`
-- version: `v21.0.1`
+- version: `v21.0.2`
 - no live Telegram delivery.
 
 ## Stable Context
@@ -17,19 +17,17 @@
 
 ## Current Changes
 
-- Added unheld `等接近` / `WAIT_APPROACH` for far-from-trigger watchlist items.
-- Aligned unheld title/state/buy/gap/unlock/summary wording.
-- Reworded distance gate to avoid implying all future setups are impossible when distance is far.
-- Historical analogy below 60% is now low-confidence reference only.
-- Fundamentals block keeps per-stock spacing.
+- TWSE historical source has same-run retry and clearer fail-closed source-error wording.
+- TWSE listed revenue OpenAPI is included in fundamentals loading.
+- Compact non-actionable wait cards reduce repeated low-signal rows.
+- Visible report version is `v21.0.2`; state-machine schema remains `v21.0.1`.
 
 ## Verification State
 
-- Generator + state-machine tests: `203 passed, 145 warnings, 44 subtests passed`.
-- Analysis/evidence/volume/theme tests: `94 passed, 1 warning, 13 subtests passed`.
-- Official dry-run: `messages 4`; key report lines checked; no live Telegram delivery.
-- Repo completion is handled by the latest pushed commit and final git gate evidence.
+- Generator + state-machine tests: `206 passed, 145 warnings, 44 subtests passed`.
+- Market/theme/analysis/strategy/volume tests: `94 passed, 1 warning, 13 subtests passed`.
+- Official dry-run: `messages 4`; v21.0.2 output checked; no live Telegram delivery.
 
 ## Known Follow-ups
 
-- None for this report/state denoise task.
+- MOPS法說會 parsing still fail-closes when official source is not parseable.

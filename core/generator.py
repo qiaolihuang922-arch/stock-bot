@@ -81,7 +81,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v21.0.1"
+VERSION = "v21.0.2"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",

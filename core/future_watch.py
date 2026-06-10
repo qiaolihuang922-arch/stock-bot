@@ -475,15 +475,21 @@ def _normalize_official_event_date(raw_date, default_year):
     return parsed.isoformat() if parsed else None
 
 
-def _request_get_json(url, requester=None, timeout=6):
+def _request_get_json(url, requester=None, timeout=6, attempts=1):
     if requester is None:
         if requests is None:
             raise RuntimeError("requests unavailable")
         requester = requests.get
-    response = requester(url, headers=HTTP_HEADERS, timeout=timeout)
-    if hasattr(response, "raise_for_status"):
-        response.raise_for_status()
-    return response.json()
+    last_error = None
+    for _attempt in range(max(1, attempts)):
+        try:
+            response = requester(url, headers=HTTP_HEADERS, timeout=timeout)
+            if hasattr(response, "raise_for_status"):
+                response.raise_for_status()
+            return response.json()
+        except Exception as exc:
+            last_error = exc
+    raise last_error
 
 
 def _request_get_text(url, requester=None, timeout=6):
@@ -903,7 +909,7 @@ def _build_twse_pressure_line(features):
 
 def build_live_twse_historical_source(now=None, get_json=None):
     try:
-        today_rows = _request_get_json(TWSE_MI_INDEX_ENDPOINT, requester=get_json)
+        today_rows = _request_get_json(TWSE_MI_INDEX_ENDPOINT, requester=get_json, attempts=2)
         taiex = None
         for row in today_rows or []:
             if row.get("指數") == "發行量加權股價指數":
@@ -916,7 +922,7 @@ def build_live_twse_historical_source(now=None, get_json=None):
                 "source_url": TWSE_MI_INDEX_ENDPOINT,
             }
 
-        history_rows = _request_get_json(TWSE_TAIEX_HISTORY_ENDPOINT, requester=get_json)
+        history_rows = _request_get_json(TWSE_TAIEX_HISTORY_ENDPOINT, requester=get_json, attempts=2)
         parsed_history = []
         for row in history_rows or []:
             trade_date = _parse_official_date(row.get("Date"))
@@ -985,7 +991,7 @@ def build_live_twse_historical_source(now=None, get_json=None):
     except Exception as exc:
         return {
             "status": "source-error",
-            "line": f"{CRASH_ANALOGY_FALLBACK}｜source=TWSE source-error",
+            "line": "歷史類比：TWSE 官方來源暫時不可讀，本次不列未確認類比｜source=TWSE source-error",
             "error": str(exc)[:120],
             "source_url": TWSE_MI_INDEX_ENDPOINT,
         }
@@ -1318,6 +1324,7 @@ def _merge_eps_rows(target, rows):
 
 def build_live_stock_fundamentals_source(now=None, get_json=None):
     endpoints = (
+        ("twse_revenue", TWSE_MONTHLY_REVENUE_ENDPOINT, _merge_monthly_revenue_rows),
         ("tpex_revenue", TPEX_MONTHLY_REVENUE_ENDPOINT, _merge_monthly_revenue_rows),
         ("twse_eps", TWSE_EPS_ENDPOINT, _merge_eps_rows),
         ("tpex_eps", TPEX_EPS_ENDPOINT, _merge_eps_rows),

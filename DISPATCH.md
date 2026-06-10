@@ -2,20 +2,19 @@
 
 ## Active
 
-- task_md_holds: `report_state_denoise_followup_20260610`
+- task_md_holds: `future_watch_source_and_card_denoise_20260610`
 - status: `complete`
 - owner_request:
-  - Analyze and fix the remaining v21.0.1 report problems.
-  - Optimize where reasonable.
+  - Analyze the pasted v21.0.1 report.
+  - Fix source/fundamental/card noise issues where clear.
   - No live Telegram delivery.
 
 ## Current Result
 
-- Unheld far-from-trigger symbols now render as `等接近`, not generic `等型態`.
-- `買點`, title, state line, gap, unlock, trigger, and summary bucket are aligned.
-- Distance gate now says the `<=4%` rule is for breakout strategy; other setups need separate evidence.
-- TWSE historical analogy below 60% is downgraded to `低相似，不作主結論`.
-- Fundamentals block has blank line between stocks.
+- Version bumped to `v21.0.2`.
+- TWSE historical source now retries transient failures and fails closed with a clearer source-error line.
+- TWSE listed monthly revenue OpenAPI is loaded, fixing EPS-only listed stock rows when source data is available.
+- Compact `等接近` cards remove low-signal repeated rows while staying non-actionable.
 
 ## Verification
 
@@ -23,15 +22,15 @@
 .\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py tests/test_trade_state_machine.py -q --tb=short
 ```
 
-Result: `203 passed, 145 warnings, 44 subtests passed`.
+Result: `206 passed, 145 warnings, 44 subtests passed`.
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_analysis_engine.py tests/test_strategy_evidence.py tests/test_volume_calibration.py tests/test_market_theme_evidence.py -q --tb=short
+.\.venv\Scripts\python.exe -m pytest tests/test_market_theme_evidence.py tests/test_analysis_engine.py tests/test_strategy_evidence.py tests/test_volume_calibration.py tests/test_market_theme_evidence.py -q --tb=short
 ```
 
 Result: `94 passed, 1 warning, 13 subtests passed`.
 
-Official dry-run returned `messages 4` and confirmed the visible report route; no live Telegram delivery.
+Official dry-run returned `messages 4`; checked `v21.0.2`, compact unheld card, historical source line, and 2303/2301 2026/05 revenue. No live Telegram delivery.
 
 ## Fixed Commands
 
@@ -45,4 +44,4 @@ $env:PYTHONIOENCODING='utf-8'
 
 ## Next Action
 
-- Owner review of v21.0.1 report/state denoise output.
+- Owner review of v21.0.2 output.

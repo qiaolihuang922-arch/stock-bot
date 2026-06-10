@@ -217,7 +217,7 @@ class TradeStateMachineTest(unittest.TestCase):
             )
 
         unheld = messages[1]
-        self.assertIn("【06/08 盤後｜v21.0.1】", unheld)
+        self.assertIn("【06/08 盤後｜v21.0.2】", unheld)
         self.assertIn("交易狀態：等接近｜動作：等待｜主因：市場弱｜還差：市場轉強 + 接近觸發", unheld)
         self.assertNotIn("交易狀態：不可行動", unheld)
 

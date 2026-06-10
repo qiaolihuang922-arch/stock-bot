@@ -493,18 +493,23 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
     distance_text = _gate_value_text(dist)
     if distance_text and float(distance_text) > 4:
         distance_gap = _gate_value_text(float(distance_text) - 4)
+        distance_gap_text = (
+            f"距突破 {distance_text}%｜突破策略需<=4%｜另等趨勢延續/回測承接setup"
+            if funnel_state == "等接近"
+            else f"距突破 {distance_text}%｜突破策略需<=4%｜差{distance_gap}%｜若走趨勢延續/回測承接，需另見有效setup"
+        )
         gates.append((
             "距觸發太遠",
-            f"距突破 {distance_text}%｜突破策略需<=4%｜差{distance_gap}%｜若走趨勢延續/回測承接，需另見有效setup",
+            distance_gap_text,
         ))
 
     quality = stock_result.get("entry_quality")
-    if not is_actionable and quality and quality not in {"A+", "A", "B"}:
+    if funnel_state != "等接近" and not is_actionable and quality and quality not in {"A+", "A", "B"}:
         gates.append(("進場品質不足", f"進場品質 {quality}｜需B以上"))
 
     if not gates:
         gates.extend(source_gates)
-    if market_background and gates and gates[0][0] != "市場弱":
+    if funnel_state != "等接近" and market_background and gates and gates[0][0] != "市場弱":
         gates.append(("市場背景", "市場轉強後才評估執行"))
 
     if not gates and post_market_prepare:
@@ -545,7 +550,8 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
         "樣本不足": "補齊有效策略樣本後重新評估",
         "資料來源缺失": "補齊有效行情 / 策略來源後重新評估",
     }.get(primary_reason, "解除主 blocker 後重新評估")
-    return evidence_lines(primary_reason, primary_gap, unlock)
+    basis = "" if funnel_state == "等接近" else None
+    return evidence_lines(primary_reason, primary_gap, unlock, basis=basis)
 
 
 def _stock_decision_judgment(report_context, name):
@@ -1048,16 +1054,20 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         strategy_source_blocked,
         title_label=title_label,
     )
+    compact_wait_card = not valid_entry and funnel_state in {"等接近", "等型態"}
     is_afterhours = effective_report_phase in {"盤後", "收盤"}
     is_afterhours_rejected = is_afterhours and funnel_state == "淘汰" and not valid_entry
+    market_line = None if is_afterhours_rejected else (
+        "盤面：證據不足｜待確認"
+        if strategy_source_blocked
+        else _score_gated_market_line(report_context, name, data, dist, deps)
+    )
+    if compact_wait_card and market_line == "盤面：證據不足｜待確認":
+        market_line = None
     lines = [
         f"【{deps['stock_title'](name, data)}】{title_icon} {title_action}｜{title_label}",
         deps["trade_state_machine_line"](data),
-        None if is_afterhours_rejected else (
-            "盤面：證據不足｜待確認"
-            if strategy_source_blocked
-            else _score_gated_market_line(report_context, name, data, dist, deps)
-        ),
+        market_line,
         buy_line,
         buy_gap_line,
     ]
@@ -1071,7 +1081,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     if weak_buy_backtest_line:
         lines.append(weak_buy_backtest_line)
 
-    if reason_line and not is_afterhours_rejected:
+    if reason_line and not (is_afterhours_rejected or compact_wait_card):
         lines.append(reason_line)
 
     lines.extend(trend_control_lines)
@@ -1081,7 +1091,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         None if is_afterhours else (
             deps["_source_status_line"](report_context, name, holding=False) if report_context else None
         ),
-        None if is_afterhours_rejected else data_line,
+        None if (is_afterhours_rejected or compact_wait_card) else data_line,
         low_volume_limit_up_risk,
         price_line,
     ])

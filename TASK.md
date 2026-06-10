@@ -1,69 +1,57 @@
-# TASK: report_state_denoise_followup_20260610
+# TASK: future_watch_source_and_card_denoise_20260610
 
 ## Status
-- task_id: `report_state_denoise_followup_20260610`
-- type: `risk_patch`
+- task_id: `future_watch_source_and_card_denoise_20260610`
+- type: `normal_patch`
 - status: `complete`
-- version: `v21.0.1`
+- version: `v21.0.2`
 - QA level: `L2`
 
 ## Owner Problem
-Owner pasted the official v21.0.1 report and asked to analyze/fix the remaining problems:
+Owner pasted the v21.0.1 official report and asked for analysis. The visible problems were:
 
-- Unheld cards all collapsed into `等型態` / market wording, making the v21 state machine look useless.
-- Distance wording looked like `>4%` always means never buy, even though trend continuation or pullback setups can still become valid later.
-- Card lines conflicted: state/title could say one blocker while `買點` said another.
-- Historical analogy looked overconfident at low similarity.
-- Future-watch fundamentals needed readable per-stock spacing.
+- `歷史類比` sometimes fell to `source-error` and misleadingly looked like no high-similarity sample, rather than a source failure.
+- Some listed-stock fundamentals had EPS but no revenue.
+- Unheld `等接近` cards still repeated low-value diagnostic lines, making the report noisy on mobile.
 
 ## User Visible Result
-- Far unheld names now enter `等接近` instead of generic `等型態`.
-- Unheld state line can show market weakness as background plus the next stock-specific gate.
-- `買點`, title, state, gap, unlock, and summary bucket use the same `等接近` route.
-- Distance text says the 4% limit is for breakout strategy; trend-continuation/pullback setups require separate valid setup evidence.
-- TWSE historical analogy below 60% is downgraded to `低相似，不作主結論`.
-- Fundamentals block leaves a blank line between stocks.
+- Report version is bumped to `v21.0.2`.
+- TWSE historical source gets a same-run retry before fail-closed.
+- Historical source failure now says TWSE official source is temporarily unreadable, not false no-similarity.
+- TWSE listed monthly revenue OpenAPI is included in fundamentals loading, so listed stocks no longer rely only on MOPS refresh for revenue.
+- Compact non-actionable wait cards hide low-signal `盤面：證據不足`, RR data rows, and RR/backtest basis lines.
 
 ## Non Goals
 - No live Telegram delivery.
 - No DB write, schema, RLS, grant, policy, role, index, or constraint change.
-- No fabricated EPS, revenue, OHLCV, or cross-day memory.
-- No change from non-actionable watchlist to buyable recommendation.
+- No fabricated revenue/EPS/historical analogy.
+- No change from watchlist to buyable signal.
 
 ## Impacted Modules And Consumers
-- `core/trade_state_machine.py`: visible unheld state labels and transition event for `WAIT_APPROACH`.
-- `core/generator.py`: unheld funnel state/bucket/summary trigger routing.
-- `presentation/report.py`: Telegram card wording and gap attribution.
-- `core/future_watch.py`: historical analogy confidence wording and fundamentals spacing.
-- `tests/test_generator_report.py`, `tests/test_trade_state_machine.py`: official report and state-machine regression coverage.
-- Direct consumers: official `generate_report(dry_run=True)`, GitHub runner generated Telegram message artifact.
+- `core/future_watch.py`: TWSE retry, source-error wording, TWSE revenue endpoint.
+- `presentation/report.py`: compact wait-card denoise.
+- `core/generator.py`: visible report version.
+- `tests/test_generator_report.py`, `tests/test_trade_state_machine.py`, `tests/test_market_theme_evidence.py`: regression and version expectations.
+- Direct consumers: official `generate_report(dry_run=True)` and runner-generated Telegram text.
 
 ## Output Contract
-- For far unheld targets with no valid setup:
-  - title: `等接近`
-  - state line includes `交易狀態：等接近`
-  - `買點：不買，等接近觸發區`
-  - summary bucket: `未持倉 ...（等接近）`
-- If market is weak but stock-specific distance/setup gate is primary, market appears as background, not a replacement for the stock gate.
-- Historical analogy with similarity `<60%` must not render as a main market conclusion.
-- Fundamentals rows keep:
-  - `code name`
-  - `EPS ...`
-  - `營收 ...`
-  - blank line before the next stock.
+- Historical source available: keep normal low-similarity / analogy wording.
+- Historical source error: `歷史類比：TWSE 官方來源暫時不可讀，本次不列未確認類比｜source=TWSE source-error`.
+- Fundamentals include TWSE and TPEX monthly revenue OpenAPI rows, plus existing MOPS refresh.
+- Compact unheld wait card keeps title, state, buy line, blocker/gap/unlock, tomorrow trigger, and price.
 
 ## Acceptance
-- Official dry-run returns 4 messages and no live delivery.
-- Official dry-run unheld card contains `等接近`, aligned `買點`, and no `等型態` fallback for the pasted specimen route.
-- Official dry-run future-watch block shows low-similarity historical analogy as non-main conclusion.
-- Generator/state-machine tests and strategy/volume/evidence tests pass.
+- Official dry-run returns 4 messages with `v21.0.2`.
+- Official dry-run future-watch shows 2303 and 2301 with 2026/05 revenue when sources are available.
+- Official dry-run first unheld `等接近` card is visibly shorter and still non-actionable.
+- Generator/state-machine and adjacent strategy/source tests pass.
 
 ## Failure Specimen And Route
-- Owner specimen: pasted v21.0.1 official Telegram report.
-- Failure layer: official generator/report formatter, not helper-only fixture.
-- Replay route: `generate_report(dry_run=True)` plus generator/state-machine tests.
+- Owner specimen: pasted v21.0.1 official report.
+- Failure layer: official generator and future-watch source loading.
+- Replay route: `generate_report(dry_run=True)` plus source unit tests.
 
 ## Forbidden / Blocking
 - Do not send live Telegram.
-- Do not directly write production DB.
-- Do not mark the task complete without git commit/push and completion evidence.
+- Do not write production DB.
+- Do not convert fail-closed source errors into invented data.

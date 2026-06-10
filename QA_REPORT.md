@@ -1,40 +1,41 @@
-# QA_REPORT: report_state_denoise_followup_20260610
+# QA_REPORT: future_watch_source_and_card_denoise_20260610
 
 ## Scope
-- Official Telegram report route for v21.0.1 unheld state wording.
-- State-machine visible label consistency.
-- Future-watch low-similarity historical analogy wording.
-- Fundamentals block spacing.
+- Official v21.0.2 report route.
+- TWSE historical source fallback behavior.
+- TWSE/TPEX fundamentals revenue source coverage.
+- Compact unheld wait-card readability.
 
 ## Risk Scan
-- `等接近` could accidentally be counted as actionable.
-- Market weakness could hide the stock-specific blocker again.
-- Distance wording could still imply all strategies are blocked by 4%.
-- Historical analogy could overstate a 51% match.
-- Formatter-only tests could pass while official generator output stays wrong.
+- Retrying TWSE could mask persistent source failures.
+- New TWSE revenue endpoint could overwrite EPS or TPEX revenue incorrectly.
+- Compact cards could hide action-critical fields.
+- Version bump could desync tests and visible headers.
 
 ## Semantic Consistency
-- `等接近` remains non-actionable and counted under `僅追蹤`.
-- Card title, state line, `買點`, `卡關主因`, `解鎖`, `明日觸發`, and summary bucket align on the same route.
-- Market weakness is visible but no longer replaces the primary distance/setup gate.
-- Low-similarity TWSE history is explicitly not a main conclusion.
+- Source failures still fail closed and do not invent analogy data.
+- Compact cards still show non-actionable state, blocker, gap, unlock, trigger, and price.
+- Listed-stock revenue fills from TWSE OpenAPI before relying on MOPS refresh.
+- State-machine schema remains `v21.0.1`; report header is `v21.0.2`.
 
 ## Failure Specimen Countercheck
-- Owner pasted an official v21.0.1 report where unheld cards were noisy and the state machine looked unhelpful.
+- Owner specimen showed:
+  - `歷史類比... source-error`
+  - EPS-only rows for some stocks.
+  - Long repeated `等接近` cards.
 - Official dry-run now shows:
-  - `【緯創 3231】⏳ 等接近｜市場弱`
-  - `交易狀態：等接近｜動作：等待｜主因：市場弱｜還差：市場轉強 + 接近觸發`
-  - `買點：不買，等接近觸發區`
-  - `未持倉 7｜僅追蹤 7（等接近）`
-  - `歷史類比：低相似，不作主結論｜source=TWSE`
+  - `【06/10 盤後｜v21.0.2】`
+  - compact `等接近` card without low-signal RR/data rows.
+  - 2303 and 2301 with `營收 2026/05`.
+  - historical source available in this run; source-error path has a tested human-readable fail-closed line.
 
 ## Additional Challenge
-- Ran generator/state-machine tests plus separate analysis/evidence/volume/theme tests.
-- Official dry-run checked final message route instead of helper-only fixture.
+- Tested source helper behavior separately from final generator.
+- Ran official dry-run after tests to inspect user-visible text.
 
 ## Not Tested
 - Live Telegram delivery.
-- DB writes/backfill.
+- Production DB writes/backfill.
 - GitHub Actions live run.
 
 ## QA Conclusion
