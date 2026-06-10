@@ -1639,6 +1639,57 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("3231 緯創｜EPS 2026Q1 3.06｜營收 2026/05 +39.2%｜關注原因：候選", message)
         self.assertNotIn("營收 2026/04", message)
 
+    def test_future_watch_revenue_fallback_uses_latest_available_month(self):
+        payload = render_payload(
+            [100, 101, 102, 103, 104, 105],
+            None,
+            price=105,
+            change=1.0,
+        )
+        payload["stock_code"] = "3231"
+        fundamentals_source = {
+            "status": "available",
+            "items_by_code": {
+                "3231": {
+                    "eps": "3.06",
+                    "eps_year": "115",
+                    "eps_quarter": "1",
+                    "revenue_month": "11504",
+                    "revenue_yoy": "112.0",
+                }
+            },
+        }
+        calls = []
+
+        def mops_fetcher(code, revenue_month):
+            calls.append((code, revenue_month))
+            if revenue_month == "11506":
+                return None
+            if revenue_month == "11505":
+                return {
+                "stock_code": "3231",
+                "revenue_month": "11505",
+                "revenue_yoy": "39.24",
+                "revenue_cumulative_yoy": "88.8",
+                    "source": "MOPS",
+                }
+            self.fail(f"unexpected revenue_month {revenue_month}")
+
+        future_payload = build_future_watch_payload(
+            {"蝺臬": payload},
+            datetime(2026, 7, 10),
+            historical_source={"samples": []},
+            mops_adapter=lambda **kwargs: {"status": "available", "rows": []},
+            fundamentals_source=fundamentals_source,
+            global_event_source={"status": "available", "items": []},
+            mops_revenue_fetcher=mops_fetcher,
+        )
+        message = format_future_watch_message(future_payload, datetime(2026, 7, 10), generator.VERSION)
+
+        self.assertEqual(calls[:2], [("3231", "11506"), ("3231", "11505")])
+        self.assertIn("2026/05 +39.2%", message)
+        self.assertNotIn("2026/06", message)
+
     def test_v20_4_47_future_watch_global_event_ranges_sort_and_fail_closed(self):
         payload = {
             "historical_analogy": {"line": "歷史類比：無高相似台股急跌樣本｜依據不足/相似度低"},

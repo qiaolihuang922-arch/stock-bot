@@ -1,55 +1,42 @@
-# CHANGELOG: report_revenue_noise_fsm_20260610
+# CHANGELOG: latest_revenue_month_fallback_20260610
 
 ## Changes
 - `core/future_watch.py`
-  - Added MOPS company monthly revenue fallback for stale TWSE/TPEX OpenAPI monthly revenue.
-  - Added previous-month ROC calculation, MOPS HTML parsing, retry, and concurrent target refresh.
-  - Reduced MOPS fallback latency by skipping the slow/stale TWSE listed-revenue bulk endpoint, using 3-second MOPS target fetches with limited concurrency, and adding a 2-second small retry for missed priority rows.
-  - `collect_target_fundamentals` now records expected revenue month and refreshed codes.
-- `core/trade_state_machine.py`
-  - Added next-event labels for unheld FSM states.
-  - Unheld visible state line now reports `還差` / `下一步` instead of repeating trigger text.
-- `presentation/report.py`
-  - Treats both `盤後` and `收盤` as after-hours card context.
-  - Hides cross-day history detail lines on closing/after-hours unheld cards.
-  - Uses the explicit `report_phase` argument for unheld card after-hours decisions.
+  - Added `_roc_year_month_candidates` to generate latest-to-older monthly revenue candidates.
+  - Updated MOPS target revenue refresh to try candidate months in order and use the first available official row.
+  - Added normalized ASCII revenue row support (`stock_code`, `revenue_month`, `revenue_yoy`) before the legacy source-key merge.
 - `tests/test_generator_report.py`
-  - Added stale OpenAPI revenue -> MOPS 2026/05 fallback regression.
-  - Added closing unheld card history-noise regression.
-- `tests/test_trade_state_machine.py`
-  - Updated v21 unheld state-line expectation.
+  - Added a regression test for a July run where June revenue is unavailable and May is selected automatically.
+  - Updated MOPS mock rows to use normalized keys.
 
 ## Contract Impact
-- Future-watch target fundamentals can show newer MOPS monthly revenue than the bulk OpenAPI source when the OpenAPI source lags.
-- If MOPS times out or returns no row for a target, the report keeps the prior official OpenAPI value rather than inventing data.
-- Telegram unheld cards remain grouped the same way, but closing/after-hours detail is shorter.
+- Revenue freshness is now month-rolling: no code change is needed when the calendar moves to the next month.
+- If the latest theoretical month is unpublished, the report falls back to the newest official month it can fetch.
+- Existing fail-closed behavior remains: no official row means no fabricated revenue.
 - No DB schema, write path, or live delivery behavior changed.
 
 ## Verification
 - Command:
   ```powershell
-  .\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py tests/test_trade_state_machine.py -q --tb=short
+  .\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py::GeneratorReportTest::test_future_watch_refreshes_stale_openapi_revenue_with_mops_month tests/test_generator_report.py::GeneratorReportTest::test_future_watch_revenue_fallback_uses_latest_available_month -q --tb=short
   ```
-- Result: `198 passed, 145 warnings, 44 subtests passed`.
+- Result: `2 passed, 1 warning`.
 - Command:
   ```powershell
-  $env:PYTHONIOENCODING='utf-8'
-  .\.venv\Scripts\python.exe -c "from core.generator import generate_report; messages,_=generate_report(dry_run=True); print(len(messages)); print('歷史噪音', '歷史：前次 observe' in '\\n'.join(messages) or '連續觀察 1 天' in '\\n'.join(messages))"
+  .\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py tests/test_trade_state_machine.py -q --tb=short
   ```
-- Result: `4`, `歷史噪音 False`.
-- Official dry-run spot check:
-  - Unheld cards show `還差：量能確認` / `還差：回測確認`.
-  - Future watch shows 2026/05 revenue for all holding rows in the latest dry-run.
-  - Candidate rows can show EPS only when MOPS times out; the report does not fabricate May revenue.
-  - Latest timed dry-run completed in about 55-59 seconds.
+- Result: `199 passed, 145 warnings, 44 subtests passed`.
+- Official dry-run:
+  - `messages 4`
+  - `elapsed_seconds 58.3`
+  - `has_unheld_history_noise False`
+  - No live Telegram delivery.
 
 ## Coverage Layers
-- Helper/collector: MOPS stale revenue fallback test.
-- Formatter: closing unheld card history-noise test.
-- Official generator: `generate_report(dry_run=True)` message-list replay.
-- State machine: visible unheld line regression.
+- Collector/helper: latest-to-older MOPS revenue month fallback.
+- Formatter/generator: full generator report suite.
+- Official generator: `generate_report(dry_run=True)`.
 
 ## Residual Risk
-- MOPS company monthly revenue is slow and can time out per target; the fallback is best-effort, short-timeout, and fail-closed.
-- Some candidate rows may show EPS only when MOPS times out.
-- Live Telegram delivery was not executed.
+- MOPS can still time out; timeout remains fail-closed.
+- Candidate stocks may omit revenue if all candidate month fetches fail.

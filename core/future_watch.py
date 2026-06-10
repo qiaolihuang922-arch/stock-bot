@@ -1069,6 +1069,14 @@ def _merge_monthly_revenue_rows(target, rows):
         if not code:
             continue
         target.setdefault(code, {})
+        if row.get("revenue_month") or row.get("revenue_yoy"):
+            target[code].update({
+                "revenue_month": row.get("revenue_month"),
+                "revenue_yoy": row.get("revenue_yoy"),
+                "revenue_cumulative_yoy": row.get("revenue_cumulative_yoy"),
+                "revenue_source_date": row.get("revenue_source_date"),
+            })
+            continue
         target[code].update({
             "revenue_month": row.get("資料年月"),
             "revenue_yoy": row.get("營業收入-去年同月增減(%)"),
@@ -1078,6 +1086,10 @@ def _merge_monthly_revenue_rows(target, rows):
 
 
 def _roc_year_month_from_date(value):
+    return _roc_year_month_candidates(value, lookback=1)[0]
+
+
+def _roc_year_month_candidates(value, lookback=4):
     current = value or date.today()
     if isinstance(current, datetime):
         current = current.date()
@@ -1086,7 +1098,14 @@ def _roc_year_month_from_date(value):
     if month == 0:
         year -= 1
         month = 12
-    return f"{year - 1911}{month:02d}"
+    candidates = []
+    for _ in range(max(1, lookback)):
+        candidates.append(f"{year - 1911}{month:02d}")
+        month -= 1
+        if month == 0:
+            year -= 1
+            month = 12
+    return candidates
 
 
 def _clean_mops_number(value):
@@ -1178,18 +1197,27 @@ def fetch_mops_monthly_revenue_row(code, revenue_month, requester=None, timeout=
     return None
 
 
+def _fetch_mops_revenue_from_candidates(fetch, code, revenue_months):
+    for revenue_month in revenue_months:
+        try:
+            row = fetch(code, revenue_month)
+        except Exception:
+            continue
+        if row:
+            return row
+    return None
+
+
 def _refresh_monthly_revenue_from_mops(target, codes, revenue_month, fetcher=None, max_workers=3, retry_limit=6):
     unique_codes = [str(code) for code in dict.fromkeys(codes or []) if code]
     if not unique_codes:
         return []
+    revenue_months = list(revenue_month) if isinstance(revenue_month, (list, tuple)) else [revenue_month]
     refreshed = []
     fetch = fetcher or fetch_mops_monthly_revenue_row
     if max_workers <= 1 or len(unique_codes) == 1:
         for code in unique_codes:
-            try:
-                row = fetch(code, revenue_month)
-            except Exception:
-                continue
+            row = _fetch_mops_revenue_from_candidates(fetch, code, revenue_months)
             if not row:
                 continue
             _merge_monthly_revenue_rows(target, [row])
@@ -1197,7 +1225,7 @@ def _refresh_monthly_revenue_from_mops(target, codes, revenue_month, fetcher=Non
         return refreshed
     with ThreadPoolExecutor(max_workers=max(1, min(max_workers, len(unique_codes)))) as executor:
         futures = {
-            executor.submit(fetch, code, revenue_month): code
+            executor.submit(_fetch_mops_revenue_from_candidates, fetch, code, revenue_months): code
             for code in unique_codes
         }
         for future in as_completed(futures):
@@ -1212,13 +1240,10 @@ def _refresh_monthly_revenue_from_mops(target, codes, revenue_month, fetcher=Non
             refreshed.append(code)
     missing_codes = [code for code in unique_codes if code not in set(refreshed)]
     for code in missing_codes[:retry_limit]:
-        try:
-            if fetcher:
-                row = fetch(code, revenue_month)
-            else:
-                row = fetch_mops_monthly_revenue_row(code, revenue_month, timeout=2, attempts=1)
-        except Exception:
-            continue
+        retry_fetch = fetch if fetcher else (
+            lambda stock_code, month: fetch_mops_monthly_revenue_row(stock_code, month, timeout=2, attempts=1)
+        )
+        row = _fetch_mops_revenue_from_candidates(retry_fetch, code, revenue_months)
         if not row:
             continue
         _merge_monthly_revenue_rows(target, [row])
@@ -1321,7 +1346,8 @@ def collect_target_fundamentals(
 
     items = []
     targets = _target_stocks(results_map, max_targets=max_items)
-    expected_revenue_month = _roc_year_month_from_date(now)
+    revenue_month_candidates = _roc_year_month_candidates(now, lookback=4)
+    expected_revenue_month = revenue_month_candidates[0]
     items_by_code = fundamentals_source.setdefault("items_by_code", {})
     can_refresh_mops = bool(mops_revenue_fetcher) or fundamentals_source.get("source") == "TWSE/TPEX OpenAPI"
     stale_codes = [
@@ -1333,7 +1359,7 @@ def collect_target_fundamentals(
     refreshed = _refresh_monthly_revenue_from_mops(
         items_by_code,
         stale_codes,
-        expected_revenue_month,
+        revenue_month_candidates,
         fetcher=mops_revenue_fetcher,
     )
 
@@ -1350,6 +1376,7 @@ def collect_target_fundamentals(
         "status": "available",
         "items": items,
         "expected_revenue_month": expected_revenue_month,
+        "revenue_month_candidates": revenue_month_candidates,
         "mops_revenue_refreshed_codes": refreshed,
     }
 

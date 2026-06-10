@@ -1,60 +1,47 @@
-# TASK: report_revenue_noise_fsm_20260610
+# TASK: latest_revenue_month_fallback_20260610
 
 ## Status
-- task_id: `report_revenue_noise_fsm_20260610`
+- task_id: `latest_revenue_month_fallback_20260610`
 - type: `normal_patch`
 - status: `complete`
 - version: `v21.0`
 - QA level: `L2`
 
 ## Owner Problem
-Owner pasted the 2026-06-10 v21.0 report and raised three visible problems:
-- May revenue should already exist, but the report still showed 2026/04 revenue.
-- The unheld stock cards are too noisy for mobile reading.
-- The v21 trade state machine line looks useless because it repeats the same trigger wording.
+Owner pointed out that revenue should always fetch the latest available month; the code must not need a patch every month.
 
 ## User Visible Result
-- The future 30-day fundamentals block can refresh stale TWSE/TPEX OpenAPI monthly revenue with MOPS company monthly revenue, so available targets show 2026/05 revenue.
-- Closing/after-hours unheld cards hide cross-day history lines like `歷史：前次 observe｜連續觀察 1 天`.
-- Unheld trade state lines now show the missing event, for example `還差：量能確認` or `還差：回測確認`, instead of repeating the full trigger sentence.
+- The future-watch fundamentals block now searches for the latest available MOPS monthly revenue by trying the theoretical latest month first, then falling back to earlier months.
+- Example: on 2026-07-10 it tries ROC `11506`; if that month is not published for a stock, it automatically falls back to `11505`, then older candidates.
 
 ## Non Goals
 - No live Telegram delivery.
 - No DB schema/RLS/grant/policy/index change.
-- No manual SQL/DML.
-- No change to holding sell/stop-loss decision logic.
+- No holding decision or trade state transition change.
 
 ## Impacted Modules And Consumers
-- `core/future_watch.py`: future-watch fundamentals collection and MOPS monthly revenue fallback.
-- `core/trade_state_machine.py`: user-visible unheld state-machine line.
-- `presentation/report.py`: closing/after-hours unheld card noise suppression.
-- `tests/test_generator_report.py`: MOPS revenue freshness and closing-card noise regression.
-- `tests/test_trade_state_machine.py`: v21 state line regression.
-- Direct consumers: official `generate_report(dry_run=True)`, Telegram message list, GitHub/Render runner report artifact.
+- `core/future_watch.py`: MOPS monthly revenue candidate-month search and normalized revenue row merge.
+- `tests/test_generator_report.py`: latest-available-month fallback regression.
+- Direct consumers: official `generate_report(dry_run=True)`, Telegram future-watch message, GitHub/Render runner artifact.
 
 ## Output Contract
-- `關注標的財報` keeps EPS and revenue on each target line.
-- If TWSE/TPEX OpenAPI revenue is stale and MOPS company monthly revenue returns the expected previous month, replace only that target revenue month/Yoy.
-- If MOPS fails or returns no row for a target, keep the best official existing value; do not fabricate May data.
-- Unheld card state line format:
-  - non-actionable: `交易狀態：<state>｜動作：等待｜還差：<next event>`
-  - actionable: `交易狀態：<state>｜動作：<action>｜下一步：<next event>`
-- `收盤` and `盤後` unheld cards must not show cross-day history detail lines.
+- Latest revenue search starts from the previous calendar month in ROC format.
+- If that month is unavailable, search earlier month candidates without code changes.
+- Use the first official row returned by MOPS.
+- Accept normalized internal keys (`stock_code`, `revenue_month`, `revenue_yoy`) so tests and adapters do not depend on mojibake-prone Chinese column names.
+- Do not fabricate revenue when all candidate months fail.
 
 ## Acceptance
-- Generator and trade-state-machine tests pass.
-- Official `generate_report(dry_run=True)` returns 4 messages without live Telegram delivery.
-- Dry-run unheld message no longer contains `歷史：前次 observe` or `連續觀察 1 天`.
-- Dry-run future watch shows available 2026/05 revenue rows from MOPS fallback and keeps stale rows only when official fallback fails.
+- Targeted latest-month fallback tests pass.
+- Generator/state-machine regression tests pass.
+- Official `generate_report(dry_run=True)` returns message list without live Telegram delivery.
 
 ## Failure Specimen And Route
-- Owner specimen: 2026-06-10 v21.0 Telegram report.
-- Failure layer: official generator message list / future-watch formatter / unheld card formatter.
-- Replay route: `generate_report(dry_run=True)` and targeted generator tests.
-- Data finding: TWSE/TPEX OpenAPI monthly revenue source was still at ROC `11504`; MOPS company monthly revenue endpoint had ROC `11505` rows for most targets.
+- Owner specimen: concern that each new month would require another code change.
+- Failure layer: future-watch fundamentals collector / MOPS revenue fallback.
+- Replay route: unit test simulates July run where June is missing and May is the latest official row.
 
 ## Forbidden / Blocking
 - No live Telegram delivery.
-- Do not claim all targets have May revenue if MOPS cannot return a row.
-- Do not weaken hard-stop or holding risk actions in this task.
+- Do not hard-code a specific calendar month.
 - If git completion gate fails, do not claim complete.
