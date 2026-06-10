@@ -1,60 +1,54 @@
-# TASK: setup_aware_volume_fsm_20260610
+# TASK: unheld_market_overlay_version_20260610
 
 ## Status
-- task_id: `setup_aware_volume_fsm_20260610`
-- type: `major`
+- task_id: `unheld_market_overlay_version_20260610`
+- type: `normal_patch`
 - status: `complete`
-- version: `v21.0`
-- QA level: `L3`
+- version: `v21.0.1`
+- QA level: `L2`
 
 ## Owner Problem
-Owner asked for a global code scan and best fix for:
-- volume handling being too strict,
-- the v21 trade state machine not helping enough,
-- stocks far from breakout still sometimes being valid candidates.
+Owner pasted a v21.0 report where all unheld candidates were shown as `等市場｜市場弱`, and asked:
+- where is the analysis,
+- version should be bumped to `21.0.1`.
 
-The pasted v21 report showed far / weak-market stocks being classified mostly as volume wait states, making the system look unable to distinguish market, setup, volume, RR, and distance gates.
+The user-visible issue is not fake data. The issue is state attribution: market weakness was treated as every stock card's primary state, hiding the stock-specific next missing gate.
 
 ## User Visible Result
-- Unheld cards now separate `等市場`, `等型態`, `等量能`, `等回測`, `等RR修復`, and `等冷卻`.
-- Low volume is a primary blocker only for breakout / pre-breakout style setups where volume confirmation matters.
-- Far-from-breakout is no longer treated as a universal no-buy reason; trend continuation, pullback reclaim, and valid setup contexts can bypass the old hard distance interpretation.
-- Current dry-run weak-market candidates now show `等市場｜市場弱`, not `等量能` noise.
+- Telegram report header and summary now show `v21.0.1`.
+- Weak market remains visible as the reason/background.
+- Unheld card primary state no longer short-circuits at `等市場` when a more specific stock gate exists.
+- Current dry-run shows far / weak candidates as `等型態｜市場弱`, with state line `還差：出現 setup`.
 
 ## Non Goals
 - No live Telegram delivery.
 - No DB schema/RLS/grant/policy/index change.
 - No production DB write/backfill.
-- No automatic live order lifecycle.
+- No holding stop-loss / sell logic change.
 
 ## Impacted Modules And Consumers
-- `core/trade_state_machine.py`: unheld FSM guard/event ordering and setup-aware volume gate.
-- `core/generator.py`: Telegram unheld state, funnel grouping, summary buckets, and trigger copy.
-- `presentation/report.py`: visible unheld title/status rendering.
-- `services/volume_calibration.py`: read-only DB artifact for volume bucket outcome review.
-- Direct consumers: official `generate_report(dry_run=True)`, Telegram report message list, runner artifact, QA probes.
+- `core/generator.py`: visible version and unheld state priority.
+- `core/trade_state_machine.py`: schema version aligned to `v21.0.1`.
+- Tests: report header/version expectations and failure specimen regression.
+- Direct consumers: official `generate_report(dry_run=True)`, Telegram message list, runner artifact.
 
 ## Output Contract
-- `WAIT_MARKET` / `等市場`: market gate first; trigger says market must turn stronger before setup review.
-- `WAIT_SETUP` / `等型態`: no valid setup formed, but not a volume-only rejection.
-- `WAIT_VOLUME` / `等量能`: only when volume is primary gate, mainly near-breakout / breakout-confirm contexts.
-- `WAIT_RR` / `等RR修復`: RR blocker remains primary when volume is not the primary gate.
-- Overheat cards show `等冷卻`, not misleading `等回測`.
-- Read-only volume calibration artifact must include `db_write=false` and `schema_change=false`.
+- Market weak can block buying globally but should not always become the card's primary wait state.
+- If no setup exists, card state is `等型態` even under market weakness.
+- If volume/RR/heat are primary, they keep `等量能` / `等RR修復` / `等冷卻`.
+- Header uses `v21.0.1`.
 
 ## Acceptance
-- Targeted FSM / report regression tests pass.
-- Broad generator / FSM / analysis / evidence / calibration tests pass.
-- Official `generate_report(dry_run=True)` produces messages without live Telegram delivery.
-- Read-only Supabase calibration artifact can group DB history by setup context and volume bucket.
+- Targeted failure specimen tests pass.
+- Broad generator/FSM/analysis/evidence tests pass.
+- Official `generate_report(dry_run=True)` returns `v21.0.1` messages and no live Telegram delivery.
 
 ## Failure Specimen And Route
-- Owner specimen: 2026-06-10 v21.0 unheld report where every far/weak candidate looked like `等量能` or an unhelpful wait state.
-- Failure layer: official generator report and unheld formatter, not only helper fixture.
-- Replay route: `generate_report(dry_run=True)` plus generator/FSM regression tests.
+- Owner specimen: 2026-06-10 v21.0 report with all unheld cards `等市場｜市場弱`.
+- Failure layer: official generator report and unheld formatter.
+- Replay route: official dry-run plus generator/FSM regression tests.
 
 ## Forbidden / Blocking
-- Do not weaken hard stop / holding sell logic.
-- Do not claim buyable if market/setup/RR/volume gates are still closed.
-- Do not use synthetic helper-only evidence as final proof.
-- No live Telegram delivery without separate Owner approval.
+- Do not fabricate market/volume/setup data.
+- Do not turn weak-market candidates into buyable names.
+- Do not live deliver Telegram without separate Owner approval.

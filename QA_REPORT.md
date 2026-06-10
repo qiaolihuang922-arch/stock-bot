@@ -1,38 +1,32 @@
-# QA_REPORT: setup_aware_volume_fsm_20260610
+# QA_REPORT: unheld_market_overlay_version_20260610
 
 ## Scope
-- Unheld trade state machine.
-- Volume gate semantics.
-- Distance / setup interaction.
-- Telegram report card and summary rendering.
-- Read-only DB calibration artifact.
+- v21.0.1 visible report version.
+- Unheld state priority under weak market.
+- Telegram card and summary consistency.
 
 ## Risk Scan
-- Far-from-breakout low-volume names could be incorrectly marked `等量能`, hiding the real market/setup gate.
-- RR or heat blockers could be overwritten by setup/distance wording.
-- New states could be missing from funnel totals, card titles, or summary buckets.
-- DB history calibration could accidentally imply a write/schema change.
+- Market weakness could be hidden too much and accidentally imply buyability.
+- Version bump could miss some report headers or summary titles.
+- Existing RR/volume/heat gates could be displaced by setup wording.
 
 ## Semantic Consistency
-- Market weak cards now show `等市場｜市場弱`.
-- Near-breakout low-volume cards remain `等量能`.
-- RR blocker cards show `等RR修復`.
-- Overheat cards show `等冷卻`.
-- Summary bucket matches visible card state.
+- Header and summary use `v21.0.1`.
+- Market weakness remains visible in the card subtitle/reason.
+- Primary card state shows stock-specific next gate when present.
+- Current weak-market dry-run remains non-actionable: no unheld buy signal is introduced.
 
 ## Failure Specimen Countercheck
-- Owner specimen was a full v21 Telegram report, so QA replayed the official generator path.
-- Official dry-run produced 4 messages and the unheld summary `未持倉 7｜僅追蹤 7（等市場）`.
-- No live Telegram delivery was run.
+- Owner specimen: all unheld cards showed `等市場｜市場弱`.
+- Replay dry-run now shows `等型態｜市場弱` for the same weak/far/no-setup shape.
+- Summary bucket now says `未持倉 7｜僅追蹤 7（等型態）`.
 
 ## Additional Challenge
-- Broad test suite covered generator, FSM, analysis, strategy evidence, and the new calibration module.
-- Read-only Supabase artifact confirmed historical signal/price rows can support volume-bucket review without schema or write changes.
+- Broad suite included generator, FSM, analysis, strategy evidence, volume calibration, and market theme evidence.
 
 ## Not Tested
 - Live Telegram delivery.
-- Production DB writes/backfill.
-- Automatic adaptive volume threshold application to live decisions.
+- Production DB write/backfill.
 
 ## QA Conclusion
 通過

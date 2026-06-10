@@ -2,9 +2,9 @@
 
 ## Current Task
 
-- task_id: `setup_aware_volume_fsm_20260610`
-- status: `complete`
-- version: `v21.0`
+- task_id: `unheld_market_overlay_version_20260610`
+- status: `complete, pending commit/push`
+- version: `v21.0.1`
 - no live Telegram delivery.
 
 ## Stable Context
@@ -17,19 +17,18 @@
 
 ## Current Changes
 
-- Unheld FSM and report now distinguish `WAIT_MARKET`, `WAIT_SETUP`, `WAIT_VOLUME`, `WAIT_PULLBACK`, `WAIT_RR`, and `WAIT_COOLDOWN` visible states.
-- Volume is primary only for breakout / pre-breakout contexts; far weak-market candidates wait for market/setup first.
-- Distance from breakout is context-sensitive and no longer a universal blocker.
-- Added read-only volume calibration artifact using DB history; no DB write or schema change.
+- Report version bumped to `v21.0.1`.
+- Weak market no longer hides stock-specific unheld gates.
+- Current dry-run shows `等型態｜市場弱` and summary `未持倉 7｜僅追蹤 7（等型態）`.
+- No fake data, DB write, schema change, or live Telegram delivery.
 
 ## Verification State
 
-- Broad suite: `258 passed, 145 warnings, 44 subtests passed`.
-- Official `generate_report(dry_run=True)`: `4` messages, no live Telegram delivery.
-- Read-only DB calibration artifact: `source_status=available`, `db_write=false`, `schema_change=false`.
-- Patch pushed to `origin/main`; git completion check required before final response.
+- Targeted tests: `2 passed, 5 warnings`.
+- Broad suite: `296 passed, 145 warnings, 57 subtests passed`.
+- Official `generate_report(dry_run=True)`: `4` messages, `v21.0.1`, no live Telegram delivery.
 
 ## Known Follow-ups
 
-- Wire calibration artifact into adaptive strategy thresholds only after Owner approves the next strategy tuning task.
+- Adaptive strategy thresholds from volume calibration remain a separate next strategy tuning task.
 - MOPS/TWSE external sources can still time out; those paths remain fail-closed.

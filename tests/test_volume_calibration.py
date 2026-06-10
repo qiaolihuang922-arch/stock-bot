@@ -34,7 +34,7 @@ class VolumeCalibrationTest(unittest.TestCase):
         signal_rows = [{
             "stock_id": "3231",
             "trade_date": "2026-01-01",
-            "version": "v21.0",
+            "version": "v21.0.1",
             "close": 100,
             "volume_ratio": 0.55,
             "pattern": "NORMAL",

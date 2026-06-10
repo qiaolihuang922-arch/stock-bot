@@ -2,49 +2,41 @@
 
 ## Active
 
-- task_md_holds: `setup_aware_volume_fsm_20260610`
+- task_md_holds: `unheld_market_overlay_version_20260610`
 - status: `complete`
 - owner_request:
-  - Global code scan and best fix for volume handling, trade state machine usefulness, and far-distance buyable contexts.
-  - Use DB history where possible.
+  - Analyze why the v21 report still looked wrong.
+  - Bump visible version to `v21.0.1`.
   - No live Telegram delivery.
 
 ## Current Result
 
-- Version remains `v21.0`.
-- Unheld state is now gate-specific: `等市場`, `等型態`, `等量能`, `等回測`, `等RR修復`, `等冷卻`.
-- Low volume is primary only for breakout / pre-breakout contexts; far weak-market names no longer become volume-only waits.
-- Current official dry-run unheld summary: `未持倉 7｜僅追蹤 7（等市場）`.
-- Added read-only volume calibration artifact from `daily_signal_snapshot + daily_price`; no DB write or schema change.
-
-## Recently Done
-
-- `setup_aware_volume_fsm_20260610`: setup-aware volume gate, market/setup state split, read-only volume calibration artifact.
-- `revenue_fallback_no_downgrade_20260610`: fixed stale revenue downgrade and amount-as-YoY errors.
-- `report_revenue_noise_fsm_20260610`: MOPS revenue freshness fallback, closing-card denoise, and unheld FSM visible-line improvement.
+- Version is now `v21.0.1`.
+- Root cause: `市場弱` short-circuited unheld card state before stock-specific gates.
+- Fix: market weakness stays as blocker/background, while card primary state shows stock-specific gate such as `等型態`.
+- Current official dry-run unheld summary: `未持倉 7｜僅追蹤 7（等型態）`.
+- No DB schema/write/live Telegram behavior changed.
 
 ## Verification
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py tests/test_trade_state_machine.py tests/test_analysis_engine.py tests/test_strategy_evidence.py tests/test_volume_calibration.py -q --tb=short
+.\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py::GeneratorReportTest::test_v21_0_1_far_low_volume_weak_market_waits_setup_not_market_or_volume tests/test_trade_state_machine.py::TradeStateMachineTest::test_report_cards_include_trade_state_line -q --tb=short
 ```
 
-Result: `258 passed, 145 warnings, 44 subtests passed`.
+Result: `2 passed, 5 warnings`.
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py tests/test_trade_state_machine.py tests/test_analysis_engine.py tests/test_strategy_evidence.py tests/test_volume_calibration.py tests/test_market_theme_evidence.py -q --tb=short
+```
+
+Result: `296 passed, 145 warnings, 57 subtests passed`.
 
 ```powershell
 $env:PYTHONIOENCODING='utf-8'
 .\.venv\Scripts\python.exe -c "from core.generator import generate_report; messages,_=generate_report(dry_run=True); print('messages',len(messages)); print('\n--- MESSAGE ---\n'.join(messages))"
 ```
 
-Result: `messages 4`; no live Telegram delivery.
-
-Read-only DB calibration result:
-
-- `source=daily_signal_snapshot+daily_price`
-- `db_write=false`
-- `schema_change=false`
-- `source_status=available`
-- contexts: `near_breakout`, `pullback`, `far_weak_market`, `far_no_breakout_setup`
+Result: `messages 4`; headers show `v21.0.1`; no live Telegram delivery.
 
 ## Fixed Commands
 
@@ -58,4 +50,4 @@ $env:PYTHONIOENCODING='utf-8'
 
 ## Next Action
 
-- Run git completion check before final response.
+- Commit/push current patch and run git completion check.

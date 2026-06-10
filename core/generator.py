@@ -81,7 +81,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v21.0"
+VERSION = "v21.0.1"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -2816,9 +2816,6 @@ def tomorrow_watch_state(name, data):
     if heat in ["HOT", "EXTREME"] or trade in ["EXTENDED", "AVOID"] or label == "過熱觀察":
         return "等冷卻"
 
-    if label == "市場弱" or "市場弱" in blockers:
-        return "等市場"
-
     if "量能不足" in blockers:
         return "等量能"
 
@@ -2834,6 +2831,9 @@ def tomorrow_watch_state(name, data):
 
     if label == "遠離觸發" or "遠離觸發" in blockers:
         return "等回測"
+
+    if label == "市場弱" or "市場弱" in blockers:
+        return "等市場"
 
     return "隔日確認"
 

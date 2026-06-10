@@ -68,7 +68,7 @@ class TradeStateMachineTest(unittest.TestCase):
             source_status="missing-source",
         )
 
-        self.assertEqual(state["schema_version"], "v21.0")
+        self.assertEqual(state["schema_version"], "v21.0.1")
         self.assertEqual(state["state"], "WAIT_VOLUME")
         self.assertEqual(state["phase"], "ENTRY_GATE")
         self.assertEqual(state["action"], "WAIT")
@@ -115,7 +115,7 @@ class TradeStateMachineTest(unittest.TestCase):
 
         artifact = build_state_artifact({"緯創": payload})
 
-        self.assertEqual(artifact["schema_version"], "v21.0")
+        self.assertEqual(artifact["schema_version"], "v21.0.1")
         self.assertFalse(artifact["db_write"])
         self.assertFalse(artifact["schema_change"])
         self.assertEqual(len(artifact["items"]), 1)
@@ -217,8 +217,8 @@ class TradeStateMachineTest(unittest.TestCase):
             )
 
         unheld = messages[1]
-        self.assertIn("【06/08 盤後｜v21.0】", unheld)
-        self.assertIn("交易狀態：等市場｜動作：等待｜還差：市場轉強", unheld)
+        self.assertIn("【06/08 盤後｜v21.0.1】", unheld)
+        self.assertIn("交易狀態：等型態｜動作：等待｜還差：出現 setup", unheld)
         self.assertNotIn("交易狀態：不可行動", unheld)
 
 

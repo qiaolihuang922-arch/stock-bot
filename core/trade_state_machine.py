@@ -545,7 +545,7 @@ def evaluate_position_state(name, data, *, summary_action=None, trigger=None):
         reason = f"持倉主行動：{summary_action}"
 
     return {
-        "schema_version": "v21.0",
+        "schema_version": "v21.0.1",
         "stock_name": name,
         "stock_code": str((data or {}).get("stock_code") or ""),
         "scope": "holding",
@@ -613,7 +613,7 @@ def evaluate_unheld_state(
         )
     blocked_by = list(dict.fromkeys(blocked_by))
     return {
-        "schema_version": "v21.0",
+        "schema_version": "v21.0.1",
         "stock_name": name,
         "stock_code": str((data or {}).get("stock_code") or ""),
         "scope": "unheld",
@@ -702,7 +702,7 @@ def build_state_artifact(results_map):
         })
     return {
         "artifact_id": "trade_state_machine_v21",
-        "schema_version": "v21.0",
+        "schema_version": "v21.0.1",
         "source": "derived-readonly",
         "db_write": False,
         "schema_change": False,
