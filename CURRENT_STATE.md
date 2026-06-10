@@ -27,7 +27,7 @@
 - Targeted tests: `2 passed, 5 warnings`.
 - Broad suite: `296 passed, 145 warnings, 57 subtests passed`.
 - Official `generate_report(dry_run=True)`: `4` messages, `v21.0.1`, no live Telegram delivery.
-- Patch commit `52a5ae8` pushed to `origin/main`; final completion check follows closeout.
+- Patch commits pushed to `origin/main`; git completion check passed.
 
 ## Known Follow-ups
 

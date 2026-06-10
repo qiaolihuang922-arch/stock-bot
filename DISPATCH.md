@@ -50,4 +50,4 @@ $env:PYTHONIOENCODING='utf-8'
 
 ## Next Action
 
-- Run git completion check before final response.
+- Owner review of `v21.0.1` report output.
