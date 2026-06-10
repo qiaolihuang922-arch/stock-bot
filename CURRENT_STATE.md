@@ -2,14 +2,14 @@
 
 ## Current Task
 
-- task_id: `future_watch_fundamental_layout_20260610`
+- task_id: `report_state_denoise_followup_20260610`
 - status: `complete`
 - version: `v21.0.1`
 - no live Telegram delivery.
 
 ## Stable Context
 
-- Owner reads Telegram on mobile; visible wording must be decision-first and avoid internal pipeline terms.
+- Owner reads Telegram on mobile; visible wording must be decision-first and avoid internal pipeline noise.
 - Current direction is v21 read-only trade state machine plus production pipeline hardening.
 - Do not expand DB schema unless read-only behavior proves an actual cross-day memory gap.
 - Production source-of-truth remains Supabase / runner data, not local cache.
@@ -17,17 +17,19 @@
 
 ## Current Changes
 
-- Future-watch `關注標的財報` block now uses multi-line stock/EPS/revenue layout.
-- `關注原因` removed from fundamentals block only.
-- No data source, calculation, DB write, schema, or live Telegram change.
+- Added unheld `等接近` / `WAIT_APPROACH` for far-from-trigger watchlist items.
+- Aligned unheld title/state/buy/gap/unlock/summary wording.
+- Reworded distance gate to avoid implying all future setups are impossible when distance is far.
+- Historical analogy below 60% is now low-confidence reference only.
+- Fundamentals block keeps per-stock spacing.
 
 ## Verification State
 
-- Targeted future-watch tests: `5 passed, 1 warning`.
-- Full generator tests: `195 passed, 143 warnings, 44 subtests passed`.
-- Official dry-run confirmed requested layout.
-- Patch commit `53cb83f` pushed to `origin/main`; git completion check passed.
+- Generator + state-machine tests: `203 passed, 145 warnings, 44 subtests passed`.
+- Analysis/evidence/volume/theme tests: `94 passed, 1 warning, 13 subtests passed`.
+- Official dry-run: `messages 4`; key report lines checked; no live Telegram delivery.
+- Repo completion is handled by the latest pushed commit and final git gate evidence.
 
 ## Known Follow-ups
 
-- None for this formatting task.
+- None for this report/state denoise task.

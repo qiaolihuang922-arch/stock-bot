@@ -3,6 +3,7 @@ STATE_LABELS = {
     "WATCH": "觀察",
     "WAIT_DATA": "等資料",
     "WAIT_MARKET": "等市場",
+    "WAIT_APPROACH": "等接近",
     "WAIT_SETUP": "等型態",
     "WAIT_VOLUME": "等量能",
     "WAIT_PULLBACK": "等回測",
@@ -37,6 +38,7 @@ NEXT_EVENT_LABELS = {
     "SETUP_FORMED": "出現 setup",
     "DATA_RESTORED": "資料恢復",
     "MARKET_STRENGTH_CONFIRMED": "市場轉強",
+    "APPROACH_TRIGGER": "接近觸發",
     "VOLUME_CONFIRMED": "量能確認",
     "PULLBACK_CONFIRMED": "回測確認",
     "RR_REPAIRED": "RR修復",
@@ -49,6 +51,7 @@ ACTION_BY_STATE = {
     "WATCH": "WATCH",
     "WAIT_DATA": "WAIT",
     "WAIT_MARKET": "WAIT",
+    "WAIT_APPROACH": "WAIT",
     "WAIT_SETUP": "WAIT",
     "WAIT_VOLUME": "WAIT",
     "WAIT_PULLBACK": "WAIT",
@@ -71,6 +74,7 @@ UNHELD_FUNNEL_STATE_MAP = {
     "可準備": "READY",
     "等量能": "WAIT_VOLUME",
     "等市場": "WAIT_MARKET",
+    "等接近": "WAIT_APPROACH",
     "等型態": "WAIT_SETUP",
     "等回測": "WAIT_PULLBACK",
     "等RR修復": "WAIT_RR",
@@ -84,6 +88,7 @@ WATCH_STATE_MAP = {
     "可買": "BUYABLE",
     "等量能": "WAIT_VOLUME",
     "等市場": "WAIT_MARKET",
+    "等接近": "WAIT_APPROACH",
     "等型態": "WAIT_SETUP",
     "等回測": "WAIT_PULLBACK",
     "等RR修復": "WAIT_RR",
@@ -117,6 +122,12 @@ UNHELD_STATE_META = {
         "is_actionable": False,
         "is_terminal": False,
         "next_required_event": "MARKET_STRENGTH_CONFIRMED",
+    },
+    "WAIT_APPROACH": {
+        "phase": "SETUP_GATE",
+        "is_actionable": False,
+        "is_terminal": False,
+        "next_required_event": "APPROACH_TRIGGER",
     },
     "WAIT_SETUP": {
         "phase": "SETUP_GATE",
@@ -172,6 +183,7 @@ UNHELD_TRANSITION_TABLE = {
     "UNKNOWN": {
         "DATA_GATE_FAILED": "WAIT_DATA",
         "MARKET_GATE_FAILED": "WAIT_MARKET",
+        "APPROACH_GATE_FAILED": "WAIT_APPROACH",
         "VOLUME_GATE_FAILED": "WAIT_VOLUME",
         "PULLBACK_GATE_FAILED": "WAIT_PULLBACK",
         "RR_GATE_FAILED": "WAIT_RR",
@@ -184,6 +196,7 @@ UNHELD_TRANSITION_TABLE = {
     "WATCH": {
         "DATA_GATE_FAILED": "WAIT_DATA",
         "MARKET_GATE_FAILED": "WAIT_MARKET",
+        "APPROACH_GATE_FAILED": "WAIT_APPROACH",
         "VOLUME_GATE_FAILED": "WAIT_VOLUME",
         "PULLBACK_GATE_FAILED": "WAIT_PULLBACK",
         "RR_GATE_FAILED": "WAIT_RR",
@@ -196,6 +209,7 @@ UNHELD_TRANSITION_TABLE = {
     "WAIT_DATA": {
         "DATA_GATE_FAILED": "WAIT_DATA",
         "MARKET_GATE_FAILED": "WAIT_MARKET",
+        "APPROACH_GATE_FAILED": "WAIT_APPROACH",
         "VOLUME_GATE_FAILED": "WAIT_VOLUME",
         "PULLBACK_GATE_FAILED": "WAIT_PULLBACK",
         "RR_GATE_FAILED": "WAIT_RR",
@@ -454,6 +468,7 @@ def _transition_event_for_state(state, *, source_status=None):
         "WATCH": "WATCHLIST_RETAINED",
         "WAIT_DATA": "DATA_GATE_FAILED",
         "WAIT_MARKET": "MARKET_GATE_FAILED",
+        "WAIT_APPROACH": "APPROACH_GATE_FAILED",
         "WAIT_SETUP": "SETUP_NOT_READY",
         "WAIT_VOLUME": "VOLUME_GATE_FAILED",
         "WAIT_PULLBACK": "PULLBACK_GATE_FAILED",
@@ -512,6 +527,14 @@ def _apply_unheld_transition(previous_state, event):
             "from": origin,
             "event": event,
             "to": "WAIT_SETUP",
+            "allowed": True,
+            "table": "UNHELD_TRANSITION_TABLE",
+        }
+    if event == "APPROACH_GATE_FAILED":
+        return {
+            "from": origin,
+            "event": event,
+            "to": "WAIT_APPROACH",
             "allowed": True,
             "table": "UNHELD_TRANSITION_TABLE",
         }
@@ -656,8 +679,13 @@ def visible_state_line(machine_state):
     if machine_state.get("scope") == "unheld":
         next_event = machine_state.get("next_required_event")
         next_label = NEXT_EVENT_LABELS.get(next_event)
+        guards = set(machine_state.get("guards") or [])
+        if "MARKET_WEAK" in guards and machine_state.get("state") != "WAIT_MARKET":
+            parts.append("主因：市場弱")
         if next_label:
             prefix = "下一步" if machine_state.get("is_actionable") else "還差"
+            if "MARKET_WEAK" in guards and machine_state.get("state") not in {"WAIT_MARKET", "WAIT_DATA"}:
+                next_label = f"市場轉強 + {next_label}"
             parts.append(f"{prefix}：{next_label}")
         return "｜".join(parts)
     trigger = machine_state.get("trigger")

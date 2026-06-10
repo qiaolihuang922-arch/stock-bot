@@ -882,6 +882,15 @@ def _build_twse_pressure_line(features):
         if _value_or_zero(features.get("intraday_range_pct")) < 2:
             gaps.append("盤中震盪仍有限")
     percent = round(template["similarity"] * 100)
+    if percent < 60:
+        return "\n".join(line for line in [
+            "歷史類比：低相似，不作主結論｜source=TWSE",
+            f"最接近樣本：{template['event']}｜相似度 {percent}%",
+            _historical_module_score_line(template),
+            "用途：僅作壓力參考；相似度低於60%時不升格為行情判斷",
+            f"下一步觀察：{_historical_followup_line(template, features)}",
+            f"資料：TWSE近{features.get('history_rows') or 0}日｜樣本庫台股急跌 {template['library_size']}件",
+        ] if line)
     return "\n".join([
         f"歷史類比：{template['event']}｜相似度 {percent}%｜{context[0]}｜{context[1]}｜source=TWSE",
         f"相似點：{'｜'.join(matched[:5])}",
@@ -1784,7 +1793,9 @@ def format_future_watch_message(payload, now, version):
         lines.extend(["", "關注標的財報", "關注標的財報：官方來源暫時不可用，本次不列未確認數據"])
     elif fundamental_items:
         lines.extend(["", "關注標的財報"])
-        for item in fundamental_items:
+        for index, item in enumerate(fundamental_items):
+            if index:
+                lines.append("")
             label = item.get("fundamentals_label")
             if not label:
                 label = "財報資料不足"

@@ -8,6 +8,7 @@ from datetime import datetime
 from core import generator
 from core.future_watch import (
     TAIWAN_CRASH_TEMPLATE_LIBRARY,
+    _build_twse_pressure_line,
     build_live_global_event_source,
     build_live_twse_historical_source,
     build_future_watch_payload,
@@ -1574,6 +1575,7 @@ class GeneratorReportTest(unittest.TestCase):
         )
         self.assertIn("關注標的財報", messages[3])
         self.assertIn("2301 光寶科\nEPS 2026Q1 1.23\n營收 2026/04 +12.3%", messages[3])
+        self.assertIn("2301 光寶科\nEPS 2026Q1 1.23\n營收 2026/04 +12.3%\n\n2421 建準", messages[3])
         self.assertIn("2421 建準\nEPS 2026Q1 2.34\n營收 2026/04 +5.7%", messages[3])
         fundamental_block = messages[3].split("關注標的財報", 1)[1].split("未來30日台股影響事件", 1)[0]
         self.assertNotIn("關注原因：", fundamental_block)
@@ -1897,6 +1899,24 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("source=TWSE", source["line"])
         self.assertEqual(source["today_features"]["change_pct"], -1.68)
         self.assertEqual(source["today_features"]["history_rows"], 4)
+
+    def test_v21_0_1_low_similarity_twse_analogy_is_not_main_conclusion(self):
+        line = _build_twse_pressure_line({
+            "change_pct": 0.32,
+            "pullback_from_high_pct": -0.6,
+            "intraday_range_pct": 0.9,
+            "turnover_ratio": 0.82,
+            "close_position_5d_pct": 72,
+            "history_rows": 5,
+        })
+
+        self.assertIn("歷史類比：低相似，不作主結論｜source=TWSE", line)
+        self.assertIn("最接近樣本：", line)
+        self.assertIn("相似度 50%", line)
+        self.assertIn("用途：僅作壓力參考；相似度低於60%時不升格為行情判斷", line)
+        self.assertIn("資料：TWSE近5日｜樣本庫台股急跌 19件", line)
+        self.assertNotIn("歷史類比：2001 911 恐攻全球風險事件｜相似度 50%", line)
+        self.assertNotIn("\n\n", line)
 
     def test_v20_4_47_live_twse_source_uses_severe_taiwan_crash_template(self):
         responses = {
@@ -3270,7 +3290,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("1. 技嘉｜等量能｜不買，等量能回升", summary_message(messages))
         self.assertIn("【技嘉 2376】👀 等量能｜量能不足", unheld_message(messages))
 
-    def test_v21_0_1_far_low_volume_weak_market_waits_setup_not_market_or_volume(self):
+    def test_v21_0_1_far_low_volume_weak_market_waits_approach_not_market_or_volume(self):
         payload = {
             "stock_code": "3231",
             "price": 163.5,
@@ -3308,12 +3328,14 @@ class GeneratorReportTest(unittest.TestCase):
             report_phase="盤後",
         )
 
-        self.assertEqual(generator.tomorrow_watch_state("緯創", payload), "等型態")
-        self.assertEqual(generator.unheld_funnel_state("緯創", payload), "等型態")
-        self.assertIn("未持倉 1｜僅追蹤 1（等型態）", summary_message(messages))
+        self.assertEqual(generator.tomorrow_watch_state("緯創", payload), "等接近")
+        self.assertEqual(generator.unheld_funnel_state("緯創", payload), "等接近")
+        self.assertIn("未持倉 1｜僅追蹤 1（等接近）", summary_message(messages))
         self.assertNotIn("淘汰 1", summary_message(messages))
-        self.assertIn("【緯創 3231】⏳ 等型態｜市場弱", unheld_message(messages))
-        self.assertIn("明日觸發：重新形成買點 setup，再評估", unheld_message(messages))
+        self.assertIn("【緯創 3231】⏳ 等接近｜市場弱", unheld_message(messages))
+        self.assertIn("交易狀態：等接近｜動作：等待｜主因：市場弱｜還差：市場轉強 + 接近觸發", unheld_message(messages))
+        self.assertIn("買點：不買，等接近觸發區", unheld_message(messages))
+        self.assertIn("明日觸發：接近觸發區後重新評估 setup", unheld_message(messages))
         self.assertNotIn("【緯創 3231】⛔ 淘汰", unheld_message(messages))
 
     def test_v19_4_backtest_changes_tracking_order_only(self):
@@ -9056,7 +9078,10 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("淘汰 2", summary)
         self.assertIn("【台積電 2330】👀 等RR修復｜RR不足", rr_card)
         self.assertIn("卡關主因：RR不足", rr_card)
-        self.assertIn("量化差距：RR 0.98｜需>=1.5｜差0.52｜距突破 6%｜需<=4%｜差2%", rr_card)
+        self.assertIn(
+            "量化差距：RR 0.98｜需>=1.5｜差0.52｜距突破 6%｜突破策略需<=4%｜差2%｜若走趨勢延續/回測承接，需另見有效setup",
+            rr_card,
+        )
         self.assertIn("解鎖：風險報酬比修復到 >=1.5", rr_card)
         self.assertNotIn("盤後待確認", rr_card)
         self.assertIn("【仁寶 2324】👀 等RR修復｜RR不足", rr_near_card)

@@ -2,37 +2,36 @@
 
 ## Active
 
-- task_md_holds: `future_watch_fundamental_layout_20260610`
+- task_md_holds: `report_state_denoise_followup_20260610`
 - status: `complete`
 - owner_request:
-  - Reformat `關注標的財報` to multi-line per stock.
-  - Remove `關注原因` from that fundamentals block.
+  - Analyze and fix the remaining v21.0.1 report problems.
+  - Optimize where reasonable.
   - No live Telegram delivery.
 
 ## Current Result
 
-- `關注標的財報` now renders as:
-  - `code name`
-  - `EPS ...`
-  - `營收 ...`
-- `關注原因` is removed from the fundamentals block only.
-- No EPS/revenue source or calculation change.
+- Unheld far-from-trigger symbols now render as `等接近`, not generic `等型態`.
+- `買點`, title, state line, gap, unlock, trigger, and summary bucket are aligned.
+- Distance gate now says the `<=4%` rule is for breakout strategy; other setups need separate evidence.
+- TWSE historical analogy below 60% is downgraded to `低相似，不作主結論`.
+- Fundamentals block has blank line between stocks.
 
 ## Verification
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py::GeneratorReportTest::test_future_watch_refreshes_stale_openapi_revenue_with_mops_month tests/test_generator_report.py::GeneratorReportTest::test_future_watch_revenue_fallback_uses_latest_available_month tests/test_generator_report.py::GeneratorReportTest::test_future_watch_revenue_fallback_never_downgrades_existing_month tests/test_generator_report.py::GeneratorReportTest::test_future_watch_revenue_fallback_does_not_use_revenue_amount_as_yoy tests/test_generator_report.py::GeneratorReportTest::test_future_watch_revenue_fallback_does_not_show_too_old_month -q --tb=short
+.\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py tests/test_trade_state_machine.py -q --tb=short
 ```
 
-Result: `5 passed, 1 warning`.
+Result: `203 passed, 145 warnings, 44 subtests passed`.
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py -q --tb=short
+.\.venv\Scripts\python.exe -m pytest tests/test_analysis_engine.py tests/test_strategy_evidence.py tests/test_volume_calibration.py tests/test_market_theme_evidence.py -q --tb=short
 ```
 
-Result: `195 passed, 143 warnings, 44 subtests passed`.
+Result: `94 passed, 1 warning, 13 subtests passed`.
 
-Official dry-run checked the `關注標的財報` block; no live Telegram delivery.
+Official dry-run returned `messages 4` and confirmed the visible report route; no live Telegram delivery.
 
 ## Fixed Commands
 
@@ -46,4 +45,4 @@ $env:PYTHONIOENCODING='utf-8'
 
 ## Next Action
 
-- Owner review of fundamentals block layout.
+- Owner review of v21.0.1 report/state denoise output.

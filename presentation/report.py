@@ -454,14 +454,11 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
     blocker_text = "、".join(str(item) for item in blockers)
     phase = stock_result.get("structure_phase")
     title_text = str(title_label or "")
+    market_background = "市場弱" in title_text or "市場弱" in blocker_text
     if "量能不足" in title_text:
         gates.append(("量能不足", "需量能回升後重新評估"))
-    elif "市場弱" in title_text:
-        gates.append(("市場弱", "等市場轉強後再評估"))
     elif "量能不足" in blocker_text:
         gates.append(("量能不足", "需量能回升後重新評估"))
-    elif "市場弱" in blocker_text:
-        gates.append(("市場弱", "等市場轉強後再評估"))
     if "突破失敗" in blocker_text or phase == "FAILED_BREAKOUT":
         distance_text = _gate_value_text(dist)
         gap = "需重新站回突破區"
@@ -496,7 +493,10 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
     distance_text = _gate_value_text(dist)
     if distance_text and float(distance_text) > 4:
         distance_gap = _gate_value_text(float(distance_text) - 4)
-        gates.append(("距突破太遠", f"距突破 {distance_text}%｜需<=4%｜差{distance_gap}%"))
+        gates.append((
+            "距觸發太遠",
+            f"距突破 {distance_text}%｜突破策略需<=4%｜差{distance_gap}%｜若走趨勢延續/回測承接，需另見有效setup",
+        ))
 
     quality = stock_result.get("entry_quality")
     if not is_actionable and quality and quality not in {"A+", "A", "B"}:
@@ -504,6 +504,8 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
 
     if not gates:
         gates.extend(source_gates)
+    if market_background and gates and gates[0][0] != "市場弱":
+        gates.append(("市場背景", "市場轉強後才評估執行"))
 
     if not gates and post_market_prepare:
         gates.append(("盤後待確認", "需開盤後重新確認"))
@@ -534,7 +536,8 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
         primary_gap = f"{primary_gap}｜" + "｜".join(extra_gaps)
     unlock = {
         "RR不足": "風險報酬比修復到 >=1.5",
-        "距突破太遠": "接近突破區後再評估",
+        "距觸發太遠": "接近觸發區，或另出現趨勢延續/回測承接setup後再評估",
+        "市場背景": "市場轉強後再評估",
         "漲跌停鎖定": "解除鎖定後重新評估",
         "反彈力道不足": "放量轉強後重新評估",
         "市場弱": "市場轉強後重新評估",
@@ -876,7 +879,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
             if funnel_state == "淘汰"
             else (blockers[0] if blockers else deps["final_label"](stock_result))
         )
-    if not valid_entry and funnel_state in ["等冷卻", "等市場", "等型態", "等回測", "等RR修復", "等量能", "隔日確認", "淘汰"]:
+    if not valid_entry and funnel_state in ["等冷卻", "等市場", "等接近", "等型態", "等回測", "等RR修復", "等量能", "隔日確認", "淘汰"]:
         state = funnel_state
     if deps["is_valid_entry"](stock_result) and strategy_source_blocked:
         title_label = {
@@ -910,7 +913,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     elif funnel_state == "可準備":
         title_icon = "👀"
         title_action = "可準備" if data.get("evidence_adjustment_reason") else deps["unheld_non_actionable_prepare_label"](data)
-    elif state in ["等冷卻", "等市場", "等型態", "等回測"]:
+    elif state in ["等冷卻", "等市場", "等接近", "等型態", "等回測"]:
         title_icon = "⏳"
         title_action = state
     elif state in ["等RR修復", "等量能", "隔日確認"]:
@@ -986,6 +989,10 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
     elif funnel_state == "等回測":
         buy_line = "買點：不買，等回測"
+        data_line = f"數據：{rr_data_text}｜{display_score_text}｜V {data.get('volume_ratio', '-')}x"
+        price_line = deps["price_change_line"](data.get("price"), data.get("change"))
+    elif funnel_state == "等接近":
+        buy_line = "買點：不買，等接近觸發區"
         data_line = f"數據：{rr_data_text}｜{display_score_text}｜V {data.get('volume_ratio', '-')}x"
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
     elif funnel_state == "淘汰":

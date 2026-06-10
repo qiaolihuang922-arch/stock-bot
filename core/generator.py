@@ -2827,6 +2827,12 @@ def tomorrow_watch_state(name, data):
         or "遠離觸發" in blockers
         or not blockers
     ):
+        try:
+            distance = result.get("breakout_distance")
+            if distance is not None and float(distance) > 12:
+                return "等接近"
+        except (TypeError, ValueError):
+            pass
         return "等型態"
 
     if label == "遠離觸發" or "遠離觸發" in blockers:
@@ -2850,6 +2856,9 @@ def tomorrow_trigger_text(state, data):
 
     if state == "等市場":
         return "市場轉強後重新評估 setup"
+
+    if state == "等接近":
+        return "接近觸發區後重新評估 setup"
 
     if state == "等型態":
         return "重新形成買點 setup，再評估"
@@ -3157,7 +3166,8 @@ def tracking_sort_key(index, name, data):
         "可買": 0,
         "等冷卻": 1,
         "等市場": 2,
-        "等型態": 2,
+        "等接近": 2,
+        "等型態": 3,
         "等回測": 2,
         "等RR修復": 3,
         "等量能": 4,
@@ -3216,6 +3226,7 @@ def format_pending_candidates_grouped(watch_items):
         "可買": [],
         "等冷卻": [],
         "等市場": [],
+        "等接近": [],
         "等型態": [],
         "等回測": [],
         "等RR修復": [],
@@ -3229,7 +3240,7 @@ def format_pending_candidates_grouped(watch_items):
         groups.setdefault(state, []).append((index, name, data))
 
     lines = []
-    for label in ["可買", "等冷卻", "等市場", "等型態", "等回測", "等RR修復", "等量能", "隔日確認", "弱勢淘汰"]:
+    for label in ["可買", "等冷卻", "等市場", "等接近", "等型態", "等回測", "等RR修復", "等量能", "隔日確認", "弱勢淘汰"]:
         values = sorted(
             groups.get(label, []),
             key=lambda item: tracking_sort_key(item[0], item[1], item[2])
@@ -5796,6 +5807,9 @@ def unheld_funnel_assessment(name, data, market_mode=None, report_context=None):
     if state == "等市場":
         return "等市場", None
 
+    if state == "等接近":
+        return "等接近", None
+
     if state == "等型態":
         return "等型態", None
 
@@ -5833,6 +5847,7 @@ def unheld_funnel_state(name, data, market_mode=None, report_context=None):
         state = fallback_state if fallback_state in {
             "等冷卻",
             "等市場",
+            "等接近",
             "等型態",
             "等回測",
             "等RR修復",
@@ -5941,6 +5956,9 @@ def unheld_execution_trigger(funnel_state, data):
     if funnel_state == "等市場":
         return "不買，等市場轉強"
 
+    if funnel_state == "等接近":
+        return "不買，等接近觸發區"
+
     if funnel_state == "等回測":
         return "不追價，回測不破且降溫再評估"
 
@@ -5965,7 +5983,8 @@ def unheld_execution_priority(index, name, data, market_mode=None, report_contex
         "可準備": 3,
         "等冷卻": 4,
         "等市場": 5,
-        "等型態": 5,
+        "等接近": 5,
+        "等型態": 6,
         "等回測": 5,
         "等RR修復": 6,
         "等量能": 7,
@@ -6017,6 +6036,7 @@ def build_unheld_funnel(watch_items, market_mode=None, report_context=None):
         "可準備": [],
         "等冷卻": [],
         "等市場": [],
+        "等接近": [],
         "等型態": [],
         "等回測": [],
         "等RR修復": [],
@@ -6089,7 +6109,7 @@ def unheld_tracking_count(funnel):
 
     return sum(
         len(funnel[label])
-        for label in ["可準備", "等冷卻", "等市場", "等型態", "等回測", "等RR修復", "等量能", "隔日確認"]
+        for label in ["可準備", "等冷卻", "等市場", "等接近", "等型態", "等回測", "等RR修復", "等量能", "隔日確認"]
     )
 
 
@@ -6097,7 +6117,7 @@ def unheld_tracking_only_count(funnel):
 
     return sum(
         len(funnel[label])
-        for label in ["等冷卻", "等市場", "等型態", "等回測", "等RR修復", "等量能", "隔日確認"]
+        for label in ["等冷卻", "等市場", "等接近", "等型態", "等回測", "等RR修復", "等量能", "隔日確認"]
     )
 
 
@@ -6482,7 +6502,7 @@ def format_unheld_funnel(watch_items, market_mode=None, report_context=None):
     # 僅追蹤分桶：只有一桶時直接標桶名（不重複數字），多桶時內聯各桶數，避免「拆分」「合計」重複行。
     track_buckets = [
         (label, len(funnel[label]))
-        for label in ["等冷卻", "等市場", "等型態", "等回測", "等RR修復", "等量能"]
+        for label in ["等冷卻", "等市場", "等接近", "等型態", "等回測", "等RR修復", "等量能"]
         if funnel[label]
     ]
     if len(track_buckets) == 1:
@@ -6714,7 +6734,7 @@ def _report_conflicts(messages):
     summary = messages[-1]
     conflicts = []
     buy_markers = re.findall(r"新倉[:：][^\n]*?([\u4e00-\u9fffA-Za-z0-9]{2,12})\s*可買", summary)
-    blocking_terms = ("不可買", "等冷卻", "等市場", "等型態", "等回測", "等RR修復", "等量能", "淘汰")
+    blocking_terms = ("不可買", "等冷卻", "等市場", "等接近", "等型態", "等回測", "等RR修復", "等量能", "淘汰")
     for marker in buy_markers:
         if marker in {"無有效進場", "無", "今日"}:
             continue

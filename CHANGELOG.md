@@ -1,36 +1,56 @@
-# CHANGELOG: future_watch_fundamental_layout_20260610
+# CHANGELOG: report_state_denoise_followup_20260610
 
 ## Changes
+- `core/trade_state_machine.py`
+  - Added `WAIT_APPROACH` / `等接近` for unheld symbols that are too far from trigger.
+  - Added `APPROACH_TRIGGER` and `APPROACH_GATE_FAILED`.
+  - Visible state line now keeps market weakness as background when the primary state is a stock-specific gate.
+- `core/generator.py`
+  - Routes far no-setup unheld symbols to `等接近`.
+  - Added `等接近` to funnel groups, tracking counts, summary buckets, conflict scan, and tomorrow trigger text.
+- `presentation/report.py`
+  - Added `等接近` card/title support.
+  - Added `買點：不買，等接近觸發區`.
+  - Reworded distance gap so `<=4%` is explicitly a breakout-strategy gate, while trend continuation/pullback requires a separate valid setup.
+  - Keeps market weakness as a secondary background note when distance/setup is the primary blocker.
 - `core/future_watch.py`
-  - Changed `關注標的財報` rows from one-line pipe-separated output to multi-line per stock.
-  - Split `fundamentals_label` by `｜` and renders each part on its own line.
-  - Removed `關注原因` from the fundamentals block.
-- `tests/test_generator_report.py`
-  - Updated fundamentals layout assertions.
-  - Added block-scoped assertion that `關注原因：` is absent from `關注標的財報`.
+  - Downgrades TWSE historical analogy below 60% to `低相似，不作主結論`.
+  - Filters empty low-similarity lines and leaves blank lines between fundamentals stocks.
+- Tests
+  - Updated unheld official-message and state-machine expectations.
+  - Added low-similarity historical analogy regression.
+  - Added fundamentals blank-line regression.
 
 ## Contract Impact
-- Only Telegram text layout changed.
-- EPS/revenue values, collectors, source fallbacks, DB reads/writes, and version remain unchanged.
+- User-visible Telegram report wording changed.
+- New unheld visible state label: `等接近`.
+- No payload shape, DB contract, live delivery, or revenue/EPS calculation change.
+- No non-actionable target is upgraded to `可買`.
 
 ## Verification
-- Targeted:
+- Generator + state machine:
   ```powershell
-  .\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py::GeneratorReportTest::test_future_watch_refreshes_stale_openapi_revenue_with_mops_month tests/test_generator_report.py::GeneratorReportTest::test_future_watch_revenue_fallback_uses_latest_available_month tests/test_generator_report.py::GeneratorReportTest::test_future_watch_revenue_fallback_never_downgrades_existing_month tests/test_generator_report.py::GeneratorReportTest::test_future_watch_revenue_fallback_does_not_use_revenue_amount_as_yoy tests/test_generator_report.py::GeneratorReportTest::test_future_watch_revenue_fallback_does_not_show_too_old_month -q --tb=short
+  .\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py tests/test_trade_state_machine.py -q --tb=short
   ```
-  Result: `5 passed, 1 warning`.
-- Full generator:
+  Result: `203 passed, 145 warnings, 44 subtests passed`.
+- Strategy / evidence / volume related:
   ```powershell
-  .\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py -q --tb=short
+  .\.venv\Scripts\python.exe -m pytest tests/test_analysis_engine.py tests/test_strategy_evidence.py tests/test_volume_calibration.py tests/test_market_theme_evidence.py -q --tb=short
   ```
-  Result: `195 passed, 143 warnings, 44 subtests passed`.
+  Result: `94 passed, 1 warning, 13 subtests passed`.
 - Official dry-run:
-  - `關注標的財報` block renders each target as three lines where EPS and revenue are available.
-  - No live Telegram delivery.
+  ```powershell
+  $env:PYTHONIOENCODING='utf-8'
+  .\.venv\Scripts\python.exe -c "from core.generator import generate_report; messages,_=generate_report(dry_run=True); print('messages', len(messages))"
+  ```
+  Result: `messages 4`; checked unheld, summary, history analogy, and fundamentals spacing. No live Telegram delivery.
 
 ## Coverage Layers
-- Formatter: `format_future_watch_message()`.
-- Official generator dry-run: future-watch block extraction.
+- Formatter: `presentation/report.py`, `format_future_watch_message()`.
+- State machine: `core/trade_state_machine.py`.
+- Official generator: `generate_report(dry_run=True)`.
+- Adjacent strategy/volume/evidence test paths.
 
 ## Residual Risk
-- Some values may still be omitted if official source data is unavailable; this patch intentionally does not change data availability rules.
+- Runtime source values can still differ by official data availability; this patch does not change data freshness or source fallback rules.
+- The current market remains non-actionable for new entries; `等接近` is clearer tracking, not a buy signal.
