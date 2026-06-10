@@ -161,14 +161,13 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
         self.assertNotIn("echo $SUPABASE_SERVICE_ROLE_KEY", workflow_text)
         self.assertNotIn("print(service_role_key)", workflow_text)
 
-    def test_workflow_dispatch_supports_git_runner_may_backfill(self):
+    def test_workflow_dispatch_is_render_driven_without_native_cron(self):
         workflow_text = WORKFLOW.read_text(encoding="utf-8")
 
         self.assertIn("name: Stock Bot", workflow_text)
         self.assertNotIn("push:", workflow_text)
-        self.assertIn("schedule:", workflow_text)
-        self.assertIn('cron: "20 8 * * 1-5"', workflow_text)
-        self.assertIn('cron: "25 8 * * 1-5"', workflow_text)
+        self.assertNotIn("schedule:", workflow_text)
+        self.assertNotIn("cron:", workflow_text)
         self.assertIn("run_mode:", workflow_text)
         self.assertIn("- daily_evidence", workflow_text)
         self.assertNotIn("stock-bot.yml", "\n".join(str(path) for path in (ROOT / ".github/workflows").glob("*")))
@@ -184,8 +183,8 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
         self.assertIn('Run bot skipped for run_mode=$RUN_MODE', workflow_text)
         self.assertIn("Run Phase 3 evidence automation", workflow_text)
         self.assertIn("python scripts/run_phase3_evidence_automation.py $payload_arg", workflow_text)
-        self.assertIn("github.event.schedule == '20 8 * * 1-5' && 'daily_evidence'", workflow_text)
-        self.assertIn("github.event.schedule == '25 8 * * 1-5' && 'bot'", workflow_text)
+        self.assertIn("RUN_MODE: ${{ github.event.inputs.run_mode || 'bot' }}", workflow_text)
+        self.assertNotIn("github.event.schedule", workflow_text)
 
     def test_scheduled_daily_evidence_mode_skips_live_bot_delivery(self):
         self._require_local_bash()

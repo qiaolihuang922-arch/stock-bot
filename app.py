@@ -9,6 +9,9 @@ import pytz
 
 app = Flask(__name__)
 tz = pytz.timezone("Asia/Taipei")
+INTRADAY_BUCKET_MINUTES = 5
+CLOSE_DISPATCH_HOUR = 14
+CLOSE_DISPATCH_END_MINUTE = 30
 
 
 # ===== 永久防重複 =====
@@ -86,13 +89,13 @@ def home():
             reason = "盤前"
 
         # 收盤（允許補發）
-        elif not tag and hour == 13 and minute >= 20:
+        elif not tag and hour == CLOSE_DISPATCH_HOUR and minute < CLOSE_DISPATCH_END_MINUTE:
             tag = now.strftime("%Y%m%d_close")
             reason = "收盤"
 
         # 盤中（不補發）
         elif not tag and 9 <= hour < 13:
-            bucket = minute // 10
+            bucket = minute // INTRADAY_BUCKET_MINUTES
             tag = f"{now.strftime('%Y%m%d_%H')}_{bucket}"
             reason = "盤中"
 
@@ -123,7 +126,7 @@ def home():
                 "Accept": "application/vnd.github+json",
                 "Authorization": f"Bearer {token}"
             },
-            json={"ref": "main"},
+            json={"ref": "main", "inputs": {"run_mode": "bot"}},
             timeout=10
         )
 

@@ -2,81 +2,45 @@
 
 ## Active
 
-- task_md_holds: `daily_market_evidence_writeback_20260610`
+- task_md_holds: `render_dispatch_writeback_logic_20260610`
 - status: `complete`
 - owner_request:
-  - Fix daily writeback first.
-  - Scan global logic and Markdown instructions.
-  - Backfill whatever duration is needed through approved repo flow.
+  - Correct the writeback analysis to the actual Render five-minute dispatch model.
+  - Fix the logic that prevented post-close market/theme freshness writes.
+  - Update Markdown so the execution model is clear.
   - No live Telegram delivery.
 
 ## Current Result
 
-- Root cause:
-  - `daily_price` and `daily_signal_snapshot` were already current through `2026-06-10`.
-  - `market_theme_confirmed_evidence` and `market_theme_index_daily_bars` were stale at `2026-06-08`.
-  - Workflow ran evidence at `06:00 UTC` / `14:00 Asia/Taipei`, too close to the safe-write boundary.
-  - Scheduled no-payload path used the confirmed-evidence writer, not the existing freshness/backfill route that verifies both market/theme tables.
+- Corrected root cause:
+  - Production timing is Render -> GitHub `workflow_dispatch`, not GitHub native cron.
+  - Previous GitHub schedule change was the wrong layer.
+  - Render close dispatch previously started at `13:20`, but freshness safe-write default is `14:00`; after `14:00`, Render route skipped, so market/theme preflight could miss the write window.
 - Fix:
-  - Daily evidence schedule moved to `08:20 UTC` / `16:20 Asia/Taipei`.
-  - Bot schedule moved to `08:25 UTC` / `16:25 Asia/Taipei`.
-  - Normal scheduled evidence path now writes daily snapshot then uses freshness/backfill for market/theme tables.
-  - Approved payload mode remains available.
-- Production backfill:
-  - Backfilled `2026-06-09..2026-06-10`.
-  - `market_theme_confirmed_evidence`: wrote 18 rows, read-after-write passed.
-  - `market_theme_index_daily_bars`: wrote 20 rows, read-after-write passed.
+  - Removed GitHub native cron schedule.
+  - Render intraday buckets now use five-minute cadence.
+  - Render close dispatch now runs during `14:00..14:29 Asia/Taipei`.
+  - Render dispatch payload explicitly sends `run_mode=bot`.
+  - Existing market/theme freshness preflight remains before GitHub dispatch.
 
 ## Verification
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_phase3_evidence_automation.py tests/test_workflow_runtime_config.py -q --tb=short
+.\.venv\Scripts\python.exe -m pytest tests/test_app_render_preflight.py tests/test_workflow_runtime_config.py tests/test_phase3_evidence_automation.py -q --tb=short
 ```
 
-Result: `20 passed, 8 skipped`.
-
-```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_market_theme_source_backfill.py tests/test_app_render_preflight.py -q --tb=short
-```
-
-Result: `19 passed`.
-
-Independent DB read:
-
-- `daily_price` latest `2026-06-10`.
-- `daily_signal_snapshot` latest `2026-06-10`.
-- `market_theme_confirmed_evidence` latest `2026-06-10`.
-- `market_theme_index_daily_bars` latest `2026-06-10`.
-
-Freshness check:
-
-- `2026-06-10`: `already-complete`.
-- `2026-06-09`: `already-complete`.
-
-Official dry-run returned `messages 4`, visible version `v21.0.2`. No live Telegram delivery.
+Result: `27 passed, 8 skipped`.
 
 ## Fixed Commands
 
-Backfill dry-run:
+Local Render/dispatch contract tests:
 
 ```powershell
 cd D:\reserch\stock-bot
 $env:PYTHONIOENCODING='utf-8'
-.\.venv\Scripts\python.exe scripts\backfill_market_theme_sources.py --historical-range --start-date 2026-06-09 --end-date 2026-06-10 --dry-run
-```
-
-Backfill write already executed this round:
-
-```powershell
-.\.venv\Scripts\python.exe scripts\backfill_market_theme_sources.py --historical-range --start-date 2026-06-09 --end-date 2026-06-10 --write --confirm-write
-```
-
-Freshness verification:
-
-```powershell
-.\.venv\Scripts\python.exe scripts\run_phase3_evidence_automation.py --freshness-check-only --freshness-lookback-days 2 --safe-write-time 14:00 --now 2026-06-10T16:30:00+08:00
+.\.venv\Scripts\python.exe -m pytest tests/test_app_render_preflight.py tests/test_workflow_runtime_config.py tests/test_phase3_evidence_automation.py -q --tb=short
 ```
 
 ## Next Action
 
-- Optional: trigger or observe the next GitHub Actions `daily_evidence` run to prove live runner execution after push.
+- Observe the next live Render ping / GitHub workflow dispatch after push to prove external scheduler execution.

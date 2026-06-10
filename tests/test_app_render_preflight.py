@@ -1,7 +1,18 @@
 import unittest
+from datetime import datetime as real_datetime
 from unittest.mock import patch
 
 import app
+
+
+class FakeDateTime:
+    fixed_now = real_datetime(2026, 6, 10, 14, 5, 0)
+
+    @classmethod
+    def now(cls, tz=None):
+        if tz:
+            return tz.localize(cls.fixed_now)
+        return cls.fixed_now
 
 
 class RenderFreshnessPreflightTest(unittest.TestCase):
@@ -161,6 +172,128 @@ class RenderFreshnessPreflightTest(unittest.TestCase):
         self.assertEqual(len(dispatch_urls), 1)
         self.assertIn("/actions/workflows/stock-bot-clean.yml/dispatches", dispatch_urls[0])
         self.assertNotIn("stock-bot.yml/dispatches", dispatch_urls[0])
+
+    def test_render_dispatch_sends_explicit_bot_run_mode(self):
+        client = app.app.test_client()
+        payloads = []
+
+        class Response:
+            status_code = 204
+            text = ""
+
+        def dispatch(url, *args, **kwargs):
+            payloads.append(kwargs.get("json"))
+            return Response()
+
+        with patch.object(app, "run_market_theme_freshness_preflight", return_value=0), patch.object(
+            app,
+            "already_sent",
+            lambda tag: False,
+        ), patch.object(
+            app,
+            "mark_sent",
+            lambda tag: None,
+        ), patch.object(
+            app.requests,
+            "post",
+            dispatch,
+        ), patch.dict(
+            app.os.environ,
+            {"GITHUB_TOKEN": "token"},
+            clear=False,
+        ):
+            response = client.get("/?test=1")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payloads, [{"ref": "main", "inputs": {"run_mode": "bot"}}])
+
+    def test_render_close_dispatch_waits_until_market_theme_safe_write_window(self):
+        client = app.app.test_client()
+        calls = []
+
+        class Response:
+            status_code = 204
+            text = ""
+
+        def dispatch(*args, **kwargs):
+            calls.append("dispatch")
+            return Response()
+
+        with patch.object(app, "datetime", FakeDateTime), patch.object(
+            app,
+            "run_market_theme_freshness_preflight",
+            side_effect=lambda: calls.append("freshness") or 0,
+        ), patch.object(
+            app,
+            "already_sent",
+            side_effect=lambda tag: calls.append(("sent", tag)) or False,
+        ), patch.object(
+            app,
+            "mark_sent",
+            side_effect=lambda tag: calls.append(("mark", tag)),
+        ), patch.object(
+            app.requests,
+            "post",
+            dispatch,
+        ), patch.dict(
+            app.os.environ,
+            {"GITHUB_TOKEN": "token"},
+            clear=False,
+        ):
+            FakeDateTime.fixed_now = real_datetime(2026, 6, 10, 13, 25, 0)
+            early_response = client.get("/")
+            FakeDateTime.fixed_now = real_datetime(2026, 6, 10, 14, 5, 0)
+            close_response = client.get("/")
+
+        self.assertIn("Skip", early_response.get_data(as_text=True))
+        self.assertEqual(close_response.status_code, 200)
+        self.assertEqual(
+            calls,
+            [
+                "freshness",
+                ("sent", "20260610_close"),
+                "dispatch",
+                ("mark", "20260610_close"),
+            ],
+        )
+
+    def test_render_intraday_uses_five_minute_buckets(self):
+        client = app.app.test_client()
+        marked = []
+
+        class Response:
+            status_code = 204
+            text = ""
+
+        with patch.object(app, "datetime", FakeDateTime), patch.object(
+            app,
+            "run_market_theme_freshness_preflight",
+            return_value=0,
+        ), patch.object(
+            app,
+            "already_sent",
+            lambda tag: False,
+        ), patch.object(
+            app,
+            "mark_sent",
+            lambda tag: marked.append(tag),
+        ), patch.object(
+            app.requests,
+            "post",
+            lambda *args, **kwargs: Response(),
+        ), patch.dict(
+            app.os.environ,
+            {"GITHUB_TOKEN": "token"},
+            clear=False,
+        ):
+            FakeDateTime.fixed_now = real_datetime(2026, 6, 10, 9, 4, 0)
+            first = client.get("/")
+            FakeDateTime.fixed_now = real_datetime(2026, 6, 10, 9, 7, 0)
+            second = client.get("/")
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(marked, ["20260610_09_0", "20260610_09_1"])
 
 
 if __name__ == "__main__":
