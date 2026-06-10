@@ -1690,6 +1690,143 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("2026/05 +39.2%", message)
         self.assertNotIn("2026/06", message)
 
+    def test_future_watch_revenue_fallback_never_downgrades_existing_month(self):
+        payload = render_payload(
+            [100, 101, 102, 103, 104, 105],
+            None,
+            price=105,
+            change=1.0,
+        )
+        payload["stock_code"] = "2337"
+        fundamentals_source = {
+            "status": "available",
+            "items_by_code": {
+                "2337": {
+                    "eps": "0.90",
+                    "eps_year": "115",
+                    "eps_quarter": "1",
+                    "revenue_month": "11504",
+                    "revenue_yoy": "153.7",
+                }
+            },
+        }
+
+        def mops_fetcher(code, revenue_month):
+            if revenue_month in {"11505", "11504"}:
+                return None
+            if revenue_month == "11503":
+                return {
+                    "stock_code": "2337",
+                    "revenue_month": "11503",
+                    "revenue_yoy": "96.5",
+                    "source": "MOPS",
+                }
+            return None
+
+        future_payload = build_future_watch_payload(
+            {"旺宏": payload},
+            datetime(2026, 6, 10),
+            historical_source={"samples": []},
+            mops_adapter=lambda **kwargs: {"status": "available", "rows": []},
+            fundamentals_source=fundamentals_source,
+            global_event_source={"status": "available", "items": []},
+            mops_revenue_fetcher=mops_fetcher,
+        )
+        message = format_future_watch_message(future_payload, datetime(2026, 6, 10), generator.VERSION)
+
+        self.assertIn("2026/04 +153.7%", message)
+        self.assertNotIn("2026/03 +96.5%", message)
+
+    def test_future_watch_revenue_fallback_does_not_use_revenue_amount_as_yoy(self):
+        payload = render_payload(
+            [100, 101, 102, 103, 104, 105],
+            None,
+            price=105,
+            change=1.0,
+        )
+        payload["stock_code"] = "2337"
+        fundamentals_source = {
+            "status": "available",
+            "items_by_code": {
+                "2337": {
+                    "eps": "0.90",
+                    "eps_year": "115",
+                    "eps_quarter": "1",
+                    "revenue_month": "11504",
+                    "revenue_yoy": "153.7",
+                }
+            },
+        }
+
+        def mops_fetcher(code, revenue_month):
+            return {
+                "stock_code": "2337",
+                "revenue_month": "11505",
+                "raw_revenue_amount": "6255653",
+                "raw_yoy": "175.80",
+                "raw_cumulative_yoy": "110.85",
+                "source": "MOPS",
+            }
+
+        future_payload = build_future_watch_payload(
+            {"旺宏": payload},
+            datetime(2026, 6, 10),
+            historical_source={"samples": []},
+            mops_adapter=lambda **kwargs: {"status": "available", "rows": []},
+            fundamentals_source=fundamentals_source,
+            global_event_source={"status": "available", "items": []},
+            mops_revenue_fetcher=mops_fetcher,
+        )
+        message = format_future_watch_message(future_payload, datetime(2026, 6, 10), generator.VERSION)
+
+        self.assertIn("2026/05 +175.8%", message)
+        self.assertNotIn("+6255653.0%", message)
+
+    def test_future_watch_revenue_fallback_does_not_show_too_old_month(self):
+        payload = render_payload(
+            [100, 101, 102, 103, 104, 105],
+            None,
+            price=105,
+            change=1.0,
+        )
+        payload["stock_code"] = "2344"
+        fundamentals_source = {
+            "status": "available",
+            "items_by_code": {
+                "2344": {
+                    "eps": "2.25",
+                    "eps_year": "115",
+                    "eps_quarter": "1",
+                }
+            },
+        }
+
+        def mops_fetcher(code, revenue_month):
+            if revenue_month in {"11505", "11504"}:
+                return None
+            if revenue_month == "11503":
+                return {
+                    "stock_code": "2344",
+                    "revenue_month": "11503",
+                    "revenue_yoy": "91.5",
+                    "source": "MOPS",
+                }
+            return None
+
+        future_payload = build_future_watch_payload(
+            {"華邦電": payload},
+            datetime(2026, 6, 10),
+            historical_source={"samples": []},
+            mops_adapter=lambda **kwargs: {"status": "available", "rows": []},
+            fundamentals_source=fundamentals_source,
+            global_event_source={"status": "available", "items": []},
+            mops_revenue_fetcher=mops_fetcher,
+        )
+        message = format_future_watch_message(future_payload, datetime(2026, 6, 10), generator.VERSION)
+
+        self.assertIn("2344 華邦電｜EPS 2026Q1 2.25｜關注原因：候選", message)
+        self.assertNotIn("2026/03 +91.5%", message)
+
     def test_v20_4_47_future_watch_global_event_ranges_sort_and_fail_closed(self):
         payload = {
             "historical_analogy": {"line": "歷史類比：無高相似台股急跌樣本｜依據不足/相似度低"},

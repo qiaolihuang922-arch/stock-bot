@@ -2,8 +2,8 @@
 
 ## Current Task
 
-- task_id: `latest_revenue_month_fallback_20260610`
-- status: `complete`
+- task_id: `revenue_fallback_no_downgrade_20260610`
+- status: `complete_pending_git`
 - version: `v21.0`
 - no live Telegram delivery.
 
@@ -17,16 +17,16 @@
 
 ## Current Changes
 
-- Monthly revenue lookup now rolls automatically by trying latest-to-older MOPS month candidates.
-- Normalized revenue row keys are supported for stable internal merge.
+- Revenue fallback rejects old-month downgrades.
+- Revenue fallback no longer uses revenue amount as YoY.
+- Revenue fallback only accepts latest completed month or one-month fallback.
 - No DB write path, schema, or live Telegram delivery changed.
 
 ## Verification State
 
-- Targeted latest revenue tests: `2 passed, 1 warning`.
-- Generator/state machine suite: `199 passed, 145 warnings, 44 subtests passed`.
-- Official `generate_report(dry_run=True)`: `4` messages, about `58.3s`, no live Telegram delivery.
-- Commit `66658e1` pushed to `origin/main`; equivalent git completion check passed (`HEAD == origin/main`).
+- Targeted revenue tests: `5 passed, 1 warning`.
+- Generator/state machine suite: `202 passed, 145 warnings, 44 subtests passed`.
+- Official `generate_report(dry_run=True)`: `4` messages, `bad_large_pct False`, `too_old False`, no live Telegram delivery.
 
 ## Known Follow-ups
 
