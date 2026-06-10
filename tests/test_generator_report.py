@@ -3266,7 +3266,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("1. 技嘉｜等量能｜不買，等量能回升", summary_message(messages))
         self.assertIn("【技嘉 2376】👀 等量能｜量能不足", unheld_message(messages))
 
-    def test_v20_4_55_volume_blocked_far_weak_market_tracks_instead_of_rejecting(self):
+    def test_v21_far_low_volume_weak_market_waits_market_not_volume(self):
         payload = {
             "stock_code": "3231",
             "price": 163.5,
@@ -3304,12 +3304,12 @@ class GeneratorReportTest(unittest.TestCase):
             report_phase="盤後",
         )
 
-        self.assertEqual(generator.tomorrow_watch_state("緯創", payload), "等量能")
-        self.assertEqual(generator.unheld_funnel_state("緯創", payload), "等量能")
-        self.assertIn("未持倉 1｜僅追蹤 1（等量能）", summary_message(messages))
+        self.assertEqual(generator.tomorrow_watch_state("緯創", payload), "等市場")
+        self.assertEqual(generator.unheld_funnel_state("緯創", payload), "等市場")
+        self.assertIn("未持倉 1｜僅追蹤 1（等市場）", summary_message(messages))
         self.assertNotIn("淘汰 1", summary_message(messages))
-        self.assertIn("【緯創 3231】👀 等量能｜量能不足", unheld_message(messages))
-        self.assertIn("明日觸發：量能回升且重新接近買點", unheld_message(messages))
+        self.assertIn("【緯創 3231】⏳ 等市場｜市場弱", unheld_message(messages))
+        self.assertIn("明日觸發：市場轉強後重新評估 setup", unheld_message(messages))
         self.assertNotIn("【緯創 3231】⛔ 淘汰", unheld_message(messages))
 
     def test_v19_4_backtest_changes_tracking_order_only(self):
@@ -9050,7 +9050,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("未持倉 9｜趨勢延續 1｜可準備 1（不可買）", summary)
         self.assertIn("僅追蹤 5", summary)
         self.assertIn("淘汰 2", summary)
-        self.assertIn("【台積電 2330】⏳ 等回測｜RR不足", rr_card)
+        self.assertIn("【台積電 2330】👀 等RR修復｜RR不足", rr_card)
         self.assertIn("卡關主因：RR不足", rr_card)
         self.assertIn("量化差距：RR 0.98｜需>=1.5｜差0.52｜距突破 6%｜需<=4%｜差2%", rr_card)
         self.assertIn("解鎖：風險報酬比修復到 >=1.5", rr_card)
@@ -9066,7 +9066,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("解鎖：降溫後重新評估", hot_card)
         self.assertNotIn("RR 1.4｜需>=1.5", hot_card)
         self.assertNotIn("進場品質", hot_card)
-        self.assertIn("【華邦電 2344】⏳ 等回測｜過熱 Lv.3", extreme_card)
+        self.assertIn("【華邦電 2344】⏳ 等冷卻｜過熱 Lv.3", extreme_card)
         self.assertIn("卡關主因：熱度 Lv.3", extreme_card)
         self.assertIn("量化差距：熱度 Lv.3｜需降至 Lv.1/觀察以下", extreme_card)
         self.assertIn("解鎖：降溫後重新評估", extreme_card)

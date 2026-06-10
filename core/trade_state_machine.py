@@ -3,6 +3,7 @@ STATE_LABELS = {
     "WATCH": "觀察",
     "WAIT_DATA": "等資料",
     "WAIT_MARKET": "等市場",
+    "WAIT_SETUP": "等型態",
     "WAIT_VOLUME": "等量能",
     "WAIT_PULLBACK": "等回測",
     "WAIT_RR": "等RR修復",
@@ -48,6 +49,7 @@ ACTION_BY_STATE = {
     "WATCH": "WATCH",
     "WAIT_DATA": "WAIT",
     "WAIT_MARKET": "WAIT",
+    "WAIT_SETUP": "WAIT",
     "WAIT_VOLUME": "WAIT",
     "WAIT_PULLBACK": "WAIT",
     "WAIT_RR": "WAIT",
@@ -68,6 +70,8 @@ UNHELD_FUNNEL_STATE_MAP = {
     "趨勢延續": "BUYABLE",
     "可準備": "READY",
     "等量能": "WAIT_VOLUME",
+    "等市場": "WAIT_MARKET",
+    "等型態": "WAIT_SETUP",
     "等回測": "WAIT_PULLBACK",
     "等RR修復": "WAIT_RR",
     "等冷卻": "WAIT_COOLDOWN",
@@ -79,6 +83,8 @@ UNHELD_FUNNEL_STATE_MAP = {
 WATCH_STATE_MAP = {
     "可買": "BUYABLE",
     "等量能": "WAIT_VOLUME",
+    "等市場": "WAIT_MARKET",
+    "等型態": "WAIT_SETUP",
     "等回測": "WAIT_PULLBACK",
     "等RR修復": "WAIT_RR",
     "等冷卻": "WAIT_COOLDOWN",
@@ -111,6 +117,12 @@ UNHELD_STATE_META = {
         "is_actionable": False,
         "is_terminal": False,
         "next_required_event": "MARKET_STRENGTH_CONFIRMED",
+    },
+    "WAIT_SETUP": {
+        "phase": "SETUP_GATE",
+        "is_actionable": False,
+        "is_terminal": False,
+        "next_required_event": "SETUP_FORMED",
     },
     "WAIT_VOLUME": {
         "phase": "ENTRY_GATE",
@@ -359,6 +371,48 @@ def _source_blocker(source_status):
     return None
 
 
+def _setup_type(result):
+    decision_type = result.get("decision_type")
+    phase = result.get("structure_phase")
+    behavior = result.get("price_behavior")
+    entry_profile = result.get("entry_profile")
+    entry_stage = result.get("entry_stage")
+    breakout_state = result.get("breakout_state")
+    distance = _as_float(result.get("breakout_distance") or result.get("distance_to_breakout"))
+    trend = result.get("trend")
+    structure = result.get("structure_state")
+
+    if decision_type in {"trend_continuation", "trend_observation"}:
+        return "TREND_CONTINUATION"
+    if entry_stage == "PULLBACK_RECLAIM" or entry_profile == "BUY_RECLAIM_CONFIRM":
+        return "PULLBACK_RECLAIM"
+    if phase in {"SHAKEOUT", "HEALTHY_PULLBACK"} or behavior == "LOW_VOLUME_PULLBACK":
+        return "PULLBACK_RECLAIM"
+    if decision_type in {"breakout", "wait_breakout_confirm", "wait_breakout_low_rr"}:
+        return "BREAKOUT_CONFIRM"
+    if decision_type in {"pre_breakout", "wait_pre_breakout", "wait_pre_breakout_low_rr"}:
+        return "PRE_BREAKOUT"
+    if breakout_state == "BREAKOUT":
+        return "BREAKOUT_CONFIRM"
+    if phase in {"BREAKOUT_NEAR", "READY_BREAKOUT"}:
+        return "PRE_BREAKOUT"
+    if breakout_state == "READY" or (distance is not None and 0 <= distance <= 4):
+        return "PRE_BREAKOUT"
+    if phase == "BASE" and trend == "UP" and structure in {"STRONG", "NORMAL"}:
+        return "BASE_REVERSAL"
+    return "NO_SETUP"
+
+
+def _volume_is_primary_gate(result):
+    setup = _setup_type(result)
+    distance = _as_float(result.get("breakout_distance") or result.get("distance_to_breakout"))
+    if setup in {"TREND_CONTINUATION", "PULLBACK_RECLAIM"}:
+        return False
+    if setup in {"BREAKOUT_CONFIRM", "PRE_BREAKOUT", "BASE_REVERSAL"}:
+        return distance is None or distance <= 6
+    return False
+
+
 def _unheld_guard_snapshot(data, source_status=None):
     result = (data or {}).get("result") or {}
     guards = []
@@ -367,8 +421,13 @@ def _unheld_guard_snapshot(data, source_status=None):
         guards.append(source_blocker)
     if result.get("market_grade") in {"D", "E"} or result.get("market_state") in {"weak", "bear"}:
         guards.append("MARKET_WEAK")
+    setup = _setup_type(result)
+    if setup == "NO_SETUP":
+        guards.append("SETUP_NOT_READY")
     if result.get("volume_state") == "WEAK" or result.get("trade_state") == "NO_VOLUME":
         guards.append("VOLUME_WEAK")
+        if not _volume_is_primary_gate(result):
+            guards.append("VOLUME_NOT_PRIMARY")
     rr = _as_float(result.get("rr"))
     if rr is None:
         guards.append("RR_MISSING")
@@ -395,6 +454,7 @@ def _transition_event_for_state(state, *, source_status=None):
         "WATCH": "WATCHLIST_RETAINED",
         "WAIT_DATA": "DATA_GATE_FAILED",
         "WAIT_MARKET": "MARKET_GATE_FAILED",
+        "WAIT_SETUP": "SETUP_NOT_READY",
         "WAIT_VOLUME": "VOLUME_GATE_FAILED",
         "WAIT_PULLBACK": "PULLBACK_GATE_FAILED",
         "WAIT_RR": "RR_GATE_FAILED",
@@ -423,24 +483,38 @@ def _unheld_event_from_target(target_state, *, source_status=None, guards=None):
         return "DATA_GATE_FAILED"
     guard_set = set(guards or [])
     if target_state == "WATCH":
-        if "VOLUME_WEAK" in guard_set:
-            return "VOLUME_GATE_FAILED"
-        if "HEAT_NOT_COOL" in guard_set:
-            return "COOLDOWN_GATE_FAILED"
-        if "RR_BELOW_MIN" in guard_set or "RR_MISSING" in guard_set:
-            return "RR_GATE_FAILED"
-        if "TOO_FAR_FROM_TRIGGER" in guard_set:
-            return "PULLBACK_GATE_FAILED"
-        if "MARKET_WEAK" in guard_set:
-            return "MARKET_GATE_FAILED"
         if _source_blocker(source_status):
             return "DATA_GATE_FAILED"
+        if "MARKET_WEAK" in guard_set:
+            return "MARKET_GATE_FAILED"
+        if "SETUP_NOT_READY" in guard_set:
+            return "SETUP_NOT_READY"
+        if "STRUCTURE_FAILED" in guard_set:
+            return "PULLBACK_GATE_FAILED"
+        if "HEAT_NOT_COOL" in guard_set:
+            return "COOLDOWN_GATE_FAILED"
+        if "VOLUME_WEAK" in guard_set and "VOLUME_NOT_PRIMARY" not in guard_set:
+            return "VOLUME_GATE_FAILED"
+        if "RR_BELOW_MIN" in guard_set or "RR_MISSING" in guard_set:
+            return "RR_GATE_FAILED"
+        if "VOLUME_WEAK" in guard_set:
+            return "VOLUME_GATE_FAILED"
+        if "TOO_FAR_FROM_TRIGGER" in guard_set:
+            return "PULLBACK_GATE_FAILED"
     return _transition_event_for_state(target_state, source_status=source_status)
 
 
 def _apply_unheld_transition(previous_state, event):
     origin = previous_state or "UNKNOWN"
     transitions = UNHELD_TRANSITION_TABLE.get(origin) or UNHELD_TRANSITION_TABLE["UNKNOWN"]
+    if event == "SETUP_NOT_READY":
+        return {
+            "from": origin,
+            "event": event,
+            "to": "WAIT_SETUP",
+            "allowed": True,
+            "table": "UNHELD_TRANSITION_TABLE",
+        }
     if event in transitions:
         return {
             "from": origin,
@@ -522,7 +596,9 @@ def evaluate_unheld_state(
     blocked_by = []
     if source_blocker:
         blocked_by.append(source_blocker)
-    if state == "WAIT_VOLUME":
+    if state == "WAIT_SETUP":
+        blocked_by.append("SETUP_NOT_READY")
+    elif state == "WAIT_VOLUME":
         blocked_by.append("VOLUME_WEAK")
     elif state == "WAIT_PULLBACK":
         blocked_by.append("PULLBACK_NOT_CONFIRMED")
@@ -561,6 +637,7 @@ def evaluate_unheld_state(
         "next_required_event": meta["next_required_event"],
         "guards": guards,
         "blocked_by": blocked_by,
+        "setup_type": _setup_type(result),
         "requires_order_lifecycle": False,
         "source": "derived-readonly",
         "db_write": False,
@@ -617,6 +694,7 @@ def build_state_artifact(results_map):
             "next_required_event": state.get("next_required_event"),
             "guards": state.get("guards") or [],
             "blocked_by": state.get("blocked_by") or [],
+            "setup_type": state.get("setup_type"),
             "requires_order_lifecycle": state.get("requires_order_lifecycle", False),
             "source": state.get("source"),
             "db_write": False,

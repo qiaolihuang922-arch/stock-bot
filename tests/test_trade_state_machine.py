@@ -157,8 +157,9 @@ class TradeStateMachineTest(unittest.TestCase):
         self.assertTrue(buyable["is_actionable"])
         self.assertEqual(buyable["next_required_event"], "SUBMIT_ORDER")
 
-    def test_unheld_transition_uses_guards_when_labels_are_missing(self):
+    def test_unheld_transition_uses_setup_guard_when_labels_are_missing(self):
         payload = _watch_payload()
+        payload["result"]["market_grade"] = "B"
         state = evaluate_unheld_state(
             "緯創",
             payload,
@@ -167,11 +168,13 @@ class TradeStateMachineTest(unittest.TestCase):
             source_status="available",
         )
 
-        self.assertEqual(state["transition_event"], "VOLUME_GATE_FAILED")
-        self.assertEqual(state["state"], "WAIT_VOLUME")
+        self.assertEqual(state["transition_event"], "SETUP_NOT_READY")
+        self.assertEqual(state["state"], "WAIT_SETUP")
         self.assertEqual(state["target_state"], "WATCH")
+        self.assertIn("SETUP_NOT_READY", state["guards"])
         self.assertIn("VOLUME_WEAK", state["guards"])
-        self.assertIn("VOLUME_WEAK", state["blocked_by"])
+        self.assertIn("VOLUME_NOT_PRIMARY", state["guards"])
+        self.assertIn("SETUP_NOT_READY", state["blocked_by"])
 
     def test_unheld_buyable_with_source_error_fails_closed_before_order_lifecycle(self):
         payload = _watch_payload()
@@ -215,7 +218,7 @@ class TradeStateMachineTest(unittest.TestCase):
 
         unheld = messages[1]
         self.assertIn("【06/08 盤後｜v21.0】", unheld)
-        self.assertIn("交易狀態：等量能｜動作：等待｜還差：量能確認", unheld)
+        self.assertIn("交易狀態：等市場｜動作：等待｜還差：市場轉強", unheld)
         self.assertNotIn("交易狀態：不可行動", unheld)
 
 

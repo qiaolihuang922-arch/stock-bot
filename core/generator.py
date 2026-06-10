@@ -609,7 +609,7 @@ def entry_blockers(result):
     if rr is not None and rr < 1 and result.get("decision") != "FAIL":
         labels.append("RR不足")
 
-    if trade == "NO_VOLUME" or result.get("volume_state") == "WEAK":
+    if (trade == "NO_VOLUME" or result.get("volume_state") == "WEAK") and volume_is_primary_gate(result):
         labels.append("量能不足")
 
     if result.get("market_grade") == "D":
@@ -619,6 +619,57 @@ def entry_blockers(result):
         labels.append("遠離觸發")
 
     return list(dict.fromkeys(labels))
+
+
+def result_setup_type(result):
+
+    result = result or {}
+    decision_type = result.get("decision_type")
+    phase = result.get("structure_phase")
+    behavior = result.get("price_behavior")
+    entry_profile = result.get("entry_profile")
+    entry_stage = result.get("entry_stage")
+    breakout_state = result.get("breakout_state")
+    trend = result.get("trend")
+    structure = result.get("structure_state")
+    try:
+        distance = float(result.get("breakout_distance"))
+    except (TypeError, ValueError):
+        distance = None
+
+    if decision_type in {"trend_continuation", "trend_observation"}:
+        return "TREND_CONTINUATION"
+    if entry_stage == "PULLBACK_RECLAIM" or entry_profile == "BUY_RECLAIM_CONFIRM":
+        return "PULLBACK_RECLAIM"
+    if phase in {"SHAKEOUT", "HEALTHY_PULLBACK"} or behavior == "LOW_VOLUME_PULLBACK":
+        return "PULLBACK_RECLAIM"
+    if decision_type in {"breakout", "wait_breakout_confirm", "wait_breakout_low_rr"}:
+        return "BREAKOUT_CONFIRM"
+    if decision_type in {"pre_breakout", "wait_pre_breakout", "wait_pre_breakout_low_rr"}:
+        return "PRE_BREAKOUT"
+    if breakout_state == "BREAKOUT":
+        return "BREAKOUT_CONFIRM"
+    if phase in {"BREAKOUT_NEAR", "READY_BREAKOUT"}:
+        return "PRE_BREAKOUT"
+    if breakout_state == "READY" or (distance is not None and 0 <= distance <= 4):
+        return "PRE_BREAKOUT"
+    if phase == "BASE" and trend == "UP" and structure in {"STRONG", "NORMAL"}:
+        return "BASE_REVERSAL"
+    return "NO_SETUP"
+
+
+def volume_is_primary_gate(result):
+
+    setup = result_setup_type(result)
+    try:
+        distance = float((result or {}).get("breakout_distance"))
+    except (TypeError, ValueError):
+        distance = None
+    if setup in {"TREND_CONTINUATION", "PULLBACK_RECLAIM"}:
+        return False
+    if setup in {"BREAKOUT_CONFIRM", "PRE_BREAKOUT", "BASE_REVERSAL"}:
+        return distance is None or distance <= 6
+    return False
 
 
 def has_chase_hard_blocker(result, blockers=None):
@@ -2759,20 +2810,30 @@ def tomorrow_watch_state(name, data):
     if _unheld_structural_reject(result, blockers):
         return "弱勢淘汰"
 
-    if "量能不足" in blockers:
-        return "等量能"
-
-    if label == "遠離觸發" or "遠離觸發" in blockers:
-        return "等回測"
-
     if behavior in ["LIMIT_LOCK", "LIMIT_REBOUND"] or label in ["漲停不追", "漲停反彈待確認"]:
         return "等回測" if behavior == "LIMIT_LOCK" or label == "漲停不追" else "隔日確認"
 
     if heat in ["HOT", "EXTREME"] or trade in ["EXTENDED", "AVOID"] or label == "過熱觀察":
         return "等冷卻"
 
+    if label == "市場弱" or "市場弱" in blockers:
+        return "等市場"
+
+    if "量能不足" in blockers:
+        return "等量能"
+
     if label == "RR不足" or trade == "LATE_ENTRY" or "RR不足" in blockers:
         return "等RR修復"
+
+    if result_setup_type(result) == "NO_SETUP" and (
+        label == "遠離觸發"
+        or "遠離觸發" in blockers
+        or not blockers
+    ):
+        return "等型態"
+
+    if label == "遠離觸發" or "遠離觸發" in blockers:
+        return "等回測"
 
     return "隔日確認"
 
@@ -2786,6 +2847,12 @@ def tomorrow_trigger_text(state, data):
 
     if state == "等冷卻":
         return "過熱降溫且回測不破"
+
+    if state == "等市場":
+        return "市場轉強後重新評估 setup"
+
+    if state == "等型態":
+        return "重新形成買點 setup，再評估"
 
     if state == "等回測":
         return "回測不破且非漲停追價"
@@ -3089,6 +3156,8 @@ def tracking_sort_key(index, name, data):
     state_rank = {
         "可買": 0,
         "等冷卻": 1,
+        "等市場": 2,
+        "等型態": 2,
         "等回測": 2,
         "等RR修復": 3,
         "等量能": 4,
@@ -3146,6 +3215,8 @@ def format_pending_candidates_grouped(watch_items):
     groups = {
         "可買": [],
         "等冷卻": [],
+        "等市場": [],
+        "等型態": [],
         "等回測": [],
         "等RR修復": [],
         "等量能": [],
@@ -3158,7 +3229,7 @@ def format_pending_candidates_grouped(watch_items):
         groups.setdefault(state, []).append((index, name, data))
 
     lines = []
-    for label in ["可買", "等冷卻", "等回測", "等RR修復", "等量能", "隔日確認", "弱勢淘汰"]:
+    for label in ["可買", "等冷卻", "等市場", "等型態", "等回測", "等RR修復", "等量能", "隔日確認", "弱勢淘汰"]:
         values = sorted(
             groups.get(label, []),
             key=lambda item: tracking_sort_key(item[0], item[1], item[2])
@@ -5722,6 +5793,12 @@ def unheld_funnel_assessment(name, data, market_mode=None, report_context=None):
     if state == "等回測":
         return "等回測", None
 
+    if state == "等市場":
+        return "等市場", None
+
+    if state == "等型態":
+        return "等型態", None
+
     if state == "等RR修復":
         return "等RR修復", None
 
@@ -5755,6 +5832,8 @@ def unheld_funnel_state(name, data, market_mode=None, report_context=None):
             fallback_state = tomorrow_watch_state(name, data)
         state = fallback_state if fallback_state in {
             "等冷卻",
+            "等市場",
+            "等型態",
             "等回測",
             "等RR修復",
             "等量能",
@@ -5859,11 +5938,17 @@ def unheld_execution_trigger(funnel_state, data):
     if funnel_state == "等冷卻":
         return "不追價，等冷卻降溫"
 
+    if funnel_state == "等市場":
+        return "不買，等市場轉強"
+
     if funnel_state == "等回測":
         return "不追價，回測不破且降溫再評估"
 
     if funnel_state == "等RR修復":
         return "不追價，等RR達標"
+
+    if funnel_state == "等型態":
+        return "不買，等型態形成"
 
     if funnel_state == "等量能":
         return "不買，等量能回升"
@@ -5879,6 +5964,8 @@ def unheld_execution_priority(index, name, data, market_mode=None, report_contex
         "趨勢延續": 1,
         "可準備": 3,
         "等冷卻": 4,
+        "等市場": 5,
+        "等型態": 5,
         "等回測": 5,
         "等RR修復": 6,
         "等量能": 7,
@@ -5929,6 +6016,8 @@ def build_unheld_funnel(watch_items, market_mode=None, report_context=None):
         "趨勢延續": [],
         "可準備": [],
         "等冷卻": [],
+        "等市場": [],
+        "等型態": [],
         "等回測": [],
         "等RR修復": [],
         "等量能": [],
@@ -6000,7 +6089,7 @@ def unheld_tracking_count(funnel):
 
     return sum(
         len(funnel[label])
-        for label in ["可準備", "等冷卻", "等回測", "等RR修復", "等量能", "隔日確認"]
+        for label in ["可準備", "等冷卻", "等市場", "等型態", "等回測", "等RR修復", "等量能", "隔日確認"]
     )
 
 
@@ -6008,7 +6097,7 @@ def unheld_tracking_only_count(funnel):
 
     return sum(
         len(funnel[label])
-        for label in ["等冷卻", "等回測", "等RR修復", "等量能", "隔日確認"]
+        for label in ["等冷卻", "等市場", "等型態", "等回測", "等RR修復", "等量能", "隔日確認"]
     )
 
 
@@ -6393,7 +6482,7 @@ def format_unheld_funnel(watch_items, market_mode=None, report_context=None):
     # 僅追蹤分桶：只有一桶時直接標桶名（不重複數字），多桶時內聯各桶數，避免「拆分」「合計」重複行。
     track_buckets = [
         (label, len(funnel[label]))
-        for label in ["等冷卻", "等回測", "等RR修復", "等量能"]
+        for label in ["等冷卻", "等市場", "等型態", "等回測", "等RR修復", "等量能"]
         if funnel[label]
     ]
     if len(track_buckets) == 1:
@@ -6625,7 +6714,7 @@ def _report_conflicts(messages):
     summary = messages[-1]
     conflicts = []
     buy_markers = re.findall(r"新倉[:：][^\n]*?([\u4e00-\u9fffA-Za-z0-9]{2,12})\s*可買", summary)
-    blocking_terms = ("不可買", "等冷卻", "等回測", "等RR修復", "等量能", "淘汰")
+    blocking_terms = ("不可買", "等冷卻", "等市場", "等型態", "等回測", "等RR修復", "等量能", "淘汰")
     for marker in buy_markers:
         if marker in {"無有效進場", "無", "今日"}:
             continue

@@ -2,49 +2,49 @@
 
 ## Active
 
-- task_md_holds: `revenue_fallback_no_downgrade_20260610`
+- task_md_holds: `setup_aware_volume_fsm_20260610`
 - status: `complete`
 - owner_request:
-  - Analyze incorrect revenue output in the pasted v21.0 report.
-  - Fix old-month downgrade and impossible revenue YoY values.
+  - Global code scan and best fix for volume handling, trade state machine usefulness, and far-distance buyable contexts.
+  - Use DB history where possible.
   - No live Telegram delivery.
 
 ## Current Result
 
 - Version remains `v21.0`.
-- Revenue fallback now rejects older MOPS months when an existing newer month is present.
-- Revenue fallback no longer treats revenue amount as YoY percentage.
-- 2026/06 runs only accept 2026/05 or 2026/04 revenue; older months are omitted.
-- Official dry-run generated 4 messages and did not run live Telegram delivery.
-- Official dry-run check: `bad_large_pct False`, `too_old False`.
-- Commit `eca967c` pushed to `origin/main`; equivalent git completion check passed (`HEAD == origin/main`).
+- Unheld state is now gate-specific: `等市場`, `等型態`, `等量能`, `等回測`, `等RR修復`, `等冷卻`.
+- Low volume is primary only for breakout / pre-breakout contexts; far weak-market names no longer become volume-only waits.
+- Current official dry-run unheld summary: `未持倉 7｜僅追蹤 7（等市場）`.
+- Added read-only volume calibration artifact from `daily_signal_snapshot + daily_price`; no DB write or schema change.
 
 ## Recently Done
 
-- `revenue_fallback_no_downgrade_20260610`: fixed revenue downgrade and amount-as-YoY errors.
-- `latest_revenue_month_fallback_20260610`: latest available revenue month fallback implemented and tested.
+- `setup_aware_volume_fsm_20260610`: setup-aware volume gate, market/setup state split, read-only volume calibration artifact.
+- `revenue_fallback_no_downgrade_20260610`: fixed stale revenue downgrade and amount-as-YoY errors.
 - `report_revenue_noise_fsm_20260610`: MOPS revenue freshness fallback, closing-card denoise, and unheld FSM visible-line improvement.
 
 ## Verification
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py::GeneratorReportTest::test_future_watch_refreshes_stale_openapi_revenue_with_mops_month tests/test_generator_report.py::GeneratorReportTest::test_future_watch_revenue_fallback_uses_latest_available_month tests/test_generator_report.py::GeneratorReportTest::test_future_watch_revenue_fallback_never_downgrades_existing_month tests/test_generator_report.py::GeneratorReportTest::test_future_watch_revenue_fallback_does_not_use_revenue_amount_as_yoy tests/test_generator_report.py::GeneratorReportTest::test_future_watch_revenue_fallback_does_not_show_too_old_month -q --tb=short
+.\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py tests/test_trade_state_machine.py tests/test_analysis_engine.py tests/test_strategy_evidence.py tests/test_volume_calibration.py -q --tb=short
 ```
 
-Result: `5 passed, 1 warning`.
-
-```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py tests/test_trade_state_machine.py -q --tb=short
-```
-
-Result: `202 passed, 145 warnings, 44 subtests passed`.
+Result: `258 passed, 145 warnings, 44 subtests passed`.
 
 ```powershell
 $env:PYTHONIOENCODING='utf-8'
-.\.venv\Scripts\python.exe -c "from core.generator import generate_report; from time import perf_counter; s=perf_counter(); messages,_=generate_report(dry_run=True); joined='\\n'.join(messages); print('messages', len(messages)); print('elapsed_seconds', round(perf_counter()-s,2)); print('bad_large_pct', any(x in joined for x in ['+6255653.0%', '+290183471.0%', '+20647675.0%'])); print('too_old', any(x in joined for x in ['營收 2026/03', '營收 2026/02']))"
+.\.venv\Scripts\python.exe -c "from core.generator import generate_report; messages,_=generate_report(dry_run=True); print('messages',len(messages)); print('\n--- MESSAGE ---\n'.join(messages))"
 ```
 
-Result: `messages 4`, `elapsed_seconds 68.47`, `bad_large_pct False`, `too_old False`.
+Result: `messages 4`; no live Telegram delivery.
+
+Read-only DB calibration result:
+
+- `source=daily_signal_snapshot+daily_price`
+- `db_write=false`
+- `schema_change=false`
+- `source_status=available`
+- contexts: `near_breakout`, `pullback`, `far_weak_market`, `far_no_breakout_setup`
 
 ## Fixed Commands
 
@@ -53,9 +53,9 @@ Local dry-run only:
 ```powershell
 cd D:\reserch\stock-bot
 $env:PYTHONIOENCODING='utf-8'
-.\.venv\Scripts\python.exe -c "from core.generator import generate_report; messages, _ = generate_report(dry_run=True); print('\\n--- MESSAGE ---\\n'.join(messages))"
+.\.venv\Scripts\python.exe -c "from core.generator import generate_report; messages, _ = generate_report(dry_run=True); print('\n--- MESSAGE ---\n'.join(messages))"
 ```
 
 ## Next Action
 
-- Owner review of revenue fallback correction.
+- Commit/push current patch and run git completion check.

@@ -2,8 +2,8 @@
 
 ## Current Task
 
-- task_id: `revenue_fallback_no_downgrade_20260610`
-- status: `complete`
+- task_id: `setup_aware_volume_fsm_20260610`
+- status: `complete, pending commit/push`
 - version: `v21.0`
 - no live Telegram delivery.
 
@@ -17,19 +17,18 @@
 
 ## Current Changes
 
-- Revenue fallback rejects old-month downgrades.
-- Revenue fallback no longer uses revenue amount as YoY.
-- Revenue fallback only accepts latest completed month or one-month fallback.
-- No DB write path, schema, or live Telegram delivery changed.
+- Unheld FSM and report now distinguish `WAIT_MARKET`, `WAIT_SETUP`, `WAIT_VOLUME`, `WAIT_PULLBACK`, `WAIT_RR`, and `WAIT_COOLDOWN` visible states.
+- Volume is primary only for breakout / pre-breakout contexts; far weak-market candidates wait for market/setup first.
+- Distance from breakout is context-sensitive and no longer a universal blocker.
+- Added read-only volume calibration artifact using DB history; no DB write or schema change.
 
 ## Verification State
 
-- Targeted revenue tests: `5 passed, 1 warning`.
-- Generator/state machine suite: `202 passed, 145 warnings, 44 subtests passed`.
-- Official `generate_report(dry_run=True)`: `4` messages, `bad_large_pct False`, `too_old False`, no live Telegram delivery.
-- Commit `eca967c` pushed to `origin/main`; equivalent git completion check passed (`HEAD == origin/main`).
+- Broad suite: `258 passed, 145 warnings, 44 subtests passed`.
+- Official `generate_report(dry_run=True)`: `4` messages, no live Telegram delivery.
+- Read-only DB calibration artifact: `source_status=available`, `db_write=false`, `schema_change=false`.
 
 ## Known Follow-ups
 
-- MOPS monthly revenue fallback is best-effort and can time out per target.
-- CAO TUI automation gap remains separate from this product patch.
+- Wire calibration artifact into adaptive strategy thresholds only after Owner approves the next strategy tuning task.
+- MOPS/TWSE external sources can still time out; those paths remain fail-closed.

@@ -876,7 +876,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
             if funnel_state == "淘汰"
             else (blockers[0] if blockers else deps["final_label"](stock_result))
         )
-    if not valid_entry and funnel_state in ["等冷卻", "等回測", "等RR修復", "等量能", "隔日確認", "淘汰"]:
+    if not valid_entry and funnel_state in ["等冷卻", "等市場", "等型態", "等回測", "等RR修復", "等量能", "隔日確認", "淘汰"]:
         state = funnel_state
     if deps["is_valid_entry"](stock_result) and strategy_source_blocked:
         title_label = {
@@ -910,7 +910,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     elif funnel_state == "可準備":
         title_icon = "👀"
         title_action = "可準備" if data.get("evidence_adjustment_reason") else deps["unheld_non_actionable_prepare_label"](data)
-    elif state in ["等冷卻", "等回測"]:
+    elif state in ["等冷卻", "等市場", "等型態", "等回測"]:
         title_icon = "⏳"
         title_action = state
     elif state in ["等RR修復", "等量能", "隔日確認"]:
