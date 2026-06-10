@@ -3,7 +3,7 @@
 ## Current Task
 
 - task_id: `setup_aware_volume_fsm_20260610`
-- status: `complete, pending commit/push`
+- status: `complete`
 - version: `v21.0`
 - no live Telegram delivery.
 
@@ -27,6 +27,7 @@
 - Broad suite: `258 passed, 145 warnings, 44 subtests passed`.
 - Official `generate_report(dry_run=True)`: `4` messages, no live Telegram delivery.
 - Read-only DB calibration artifact: `source_status=available`, `db_write=false`, `schema_change=false`.
+- Commit `85159a3` created locally; final push/completion gate follows this closeout.
 
 ## Known Follow-ups
 
