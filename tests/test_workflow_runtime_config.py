@@ -1,4 +1,5 @@
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -29,8 +30,27 @@ def _workflow_run_script(step_name):
     return "\n".join(line[10:] if line.startswith("          ") else line for line in lines[start:end])
 
 
+def _local_bash_available():
+    if not shutil.which("bash"):
+        return False
+    completed = subprocess.run(
+        ["bash", "-c", "exit 0"],
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        capture_output=True,
+        check=False,
+    )
+    return completed.returncode == 0
+
+
 class WorkflowRuntimeConfigTest(unittest.TestCase):
+    def _require_local_bash(self):
+        if not _local_bash_available():
+            self.skipTest("local bash is unavailable; workflow shell contract is covered by static assertions")
+
     def _run_create_runtime_config(self, env):
+        self._require_local_bash()
         script = _create_runtime_config_script().replace("python - <<'PY'", f'"{sys.executable}" - <<\'PY\'')
         runtime_env = os.environ.copy()
         runtime_env.update(env)
@@ -39,6 +59,8 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
                 ["bash", "-e", "-c", script],
                 cwd=tmpdir,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 capture_output=True,
                 check=False,
                 env=runtime_env,
@@ -145,8 +167,8 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
         self.assertIn("name: Stock Bot", workflow_text)
         self.assertNotIn("push:", workflow_text)
         self.assertIn("schedule:", workflow_text)
-        self.assertIn('cron: "0 6 * * 1-5"', workflow_text)
-        self.assertIn('cron: "10 6 * * 1-5"', workflow_text)
+        self.assertIn('cron: "20 8 * * 1-5"', workflow_text)
+        self.assertIn('cron: "25 8 * * 1-5"', workflow_text)
         self.assertIn("run_mode:", workflow_text)
         self.assertIn("- daily_evidence", workflow_text)
         self.assertNotIn("stock-bot.yml", "\n".join(str(path) for path in (ROOT / ".github/workflows").glob("*")))
@@ -162,16 +184,19 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
         self.assertIn('Run bot skipped for run_mode=$RUN_MODE', workflow_text)
         self.assertIn("Run Phase 3 evidence automation", workflow_text)
         self.assertIn("python scripts/run_phase3_evidence_automation.py $payload_arg", workflow_text)
-        self.assertIn("github.event.schedule == '0 6 * * 1-5' && 'daily_evidence'", workflow_text)
-        self.assertIn("github.event.schedule == '10 6 * * 1-5' && 'bot'", workflow_text)
+        self.assertIn("github.event.schedule == '20 8 * * 1-5' && 'daily_evidence'", workflow_text)
+        self.assertIn("github.event.schedule == '25 8 * * 1-5' && 'bot'", workflow_text)
 
     def test_scheduled_daily_evidence_mode_skips_live_bot_delivery(self):
+        self._require_local_bash()
         script = _workflow_run_script("Run bot (retry 3 times)")
         runtime_env = os.environ.copy()
         runtime_env["RUN_MODE"] = "daily_evidence"
         completed = subprocess.run(
             ["bash", "-e", "-c", script],
             text=True,
+            encoding="utf-8",
+            errors="replace",
             capture_output=True,
             check=False,
             env=runtime_env,
@@ -181,6 +206,7 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
         self.assertIn("Run bot skipped for run_mode=daily_evidence", completed.stdout)
 
     def test_scheduled_bot_mode_invokes_main_without_live_network(self):
+        self._require_local_bash()
         script = _workflow_run_script("Run bot (retry 3 times)")
         runtime_env = os.environ.copy()
         runtime_env["RUN_MODE"] = "bot"
@@ -199,6 +225,8 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
                 ["bash", "-e", "-c", script],
                 cwd=tmpdir,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 capture_output=True,
                 check=False,
                 env=runtime_env,
@@ -210,6 +238,7 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
         self.assertNotIn("Run bot skipped", completed.stdout)
 
     def test_phase3_evidence_step_preserves_market_theme_write_cli_path(self):
+        self._require_local_bash()
         script = _workflow_run_script("Run Phase 3 evidence automation")
         runtime_env = os.environ.copy()
         runtime_env["RUN_MODE"] = "daily_evidence"
@@ -229,6 +258,8 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
                 ["bash", "-e", "-c", script],
                 cwd=tmpdir,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 capture_output=True,
                 check=False,
                 env=runtime_env,
@@ -240,6 +271,7 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
         self.assertIn("--market-theme-payload market_theme_approved_payload.json", calls)
 
     def test_phase3_evidence_step_uses_official_twse_payload_when_secret_missing(self):
+        self._require_local_bash()
         script = _workflow_run_script("Run Phase 3 evidence automation")
         runtime_env = os.environ.copy()
         runtime_env["RUN_MODE"] = "daily_evidence"
@@ -259,6 +291,8 @@ class WorkflowRuntimeConfigTest(unittest.TestCase):
                 ["bash", "-e", "-c", script],
                 cwd=tmpdir,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 capture_output=True,
                 check=False,
                 env=runtime_env,

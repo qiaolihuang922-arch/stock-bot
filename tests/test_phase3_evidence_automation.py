@@ -198,16 +198,16 @@ class Phase3EvidenceAutomationTest(unittest.TestCase):
             output,
         )
 
-    def test_main_confirmed_trading_day_after_close_runs_both_writes(self):
+    def test_main_confirmed_trading_day_after_close_runs_daily_and_freshness_backfill(self):
         calls = []
 
         def fake_daily(trading_day):
             calls.append(("daily", trading_day))
             return 0
 
-        def fake_market(trading_day, payload_path=None):
-            calls.append(("market", trading_day, payload_path))
-            return 0
+        def fake_freshness(now=None, lookback_days=None, safe_write_time=None):
+            calls.append(("freshness", now.date().isoformat(), lookback_days, safe_write_time))
+            return {"status": "ok"}
 
         out = io.StringIO()
         with patch.object(
@@ -220,13 +220,50 @@ class Phase3EvidenceAutomationTest(unittest.TestCase):
             fake_daily,
         ), patch.object(
             phase3,
-            "run_market_theme_confirmed_evidence",
-            fake_market,
+            "run_market_theme_freshness_check",
+            fake_freshness,
         ), redirect_stdout(out):
             returncode = phase3.main(["--now", "2026-06-02T13:25:00+08:00"])
 
         self.assertEqual(returncode, 0)
-        self.assertEqual(calls, [("daily", "2026-06-02"), ("market", "2026-06-02", None)])
+        self.assertEqual(calls, [("daily", "2026-06-02"), ("freshness", "2026-06-02", None, None)])
+
+    def test_main_approved_payload_preserves_confirmed_evidence_writer_path(self):
+        calls = []
+
+        def fake_daily(trading_day):
+            calls.append(("daily", trading_day))
+            return 0
+
+        def fake_market(trading_day, payload_path=None):
+            calls.append(("market", trading_day, payload_path))
+            return 0
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            payload_path = Path(tmpdir) / "payload.json"
+            payload_path.write_text("[]", encoding="utf-8")
+            with patch.object(
+                phase3,
+                "confirm_trading_day",
+                return_value={"confirmed": True, "reason": "confirmed-trading-day"},
+            ), patch.object(
+                phase3,
+                "run_daily_signal_snapshot",
+                fake_daily,
+            ), patch.object(
+                phase3,
+                "run_market_theme_confirmed_evidence",
+                fake_market,
+            ):
+                returncode = phase3.main([
+                    "--now",
+                    "2026-06-02T13:25:00+08:00",
+                    "--market-theme-payload",
+                    str(payload_path),
+                ])
+
+        self.assertEqual(returncode, 0)
+        self.assertEqual(calls, [("daily", "2026-06-02"), ("market", "2026-06-02", str(payload_path))])
 
     def test_stale_alert_counts_confirmed_trading_days_only(self):
         alerts = phase3.build_stale_alerts(

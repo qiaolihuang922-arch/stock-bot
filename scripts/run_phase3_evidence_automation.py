@@ -636,10 +636,26 @@ def main(argv=None):
         return 2
 
     daily_status = run_daily_signal_snapshot(trading_day)
-    market_status = run_market_theme_confirmed_evidence(
-        trading_day,
-        payload_path=args.market_theme_payload,
-    )
+    if args.market_theme_payload:
+        market_status = run_market_theme_confirmed_evidence(
+            trading_day,
+            payload_path=args.market_theme_payload,
+        )
+    else:
+        try:
+            freshness_report = run_market_theme_freshness_check(
+                now=now,
+                lookback_days=args.freshness_lookback_days,
+                safe_write_time=args.safe_write_time,
+            )
+            market_status = 0 if freshness_report["status"] == "ok" else 2
+        except Exception as exc:
+            emit(
+                "MARKET_THEME_FRESHNESS_FAILED "
+                f"version={FRESHNESS_CHECK_VERSION} trade_date={trading_day} source=market_theme "
+                f"stage=scheduled-run reason={str(exc)} action=fail_closed"
+            )
+            market_status = 2
     return 0 if daily_status == 0 and market_status == 0 else 2
 
 

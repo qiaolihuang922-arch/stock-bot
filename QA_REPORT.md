@@ -1,42 +1,44 @@
-# QA_REPORT: future_watch_source_and_card_denoise_20260610
+# QA_REPORT: daily_market_evidence_writeback_20260610
 
 ## Scope
-- Official v21.0.2 report route.
-- TWSE historical source fallback behavior.
-- TWSE/TPEX fundamentals revenue source coverage.
-- Compact unheld wait-card readability.
+- Daily evidence writeback flow.
+- GitHub schedule and `RUN_MODE` mapping.
+- Approved market/theme DB backfill for missing `2026-06-09..2026-06-10`.
+- Read-after-write and official generator smoke.
 
 ## Risk Scan
-- Retrying TWSE could mask persistent source failures.
-- New TWSE revenue endpoint could overwrite EPS or TPEX revenue incorrectly.
-- Compact cards could hide action-critical fields.
-- Version bump could desync tests and visible headers.
+- Moving schedule could break daily bot cadence.
+- Replacing the normal market-theme writer path could bypass approved payload mode.
+- Backfill could create duplicate rows or write partial data.
+- Tests could pass locally while production DB remains stale.
 
 ## Semantic Consistency
-- Source failures still fail closed and do not invent analogy data.
-- Compact cards still show non-actionable state, blocker, gap, unlock, trigger, and price.
-- Listed-stock revenue fills from TWSE OpenAPI before relying on MOPS refresh.
-- State-machine schema remains `v21.0.1`; report header is `v21.0.2`.
+- Evidence writes still do not send live Telegram.
+- Bot still runs five minutes after evidence.
+- Scheduled no-payload path now uses freshness/backfill, matching the production DB source-of-truth rule.
+- Approved payload mode remains available for manual/secret-supplied market evidence.
+- Missing source remains fail-closed.
 
 ## Failure Specimen Countercheck
-- Owner specimen showed:
-  - `歷史類比... source-error`
-  - EPS-only rows for some stocks.
-  - Long repeated `等接近` cards.
-- Official dry-run now shows:
-  - `【06/10 盤後｜v21.0.2】`
-  - compact `等接近` card without low-signal RR/data rows.
-  - 2303 and 2301 with `營收 2026/05`.
-  - historical source available in this run; source-error path has a tested human-readable fail-closed line.
+- Before fix, production DB latest dates showed:
+  - `market_theme_confirmed_evidence`: `2026-06-08`
+  - `market_theme_index_daily_bars`: `2026-06-08`
+- After approved backfill and independent read:
+  - `market_theme_confirmed_evidence`: latest `2026-06-10`, counts `2026-06-09=9`, `2026-06-10=9`
+  - `market_theme_index_daily_bars`: latest `2026-06-10`, counts `2026-06-09=10`, `2026-06-10=10`
+- Freshness check now reports both latest trading days as `already-complete`.
 
 ## Additional Challenge
-- Tested source helper behavior separately from final generator.
-- Ran official dry-run after tests to inspect user-visible text.
+- Verified `daily_price` and `daily_signal_snapshot` were already up to `2026-06-10`, so the fix targeted the actual stale tables instead of rewriting unrelated daily data.
+- Verified official generator still returns 4 messages at `v21.0.2`.
+- Confirmed local bash execution tests skip only because local WSL/bash is unavailable; workflow text assertions still validate schedule and mode mapping.
 
 ## Not Tested
 - Live Telegram delivery.
-- Production DB writes/backfill.
-- GitHub Actions live run.
+- Live GitHub Actions run after push.
+- Historical dated `sector_theme_members` backfill.
 
 ## QA Conclusion
-通過
+conditional pass
+
+Reason: code/tests/backfill/read-after-write passed, but live GitHub Actions execution can only be proven after push and the next scheduled or manual workflow run.

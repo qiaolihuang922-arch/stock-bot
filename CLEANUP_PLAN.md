@@ -9,6 +9,10 @@
 
 ## Active Cleanup Follow-ups
 
+- `market_theme_membership_history_gap`
+  - Backfill can safely write `market_theme_confirmed_evidence` and `market_theme_index_daily_bars` from official historical TWSE sources.
+  - `sector_theme_members` cannot be called historical coverage because current source only proves latest company profile membership.
+  - Needed fix: find an official dated membership source or keep this table as mapping-only in future audits.
 - `runner_gap: cao_codex_tui_send`
   - CAO API/UI and WSL Codex auth are available, but TUI automation can hang after prompt send.
   - Needed fix: noninteractive fallback or stable `codex exec` runner path.
