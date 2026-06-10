@@ -17,6 +17,7 @@
 - 2026/06 runs only accept 2026/05 or 2026/04 revenue; older months are omitted.
 - Official dry-run generated 4 messages and did not run live Telegram delivery.
 - Official dry-run check: `bad_large_pct False`, `too_old False`.
+- Commit `eca967c` pushed to `origin/main`; equivalent git completion check passed (`HEAD == origin/main`).
 
 ## Recently Done
 
@@ -57,4 +58,4 @@ $env:PYTHONIOENCODING='utf-8'
 
 ## Next Action
 
-- Commit/push current patch and run git completion gate.
+- Owner review of revenue fallback correction.

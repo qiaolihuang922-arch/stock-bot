@@ -3,7 +3,7 @@
 ## Current Task
 
 - task_id: `revenue_fallback_no_downgrade_20260610`
-- status: `complete_pending_git`
+- status: `complete`
 - version: `v21.0`
 - no live Telegram delivery.
 
@@ -27,6 +27,7 @@
 - Targeted revenue tests: `5 passed, 1 warning`.
 - Generator/state machine suite: `202 passed, 145 warnings, 44 subtests passed`.
 - Official `generate_report(dry_run=True)`: `4` messages, `bad_large_pct False`, `too_old False`, no live Telegram delivery.
+- Commit `eca967c` pushed to `origin/main`; equivalent git completion check passed (`HEAD == origin/main`).
 
 ## Known Follow-ups
 
