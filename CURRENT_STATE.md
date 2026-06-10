@@ -3,7 +3,7 @@
 ## Current Task
 
 - task_id: `report_revenue_noise_fsm_20260610`
-- status: `complete_pending_git`
+- status: `complete`
 - version: `v21.0`
 - no live Telegram delivery.
 
@@ -29,6 +29,8 @@
 - Official `generate_report(dry_run=True)`: `4` messages, about `55-59s`, no live Telegram delivery.
 - Official dry-run unheld history noise check: `False`.
 - Official dry-run future watch: holding rows refreshed to 2026/05; some candidate rows may show EPS only when MOPS times out.
+- Commit `182d26d` pushed to `origin/main`; equivalent git completion check passed (`HEAD == origin/main`).
+- WSL shell gate could not run because local WSL reports `HCS_E_HYPERV_NOT_INSTALLED`; PowerShell git checks were used as the equivalent gate.
 
 ## Known Follow-ups
 

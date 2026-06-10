@@ -19,6 +19,8 @@
 - Unheld FSM line now shows missing confirmation event, e.g. `還差：量能確認` or `還差：回測確認`.
 - Official dry-run generated 4 messages in about 55-59 seconds and did not run live Telegram delivery.
 - Latest dry-run refreshed May revenue for all holding names; a few candidate rows may show EPS only if MOPS times out.
+- Commit `182d26d` pushed to `origin/main`; equivalent git completion check passed (`HEAD == origin/main`).
+- WSL shell gate could not run because local WSL reports `HCS_E_HYPERV_NOT_INSTALLED`; PowerShell git checks were used as the equivalent gate.
 
 ## Recently Done
 
@@ -53,4 +55,4 @@ $env:PYTHONIOENCODING='utf-8'
 
 ## Next Action
 
-- Commit/push current patch and run git completion gate.
+- Owner review of v21.0 report freshness/noise/FSM patch.
