@@ -46,4 +46,4 @@ $env:PYTHONIOENCODING='utf-8'
 
 ## Next Action
 
-- Commit/push current patch and run git completion check.
+- Owner review of fundamentals block layout.

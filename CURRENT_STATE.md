@@ -3,7 +3,7 @@
 ## Current Task
 
 - task_id: `future_watch_fundamental_layout_20260610`
-- status: `complete, pending commit/push`
+- status: `complete`
 - version: `v21.0.1`
 - no live Telegram delivery.
 
@@ -26,6 +26,7 @@
 - Targeted future-watch tests: `5 passed, 1 warning`.
 - Full generator tests: `195 passed, 143 warnings, 44 subtests passed`.
 - Official dry-run confirmed requested layout.
+- Patch commit `53cb83f` pushed to `origin/main`; git completion check passed.
 
 ## Known Follow-ups
 
