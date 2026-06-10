@@ -1,6 +1,7 @@
 """Future 30-day Telegram watch payload helpers."""
 
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from html import unescape
 from datetime import date, datetime, timedelta
 from time import monotonic
@@ -33,6 +34,7 @@ TWSE_TAIEX_HISTORY_ENDPOINT = "https://openapi.twse.com.tw/v1/exchangeReport/MI_
 TWSE_TAIEX_HISTORY_RWD_ENDPOINT = "https://www.twse.com.tw/rwd/zh/TAIEX/MI_5MINS_HIST"
 TWSE_MONTHLY_REVENUE_ENDPOINT = "https://openapi.twse.com.tw/v1/opendata/t187ap05_L"
 TPEX_MONTHLY_REVENUE_ENDPOINT = "https://www.tpex.org.tw/openapi/v1/t187ap05_R"
+MOPS_MONTHLY_REVENUE_ENDPOINT = "https://mopsov.twse.com.tw/mops/web/ajax_t05st10_ifrs"
 TWSE_EPS_ENDPOINT = "https://openapi.twse.com.tw/v1/opendata/t187ap14_L"
 TPEX_EPS_ENDPOINT = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap14_O"
 HTTP_HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -1075,6 +1077,155 @@ def _merge_monthly_revenue_rows(target, rows):
         })
 
 
+def _roc_year_month_from_date(value):
+    current = value or date.today()
+    if isinstance(current, datetime):
+        current = current.date()
+    year = current.year
+    month = current.month - 1
+    if month == 0:
+        year -= 1
+        month = 12
+    return f"{year - 1911}{month:02d}"
+
+
+def _clean_mops_number(value):
+    text = unescape(str(value or ""))
+    text = re.sub(r"<[^>]+>", "", text)
+    text = text.replace("&nbsp;", " ").replace(",", "").strip()
+    return text
+
+
+def _mops_value_after_label(html, label):
+    pattern = (
+        rf"<TH[^>]*>\s*{re.escape(label)}\s*</TH>\s*"
+        r"<TD[^>]*>\s*(?P<value>.*?)\s*</TD>"
+    )
+    match = re.search(pattern, html or "", flags=re.I | re.S)
+    return _clean_mops_number(match.group("value")) if match else ""
+
+
+def _mops_values_after_label(html, label):
+    pattern = (
+        rf"<TH[^>]*>\s*{re.escape(label)}\s*</TH>\s*"
+        r"<TD[^>]*>\s*(?P<value>.*?)\s*</TD>"
+    )
+    return [
+        _clean_mops_number(match.group("value"))
+        for match in re.finditer(pattern, html or "", flags=re.I | re.S)
+    ]
+
+
+def _parse_mops_monthly_revenue_row(code, html):
+    if not html or str(code) not in html:
+        return None
+    period = re.search(r"民國\s*(?P<year>\d+)\s*年\s*(?P<month>\d+)\s*月", html)
+    if not period:
+        return None
+    revenue = _mops_value_after_label(html, "本月")
+    yoy_values = _mops_values_after_label(html, "增減百分比")
+    if not revenue or not yoy_values:
+        return None
+    return {
+        "公司代號": str(code),
+        "資料年月": f"{int(period.group('year'))}{int(period.group('month')):02d}",
+        "營業收入-當月營收": revenue,
+        "營業收入-去年同月增減(%)": yoy_values[0],
+        "累計營業收入-前期比較增減(%)": yoy_values[1] if len(yoy_values) > 1 else "",
+        "出表日期": "",
+        "source": "MOPS",
+    }
+
+
+def fetch_mops_monthly_revenue_row(code, revenue_month, requester=None, timeout=3, attempts=1):
+    if not requests and requester is None:
+        raise RuntimeError("requests unavailable")
+    year = str(revenue_month)[:-2]
+    month = str(revenue_month)[-2:]
+    payload = {
+        "encodeURIComponent": "1",
+        "step": "1",
+        "firstin": "1",
+        "off": "1",
+        "TYPEK": "all",
+        "year": year,
+        "month": month,
+        "co_id": str(code),
+        "queryName": "co_id",
+        "inpuType": "co_id",
+    }
+    headers = dict(HTTP_HEADERS)
+    headers["Referer"] = "https://mopsov.twse.com.tw/mops/web/t05st10_ifrs"
+    last_error = None
+    for _attempt in range(max(1, attempts)):
+        try:
+            if requester:
+                html = requester(MOPS_MONTHLY_REVENUE_ENDPOINT, payload, headers)
+            else:
+                response = requests.post(
+                    MOPS_MONTHLY_REVENUE_ENDPOINT,
+                    data=payload,
+                    headers=headers,
+                    timeout=timeout,
+                )
+                response.raise_for_status()
+                html = response.text
+            return _parse_mops_monthly_revenue_row(code, html)
+        except Exception as exc:
+            last_error = exc
+    if last_error:
+        raise last_error
+    return None
+
+
+def _refresh_monthly_revenue_from_mops(target, codes, revenue_month, fetcher=None, max_workers=3, retry_limit=6):
+    unique_codes = [str(code) for code in dict.fromkeys(codes or []) if code]
+    if not unique_codes:
+        return []
+    refreshed = []
+    fetch = fetcher or fetch_mops_monthly_revenue_row
+    if max_workers <= 1 or len(unique_codes) == 1:
+        for code in unique_codes:
+            try:
+                row = fetch(code, revenue_month)
+            except Exception:
+                continue
+            if not row:
+                continue
+            _merge_monthly_revenue_rows(target, [row])
+            refreshed.append(code)
+        return refreshed
+    with ThreadPoolExecutor(max_workers=max(1, min(max_workers, len(unique_codes)))) as executor:
+        futures = {
+            executor.submit(fetch, code, revenue_month): code
+            for code in unique_codes
+        }
+        for future in as_completed(futures):
+            code = futures[future]
+            try:
+                row = future.result()
+            except Exception:
+                continue
+            if not row:
+                continue
+            _merge_monthly_revenue_rows(target, [row])
+            refreshed.append(code)
+    missing_codes = [code for code in unique_codes if code not in set(refreshed)]
+    for code in missing_codes[:retry_limit]:
+        try:
+            if fetcher:
+                row = fetch(code, revenue_month)
+            else:
+                row = fetch_mops_monthly_revenue_row(code, revenue_month, timeout=2, attempts=1)
+        except Exception:
+            continue
+        if not row:
+            continue
+        _merge_monthly_revenue_rows(target, [row])
+        refreshed.append(code)
+    return refreshed
+
+
 def _merge_eps_rows(target, rows):
     for row in rows or []:
         code = _stock_code_from_financial_row(row)
@@ -1091,17 +1242,27 @@ def _merge_eps_rows(target, rows):
 
 def build_live_stock_fundamentals_source(now=None, get_json=None):
     endpoints = (
-        ("twse_revenue", TWSE_MONTHLY_REVENUE_ENDPOINT, _merge_monthly_revenue_rows),
         ("tpex_revenue", TPEX_MONTHLY_REVENUE_ENDPOINT, _merge_monthly_revenue_rows),
         ("twse_eps", TWSE_EPS_ENDPOINT, _merge_eps_rows),
         ("tpex_eps", TPEX_EPS_ENDPOINT, _merge_eps_rows),
     )
     rows_by_code = {}
     errors = []
-    for label, url, merger in endpoints:
+    fetched = {}
+    with ThreadPoolExecutor(max_workers=len(endpoints)) as executor:
+        futures = {
+            executor.submit(_request_get_json, url, requester=get_json): label
+            for label, url, _merger in endpoints
+        }
+        for future in as_completed(futures):
+            label = futures[future]
+            try:
+                fetched[label] = future.result()
+            except Exception as exc:
+                errors.append(f"{label}:{str(exc)[:60]}")
+    for label, _url, merger in endpoints:
         try:
-            rows = _request_get_json(url, requester=get_json)
-            merger(rows_by_code, rows)
+            merger(rows_by_code, fetched.get(label) or [])
         except Exception as exc:
             errors.append(f"{label}:{str(exc)[:60]}")
     if not rows_by_code:
@@ -1146,14 +1307,37 @@ def _fundamentals_detail_line(fundamentals):
     return f"  財報：{label}" if label else ""
 
 
-def collect_target_fundamentals(results_map, fundamentals_source=None, max_items=MOPS_DEFAULT_MAX_TARGETS):
+def collect_target_fundamentals(
+    results_map,
+    fundamentals_source=None,
+    max_items=MOPS_DEFAULT_MAX_TARGETS,
+    now=None,
+    mops_revenue_fetcher=None,
+):
     if not isinstance(fundamentals_source, dict):
         return {"status": "missing-source", "items": []}
     if fundamentals_source.get("status") in {"source-error", "missing-source", "insufficient-data"}:
         return {"status": fundamentals_source.get("status"), "items": []}
 
     items = []
-    for target in _target_stocks(results_map, max_targets=max_items):
+    targets = _target_stocks(results_map, max_targets=max_items)
+    expected_revenue_month = _roc_year_month_from_date(now)
+    items_by_code = fundamentals_source.setdefault("items_by_code", {})
+    can_refresh_mops = bool(mops_revenue_fetcher) or fundamentals_source.get("source") == "TWSE/TPEX OpenAPI"
+    stale_codes = [
+        target["code"]
+        for target in targets
+        if can_refresh_mops
+        and (_fundamentals_for_code(fundamentals_source, target["code"]).get("revenue_month") or "") < expected_revenue_month
+    ]
+    refreshed = _refresh_monthly_revenue_from_mops(
+        items_by_code,
+        stale_codes,
+        expected_revenue_month,
+        fetcher=mops_revenue_fetcher,
+    )
+
+    for target in targets:
         fundamentals = _fundamentals_for_code(fundamentals_source, target["code"])
         items.append({
             "code": target["code"],
@@ -1162,7 +1346,12 @@ def collect_target_fundamentals(results_map, fundamentals_source=None, max_items
             "fundamentals": fundamentals,
             "fundamentals_label": _fundamentals_label(fundamentals),
         })
-    return {"status": "available", "items": items}
+    return {
+        "status": "available",
+        "items": items,
+        "expected_revenue_month": expected_revenue_month,
+        "mops_revenue_refreshed_codes": refreshed,
+    }
 
 
 def _mops_event_title(row):
@@ -1474,6 +1663,7 @@ def build_future_watch_payload(
     mops_adapter=None,
     fundamentals_source=None,
     global_event_source=None,
+    mops_revenue_fetcher=None,
 ):
     return {
         "historical_analogy": build_historical_analogy(today_features, historical_source),
@@ -1486,6 +1676,8 @@ def build_future_watch_payload(
         "target_fundamentals": collect_target_fundamentals(
             results_map,
             fundamentals_source=fundamentals_source,
+            now=now,
+            mops_revenue_fetcher=mops_revenue_fetcher,
         ),
         "global_events": collect_global_events(now, global_event_source=global_event_source),
     }

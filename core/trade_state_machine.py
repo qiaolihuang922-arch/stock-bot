@@ -31,6 +31,19 @@ ACTION_LABELS = {
     "BLOCK": "停止行動",
 }
 
+NEXT_EVENT_LABELS = {
+    "ADD_TO_WATCHLIST": "加入追蹤",
+    "SETUP_FORMED": "出現 setup",
+    "DATA_RESTORED": "資料恢復",
+    "MARKET_STRENGTH_CONFIRMED": "市場轉強",
+    "VOLUME_CONFIRMED": "量能確認",
+    "PULLBACK_CONFIRMED": "回測確認",
+    "RR_REPAIRED": "RR修復",
+    "COOLDOWN_FINISHED": "冷卻完成",
+    "OPEN_CONFIRMATION": "開盤確認",
+    "SUBMIT_ORDER": "送單前確認",
+}
+
 ACTION_BY_STATE = {
     "WATCH": "WATCH",
     "WAIT_DATA": "WAIT",
@@ -563,6 +576,13 @@ def visible_state_line(machine_state):
         f"交易狀態：{machine_state.get('state_label')}",
         f"動作：{machine_state.get('action_label')}",
     ]
+    if machine_state.get("scope") == "unheld":
+        next_event = machine_state.get("next_required_event")
+        next_label = NEXT_EVENT_LABELS.get(next_event)
+        if next_label:
+            prefix = "下一步" if machine_state.get("is_actionable") else "還差"
+            parts.append(f"{prefix}：{next_label}")
+        return "｜".join(parts)
     trigger = machine_state.get("trigger")
     if trigger:
         parts.append(f"觸發：{trigger}")

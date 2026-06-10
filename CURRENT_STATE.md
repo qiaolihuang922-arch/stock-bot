@@ -2,8 +2,8 @@
 
 ## Current Task
 
-- task_id: `render_git_tg_db_pipeline_check_20260609`
-- status: `complete`
+- task_id: `report_revenue_noise_fsm_20260610`
+- status: `complete_pending_git`
 - version: `v21.0`
 - no live Telegram delivery.
 
@@ -17,19 +17,20 @@
 
 ## Current Changes
 
-- Render dispatch URL fixed from missing `stock-bot.yml` to existing `stock-bot-clean.yml`.
-- Daily evidence workflow can write market-theme evidence without requiring `MARKET_THEME_APPROVED_PAYLOAD`.
-- Approved freshness script backfilled and verified market-theme rows for 2026-06-04, 2026-06-05, and 2026-06-08.
-- No live Telegram delivery was run.
+- Future-watch fundamentals can refresh stale TWSE/TPEX OpenAPI monthly revenue through MOPS company monthly revenue.
+- MOPS fallback skips the slow/stale TWSE listed-revenue bulk endpoint, uses 3-second target fetches with limited concurrency, and runs a 2-second small retry for missed priority rows.
+- Closing/after-hours unheld cards hide cross-day history noise.
+- Unheld FSM visible line now says what confirmation is still missing instead of repeating trigger text.
+- No DB write path, schema, or live Telegram delivery changed.
 
 ## Verification State
 
-- Workflow static contract: `2 passed, 1 warning`.
-- Render/TG/DB/evidence package: `142 passed, 1 warning, 64 subtests passed`.
-- official `generate_report(dry_run=True, return_write_results=True)`: `messages 4`, `reply_markup True`, `write_results {}`.
-- Production DB read-after-write shows `daily_price`, `signal_runs`, `daily_signal_snapshot`, `market_theme_confirmed_evidence`, and `market_theme_index_daily_bars` rows through 2026-06-08.
-- Git completion gate passed on `main` at `a0ffad2` before closeout doc refresh.
+- Generator/state machine suite: `198 passed, 145 warnings, 44 subtests passed`.
+- Official `generate_report(dry_run=True)`: `4` messages, about `55-59s`, no live Telegram delivery.
+- Official dry-run unheld history noise check: `False`.
+- Official dry-run future watch: holding rows refreshed to 2026/05; some candidate rows may show EPS only when MOPS times out.
 
 ## Known Follow-ups
 
+- MOPS monthly revenue fallback is best-effort and can time out per target.
 - CAO TUI automation gap remains separate from this product patch.

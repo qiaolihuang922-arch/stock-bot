@@ -215,7 +215,7 @@ class TradeStateMachineTest(unittest.TestCase):
 
         unheld = messages[1]
         self.assertIn("【06/08 盤後｜v21.0】", unheld)
-        self.assertIn("交易狀態：等量能｜動作：等待｜觸發：量能回升且重新接近買點", unheld)
+        self.assertIn("交易狀態：等量能｜動作：等待｜還差：量能確認", unheld)
         self.assertNotIn("交易狀態：不可行動", unheld)
 
 

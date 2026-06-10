@@ -10,6 +10,7 @@ from core.future_watch import (
     TAIWAN_CRASH_TEMPLATE_LIBRARY,
     build_live_global_event_source,
     build_live_twse_historical_source,
+    build_future_watch_payload,
     collect_mops_events,
     collect_global_events,
     format_future_watch_message,
@@ -1591,6 +1592,52 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("Invalid official row", messages[3])
         self.assertTrue(any(call["year"] == 115 and call["month"] == "06" and call["co_id"] == "2301" for call in mops_calls))
         self.assertTrue(any(call["year"] == 115 and call["month"] == "07" and call["co_id"] == "2301" for call in mops_calls))
+
+    def test_future_watch_refreshes_stale_openapi_revenue_with_mops_month(self):
+        payload = render_payload(
+            [100, 101, 102, 103, 104, 105],
+            None,
+            price=105,
+            change=1.0,
+        )
+        payload["stock_code"] = "3231"
+        fundamentals_source = {
+            "status": "available",
+            "items_by_code": {
+                "3231": {
+                    "eps": "3.06",
+                    "eps_year": "115",
+                    "eps_quarter": "1",
+                    "revenue_month": "11504",
+                    "revenue_yoy": "112.0",
+                }
+            },
+        }
+
+        def mops_fetcher(code, revenue_month):
+            self.assertEqual(code, "3231")
+            self.assertEqual(revenue_month, "11505")
+            return {
+                "公司代號": "3231",
+                "資料年月": "11505",
+                "營業收入-去年同月增減(%)": "39.24",
+                "累計營業收入-前期比較增減(%)": "88.8",
+                "source": "MOPS",
+            }
+
+        future_payload = build_future_watch_payload(
+            {"緯創": payload},
+            datetime(2026, 6, 10),
+            historical_source={"samples": []},
+            mops_adapter=lambda **kwargs: {"status": "available", "rows": []},
+            fundamentals_source=fundamentals_source,
+            global_event_source={"status": "available", "items": []},
+            mops_revenue_fetcher=mops_fetcher,
+        )
+        message = format_future_watch_message(future_payload, datetime(2026, 6, 10), generator.VERSION)
+
+        self.assertIn("3231 緯創｜EPS 2026Q1 3.06｜營收 2026/05 +39.2%｜關注原因：候選", message)
+        self.assertNotIn("營收 2026/04", message)
 
     def test_v20_4_47_future_watch_global_event_ranges_sort_and_fail_closed(self):
         payload = {
@@ -7225,6 +7272,24 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("回測：不可用", unheld)
         self.assertNotIn("回測：-", unheld)
         self.assertNotIn("樣本不足（有效樣本3）", unheld)
+
+    def test_closing_unheld_card_hides_cross_day_history_noise(self):
+        payload = self.evidence_payload(confidence=64, decision="WAIT", action=0, rr=1.2, distance=23)
+        payload["stock_code"] = "3231"
+        payload["cross_day_context"] = {
+            "source_status": "ready",
+            "source_of_truth": ["daily_signal_snapshot"],
+            "previous_state": "observe",
+            "repair_status": "deteriorating",
+            "consecutive_observe_days": 1,
+            "weight_adjustment": -1,
+            "weight_reason": ["連續失效", "前次狀態轉弱"],
+        }
+
+        card = generator.formatTelegramUnheldCard("緯創", payload, report_phase="收盤")
+
+        self.assertNotIn("歷史：", card)
+        self.assertNotIn("前次 observe", card)
 
     def test_telegram_message_noise_consistency_intraday_owner_nine_points(self):
         holding = render_payload(

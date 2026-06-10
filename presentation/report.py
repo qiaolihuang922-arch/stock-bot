@@ -228,7 +228,7 @@ def _card_history_line(data, report_context, deps, dedupe_setup_key=False):
 
 
 def _afterhours_card_text(line, report_context):
-    if _report_phase(report_context) != "盤後" or line is None:
+    if _report_phase(report_context) not in {"盤後", "收盤"} or line is None:
         return line
     replacements = {
         "盤中留意": "盤後觀察",
@@ -804,7 +804,7 @@ def formatTelegramPositionCard(name, data, *, deps, report_context=None):
         else f"數據：RR {rr_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
     )
 
-    is_afterhours = _report_phase(report_context) == "盤後"
+    is_afterhours = _report_phase(report_context) in {"盤後", "收盤"}
     lines = [
         f"【{deps['stock_title'](name, data)}】📌 {summary_action}｜{deps['signed_pct'](deps['stock_pnl'](data))}",
         deps["trade_state_machine_line"](data),
@@ -846,6 +846,7 @@ def formatTelegramPositionCard(name, data, *, deps, report_context=None):
 
 def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode=None, report_context=None):
     stock_result = data["result"]
+    effective_report_phase = report_phase or _report_phase(report_context)
     dist = deps["card_breakout_distance"](data)
     blockers = deps["entry_blockers"](stock_result)
     stock_source_status = deps["_stock_decision_source_status"](report_context, name)
@@ -1040,7 +1041,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         strategy_source_blocked,
         title_label=title_label,
     )
-    is_afterhours = _report_phase(report_context) == "盤後"
+    is_afterhours = effective_report_phase in {"盤後", "收盤"}
     is_afterhours_rejected = is_afterhours and funnel_state == "淘汰" and not valid_entry
     lines = [
         f"【{deps['stock_title'](name, data)}】{title_icon} {title_action}｜{title_label}",
@@ -1070,7 +1071,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
 
     lines.extend([
         tomorrow_line,
-        None if _report_phase(report_context) == "盤後" else (
+        None if is_afterhours else (
             deps["_source_status_line"](report_context, name, holding=False) if report_context else None
         ),
         None if is_afterhours_rejected else data_line,
@@ -1079,7 +1080,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     ])
     lines = [line for line in lines if line is not None]
     lines = [_afterhours_card_text(line, report_context) for line in lines]
-    history_line = None if is_afterhours_rejected else deps["cross_day_detail_line"](data)
+    history_line = None if is_afterhours else deps["cross_day_detail_line"](data)
     if history_line:
         lines.insert(-1, history_line)
 
