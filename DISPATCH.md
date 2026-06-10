@@ -16,6 +16,7 @@
 - A July run can try `11506` first and fall back to `11505` if June has not published.
 - Normalized revenue row keys are supported so internal adapters/tests do not depend on fragile Chinese/mojibake column names.
 - Official dry-run generated 4 messages in about 58 seconds and did not run live Telegram delivery.
+- Commit `66658e1` pushed to `origin/main`; equivalent git completion check passed (`HEAD == origin/main`).
 
 ## Recently Done
 
@@ -56,4 +57,4 @@ $env:PYTHONIOENCODING='utf-8'
 
 ## Next Action
 
-- Commit/push current patch and run git completion gate.
+- Owner review of latest revenue month fallback.
