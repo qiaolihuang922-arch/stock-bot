@@ -2,33 +2,37 @@
 
 ## Current Task
 
-- task_id: `render_dispatch_writeback_logic_20260610`
+- task_id: `report_noise_conflict_v21_0_3_20260611`
 - status: `complete`
-- version: `v21.0.2`
+- version: `v21.0.3`
 - no live Telegram delivery.
 
 ## Stable Context
 
-- Owner reads Telegram on mobile; visible wording must be decision-first and avoid internal pipeline noise.
-- Production dispatch model is Render web service called every five minutes, which then dispatches GitHub workflow.
-- GitHub Actions workflow should be dispatch-only unless Owner explicitly changes the production timing model.
+- Owner reads Telegram on mobile; wording must be decision-first and avoid internal pipeline noise.
+- Production dispatch model is Render web service called every five minutes, then GitHub workflow dispatch.
 - Production source-of-truth remains Supabase / runner data, not local cache.
 - DB schema/RLS/grant/policy/role/index/constraint changes require Owner approval.
 - Non-schema DB write/backfill must use existing approved repo scripts or service APIs; direct hand-written production DML is forbidden.
 
 ## Current Changes
 
-- Render intraday tags use five-minute buckets.
-- Render close dispatch runs at `14:00..14:29 Asia/Taipei`, after the market/theme safe-write time.
-- GitHub workflow native cron was removed.
-- GitHub workflow dispatch defaults to `run_mode=bot`; Render sends it explicitly.
+- Intraday report wording changed from execution wording to risk-advice wording.
+- Direct risk holding cards are shorter and keep only high-value action context.
+- Unheld `等資料` handling is scoped to state-machine-confirmed data recovery; it no longer swallows normal wait buckets.
+- Historical analogy includes a confidence limitation when volume is missing.
 
 ## Verification State
 
-- Render/workflow/phase3 tests: `27 passed, 8 skipped`.
+- `tests/test_generator_report.py tests/test_trade_state_machine.py tests/test_market_theme_evidence.py`:
+  - `244 passed, 145 warnings, 57 subtests passed`.
+- Official dry-run confirmed:
+  - `v21.0.3`.
+  - old `今日盤中交易執行` wording absent.
+  - new `今日盤中風控建議` wording present.
+  - historical confidence note present.
 
 ## Known Follow-ups
 
-- Live Render external ping and live GitHub Actions execution after this correction push are not yet proven.
-- Local bash workflow execution tests skipped because this machine's `bash` points to unavailable WSL/Hyper-V.
-- `sector_theme_members` historical membership remains blocked: available source is latest profile mapping, not dated membership history.
+- Live Telegram delivery not tested by design.
+- During market hours, live/read-only prices can move between dry-runs, so exact per-stock percentage/classification may drift.

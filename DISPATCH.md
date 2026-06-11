@@ -2,45 +2,44 @@
 
 ## Active
 
-- task_md_holds: `render_dispatch_writeback_logic_20260610`
+- task_md_holds: `report_noise_conflict_v21_0_3_20260611`
 - status: `complete`
 - owner_request:
-  - Correct the writeback analysis to the actual Render five-minute dispatch model.
-  - Fix the logic that prevented post-close market/theme freshness writes.
-  - Update Markdown so the execution model is clear.
-  - No live Telegram delivery.
+  - Analyze the pasted `06/11` intraday report.
+  - Fix visible conflicts and unnecessary noise.
+  - Keep no live Telegram delivery.
 
 ## Current Result
 
-- Corrected root cause:
-  - Production timing is Render -> GitHub `workflow_dispatch`, not GitHub native cron.
-  - Previous GitHub schedule change was the wrong layer.
-  - Render close dispatch previously started at `13:20`, but freshness safe-write default is `14:00`; after `14:00`, Render route skipped, so market/theme preflight could miss the write window.
-- Fix:
-  - Removed GitHub native cron schedule.
-  - Render intraday buckets now use five-minute cadence.
-  - Render close dispatch now runs during `14:00..14:29 Asia/Taipei`.
-  - Render dispatch payload explicitly sends `run_mode=bot`.
-  - Existing market/theme freshness preflight remains before GitHub dispatch.
+- Visible version is now `v21.0.3`.
+- Intraday summary no longer says `今日盤中交易執行`; it says `今日盤中風控建議`.
+- Detail index now uses `風控建議 N`.
+- Stop-loss / reduce / profit direct-action holding cards suppress low-signal `條件` and `數據` lines.
+- Unheld data-wait handling is narrow:
+  - `等資料` is used only when the state machine already says data recovery is the blocker.
+  - Normal states such as `等接近`, `等回測`, `等量能`, `隔日確認` are preserved.
+- Historical analogy now states medium confidence when volume data is unavailable.
 
 ## Verification
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_app_render_preflight.py tests/test_workflow_runtime_config.py tests/test_phase3_evidence_automation.py -q --tb=short
+.\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py tests/test_trade_state_machine.py tests/test_market_theme_evidence.py -q --tb=short
 ```
 
-Result: `27 passed, 8 skipped`.
+Result: `244 passed, 145 warnings, 57 subtests passed`.
 
-## Fixed Commands
-
-Local Render/dispatch contract tests:
+Official dry-run:
 
 ```powershell
-cd D:\reserch\stock-bot
-$env:PYTHONIOENCODING='utf-8'
-.\.venv\Scripts\python.exe -m pytest tests/test_app_render_preflight.py tests/test_workflow_runtime_config.py tests/test_phase3_evidence_automation.py -q --tb=short
+.\.venv\Scripts\python.exe -c "from core.generator import generate_report; messages,_=generate_report(dry_run=True); print('\n\n--- MESSAGE ---\n\n'.join(messages))"
 ```
+
+Checked:
+- `v21.0.3` present.
+- `今日盤中風控建議` present.
+- old `今日盤中交易執行` absent.
+- historical confidence note present.
 
 ## Next Action
 
-- Observe the next live Render ping / GitHub workflow dispatch after push to prove external scheduler execution.
+- After push, observe the next Render/GitHub report run if Owner wants live external confirmation.

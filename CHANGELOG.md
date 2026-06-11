@@ -1,39 +1,52 @@
-# CHANGELOG: render_dispatch_writeback_logic_20260610
+# CHANGELOG: report_noise_conflict_v21_0_3_20260611
 
 ## Changes
-- `app.py`
-  - Added explicit Render timing constants.
-  - Intraday dispatch buckets changed from 10 minutes to 5 minutes.
-  - Close dispatch moved from `13:20..13:59` to `14:00..14:29`, aligning with market/theme `MARKET_THEME_SAFE_WRITE_TIME=14:00`.
-  - GitHub dispatch now sends `{"inputs": {"run_mode": "bot"}}`.
-- `.github/workflows/stock-bot-clean.yml`
-  - Removed native GitHub cron schedule.
-  - `RUN_MODE` now comes only from `workflow_dispatch` input or defaults to `bot`.
-- `tests/test_app_render_preflight.py`
-  - Added close-window regression: `13:25` skips, `14:05` dispatches after freshness.
-  - Added five-minute intraday bucket regression.
-  - Added explicit `run_mode=bot` dispatch payload regression.
-- `tests/test_workflow_runtime_config.py`
-  - Updated workflow contract to dispatch-only / no cron.
+- `core/generator.py`
+  - Bumped visible version to `v21.0.3`.
+  - Renamed intraday summary/detail wording from `交易執行` to `風控建議`.
+  - Updated report integrity check to accept the new wording.
+  - Added `等資料` to unheld funnel/tracking buckets, but only when `tomorrow_watch_state` already returns `等資料`.
+- `presentation/report.py`
+  - Summary heading now renders `今日盤中風控建議`.
+  - Direct risk cards suppress low-signal `條件` and `數據` lines while preserving decision/reason/next step.
+  - Source-wait unheld cards align title/action/buy line with `等資料` only when the state machine says data recovery is the blocker.
+  - Compact rejected cards no longer force low-value trade-state/evidence lines when source is otherwise usable.
+- `core/future_watch.py`
+  - Historical analogy now adds a medium-confidence limitation when volume data is unavailable.
+- Tests updated to enforce the new mobile-reading contract and `v21.0.3`.
 
 ## Contract Impact
-- Production timing is Render-driven, not GitHub cron-driven.
-- Visible report version remains `v21.0.2`.
-- No Telegram payload shape change.
+- Telegram message wording changes:
+  - `今日盤中交易執行` -> `今日盤中風控建議`
+  - detail index `交易執行 N` -> `風控建議 N`
+- No DB payload shape change.
 - No DB schema change.
+- No live delivery path change.
 
 ## Verification
-- Render/workflow/phase3:
+- Report tests:
   ```powershell
-  .\.venv\Scripts\python.exe -m pytest tests/test_app_render_preflight.py tests/test_workflow_runtime_config.py tests/test_phase3_evidence_automation.py -q --tb=short
+  .\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py -q --tb=short
   ```
-  Result: `27 passed, 8 skipped`.
+  Result: `199 passed, 143 warnings, 44 subtests passed`.
+- Combined report/state/evidence:
+  ```powershell
+  .\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py tests/test_trade_state_machine.py tests/test_market_theme_evidence.py -q --tb=short
+  ```
+  Result: `244 passed, 145 warnings, 57 subtests passed`.
+- Official dry-run:
+  ```powershell
+  .\.venv\Scripts\python.exe -c "from core.generator import generate_report; messages,_=generate_report(dry_run=True); print('\n\n--- MESSAGE ---\n\n'.join(messages))"
+  ```
+  Checked: `v21.0.3`, new risk-advice wording, no old execution wording, historical confidence note present.
 
 ## Coverage Layers
-- Render dispatch gate.
-- GitHub workflow dispatch contract.
-- Phase3 evidence helper path.
+- Formatter: card and summary wording.
+- Official generator: full message list dry-run.
+- Trade state/funnel interaction.
+- Future-watch historical analogy.
+- Market evidence artifact compatibility.
 
 ## Residual Risk
-- Local workflow shell execution tests skipped because this machine's `bash` points to unavailable WSL/Hyper-V. Static workflow contract checks still passed.
-- Live Render cron/ping execution is not proven locally; tests cover the Flask dispatch logic used by Render.
+- Dry-run uses current live/read-only sources, so prices and some unheld classifications may move during market hours.
+- Live Telegram delivery was intentionally not tested.

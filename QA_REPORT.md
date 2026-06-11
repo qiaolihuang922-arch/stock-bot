@@ -1,45 +1,42 @@
-# QA_REPORT: render_dispatch_writeback_logic_20260610
+# QA_REPORT: report_noise_conflict_v21_0_3_20260611
 
 ## Scope
-- Render five-minute dispatch logic.
-- Close-window writeback/preflight timing.
-- GitHub workflow dispatch-only contract.
-- Regression that Phase3 evidence path remains intact.
+- Telegram visible wording for intraday report.
+- Holding direct-risk card denoise.
+- Unheld title/state/funnel consistency.
+- Historical analogy reliability wording.
+- Version synchronization to `v21.0.3`.
 
 ## Risk Scan
-- Native GitHub cron could bypass Render's sent-tag and close-stop logic.
-- Close preflight before `14:00` could skip market/theme writes forever because Render would stop dispatching afterward.
-- Ten-minute intraday buckets conflict with the intended five-minute Render cadence.
-- Dispatch without explicit run mode could become ambiguous later.
+- Rewording `交易執行` could break integrity checks or detail index tests.
+- Hiding low-signal lines could accidentally remove required stop-loss reason/next-step lines.
+- Treating source issues as `等資料` too broadly could swallow valid wait states like `等回測`, `等量能`, or `隔日確認`.
+- Future-watch date filtering must not reintroduce past single-day events as future events.
 
 ## Semantic Consistency
-- Render is the scheduler.
-- GitHub workflow is an execution target.
-- Market/theme freshness preflight runs before workflow dispatch.
-- Close dispatch now starts at the safe-write window instead of before it.
-- No live Telegram delivery was executed.
+- Intraday summary now says `風控建議`, matching the fact that no live broker/TG execution is performed.
+- Stop-loss cards still show the actionable decision and reason, but not repetitive condition/data filler.
+- `等資料` appears only when the state machine says data recovery is the blocker.
+- Missing volume in historical analogy is explicitly called out as a confidence limitation.
 
 ## Failure Specimen Countercheck
-- Before correction:
-  - MD and workflow claimed GitHub schedule was the main timing fix.
-  - `app.py` close dispatch started at `13:20`, before the default `14:00` freshness safe-write time.
-  - Intraday bucket was `minute // 10`.
-- After correction:
-  - GitHub workflow has no `schedule:` or `github.event.schedule` mapping.
-  - `13:25` returns skip in the Render route.
-  - `14:05` runs freshness, checks sent tag, dispatches GitHub, then marks sent.
-  - Intraday buckets are five-minute buckets.
+- Owner specimen conflict: `今日盤中交易執行` sounded like execution.
+  - Countercheck: dry-run has `今日盤中風控建議`; old wording absent.
+- Owner specimen conflict: stop cards had repetitive `條件` / `數據`.
+  - Countercheck: direct stop-loss cards keep `決策` / `原因` / `下一步` / `價格`, and omit the old low-signal lines.
+- Owner specimen conflict: unheld `淘汰` vs `等資料`.
+  - Countercheck: state/funnel logic no longer globally forces data issues into `淘汰`; narrow `等資料` handling is tested.
 
 ## Additional Challenge
-- Verified dispatch payload includes `inputs.run_mode=bot`, making Render intent explicit.
-- Re-ran Phase3 evidence tests to ensure previous freshness/backfill helper logic remains intact.
+- After an over-broad first fix made many wait states become `等資料`, tests caught the regression. The final fix narrows `等資料` to state-machine-confirmed data recovery only.
 
 ## Not Tested
 - Live Telegram delivery.
-- Live Render external ping service.
-- Live GitHub Actions run after this correction push.
+- Production DB writes/backfill.
 
 ## QA Conclusion
-conditional pass
+通過
 
-Reason: local route and workflow contract tests pass; live Render/GitHub execution can only be proven after push and next external ping.
+Evidence:
+- `244 passed, 145 warnings, 57 subtests passed`.
+- Official dry-run message list checked with no live Telegram delivery.

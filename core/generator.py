@@ -81,7 +81,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v21.0.2"
+VERSION = "v21.0.3"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -3231,6 +3231,7 @@ def format_pending_candidates_grouped(watch_items):
         "等回測": [],
         "等RR修復": [],
         "等量能": [],
+        "等資料": [],
         "隔日確認": [],
         "弱勢淘汰": [],
     }
@@ -3240,7 +3241,7 @@ def format_pending_candidates_grouped(watch_items):
         groups.setdefault(state, []).append((index, name, data))
 
     lines = []
-    for label in ["可買", "等冷卻", "等市場", "等接近", "等型態", "等回測", "等RR修復", "等量能", "隔日確認", "弱勢淘汰"]:
+    for label in ["可買", "等冷卻", "等市場", "等接近", "等型態", "等回測", "等RR修復", "等量能", "等資料", "隔日確認", "弱勢淘汰"]:
         values = sorted(
             groups.get(label, []),
             key=lambda item: tracking_sort_key(item[0], item[1], item[2])
@@ -5834,6 +5835,14 @@ def unheld_funnel_state(name, data, market_mode=None, report_context=None):
         report_context=report_context,
     )
     source_status = _unheld_decision_source_status(report_context, name)
+    stock_source_status = _stock_decision_source_status(report_context, name)
+    strategy_source_status = _strategy_sample_decision_source_status(report_context)
+    if (
+        stock_source_status == "available"
+        and strategy_source_status != "available"
+        and tomorrow_watch_state(name, data) == "等資料"
+    ):
+        return "等資料"
     hard_gate_reasons = _unheld_hard_gate_reasons((data or {}).get("result") or {}, source_status)
     if hard_gate_reasons and state in {"可買", "趨勢延續", "可準備"}:
         if "unresolved RR不足" in hard_gate_reasons:
@@ -6041,6 +6050,7 @@ def build_unheld_funnel(watch_items, market_mode=None, report_context=None):
         "等回測": [],
         "等RR修復": [],
         "等量能": [],
+        "等資料": [],
         "隔日確認": [],
         "淘汰": [],
     }
@@ -6109,7 +6119,7 @@ def unheld_tracking_count(funnel):
 
     return sum(
         len(funnel[label])
-        for label in ["可準備", "等冷卻", "等市場", "等接近", "等型態", "等回測", "等RR修復", "等量能", "隔日確認"]
+        for label in ["可準備", "等冷卻", "等市場", "等接近", "等型態", "等回測", "等RR修復", "等量能", "等資料", "隔日確認"]
     )
 
 
@@ -6117,7 +6127,7 @@ def unheld_tracking_only_count(funnel):
 
     return sum(
         len(funnel[label])
-        for label in ["等冷卻", "等市場", "等接近", "等型態", "等回測", "等RR修復", "等量能", "隔日確認"]
+        for label in ["等冷卻", "等市場", "等接近", "等型態", "等回測", "等RR修復", "等量能", "等資料", "隔日確認"]
     )
 
 
@@ -6146,7 +6156,7 @@ def today_conclusion_text(holding_items, watch_items, market_mode, risk_level, r
     unheld_total = sum(len(items) for items in funnel.values())
     holding_count = len(holding_items)
     intraday = report_phase in (None, "盤中")
-    execution_label = "交易執行" if intraday else "明日計畫"
+    execution_label = "風控建議" if intraday else "明日計畫"
     no_new_entry_text = "新倉：無有效進場"
 
     if pending_count:
@@ -6344,7 +6354,7 @@ def format_execution_checklist(holding_items, watch_items, limit=5, report_phase
 
     if len(items) > len(displayed):
         if intraday:
-            lines.append(f"另有 {len(items) - len(displayed)} 項交易執行見詳情")
+            lines.append(f"另有 {len(items) - len(displayed)} 項風控建議見詳情")
         else:
             lines.append(f"另有 {len(items) - len(displayed)} 項明日計畫見詳情")
 
@@ -6364,7 +6374,7 @@ def format_unheld_non_execution_lines(watch_items, report_phase=None, market_mod
     tracking_only_count = unheld_tracking_only_count(funnel)
     next_day_count = unheld_next_day_count(funnel)
     intraday = report_phase in (None, "盤中")
-    tracking_suffix = "不列入今日盤中交易執行" if intraday else "不列入明日計畫"
+    tracking_suffix = "不列入今日盤中風控建議" if intraday else "不列入明日計畫"
 
     if prepare_count and tracking_only_count:
         tail = f"未持倉 {unheld_prepare_count_text(prepare_counts)}、{tracking_only_count} 檔僅追蹤"
@@ -6502,7 +6512,7 @@ def format_unheld_funnel(watch_items, market_mode=None, report_context=None):
     # 僅追蹤分桶：只有一桶時直接標桶名（不重複數字），多桶時內聯各桶數，避免「拆分」「合計」重複行。
     track_buckets = [
         (label, len(funnel[label]))
-        for label in ["等冷卻", "等市場", "等接近", "等型態", "等回測", "等RR修復", "等量能"]
+        for label in ["等冷卻", "等市場", "等接近", "等型態", "等回測", "等RR修復", "等量能", "等資料"]
         if funnel[label]
     ]
     if len(track_buckets) == 1:
@@ -6559,7 +6569,7 @@ def detail_index_text(holding_items, watch_items, report_phase=None, market_mode
     prepare_count = len(funnel["可準備"])
     tracking_only_count = unheld_tracking_only_count(funnel)
     rejected = funnel["淘汰"]
-    execution_label = "明日計畫" if report_phase not in (None, "盤中") else "交易執行"
+    execution_label = "明日計畫" if report_phase not in (None, "盤中") else "風控建議"
     holding_names = "、".join(name for name, _data in holding_items) if holding_items else "無"
     parts = [f"📎 詳情索引：持倉 {holding_names}"]
 
@@ -6734,7 +6744,7 @@ def _report_conflicts(messages):
     summary = messages[-1]
     conflicts = []
     buy_markers = re.findall(r"新倉[:：][^\n]*?([\u4e00-\u9fffA-Za-z0-9]{2,12})\s*可買", summary)
-    blocking_terms = ("不可買", "等冷卻", "等市場", "等接近", "等型態", "等回測", "等RR修復", "等量能", "淘汰")
+    blocking_terms = ("不可買", "等冷卻", "等市場", "等接近", "等型態", "等回測", "等RR修復", "等量能", "等資料", "淘汰")
     for marker in buy_markers:
         if marker in {"無有效進場", "無", "今日"}:
             continue
@@ -6758,7 +6768,7 @@ def analyze_report_cross_section_integrity(messages, telegram_header_version=VER
     conflicts = _report_conflicts(messages)
     has_funnel = "未持倉狀態" in joined or "未持倉漏斗" in joined or "Funnel" in joined
     has_cards = "【持倉標的】" in joined or "【未持倉標的】" in joined
-    has_checklist = "今日盤中交易執行" in joined or "交易執行" in summary
+    has_checklist = "今日盤中風控建議" in joined or "風控建議" in summary or "交易執行" in summary
     version_ok = bool(messages) and telegram_header_version in summary
 
     action_status = "passed" if not conflicts else "blocked"

@@ -882,6 +882,7 @@ def _build_twse_pressure_line(features):
         gaps.append("高檔回落尚未到深度修正")
     if features.get("turnover_ratio") is None:
         gaps.append("量能資料不足，未納入主要判斷")
+        gaps.append("可信度中等：本次以價格/位置為主")
     elif _value_or_zero(features.get("turnover_ratio")) < 1.2:
         gaps.append("量能未明顯失控")
     if features.get("intraday_range_pct") is not None:
@@ -901,7 +902,7 @@ def _build_twse_pressure_line(features):
         f"歷史類比：{template['event']}｜相似度 {percent}%｜{context[0]}｜{context[1]}｜source=TWSE",
         f"相似點：{'｜'.join(matched[:5])}",
         _historical_module_score_line(template),
-        f"不相似/限制：{'；'.join(dict.fromkeys(gaps[:3]))}",
+        f"不相似/限制：{'；'.join(dict.fromkeys(gaps[:4]))}",
         f"下一步觀察：{_historical_followup_line(template, features)}",
         f"資料：TWSE近{features.get('history_rows') or 0}日｜樣本庫台股急跌 {template['library_size']}件",
     ])
