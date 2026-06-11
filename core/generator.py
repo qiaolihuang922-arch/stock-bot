@@ -81,7 +81,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v21.0.3"
+VERSION = "v21.0.4"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -615,7 +615,7 @@ def entry_blockers(result):
     if result.get("market_grade") == "D":
         labels.append("市場弱")
 
-    if dist is not None and dist > 4:
+    if distance_blocks_entry(result, dist) or far_without_actionable_setup(result, dist):
         labels.append("遠離觸發")
 
     return list(dict.fromkeys(labels))
@@ -651,11 +651,96 @@ def result_setup_type(result):
         return "BREAKOUT_CONFIRM"
     if phase in {"BREAKOUT_NEAR", "READY_BREAKOUT"}:
         return "PRE_BREAKOUT"
-    if breakout_state == "READY" or (distance is not None and 0 <= distance <= 4):
+    if breakout_state == "READY" or (distance is not None and 0 <= distance <= 5):
         return "PRE_BREAKOUT"
     if phase == "BASE" and trend == "UP" and structure in {"STRONG", "NORMAL"}:
         return "BASE_REVERSAL"
     return "NO_SETUP"
+
+
+def entry_distance_policy(result):
+
+    setup = result_setup_type(result or {})
+    if setup == "BREAKOUT_CONFIRM":
+        return {
+            "setup": setup,
+            "label": "突破確認",
+            "max_pct": 5.0,
+            "basis": "突破買點區",
+            "unlock": "回到買點區內，或轉為回測承接 setup",
+            "hard_gate": True,
+        }
+    if setup == "PRE_BREAKOUT":
+        return {
+            "setup": setup,
+            "label": "接近突破",
+            "max_pct": 5.0,
+            "basis": "突破買點區",
+            "unlock": "接近突破買點區後重評，或另出現回測承接 setup",
+            "hard_gate": True,
+        }
+    if setup == "BASE_REVERSAL":
+        return {
+            "setup": setup,
+            "label": "底部轉強",
+            "max_pct": 8.0,
+            "basis": "底部轉強觀察區",
+            "unlock": "站穩支撐且風險報酬達標",
+            "hard_gate": True,
+        }
+    if setup == "PULLBACK_RECLAIM":
+        return {
+            "setup": setup,
+            "label": "回測承接",
+            "max_pct": None,
+            "basis": "看回測不破/站回均線，不用突破距離硬擋",
+            "unlock": "回測不破且量價轉強",
+            "hard_gate": False,
+        }
+    if setup == "TREND_CONTINUATION":
+        return {
+            "setup": setup,
+            "label": "趨勢延續",
+            "max_pct": None,
+            "basis": "看趨勢延續/回踩低點，小倉處理，不用突破距離硬擋",
+            "unlock": "回踩站回且不追高加碼",
+            "hard_gate": False,
+        }
+    return {
+        "setup": setup,
+        "label": "型態未成立",
+        "max_pct": None,
+        "basis": "先等有效 setup",
+        "unlock": "重新形成突破、回測或趨勢延續 setup",
+        "hard_gate": False,
+    }
+
+
+def distance_blocks_entry(result, distance=None):
+
+    policy = entry_distance_policy(result or {})
+    if not policy.get("hard_gate"):
+        return False
+    if distance is None:
+        try:
+            distance = float((result or {}).get("breakout_distance"))
+        except (TypeError, ValueError):
+            return False
+    max_pct = policy.get("max_pct")
+    return max_pct is not None and distance is not None and distance > max_pct
+
+
+def far_without_actionable_setup(result, distance=None):
+
+    result = result or {}
+    if result_setup_type(result) != "NO_SETUP":
+        return False
+    if distance is None:
+        try:
+            distance = float(result.get("breakout_distance"))
+        except (TypeError, ValueError):
+            return False
+    return distance is not None and distance > 5
 
 
 def volume_is_primary_gate(result):
@@ -668,7 +753,9 @@ def volume_is_primary_gate(result):
     if setup in {"TREND_CONTINUATION", "PULLBACK_RECLAIM"}:
         return False
     if setup in {"BREAKOUT_CONFIRM", "PRE_BREAKOUT", "BASE_REVERSAL"}:
-        return distance is None or distance <= 6
+        policy = entry_distance_policy(result or {})
+        max_pct = policy.get("max_pct")
+        return distance is None or max_pct is None or distance <= max_pct + 1
     return False
 
 
@@ -2872,7 +2959,7 @@ def tomorrow_trigger_text(state, data):
     if state == "等量能":
         try:
             distance = result.get("breakout_distance")
-            if distance is not None and float(distance) > 4:
+            if distance_blocks_entry(result, float(distance)):
                 return "量能回升且重新接近買點"
         except (TypeError, ValueError):
             pass
@@ -4625,7 +4712,7 @@ def _technical_setup_near_funnel_boundary(result, state, prepare_label=None):
     ):
         return False
     distance = result.get("breakout_distance")
-    return distance is None or distance <= 4
+    return not distance_blocks_entry(result, distance)
 
 
 def _holding_source_status(data):
@@ -5701,7 +5788,7 @@ def strong_prepare_bucket(data):
     near_breakout = (
         phase == "BREAKOUT_NEAR"
         or behavior == "BREAKOUT_NEAR"
-        or (distance is not None and 0 <= distance <= 4)
+        or (distance is not None and 0 <= distance <= 5)
     )
     if near_breakout and not blocker_set.intersection({"RR不足", "量能不足", "市場弱", "弱反彈待確認"}):
         return "突破回測", "待觸發，不追高"

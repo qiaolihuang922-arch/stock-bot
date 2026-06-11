@@ -217,9 +217,59 @@ class TradeStateMachineTest(unittest.TestCase):
             )
 
         unheld = messages[1]
-        self.assertIn("【06/08 盤後｜v21.0.3】", unheld)
+        self.assertIn("【06/08 盤後｜v21.0.4】", unheld)
         self.assertIn("交易狀態：等接近｜動作：等待｜主因：市場弱｜還差：市場轉強 + 接近觸發", unheld)
         self.assertNotIn("交易狀態：不可行動", unheld)
+
+    def test_breakout_distance_gate_only_blocks_breakout_setup(self):
+        payload = _watch_payload()
+        payload["result"].update({
+            "market_grade": "B",
+            "volume_state": "OK",
+            "trade_state": "READY",
+            "rr": 2.0,
+            "entry_quality": "B",
+            "decision_type": "wait_breakout_confirm",
+            "breakout_distance": 9,
+        })
+
+        state = evaluate_unheld_state(
+            "breakout",
+            payload,
+            funnel_state="等接近",
+            watch_state="等接近",
+            source_status="available",
+        )
+
+        self.assertIn("TOO_FAR_FROM_TRIGGER", state["guards"])
+
+    def test_far_pullback_and_trend_continuation_are_not_blocked_by_breakout_distance(self):
+        for decision_type, phase in [
+            ("pullback", "HEALTHY_PULLBACK"),
+            ("trend_continuation", "BREAKOUT"),
+        ]:
+            payload = _watch_payload()
+            payload["result"].update({
+                "market_grade": "B",
+                "volume_state": "OK",
+                "trade_state": "READY",
+                "rr": 2.0,
+                "entry_quality": "B",
+                "decision_type": decision_type,
+                "structure_phase": phase,
+                "breakout_distance": 12,
+            })
+
+            state = evaluate_unheld_state(
+                decision_type,
+                payload,
+                funnel_state="等回測",
+                watch_state="等回測",
+                source_status="available",
+            )
+
+            self.assertNotIn("TOO_FAR_FROM_TRIGGER", state["guards"])
+            self.assertNotIn("TOO_FAR_FROM_TRIGGER", state["blocked_by"])
 
 
 if __name__ == "__main__":

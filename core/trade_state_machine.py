@@ -410,11 +410,32 @@ def _setup_type(result):
         return "BREAKOUT_CONFIRM"
     if phase in {"BREAKOUT_NEAR", "READY_BREAKOUT"}:
         return "PRE_BREAKOUT"
-    if breakout_state == "READY" or (distance is not None and 0 <= distance <= 4):
+    if breakout_state == "READY" or (distance is not None and 0 <= distance <= 5):
         return "PRE_BREAKOUT"
     if phase == "BASE" and trend == "UP" and structure in {"STRONG", "NORMAL"}:
         return "BASE_REVERSAL"
     return "NO_SETUP"
+
+
+def _entry_distance_policy(result):
+    setup = _setup_type(result or {})
+    if setup in {"BREAKOUT_CONFIRM", "PRE_BREAKOUT"}:
+        return {"setup": setup, "max_pct": 5.0, "hard_gate": True}
+    if setup == "BASE_REVERSAL":
+        return {"setup": setup, "max_pct": 8.0, "hard_gate": True}
+    if setup in {"PULLBACK_RECLAIM", "TREND_CONTINUATION"}:
+        return {"setup": setup, "max_pct": None, "hard_gate": False}
+    return {"setup": setup, "max_pct": None, "hard_gate": False}
+
+
+def _distance_blocks_entry(result, distance=None):
+    policy = _entry_distance_policy(result or {})
+    if not policy.get("hard_gate"):
+        return False
+    if distance is None:
+        distance = _as_float((result or {}).get("breakout_distance") or (result or {}).get("distance_to_breakout"))
+    max_pct = policy.get("max_pct")
+    return max_pct is not None and distance is not None and distance > max_pct
 
 
 def _volume_is_primary_gate(result):
@@ -423,7 +444,9 @@ def _volume_is_primary_gate(result):
     if setup in {"TREND_CONTINUATION", "PULLBACK_RECLAIM"}:
         return False
     if setup in {"BREAKOUT_CONFIRM", "PRE_BREAKOUT", "BASE_REVERSAL"}:
-        return distance is None or distance <= 6
+        policy = _entry_distance_policy(result or {})
+        max_pct = policy.get("max_pct")
+        return distance is None or max_pct is None or distance <= max_pct + 1
     return False
 
 
@@ -452,7 +475,7 @@ def _unheld_guard_snapshot(data, source_status=None):
     if result.get("structure_phase") in {"FAILED_BREAKOUT", "WEAK_REBOUND", "DISTRIBUTION"}:
         guards.append("STRUCTURE_FAILED")
     distance = _as_float(result.get("breakout_distance") or result.get("distance_to_breakout"))
-    if distance is not None and distance > 4:
+    if _distance_blocks_entry(result, distance):
         guards.append("TOO_FAR_FROM_TRIGGER")
     quality = result.get("entry_quality")
     if quality and quality not in {"A+", "A", "B"}:

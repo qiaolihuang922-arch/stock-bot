@@ -2,9 +2,9 @@
 
 ## Current Task
 
-- task_id: `report_noise_conflict_v21_0_3_20260611`
+- task_id: `entry_distance_strategy_v21_0_4_20260611`
 - status: `complete`
-- version: `v21.0.3`
+- version: `v21.0.4`
 - no live Telegram delivery.
 
 ## Stable Context
@@ -17,22 +17,23 @@
 
 ## Current Changes
 
-- Intraday report wording changed from execution wording to risk-advice wording.
-- Direct risk holding cards are shorter and keep only high-value action context.
-- Unheld `等資料` handling is scoped to state-machine-confirmed data recovery; it no longer swallows normal wait buckets.
-- Historical analogy includes a confidence limitation when volume is missing.
+- Distance-to-breakout is no longer a universal `<=4%` rule.
+- Breakout/pre-breakout uses `<=5%` pivot buy zone.
+- Pullback reclaim and trend continuation are allowed to use their own setup gates.
+- Far-without-setup remains non-actionable and waits for approach/setup.
+- Telegram display uses strategy-specific distance wording.
 
 ## Verification State
 
 - `tests/test_generator_report.py tests/test_trade_state_machine.py tests/test_market_theme_evidence.py`:
-  - `244 passed, 145 warnings, 57 subtests passed`.
+  - `246 passed, 145 warnings, 57 subtests passed`.
 - Official dry-run confirmed:
-  - `v21.0.3`.
-  - old `今日盤中交易執行` wording absent.
-  - new `今日盤中風控建議` wording present.
-  - historical confidence note present.
+  - `v21.0.4`.
+  - old `<=4%` wording absent.
+  - old intraday execution wording absent.
+  - rejected/data-state conflict absent.
 
 ## Known Follow-ups
 
 - Live Telegram delivery not tested by design.
-- During market hours, live/read-only prices can move between dry-runs, so exact per-stock percentage/classification may drift.
+- This patch separates rule-based entry paths; it does not yet learn thresholds from historical DB outcomes.

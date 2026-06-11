@@ -401,6 +401,41 @@ def _gate_gap_text(value, threshold):
     return _gate_value_text(gap)
 
 
+def _display_entry_distance_policy(stock_result):
+    stock_result = stock_result or {}
+    decision_type = stock_result.get("decision_type")
+    phase = stock_result.get("structure_phase")
+    behavior = stock_result.get("price_behavior")
+    entry_profile = stock_result.get("entry_profile")
+    entry_stage = stock_result.get("entry_stage")
+    breakout_state = stock_result.get("breakout_state")
+    trend = stock_result.get("trend")
+    structure = stock_result.get("structure_state")
+    try:
+        distance = float(stock_result.get("breakout_distance"))
+    except (TypeError, ValueError):
+        distance = None
+
+    if decision_type in {"trend_continuation", "trend_observation"}:
+        return {"label": "趨勢延續", "max_pct": None, "hard_gate": False, "unlock": "回踩站回且不追高加碼"}
+    if entry_stage == "PULLBACK_RECLAIM" or entry_profile == "BUY_RECLAIM_CONFIRM":
+        return {"label": "回測承接", "max_pct": None, "hard_gate": False, "unlock": "回測不破且量價轉強"}
+    if phase in {"SHAKEOUT", "HEALTHY_PULLBACK"} or behavior == "LOW_VOLUME_PULLBACK":
+        return {"label": "回測承接", "max_pct": None, "hard_gate": False, "unlock": "回測不破且量價轉強"}
+    if decision_type in {"breakout", "wait_breakout_confirm", "wait_breakout_low_rr"} or breakout_state == "BREAKOUT":
+        return {"label": "突破買點區", "max_pct": 5.0, "hard_gate": True, "unlock": "回到買點區內，或轉為回測承接 setup"}
+    if (
+        decision_type in {"pre_breakout", "wait_pre_breakout", "wait_pre_breakout_low_rr"}
+        or phase in {"BREAKOUT_NEAR", "READY_BREAKOUT"}
+        or breakout_state == "READY"
+        or (distance is not None and 0 <= distance <= 5)
+    ):
+        return {"label": "突破買點區", "max_pct": 5.0, "hard_gate": True, "unlock": "接近突破買點區後重評，或另出現回測承接 setup"}
+    if phase == "BASE" and trend == "UP" and structure in {"STRONG", "NORMAL"}:
+        return {"label": "底部轉強觀察區", "max_pct": 8.0, "hard_gate": True, "unlock": "站穩支撐且風險報酬達標"}
+    return {"label": "有效 setup", "max_pct": None, "hard_gate": False, "unlock": "重新形成突破、回測或趨勢延續 setup"}
+
+
 def _supporting_basis_text(data, primary_reason):
     stock_result = (data or {}).get("result") or {}
     basis = []
@@ -462,9 +497,12 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
     if "突破失敗" in blocker_text or phase == "FAILED_BREAKOUT":
         distance_text = _gate_value_text(dist)
         gap = "需重新站回突破區"
-        if distance_text and float(distance_text) > 4:
-            distance_gap = _gate_value_text(float(distance_text) - 4)
-            gap = f"距突破區 {distance_text}%｜需<=4%｜差{distance_gap}%"
+        policy = _display_entry_distance_policy(stock_result)
+        max_pct = policy.get("max_pct") or 5.0
+        policy_label = policy["label"] if policy.get("hard_gate") else "突破買點區"
+        if distance_text and float(distance_text) > max_pct:
+            distance_gap = _gate_value_text(float(distance_text) - max_pct)
+            gap = f"距突破區 {distance_text}%｜{policy_label}需<={_gate_value_text(max_pct)}%｜差{distance_gap}%"
         return evidence_lines("未站回突破區", gap, "重新站回突破區後再評估", basis="")
     if post_market_prepare:
         return evidence_lines(
@@ -491,12 +529,14 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
         gates.append(("RR不足", rr_gap))
 
     distance_text = _gate_value_text(dist)
-    if distance_text and float(distance_text) > 4:
-        distance_gap = _gate_value_text(float(distance_text) - 4)
+    policy = _display_entry_distance_policy(stock_result)
+    max_pct = policy.get("max_pct")
+    if distance_text and policy.get("hard_gate") and max_pct is not None and float(distance_text) > max_pct:
+        distance_gap = _gate_value_text(float(distance_text) - max_pct)
         distance_gap_text = (
-            f"距突破 {distance_text}%｜突破策略需<=4%｜另等趨勢延續/回測承接setup"
+            f"距突破 {distance_text}%｜{policy['label']}需<={_gate_value_text(max_pct)}%｜另等趨勢延續/回測承接setup"
             if funnel_state == "等接近"
-            else f"距突破 {distance_text}%｜突破策略需<=4%｜差{distance_gap}%｜若走趨勢延續/回測承接，需另見有效setup"
+            else f"距突破 {distance_text}%｜{policy['label']}需<={_gate_value_text(max_pct)}%｜差{distance_gap}%｜若走趨勢延續/回測承接，需另見有效setup"
         )
         gates.append((
             "距觸發太遠",
@@ -1090,9 +1130,15 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     )
     if compact_wait_card and market_line == "盤面：證據不足｜待確認":
         market_line = None
+    trade_state_line = deps["trade_state_machine_line"](data)
+    if (
+        (compact_wait_card and funnel_state == "淘汰")
+        or (funnel_state == "淘汰" and "交易狀態：等資料" in str(trade_state_line))
+    ):
+        trade_state_line = None
     lines = [
         f"【{deps['stock_title'](name, data)}】{title_icon} {title_action}｜{title_label}",
-        None if compact_wait_card and funnel_state == "淘汰" else deps["trade_state_machine_line"](data),
+        trade_state_line,
         market_line,
         buy_line,
         buy_gap_line,
