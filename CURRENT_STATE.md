@@ -3,7 +3,7 @@
 ## Current Task
 
 - task_id: `summary_brief_mobile_denoise_20260616`
-- status: `implemented + QA passed, pending commit/push`
+- status: `implemented + QA passed + pushed`
 - version: `v21.1`
 - no live Telegram delivery.
 

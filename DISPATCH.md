@@ -3,7 +3,7 @@
 ## Active
 
 - task_md_holds: `summary_brief_mobile_denoise_20260616`
-- status: `implemented + QA passed, pending commit/push`
+- status: `implemented + QA passed + pushed`
 - current_version: `v21.1`
 - no live Telegram delivery in this cycle.
 
@@ -44,10 +44,10 @@
 
 - branch: `main`
 - upstream: `origin/main`
-- latest commit: `pending`
-- HEAD equals upstream: `pending closeout push`
-- worktree/index: `pending commit`
+- latest commit: `git log -1 --oneline`
+- HEAD equals upstream: `true after closeout push`
+- worktree/index: `clean after closeout push`
 
 ## Next Action
 
-- Commit/push current summary brief denoise, then run git completion checks.
+- Observe next scheduled `run_mode=bot` report and confirm production Telegram artifact keeps the compact third-message summary.
