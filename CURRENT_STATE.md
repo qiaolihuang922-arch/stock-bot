@@ -2,7 +2,7 @@
 
 ## Current Task
 
-- task_id: `strategy_axis_memory_backfill_prune_20260615`
+- task_id: `db_table_health_audit_20260615`
 - status: `implemented + QA passed`
 - version: `v21.1`
 - no live Telegram delivery.
@@ -20,30 +20,41 @@
 
 - Runtime report remains `v21.1`.
 - v21.3 strategy-axis memory schema is applied in production.
-- `daily_signal_snapshot` backfilled from `daily_price`.
-- `daily_signal_snapshot` now has populated strategy-axis memory for `5786` v21.1 rows.
-- Retest memory was tightened after audit:
-  - only `356` active retest rows have `retest_reference_price` / `retest_days_since_breakout`;
+- `daily_signal_snapshot` has `5786` v21.1 strategy-memory rows from the previous backfill.
+- Retest memory is tightened:
+  - only active retest rows have `retest_reference_price` / `retest_days_since_breakout`;
   - non-retest rows keep those fields null.
-- `signal_items` schema exists, but historical rows are not backfilled because report-run history cannot be reconstructed truthfully from daily_price alone.
-- Duplicate/version prune found no rows to delete.
+- New read-only audit utility exists:
+  - `scripts/audit_db_table_health.py`
+- Future `signal_items` item payloads are tested to include strategy-memory fields.
+
+## Table Health Findings
+
+- Expected constants:
+  - `daily_price.source=twse`
+  - `daily_signal_snapshot.version=v21.1`
+  - formula/basis labels such as `rr_formula`, `volume_basis`, `breakout_reference_type`
+  - official TWSE source labels in market-theme tables
+- Real gaps to fix or explicitly ignore:
+  - `market_theme_index_daily_bars.open/high/low/volume/turnover/member_count` are all null.
+  - `signal_outcomes.max_high_pct/max_drawdown_pct` are all null.
+  - historical `signal_items` new strategy-memory columns are all null by design; do not fabricate.
+- `position_events` repeated stocks are valid event history, not duplicate rows.
 
 ## Verification State
 
-- Production backfill:
-  - `5786` snapshot rows upserted.
-  - `schema_fallback=false`.
-- Production read-after-write:
-  - all `5786` rows have non-null `stock_strength_state`, `entry_setup_state`, and `actionability_state`.
-  - `356` rows have active retest anchor/day fields; `5430` non-retest rows do not.
-- Production prune:
-  - exact duplicate extra rows: `0`.
-  - multi-version extra rows: `0`.
-  - `deleted_rows=0`.
+- Production audit command:
+  - `.\.venv\Scripts\python.exe scripts\audit_db_table_health.py`
+  - result: `errors=[]`
+- Tests:
+  - `56 passed`
 - No live Telegram delivery.
+- No DB schema change.
+- No production deletion.
 
 ## Known Follow-ups
 
-- Commit and push MD closeout.
-- Observe next scheduled `run_mode=bot` report and check `signal_items` new fields on fresh rows.
-- Future tightening: source-error / insufficient-data paths should explicitly set data-quality fields instead of relying on normal defaults.
+- Commit and push this audit utility / MD closeout.
+- Observe next scheduled `run_mode=bot` report and check fresh `signal_items` strategy fields.
+- Decide whether to enrich or hide `market_theme_index_daily_bars` OHLCV/member placeholder columns.
+- Implement or retire `signal_outcomes` max high/drawdown metrics.

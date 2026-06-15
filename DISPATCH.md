@@ -2,47 +2,33 @@
 
 ## Active
 
-- task_md_holds: `strategy_axis_memory_backfill_prune_20260615`
+- task_md_holds: `db_table_health_audit_20260615`
 - status: `implemented + QA passed`
 - current_version: `v21.1`
 - no live Telegram delivery in this cycle.
 
 ## Result Summary
 
-- Owner applied v21.3 schema and requested real data backfill, duplicate cleanup, and MD closeout.
-- Production schema read confirmed both `daily_signal_snapshot` and `signal_items` contain the new columns.
-- Backfilled `daily_signal_snapshot` from `daily_price`:
-  - date range: `2024-06-15` to `2026-06-15`
-  - version: `v21.1`
-  - rows written/upserted: `5786`
-  - schema fallback: `false`
-- Read-after-write confirmed all `5786` snapshot rows now have non-null strategy-axis memory fields.
-- Follow-up audit found retest fields were too broad; code and production backfill were tightened so retest anchor/days are only populated on active retest rows.
-- Duplicate/version prune ran:
-  - keep version: `v21.1`
-  - delete candidates: `0`
-  - deleted rows: `0`
-- `signal_items` historical rows were not fabricated; future bot runs will fill new item fields.
-- Added reusable `AGENTS.md` rule: DB backfill/prune tasks must automatically update MD and cleanup evidence.
+- Added read-only DB table health audit script: `scripts/audit_db_table_health.py`.
+- Audited all current active production tables.
+- Found no audit read errors.
+- Found no table-specific duplicate issue in the checked keys.
+- Classified repeated daily values:
+  - expected metadata: source, version, formula, basis, static source labels;
+  - real data gaps: market index OHLCV/member placeholders, outcome max high/drawdown, historical `signal_items` new fields.
+- Strengthened `signal_items` future write-path test so new strategy fields must be present in fresh payloads.
 
 ## Verification
 
-- Production read-after-write:
-  - `stock_strength_state`: `5786/5786`
-  - `entry_setup_state`: `5786/5786`
-  - `actionability_state`: `5786/5786`
-  - `setup_family`: `5786/5786`
-  - `data_quality_state`: `5786/5786`
-  - `volume_basis`: `5786/5786`
-  - `retest_state`: `5786/5786`
-  - `retest_reference_price`: `356/5786`
-  - `retest_days_since_breakout`: `356/5786`
-- Duplicate audit:
-  - exact duplicate extra rows: `0`
-  - stock/date multi-version extra rows: `0`
-- Prune result:
-  - `deleted_rows=0`
+- Production audit:
+  - command: `.\.venv\Scripts\python.exe scripts\audit_db_table_health.py`
+  - result: `errors=[]`
+- Tests:
+  - command: `.\.venv\Scripts\python.exe -m pytest tests\test_audit_db_table_health.py tests\test_daily_snapshot_store.py tests\test_analysis_engine.py -q --tb=short`
+  - result: `56 passed`
 - No live Telegram delivery.
+- No DB schema change.
+- No production deletion.
 
 ## Current Git State
 
@@ -52,5 +38,6 @@
 
 ## Next Action
 
-- Commit/push MD closeout.
-- Observe next scheduled `run_mode=bot` report to confirm future `signal_items` rows naturally fill the new fields.
+- Commit/push DB health audit utility and MD closeout.
+- Observe next scheduled `run_mode=bot` report and check fresh `signal_items` rows.
+- Plan follow-up for `market_theme_index_daily_bars` OHLCV/member source gap and `signal_outcomes` outcome metrics.

@@ -1,83 +1,84 @@
-# TASK: strategy_axis_memory_backfill_prune_20260615
+# TASK: db_table_health_audit_20260615
 
 ## Status
 
-- task_id: `strategy_axis_memory_backfill_prune_20260615`
-- task_type: `risk_patch`
+- task_id: `db_table_health_audit_20260615`
+- task_type: `normal_patch`
 - status: `implemented`
 - version: `v21.1`
-- QA level: `L3`
+- QA level: `L2`
 
 ## Owner Problem
 
-Owner applied the v21.3 strategy-axis memory schema and requested actual DB backfill, duplicate cleanup, and complete MD handoff. Owner also requested that future DB/data work automatically updates documents and cleanup evidence without repeated reminders.
+Owner saw multiple DB columns showing the same value every day and asked whether the data is useful, whether repeated values are fake, and whether all tables / output flow are still healthy.
 
 ## User Visible Result
 
-- `daily_signal_snapshot` has been backfilled from `daily_price`.
-- New strategy-axis memory fields are populated for historical v21.1 snapshot rows.
-- Duplicate/version prune was executed through the repo script; no duplicate rows existed, so no rows were deleted.
-- Process rule added to `AGENTS.md` requiring future DB backfill/prune tasks to update MD and cleanup evidence automatically.
+- Added a reusable read-only table health audit script.
+- Audited all current production tables used by the bot.
+- Separated expected constant metadata from real data gaps.
+- Added tests so future `signal_items` writes must include strategy-memory fields without fabricating historical rows.
 
 ## Non Goals
 
 - No live Telegram delivery.
-- No hand-written production DML.
-- No production schema change in this task; schema was already applied by Owner.
-- No fake reconstruction of historical `signal_items`.
-- No threshold calibration.
+- No DB schema change.
+- No production row deletion.
+- No fabricated backfill for historical `signal_items`.
+- No direct production DML.
 
 ## Impacted Modules And Direct Consumers
 
-- Production DB:
+- `scripts/audit_db_table_health.py`
+- `tests/test_audit_db_table_health.py`
+- `tests/test_daily_snapshot_store.py`
+- Production DB read-only audit:
+  - `daily_price`
   - `daily_signal_snapshot`
-- Existing repo scripts:
-  - `scripts/backfill_snapshots_from_daily_price.py`
-  - `scripts/prune_daily_signal_snapshot_versions.py`
-- Process docs:
-  - `AGENTS.md`
-  - `DISPATCH.md`
-  - `CURRENT_STATE.md`
-  - `CLEANUP_PLAN.md`
-  - `TASK.md`
-  - `CHANGELOG.md`
-  - `QA_REPORT.md`
+  - `market_theme_confirmed_evidence`
+  - `market_theme_index_daily_bars`
+  - `position_events`
+  - `positions`
+  - `sector_theme_members`
+  - `signal_items`
+  - `signal_outcomes`
+  - `signal_runs`
 
 ## Output Contract
 
-- Backfill source must be `daily_price`.
-- Version must remain `v21.1` so upsert updates existing rows instead of creating a new duplicate version.
-- Duplicate cleanup must keep `v21.1`.
-- If delete candidates are zero, record zero deletion instead of forcing data deletion.
-- `signal_items` historical rows must not be fabricated from `daily_price`; future bot runs will fill those report-item columns naturally.
+- Audit script must be read-only.
+- Audit output must include `read_only=true`, `live_telegram=false`, and `schema_change=false`.
+- Duplicate checks must use table-specific keys only; event tables must not be treated as duplicate just because the same stock appears multiple times.
+- Mostly-null columns are reported as evidence gaps, not filled with fake values.
 
 ## Version Contract
 
-- Backfilled snapshot version: `v21.1`.
-- Runtime report header remains `v21.1`.
+- Runtime report remains `v21.1`.
+- No user-visible Telegram version bump for this utility-only audit.
 
 ## Acceptance Conditions
 
-- Read-before-write confirms schema exists.
-- Backfill writes snapshot rows with `schema_fallback=false`.
-- Read-after-write confirms new fields are non-null on `daily_signal_snapshot`.
-- Prune plan/write confirms exact duplicate and multi-version duplicate counts are zero.
-- MD files record results and future cleanup rules.
+- Production audit runs without DB errors.
+- Tests cover duplicate-key semantics and future `signal_items` strategy fields.
+- MD files classify:
+  - expected constant metadata;
+  - actionable data gaps;
+  - fields that should stay null until a matching setup exists.
 - No live Telegram delivery.
 
 ## Fixture / Failure Specimen
 
-- Owner concern: DB had new columns but no historical values, so multi-day state would still be missing.
+- Owner observation: several columns looked identical across days, which made the table look useless or fake.
 - Required route:
-  - production read audit;
-  - repo-script backfill;
-  - production read-after-write;
-  - repo-script prune;
-  - MD closeout.
+  - read all production tables;
+  - profile constant / mostly-null / duplicate candidates;
+  - classify findings;
+  - add reusable audit command and tests;
+  - update handoff and cleanup docs.
 
 ## Forbidden And Blocking Conditions
 
-- Do not hand-write DML.
-- Do not backfill `signal_items` by inventing historical report runs.
-- Do not delete data unless repo prune plan selects candidates.
-- Do not claim future bot-run data exists before it is written.
+- Do not delete DB rows in this task.
+- Do not invent historical values to make columns look populated.
+- Do not classify repeated stock events as duplicate rows without a table-specific unique key.
+- Do not claim scheduled bot output is fixed from this audit alone.
