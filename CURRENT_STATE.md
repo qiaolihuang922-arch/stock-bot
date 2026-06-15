@@ -30,6 +30,7 @@
     - open confirmation still required;
   - `等RR修復` is rendered as `等風險報酬`;
   - `setup`, `V10`, and `V20` are removed from visible strategy explanations;
+  - afterhours summary avoids repeating `新增有效進場：無` after the conclusion line;
   - strategy decisions and thresholds are unchanged.
 
 ## Verification State
@@ -37,6 +38,7 @@
 - `205 passed, 147 warnings, 44 subtests passed`.
 - Official generator dry-run printed the updated unheld message and summary.
 - Official dry-run scan found no visible `setup`, `V10`, `V20`, `理論RR`, `理論風險報酬`, or unspaced `風險報酬>=`.
+- Official summary dry-run confirms the duplicate no-entry line is removed.
 - No live Telegram delivery.
 - No DB write, backfill, schema change, RLS, grant, policy, role, index, or constraint change in this task.
 

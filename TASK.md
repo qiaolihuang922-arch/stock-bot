@@ -25,6 +25,7 @@ Owner challenged whether the previous change only hard-replaced wording. The rep
   - `V10 / V20` -> `10日量 / 20日量`.
   - `風險報酬>=1.5` -> `風險報酬 >= 1.5`.
   - `品質B以上` -> `品質 B 以上`.
+  - summary no longer repeats `新增有效進場：無` after the conclusion already says it.
 - Example:
   - before: `不能買：RR 還不夠`
   - after: `不能買：風險報酬還不夠`
@@ -53,6 +54,7 @@ Owner challenged whether the previous change only hard-replaced wording. The rep
 - Internal state names may remain unchanged where needed for code compatibility, but final Telegram strings must render as `風險報酬`.
 - Non-actionable high values must be rendered with the active blocker reason, not a generic fixed phrase.
 - Visible strategy explanation should avoid raw English/internal shorthand such as `setup`, `V10`, and `V20`.
+- Summary must not repeat the same no-entry conclusion in adjacent lines.
 - `可買條件` must remain future unlock criteria, not a current buy recommendation.
 
 ## Version Contract
@@ -62,6 +64,7 @@ Owner challenged whether the previous change only hard-replaced wording. The rep
 ## Acceptance Conditions
 - Official generator dry-run shows state-aware potential reward wording for at least `等型態`, `等回測`, and `淘汰 / 弱反彈`.
 - Official generator dry-run does not show user-facing `setup`, `V10`, `V20`, `理論RR`, `理論風險報酬`, or unspaced `風險報酬>=`.
+- Official summary dry-run contains only one no-entry conclusion in the afterhours brief.
 - Official generator dry-run does not show user-facing `等RR修復` / `RR不足` in the unheld card or summary funnel.
 - Existing formatter/generator tests pass.
 - No live Telegram delivery.

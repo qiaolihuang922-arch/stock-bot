@@ -7646,7 +7646,8 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn(f"🧾 {generator.VERSION} 簡報", brief)
         self.assertNotIn("資料依據", brief)
         self.assertIn("📌 盤後簡報", brief)
-        self.assertIn("新增有效進場：無", brief)
+        self.assertIn("新倉：無有效進場", brief)
+        self.assertEqual(brief.count("有效進場"), 1)
         self.assertNotIn("市場 / 題材背景：", brief)
         self.assertNotIn("策略樣本：", brief)
 

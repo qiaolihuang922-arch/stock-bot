@@ -11,12 +11,13 @@
   - `setup` -> `買點型態` in explanation lines only, without changing stock titles.
   - `V10 / V20` -> `10日量 / 20日量`.
   - `品質B以上` and `風險報酬>=1.5` now include readable spacing.
+- Removed duplicate `新增有效進場：無` from afterhours summary when the conclusion already contains the same no-entry result.
 - Updated `core/generator.py` helper and funnel display labels to avoid exposing `等RR修復` in summaries.
 - Updated formatter and official generator tests to lock the new visible wording.
 
 ## Contract Impact
 
-- Telegram report wording changes only.
+- Telegram report wording / summary de-noise changes only.
 - No payload shape change.
 - No strategy threshold or decision change.
 - No DB schema or persistence change.
@@ -40,7 +41,7 @@
   ```powershell
   $env:PYTHONIOENCODING='utf-8'; .\.venv\Scripts\python.exe -c "from core.generator import generate_report; messages,_=generate_report(dry_run=True); print(messages[1]); print('\n--- SUMMARY ---\n'); print(messages[2])"
   ```
-  Result: unheld message shows state-aware potential reward wording and no visible `setup / V10 / V20 / 理論RR`; no live Telegram delivery.
+  Result: unheld message shows state-aware potential reward wording and no visible `setup / V10 / V20 / 理論RR`; summary no longer repeats no-entry line; no live Telegram delivery.
 
 ## Covered Layers
 

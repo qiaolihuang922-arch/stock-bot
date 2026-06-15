@@ -1872,10 +1872,7 @@ def _afterhours_brief_lines(holding_items, watch_items, report_context, deps, ma
             today_trade_line = f"今日買入狀態：已風控 {today_buy_risk_count}/觀察 {today_buy_observe_count}（{'、'.join(today_buy_names)}）"
         else:
             today_trade_line = f"今日交易：已建立新倉 {len(today_buy_names)} 檔（{'、'.join(today_buy_names)}）"
-        lines.extend([
-            today_trade_line,
-            f"新增有效進場：{actionable} 檔需明日開盤前確認" if actionable else "新增有效進場：無",
-        ])
+        lines.append(today_trade_line)
         if prepare_count:
             lines.append(f"可準備：{prepare_count} 檔需明日開盤後確認，未確認前不可下單")
     elif actionable:
@@ -1886,7 +1883,6 @@ def _afterhours_brief_lines(holding_items, watch_items, report_context, deps, ma
         lines.extend([
             "新倉：無有效進場",
             f"可準備：{prepare_count} 檔需明日開盤後確認，未確認前不可下單",
-            "新增有效進場：無",
         ])
     elif not actionable:
         lines.append("新增有效進場：無")

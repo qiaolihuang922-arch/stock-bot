@@ -14,6 +14,7 @@
 - Potential reward could be misread as buy evidence if it is not tied to the actual blocker.
 - Global shorthand replacement could accidentally mutate stock names or titles.
 - Other jargon (`setup`, `V10`, `V20`) could remain even after RR wording is fixed.
+- Summary could still repeat no-entry statements and make the brief feel noisy.
 
 ## Cross-Block Semantic Consistency
 
@@ -41,6 +42,7 @@
 - `205 passed, 147 warnings, 44 subtests passed`.
 - Official dry-run printed the updated unheld message and summary.
 - Official dry-run scan confirmed no visible `setup`, `V10`, `V20`, `理論RR`, `理論風險報酬`, or unspaced `風險報酬>=`.
+- Official summary dry-run keeps `新增有效進場：無` in the conclusion and removes the adjacent duplicate line.
 - No live Telegram delivery.
 
 ## Not Tested

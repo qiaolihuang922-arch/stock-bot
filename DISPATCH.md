@@ -21,6 +21,7 @@
   - `setup` -> `買點型態`
   - `V10 / V20` -> `10日量 / 20日量`
   - readable spacing for quality and risk/reward thresholds.
+  - duplicate `新增有效進場：無` summary line removed when conclusion already says it.
 - Strategy thresholds, buy/sell decisions, DB schema, and production data were not changed.
 
 ## Verification
@@ -30,6 +31,7 @@
 - Official generator dry-run:
   - printed the unheld message and summary with state-aware wording.
   - scan confirmed no visible `setup`, `V10`, `V20`, `理論RR`, `理論風險報酬`, or unspaced `風險報酬>=`.
+  - afterhours summary no longer repeats the no-entry conclusion.
   - no live Telegram delivery.
 
 ## Current Git State
