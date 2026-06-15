@@ -13,6 +13,9 @@
 ## Current Result
 
 - Decision: yes, v21.1 strategy features should be persisted as typed DB columns.
+- Production schema was checked after Owner applied the SQL migration:
+  - `daily_signal_snapshot` has all v21.1 typed feature columns.
+  - `signal_items` has all v21.1 typed feature columns.
 - Root cause found for market/theme evidence stale rows:
   - `daily_price` is written inside normal `run_mode=bot` after-close generator path.
   - market/theme evidence was only wired to `run_mode=daily_evidence`.
@@ -34,9 +37,14 @@
 - Daily writer, signal item writer, and guarded backfill now include these fields.
 - Writer paths fall back to legacy columns if production schema has not been applied yet.
 - Backfill recommendation:
-  - apply SQL migration first;
-  - then backfill two years with `--lookback-days 730`;
+  - SQL migration has been applied by Owner and verified read-only;
+  - two-year v21.1 strategy snapshot backfill has been executed with `--lookback-days 730`;
   - script uses 120-day warmup.
+- Backfill completed:
+  - `daily_signal_snapshot` v21.1: 5112 rows across 12 tracked stocks.
+  - All 12 tracked stocks have v21.1 snapshots through `2026-06-15`.
+  - All persisted v21.1 feature fields are non-null on those 5112 rows.
+  - market/theme evidence gaps for `2026-06-11`, `2026-06-12`, `2026-06-15` were filled by approved script.
 
 ## Verification
 
@@ -64,11 +72,18 @@ TWSE backfill dry-run:
 - `VALIDATION OK`
 - `DRY RUN ONLY: no database writes`
 
-Market/theme evidence freshness read-only check:
+Market/theme evidence freshness / backfill check:
 - `2026-06-10`: complete (`market_theme_confirmed_evidence=9`, `market_theme_index_daily_bars=10`)
-- `2026-06-11`: missing both sources
-- `2026-06-12`: missing both sources
-- `2026-06-15`: missing both sources
+- `2026-06-11`: complete after backfill (`market_theme_confirmed_evidence=9`, `market_theme_index_daily_bars=10`)
+- `2026-06-12`: complete after backfill (`market_theme_confirmed_evidence=9`, `market_theme_index_daily_bars=10`)
+- `2026-06-13`: weekend / no rows expected
+- `2026-06-14`: weekend / no rows expected
+- `2026-06-15`: complete after backfill (`market_theme_confirmed_evidence=8`, `market_theme_index_daily_bars=9`)
+
+Production v21.1 strategy snapshot read-back:
+- 12 tracked stocks covered through `2026-06-15`.
+- Total v21.1 rows: `5112`.
+- Non-null counts for each v21.1 feature column: `5112`.
 
 Workflow evidence automation tests:
 - `71 passed, 13 subtests passed`
@@ -83,6 +98,6 @@ Workflow evidence automation tests:
 
 ## Next Action
 
-- Production DB is not migrated/backfilled by this task.
-- Owner should apply `db/sql/v21_1_strategy_feature_snapshot_columns.sql`, then run approved backfill.
+- No live Telegram delivery was performed.
 - Normal `run_mode=bot` should fill market/theme evidence going forward after the bot run reaches the after-close safe-write window.
+- Optional cleanup remains: `trades` appears unused by code and has only one old row, but should not be deleted without a dedicated cleanup task.

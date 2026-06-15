@@ -6,7 +6,7 @@
 - status: `complete`
 - version: `v21.1`
 - no live Telegram delivery.
-- no live production DB write in this task.
+- production DB backfill was executed through approved repo scripts only.
 
 ## Stable Context
 
@@ -36,15 +36,23 @@
   - compact raw_result where applicable.
 - Schema-missing fallback keeps runner/backfill from crashing before migration is applied.
 - `backfill_signals.py` now supports `--lookback-days`.
+- Owner applied the SQL migration; schema was verified read-only before backfill.
+- v21.1 strategy-feature backfill has been executed for the 12 tracked stocks.
+- market/theme evidence gaps for `2026-06-11`, `2026-06-12`, and `2026-06-15` have been filled.
 
 ## Backfill Decision
 
-- Recommended strategy-feature backfill: `730` calendar days.
+- Completed strategy-feature backfill: `730` calendar days.
 - Reason:
   - 60D resistance needs enough warmup;
   - outcome calibration needs repeated 1/3/5/10-day forward samples across regimes;
   - Owner said two years of DB data should exist.
 - Script warmup: `120` calendar days before requested start.
+- Result:
+  - `daily_signal_snapshot` v21.1 total rows: `5112`.
+  - All 12 tracked stocks have v21.1 snapshots through `2026-06-15`.
+  - v21.1 feature columns are non-null on all `5112` v21.1 rows.
+  - No live Telegram delivery.
 
 ## Verification State
 
@@ -56,12 +64,17 @@
   - `v21.1`;
   - `messages 4`;
   - `write_results None`.
-- TWSE backfill dry-run:
-  - valid rows;
-  - no database writes.
-- Market/theme freshness read-only check:
+- TWSE v21.1 strategy backfill:
+  - approved script used: `scripts/backfill_signals.py`;
+  - version: `v21.1`;
+  - source: `twse`;
+  - `schema_fallback=False` on completed single-stock writes.
+- Market/theme freshness / backfill check:
   - `2026-06-10` complete;
-  - `2026-06-11`, `2026-06-12`, `2026-06-15` missing both market/theme sources.
+  - `2026-06-11` complete after backfill;
+  - `2026-06-12` complete after backfill;
+  - `2026-06-13`, `2026-06-14` weekend / no rows expected;
+  - `2026-06-15` complete after backfill.
 - Evidence automation tests:
   - `71 passed, 13 subtests passed`.
 
@@ -75,7 +88,5 @@
 
 ## Known Follow-ups
 
-- Apply `db/sql/v21_1_strategy_feature_snapshot_columns.sql` manually in Supabase before expecting typed columns to store in production.
-- After migration, run approved backfill with `--lookback-days 730 --source twse --version v21.1 --write --confirm-write`.
-- Current repo implementation is ready, but production DB is not yet migrated/backfilled from this task.
-- Market/theme evidence should resume through the normal bot workflow after the after-close safe-write window; older missing dates still need approved backfill if historical continuity is required.
+- Market/theme evidence should resume through the normal bot workflow after the after-close safe-write window.
+- `trades` appears unused by code and has only one old row, but deletion needs a dedicated cleanup task and evidence review.
