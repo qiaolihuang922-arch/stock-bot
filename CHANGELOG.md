@@ -16,6 +16,10 @@
   - non-actionable high RR becomes `理論RR x（setup未成立）` / `理論RR x僅參考`;
   - RR不足 stays normal RR instead of being mislabeled theoretical.
 - Updated regression tests for the new contract and added persistence assertions for RR fields.
+- After Owner applied the SQL artifact, production backfill was completed through existing approved scripts:
+  - `scripts/backfill_daily_price_history.py` filled 664 warmup `daily_price` rows for 2024-02-18 through 2024-06-16.
+  - `scripts/backfill_snapshots_from_daily_price.py` recomputed `daily_signal_snapshot` rows through 2026-06-15.
+  - `scripts/prune_daily_signal_snapshot_versions.py --dry-run` found no rows to delete.
 
 ## Research Alignment
 
@@ -47,9 +51,16 @@
   - `緯創 / 仁寶 / 技嘉` show `理論RR ...（setup未成立）`;
   - `旺宏` shows `理論RR 2.21僅參考` while waiting for retest;
   - `聯電` RR不足 remains `RR 1.32｜需>=1.5`.
+- Production DB read-after-write:
+  - `daily_signal_snapshot` total rows: 5786.
+  - versions: `{'v21.1': 5786}`.
+  - missing RR component rows: 0.
+  - exact duplicate groups: 0.
+  - old-version overlap rows: 0.
+  - prune dry-run delete candidates: 0.
 
 ## Residual Risk
 
-- SQL artifact still needs Owner review/execution before production DB typed RR columns exist.
+- Historical `signal_items` rows were not reconstructed; next bot/report write will naturally include the new RR fields.
 - Existing RR target basis is now explicit and auditable; future calibration can compare target-basis choices against persisted outcomes.
 - Live production runner artifact after next scheduled `run_mode=bot` was not observed in this cycle.

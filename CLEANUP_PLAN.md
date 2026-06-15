@@ -17,8 +17,8 @@
 ## Active Follow-ups
 
 - `db_schema_review: rr_context_columns`
-  - `db/sql/v21_2_rr_context_columns.sql` is a prepared schema artifact, not executed by agent.
-  - Owner review is required before applying because it adds columns.
+  - Owner applied `db/sql/v21_2_rr_context_columns.sql`.
+  - Production read/backfill verified RR component columns on `daily_signal_snapshot`.
 - `runner_gap: git_completion_gate_windows`
   - Bash gates fail on this Windows machine when WSL/Hyper-V is unavailable.
   - Add a PowerShell-equivalent completion gate or normalize gate execution.
@@ -30,6 +30,9 @@
 - `strategy_calibration`
   - v21.1 persists V10/V20, 20D/60D evidence, and now has a prepared RR component schema.
   - Future work should calibrate V20 cutoffs, retest success, heat/quality transitions, and RR target-basis choices from production outcomes.
+- `signal_items_history`
+  - Old `signal_items` rows were not reconstructed after RR fields were added.
+  - This is acceptable unless a future task specifically needs historical report-run item analytics; new bot runs will write the fields.
 
 ## Boundaries
 

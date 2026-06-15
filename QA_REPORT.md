@@ -39,15 +39,22 @@
 - `263 passed, 147 warnings, 44 subtests passed`.
 - Official dry-run generated 4 messages, no live delivery.
 - Dry-run confirmed `理論RR` wording on non-actionable high RR cards and normal `RR` wording on RR不足 card.
+- Production DB verification after Owner-applied schema and approved-script backfill:
+  - `daily_signal_snapshot`: 5786 rows, all `v21.1`.
+  - RR component missing rows: 0.
+  - exact duplicate groups: 0.
+  - old-version overlap rows: 0.
+  - prune dry-run delete candidates: 0.
+  - warmup daily_price rows written: 664.
 
 ## Not Tested
 
 - Live Telegram delivery.
-- Production DB migration execution.
 - Next scheduled GitHub/Render runner artifact after push.
+- Historical `signal_items` reconstruction.
 
 ## QA Conclusion
 
 conditional pass
 
-Reason: repo code, tests, and official dry-run pass. Production DB schema still requires Owner-reviewed SQL execution, and live Telegram delivery was intentionally not performed.
+Reason: repo code, tests, official dry-run, production schema read, approved backfill, and duplicate audit pass. Live Telegram delivery was intentionally not performed, and the next scheduled runner artifact still needs observation.
