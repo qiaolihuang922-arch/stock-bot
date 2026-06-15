@@ -1,10 +1,10 @@
-# TASK: acute_rebound_buy_conditions_v21_0_8_20260615
+# TASK: acute_rebound_retest_anchor_v21_0_9_20260615
 
 ## Status
-- task_id: `acute_rebound_buy_conditions_v21_0_8_20260615`
+- task_id: `acute_rebound_retest_anchor_v21_0_9_20260615`
 - type: `risk_patch`
 - status: `complete`
-- version: `v21.0.8`
+- version: `v21.0.9`
 - QA level: `L2`
 
 ## Owner Problem
@@ -13,7 +13,7 @@ Owner asked why a stock such as 旺宏 can be up strongly but still read like a 
 ## User Visible Result
 - `急彈待回測` cards now show a compact not-buy reason and buy-condition line.
 - The card says the issue is `急彈追價區，尚未回測`, and lists live blockers such as weak volume, D quality, and current RR.
-- The unlock line is explicit: `回測不破 + 非漲停追價 + 量能有效 + 品質B以上 + RR>=1.5`.
+- The unlock line is explicit: `回測前高/突破區不破 + 非漲停追價 + 量能有效 + 品質B以上 + RR>=1.5`.
 - RR is no longer hidden as `-（不可行動）` on acute rebound wait cards when a real RR exists.
 - Limit-up / locked-overheat cards still hide RR as overheat and remain hard blocked.
 
@@ -37,7 +37,7 @@ Owner asked why a stock such as 旺宏 can be up strongly but still read like a 
 - It must show:
   - `卡關主因：急彈未回測`
   - `量化差距：急彈追價區，尚未回測...`
-  - `解鎖：回測不破 + 非漲停追價 + 量能有效 + 品質B以上 + RR>=1.5`
+  - `解鎖：回測前高/突破區不破 + 非漲停追價 + 量能有效 + 品質B以上 + RR>=1.5`
 - If a real RR exists for acute rebound wait, the data line may show that RR while still saying the card is not actionable.
 - For true limit-up / locked-overheat cards, existing `RR -（過熱）` hard blocker behavior must remain.
 
@@ -45,13 +45,13 @@ Owner asked why a stock such as 旺宏 can be up strongly but still read like a 
 - Focused owner specimen proves 旺宏-style +8% acute rebound is `等回測｜急彈待回測`, not weak rebound.
 - Focused negative cases prove limit-up and low-volume limit-up still remain overheat / no-chase.
 - Targeted report/state/evidence suites pass.
-- Official dry-run generates `v21.0.8` with no live Telegram delivery and contains the new condition line.
+- Official dry-run generates `v21.0.9` with no live Telegram delivery and contains the new condition line.
 
 ## Failure Specimen And Route
 - Owner failure: pasted report where 旺宏 near limit-up / sharp rebound still looked like weak rebound and did not say what conditions would make it buyable.
 - Failure layer: official generator + Telegram formatter.
 - Verification route:
-  - `tests/test_generator_report.py::GeneratorReportTest::test_v21_0_8_strong_rebound_is_not_labeled_weak_rebound`
+  - `tests/test_generator_report.py::GeneratorReportTest::test_v21_0_9_strong_rebound_is_not_labeled_weak_rebound`
   - limit-up / low-volume limit-up regression tests
   - official `generate_report(dry_run=True)` message list.
 
@@ -60,3 +60,6 @@ Owner asked why a stock such as 旺宏 can be up strongly but still read like a 
 - Do not live-send Telegram.
 - Do not loosen the trade state machine into buying acute rebounds without retest and confirmation.
 - Do not remove existing overheat / limit-up hard blockers.
+
+
+

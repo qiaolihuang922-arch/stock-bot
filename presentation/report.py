@@ -386,6 +386,8 @@ def _unheld_score_text_for_state(score_text, rr_text, valid_entry, funnel_state,
     reason = _hidden_score_reason(rr_text, funnel_state, state)
     if reason == "RR不足":
         return "不適用（RR不足）｜原因：RR不足，等待RR修復"
+    if reason == "等回測":
+        return "不適用（等回測）｜原因：等待前高/突破區回測承接"
     evidence_text = _evidence_unavailable_text(stock_result or {}, data or {})
     return f"不適用（{reason}）｜證據：{evidence_text}"
 
@@ -537,7 +539,7 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
         return evidence_lines(
             "急彈未回測",
             "｜".join(rebound_gaps),
-            "回測不破 + 非漲停追價 + 量能有效 + 品質B以上 + RR>=1.5",
+            "回測前高/突破區不破 + 非漲停追價 + 量能有效 + 品質B以上 + RR>=1.5",
             basis="",
         )
     if behavior in {"LIMIT_LOCK", "LIMIT_REBOUND"} or "漲停" in blocker_text or "不可追高" in blocker_text:

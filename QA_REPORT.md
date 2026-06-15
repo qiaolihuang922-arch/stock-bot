@@ -1,4 +1,4 @@
-# QA_REPORT: acute_rebound_buy_conditions_v21_0_8_20260615
+# QA_REPORT: acute_rebound_retest_anchor_v21_0_9_20260615
 
 ## Test Scope
 - Acute rebound unheld card wording.
@@ -29,7 +29,7 @@
   - buy conditions: retest hold, non-limit-up chasing, valid volume, B+ quality, RR >= 1.5.
 - Countercheck from official dry-run:
   - 旺宏 card contains `量化差距：急彈追價區，尚未回測｜V 0.5x偏弱｜品質 D 未達B｜RR 2.21達標`.
-  - 旺宏 card contains `解鎖：回測不破 + 非漲停追價 + 量能有效 + 品質B以上 + RR>=1.5`.
+  - 旺宏 card contains `解鎖：回測前高/突破區不破 + 非漲停追價 + 量能有效 + 品質B以上 + RR>=1.5`.
   - 旺宏 card remains `買點：不買，等回測`.
   - 旺宏 card data line shows `RR 2.21` without turning the card into buyable.
 
@@ -50,4 +50,6 @@
 Evidence:
 - `3 passed` focused acute/limit-up specimens.
 - `249 passed, 149 warnings, 57 subtests passed` targeted report/state/evidence suite.
-- Official dry-run generated `v21.0.8` and showed the new 旺宏 condition line with no live Telegram delivery.
+- Official dry-run generated `v21.0.9` and showed the new 旺宏 retest-anchor condition line with no live Telegram delivery.
+
+

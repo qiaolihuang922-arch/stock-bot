@@ -81,7 +81,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v21.0.8"
+VERSION = "v21.0.9"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -9434,4 +9434,5 @@ def generate():
     if isinstance(result, list):
         return "\n\n====================\n\n".join(result)
     return result
+
 
