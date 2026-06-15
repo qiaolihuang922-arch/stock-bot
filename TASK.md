@@ -20,6 +20,7 @@ Owner pasted the 06/16 pre-market unheld report and pointed out repeated mobile-
 ## User Visible Result
 
 - Unheld cards no longer print standalone `拆解` / duplicate `盤面` state rows.
+- Normal waiting/rejected unheld cards no longer repeat `交易狀態` when title + `進場` already convey the same decision.
 - Non-actionable unheld cards now show a readable entry block:
   - `進場：...｜原因：...`
   - `缺口：...`
@@ -32,6 +33,7 @@ Owner pasted the 06/16 pre-market unheld report and pointed out repeated mobile-
   - `等型態` shows setup/quality gap.
   - `淘汰` shows the invalidation / repair requirement.
 - Normal waiting/rejected cards suppress noisy `數據：...` rows; source/data failure cards still keep fail-closed evidence.
+- `歷史：...` is shown only when it carries useful memory such as repair / positive weight / high-signal prior execution, not for ordinary repeated failure noise.
 - Strategy fields are still computed separately; only presentation is denoised.
 - Entry evidence is now selected before formatting, not generated as a full metric package and trimmed afterward.
 
@@ -81,6 +83,8 @@ Owner pasted the 06/16 pre-market unheld report and pointed out repeated mobile-
 - Dry-run unheld card shows `進場` / `缺口` / `可買` as short decision lines.
 - Dry-run keeps one `距突破` line per unheld card.
 - Dry-run normal unheld waiting/rejected cards have no `數據：` metric dump.
+- Dry-run normal unheld waiting/rejected cards do not repeat `交易狀態` when the same state is already in the title and `進場`.
+- Dry-run suppresses ordinary `歷史` noise while keeping meaningful repair / execution memory available.
 - Generator report tests pass.
 - Regression test prevents standalone duplicate `拆解` / `買點` / `不能買` / `還差` rows from returning in the rebound-retest case.
 - Regression test prevents `等回測` / `等型態` helper output from reintroducing volume/quality/RR metric packages outside their state scope.

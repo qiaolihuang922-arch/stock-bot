@@ -3,7 +3,7 @@
 ## Current Task
 
 - task_id: `unheld_card_mobile_denoise_20260616`
-- status: `implemented + QA passed + pushed`
+- status: `implemented + QA passed, pending commit/push`
 - version: `v21.1`
 - no live Telegram delivery.
 
@@ -30,15 +30,17 @@
   - `淘汰`: repair requirement only.
 - Official unheld formatting now uses `_unheld_entry_contract`; state-specific evidence is selected before formatting rather than produced as a broad metric package and cropped later.
 - Normal waiting/rejected unheld cards suppress broad `數據：...` metric dumps; fail-closed source/data evidence remains allowed.
+- Additional denoise now suppresses repeated waiting-card `交易狀態` lines when title + `進場` already carry the same state.
+- Unheld `歷史` rows are gated to meaningful repair / positive-weight / execution-memory signals; ordinary repeated-failure history is hidden.
 - Strategy logic is unchanged.
 - No DB operation was performed.
 
 ## Verification State
 
 - Dry-run `generate_report(dry_run=True)` checked locally; unheld cards render readable state-scoped entry lines.
-- Dry-run unheld message: `legacy_split_rows=0`, `data_lines=0`, `distance_lines=8`.
+- Dry-run current output: `trade_state=0`, `history=0`, `data=0`.
 - Tests:
-  - `205 passed, 44 subtests passed`
+  - `479 passed, 8 skipped, 108 subtests passed`
 - No live Telegram delivery.
 
 ## Known Follow-ups

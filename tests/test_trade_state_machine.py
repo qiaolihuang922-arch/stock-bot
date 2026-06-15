@@ -203,7 +203,7 @@ class TradeStateMachineTest(unittest.TestCase):
         self.assertIn("DATA_SOURCE_ERROR", state["guards"])
         self.assertIn("DATA_SOURCE_ERROR", state["blocked_by"])
 
-    def test_report_cards_include_trade_state_line(self):
+    def test_report_cards_keep_trade_state_decision_without_repeating_state_line(self):
         payload = _watch_payload()
         with patch.object(generator, "get_market_phase", return_value="盤後"):
             messages = generator.formatTelegramMessages(
@@ -218,7 +218,10 @@ class TradeStateMachineTest(unittest.TestCase):
 
         unheld = messages[1]
         self.assertIn("【06/08 盤後｜v21.1】", unheld)
-        self.assertIn("交易狀態：等接近｜動作：等待｜主因：個股弱勢｜還差：接近觸發", unheld)
+        self.assertNotIn("交易狀態：等接近｜動作：等待｜主因：個股弱勢｜還差：接近觸發", unheld)
+        self.assertIn("【緯創 3231】⏳ 等接近｜個股弱勢", unheld)
+        self.assertIn("進場：不買，等接近觸發區", unheld)
+        self.assertIn("缺口：補齊行情/策略來源", unheld)
         self.assertNotIn("交易狀態：不可行動", unheld)
 
     def test_breakout_distance_gate_only_blocks_breakout_setup(self):

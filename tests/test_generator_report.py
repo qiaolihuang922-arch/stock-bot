@@ -3556,8 +3556,10 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("未持倉 1｜僅追蹤 1（等接近）", summary_message(messages))
         self.assertNotIn("淘汰 1", summary_message(messages))
         self.assertIn("【緯創 3231】⏳ 等接近｜個股弱勢", unheld_message(messages))
-        self.assertIn("交易狀態：等接近｜動作：等待｜主因：個股弱勢｜還差：接近觸發", unheld_message(messages))
+        self.assertNotIn("交易狀態：等接近｜動作：等待｜主因：個股弱勢｜還差：接近觸發", unheld_message(messages))
+        self.assertIn("距突破：19.25%｜遠離突破", unheld_message(messages))
         self.assertIn("進場：不買，等接近觸發區｜原因：策略樣本不足", unheld_message(messages))
+        self.assertIn("缺口：補足有效策略樣本", unheld_message(messages))
         self.assertIn("明日觸發：接近觸發區後重新評估 買點型態", unheld_message(messages))
         self.assertNotIn("【緯創 3231】⛔ 淘汰", unheld_message(messages))
 

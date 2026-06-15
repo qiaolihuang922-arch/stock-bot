@@ -3,7 +3,7 @@
 ## Active
 
 - task_md_holds: `unheld_card_mobile_denoise_20260616`
-- status: `implemented + QA passed + pushed`
+- status: `implemented + QA passed, pending commit/push`
 - current_version: `v21.1`
 - no live Telegram delivery in this cycle.
 
@@ -24,6 +24,9 @@
   - `等風險報酬` focuses on risk-reward;
   - `等型態` focuses on setup / quality;
   - normal waiting/rejected cards suppress noisy `數據：...` rows.
+- Follow-up denoise completed:
+  - normal waiting/rejected unheld cards suppress repeated `交易狀態` when title + `進場` already explain the state;
+  - ordinary repeated-failure `歷史` rows are hidden, while repair / positive-weight / high-signal memory remains eligible.
 - Corrected the implementation path:
   - official formatter now consumes `_unheld_entry_contract`;
   - state-specific evidence is selected before formatting;
@@ -36,10 +39,10 @@
 - Dry-run:
   - `generate_report(dry_run=True)`
   - confirmed unheld cards render short state-scoped `進場` / `缺口` / `可買` lines.
-  - `legacy_split_rows=0`; `data_lines=0`; `distance_lines=8`.
+  - latest current-output counts: `trade_state=0`; `history=0`; `data=0`.
 - Tests:
-  - command: `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py tests\test_unheld_gap_format.py -q --tb=short`
-  - result: `205 passed, 44 subtests passed`
+  - command: `.\.venv\Scripts\python.exe -m pytest -q --tb=short`
+  - result: `479 passed, 8 skipped, 108 subtests passed`
 - No live Telegram delivery.
 - No DB schema change/write/backfill.
 
@@ -47,11 +50,11 @@
 
 - branch: `main`
 - upstream: `origin/main`
-- latest commit: `see git log -1 after push`
-- HEAD equals upstream: `true after closeout push`
-- worktree/index: `clean`
+- latest commit: `pending`
+- HEAD equals upstream: `pending closeout push`
+- worktree/index: `pending commit`
 - closeout uses Windows-equivalent git checks because bash scripts may fail on this machine without WSL/Hyper-V.
 
 ## Next Action
 
-- After next scheduled `run_mode=bot`, confirm production Telegram artifact keeps the readable unheld-card layout.
+- Commit and push the current unheld-card state/history denoise, then run git completion checks.

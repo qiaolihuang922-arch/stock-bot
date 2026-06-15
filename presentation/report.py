@@ -1233,6 +1233,33 @@ def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None):
     return lines
 
 
+def _compact_unheld_trade_state_line(line, *, valid_entry=False, post_market_prepare=False, data_source_blocked=False, funnel_state=None):
+    if not line:
+        return None
+    if valid_entry or post_market_prepare or data_source_blocked:
+        return line
+    if funnel_state in {"等冷卻", "等回測", "等型態", "等接近", "等RR修復", "淘汰"}:
+        return None
+    return line
+
+
+def _compact_unheld_history_line(line, *, funnel_state=None):
+    if not line:
+        return None
+    text = str(line)
+    if "修復中" in text or "權重 +" in text:
+        return line
+    if funnel_state in {"淘汰", "等資料"} and (
+        "前次 eliminated" in text
+        or "前次 failed" in text
+        or "已買" in text
+        or "已賣" in text
+        or "停損" in text
+    ):
+        return line
+    return None
+
+
 def _strip_breakout_position_segment(market_text):
     if not market_text:
         return market_text
@@ -1697,6 +1724,13 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         or (funnel_state == "淘汰" and "交易狀態：等資料" in str(trade_state_line))
     ):
         trade_state_line = None
+    trade_state_line = _compact_unheld_trade_state_line(
+        trade_state_line,
+        valid_entry=valid_entry,
+        post_market_prepare=post_market_prepare,
+        data_source_blocked=data_source_display_blocked or (deps["is_valid_entry"](stock_result) and not source_eligible),
+        funnel_state=funnel_state,
+    )
     entry_check_lines = _entry_check_lines(buy_line, buy_gap_contract, funnel_state=funnel_state)
     lines = [
         f"【{deps['stock_title'](name, data)}】{title_icon} {title_action}｜{title_label}",
@@ -1731,7 +1765,10 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     ])
     lines = [line for line in lines if line is not None]
     lines = [_afterhours_card_text(line, report_context) for line in lines]
-    history_line = None if is_afterhours else deps["cross_day_detail_line"](data)
+    history_line = None if is_afterhours else _compact_unheld_history_line(
+        deps["cross_day_detail_line"](data),
+        funnel_state=funnel_state,
+    )
     if history_line:
         lines.insert(-1, history_line)
 

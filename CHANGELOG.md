@@ -17,6 +17,8 @@
   - setup cards focus on setup / quality;
   - rejected cards focus on the repair requirement.
 - Normal waiting / rejected unheld cards no longer print the broad `數據：...` metric dump; source/data failure cards still keep fail-closed evidence.
+- Normal waiting / rejected unheld cards no longer repeat `交易狀態：...` when title and `進場` already carry the same state.
+- Unheld `歷史：...` rows are now gated: repair / positive weight / high-signal prior execution remains visible; ordinary repeated failure history is suppressed.
 - Removed the previous post-format state-scoping parser so there is only one active rule source for unheld entry evidence.
 - Removed standalone display rows for unheld-card `拆解`, `買點`, `不能買`, `還差`, and `可買條件` when they belong to the same entry-check block.
 - Updated `tests/test_generator_report.py` and `tests/test_unheld_gap_format.py` to verify the new compact layout, state-scoped helper contract, and prevent old split rows / full metric packages from returning.
@@ -44,14 +46,13 @@
 
 - Local dry-run:
   - `generate_report(dry_run=True)`
-  - confirmed unheld cards render `進場` / `缺口` / `可買` and no longer render wall-like `狀態` / `進場檢查`.
-  - `data_lines=0` in the unheld message.
-  - `distance_lines=8` in the unheld message.
+  - confirmed unheld cards render `進場` / `缺口` / `可買` without repeated `交易狀態`.
+  - latest dry-run line counts: `trade_state=0`, `history=0`, `data=0` in current unheld output.
   - 旺宏 example keeps `距突破：10.93%｜遠離突破` and narrows `缺口` to `站回突破區 175.5~176.38`.
   - `legacy_split_rows=0`; `data_lines_total=0`.
 - Test command:
-  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py tests\test_unheld_gap_format.py -q --tb=short`
-  - result: `205 passed, 44 subtests passed`
+  - `.\.venv\Scripts\python.exe -m pytest -q --tb=short`
+  - result: `479 passed, 8 skipped, 108 subtests passed`
 
 ## Covered Layers
 

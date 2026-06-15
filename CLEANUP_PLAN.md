@@ -32,6 +32,8 @@
   - blocker details are scoped by state instead of dumping every metric into every waiting card.
   - official formatting uses `_unheld_entry_contract`; the old post-format parser/crop path is not the active rule source.
   - normal waiting/rejected cards suppress noisy `數據：...` rows while fail-closed source/data evidence remains available.
+  - repeated waiting-card `交易狀態` lines are hidden when title + `進場` already carry the state.
+  - unheld `歷史` rows are hidden unless they add repair / positive-weight / execution-memory signal.
   - Strategy calculations are unchanged.
 
 ## Active Follow-ups

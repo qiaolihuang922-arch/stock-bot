@@ -23,6 +23,8 @@
 - Non-actionable entry details are split into short `進場` / `缺口` / `可買` rows.
 - `距突破` remains a separate line for every unheld card.
 - Normal waiting/rejected cards no longer show a generic `數據：...` metric dump.
+- Normal waiting/rejected cards no longer repeat `交易狀態` when the title and `進場` already communicate the waiting decision.
+- Ordinary `歷史` failure rows are suppressed; meaningful repair / positive-weight / execution-memory rows remain eligible.
 - State-specific cards expose only the relevant blocker family:
   - retest: retest / breakout zone;
   - cooling: heat level;
@@ -48,21 +50,19 @@
   - cards now show `缺口：...`;
   - cards now show `可買：...`;
   - cards still show `距突破：...`;
-  - normal unheld cards show `data_lines=0`;
+  - normal unheld cards show no repeated `交易狀態`, ordinary `歷史`, or broad `數據` rows;
   - helper-level rebound/setup tests no longer allow volume/quality/RR packages to appear outside their state scope;
   - cards no longer show standalone `拆解`, `買點`, `不能買`, `還差`, or hard-concat `進場檢查`.
 
 ## Evidence
 
 - Test command:
-  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py tests\test_unheld_gap_format.py -q --tb=short`
-  - result: `205 passed, 44 subtests passed`
+  - `.\.venv\Scripts\python.exe -m pytest -q --tb=short`
+  - result: `479 passed, 8 skipped, 108 subtests passed`
 - Dry-run:
   - `generate_report(dry_run=True)`
   - result checked locally:
-    - `data_lines=0`;
-    - `legacy_split_rows=0`;
-    - `distance_lines=8`;
+    - current unheld output has `trade_state=0`, `history=0`, `data=0`;
     - 旺宏 card shows only retest-zone blocker details, not the full metric package.
   - no live Telegram delivery.
 
