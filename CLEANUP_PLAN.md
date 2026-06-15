@@ -25,6 +25,10 @@
 - False duplicate risk reduced:
   - duplicate checks now use table-specific keys;
   - event tables are not treated as duplicate only because stock code/name repeats.
+- Unheld-card mobile denoise completed:
+  - `拆解` / `盤面`-like state is merged into `狀態`.
+  - `買點` / `不能買` / `還差` / `可買條件` is merged into `進場檢查`.
+  - Strategy calculations are unchanged.
 
 ## Active Follow-ups
 
@@ -40,6 +44,9 @@
 - `data_quality_tightening`
   - Replace remaining source/volume fallback paths that can make missing data look normal.
   - Missing data should become `insufficient`, `source_error`, `stale`, or `missing_source`.
+- `telegram_rejected_reason_denoise`
+  - Some rejected-card `原因` lines still repeat source/status detail.
+  - Future cleanup should compress them without hiding the primary blocker.
 - `runner_gap: git_completion_gate_windows`
   - Bash gates may fail on this Windows machine when WSL/Hyper-V is unavailable.
   - Add a PowerShell-equivalent completion gate or normalize gate execution.

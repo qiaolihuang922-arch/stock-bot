@@ -1,8 +1,8 @@
-# TASK: db_table_health_audit_20260615
+# TASK: unheld_card_mobile_denoise_20260616
 
 ## Status
 
-- task_id: `db_table_health_audit_20260615`
+- task_id: `unheld_card_mobile_denoise_20260616`
 - task_type: `normal_patch`
 - status: `implemented`
 - version: `v21.1`
@@ -10,75 +10,68 @@
 
 ## Owner Problem
 
-Owner saw multiple DB columns showing the same value every day and asked whether the data is useful, whether repeated values are fake, and whether all tables / output flow are still healthy.
+Owner pasted the 06/16 pre-market unheld report and pointed out repeated mobile-reading lines:
+
+- `拆解` and `盤面` carry overlapping state information.
+- `買點`, `不能買`, `還差`, and `可買條件` repeat the same decision in separate rows.
+- The report should be smarter and strategy-granular, not a hard text rewrite.
 
 ## User Visible Result
 
-- Added a reusable read-only table health audit script.
-- Audited all current production tables used by the bot.
-- Separated expected constant metadata from real data gaps.
-- Added tests so future `signal_items` writes must include strategy-memory fields without fabricating historical rows.
+- Unheld cards now merge strategy state and market state into one `狀態` line.
+- Unheld cards now merge entry decision, blocker, gap, and unlock into one `進場檢查` line.
+- Strategy fields are still computed separately; only presentation is compacted.
 
 ## Non Goals
 
+- No strategy threshold change.
+- No DB schema/write/backfill.
 - No live Telegram delivery.
-- No DB schema change.
-- No production row deletion.
-- No fabricated backfill for historical `signal_items`.
-- No direct production DML.
+- No holding-card rewrite.
+- No version bump; runtime remains `v21.1` because this is presentation denoise inside the same strategy contract.
 
 ## Impacted Modules And Direct Consumers
 
-- `scripts/audit_db_table_health.py`
-- `tests/test_audit_db_table_health.py`
-- `tests/test_daily_snapshot_store.py`
-- Production DB read-only audit:
-  - `daily_price`
-  - `daily_signal_snapshot`
-  - `market_theme_confirmed_evidence`
-  - `market_theme_index_daily_bars`
-  - `position_events`
-  - `positions`
-  - `sector_theme_members`
-  - `signal_items`
-  - `signal_outcomes`
-  - `signal_runs`
+- `presentation/report.py`
+- `tests/test_generator_report.py`
+- Direct consumer: Telegram unheld card message.
 
 ## Output Contract
 
-- Audit script must be read-only.
-- Audit output must include `read_only=true`, `live_telegram=false`, and `schema_change=false`.
-- Duplicate checks must use table-specific keys only; event tables must not be treated as duplicate just because the same stock appears multiple times.
-- Mostly-null columns are reported as evidence gaps, not filled with fake values.
+- Non-actionable unheld cards should not print standalone duplicate lines:
+  - `拆解：...`
+  - `買點：...`
+  - `不能買：...`
+  - `還差：...`
+- Replacement lines:
+  - `狀態：強弱 ...｜買點 ...｜行動 ...｜盤面：...` when market detail is available.
+  - `進場檢查：買點：...｜不能買：...｜還差：...｜可買條件：...`
+- Existing decision semantics must remain visible:
+  - why not buy;
+  - what is missing;
+  - what unlocks a buy.
 
 ## Version Contract
 
-- Runtime report remains `v21.1`.
-- No user-visible Telegram version bump for this utility-only audit.
+- Header remains `v21.1`.
+- This task changes Telegram formatting, not strategy/DB version.
 
 ## Acceptance Conditions
 
-- Production audit runs without DB errors.
-- Tests cover duplicate-key semantics and future `signal_items` strategy fields.
-- MD files classify:
-  - expected constant metadata;
-  - actionable data gaps;
-  - fields that should stay null until a matching setup exists.
+- Dry-run unheld card shows merged `狀態` / `進場檢查`.
+- Generator report tests pass.
+- Regression test prevents standalone duplicate `拆解` / `買點` / `不能買` / `還差` rows from returning in the rebound-retest case.
 - No live Telegram delivery.
 
 ## Fixture / Failure Specimen
 
-- Owner observation: several columns looked identical across days, which made the table look useless or fake.
-- Required route:
-  - read all production tables;
-  - profile constant / mostly-null / duplicate candidates;
-  - classify findings;
-  - add reusable audit command and tests;
-  - update handoff and cleanup docs.
+- Owner sample: 06/16 pre-market unheld report showing separate `拆解`, `盤面`, `買點`, `不能買`, `還差`, `可買條件`.
+- Replay route:
+  - local dry-run `generate_report(dry_run=True)`;
+  - focused generator tests.
 
 ## Forbidden And Blocking Conditions
 
-- Do not delete DB rows in this task.
-- Do not invent historical values to make columns look populated.
-- Do not classify repeated stock events as duplicate rows without a table-specific unique key.
-- Do not claim scheduled bot output is fixed from this audit alone.
+- Do not remove decision detail by blindly deduplicating.
+- Do not make weak/overheated/retest/RR blockers look buyable.
+- Do not alter strategy decisions to satisfy presentation.

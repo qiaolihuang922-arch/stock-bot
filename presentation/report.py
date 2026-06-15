@@ -1149,6 +1149,43 @@ def _score_gated_market_line(report_context, name, data, dist, deps):
     return "盤面：強弱證據不足｜待確認"
 
 
+def _strip_line_prefix(text, prefixes):
+    text = str(text or "").strip()
+    for prefix in prefixes:
+        if text.startswith(prefix):
+            return text[len(prefix):].strip()
+    return text
+
+
+def _combined_status_line(strategy_axis_line, market_line):
+    strategy_text = _strip_line_prefix(strategy_axis_line, ["拆解："])
+    market_text = _strip_line_prefix(market_line, ["盤面："])
+    parts = []
+    if strategy_text:
+        parts.append(strategy_text)
+    if market_text:
+        parts.append(f"盤面：{market_text}")
+    if not parts:
+        return None
+    return "狀態：" + "｜".join(parts)
+
+
+def _combined_buy_check_line(buy_line, buy_gap_line):
+    buy_text = str(buy_line or "").strip()
+    gap_lines = [
+        str(line).strip()
+        for line in str(buy_gap_line or "").splitlines()
+        if str(line).strip()
+    ]
+    if not gap_lines:
+        return buy_text or None
+    parts = []
+    if buy_text:
+        parts.append(buy_text)
+    parts.extend(gap_lines)
+    return "進場檢查：" + "｜".join(dict.fromkeys(parts))
+
+
 def _strip_breakout_position_segment(market_text):
     if not market_text:
         return market_text
@@ -1605,14 +1642,14 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         or (funnel_state == "淘汰" and "交易狀態：等資料" in str(trade_state_line))
     ):
         trade_state_line = None
+    status_line = _combined_status_line(strategy_axis_line, market_line)
+    buy_check_line = _combined_buy_check_line(buy_line, buy_gap_line)
     lines = [
         f"【{deps['stock_title'](name, data)}】{title_icon} {title_action}｜{title_label}",
         trade_state_line,
-        strategy_axis_line,
-        market_line,
+        status_line,
         _breakout_distance_line(dist, data=data, funnel_state=funnel_state, title_label=title_label),
-        buy_line,
-        buy_gap_line,
+        buy_check_line,
     ]
 
     weak_buy_backtest_line = _weak_buy_backtest_line(

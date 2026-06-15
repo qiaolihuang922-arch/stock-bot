@@ -2,44 +2,41 @@
 
 ## Active
 
-- task_md_holds: `db_table_health_audit_20260615`
+- task_md_holds: `unheld_card_mobile_denoise_20260616`
 - status: `implemented + QA passed`
 - current_version: `v21.1`
 - no live Telegram delivery in this cycle.
 
 ## Result Summary
 
-- Added read-only DB table health audit script: `scripts/audit_db_table_health.py`.
-- Audited all current active production tables.
-- Found no audit read errors.
-- Found no table-specific duplicate issue in the checked keys.
-- Classified repeated daily values:
-  - expected metadata: source, version, formula, basis, static source labels;
-  - real data gaps: market index OHLCV/member placeholders, outcome max high/drawdown, historical `signal_items` new fields.
-- Strengthened `signal_items` future write-path test so new strategy fields must be present in fresh payloads.
+- Owner requested smarter denoise for unheld cards, specifically:
+  - merge `拆解` / `盤面`-like state;
+  - merge `買點` / `不能買` / `還差` / `可買條件`.
+- Implemented presentation-only merge:
+  - `狀態：強弱 ...｜買點 ...｜行動 ...`
+  - `進場檢查：買點：...｜不能買：...｜還差：...｜可買條件：...`
+- Strategy calculations and blockers are unchanged.
+- Header/runtime version remains `v21.1`.
 
 ## Verification
 
-- Production audit:
-  - command: `.\.venv\Scripts\python.exe scripts\audit_db_table_health.py`
-  - result: `errors=[]`
+- Dry-run:
+  - `generate_report(dry_run=True)`
+  - confirmed unheld cards render merged lines.
 - Tests:
-  - command: `.\.venv\Scripts\python.exe -m pytest tests\test_audit_db_table_health.py tests\test_daily_snapshot_store.py tests\test_analysis_engine.py -q --tb=short`
-  - result: `56 passed`
+  - command: `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py tests\test_unheld_gap_format.py -q --tb=short`
+  - result: `205 passed, 44 subtests passed`
 - No live Telegram delivery.
-- No DB schema change.
-- No production deletion.
+- No DB schema change/write/backfill.
 
 ## Current Git State
 
 - branch: `main`
 - upstream: `origin/main`
-- latest commit: `f50e2acd7cde6dd344e7cff264227afde981b9a0`
-- HEAD equals upstream: `true`
-- worktree/index: `clean`
+- pending: commit/push this presentation denoise patch.
 - closeout uses Windows-equivalent git checks because bash scripts may fail on this machine without WSL/Hyper-V.
 
 ## Next Action
 
-- Observe next scheduled `run_mode=bot` report and check fresh `signal_items` rows.
-- Plan follow-up for `market_theme_index_daily_bars` OHLCV/member source gap and `signal_outcomes` outcome metrics.
+- Commit/push presentation denoise patch.
+- After next scheduled `run_mode=bot`, confirm production Telegram artifact keeps the merged unheld-card layout.
