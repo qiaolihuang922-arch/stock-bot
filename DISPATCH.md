@@ -58,6 +58,10 @@
     - `2301` 2026/05: 20 rows.
   - Removed the remaining 118 old-version rows after v21.1 replacements existed.
   - Post-cleanup `daily_signal_snapshot` versions: only `v21.1`.
+- Report readability fix completed:
+  - Root cause: only the `急彈待回測` formatter branch printed retest zone, V10/V20, quality, and RR details; `等型態` / `等RR修復` branches fell back to generic text.
+  - Non-actionable unheld cards now share compact setup context in `量化差距`.
+  - Redundant after-hours `盤面：證據不足｜待確認` and `數據：...風控不適用` lines are suppressed for waiting / rejected tracking cards when the gap line already carries the decision data.
 
 ## Verification
 
@@ -107,6 +111,9 @@ Duplicate cleanup read-back:
 
 Cleanup script tests:
 - `tests/test_prune_daily_signal_snapshot_versions.py`: `2 passed`.
+
+Report readability tests:
+- `tests/test_unheld_gap_format.py tests/test_generator_report.py`: `205 passed`.
 
 Workflow evidence automation tests:
 - `71 passed, 13 subtests passed`

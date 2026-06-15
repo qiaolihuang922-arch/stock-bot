@@ -26,12 +26,20 @@
 - Tests:
   - Added persistence/fallback assertions in daily snapshot and backfill tests.
   - Updated volume calibration test to assert V20-first behavior.
+- `presentation/report.py`
+  - Added shared compact setup context for non-actionable unheld cards, including retest / breakout zone, breakout distance, V10/V20 status, and RR status where data exists.
+  - Fixed the inconsistent display where only the `急彈待回測` branch showed detailed buy-blocker evidence while `等型態` / `等RR修復` fell back to generic text.
+  - Suppressed redundant after-hours `盤面：證據不足｜待確認` and `數據：...風控不適用` lines for waiting / rejected tracking cards when `量化差距` already carries the decision evidence.
+- `tests/test_unheld_gap_format.py`
+  - Added report-level formatter coverage for `等型態` and `急彈待回測` unheld cards.
 
 ## Contract Impact
 - Repo now has a DB migration artifact, but this task did not execute it.
 - Production daily writer remains compatible before migration because of schema fallback.
 - After SQL migration, daily runner and guarded backfill can persist the new typed fields.
 - Backfill command can be driven by `--lookback-days` instead of hand-computed dates.
+- Unheld report card strategy decisions are unchanged; only the visible explanation/noise layout changed.
+- Non-actionable unheld cards can now expose the same setup evidence shape instead of only one special branch showing it.
 
 ## Verification
 - Focused persistence/backfill/calibration:
@@ -39,6 +47,11 @@
   .\.venv\Scripts\python.exe -m pytest tests/test_daily_snapshot_store.py tests/test_backfill_signals.py tests/test_volume_calibration.py tests/test_analysis_engine.py::AnalysisEngineTest::test_v21_1_snapshot_exports_multi_window_volume_and_retest_zone -q --tb=short
   ```
   Result: `19 passed`.
+- Report readability regression:
+  ```powershell
+  .\.venv\Scripts\python.exe -m pytest tests/test_unheld_gap_format.py tests/test_generator_report.py -q --tb=short
+  ```
+  Result: `205 passed, 147 warnings, 44 subtests passed`.
 
 ## Coverage Layers
 - DB migration artifact.
@@ -47,8 +60,11 @@
 - `signal_items` report-run persistence payload.
 - Schema-missing fallback path.
 - Volume calibration consumer.
+- Telegram unheld-card formatter for waiting/rejected tracking cards.
+- Official generator report regression suite.
 
 ## Residual Risk
 - Production DB still needs the manual SQL migration before typed columns are actually stored.
 - Historical feature rows need a production backfill after migration.
 - This task does not validate live Supabase writes or live Telegram delivery.
+- Report readability fix does not change buy/sell strategy thresholds; future strategy tuning remains a separate task.

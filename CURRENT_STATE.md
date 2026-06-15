@@ -62,8 +62,21 @@
   - Rebuilt missing v21.1 snapshots from existing `daily_price`:
     - `2303` 2026/04: 20 rows.
     - `2301` 2026/05: 20 rows.
-  - Deleted the remaining `118` old-version rows after v21.1 replacements existed.
-  - Post-cleanup total rows: `5152`; v21.1 rows: `5152`; old versions: `0`; overlap old-with-v21.1: `0`.
+- Deleted the remaining `118` old-version rows after v21.1 replacements existed.
+- Post-cleanup total rows: `5152`; v21.1 rows: `5152`; old versions: `0`; overlap old-with-v21.1: `0`.
+
+## Report Readability Follow-up
+
+- Root cause of Owner's v21.1 report issue:
+  - `旺宏` used the dedicated `急彈待回測` formatter branch, so it showed retest zone, V10/V20 volume, quality, and RR details.
+  - other waiting states such as `等型態` / `等RR修復` fell back to generic gap text, so cards looked inconsistent and hid the same class of decision evidence.
+- `presentation/report.py` now shares compact setup context for non-actionable unheld cards:
+  - retest / breakout zone where available;
+  - breakout distance;
+  - V10/V20 volume status;
+  - RR status.
+- After-hours waiting / rejected tracking cards suppress redundant `盤面：證據不足｜待確認` and `數據：...風控不適用` lines when `量化差距` already carries the decision evidence.
+- Strategy logic was not changed in this follow-up; this is report presentation / noise reduction only.
 
 ## Verification State
 
@@ -90,6 +103,8 @@
   - `71 passed, 13 subtests passed`.
 - Cleanup script tests:
   - `tests/test_prune_daily_signal_snapshot_versions.py`: `2 passed`.
+- Report readability tests:
+  - `tests/test_unheld_gap_format.py tests/test_generator_report.py`: `205 passed, 147 warnings, 44 subtests passed`.
 
 ## Git State
 

@@ -422,6 +422,47 @@ def _volume_window_text(data):
     return None
 
 
+def _volume_window_gap_text(data):
+    volume_text = _volume_window_text(data)
+    if not volume_text:
+        return None
+    try:
+        v10 = float((data or {}).get("volume_ratio_10") or (data or {}).get("volume_ratio") or 0)
+        v20_raw = (data or {}).get("volume_ratio_20")
+        v20 = float(v20_raw) if v20_raw is not None else v10
+    except (TypeError, ValueError):
+        return f"{volume_text}待確認"
+    return f"{volume_text}{'偏弱' if min(v10, v20) < 0.8 else '達標'}"
+
+
+def _rr_gap_summary(stock_result):
+    rr_text = _gate_value_text((stock_result or {}).get("rr"))
+    if not rr_text:
+        return None
+    try:
+        rr_value = float(rr_text)
+    except (TypeError, ValueError):
+        return f"RR {rr_text}"
+    return f"RR {rr_text}{'達標' if rr_value >= 1.5 else '未達1.5'}"
+
+
+def _entry_setup_summary(data, dist, stock_result):
+    parts = []
+    retest_text = _retest_zone_text(data)
+    if retest_text:
+        parts.append(retest_text)
+    distance_text = _gate_value_text(dist)
+    if distance_text:
+        parts.append(f"距突破 {distance_text}%")
+    volume_text = _volume_window_gap_text(data)
+    if volume_text:
+        parts.append(volume_text)
+    rr_text = _rr_gap_summary(stock_result)
+    if rr_text:
+        parts.append(rr_text)
+    return parts
+
+
 def _retest_zone_text(data):
     low = _gate_value_text((data or {}).get("retest_zone_low"))
     high = _gate_value_text((data or {}).get("retest_zone_high"))
@@ -620,7 +661,11 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
 
     quality = stock_result.get("entry_quality")
     if funnel_state != "等接近" and not is_actionable and quality and quality not in {"A+", "A", "B"}:
-        gates.append(("進場品質不足", f"進場品質 {quality}｜需B以上"))
+        setup_parts = _entry_setup_summary(data, dist, stock_result)
+        setup_text = f"進場品質 {quality}｜需B以上"
+        if setup_parts:
+            setup_text += "｜" + "｜".join(setup_parts[:4])
+        gates.append(("進場品質不足", setup_text))
 
     if not gates:
         gates.extend(source_gates)
@@ -1237,11 +1282,24 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     )
     is_afterhours = effective_report_phase in {"盤後", "收盤"}
     is_afterhours_rejected = is_afterhours and funnel_state == "淘汰" and not valid_entry
+    preserve_strategy_source_card = deps["is_valid_entry"](stock_result) and strategy_source_blocked
+    if (
+        not valid_entry
+        and is_afterhours
+        and not post_market_prepare
+        and not preserve_strategy_source_card
+        and funnel_state in {"等接近", "等型態", "等回測", "等RR修復", "淘汰"}
+        and data_line
+        and ("不適用" in data_line or "風控不適用" in data_line)
+    ):
+        data_line = None
     market_line = None if is_afterhours_rejected else (
         "盤面：證據不足｜待確認"
         if strategy_source_blocked
         else _score_gated_market_line(report_context, name, data, dist, deps)
     )
+    if market_line == "盤面：證據不足｜待確認" and not valid_entry and not preserve_strategy_source_card:
+        market_line = None
     if compact_wait_card and market_line == "盤面：證據不足｜待確認":
         market_line = None
     trade_state_line = deps["trade_state_machine_line"](data)
