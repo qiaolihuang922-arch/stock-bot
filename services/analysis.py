@@ -447,6 +447,77 @@ def entry_quality_label(score):
     return "D"
 
 
+def stock_strength_state(market_grade_value, phase, behavior, trend, structure, heat_state, change=None):
+    try:
+        change_value = float(change) if change is not None else None
+    except (TypeError, ValueError):
+        change_value = None
+
+    if behavior == "LIMIT_LOCK" or phase == "LOCK_LIMIT":
+        return "LIMIT_STRONG"
+    if behavior == "LIMIT_REBOUND" or phase == "LIMIT_REBOUND":
+        return "REBOUND_STRONG"
+    if behavior == "WEAK_REBOUND" or phase == "WEAK_REBOUND":
+        if change_value is not None and change_value >= 7:
+            return "SHARP_REBOUND"
+        return "WEAK_REBOUND"
+    if heat_state in {"HOT", "EXTREME"} and market_grade_value in {"A+", "A", "B"}:
+        return "OVERHEATED_STRONG"
+    if market_grade_value in {"A+", "A"}:
+        return "STRONG"
+    if market_grade_value == "B":
+        return "IMPROVING"
+    if market_grade_value == "C":
+        return "NEUTRAL"
+    if trend == "DOWN" or structure == "WEAK":
+        return "WEAK"
+    return "WATCH"
+
+
+def entry_setup_state(decision, quality, phase, behavior, heat_state, trade_state, volume, rr, distance):
+    try:
+        rr_value = float(rr) if rr is not None else None
+    except (TypeError, ValueError):
+        rr_value = None
+
+    if decision == "BUY" and quality in {"A+", "A", "B"}:
+        return "READY"
+    if behavior == "LIMIT_LOCK":
+        return "CHASE_BLOCKED"
+    if behavior in {"LIMIT_REBOUND", "WEAK_REBOUND"} or phase in {"LIMIT_REBOUND", "WEAK_REBOUND"}:
+        return "WAIT_RETEST"
+    if heat_state in {"HOT", "EXTREME"} or trade_state in {"EXTENDED", "AVOID"}:
+        return "WAIT_COOLDOWN"
+    if rr_value is None or rr_value < 1.5:
+        return "WAIT_RR"
+    if volume == "WEAK" or trade_state == "NO_VOLUME":
+        return "WAIT_VOLUME"
+    if quality in {"C", "D"}:
+        return "WAIT_SETUP"
+    if distance is not None:
+        try:
+            if float(distance) > 5:
+                return "WAIT_APPROACH"
+        except (TypeError, ValueError):
+            pass
+    return "WAIT_CONFIRM"
+
+
+def actionability_state(decision, entry_setup_state_value):
+    if decision == "BUY" and entry_setup_state_value == "READY":
+        return "BUYABLE"
+    return {
+        "CHASE_BLOCKED": "NO_CHASE",
+        "WAIT_RETEST": "WAIT_RETEST",
+        "WAIT_COOLDOWN": "WAIT_COOLDOWN",
+        "WAIT_RR": "WAIT_RR",
+        "WAIT_VOLUME": "WAIT_VOLUME",
+        "WAIT_SETUP": "WAIT_SETUP",
+        "WAIT_APPROACH": "WAIT_APPROACH",
+        "WAIT_CONFIRM": "WAIT_CONFIRM",
+    }.get(entry_setup_state_value, "WAIT_CONFIRM")
+
+
 def guard_low_volume_quality(
     score,
     metrics,
@@ -662,6 +733,42 @@ def build_result(**kwargs):
         position
     )
 
+    quality_value = kwargs.get("entry_quality", "D")
+    phase_value = kwargs.get("structure_phase", kwargs.get("lifecycle", "BASE"))
+    behavior_value = kwargs.get("price_behavior", "NORMAL")
+    heat_value = kwargs.get("heat_state", "NORMAL")
+    trade_value = kwargs.get("trade_state", "NORMAL")
+    trend_value = kwargs.get("trend")
+    structure_value = kwargs.get("structure_state")
+    volume_value = kwargs.get("volume_state")
+    rr_value = kwargs.get("rr", 0)
+    distance_value = kwargs.get("breakout_distance")
+    market_grade_value = kwargs.get("market_grade")
+    strength_state_value = kwargs.get("stock_strength_state") or stock_strength_state(
+        market_grade_value,
+        phase_value,
+        behavior_value,
+        trend_value,
+        structure_value,
+        heat_value,
+        kwargs.get("live_change"),
+    )
+    setup_state_value = kwargs.get("entry_setup_state") or entry_setup_state(
+        decision,
+        quality_value,
+        phase_value,
+        behavior_value,
+        heat_value,
+        trade_value,
+        volume_value,
+        rr_value,
+        distance_value,
+    )
+    actionability_value = kwargs.get("actionability_state") or actionability_state(
+        decision,
+        setup_state_value,
+    )
+
     result = {
 
         "decision": decision,
@@ -713,20 +820,16 @@ def build_result(**kwargs):
             0
         ),
 
-        "trend": kwargs.get("trend"),
+        "trend": trend_value,
 
         "trend_bias": kwargs.get(
             "trend_bias",
             "NORMAL"
         ),
 
-        "structure_state": kwargs.get(
-            "structure_state"
-        ),
+        "structure_state": structure_value,
 
-        "volume_state": kwargs.get(
-            "volume_state"
-        ),
+        "volume_state": volume_value,
 
         "volume_price_state": kwargs.get(
             "volume_price_state"
@@ -753,15 +856,9 @@ def build_result(**kwargs):
             "NONE"
         ),
 
-        "trade_state": kwargs.get(
-            "trade_state",
-            "NORMAL"
-        ),
+        "trade_state": trade_value,
 
-        "heat_state": kwargs.get(
-            "heat_state",
-            "NORMAL"
-        ),
+        "heat_state": heat_value,
 
         "dominant_state": kwargs.get(
             "dominant_state",
@@ -798,15 +895,9 @@ def build_result(**kwargs):
             0
         ),
 
-        "price_behavior": kwargs.get(
-            "price_behavior",
-            "NORMAL"
-        ),
+        "price_behavior": behavior_value,
 
-        "structure_phase": kwargs.get(
-            "structure_phase",
-            kwargs.get("lifecycle", "BASE")
-        ),
+        "structure_phase": phase_value,
 
         "market_regime": kwargs.get(
             "market_regime",
@@ -827,15 +918,18 @@ def build_result(**kwargs):
             "NONE"
         ),
 
-        "entry_quality": kwargs.get(
-            "entry_quality",
-            "D"
-        ),
+        "entry_quality": quality_value,
 
         "confidence_score": kwargs.get(
             "confidence_score",
             0
-        )
+        ),
+
+        "stock_strength_state": strength_state_value,
+
+        "entry_setup_state": setup_state_value,
+
+        "actionability_state": actionability_value
     }
 
     for key in [

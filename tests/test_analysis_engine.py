@@ -185,6 +185,9 @@ class AnalysisEngineTest(unittest.TestCase):
         self.assertEqual(item["market_state"], "A+")
         self.assertEqual(item["structure_state"], "STRONG")
         self.assertEqual(item["action"], "BUY")
+        self.assertEqual(item["raw_result"]["stock_strength_state"], "STRONG")
+        self.assertEqual(item["raw_result"]["entry_setup_state"], "READY")
+        self.assertEqual(item["raw_result"]["actionability_state"], "BUYABLE")
         self.assertTrue(item["is_tradeable"])
         self.assertIn("RR足夠", item["reasons"])
 
@@ -199,7 +202,19 @@ class AnalysisEngineTest(unittest.TestCase):
         self.assertEqual(item["pattern"], "WEAK_REBOUND")
         self.assertEqual(item["market_state"], "D")
         self.assertEqual(item["action"], "NO_TRADE")
+        self.assertEqual(item["raw_result"]["stock_strength_state"], "WEAK_REBOUND")
+        self.assertEqual(item["raw_result"]["entry_setup_state"], "WAIT_RETEST")
+        self.assertEqual(item["raw_result"]["actionability_state"], "WAIT_RETEST")
         self.assertFalse(item["is_tradeable"])
+
+    def test_limit_rebound_split_keeps_strength_but_waits_for_retest(self):
+        item = snap("limit_rebound", [150, 148, 146, 144, 142, 140, 138, 136, 134, 132, 130, 128, 126, 124, 122, 120, 118, 116, 114, 125], VOL_ATTACK)
+        self.assertEqual(item["pattern"], "LIMIT_REBOUND")
+        self.assertEqual(item["market_state"], "D")
+        self.assertEqual(item["action"], "NO_TRADE")
+        self.assertEqual(item["raw_result"]["stock_strength_state"], "REBOUND_STRONG")
+        self.assertEqual(item["raw_result"]["entry_setup_state"], "WAIT_RETEST")
+        self.assertEqual(item["raw_result"]["actionability_state"], "WAIT_RETEST")
 
     def test_can_buy_rejects_weak_far_from_breakout(self):
         self.assertFalse(can_buy(
@@ -216,6 +231,9 @@ class AnalysisEngineTest(unittest.TestCase):
         item = snap("limit_lock", [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 130], VOL_ATTACK)
         self.assertEqual(item["pattern"], "LOCK_LIMIT")
         self.assertEqual(item["raw_result"]["price_behavior"], "LIMIT_LOCK")
+        self.assertEqual(item["raw_result"]["stock_strength_state"], "LIMIT_STRONG")
+        self.assertEqual(item["raw_result"]["entry_setup_state"], "CHASE_BLOCKED")
+        self.assertEqual(item["raw_result"]["actionability_state"], "NO_CHASE")
         self.assertIn("不追高", item["reasons"])
         self.assertFalse(item["is_tradeable"])
 

@@ -1,8 +1,8 @@
-# TASK: entry_quality_d_semantics_v21_1_20260615
+# TASK: strategy_axis_split_v21_1_20260615
 
 ## Status
 
-- task_id: `entry_quality_d_semantics_v21_1_20260615`
+- task_id: `strategy_axis_split_v21_1_20260615`
 - task_type: `normal_patch`
 - status: `implemented`
 - version: `v21.1`
@@ -10,69 +10,71 @@
 
 ## Owner Problem
 
-Owner observed that many cards show `D`, even when a stock is limit-up or has risen for multiple days. The report makes it look like `D` means the market or stock is simply bad, while in the strategy it can also mean "current entry is not actionable" because of limit-up chasing, missing retest, low RR, or setup quality.
+Owner observed that report cards still feel like a dead machine: stocks at lows, limit-up stocks, and multi-day rising stocks can all appear blocked by the same `D`-like language. The report does not clearly answer whether the stock is weak, whether the setup is missing, or whether the action is simply "wait / do not chase".
 
 ## User Visible Result
 
-- Limit-up / rebound states are no longer overwritten by low entry quality.
-- Snapshot reasons now say `個股弱勢` for per-stock `market_grade == D`, not `市場弱`.
-- Unheld cards distinguish:
-  - true setup-quality gap: `買點品質未過（目前 D，需 B 以上）`
-  - rebound / retest state: `買點品質：回測 / 轉強後重評`
-  - cooldown state: `買點品質：降溫後重評`
-- Unlock wording uses `買點品質 B 以上`, so it is clear this is entry setup quality, not a general stock grade.
+- Unheld cards now show a strategy split line:
+  - `強弱`: current stock behavior / strength.
+  - `買點`: whether entry setup is ready, waiting for retest, cooling, risk/reward, volume, or pattern.
+  - `行動`: buyable / wait / do not chase / do not buy.
+- Limit-up no longer reads like generic weakness: it can show `強勢鎖價` while action remains wait / no chase.
+- Strong rebound no longer reads like generic weakness: it can show `急彈修復` while setup remains `等回測確認`.
+- True weak or failed patterns can still show weak / invalid, but the reason is separated from potential reward.
 
 ## Non Goals
 
 - No live Telegram delivery.
 - No DB schema or production data change.
-- No strategy threshold change.
-- No buy/sell decision threshold change.
+- No threshold calibration in this round.
+- No buy/sell rule loosening.
 - No version bump beyond current `v21.1`.
 
 ## Impacted Modules And Direct Consumers
 
-- `presentation/report.py`
-  - Direct consumer: official Telegram unheld card text.
+- `services/analysis.py`
+  - Adds derived strategy axis fields to raw result.
+  - Direct consumer: official generator, snapshots, replay payloads.
 - `core/generator.py`
-  - Direct consumer: unheld funnel state transitions.
-- `core/signal_snapshot.py`
-  - Direct consumer: dry-run / snapshot reason labels.
-- `tests/test_unheld_gap_format.py`
-  - Formatter-level regression.
+  - Adds visible split line and fallback derivation for older/replayed payloads.
+  - Direct consumer: Telegram report message list.
+- `presentation/report.py`
+  - Renders the split line in unheld cards.
+  - Direct consumer: Owner mobile reading path.
+- `tests/test_analysis_engine.py`
 - `tests/test_generator_report.py`
-  - Official message-list regression.
 
 ## Output Contract
 
-- `D` may remain an internal entry-quality label, but visible text must explain the strategy state.
-- Price behavior states (`LIMIT_LOCK`, `LIMIT_REBOUND`, `WEAK_REBOUND`) must not be hidden by generic `entry_quality D`.
-- A non-actionable rebound card must explain that quality is re-evaluated after retest / strength confirmation.
-- A true setup-quality card may show current D, but only as `買點品質未過（目前 D，需 B 以上）`.
-- Per-stock D must not be presented as broad market weakness.
+- A card must not use one grade to represent strength, setup, and action at the same time.
+- `強弱` may be strong while `買點` is not ready.
+- `買點` may wait for retest/cooldown/RR/setup without implying the stock is dead.
+- `行動` must remain conservative when the setup is not ready.
+- Replay payloads with stale derived fields must prefer current explicit behavior evidence (`LIMIT_LOCK`, `LIMIT_REBOUND`, `WEAK_REBOUND`) over stale derived labels.
 
 ## Version Contract
 
 - Header remains `v21.1`.
-- This is a semantic presentation / state routing patch inside v21.1.
+- This is a presentation/derived-state split inside v21.1, not a DB or strategy-threshold release.
 
 ## Acceptance Conditions
 
-- Official generator dry-run shows rebound cards using `買點品質：回測 / 轉強後重評`, not `品質 D→B`.
-- Official generator dry-run still shows true setup cards with current D and the B target.
-- Limit-up / rebound states are not downgraded to `等型態` solely because `entry_quality` is D.
-- Snapshot probe confirms limit-up can have strong `market_grade` while still non-actionable due to chase / RR / heat.
-- Related formatter, generator, analysis, condition, and state-machine tests pass.
-- No live Telegram delivery.
+- Official `generate_report(dry_run=True)` shows `拆解：強弱 ...｜買點 ...｜行動 ...` on unheld cards.
+- Limit-up card can show `強勢鎖價` but still wait / no chase.
+- Strong rebound card can show `急彈修復` but still wait for retest.
+- Confirmed breakout snapshot can produce `READY` / `BUYABLE`.
+- Weak rebound snapshot remains non-tradeable and waits for retest.
+- Related formatter/generator/analysis/condition/state-machine tests pass.
+- No live Telegram delivery and no DB writes.
 
 ## Fixture / Failure Specimen
 
-- Owner sample: 06/15 v21.1 report where limit-up / strong rebound cards still showed D-like quality language and could be read as "the stock is weak" instead of "current entry is not actionable".
-- Required replay route: official `generate_report(dry_run=True)` plus targeted snapshot probes.
+- Owner sample: 06/15 v21.1 report where cards with limit-up, rebound, and multi-day strength still looked like generic D / no-buy forever.
+- Required replay route: official `generate_report(dry_run=True)` plus targeted `analyze_ohlcv_snapshot` probes.
 
 ## Forbidden And Blocking Conditions
 
-- Do not hard-code one stock/date.
-- Do not convert overheat / limit-up into buyable.
-- Do not remove entry-quality checks from true setup validation.
-- Do not change DB schema, backfill, or live delivery.
+- Do not hard-code a single stock/date.
+- Do not mark limit-up or overheated moves as buyable.
+- Do not hide true setup-quality failures.
+- Do not change DB schema, backfill, or live delivery in this task.

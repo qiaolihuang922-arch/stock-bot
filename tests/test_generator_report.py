@@ -2938,6 +2938,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertEqual(generator.unheld_funnel_state("旺宏", payload), "等回測")
         self.assertIn("僅追蹤 1（等回測）", summary)
         self.assertIn("【旺宏 2337】⏳ 等回測｜急彈待回測", card)
+        self.assertIn("拆解：強弱 急彈修復｜買點 等回測確認｜行動 等待", card)
         self.assertIn("買點：不買，等回測", card)
         self.assertIn("不能買：急彈後還沒回測確認", card)
         self.assertIn("還差：急彈後先等回測；回測區 118~118.59不破；量能偏弱（10日量 0.44x / 20日量 0.62x）；買點品質：回測 / 轉強後重評；潛在報酬：好（1.6倍），但尚未回測確認", card)

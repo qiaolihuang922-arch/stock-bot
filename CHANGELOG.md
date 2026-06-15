@@ -1,65 +1,67 @@
-# CHANGELOG: entry_quality_d_semantics_v21_1_20260615
+# CHANGELOG: strategy_axis_split_v21_1_20260615
 
 ## Changes
 
-- Updated `presentation/report.py`:
-  - Added strategy-aware quality gap wording.
-  - Rebound / retest cards now show `買點品質：回測 / 轉強後重評`.
-  - True setup-quality gaps now show `買點品質未過（目前 D，需 B 以上）`.
-  - Unlock criteria now render `買點品質 B 以上`.
+- Updated `services/analysis.py`:
+  - Added derived fields:
+    - `stock_strength_state`
+    - `entry_setup_state`
+    - `actionability_state`
+  - These separate stock strength, setup readiness, and executable action.
+  - Confirmed breakout can become `READY` / `BUYABLE`.
+  - Limit-up, rebound, weak rebound, cooldown, RR, volume, and setup waits are distinct states.
 - Updated `core/generator.py`:
-  - `隔日確認` for recognized price behaviors (`LIMIT_LOCK`, `LIMIT_REBOUND`, `WEAK_REBOUND`) is no longer overwritten to `等型態` solely because `entry_quality` is below B.
-- Updated `core/signal_snapshot.py`:
-  - Per-stock `market_grade == D` reason now renders as `個股弱勢` instead of `市場弱`.
+  - Added `strategy_axis_line(...)`.
+  - Added fallback derivation for older/replayed payloads.
+  - Explicit behavior evidence (`LIMIT_LOCK`, `LIMIT_REBOUND`, `WEAK_REBOUND`) overrides stale derived labels.
+  - Kept prior semantic cleanup: per-stock D is `個股弱勢`, and rebound/limit labels are not flattened to generic `不交易`.
+- Updated `presentation/report.py`:
+  - Unheld cards now render `拆解：強弱 ...｜買點 ...｜行動 ...` after the trade-state line.
 - Updated tests:
-  - `tests/test_unheld_gap_format.py`
+  - `tests/test_analysis_engine.py`
   - `tests/test_generator_report.py`
 
 ## Contract Impact
 
-- Telegram wording and unheld funnel routing changed for readability / semantics.
-- No payload shape change.
-- No DB schema or persistence change.
+- Telegram unheld card layout gains one new split line.
+- Raw result gains derived fields for internal/report consumption.
+- No DB schema change.
+- No production DB write/backfill.
 - No live Telegram delivery.
 - No strategy threshold change.
 - Version remains `v21.1`.
 
 ## Direct Consumer Sync
 
-- `core.generator.generate_report(dry_run=True)` now prints:
-  - rebound card: `買點品質：回測 / 轉強後重評`
-  - setup card: `買點品質未過（目前 D，需 B 以上）`
-  - unlock: `買點品質 B 以上`
-- `core.signal_snapshot.analyze_ohlcv_snapshot` keeps internal `market_grade` / `entry_quality`, but reason labels no longer call per-stock D "market weak".
+- Official dry-run now shows examples like:
+  - `拆解：強弱 強勢鎖價｜買點 等回測確認｜行動 等待`
+  - `拆解：強弱 急彈修復｜買點 等回測確認｜行動 等待`
+  - `拆解：強弱 轉強中｜買點 等風險報酬｜行動 等待`
+- Snapshot/raw-result consumers can inspect the three separate fields instead of inferring from one grade.
 
 ## Verification
 
 - Related regression:
   ```powershell
-  $env:PYTHONIOENCODING='utf-8'; .\.venv\Scripts\python.exe -m pytest tests\test_unheld_gap_format.py tests\test_generator_report.py tests\test_analysis_engine.py tests\test_condition_engine.py tests\test_trade_state_machine.py -q --tb=short
+  $env:PYTHONIOENCODING='utf-8'; .\.venv\Scripts\python.exe -m pytest tests\test_analysis_engine.py tests\test_generator_report.py tests\test_unheld_gap_format.py tests\test_condition_engine.py tests\test_trade_state_machine.py -q --tb=short
   ```
-  Result: `257 passed, 149 warnings, 44 subtests passed`.
+  Result: `258 passed, 149 warnings, 44 subtests passed`.
 - Official dry-run:
   ```powershell
-  $env:PYTHONIOENCODING='utf-8'; .\.venv\Scripts\python.exe -c "from core.generator import generate_report; messages,_=generate_report(dry_run=True); print('\n\n--- MESSAGE ---\n\n'.join(messages))"
+  $env:PYTHONIOENCODING='utf-8'; .\.venv\Scripts\python.exe -c "from core.generator import generate_report; messages,_=generate_report(dry_run=True); print(messages[1])"
   ```
-  Result: unheld cards distinguish setup-quality D from rebound/retest re-evaluation; no live Telegram delivery.
-- Snapshot probe:
-  - `LIMIT_LOCK`: `market_grade=A+`, `entry_quality=D`, reason `漲停鎖價 / 不追高`.
-  - multi-day rise sample: `market_grade=A+`, `entry_quality=C`, blocked by low RR / observation.
-  - weak rebound sample: `market_grade=D`, `entry_quality=D`, reason `弱勢反彈 / 隔日確認`.
-  - limit rebound after decline: `market_grade=D`, `entry_quality=D`, reason `漲停反彈 / 隔日確認`.
+  Result: unheld cards show split strategy axes; no live Telegram delivery.
 
 ## Covered Layers
 
-- Formatter helper: covered by `tests/test_unheld_gap_format.py`.
-- Official generator / message list: covered by `tests/test_generator_report.py` and dry-run.
-- Snapshot / analysis semantics: covered by `tests/test_analysis_engine.py` and targeted probe.
+- Analysis/snapshot derived states: covered by `tests/test_analysis_engine.py`.
+- Official generator/message list: covered by `tests/test_generator_report.py` and dry-run.
+- Formatter helper compatibility: covered by `tests/test_unheld_gap_format.py`.
 - Condition/state-machine compatibility: covered by `tests/test_condition_engine.py` and `tests/test_trade_state_machine.py`.
 - Runner/live Telegram: not executed by design.
 - Production DB: not touched.
 
 ## Residual Risk
 
-- `entry_quality` remains an internal entry setup grade. It is intentionally not a general stock grade.
-- Further calibration of quality thresholds should be a separate strategy task, not a display patch.
+- The split clarifies why a stock is not actionable; it does not recalibrate thresholds.
+- Future calibration should use persisted outcomes and may require a separate DB-backed strategy task.

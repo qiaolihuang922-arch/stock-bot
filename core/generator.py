@@ -1180,6 +1180,18 @@ def semantic_reason(result):
         # 中文註釋：v19.1.3 失敗股評級原因固定為突破失敗，不再被過熱或遠離觸發覆蓋。
         return "突破失敗"
 
+    if behavior == "LIMIT_LOCK":
+        return "漲停鎖價"
+
+    if behavior == "LIMIT_REBOUND":
+        return "漲停反彈"
+
+    if phase == "SHAKEOUT":
+        return "縮量洗盤"
+
+    if heat == "EXTREME":
+        return "過熱風險"
+
     if quality in ["A+", "A"] and confidence:
         return f"高品質{quality}"
 
@@ -1190,19 +1202,7 @@ def semantic_reason(result):
         return "等待確認"
 
     if quality == "D":
-        return "不交易"
-
-    if behavior == "LIMIT_LOCK":
-        return "漲停鎖價"
-
-    if behavior == "LIMIT_REBOUND":
-        return "弱勢漲停"
-
-    if phase == "SHAKEOUT":
-        return "縮量洗盤"
-
-    if heat == "EXTREME":
-        return "過熱風險"
+        return "買點未成立"
 
     if decision == "NO_TRADE":
 
@@ -1219,7 +1219,7 @@ def semantic_reason(result):
 
         # 中文註釋：v19.1.3 RR 被隱藏時，評級原因同步回到市場 / 趨勢 / 量能主因，避免文字仍提示高 RR。
         if result.get("market_grade") == "D":
-            return "市場弱勢"
+            return "個股弱勢"
 
         if trade == "NO_VOLUME" or result.get("volume_state") == "WEAK":
             return "量能不足"
@@ -7322,6 +7322,107 @@ def trade_state_machine_line(data):
     return visible_state_line((data or {}).get("trade_state_machine"))
 
 
+def strategy_axis_line(data, funnel_state=None):
+    result = (data or {}).get("result") or {}
+    behavior = result.get("price_behavior")
+    phase = result.get("structure_phase")
+    heat = result.get("heat_state")
+    grade = result.get("market_grade")
+    try:
+        change_value = float(result.get("live_change"))
+    except (TypeError, ValueError):
+        change_value = None
+    if behavior == "LIMIT_LOCK" or phase == "LOCK_LIMIT":
+        strength_key = "LIMIT_STRONG"
+    elif behavior == "LIMIT_REBOUND" or phase == "LIMIT_REBOUND":
+        strength_key = "REBOUND_STRONG"
+    elif behavior == "WEAK_REBOUND" or phase == "WEAK_REBOUND":
+        strength_key = "SHARP_REBOUND" if change_value is not None and change_value >= 7 else "WEAK_REBOUND"
+    else:
+        strength_key = result.get("stock_strength_state")
+    if not strength_key:
+        if heat in {"HOT", "EXTREME"} and grade in {"A+", "A", "B"}:
+            strength_key = "OVERHEATED_STRONG"
+        elif grade in {"A+", "A"}:
+            strength_key = "STRONG"
+        elif grade == "B":
+            strength_key = "IMPROVING"
+        elif grade == "C":
+            strength_key = "NEUTRAL"
+        elif grade == "D":
+            strength_key = "WEAK"
+        else:
+            strength_key = "WATCH"
+    strength_labels = {
+        "LIMIT_STRONG": "強勢鎖價",
+        "REBOUND_STRONG": "強反彈",
+        "SHARP_REBOUND": "急彈修復",
+        "WEAK_REBOUND": "弱反彈",
+        "OVERHEATED_STRONG": "強但偏熱",
+        "STRONG": "強勢",
+        "IMPROVING": "轉強中",
+        "NEUTRAL": "中性",
+        "WEAK": "弱勢",
+        "WATCH": "觀察",
+    }
+    setup_labels = {
+        "READY": "成立",
+        "CHASE_BLOCKED": "鎖價不追",
+        "WAIT_RETEST": "等回測確認",
+        "WAIT_COOLDOWN": "等冷卻",
+        "WAIT_RR": "等風險報酬",
+        "WAIT_VOLUME": "等量能",
+        "WAIT_SETUP": "等型態",
+        "WAIT_APPROACH": "等接近",
+        "WAIT_CONFIRM": "等確認",
+    }
+    action_labels = {
+        "BUYABLE": "可買",
+        "NO_CHASE": "不追價",
+        "WAIT_RETEST": "等待",
+        "WAIT_COOLDOWN": "等待",
+        "WAIT_RR": "等待",
+        "WAIT_VOLUME": "等待",
+        "WAIT_SETUP": "等待",
+        "WAIT_APPROACH": "等待",
+        "WAIT_CONFIRM": "等待",
+    }
+    funnel_setup_labels = {
+        "可買": "成立",
+        "趨勢延續": "趨勢延續",
+        "可準備": "開盤確認",
+        "等冷卻": "等冷卻",
+        "等市場": "等市場",
+        "等接近": "等接近",
+        "等型態": "等型態",
+        "等回測": "等回測確認",
+        "等RR修復": "等風險報酬",
+        "等量能": "等量能",
+        "等資料": "等資料",
+        "隔日確認": "隔日確認",
+        "淘汰": "條件失效",
+    }
+    funnel_action_labels = {
+        "可買": "可買",
+        "趨勢延續": "可小倉",
+        "可準備": "等待",
+        "等冷卻": "等待",
+        "等市場": "等待",
+        "等接近": "等待",
+        "等型態": "等待",
+        "等回測": "等待",
+        "等RR修復": "等待",
+        "等量能": "等待",
+        "等資料": "等待",
+        "隔日確認": "等待",
+        "淘汰": "不買",
+    }
+    strength = strength_labels.get(strength_key, "觀察")
+    setup = funnel_setup_labels.get(funnel_state) or setup_labels.get(result.get("entry_setup_state"), "等確認")
+    action = funnel_action_labels.get(funnel_state) or action_labels.get(result.get("actionability_state"), "等待")
+    return f"拆解：強弱 {strength}｜買點 {setup}｜行動 {action}"
+
+
 def trade_state_machine_artifact(results_map):
     return build_trade_state_artifact(results_map)
 
@@ -7346,6 +7447,7 @@ def _telegram_presentation_deps():
         "format_cross_day_tracking_summary": format_cross_day_tracking_summary,
         "apply_trade_state_machine": apply_trade_state_machine,
         "trade_state_machine_line": trade_state_machine_line,
+        "strategy_axis_line": strategy_axis_line,
         "trade_state_machine_artifact": trade_state_machine_artifact,
         "format_strong_prepare_summary": format_strong_prepare_summary,
         "format_market_theme_summary_lines": format_market_theme_summary_lines,

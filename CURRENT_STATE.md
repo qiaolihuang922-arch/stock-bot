@@ -2,7 +2,7 @@
 
 ## Current Task
 
-- task_id: `entry_quality_d_semantics_v21_1_20260615`
+- task_id: `strategy_axis_split_v21_1_20260615`
 - status: `implemented + QA passed`
 - version: `v21.1`
 - no live Telegram delivery.
@@ -18,22 +18,25 @@
 ## Current Implementation State
 
 - v21.1 strategy thresholds remain unchanged.
-- `entry_quality` remains an entry setup grade, not a general stock grade.
-- Visible report now separates:
-  - true setup quality gap: `買點品質未過（目前 D，需 B 以上）`;
-  - rebound/retest state: `買點品質：回測 / 轉強後重評`;
-  - cooldown state: `買點品質：降溫後重評`.
-- `LIMIT_LOCK`, `LIMIT_REBOUND`, and `WEAK_REBOUND` are preserved as price-behavior states instead of being hidden by generic low quality.
-- Snapshot reason for per-stock `market_grade == D` is `個股弱勢`, not `市場弱`.
+- Unheld cards now separate:
+  - `強弱`: stock behavior/strength;
+  - `買點`: setup readiness;
+  - `行動`: buy/wait/no-chase/no-buy actionability.
+- New raw-result derived fields:
+  - `stock_strength_state`
+  - `entry_setup_state`
+  - `actionability_state`
+- Display fallback recalculates from explicit behavior if a replay payload has stale derived values.
+- This is not a DB schema change; the fields are derived in the analysis/report path.
 
 ## Verification State
 
-- `257 passed, 149 warnings, 44 subtests passed`.
-- Official generator dry-run printed the updated full message list.
-- Snapshot probe confirmed:
-  - limit-up can have strong `market_grade` but low `entry_quality` because current entry is not actionable;
-  - multi-day rise can still be observation if risk/reward is not enough;
-  - true weak rebound remains D.
+- `258 passed, 149 warnings, 44 subtests passed`.
+- Official generator dry-run printed split-axis unheld cards.
+- Snapshot probes confirmed:
+  - confirmed breakout can reach `READY` / `BUYABLE`;
+  - limit-up can be strong while not chaseable;
+  - strong rebound can wait for retest instead of looking like generic D weakness.
 - No live Telegram delivery.
 - No DB write, backfill, schema change, RLS, grant, policy, role, index, or constraint change in this task.
 
@@ -41,4 +44,4 @@
 
 - Commit and push current patch.
 - Observe next scheduled `run_mode=bot` report after push.
-- Optional future strategy task: calibrate entry-quality thresholds from production outcomes, separate from display semantics.
+- Optional future strategy task: calibrate thresholds from production outcomes, separate from this presentation/derived-state split.

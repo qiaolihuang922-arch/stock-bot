@@ -1599,6 +1599,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     if compact_wait_card and market_line == "盤面：證據不足｜待確認":
         market_line = None
     trade_state_line = deps["trade_state_machine_line"](data)
+    strategy_axis_line = None if data_source_display_blocked or funnel_state == "等資料" else deps["strategy_axis_line"](data, funnel_state=funnel_state)
     if (
         (compact_wait_card and funnel_state == "淘汰")
         or (funnel_state == "淘汰" and "交易狀態：等資料" in str(trade_state_line))
@@ -1607,6 +1608,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     lines = [
         f"【{deps['stock_title'](name, data)}】{title_icon} {title_action}｜{title_label}",
         trade_state_line,
+        strategy_axis_line,
         market_line,
         _breakout_distance_line(dist, data=data, funnel_state=funnel_state, title_label=title_label),
         buy_line,
