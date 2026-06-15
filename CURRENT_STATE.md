@@ -3,7 +3,7 @@
 ## Current Task
 
 - task_id: `unheld_card_mobile_denoise_20260616`
-- status: `implemented + QA passed`
+- status: `implemented + QA passed, pending push`
 - version: `v21.1`
 - no live Telegram delivery.
 
@@ -18,22 +18,23 @@
 ## Current Implementation State
 
 - Runtime report remains `v21.1`.
-- Unheld card presentation now merges repeated state/entry-check rows:
-  - `狀態：...`
-  - `進場檢查：...`
+- Unheld card presentation now removes the unreadable hard-concat rows:
+  - no standalone `拆解`;
+  - no wall-like `狀態` / `進場檢查`;
+  - non-actionable cards show `進場` / `缺口` / `可買`.
 - Strategy logic is unchanged.
 - No DB operation was performed.
 
 ## Verification State
 
-- Dry-run `generate_report(dry_run=True)` checked locally.
+- Dry-run `generate_report(dry_run=True)` checked locally; unheld cards render readable short entry lines.
 - Tests:
   - `205 passed, 44 subtests passed`
 - No live Telegram delivery.
 
 ## Known Follow-ups
 
-- Observe next scheduled `run_mode=bot` report and confirm merged unheld-card layout in production artifact.
+- Observe next scheduled `run_mode=bot` report and confirm readable `進場` / `缺口` / `可買` unheld-card layout in production artifact.
 - Future cleanup candidate: rejected-card `原因` lines can still be verbose.
 - Prior DB follow-ups remain:
   - decide whether to enrich or hide `market_theme_index_daily_bars` OHLCV/member placeholder columns;

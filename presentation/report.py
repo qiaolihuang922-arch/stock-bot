@@ -1157,20 +1157,7 @@ def _strip_line_prefix(text, prefixes):
     return text
 
 
-def _combined_status_line(strategy_axis_line, market_line):
-    strategy_text = _strip_line_prefix(strategy_axis_line, ["拆解："])
-    market_text = _strip_line_prefix(market_line, ["盤面："])
-    parts = []
-    if strategy_text:
-        parts.append(strategy_text)
-    if market_text:
-        parts.append(f"盤面：{market_text}")
-    if not parts:
-        return None
-    return "狀態：" + "｜".join(parts)
-
-
-def _combined_buy_check_line(buy_line, buy_gap_line):
+def _entry_check_lines(buy_line, buy_gap_line):
     buy_text = str(buy_line or "").strip()
     gap_lines = [
         str(line).strip()
@@ -1178,12 +1165,38 @@ def _combined_buy_check_line(buy_line, buy_gap_line):
         if str(line).strip()
     ]
     if not gap_lines:
-        return buy_text or None
-    parts = []
-    if buy_text:
-        parts.append(buy_text)
-    parts.extend(gap_lines)
-    return "進場檢查：" + "｜".join(dict.fromkeys(parts))
+        return [buy_text] if buy_text else []
+
+    reason = None
+    gap = None
+    unlock = None
+    extras = []
+    for line in gap_lines:
+        if line.startswith("不能買："):
+            reason = _strip_line_prefix(line, ["不能買："])
+        elif line.startswith("還差："):
+            gap = _strip_line_prefix(line, ["還差："])
+        elif line.startswith("可買條件："):
+            unlock = _strip_line_prefix(line, ["可買條件："])
+        else:
+            extras.append(line)
+
+    entry_text = _strip_line_prefix(buy_text, ["買點："])
+    entry_parts = []
+    if entry_text:
+        entry_parts.append(entry_text)
+    if reason and reason not in entry_text:
+        entry_parts.append(f"原因：{reason}")
+
+    lines = []
+    if entry_parts:
+        lines.append("進場：" + "｜".join(dict.fromkeys(entry_parts)))
+    if gap:
+        lines.append(f"缺口：{gap}")
+    if unlock:
+        lines.append(f"可買：{unlock}")
+    lines.extend(extras)
+    return lines
 
 
 def _strip_breakout_position_segment(market_text):
@@ -1636,20 +1649,18 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     if compact_wait_card and market_line == "盤面：證據不足｜待確認":
         market_line = None
     trade_state_line = deps["trade_state_machine_line"](data)
-    strategy_axis_line = None if data_source_display_blocked or funnel_state == "等資料" else deps["strategy_axis_line"](data, funnel_state=funnel_state)
     if (
         (compact_wait_card and funnel_state == "淘汰")
         or (funnel_state == "淘汰" and "交易狀態：等資料" in str(trade_state_line))
     ):
         trade_state_line = None
-    status_line = _combined_status_line(strategy_axis_line, market_line)
-    buy_check_line = _combined_buy_check_line(buy_line, buy_gap_line)
+    entry_check_lines = _entry_check_lines(buy_line, buy_gap_line)
     lines = [
         f"【{deps['stock_title'](name, data)}】{title_icon} {title_action}｜{title_label}",
         trade_state_line,
-        status_line,
+        market_line,
         _breakout_distance_line(dist, data=data, funnel_state=funnel_state, title_label=title_label),
-        buy_check_line,
+        *entry_check_lines,
     ]
 
     weak_buy_backtest_line = _weak_buy_backtest_line(

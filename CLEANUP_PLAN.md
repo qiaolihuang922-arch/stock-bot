@@ -25,9 +25,9 @@
 - False duplicate risk reduced:
   - duplicate checks now use table-specific keys;
   - event tables are not treated as duplicate only because stock code/name repeats.
-- Unheld-card mobile denoise completed:
-  - `拆解` / `盤面`-like state is merged into `狀態`.
-  - `買點` / `不能買` / `還差` / `可買條件` is merged into `進場檢查`.
+- Unheld-card mobile denoise corrected:
+  - the wall-like `狀態` / `進場檢查` hard-concat layout was removed after mobile screenshot review.
+  - non-actionable cards now use short `進場` / `缺口` / `可買` lines.
   - Strategy calculations are unchanged.
 
 ## Active Follow-ups

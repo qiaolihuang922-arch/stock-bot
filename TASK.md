@@ -18,9 +18,12 @@ Owner pasted the 06/16 pre-market unheld report and pointed out repeated mobile-
 
 ## User Visible Result
 
-- Unheld cards now merge strategy state and market state into one `狀態` line.
-- Unheld cards now merge entry decision, blocker, gap, and unlock into one `進場檢查` line.
-- Strategy fields are still computed separately; only presentation is compacted.
+- Unheld cards no longer print standalone `拆解` / duplicate `盤面` state rows.
+- Non-actionable unheld cards now show a readable entry block:
+  - `進場：...｜原因：...`
+  - `缺口：...`
+  - `可買：...`
+- Strategy fields are still computed separately; only presentation is denoised.
 
 ## Non Goals
 
@@ -44,8 +47,11 @@ Owner pasted the 06/16 pre-market unheld report and pointed out repeated mobile-
   - `不能買：...`
   - `還差：...`
 - Replacement lines:
-  - `狀態：強弱 ...｜買點 ...｜行動 ...｜盤面：...` when market detail is available.
-  - `進場檢查：買點：...｜不能買：...｜還差：...｜可買條件：...`
+  - existing `交易狀態` stays as the state-machine line;
+  - `盤面` is kept only when it adds useful market detail;
+  - `進場：...｜原因：...`;
+  - `缺口：...`;
+  - `可買：...`.
 - Existing decision semantics must remain visible:
   - why not buy;
   - what is missing;
@@ -58,7 +64,8 @@ Owner pasted the 06/16 pre-market unheld report and pointed out repeated mobile-
 
 ## Acceptance Conditions
 
-- Dry-run unheld card shows merged `狀態` / `進場檢查`.
+- Dry-run unheld card does not show the wall-like `狀態` / `進場檢查` hard-concat format.
+- Dry-run unheld card shows `進場` / `缺口` / `可買` as short decision lines.
 - Generator report tests pass.
 - Regression test prevents standalone duplicate `拆解` / `買點` / `不能買` / `還差` rows from returning in the rebound-retest case.
 - No live Telegram delivery.

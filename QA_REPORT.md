@@ -15,14 +15,15 @@
 
 ## Cross-Block Semantic Consistency
 
-- `狀態` line combines strategy-axis state and market-line state.
-- `進場檢查` line combines buy line, blocker, gap, and unlock.
+- `交易狀態` remains the state-machine line; no extra `狀態` hard-concat row is emitted.
+- Non-actionable entry details are split into short `進場` / `缺口` / `可買` rows.
 - Summary/funnel counts are not changed.
 - Holding cards are not changed.
 
 ## User Misread Risk
 
 - Reduced: users no longer read separate `拆解`, `買點`, `不能買`, and `還差` rows that repeat each other.
+- Reduced: users no longer get one wall-like `狀態` / `進場檢查` row on mobile.
 - Preserved: users can still see the blocker and exact unlock condition in the same card.
 - Remaining: rejected-card `原因` lines may still need future cleanup if they repeat source/status details.
 
@@ -30,8 +31,10 @@
 
 - Owner sample: 06/16 pre-market unheld report.
 - Countercheck via dry-run:
-  - cards now show `狀態：...`;
-  - cards now show `進場檢查：買點：...｜不能買：...｜還差：...｜可買條件：...`.
+  - cards now show `進場：...｜原因：...`;
+  - cards now show `缺口：...`;
+  - cards now show `可買：...`;
+  - cards no longer show standalone `拆解`, `買點`, `不能買`, `還差`, or hard-concat `進場檢查`.
 
 ## Evidence
 
@@ -51,4 +54,4 @@
 
 通過
 
-Reason: the official generator path now renders merged mobile lines and focused regression tests prevent the old split-row pattern from returning.
+Reason: the official generator path now renders readable short mobile lines and focused regression tests prevent both the old split-row pattern and the wall-like hard-concat pattern from returning.
