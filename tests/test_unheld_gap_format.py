@@ -28,7 +28,6 @@ def test_unheld_quality_gap_includes_setup_volume_and_rr_context():
     assert "卡關主因：進場品質不足" in line
     assert "進場品質 D｜需B以上" in line
     assert "突破區 194~194.97（現價未站回）" in line
-    assert "距突破 20.72%" in line
     assert "V10 0.48x / V20 0.61x偏弱" in line
     assert "RR 9.94達標" in line
 

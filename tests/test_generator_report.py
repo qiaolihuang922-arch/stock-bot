@@ -936,16 +936,18 @@ class GeneratorReportTest(unittest.TestCase):
             report_context=self.score_source_report_context("TEST", "available"),
         )
 
-        self.assertIn("盤面：弱勢｜待確認｜攻擊量｜遠離突破（7%）", card)
+        self.assertIn("盤面：弱勢｜待確認｜攻擊量", card)
+        self.assertIn("距突破：7%｜遠離突破", card)
+        self.assertNotIn("盤面：弱勢｜待確認｜攻擊量｜遠離突破", card)
         self.assertNotIn("弱勢｜極強", card)
         self.assertNotIn("遠離突破｜極強", card)
 
     def test_v20_2_1_holding_card_always_shows_breakout_distance_when_available(self):
         cases = [
-            (-1, "已突破，位於突破區上方"),
-            (0, "臨界突破（0%）"),
-            (2, "接近突破（2%）"),
-            (7, "遠離突破（7%）"),
+            (-1, "距突破：-1%｜已突破"),
+            (0, "距突破：0%｜臨界突破"),
+            (2, "距突破：2%｜接近突破"),
+            (7, "距突破：7%｜遠離突破"),
         ]
 
         for distance, expected in cases:
@@ -955,14 +957,16 @@ class GeneratorReportTest(unittest.TestCase):
                     self.breakout_distance_payload(distance, holding=True),
                 )
 
-                self.assertIn(f"盤面：突破確認｜偏強｜普通｜{expected}", card)
+                self.assertIn("盤面：突破確認｜偏強｜普通", card)
+                self.assertIn(expected, card)
+                self.assertNotIn("盤面：突破確認｜偏強｜普通｜", card)
 
     def test_v20_2_1_unheld_card_always_shows_breakout_distance_when_available(self):
         cases = [
-            (-1, "已突破，位於突破區上方"),
-            (0, "臨界突破（0%）"),
-            (2, "接近突破（2%）"),
-            (7, "遠離突破（7%）"),
+            (-1, "距突破：-1%｜已突破"),
+            (0, "距突破：0%｜臨界突破"),
+            (2, "距突破：2%｜接近突破"),
+            (7, "距突破：7%｜遠離突破"),
         ]
 
         for distance, expected in cases:
@@ -973,7 +977,9 @@ class GeneratorReportTest(unittest.TestCase):
                     report_phase="盤中",
                 )
 
-                self.assertIn(f"盤面：突破確認｜偏強｜普通｜{expected}", card)
+                self.assertIn("盤面：突破確認｜偏強｜普通", card)
+                self.assertIn(expected, card)
+                self.assertNotIn("盤面：突破確認｜偏強｜普通｜", card)
 
     def test_v20_2_1_card_breakout_distance_falls_back_to_result_and_omits_missing(self):
         holding_card = generator.formatTelegramPositionCard(
@@ -986,8 +992,12 @@ class GeneratorReportTest(unittest.TestCase):
             report_phase="盤中",
         )
 
-        self.assertIn("盤面：突破確認｜偏強｜普通｜接近突破（2%）", holding_card)
-        self.assertIn("盤面：突破確認｜偏強｜普通｜遠離突破（7%）", unheld_card)
+        self.assertIn("盤面：突破確認｜偏強｜普通", holding_card)
+        self.assertIn("距突破：2%｜接近突破", holding_card)
+        self.assertNotIn("盤面：突破確認｜偏強｜普通｜接近突破", holding_card)
+        self.assertIn("盤面：突破確認｜偏強｜普通", unheld_card)
+        self.assertIn("距突破：7%｜遠離突破", unheld_card)
+        self.assertNotIn("盤面：突破確認｜偏強｜普通｜遠離突破", unheld_card)
 
         for holding in [True, False]:
             with self.subTest(holding=holding):
@@ -4249,7 +4259,9 @@ class GeneratorReportTest(unittest.TestCase):
 
                 self.assertIn("【光寶科 2301】📌 新倉風控觀察", card)
                 self.assertIn("今日 買 50股", card)
-                self.assertIn("盤面：洗盤回測｜弱勢｜普通｜遠離突破（5.43%）", card)
+                self.assertIn("盤面：洗盤回測｜弱勢｜普通", card)
+                self.assertIn("距突破：5.43%｜遠離突破", card)
+                self.assertNotIn("盤面：洗盤回測｜弱勢｜普通｜遠離突破", card)
                 for term in expected_terms:
                     self.assertIn(term, card)
                 self.assertIn("結論：今日交易已建立新倉 1 檔；新增有效進場：無。", brief)

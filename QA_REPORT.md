@@ -9,6 +9,7 @@
 - Official generator dry-run.
 - Backfill dry-run with synthetic and TWSE sources.
 - v21.1 unheld Telegram card readability for waiting / rejected tracking states.
+- Holding and unheld card breakout-distance display.
 
 ## Risk Scan
 - If fields are only inside Telegram text, later calibration cannot prove whether V20 / resistance / retest gates worked.
@@ -23,6 +24,7 @@
 - Backfill recommendation is 730 calendar days plus 120-day warmup.
 - Unheld waiting-card explanations now use the same evidence shape when the fields exist; `急彈待回測` no longer has an exclusive richer display path.
 - Redundant no-decision lines are suppressed only when they repeat internal "not applicable" evidence already represented in `量化差距`.
+- Breakout distance is now an independent stock-card field: `盤面` does not own it, and strategy branch selection does not control whether it displays.
 
 ## Failure Specimen Countercheck
 - Previous failure: v21.1 report had richer strategy context but durable DB rows did not have typed V20 / resistance / retest-zone features.
@@ -32,9 +34,14 @@
   - fallback tests confirm missing production columns do not crash the writer path.
 - Owner report failure: `旺宏` showed detailed retest / V10/V20 / quality / RR evidence, but other unheld states only showed generic blockers and noisy internal lines.
 - Countercheck:
-  - `tests/test_unheld_gap_format.py` verifies `等型態` now shows quality, breakout zone, distance, V10/V20, and RR context.
+  - `tests/test_unheld_gap_format.py` verifies `等型態` now shows quality, breakout zone, V10/V20, and RR context.
   - The same test verifies the `急彈待回測` branch still preserves retest-zone, V10/V20, quality, RR, and unlock wording.
   - `tests/test_generator_report.py` guards the official generator report path against broad formatter regressions.
+- Owner follow-up: `遠離突破（18.42%）` should be pulled out and shown for every stock, not only depending on strategy display.
+- Countercheck:
+  - `tests/test_generator_report.py` verifies holding and unheld cards show `距突破：x%｜狀態`.
+  - The same tests verify `盤面` no longer embeds the breakout-distance segment.
+  - Official generator dry-run confirmed standalone `距突破` lines in holding and unheld report sections.
 
 ## Additional Challenge
 - Ran a guarded TWSE dry-run backfill:
@@ -48,12 +55,14 @@
   - `write_results None`
 - Report readability regression returned:
   - `205 passed, 147 warnings, 44 subtests passed`
+- Official generator dry-run used `dry_run=True`; no live Telegram delivery.
 
 ## Not Tested
 - Live Telegram delivery.
 - Live Supabase SQL migration execution.
 - Live production DB write/backfill.
 - Live Telegram delivery of the report readability change.
+- Production runner artifact after push.
 
 ## QA Conclusion
 conditional pass
@@ -66,3 +75,4 @@ Evidence:
 - Official generator dry-run produced `v21.1` without live write/delivery.
 - TWSE backfill dry-run produced valid rows without DB writes.
 - `205 passed, 147 warnings, 44 subtests passed` for unheld formatter and generator report regression.
+- Dry-run report confirmed `距突破` standalone display in stock cards without live delivery.

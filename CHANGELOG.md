@@ -30,8 +30,12 @@
   - Added shared compact setup context for non-actionable unheld cards, including retest / breakout zone, breakout distance, V10/V20 status, and RR status where data exists.
   - Fixed the inconsistent display where only the `急彈待回測` branch showed detailed buy-blocker evidence while `等型態` / `等RR修復` fell back to generic text.
   - Suppressed redundant after-hours `盤面：證據不足｜待確認` and `數據：...風控不適用` lines for waiting / rejected tracking cards when `量化差距` already carries the decision evidence.
+  - Moved breakout distance to a standalone `距突破：x%｜狀態` line for both holding and unheld cards whenever the value exists.
+  - Removed the breakout-distance segment from `盤面`, so `盤面` only carries structure / strength / volume context.
 - `tests/test_unheld_gap_format.py`
   - Added report-level formatter coverage for `等型態` and `急彈待回測` unheld cards.
+- `tests/test_generator_report.py`
+  - Updated regression coverage so breakout distance must be shown as a standalone line and must not be embedded back into `盤面`.
 
 ## Contract Impact
 - Repo now has a DB migration artifact, but this task did not execute it.
@@ -40,6 +44,7 @@
 - Backfill command can be driven by `--lookback-days` instead of hand-computed dates.
 - Unheld report card strategy decisions are unchanged; only the visible explanation/noise layout changed.
 - Non-actionable unheld cards can now expose the same setup evidence shape instead of only one special branch showing it.
+- Breakout distance visibility no longer depends on strategy branch; it is a display-level stock-card field when data exists.
 
 ## Verification
 - Focused persistence/backfill/calibration:
@@ -52,6 +57,7 @@
   .\.venv\Scripts\python.exe -m pytest tests/test_unheld_gap_format.py tests/test_generator_report.py -q --tb=short
   ```
   Result: `205 passed, 147 warnings, 44 subtests passed`.
+- Official generator dry-run was executed with `dry_run=True`; no live Telegram delivery.
 
 ## Coverage Layers
 - DB migration artifact.
@@ -62,6 +68,7 @@
 - Volume calibration consumer.
 - Telegram unheld-card formatter for waiting/rejected tracking cards.
 - Official generator report regression suite.
+- Holding and unheld stock card breakout-distance presentation.
 
 ## Residual Risk
 - Production DB still needs the manual SQL migration before typed columns are actually stored.

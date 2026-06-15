@@ -77,6 +77,10 @@
   - RR status.
 - After-hours waiting / rejected tracking cards suppress redundant `盤面：證據不足｜待確認` and `數據：...風控不適用` lines when `量化差距` already carries the decision evidence.
 - Strategy logic was not changed in this follow-up; this is report presentation / noise reduction only.
+- Breakout distance display follow-up:
+  - holding and unheld cards now show `距突破：x%｜狀態` as a standalone line when breakout distance exists;
+  - `盤面` line no longer carries the distance segment;
+  - the standalone line is display-only and does not depend on whether the strategy is using breakout, retest, trend continuation, RR repair, cooling, or rejection.
 
 ## Verification State
 
@@ -105,6 +109,7 @@
   - `tests/test_prune_daily_signal_snapshot_versions.py`: `2 passed`.
 - Report readability tests:
   - `tests/test_unheld_gap_format.py tests/test_generator_report.py`: `205 passed, 147 warnings, 44 subtests passed`.
+- Official generator dry-run confirmed standalone `距突破` lines in both holding and unheld report sections, with no live Telegram delivery.
 
 ## Git State
 

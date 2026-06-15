@@ -62,6 +62,10 @@
   - Root cause: only the `急彈待回測` formatter branch printed retest zone, V10/V20, quality, and RR details; `等型態` / `等RR修復` branches fell back to generic text.
   - Non-actionable unheld cards now share compact setup context in `量化差距`.
   - Redundant after-hours `盤面：證據不足｜待確認` and `數據：...風控不適用` lines are suppressed for waiting / rejected tracking cards when the gap line already carries the decision data.
+- Breakout distance display follow-up completed:
+  - `距突破` is now a standalone line on holding and unheld stock cards whenever the value exists.
+  - The line is display-only and does not depend on strategy branch selection.
+  - `盤面` no longer embeds `遠離突破（x%）` / `接近突破（x%）`; it keeps only structure / strength / volume context.
 
 ## Verification
 
@@ -114,6 +118,7 @@ Cleanup script tests:
 
 Report readability tests:
 - `tests/test_unheld_gap_format.py tests/test_generator_report.py`: `205 passed`.
+- Breakout distance standalone-line regression is covered in the same suite: `205 passed, 147 warnings, 44 subtests passed`.
 
 Workflow evidence automation tests:
 - `71 passed, 13 subtests passed`

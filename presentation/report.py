@@ -451,9 +451,6 @@ def _entry_setup_summary(data, dist, stock_result):
     retest_text = _retest_zone_text(data)
     if retest_text:
         parts.append(retest_text)
-    distance_text = _gate_value_text(dist)
-    if distance_text:
-        parts.append(f"距突破 {distance_text}%")
     volume_text = _volume_window_gap_text(data)
     if volume_text:
         parts.append(volume_text)
@@ -917,6 +914,7 @@ def _score_gated_market_line(report_context, name, data, dist, deps):
     stock_result = data.get("result") or {}
     if _score_source_available(report_context, name, deps):
         market_text = deps["plain_label"](deps["compact_market_line"](stock_result, dist))
+        market_text = _strip_breakout_position_segment(market_text)
         if ("弱勢" in market_text or "遠離突破" in market_text) and "極強" in market_text:
             market_text = market_text.replace("極強", "待確認")
         if _is_low_volume_consolidation(report_context, data, stock_result):
@@ -926,6 +924,43 @@ def _score_gated_market_line(report_context, name, data, dist, deps):
                 market_text = f"{market_text}｜縮量觀察"
         return f"盤面：{market_text}"
     return "盤面：強弱證據不足｜待確認"
+
+
+def _strip_breakout_position_segment(market_text):
+    if not market_text:
+        return market_text
+    breakout_labels = (
+        "已突破，位於突破區上方",
+        "臨界突破",
+        "接近突破",
+        "遠離突破",
+    )
+    parts = [
+        part for part in str(market_text).split("｜")
+        if not any(label in part for label in breakout_labels)
+    ]
+    return "｜".join(parts) if parts else market_text
+
+
+def _breakout_distance_label(dist):
+    try:
+        value = float(dist)
+    except (TypeError, ValueError):
+        return None
+    if value < 0:
+        return "已突破"
+    if value < 1:
+        return "臨界突破"
+    if value < 4:
+        return "接近突破"
+    return "遠離突破"
+
+
+def _breakout_distance_line(dist):
+    label = _breakout_distance_label(dist)
+    if not label:
+        return None
+    return f"距突破：{_gate_value_text(dist)}%｜{label}"
 
 
 def _unheld_rr_text(stock_result, funnel_state, valid_entry, deps, state=None, title_label=None, blockers=None):
@@ -1003,6 +1038,7 @@ def formatTelegramPositionCard(name, data, *, deps, report_context=None):
         execution_line,
         f"風控：{deps['holding_risk_text'](decision)}",
         _score_gated_market_line(report_context, name, data, dist, deps),
+        _breakout_distance_line(dist),
         deps["today_buy_holding_context_line"](data) if _report_phase(report_context) == "盤後" else None,
         f"決策：{decision_line}",
         None if is_afterhours or hide_low_signal_detail else f"條件：{condition_line}",
@@ -1312,6 +1348,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         f"【{deps['stock_title'](name, data)}】{title_icon} {title_action}｜{title_label}",
         trade_state_line,
         market_line,
+        _breakout_distance_line(dist),
         buy_line,
         buy_gap_line,
     ]
