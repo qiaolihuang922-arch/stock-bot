@@ -13,6 +13,7 @@
 - Confirmed `AGENTS.md` content is valid UTF-8; earlier mojibake was caused by default PowerShell decoding, not a broken file.
 - Confirmed `reports/backfill/*` and `reports/research/*` are tracked repo artifacts, not disposable runtime output.
 - Added an abstract handoff hygiene rule to `AGENTS.md`: active handoff files must be UTF-8 readable, free of mojibake / stale task state / broken commands, and post-cycle review must not hard-code one-off incidents.
+- Fixed a report phase abstraction gap: trading-day pre-open is now `盤前`, and `盤前` uses today-action summary routing instead of afterhours/tomorrow routing.
 
 ## Current Post-cycle Review
 
@@ -22,6 +23,7 @@
   - The previous closeout over-focused on code/test/git completion and under-checked handoff hygiene.
   - Windows shell display created false mojibake noise unless files were read with explicit UTF-8.
   - The bash-based git gates cannot run on this machine because WSL/Hyper-V is unavailable, so Windows-equivalent gate evidence must be recorded.
+  - Report phase semantics were scattered: `盤前` was not a first-class today-action phase, so early trading-day reports could fall into `非交易` or tomorrow-plan wording.
 - QA did catch core report conflicts, but did not independently enforce Markdown hygiene.
 - Tech did not change DB schema, live Telegram, or production write paths.
 - No single-date or single-stock dead rule was added. The new rule is an abstract handoff hygiene invariant.
@@ -40,6 +42,9 @@
 - `report_suite_baseline`
   - Current fact: report tests pass for the current targeted suite, but broader strategy behavior remains rule-based.
   - Needed fix: future PM task should separate "report wording conflict" from "strategy quality / bottom-buying model quality".
+- `phase_semantics_gate`
+  - Current fact: `盤前`, `盤中`, `收盤`, `盤後`, `假日`, and true `非交易` must not be handled by scattered string checks.
+  - Needed fix: keep using shared phase helpers and add tests when a new phase-specific report wording appears.
 - `runner_gap: cao_codex_tui_send`
   - Current fact: CAO TUI automation can hang after prompt send.
   - Needed fix: noninteractive fallback or stable `codex exec` runner path.

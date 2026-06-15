@@ -8,6 +8,14 @@ preparation and passes the formatter helpers needed for compatibility.
 SHOW_DATA_BASIS = False
 
 
+def _is_today_action_phase(report_phase):
+    return report_phase in (None, "盤前", "盤中")
+
+
+def _today_trigger_label(report_phase):
+    return "盤前觀察" if report_phase == "盤前" else "盤中觸發"
+
+
 def formatTelegramSummary(
     results_map,
     best,
@@ -92,7 +100,7 @@ def formatTelegramSummary(
         risk_parts.append(deps["compact_risk_text"](results_map))
     lines.append(f"市場/結論：{market_mode}｜{risk_level}；{conclusion_text}")
 
-    if report_phase == "盤中":
+    if _is_today_action_phase(report_phase):
         lines.append(deps["source_summary_text"](results_map))
 
     lines.append(f"原因：{reason_line}")
@@ -108,13 +116,14 @@ def formatTelegramSummary(
         f"📌 持倉：{holding_names}",
     ])
 
-    if report_phase == "盤中":
+    if _is_today_action_phase(report_phase):
         execution_lines = deps["format_execution_checklist"](
             holding_items, watch_items, report_phase=report_phase, market_mode=market_mode, report_context=report_context
         )
         execution_lines = [line for line in execution_lines if line != "無新增下單"]
         if execution_lines:
-            lines.extend(["", "今日盤中風控建議"])
+            heading = "今日盤中風控建議" if report_phase == "盤中" else "今日盤前風控計畫"
+            lines.extend(["", heading])
             lines.extend(execution_lines)
         new_entry_lines = deps["format_new_entry_suggestions"](
             watch_items, report_phase=report_phase, market_mode=market_mode, report_context=report_context
@@ -139,7 +148,7 @@ def formatTelegramSummary(
     lines.extend(["", "持倉風控檢查"])
     lines.extend(deps["format_holding_control_checklist"](holding_items, report_phase=report_phase))
 
-    if report_phase != "盤中":
+    if not _is_today_action_phase(report_phase):
         plan_count = len(deps["pending_trade_items"](
             holding_items, watch_items, market_mode=market_mode, report_context=report_context
         ))
@@ -653,7 +662,7 @@ def _decision_reason_text(report_context, name):
             text for text in progress
             if "買點成立" not in text and "倉位規則通過" not in text
         ]
-    if _report_phase(report_context) != "盤中":
+    if not _is_today_action_phase(_report_phase(report_context)):
         progress = [
             text for text in progress
             if "買點成立" not in text and "倉位規則通過" not in text
@@ -959,7 +968,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         if funnel_state == "趨勢延續":
             title_action = "趨勢延續買入"
             title_label = "小倉"
-        elif report_phase not in (None, "盤中"):
+        elif not _is_today_action_phase(report_phase):
             title_action = f"明日追蹤｜{deps['unheld_entry_size_detail_text'](stock_result)}"
         else:
             title_action = f"可買｜{deps['unheld_entry_size_detail_text'](stock_result)}"
@@ -1029,7 +1038,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         buy_line = "買點：趨勢延續買入｜小倉 <=15%｜回測 55% 勝 / +2.26%"
         data_line = f"數據：{rr_data_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
-    elif valid_entry and report_phase not in (None, "盤中"):
+    elif valid_entry and not _is_today_action_phase(report_phase):
         buy_line = "買點：盤後追蹤｜開盤後確認｜不追價"
         data_line = f"數據：{rr_data_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
@@ -1073,7 +1082,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         buy_line = f"買點：不買，{wait_text}"
         data_line = f"數據：{rr_data_text}｜{display_score_text}｜V {data.get('volume_ratio', '-')}x"
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
-    trigger_label = "盤中觸發" if report_phase == "盤中" else "明日觸發"
+    trigger_label = _today_trigger_label(report_phase) if _is_today_action_phase(report_phase) else "明日觸發"
     if valid_entry and funnel_state == "趨勢延續":
         tomorrow_line = f"{trigger_label}：回踩站回日，小倉執行；不追高加碼"
     elif data_source_display_blocked:

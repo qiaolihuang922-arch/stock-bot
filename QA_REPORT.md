@@ -1,48 +1,44 @@
-# QA_REPORT: report_conflict_entry_gate_v21_0_5_20260615
+# QA_REPORT: premarket_phase_report_v21_0_6_20260615
 
 ## Test Scope
-- Owner pasted `06/15 盤中｜v21.0.4` conflict class.
-- Unheld entry blocker wording and state-machine states.
-- Broad market gate versus individual stock gate.
-- False data-source gate on dry-run / report-only paths.
-- Official generator message list.
+- Trading-day pre-open phase classification.
+- Telegram header and summary wording for `盤前`.
+- Regression risk for existing `盤中` wording.
+- Official generator dry-run path with patched time.
 
 ## Risk Scan
-- `市場：中性觀察 R2` must not coexist with every unheld stock blocked by `等市場｜市場弱`.
-- Missing source context in a dry-run must not create fake `等資料`.
-- A stock may be blocked by heat, RR, setup, or individual weakness without calling it market-wide weakness.
-- No card should expose internal English noise such as `entry quality low`.
-- No change should create a valid buy when the underlying score remains non-actionable.
+- Fixing `非交易` by forcing everything to `盤中` would be misleading.
+- Treating `盤前` like `盤後` would keep wrong `明日計畫` wording.
+- Changing generic intraday suffixes could break existing phone-readable `盤中` reports.
+- A single-date hard-code would fail the next trading day.
 
 ## Semantic Consistency
-- Market gate: only true weak/bear market states block as `市場弱`.
-- Stock gate: low individual grade blocks as `個股弱勢`.
-- Heat gate: limit-up / overheated moves stay non-chase and wait for cooldown or retest.
-- Volume gate: used as confirmation for breakout/setup quality, not a universal buy ban.
-- RR gate: weak reward/risk waits for repair and is not mislabeled as source failure.
+- `盤前`: same trading day, preparation/observation semantics.
+- `盤中`: live intraday semantics, unchanged.
+- `盤後` / `收盤`: next open / tomorrow confirmation semantics.
+- `假日`: non-trading semantics.
 
 ## Failure Specimen Countercheck
-- Official dry-run after the patch produced `v21.0.5`.
-- Counterchecks:
-  - `has_R2_market_weak_conflict False`
-  - `has_nextday_data_conflict False`
-  - `has_english_quality_noise False`
-  - `has_buyable False`
-  - `liandian_rr True`
+- Owner pasted `06/15 非交易｜v21.0.5`.
+- Countercheck with patched 2026-06-15 08:00:
+  - generated headers: `【06/15 盤前｜v21.0.6】`;
+  - `phase 盤前`;
+  - no `06/15 非交易`;
+  - no `明日計畫`.
 
 ## Additional Challenge
-- QA checked the final official generator path, not only helper fixtures.
-- The current dry-run remains conservative: no valid new entry is emitted.
-- The fix changes labels and gates, not hidden data or fake market evidence.
+- Full targeted suite first failed when `盤中` wording regressed from `今日盤中風控建議` to `今日風控建議`.
+- The regression was fixed by preserving the old `盤中` suffix and only adding a separate `盤前` suffix.
 
 ## Not Tested
 - Live Telegram delivery.
 - Production DB write/backfill.
-- Broker/order execution.
+- Official holiday API confirmation beyond the existing source/evidence paths.
 
 ## QA Conclusion
 通過
 
 Evidence:
-- `246 passed, 145 warnings, 57 subtests passed`.
-- Official dry-run conflict probe passed with no live Telegram delivery.
+- `2 passed` targeted phase tests.
+- `248 passed, 147 warnings, 57 subtests passed` targeted report/state/evidence suite.
+- Official dry-run probe produced `盤前` headers and no `明日計畫`.

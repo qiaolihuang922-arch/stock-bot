@@ -2,9 +2,9 @@
 
 ## Current Task
 
-- task_id: `report_conflict_entry_gate_v21_0_5_20260615`
+- task_id: `premarket_phase_report_v21_0_6_20260615`
 - status: `complete`
-- version: `v21.0.5`
+- version: `v21.0.6`
 - no live Telegram delivery.
 
 ## Stable Context
@@ -17,31 +17,24 @@
 
 ## Current Changes
 
-- Market-wide weakness and individual-stock weakness are no longer conflated.
-- Source/data failure is not inferred from missing report-only context.
-- Unheld blockers now separate:
-  - market gate;
-  - individual stock weakness;
-  - setup/distance;
-  - volume confirmation;
-  - heat/cooldown;
-  - RR repair;
-  - real data/source failure.
-- The current official dry-run has no valid buy signal.
+- Trading weekday before 09:00 is `盤前`.
+- `盤前` is a today-action phase:
+  - no `非交易` header;
+  - no `明日計畫`;
+  - unheld trigger wording uses `盤前觀察`.
+- `盤中` wording remains unchanged.
 
 ## Verification State
 
 - `tests/test_trade_state_machine.py tests/test_generator_report.py tests/test_market_theme_evidence.py`:
-  - `246 passed, 145 warnings, 57 subtests passed`.
-- Official dry-run confirmed:
-  - `v21.0.5`.
-  - no R2-versus-market-weak conflict.
-  - no next-day/data-state conflict.
-  - no `entry quality low` visible noise.
-  - no valid new buy emitted.
-  - `聯電` is represented as RR repair, not data failure.
+  - `248 passed, 147 warnings, 57 subtests passed`.
+- Patched-time official dry-run confirmed:
+  - `【06/15 盤前｜v21.0.6】`;
+  - phase `盤前`;
+  - no `06/15 非交易`;
+  - no `明日計畫`.
 
 ## Known Follow-ups
 
 - Live Telegram delivery not tested by design.
-- Strategy remains rule-based; bottom buying requires confirmed setup/RR/heat cooldown, not just a low price.
+- Holiday confirmation beyond weekend checks remains part of the broader source/evidence workflow, not this patch.

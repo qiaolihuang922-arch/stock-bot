@@ -81,7 +81,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v21.0.5"
+VERSION = "v21.0.6"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -261,7 +261,8 @@ def get_market_phase():
     if now.weekday() >= 5:
         return "假日"
 
-    if h == 8 and 30 <= m < 40:
+    # Trading-day pre-open reports are actionable preparation, not non-trading diagnostics.
+    if h < 9:
         return "盤前"
 
     if 9 <= h < 13:
@@ -275,6 +276,16 @@ def get_market_phase():
 
     # 中文註釋：v19.1.3 非交易時段不標成盤後，避免早盤手動執行被誤解為收盤訊號。
     return "非交易"
+
+
+def is_today_action_phase(report_phase):
+    return report_phase in (None, "盤前", "盤中")
+
+
+def today_trigger_label(report_phase):
+    if report_phase == "盤前":
+        return "盤前觀察"
+    return "盤中觸發"
 
 
 # ================================
@@ -5876,7 +5887,7 @@ def post_market_unheld_buy_requires_open_confirmation(data, report_context=None)
     result = (data or {}).get("result") or {}
     report_phase = (report_context or {}).get("report_context", {}).get("report_phase")
     return (
-        report_phase not in (None, "盤中")
+        not is_today_action_phase(report_phase)
         and is_valid_entry(result)
         and result.get("decision_type") != "trend_continuation"
     )
@@ -6312,7 +6323,7 @@ def today_conclusion_text(holding_items, watch_items, market_mode, risk_level, r
     rejected_count = len(funnel["淘汰"])
     unheld_total = sum(len(items) for items in funnel.values())
     holding_count = len(holding_items)
-    intraday = report_phase in (None, "盤中")
+    intraday = is_today_action_phase(report_phase)
     execution_label = "風控建議" if intraday else "明日計畫"
     no_new_entry_text = "新倉：無有效進場"
 
@@ -6386,7 +6397,7 @@ def today_reason_text(watch_items, market_mode, report_phase=None, report_contex
     funnel = build_unheld_funnel(watch_items, market_mode=market_mode, report_context=report_context)
 
     if funnel["可買"] or funnel["趨勢延續"]:
-        if report_phase not in (None, "盤中"):
+        if not is_today_action_phase(report_phase):
             return "盤後只列明日追蹤，開盤後再確認，不追價"
         if funnel["趨勢延續"] and not funnel["可買"]:
             return "趨勢延續回踩站回，僅小倉執行並守回踩低點"
@@ -6498,7 +6509,7 @@ def format_execution_checklist(holding_items, watch_items, limit=5, report_phase
 
     items = pending_trade_items(holding_items, watch_items, market_mode=market_mode, report_context=report_context)
     items.extend(executed_trade_items(holding_items, watch_items, market_mode=market_mode, report_context=report_context))
-    intraday = report_phase in (None, "盤中")
+    intraday = is_today_action_phase(report_phase)
 
     if not items:
         return []
@@ -6530,8 +6541,13 @@ def format_unheld_non_execution_lines(watch_items, report_phase=None, market_mod
     prepare_count = len(funnel["可準備"])
     tracking_only_count = unheld_tracking_only_count(funnel)
     next_day_count = unheld_next_day_count(funnel)
-    intraday = report_phase in (None, "盤中")
-    tracking_suffix = "不列入今日盤中風控建議" if intraday else "不列入明日計畫"
+    intraday = is_today_action_phase(report_phase)
+    if report_phase == "盤前":
+        tracking_suffix = "不列入今日盤前風控計畫"
+    elif intraday:
+        tracking_suffix = "不列入今日盤中風控建議"
+    else:
+        tracking_suffix = "不列入明日計畫"
 
     if prepare_count and tracking_only_count:
         tail = f"未持倉 {unheld_prepare_count_text(prepare_counts)}、{tracking_only_count} 檔僅追蹤"
@@ -6553,8 +6569,8 @@ def format_new_entry_suggestions(watch_items, limit=5, report_phase=None, market
     if not items:
         return []
 
-    intraday = report_phase in (None, "盤中")
-    timing = "盤中觸發" if intraday else "明日開盤後確認"
+    intraday = is_today_action_phase(report_phase)
+    timing = today_trigger_label(report_phase) if intraday else "明日開盤後確認"
     lines = []
     for item in items[:limit]:
         if item.get("state") == "趨勢延續":
@@ -6616,7 +6632,7 @@ def intraday_holding_control_line(item, report_phase):
     if item.get("state") in ["加碼10", "加碼20", "加碼30"]:
         return f"{item['name']}｜風控：守警戒線，不追價"
 
-    if report_phase != "盤中":
+    if not is_today_action_phase(report_phase):
         return line
 
     if item.get("state") == "已執行":
@@ -6726,7 +6742,7 @@ def detail_index_text(holding_items, watch_items, report_phase=None, market_mode
     prepare_count = len(funnel["可準備"])
     tracking_only_count = unheld_tracking_only_count(funnel)
     rejected = funnel["淘汰"]
-    execution_label = "明日計畫" if report_phase not in (None, "盤中") else "風控建議"
+    execution_label = "風控建議" if is_today_action_phase(report_phase) else "明日計畫"
     holding_names = "、".join(name for name, _data in holding_items) if holding_items else "無"
     parts = [f"📎 詳情索引：持倉 {holding_names}"]
 

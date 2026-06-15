@@ -2,22 +2,20 @@
 
 ## Active
 
-- task_md_holds: `report_conflict_entry_gate_v21_0_5_20260615`
+- task_md_holds: `premarket_phase_report_v21_0_6_20260615`
 - status: `complete`
 - owner_request:
-  - Solve visible report conflicts.
-  - Remove unreasonable blocker labels.
-  - Check whether volume, market, heat, and low-point buying logic are reasonable.
+  - Analyze pasted `06/15 非交易｜v21.0.5` report.
+  - Resolve visible conflict where a trading-day report mixed non-trading, today, and tomorrow wording.
   - No live Telegram delivery.
 
 ## Current Result
 
-- Visible version is now `v21.0.5`.
-- Broad market and individual-stock weakness are separated.
-- A neutral market summary no longer turns every unheld stock into `等市場｜市場弱`.
-- Real data/source failure is the only path that displays `等資料`.
-- Heat, volume, RR, setup, and stock weakness are separate blockers.
-- Current official dry-run emits no valid new buy; blocked names are wait/observe states, not recommendations.
+- Visible version is now `v21.0.6`.
+- Trading weekday before 09:00 now renders as `盤前`, not `非交易`.
+- `盤前` is treated as a today-action phase for summary routing.
+- `盤前` does not append `明日計畫`.
+- Existing `盤中` wording remains unchanged.
 
 ## Verification
 
@@ -25,21 +23,14 @@
 .\.venv\Scripts\python.exe -m pytest tests/test_trade_state_machine.py tests/test_generator_report.py tests/test_market_theme_evidence.py -q --tb=short
 ```
 
-Result: `246 passed, 145 warnings, 57 subtests passed`.
+Result: `248 passed, 147 warnings, 57 subtests passed`.
 
-Official dry-run conflict probe:
-
-```powershell
-$env:PYTHONIOENCODING='utf-8'; .\.venv\Scripts\python.exe -c "from core.generator import generate_report, VERSION; messages,_=generate_report(dry_run=True); text='\n'.join(messages); print('version', VERSION); print('has_R2_market_weak_conflict', ('市場：中性觀察 R2' in text and '等市場｜市場弱' in text)); print('has_nextday_data_conflict', ('隔日確認' in text and '交易狀態：等資料' in text)); print('has_english_quality_noise', 'entry quality low' in text); print('has_buyable', '可買｜' in text or '趨勢延續買入' in text); print('liandian_rr', '【聯電 2303】👀 等RR修復｜觀察' in text and '交易狀態：等RR修復' in text)"
-```
-
-Result:
-- `version v21.0.5`
-- `has_R2_market_weak_conflict False`
-- `has_nextday_data_conflict False`
-- `has_english_quality_noise False`
-- `has_buyable False`
-- `liandian_rr True`
+Official patched-time dry-run:
+- simulated time: `2026-06-15 08:00` Taipei.
+- headers: `【06/15 盤前｜v21.0.6】`.
+- phase: `盤前`.
+- no `06/15 非交易`.
+- no `明日計畫`.
 
 ## Next Action
 
