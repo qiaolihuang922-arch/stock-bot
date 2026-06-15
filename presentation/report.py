@@ -412,6 +412,44 @@ def _gate_gap_text(value, threshold):
     return _gate_value_text(gap)
 
 
+def _volume_window_text(data):
+    v10 = _gate_value_text((data or {}).get("volume_ratio_10") or (data or {}).get("volume_ratio"))
+    v20 = _gate_value_text((data or {}).get("volume_ratio_20"))
+    if v10 and v20:
+        return f"V10 {v10}x / V20 {v20}x"
+    if v10:
+        return f"V10 {v10}x"
+    return None
+
+
+def _retest_zone_text(data):
+    low = _gate_value_text((data or {}).get("retest_zone_low"))
+    high = _gate_value_text((data or {}).get("retest_zone_high"))
+    if low and high:
+        try:
+            price = float((data or {}).get("price"))
+            if price < float(low):
+                return f"突破區 {low}~{high}（現價未站回）"
+        except (TypeError, ValueError):
+            pass
+        return f"回測區 {low}~{high}"
+    return "回測前高/突破區"
+
+
+def _retest_unlock_text(data):
+    low = _gate_value_text((data or {}).get("retest_zone_low"))
+    high = _gate_value_text((data or {}).get("retest_zone_high"))
+    if low and high:
+        try:
+            price = float((data or {}).get("price"))
+            if price < float(low):
+                return f"先站回突破區 {low}~{high}，再回測不破"
+        except (TypeError, ValueError):
+            pass
+        return f"回測區 {low}~{high}不破"
+    return "回測前高/突破區不破"
+
+
 def _display_entry_distance_policy(stock_result):
     stock_result = stock_result or {}
     decision_type = stock_result.get("decision_type")
@@ -524,11 +562,18 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
 
     behavior = stock_result.get("price_behavior")
     if "急彈待回測" in blocker_text:
-        rebound_gaps = ["急彈追價區，尚未回測"]
-        volume_text = _gate_value_text((data or {}).get("volume_ratio"))
+        retest_text = _retest_zone_text(data)
+        unlock_text = _retest_unlock_text(data)
+        rebound_gaps = [f"急彈追價區，尚未回測｜{retest_text}"]
+        volume_text = _volume_window_text(data)
         if volume_text:
-            volume_label = "偏弱" if float(volume_text) < 1.0 else "達標"
-            rebound_gaps.append(f"V {volume_text}x{volume_label}")
+            try:
+                v10 = float((data or {}).get("volume_ratio_10") or (data or {}).get("volume_ratio") or 1)
+                v20 = float((data or {}).get("volume_ratio_20") or v10)
+                volume_label = "偏弱" if min(v10, v20) < 0.8 else "達標"
+            except (TypeError, ValueError):
+                volume_label = "待確認"
+            rebound_gaps.append(f"{volume_text}{volume_label}")
         quality = stock_result.get("entry_quality")
         if quality and quality not in {"A+", "A", "B"}:
             rebound_gaps.append(f"品質 {quality} 未達B")
@@ -539,7 +584,7 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
         return evidence_lines(
             "急彈未回測",
             "｜".join(rebound_gaps),
-            "回測前高/突破區不破 + 非漲停追價 + 量能有效 + 品質B以上 + RR>=1.5",
+            f"{unlock_text} + 非漲停追價 + 量能有效 + 品質B以上 + RR>=1.5",
             basis="",
         )
     if behavior in {"LIMIT_LOCK", "LIMIT_REBOUND"} or "漲停" in blocker_text or "不可追高" in blocker_text:

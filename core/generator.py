@@ -41,7 +41,9 @@ from services.analysis import (
     BREAKOUT_THRESHOLD,
     holding_signal as strategy_holding_signal,
     MIN_DATA_POINTS,
-    TREND_CONTINUATION_DEFAULT_EVIDENCE
+    TREND_CONTINUATION_DEFAULT_EVIDENCE,
+    resistance_levels,
+    retest_zone_from_levels,
 )
 
 from core.condition_engine import (
@@ -81,7 +83,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v21.0.9"
+VERSION = "v21.1"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -423,6 +425,28 @@ def volume_ratio(volumes):
         return 1
 
 
+def volume_ratio_window(volumes, window):
+
+    try:
+
+        sample = volumes[-window:]
+        avg_volume = (
+            sum(sample)
+            / max(len(sample), 1)
+        )
+
+        if avg_volume <= 0:
+            return 1
+
+        return round(
+            volumes[-1] / avg_volume,
+            2
+        )
+
+    except:
+        return 1
+
+
 # ================================
 # 🔥 breakout distance
 # 距離突破百分比
@@ -456,6 +480,43 @@ def breakout_distance(
 
     except:
         return None
+
+
+def breakout_context(price, closes):
+
+    try:
+
+        levels = resistance_levels(
+            safe_list(closes)
+        )
+
+        retest_zone = retest_zone_from_levels(
+            levels
+        )
+
+        primary_breakout = levels.get("breakout_price_20")
+        distance_20 = (
+            round((primary_breakout - price) / price * 100, 2)
+            if price and primary_breakout
+            else None
+        )
+
+        breakout_60 = levels.get("breakout_price_60")
+        distance_60 = (
+            round((breakout_60 - price) / price * 100, 2)
+            if price and breakout_60
+            else None
+        )
+
+        return {
+            **levels,
+            **retest_zone,
+            "breakout_distance_20": distance_20,
+            "breakout_distance_60": distance_60,
+        }
+
+    except:
+        return {}
 
 
 # ================================
@@ -2332,6 +2393,11 @@ def render_stock(
         data["volumes"]
     )
     data["volume_ratio"] = vol
+    data["volume_ratio_10"] = result.get("volume_ratio_10") or vol
+    data["volume_ratio_20"] = result.get("volume_ratio_20") or volume_ratio_window(
+        data["volumes"],
+        20
+    )
 
     # breakout 距離
     dist = breakout_distance(
@@ -2341,6 +2407,26 @@ def render_stock(
     data["breakout_distance"] = dist
 
     result["breakout_distance"] = dist
+
+    context = breakout_context(
+        price,
+        data["closes"]
+    )
+    for key in [
+        "resistance_20",
+        "resistance_60",
+        "breakout_price_20",
+        "breakout_price_60",
+        "retest_zone_low",
+        "retest_zone_high",
+        "retest_zone_label",
+        "breakout_distance_20",
+        "breakout_distance_60",
+    ]:
+        value = result.get(key, context.get(key))
+        if value is not None:
+            result[key] = value
+            data[key] = value
 
     # entry stage
     entry = ENTRY_MAP.get(
@@ -9434,5 +9520,6 @@ def generate():
     if isinstance(result, list):
         return "\n\n====================\n\n".join(result)
     return result
+
 
 

@@ -1,53 +1,57 @@
-# CHANGELOG: acute_rebound_retest_anchor_v21_0_9_20260615
+# CHANGELOG: multi_window_strategy_v21_1_20260615
 
 ## Changes
+- `services/analysis.py`
+  - Added V20 into `multi_period_metrics`.
+  - Volume state now uses V10/V20 combined context instead of V10 alone.
+  - Added 20D/60D resistance helpers and 20D retest zone.
+  - Strategy result now carries V10/V20, 20D/60D resistance, breakout price, and retest zone fields.
 - `core/generator.py`
-  - Bumped visible version to `v21.0.9`.
+  - Bumped visible version to `v21.1`.
+  - Added fallback V20 and breakout/retest-zone context for official report payloads.
+- `core/signal_snapshot.py`
+  - Backfill / daily snapshots now preserve V10/V20 and raw retest-zone context.
 - `presentation/report.py`
-  - `急彈待回測` cards now display a compact reason:
-    - `急彈追價區，尚未回測`
-    - live volume status, entry quality, and RR status when available.
-  - `急彈待回測` unlock text now states the buy-condition checklist:
-    - `回測前高/突破區不破 + 非漲停追價 + 量能有效 + 品質B以上 + RR>=1.5`.
-  - Acute rebound wait cards preserve real RR in the data line when RR exists.
-  - Limit-up / locked-overheat cards still keep `RR -（過熱）`.
+  - Acute rebound card now shows V10/V20 and concrete zone.
+  - If current price is below the breakout zone, card says `現價未站回`.
+- `tests/test_analysis_engine.py`
+  - Added raw-result / snapshot test for multi-window strategy fields.
 - `tests/test_generator_report.py`
-  - Added regression assertions for the new condition line and RR conflict.
-  - Kept negative coverage for limit-up and low-volume limit-up hard blockers.
+  - Added report tests for V10/V20, retest-zone display, and below-zone wording.
 
 ## Contract Impact
-- Telegram unheld card wording changes for acute rebound wait states.
-- No DB payload, schema, RLS, grant, policy, role, live delivery, or production write change.
-- Trade permission is unchanged: acute rebound remains wait/retest, not buy.
+- New result/raw_result fields:
+  - `volume_ratio_10`, `volume_ratio_20`
+  - `resistance_20`, `resistance_60`
+  - `breakout_price_20`, `breakout_price_60`
+  - `retest_zone_low`, `retest_zone_high`, `retest_zone_label`
+- Telegram wording changes for acute rebound wait cards.
+- No DB schema or live delivery changes.
 
 ## Verification
-- Focused specimens:
+- Focused:
   ```powershell
-  .\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py::GeneratorReportTest::test_v21_0_9_strong_rebound_is_not_labeled_weak_rebound tests/test_generator_report.py::GeneratorReportTest::test_confirmed_evidence_preserves_limit_lock_chase_hard_blocker tests/test_generator_report.py::GeneratorReportTest::test_low_volume_limit_up_prepare_card_and_summary_show_risk -q --tb=short
+  .\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py::GeneratorReportTest::test_v21_1_strong_rebound_uses_multi_window_retest_context tests/test_generator_report.py::GeneratorReportTest::test_v21_1_retest_anchor_says_breakout_zone_when_price_is_below_zone tests/test_analysis_engine.py::AnalysisEngineTest::test_v21_1_snapshot_exports_multi_window_volume_and_retest_zone -q --tb=short
   ```
   Result: `3 passed`.
-- Targeted report/state/evidence suite:
+- Targeted strategy/report/backfill suite:
   ```powershell
-  .\.venv\Scripts\python.exe -m pytest tests/test_trade_state_machine.py tests/test_generator_report.py tests/test_market_theme_evidence.py -q --tb=short
+  .\.venv\Scripts\python.exe -m pytest tests/test_analysis_engine.py tests/test_signal_validator.py tests/test_trade_state_machine.py tests/test_generator_report.py tests/test_market_theme_evidence.py tests/test_backfill_signals.py tests/test_backfill_daily_price_history.py -q --tb=short
   ```
-  Result: `249 passed, 149 warnings, 57 subtests passed`.
+  Result: `307 passed, 149 warnings, 57 subtests passed`.
 - Official dry-run:
-  - `VERSION v21.0.9`
-  - `messages 4`
-  - retest anchor condition line present
+  - `VERSION v21.1`
   - no live Telegram delivery
-  - no current `【旺宏 2337】⛔ 淘汰｜弱反彈待確認`
+  - 旺宏 card shows `突破區 175.5~176.38（現價未站回）`
+  - 旺宏 card shows `V10 0.52x / V20 0.26x偏弱`
 
 ## Coverage Layers
+- Strategy metrics.
+- Signal snapshot / backfill payload.
+- Trade state machine guards.
 - Telegram unheld formatter.
-- Official generator dry-run message list.
-- Strong rebound owner specimen.
-- Limit-up / overheat negative specimens.
-- Existing report/state/evidence regression suite.
+- Official generator dry-run.
 
 ## Residual Risk
-- `品質B以上` is an internal composite gate, not an external universal trading term.
-- The acute rebound threshold remains rule-based and should be calibrated from DB outcomes in a separate strategy-quality task.
-
-
-
+- V20/60D are now available and used, but thresholds still need longer historical calibration from production outcomes.
+- No DB schema change means new fields are persisted only where raw_result / artifact payload already stores expanded result JSON.

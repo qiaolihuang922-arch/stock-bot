@@ -93,6 +93,10 @@ def multi_period_metrics(closes, volumes):
         volumes[-10:]
     )
 
+    avg20_volume = avg(
+        volumes[-20:]
+    )
+
     ratio5 = (
         volumes[-1] / avg5_volume
         if avg5_volume else 1
@@ -103,17 +107,25 @@ def multi_period_metrics(closes, volumes):
         if avg10_volume else 1
     )
 
-    # 中文註釋：v19.1.3 統一輸出 1 / 3 / 5 / 10 日變化，避免單日訊號反覆誤判。
+    ratio20 = (
+        volumes[-1] / avg20_volume
+        if avg20_volume else ratio10
+    )
+
+    # 中文註釋：v21.1 統一輸出短線/波段量能，避免只用 V10 誤判急彈承接。
     return {
         "chg_1d": pct_change(closes, 1),
         "chg_3d": pct_change(closes, 3),
         "chg_5d": pct_change(closes, 5),
         "chg_10d": pct_change(closes, 10),
+        "chg_20d": pct_change(closes, 20),
         "vol_ratio_5": ratio5,
         "vol_ratio_10": ratio10,
+        "vol_ratio_20": ratio20,
         "avg3": avg(closes[-3:]),
         "avg5": avg(closes[-5:]),
-        "avg10": avg(closes[-10:])
+        "avg10": avg(closes[-10:]),
+        "avg20": avg(closes[-20:])
     }
 
 
@@ -833,6 +845,15 @@ def build_result(**kwargs):
         "stop_label",
         "exit_rule",
         "exit_horizon_days",
+        "volume_ratio_10",
+        "volume_ratio_20",
+        "resistance_20",
+        "resistance_60",
+        "breakout_price_20",
+        "breakout_price_60",
+        "retest_zone_low",
+        "retest_zone_high",
+        "retest_zone_label",
     ]:
         if key in kwargs:
             result[key] = kwargs.get(key)
@@ -1066,13 +1087,24 @@ def trend_signal(
 # ================================
 def volume_signal(volumes):
 
-    avg10 = avg(
-        volumes[-10:]
+    metrics = multi_period_metrics(
+        [],
+        volumes
     )
 
-    ratio = (
-        volumes[-1] / avg10
-        if avg10 else 1
+    ratio10 = metrics.get(
+        "vol_ratio_10",
+        1
+    )
+
+    ratio20 = metrics.get(
+        "vol_ratio_20",
+        ratio10
+    )
+
+    ratio = min(
+        ratio10,
+        ratio20
     )
 
     if ratio < 0.7:
@@ -1190,15 +1222,78 @@ def structure_state(
 # ================================
 # 🔥 support resistance
 # ================================
+def _window_high_ex_recent(closes, window, exclude_recent):
+
+    values = list(closes or [])
+    if len(values) <= exclude_recent:
+        return None
+
+    start = max(0, len(values) - window)
+    end = len(values) - exclude_recent
+    sample = values[start:end]
+
+    if not sample:
+        return None
+
+    return max(sample)
+
+
+def resistance_levels(closes):
+
+    values = list(closes or [])
+
+    resistance_20 = _window_high_ex_recent(
+        values,
+        20,
+        3
+    )
+
+    resistance_60 = _window_high_ex_recent(
+        values,
+        60,
+        5
+    )
+
+    primary = resistance_20 or resistance_60
+
+    return {
+        "resistance_20": resistance_20,
+        "resistance_60": resistance_60,
+        "primary_resistance": primary,
+        "breakout_price_20": breakout_price(resistance_20) if resistance_20 else None,
+        "breakout_price_60": breakout_price(resistance_60) if resistance_60 else None,
+    }
+
+
+def retest_zone_from_levels(levels):
+
+    resistance = (levels or {}).get("resistance_20") or (levels or {}).get("primary_resistance")
+    breakout = (levels or {}).get("breakout_price_20") or (
+        breakout_price(resistance) if resistance else None
+    )
+
+    if not resistance or not breakout:
+        return {
+            "retest_zone_low": None,
+            "retest_zone_high": None,
+            "retest_zone_label": None,
+        }
+
+    return {
+        "retest_zone_low": round(resistance, 2),
+        "retest_zone_high": round(breakout, 2),
+        "retest_zone_label": "20D前高/突破區",
+    }
+
+
 def support_resistance(closes):
 
     support = min(
         closes[-20:]
     )
 
-    resistance = max(
-        closes[-20:-3]
-    )
+    levels = resistance_levels(closes)
+    resistance = levels.get("resistance_20") or levels.get("primary_resistance")
 
     return support, resistance
 
@@ -2656,6 +2751,14 @@ def strategy(
         support_resistance(closes)
     )
 
+    levels = resistance_levels(
+        closes
+    )
+
+    retest_zone = retest_zone_from_levels(
+        levels
+    )
+
     market = market_signal(
         closes,
         ma20,
@@ -2905,7 +3008,14 @@ def strategy(
         "live_change": change,
         "entry_profile": entry_profile,
         "entry_quality": quality,
-        "confidence_score": confidence
+        "confidence_score": confidence,
+        "volume_ratio_10": metrics.get("vol_ratio_10"),
+        "volume_ratio_20": metrics.get("vol_ratio_20"),
+        "resistance_20": levels.get("resistance_20"),
+        "resistance_60": levels.get("resistance_60"),
+        "breakout_price_20": levels.get("breakout_price_20"),
+        "breakout_price_60": levels.get("breakout_price_60"),
+        **retest_zone,
     }
 
     trend_continuation_setup = detect_trend_continuation_setup(

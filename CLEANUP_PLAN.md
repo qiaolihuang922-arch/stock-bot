@@ -16,6 +16,7 @@
 - Fixed a report phase abstraction gap: trading-day pre-open is now `盤前`, and `盤前` uses today-action summary routing instead of afterhours/tomorrow routing.
 - Fixed a strategy wording abstraction gap: strong intraday rebound is now separated from weak rebound. The reusable rule is "raw weak-rebound state can be upgraded to wait-for-retest when live/day change is strong, but it must not become a chase-buy signal."
 - Fixed an acute-rebound report contract gap: wait cards now show both the current no-buy reason and the concrete re-evaluation gates instead of scattering them across blocker / trigger / data lines.
+- Added v21.1 multi-window strategy context: V10/V20, 20D/60D resistance, and concrete retest zones now flow through strategy result, snapshot/raw_result, and official report.
 
 ## Current Post-cycle Review
 
@@ -28,10 +29,12 @@
   - Report phase semantics were scattered: `盤前` was not a first-class today-action phase, so early trading-day reports could fall into `非交易` or tomorrow-plan wording.
 - Rebound semantics were too rigid: `WEAK_REBOUND` was treated as permanently weak even when live price action had already become a sharp rebound.
 - Acute-rebound cards hid real RR as `-（不可行動）` or `-（過熱）` while another line said RR was達標, creating a mobile-visible contradiction.
+- The old strategy used V10 and 20D resistance as the dominant visible context; this was not fake data, but it was too narrow for swing confirmation and unclear for acute-rebound retest wording.
 - QA did catch core report conflicts, but did not independently enforce Markdown hygiene.
 - Tech did not change DB schema, live Telegram, or production write paths.
 - No single-date or single-stock dead rule was added. The new rule is an abstract handoff hygiene invariant.
 - No single-stock buy rule was added. The new formatter contract is abstract: acute rebound remains wait/retest, and only its explanation becomes explicit.
+- v21.1 did not loosen buyability. It expands evidence context and makes the retest anchor explicit; future calibration should use production outcomes before changing thresholds.
 
 ## Active Cleanup Follow-ups
 
@@ -56,6 +59,9 @@
 - `acute_rebound_quality_calibration`
   - Current fact: `回測不破`, `非漲停追價`, `量能有效`, and `RR>=1.5` align with common technical-trading gates, while `品質B以上` is the bot's internal composite score.
   - Needed fix: future strategy-quality task should define DB-backed transitions from D to B and backtest whether the acute rebound threshold should stay at 7%.
+- `multi_window_threshold_calibration`
+  - Current fact: v21.1 carries V10/V20 and 20D/60D levels, but thresholds are still rule-based.
+  - Needed fix: use historical production outcomes to calibrate V20 cutoffs, 60D resistance impact, and retest-zone success rates.
 - `runner_gap: cao_codex_tui_send`
   - Current fact: CAO TUI automation can hang after prompt send.
   - Needed fix: noninteractive fallback or stable `codex exec` runner path.

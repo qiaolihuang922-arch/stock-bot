@@ -1,4 +1,10 @@
-from services.analysis import BREAKOUT_THRESHOLD, pick_best_stock, strategy
+from services.analysis import (
+    BREAKOUT_THRESHOLD,
+    pick_best_stock,
+    resistance_levels,
+    retest_zone_from_levels,
+    strategy,
+)
 from core.condition_engine import condition_engine, summarize_conditions
 
 
@@ -25,6 +31,17 @@ def _volume_ratio(volumes):
         return 1
 
 
+def _volume_ratio_window(volumes, window):
+    try:
+        sample = volumes[-window:]
+        avg_volume = _avg(sample)
+        if avg_volume <= 0:
+            return 1
+        return round(volumes[-1] / avg_volume, 2)
+    except:
+        return 1
+
+
 def _breakout_distance(price, closes):
     try:
         resistance = max(closes[-20:-3])
@@ -32,6 +49,22 @@ def _breakout_distance(price, closes):
         return round((breakout_price - price) / price * 100, 2)
     except:
         return None
+
+
+def _breakout_context(price, closes):
+    try:
+        levels = resistance_levels(closes)
+        retest = retest_zone_from_levels(levels)
+        breakout_20 = levels.get("breakout_price_20")
+        breakout_60 = levels.get("breakout_price_60")
+        return {
+            **levels,
+            **retest,
+            "breakout_distance_20": round((breakout_20 - price) / price * 100, 2) if price and breakout_20 else None,
+            "breakout_distance_60": round((breakout_60 - price) / price * 100, 2) if price and breakout_60 else None,
+        }
+    except:
+        return {}
 
 
 def _position_state(distance):
@@ -176,15 +209,23 @@ def analyze_ohlcv_snapshot(
     )
     distance = _breakout_distance(close, closes)
     result["breakout_distance"] = distance
+    context = _breakout_context(close, closes)
+    for key, value in context.items():
+        if value is not None:
+            result[key] = value
     reasons = _reason_labels(result)
     is_tradeable = is_tradeable_result(result)
+    volume_ratio_10 = _volume_ratio(volumes)
+    volume_ratio_20 = _volume_ratio_window(volumes, 20)
 
     return {
         "stock_id": stock_id,
         "trade_date": trade_date,
         "version": version,
         "close": _safe_round(close),
-        "volume_ratio": _volume_ratio(volumes),
+        "volume_ratio": volume_ratio_10,
+        "volume_ratio_10": volume_ratio_10,
+        "volume_ratio_20": volume_ratio_20,
         "pattern": result.get("structure_phase"),
         "market_state": result.get("market_grade"),
         "structure_state": result.get("structure_state"),
@@ -211,6 +252,8 @@ def snapshot_from_result(stock_id, trade_date, version, result, close, volume_ra
         "version": version,
         "close": _safe_round(close),
         "volume_ratio": _safe_round(volume_ratio),
+        "volume_ratio_10": _safe_round(result.get("volume_ratio_10", volume_ratio)),
+        "volume_ratio_20": _safe_round(result.get("volume_ratio_20")),
         "pattern": result.get("structure_phase"),
         "market_state": result.get("market_grade"),
         "structure_state": result.get("structure_state"),

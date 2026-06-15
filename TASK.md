@@ -1,65 +1,76 @@
-# TASK: acute_rebound_retest_anchor_v21_0_9_20260615
+# TASK: multi_window_strategy_v21_1_20260615
 
 ## Status
-- task_id: `acute_rebound_retest_anchor_v21_0_9_20260615`
+- task_id: `multi_window_strategy_v21_1_20260615`
 - type: `risk_patch`
 - status: `complete`
-- version: `v21.0.9`
+- version: `v21.1`
 - QA level: `L2`
 
 ## Owner Problem
-Owner asked why a stock such as 旺宏 can be up strongly but still read like a weak rebound, and why the report does not plainly say: current state is a chase-risk zone, and buyability needs retest hold, non-limit-up chasing, volume confirmation, quality B+, and RR >= 1.5.
+Owner asked whether V10 and 20D resistance are too narrow for buy decisions, and requested a completed v21.1 strategy treatment with evidence-backed logic rather than another dead rule or report-only patch.
 
 ## User Visible Result
-- `急彈待回測` cards now show a compact not-buy reason and buy-condition line.
-- The card says the issue is `急彈追價區，尚未回測`, and lists live blockers such as weak volume, D quality, and current RR.
-- The unlock line is explicit: `回測前高/突破區不破 + 非漲停追價 + 量能有效 + 品質B以上 + RR>=1.5`.
-- RR is no longer hidden as `-（不可行動）` on acute rebound wait cards when a real RR exists.
-- Limit-up / locked-overheat cards still hide RR as overheat and remain hard blocked.
+- Acute rebound cards now show V10/V20, not only a single V value.
+- Acute rebound cards now show the computed 20D breakout / retest zone.
+- If current price is below the breakout zone, the card says the breakout zone is not reclaimed yet, instead of pretending it is already a pullback/retest.
+- Version bumps to `v21.1`.
 
 ## Non Goals
 - No live Telegram delivery.
-- No DB schema or production DB writes.
+- No DB schema, RLS, grant, policy, role, index, or constraint change.
 - No broker/order execution.
-- No blanket permission to buy sharp rebound, limit-up, or near-limit-up stocks.
 - No hard-code of 旺宏 or a single date.
+- No blanket permission to buy acute rebounds.
 
 ## Impacted Modules And Consumers
-- `presentation/report.py`
-  - Consumer: Telegram unheld card reason / gap / unlock / data line.
+- `services/analysis.py`
+  - Consumer: strategy result, volume state, RR / entry quality context.
 - `core/generator.py`
-  - Consumer: visible report version.
-- `tests/test_generator_report.py`
-  - Consumer: owner-style replay specimens and conflict guards.
+  - Consumer: official Telegram report payload, dry-run artifact.
+- `core/signal_snapshot.py`
+  - Consumer: backfill / daily signal snapshot raw result.
+- `presentation/report.py`
+  - Consumer: Telegram unheld card.
+- Tests:
+  - `tests/test_analysis_engine.py`
+  - `tests/test_generator_report.py`
+  - existing report/state/backfill suites.
 
 ## Output Contract
-- For `急彈待回測`, the unheld card must remain a wait state.
-- It must show:
-  - `卡關主因：急彈未回測`
-  - `量化差距：急彈追價區，尚未回測...`
-  - `解鎖：回測前高/突破區不破 + 非漲停追價 + 量能有效 + 品質B以上 + RR>=1.5`
-- If a real RR exists for acute rebound wait, the data line may show that RR while still saying the card is not actionable.
-- For true limit-up / locked-overheat cards, existing `RR -（過熱）` hard blocker behavior must remain.
+- Strategy result / snapshot must expose:
+  - `volume_ratio_10`
+  - `volume_ratio_20`
+  - `resistance_20`
+  - `resistance_60`
+  - `breakout_price_20`
+  - `breakout_price_60`
+  - `retest_zone_low`
+  - `retest_zone_high`
+- Acute rebound card must show:
+  - V10/V20 combined volume context.
+  - A concrete zone.
+  - If price is below the zone: `突破區 X~Y（現價未站回）`.
+  - Unlock: `先站回突破區 X~Y，再回測不破 + ...`.
 
 ## Acceptance
-- Focused owner specimen proves 旺宏-style +8% acute rebound is `等回測｜急彈待回測`, not weak rebound.
-- Focused negative cases prove limit-up and low-volume limit-up still remain overheat / no-chase.
-- Targeted report/state/evidence suites pass.
-- Official dry-run generates `v21.0.9` with no live Telegram delivery and contains the new condition line.
+- Focused tests prove:
+  - snapshot/raw_result exports V10/V20 and retest zone fields;
+  - acute rebound card uses V10/V20 and concrete retest zone;
+  - price below breakout zone is labeled as not reclaimed yet.
+- Targeted strategy/report/backfill suites pass.
+- Official dry-run generates `v21.1` and shows the new zone-aware 旺宏 card.
 
 ## Failure Specimen And Route
-- Owner failure: pasted report where 旺宏 near limit-up / sharp rebound still looked like weak rebound and did not say what conditions would make it buyable.
-- Failure layer: official generator + Telegram formatter.
+- Owner failure: report said `等回測` but did not say what it was waiting to retest, and V10/20D-only logic risked narrow strategy judgment.
+- Failure layer: strategy metrics + official generator + Telegram formatter + snapshot.
 - Verification route:
-  - `tests/test_generator_report.py::GeneratorReportTest::test_v21_0_9_strong_rebound_is_not_labeled_weak_rebound`
-  - limit-up / low-volume limit-up regression tests
+  - `tests/test_analysis_engine.py::AnalysisEngineTest::test_v21_1_snapshot_exports_multi_window_volume_and_retest_zone`
+  - `tests/test_generator_report.py::GeneratorReportTest::test_v21_1_strong_rebound_uses_multi_window_retest_context`
+  - `tests/test_generator_report.py::GeneratorReportTest::test_v21_1_retest_anchor_says_breakout_zone_when_price_is_below_zone`
   - official `generate_report(dry_run=True)` message list.
 
 ## Forbidden / Blocking
-- Do not change DB schema, RLS, grants, policies, roles, index, or constraints.
-- Do not live-send Telegram.
-- Do not loosen the trade state machine into buying acute rebounds without retest and confirmation.
-- Do not remove existing overheat / limit-up hard blockers.
-
-
-
+- Do not treat V20 or 60D resistance as display-only fake data.
+- Do not loosen buyability without retest/volume/quality/RR gates.
+- Do not hide source errors or missing data as valid strategy evidence.

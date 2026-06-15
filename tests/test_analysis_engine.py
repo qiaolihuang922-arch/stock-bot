@@ -87,6 +87,28 @@ def strategy_from_rows(rows, evidence=_DEFAULT_TEST_EVIDENCE):
 
 
 class AnalysisEngineTest(unittest.TestCase):
+    def test_v21_1_snapshot_exports_multi_window_volume_and_retest_zone(self):
+        closes = [100 + idx for idx in range(65)]
+        volumes = [1000] * 55 + [2000] * 4 + [500]
+
+        item = analyze_ohlcv_snapshot(
+            "2337",
+            "2026-06-15",
+            closes,
+            volumes,
+            version="v21.1",
+        )
+
+        self.assertIn("volume_ratio_10", item)
+        self.assertIn("volume_ratio_20", item)
+        self.assertLess(item["volume_ratio_20"], 1)
+        raw = item["raw_result"]
+        self.assertIsNotNone(raw.get("resistance_20"))
+        self.assertIsNotNone(raw.get("resistance_60"))
+        self.assertIsNotNone(raw.get("breakout_price_20"))
+        self.assertIsNotNone(raw.get("retest_zone_low"))
+        self.assertIsNotNone(raw.get("retest_zone_high"))
+
     def test_trend_continuation_reuses_research_match_and_buys_small(self):
         rows = trend_continuation_rows()
         bars = research.normalize_bars(rows)
