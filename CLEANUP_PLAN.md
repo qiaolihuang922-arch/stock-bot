@@ -9,19 +9,20 @@
 
 ## Completed Cleanup / Consolidation
 
-- `DISPATCH.md` holds active task status, result summary, verification, git state, and next action.
-- `CURRENT_STATE.md` holds stable project facts, current implementation state, verification state, and known follow-ups.
-- `TASK.md`, `CHANGELOG.md`, and `QA_REPORT.md` describe the current v21.3 schema artifact task without terminal transcripts.
-- Strategy-axis memory is now a DB schema concern, not a report-text convention.
+- `daily_signal_snapshot` v21.1 strategy-axis memory backfill completed:
+  - `5786` rows upserted from `daily_price`.
+  - all `5786` rows have non-null core strategy-axis memory fields.
+- Duplicate/version cleanup completed:
+  - exact duplicates: `0`
+  - multi-version extras: `0`
+  - deleted rows: `0`
+- `AGENTS.md` now requires DB backfill/prune tasks to automatically update MD and cleanup evidence.
 
 ## Active Follow-ups
 
-- `db_schema_review: strategy_axis_memory_columns`
-  - SQL artifact ready: `db/sql/v21_3_strategy_axis_memory_columns.sql`.
-  - Owner must execute manually before production can persist the new fields.
-- `backfill_after_v21_3_schema`
-  - After schema is applied, run a repo-script backfill for the new memory fields.
-  - Do not hand-write production DML.
+- `signal_items_future_fill_check`
+  - Historical `signal_items` rows were not fabricated.
+  - Check the next real bot run to confirm new report items fill strategy-axis fields.
 - `data_quality_tightening`
   - Replace remaining source/volume fallback paths that can make missing data look normal.
   - Missing data should become `insufficient`, `source_error`, `stale`, or `missing_source`.
@@ -36,5 +37,5 @@
 
 - Do not delete the fixed 8 Markdown files.
 - Do not delete tracked reports, SQL, replay artifacts, or production data without consumer evidence.
-- Do not turn one pasted report or one stock into a permanent hard-coded rule; extract reusable formatter contracts, gates, or validation routes.
+- Do not fabricate historical `signal_items` from daily_price.
 - Do not use local runtime output as cross-run evidence.

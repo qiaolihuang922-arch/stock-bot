@@ -1,81 +1,83 @@
-# TASK: strategy_axis_memory_schema_v21_3_20260615
+# TASK: strategy_axis_memory_backfill_prune_20260615
 
 ## Status
 
-- task_id: `strategy_axis_memory_schema_v21_3_20260615`
-- task_type: `major`
+- task_id: `strategy_axis_memory_backfill_prune_20260615`
+- task_type: `risk_patch`
 - status: `implemented`
-- version: `v21.1 runtime / v21.3 schema artifact`
+- version: `v21.1`
 - QA level: `L3`
 
 ## Owner Problem
 
-Owner wants the strategy to stop pretending it remembers multi-day state when the DB has no such memory. The three report axes (`強弱`, `買點`, `行動`) must become persistable evidence, not only runtime/report text.
+Owner applied the v21.3 strategy-axis memory schema and requested actual DB backfill, duplicate cleanup, and complete MD handoff. Owner also requested that future DB/data work automatically updates documents and cleanup evidence without repeated reminders.
 
 ## User Visible Result
 
-- New SQL file is ready for Owner review/execution:
-  - `db/sql/v21_3_strategy_axis_memory_columns.sql`
-- Daily strategy snapshots and signal items can persist:
-  - stock strength axis;
-  - entry setup state;
-  - actionability state;
-  - setup family/blockers;
-  - data quality state;
-  - volume basis;
-  - retest memory.
-- Existing schema fallback remains: if SQL has not been applied yet, DB writes fall back instead of breaking the report.
+- `daily_signal_snapshot` has been backfilled from `daily_price`.
+- New strategy-axis memory fields are populated for historical v21.1 snapshot rows.
+- Duplicate/version prune was executed through the repo script; no duplicate rows existed, so no rows were deleted.
+- Process rule added to `AGENTS.md` requiring future DB backfill/prune tasks to update MD and cleanup evidence automatically.
 
 ## Non Goals
 
 - No live Telegram delivery.
-- No agent-executed production SQL.
-- No production backfill in this task.
-- No RLS/grant/policy/role/index/constraint change.
+- No hand-written production DML.
+- No production schema change in this task; schema was already applied by Owner.
+- No fake reconstruction of historical `signal_items`.
 - No threshold calibration.
 
 ## Impacted Modules And Direct Consumers
 
-- `db/sql/v21_3_strategy_axis_memory_columns.sql`
-  - Direct consumer: Owner/Supabase SQL editor.
-- `core/signal_snapshot.py`
-  - Direct consumer: `daily_signal_snapshot` payloads and backfill/replay payloads.
-- `services/analysis.py`
-  - Direct consumer: strategy result payload.
-- `services/daily_snapshot_store.py`
-  - Direct consumer through `STRATEGY_FEATURE_FIELDS`.
-- `services/signal_store.py`
-  - Direct consumer through `strategy_feature_payload`.
-- `tests/test_analysis_engine.py`
+- Production DB:
+  - `daily_signal_snapshot`
+- Existing repo scripts:
+  - `scripts/backfill_snapshots_from_daily_price.py`
+  - `scripts/prune_daily_signal_snapshot_versions.py`
+- Process docs:
+  - `AGENTS.md`
+  - `DISPATCH.md`
+  - `CURRENT_STATE.md`
+  - `CLEANUP_PLAN.md`
+  - `TASK.md`
+  - `CHANGELOG.md`
+  - `QA_REPORT.md`
 
 ## Output Contract
 
-- Multi-day strategy memory must come from DB columns or explicit DB JSON fields.
-- Missing data must be representable as `insufficient`, `source_error`, `stale`, or `missing_source`; it must not be silently converted into normal evidence.
-- `setup_blockers` is JSON, `setup_valid` is boolean, and text labels remain text.
-- `daily_price` remains OHLCV only; derived strategy evidence belongs in `daily_signal_snapshot` / `signal_items`.
+- Backfill source must be `daily_price`.
+- Version must remain `v21.1` so upsert updates existing rows instead of creating a new duplicate version.
+- Duplicate cleanup must keep `v21.1`.
+- If delete candidates are zero, record zero deletion instead of forcing data deletion.
+- `signal_items` historical rows must not be fabricated from `daily_price`; future bot runs will fill those report-item columns naturally.
 
 ## Version Contract
 
+- Backfilled snapshot version: `v21.1`.
 - Runtime report header remains `v21.1`.
-- Schema artifact is named `v21_3` because it extends persisted memory fields.
 
 ## Acceptance Conditions
 
-- SQL artifact is idempotent and contains only `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` plus comments and validation marker.
-- Snapshot payload includes the new fields before DB execution.
-- Existing DB write fallback remains available when columns are missing.
-- Related tests pass.
-- Official dry-run report still renders.
+- Read-before-write confirms schema exists.
+- Backfill writes snapshot rows with `schema_fallback=false`.
+- Read-after-write confirms new fields are non-null on `daily_signal_snapshot`.
+- Prune plan/write confirms exact duplicate and multi-version duplicate counts are zero.
+- MD files record results and future cleanup rules.
+- No live Telegram delivery.
 
 ## Fixture / Failure Specimen
 
-- Owner concern: strategy output can say multi-day-like conclusions even when the DB has no explicit memory for setup state, retest state, or blockers.
-- Required replay route: snapshot test plus official `generate_report(dry_run=True)`.
+- Owner concern: DB had new columns but no historical values, so multi-day state would still be missing.
+- Required route:
+  - production read audit;
+  - repo-script backfill;
+  - production read-after-write;
+  - repo-script prune;
+  - MD closeout.
 
 ## Forbidden And Blocking Conditions
 
-- Do not execute production SQL from agent.
-- Do not hand-write production DML.
-- Do not claim backfill is done before Owner applies schema and backfill script runs.
-- Do not use local cache or report text as cross-day memory.
+- Do not hand-write DML.
+- Do not backfill `signal_items` by inventing historical report runs.
+- Do not delete data unless repo prune plan selects candidates.
+- Do not claim future bot-run data exists before it is written.

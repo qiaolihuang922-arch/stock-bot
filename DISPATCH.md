@@ -2,46 +2,44 @@
 
 ## Active
 
-- task_md_holds: `strategy_axis_memory_schema_v21_3_20260615`
-- status: `implemented + QA conditional pass`
-- current_version: `v21.1 runtime / v21.3 schema artifact`
+- task_md_holds: `strategy_axis_memory_backfill_prune_20260615`
+- status: `implemented + QA passed`
+- current_version: `v21.1`
 - no live Telegram delivery in this cycle.
 
 ## Result Summary
 
-- Owner requested DB-backed memory for strategy axes, not local/runtime/report-text memory.
-- Added SQL artifact:
-  - `db/sql/v21_3_strategy_axis_memory_columns.sql`
-- Added persistable fields for:
-  - `stock_strength_state`
-  - `entry_setup_state`
-  - `actionability_state`
-  - `setup_family`
-  - `setup_valid`
-  - `setup_blocker`
-  - `setup_blockers`
-  - `data_quality_state`
-  - `price_data_state`
-  - `volume_data_state`
-  - `volume_basis`
-  - `intraday_volume_run_rate`
-  - `retest_state`
-  - `retest_reference_price`
-  - `retest_days_since_breakout`
-  - `breakout_reference_type`
-- Wired these through snapshot/report item payload paths.
-- Agent did not execute production SQL, write production data, backfill, or send live Telegram.
+- Owner applied v21.3 schema and requested real data backfill, duplicate cleanup, and MD closeout.
+- Production schema read confirmed both `daily_signal_snapshot` and `signal_items` contain the new columns.
+- Backfilled `daily_signal_snapshot` from `daily_price`:
+  - date range: `2024-06-15` to `2026-06-15`
+  - version: `v21.1`
+  - rows written/upserted: `5786`
+  - schema fallback: `false`
+- Read-after-write confirmed all `5786` snapshot rows now have non-null strategy-axis memory fields.
+- Duplicate/version prune ran:
+  - keep version: `v21.1`
+  - delete candidates: `0`
+  - deleted rows: `0`
+- `signal_items` historical rows were not fabricated; future bot runs will fill new item fields.
+- Added reusable `AGENTS.md` rule: DB backfill/prune tasks must automatically update MD and cleanup evidence.
 
 ## Verification
 
-- Related regression:
-  - `258 passed, 149 warnings, 44 subtests passed`.
-- Official generator dry-run:
-  - unheld report still renders.
-  - no live Telegram delivery.
-- SQL artifact:
-  - idempotent `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`.
-  - no RLS/grant/policy/role/index/constraint change.
+- Production read-after-write:
+  - `stock_strength_state`: `5786/5786`
+  - `entry_setup_state`: `5786/5786`
+  - `actionability_state`: `5786/5786`
+  - `setup_family`: `5786/5786`
+  - `data_quality_state`: `5786/5786`
+  - `volume_basis`: `5786/5786`
+  - `retest_state`: `5786/5786`
+- Duplicate audit:
+  - exact duplicate extra rows: `0`
+  - stock/date multi-version extra rows: `0`
+- Prune result:
+  - `deleted_rows=0`
+- No live Telegram delivery.
 
 ## Current Git State
 
@@ -51,6 +49,5 @@
 
 ## Next Action
 
-- Commit/push this patch.
-- Owner applies `db/sql/v21_3_strategy_axis_memory_columns.sql` in Supabase SQL editor.
-- After schema is confirmed, run a separate backfill task; do not claim historical DB memory exists before backfill.
+- Commit/push MD closeout.
+- Observe next scheduled `run_mode=bot` report to confirm future `signal_items` rows naturally fill the new fields.

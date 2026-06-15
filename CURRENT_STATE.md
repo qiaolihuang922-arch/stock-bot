@@ -2,9 +2,9 @@
 
 ## Current Task
 
-- task_id: `strategy_axis_memory_schema_v21_3_20260615`
-- status: `implemented + QA conditional pass`
-- version: `v21.1 runtime / v21.3 schema artifact`
+- task_id: `strategy_axis_memory_backfill_prune_20260615`
+- status: `implemented + QA passed`
+- version: `v21.1`
 - no live Telegram delivery.
 
 ## Stable Context
@@ -14,31 +14,32 @@
 - Production source-of-truth is Supabase / runner data, not local cache, worktree state, or agent memory.
 - DB schema/RLS/grant/policy/role/index/constraint changes require Owner approval unless explicitly authorized.
 - Non-schema DB writes/backfills must use approved repo scripts or service APIs; direct hand-written production DML is forbidden.
+- DB backfill/prune tasks must automatically update MD and cleanup evidence.
 
 ## Current Implementation State
 
 - Runtime report remains `v21.1`.
-- New schema artifact is `db/sql/v21_3_strategy_axis_memory_columns.sql`.
-- Strategy results now emit persistable memory fields for:
-  - strength/setup/action axes;
-  - setup family/blockers;
-  - data quality;
-  - volume basis;
-  - retest memory.
-- `STRATEGY_FEATURE_FIELDS` carries these fields into daily snapshot and signal item payloads.
-- The SQL has not been executed by the agent.
-- Historical rows have not been backfilled in this task.
+- v21.3 strategy-axis memory schema is applied in production.
+- `daily_signal_snapshot` backfilled from `daily_price`.
+- `daily_signal_snapshot` now has populated strategy-axis memory for `5786` v21.1 rows.
+- `signal_items` schema exists, but historical rows are not backfilled because report-run history cannot be reconstructed truthfully from daily_price alone.
+- Duplicate/version prune found no rows to delete.
 
 ## Verification State
 
-- `258 passed, 149 warnings, 44 subtests passed`.
-- Official generator dry-run printed the unheld report successfully.
+- Production backfill:
+  - `5786` snapshot rows upserted.
+  - `schema_fallback=false`.
+- Production read-after-write:
+  - all `5786` rows have non-null `stock_strength_state`, `entry_setup_state`, and `actionability_state`.
+- Production prune:
+  - exact duplicate extra rows: `0`.
+  - multi-version extra rows: `0`.
+  - `deleted_rows=0`.
 - No live Telegram delivery.
-- No production DB write, backfill, schema execution, RLS, grant, policy, role, index, or constraint change by agent.
 
 ## Known Follow-ups
 
-- Commit and push current patch.
-- Owner applies `db/sql/v21_3_strategy_axis_memory_columns.sql`.
-- After schema confirmation, run backfill via repo script/interface only.
+- Commit and push MD closeout.
+- Observe next scheduled `run_mode=bot` report and check `signal_items` new fields on fresh rows.
 - Future tightening: source-error / insufficient-data paths should explicitly set data-quality fields instead of relying on normal defaults.

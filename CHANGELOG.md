@@ -1,61 +1,89 @@
-# CHANGELOG: strategy_axis_memory_schema_v21_3_20260615
+# CHANGELOG: strategy_axis_memory_backfill_prune_20260615
 
 ## Changes
 
-- Added `db/sql/v21_3_strategy_axis_memory_columns.sql`:
-  - Extends `daily_signal_snapshot`.
-  - Extends `signal_items`.
-  - Adds strategy-axis, setup-memory, data-quality, volume-basis, and retest-memory columns.
-  - Does not write/backfill data.
-  - Does not change RLS, grants, policies, roles, indexes, or constraints.
-- Updated `core/signal_snapshot.py`:
-  - Added the new fields to `STRATEGY_FEATURE_FIELDS`.
-  - Added text/bool/json handling so `setup_valid` and `setup_blockers` are not coerced into numeric fields.
-- Updated `services/analysis.py`:
-  - Derives `setup_family`, `setup_valid`, `setup_blocker`, `setup_blockers`.
-  - Derives default data-quality, volume-basis, and retest-memory fields.
-  - Keeps the existing three axes: `stock_strength_state`, `entry_setup_state`, `actionability_state`.
-- Updated `tests/test_analysis_engine.py`:
-  - Snapshot payload now verifies persisted strategy-axis/memory fields.
+- Ran production DB schema read check for v21.3 fields:
+  - `daily_signal_snapshot`: all fields readable.
+  - `signal_items`: all fields readable.
+- Backfilled `daily_signal_snapshot` from `daily_price` via repo script:
+  - source: `daily_price`
+  - version: `v21.1`
+  - date range: `2024-06-15` to `2026-06-15`
+  - warmup start: `2024-02-16`
+  - stocks: 12 watchlist stocks
+  - total snapshot rows written/upserted: `5786`
+  - schema fallback: `false`
+- Ran duplicate/version prune via repo script:
+  - keep version: `v21.1`
+  - delete candidates: `0`
+  - deleted rows: `0`
+- Updated `AGENTS.md` with reusable DB backfill/prune closeout rules.
 
 ## Contract Impact
 
-- `daily_signal_snapshot` and `signal_items` can persist strategy memory after Owner applies SQL.
-- Before SQL execution, existing schema fallback can still write legacy rows instead of breaking the report.
-- `daily_price` remains unchanged.
+- `daily_signal_snapshot` now has persisted strategy-axis memory fields for v21.1 historical rows.
+- `signal_items` schema exists but historical report-run rows were not fabricated; future bot runs will populate them.
 - No live Telegram delivery.
-- No production SQL execution by agent.
+- No hand-written production DML.
+- No schema/RLS/grant/policy/role/index/constraint change by agent.
 
 ## Direct Consumer Sync
 
-- `services.daily_snapshot_store._signal_payload(...)` automatically includes new fields through `STRATEGY_FEATURE_FIELDS`.
-- `services.signal_store._item_payload(...)` automatically includes new fields through `strategy_feature_payload(...)`.
-- Official Telegram text remains compatible; this patch is persistence/audit support, not a report wording change.
+- Strategy evidence and future calibration can now query `daily_signal_snapshot` columns directly:
+  - `stock_strength_state`
+  - `entry_setup_state`
+  - `actionability_state`
+  - `setup_family`
+  - `setup_valid`
+  - `setup_blocker`
+  - `setup_blockers`
+  - `data_quality_state`
+  - `volume_basis`
+  - `retest_state`
+- `signal_items` remains a report-run item table; new rows from future bot runs can persist the same fields.
 
 ## Verification
 
-- Related regression:
-  ```powershell
-  $env:PYTHONIOENCODING='utf-8'; .\.venv\Scripts\python.exe -m pytest tests\test_analysis_engine.py tests\test_generator_report.py tests\test_unheld_gap_format.py tests\test_condition_engine.py tests\test_trade_state_machine.py -q --tb=short
-  ```
-  Result: `258 passed, 149 warnings, 44 subtests passed`.
-- Official dry-run:
-  ```powershell
-  $env:PYTHONIOENCODING='utf-8'; .\.venv\Scripts\python.exe -c "from core.generator import generate_report; messages,_=generate_report(dry_run=True); print(messages[1])"
-  ```
-  Result: unheld report still renders with three-axis split; no live Telegram delivery.
-- SQL artifact read:
-  - `db/sql/v21_3_strategy_axis_memory_columns.sql` is UTF-8 readable and contains the manual execution notes.
+- Backfill write result by stock:
+  - 3231: `484`
+  - 2421: `484`
+  - 3035: `484`
+  - 2303: `484`
+  - 3481: `477`
+  - 2344: `484`
+  - 2376: `484`
+  - 2408: `469`
+  - 2356: `484`
+  - 2324: `484`
+  - 2301: `484`
+  - 2337: `484`
+- Read-after-write:
+  - total rows: `5786`
+  - versions: `{'v21.1': 5786}`
+  - `stock_strength_state` non-null: `5786`
+  - `entry_setup_state` non-null: `5786`
+  - `actionability_state` non-null: `5786`
+  - `setup_family` non-null: `5786`
+  - `data_quality_state` non-null: `5786`
+  - `volume_basis` non-null: `5786`
+  - `retest_state` non-null: `5786`
+  - exact duplicate extra rows: `0`
+  - stock/date multi-version extra rows: `0`
+- Prune write:
+  - `deleted_rows=0`
+  - after total rows: `5786`
+  - unique stock/date: `5786`
+  - exact duplicate groups: `0`
 
 ## Covered Layers
 
-- SQL artifact: file present and idempotent by construction.
-- Snapshot payload: covered by `tests/test_analysis_engine.py`.
-- Official generator/report: covered by dry-run and existing generator tests.
-- DB execution/backfill: not performed by design.
+- Production schema read.
+- Production backfill via repo script/API.
+- Production read-after-write.
+- Production prune via repo script/API.
+- MD process closeout.
 
 ## Residual Risk
 
-- Until Owner applies the SQL, production DB cannot persist the new columns and write path may schema-fallback.
-- Backfill is still a separate follow-up after schema execution.
-- Data-quality states default to `complete` for normal strategy results; future source-error paths should be tightened to write explicit `insufficient/source_error` where available.
+- `signal_items` historical rows remain mostly null for new fields because they represent actual report runs and cannot be truthfully reconstructed from daily_price alone.
+- Data-quality fields currently backfill as `complete` because the source was complete `daily_price`; source-error/insufficient-data tightening remains a future task.

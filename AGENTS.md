@@ -192,6 +192,17 @@ QA 不只重跑 Tech 命令；至少補一個 Tech 未覆蓋的直接消費者�
 - QA 反證每個可刪與不可刪結論，確認沒有漏 runtime / cron / DB / Telegram / tests 消費者。
 - 沒有 evidence 的「可刪 / 不可刪 / 可合併 / 可通過」結論一律無效。
 
+## DB 回寫 / 去重收口
+
+涉及 production DB 回寫、backfill、prune、dedupe 或資料清理的任務，收口時必須自動完成文件與清理證據，不得等 Owner 反覆提醒：
+
+- 必須走既有 repo script / approved service API，不得手寫 production DML。
+- 回寫前後必須記錄資料來源、版本、日期範圍、row count、schema fallback、validation errors、live Telegram 狀態。
+- 去重 / 刪除必須先有 dry-run 或 plan；若 delete candidate 為 0，明確記錄 `deleted_rows=0`，不得硬刪。
+- 回寫後必須補 `DISPATCH.md`、`CURRENT_STATE.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md`，待清理/待校準寫入 `CLEANUP_PLAN.md`。
+- 若新欄位只是未來 run 才能自然填入，必須明確標成未回寫或不適合回寫；不得用假資料補滿。
+- 完成前至少做一次 read-after-write 或 read-after-prune 驗證，證明 production DB 狀態與結論一致。
+
 ## 測試環境
 
 - Architect runner 啟動 Tech / QA 前必須準備可用測試環境。

@@ -1,56 +1,63 @@
-# QA_REPORT: strategy_axis_memory_schema_v21_3_20260615
+# QA_REPORT: strategy_axis_memory_backfill_prune_20260615
 
 ## Test Scope
 
-- Schema artifact for strategy-axis DB memory.
-- Snapshot payload field propagation.
-- Type handling for text/bool/json/numeric strategy feature fields.
-- Official report dry-run compatibility.
+- Production read-after-schema.
+- Production backfill through repo script/API.
+- Production duplicate/version prune through repo script/API.
+- Read-after-write validation for new strategy-axis memory fields.
+- MD/process closeout.
 
 ## Risk Scan
 
-- If SQL exists but payload does not write fields, DB memory remains empty.
-- If payload writes JSON/bool fields as numeric, Supabase writes will fail or data will be corrupted.
-- If agent executes SQL directly, it violates DB schema-change boundary.
-- If fallback is removed, production report can break before Owner applies schema.
-- If data-quality defaults are overused, missing evidence can still look normal.
+- If backfill uses a new version, it may create duplicate historical rows.
+- If backfill hand-writes DML, it bypasses repo validation.
+- If prune deletes without a plan, unique history may be lost.
+- If `signal_items` is fabricated from daily_price, report-run history becomes false.
+- If docs are not updated, the next round may repeat the same missing-memory confusion.
 
 ## Cross-Block Semantic Consistency
 
-- `daily_price` remains OHLCV only.
-- Strategy memory belongs to `daily_signal_snapshot` and `signal_items`.
-- Three-axis report states are now persistable as DB fields.
-- Existing report wording still separates strength/setup/action.
+- Backfill version remained `v21.1`.
+- `daily_signal_snapshot` is the source for strategy memory.
+- `signal_items` is not backfilled historically because it is a report-run table.
+- Prune result says no duplicates; no deletion was forced.
+- No live Telegram delivery occurred.
 
 ## User Misread Risk
 
-- Reduced after schema execution: future reports/backtests can audit why a card was waiting or non-actionable.
-- Remaining: until SQL is applied and backfilled, historical rows do not have these explicit columns.
-- Remaining: source-error and insufficient-data paths still need a follow-up tightening pass.
+- Reduced: DB now actually contains the strategy-axis memory fields on historical snapshots.
+- Reduced: docs now state exactly what was backfilled and what was not.
+- Remaining: future bot run should be observed to confirm `signal_items` new fields fill naturally.
 
 ## Failure Specimen Countercheck
 
-- Owner concern was that multi-day memory must not be invented.
-- Countermeasure:
-  - explicit columns for setup state, blockers, retest state, data quality, and volume basis;
-  - snapshot payload test proves these fields are emitted from strategy result;
-  - SQL is manual, reviewable, and idempotent.
+- Owner concern: new DB fields existed but would remain empty, leaving no real multi-day memory.
+- Countercheck:
+  - before backfill: new fields had `0` non-null rows;
+  - after backfill: all `5786` `daily_signal_snapshot` rows have non-null strategy-axis fields.
 
 ## Evidence
 
-- `258 passed, 149 warnings, 44 subtests passed`.
-- Official dry-run unheld report rendered successfully.
-- SQL artifact exists at `db/sql/v21_3_strategy_axis_memory_columns.sql`.
+- Backfilled `5786` `daily_signal_snapshot` rows.
+- `schema_fallback=false` for every stock backfill.
+- Read-after-write non-null counts:
+  - `stock_strength_state=5786`
+  - `entry_setup_state=5786`
+  - `actionability_state=5786`
+- Prune write:
+  - `deleted_rows=0`
+  - exact duplicate extra rows after prune: `0`
+  - multi-version extra rows after prune: `0`
 
 ## Not Tested
 
-- Production SQL execution.
-- Production backfill.
-- Scheduled Render/GitHub runner after push.
 - Live Telegram delivery.
+- Next scheduled Render/GitHub bot run.
+- Historical `signal_items` reconstruction, intentionally not performed.
 
 ## QA Conclusion
 
-conditional pass
+通過
 
-Reason: code and SQL artifact are ready and tested locally, but DB persistence is conditional on Owner applying the schema and then running a separate backfill.
+Reason: production DB read-after-write confirms the backfill succeeded; repo-script prune confirms there was no duplicate data to delete.
