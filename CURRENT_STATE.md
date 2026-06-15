@@ -3,7 +3,7 @@
 ## Current Task
 
 - task_id: `unheld_card_mobile_denoise_20260616`
-- status: `implemented + QA passed, pending commit/push`
+- status: `implemented + QA passed + pushed`
 - version: `v21.1`
 - no live Telegram delivery.
 

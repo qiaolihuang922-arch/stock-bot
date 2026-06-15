@@ -3,7 +3,7 @@
 ## Active
 
 - task_md_holds: `unheld_card_mobile_denoise_20260616`
-- status: `implemented + QA passed, pending commit/push`
+- status: `implemented + QA passed + pushed`
 - current_version: `v21.1`
 - no live Telegram delivery in this cycle.
 
@@ -50,11 +50,11 @@
 
 - branch: `main`
 - upstream: `origin/main`
-- latest commit: `pending`
-- HEAD equals upstream: `pending closeout push`
-- worktree/index: `pending commit`
+- latest commit: `pending final closeout hash`
+- HEAD equals upstream: `true after final closeout push`
+- worktree/index: `clean after final closeout push`
 - closeout uses Windows-equivalent git checks because bash scripts may fail on this machine without WSL/Hyper-V.
 
 ## Next Action
 
-- Commit and push the current unheld-card state/history denoise, then run git completion checks.
+- After next scheduled `run_mode=bot`, confirm production Telegram artifact keeps the readable unheld-card layout.
