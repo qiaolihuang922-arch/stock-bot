@@ -1,76 +1,80 @@
-# TASK: multi_window_strategy_v21_1_20260615
+# TASK: strategy_feature_persistence_v21_1_20260615
 
 ## Status
-- task_id: `multi_window_strategy_v21_1_20260615`
-- type: `risk_patch`
-- status: `complete`
+- task_id: `strategy_feature_persistence_v21_1_20260615`
+- type: `major`
+- status: `implemented`
 - version: `v21.1`
-- QA level: `L2`
+- QA level: `L3`
 
 ## Owner Problem
-Owner asked whether V10 and 20D resistance are too narrow for buy decisions, and requested a completed v21.1 strategy treatment with evidence-backed logic rather than another dead rule or report-only patch.
+Owner asked to re-check from scratch whether v21.1 strategy features are only fixed at runtime instead of being persisted, and authorized adding fields / recording more data if needed. Owner also asked how long to backfill.
 
 ## User Visible Result
-- Acute rebound cards now show V10/V20, not only a single V value.
-- Acute rebound cards now show the computed 20D breakout / retest zone.
-- If current price is below the breakout zone, the card says the breakout zone is not reclaimed yet, instead of pretending it is already a pullback/retest.
-- Version bumps to `v21.1`.
+- v21.1 strategy features are now prepared for durable DB storage, not just report-time wording.
+- Daily runner and backfill payloads carry V10/V20, 20D/60D resistance, breakout distances, retest zone, and compact raw_result.
+- A manual SQL migration is provided for Supabase.
+- Backfill CLI supports `--lookback-days`; recommended v21.1 strategy-feature backfill is two years / 730 calendar days, with 120-day warmup.
 
 ## Non Goals
 - No live Telegram delivery.
-- No DB schema, RLS, grant, policy, role, index, or constraint change.
+- No live production DB write in this task.
+- No direct hand-written production DML.
+- No RLS, grant, policy, role, index, or constraint change.
 - No broker/order execution.
-- No hard-code of 旺宏 or a single date.
-- No blanket permission to buy acute rebounds.
+- No buy-rule loosening.
 
 ## Impacted Modules And Consumers
-- `services/analysis.py`
-  - Consumer: strategy result, volume state, RR / entry quality context.
-- `core/generator.py`
-  - Consumer: official Telegram report payload, dry-run artifact.
+- `db/sql/v21_1_strategy_feature_snapshot_columns.sql`
+  - Consumer: Owner / Supabase SQL editor.
 - `core/signal_snapshot.py`
-  - Consumer: backfill / daily signal snapshot raw result.
-- `presentation/report.py`
-  - Consumer: Telegram unheld card.
-- Tests:
-  - `tests/test_analysis_engine.py`
-  - `tests/test_generator_report.py`
-  - existing report/state/backfill suites.
+  - Consumer: official daily snapshot and backfill snapshot payload.
+- `services/daily_snapshot_store.py`
+  - Consumer: after-close daily `daily_signal_snapshot` writer.
+- `services/signal_store.py`
+  - Consumer: `signal_runs` / `signal_items` report-run persistence.
+- `scripts/backfill_signals.py`
+  - Consumer: guarded historical backfill CLI.
+- `services/strategy_evidence.py`
+  - Consumer: derived feature/outcome calibration.
+- `services/volume_calibration.py`
+  - Consumer: DB-backed volume calibration artifact.
 
 ## Output Contract
-- Strategy result / snapshot must expose:
-  - `volume_ratio_10`
-  - `volume_ratio_20`
-  - `resistance_20`
-  - `resistance_60`
-  - `breakout_price_20`
-  - `breakout_price_60`
-  - `retest_zone_low`
-  - `retest_zone_high`
-- Acute rebound card must show:
-  - V10/V20 combined volume context.
-  - A concrete zone.
-  - If price is below the zone: `突破區 X~Y（現價未站回）`.
-  - Unlock: `先站回突破區 X~Y，再回測不破 + ...`.
+- `daily_signal_snapshot` payload includes:
+  - `volume_ratio_10`, `volume_ratio_20`
+  - `resistance_20`, `resistance_60`
+  - `breakout_price_20`, `breakout_price_60`
+  - `breakout_distance_20`, `breakout_distance_60`
+  - `retest_zone_low`, `retest_zone_high`, `retest_zone_label`
+  - compact `raw_result`
+- `signal_items` payload includes the same typed strategy-feature columns and keeps compact raw_result.
+- If production schema is not applied yet, daily snapshot / backfill / signal item writes fall back to legacy columns instead of crashing the runner.
+- Backfill default recommendation:
+  - apply SQL migration first;
+  - backfill `--lookback-days 730`;
+  - use existing approved repo script `scripts/backfill_signals.py`;
+  - no live Telegram.
 
 ## Acceptance
-- Focused tests prove:
-  - snapshot/raw_result exports V10/V20 and retest zone fields;
-  - acute rebound card uses V10/V20 and concrete retest zone;
-  - price below breakout zone is labeled as not reclaimed yet.
-- Targeted strategy/report/backfill suites pass.
-- Official dry-run generates `v21.1` and shows the new zone-aware 旺宏 card.
+- Tests prove official daily snapshot payload carries new fields.
+- Tests prove guarded backfill payload carries new fields.
+- Tests prove schema-missing fallback removes new fields and does not crash.
+- Tests prove volume calibration uses V20 first and only falls back to legacy volume ratio if V20 is missing.
+- SQL migration is idempotent and contains no RLS/grant/policy/role/index/constraint change.
 
 ## Failure Specimen And Route
-- Owner failure: report said `等回測` but did not say what it was waiting to retest, and V10/20D-only logic risked narrow strategy judgment.
-- Failure layer: strategy metrics + official generator + Telegram formatter + snapshot.
+- Failure: v21.1 report showed better strategy context, but durable DB records did not keep typed V20 / resistance / retest-zone features.
+- Failure layer: persistence / backfill / calibration, not Telegram formatter.
 - Verification route:
-  - `tests/test_analysis_engine.py::AnalysisEngineTest::test_v21_1_snapshot_exports_multi_window_volume_and_retest_zone`
-  - `tests/test_generator_report.py::GeneratorReportTest::test_v21_1_strong_rebound_uses_multi_window_retest_context`
-  - `tests/test_generator_report.py::GeneratorReportTest::test_v21_1_retest_anchor_says_breakout_zone_when_price_is_below_zone`
-  - official `generate_report(dry_run=True)` message list.
+  - `tests/test_daily_snapshot_store.py`
+  - `tests/test_backfill_signals.py`
+  - `tests/test_volume_calibration.py`
+  - focused v21.1 snapshot export test
+  - dry-run backfill command with no DB write
 
 ## Forbidden / Blocking
-- Do not treat V20 or 60D resistance as display-only fake data.
-- Do not loosen buyability without retest/volume/quality/RR gates.
-- Do not hide source errors or missing data as valid strategy evidence.
+- Do not claim production DB is updated unless SQL migration and write/backfill are actually executed.
+- Do not store full OHLCV arrays inside raw_result.
+- Do not use local cache or runtime dict as cross-day source-of-truth.
+- Do not replace approved backfill/write scripts with manual production DML.

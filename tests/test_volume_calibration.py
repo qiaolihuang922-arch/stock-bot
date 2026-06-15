@@ -37,6 +37,7 @@ class VolumeCalibrationTest(unittest.TestCase):
             "version": "v21.0.1",
             "close": 100,
             "volume_ratio": 0.55,
+            "volume_ratio_20": 1.2,
             "pattern": "NORMAL",
             "market_state": "D",
             "structure_state": "WEAK",
@@ -61,8 +62,9 @@ class VolumeCalibrationTest(unittest.TestCase):
         self.assertEqual(artifact["source"], "daily_signal_snapshot+daily_price")
         self.assertFalse(artifact["db_write"])
         self.assertFalse(artifact["schema_change"])
+        self.assertEqual(artifact["volume_window"], "volume_ratio_20_fallback_volume_ratio")
         self.assertEqual(artifact["source_status"], "available")
-        bucket = artifact["contexts"]["far_weak_market"]["lt_0_7"]
+        bucket = artifact["contexts"]["far_weak_market"]["1_1_1_4"]
         self.assertEqual(bucket["sample"], 1)
         self.assertTrue(bucket["decision_eligible"])
         self.assertEqual(bucket["source_status"], "available")

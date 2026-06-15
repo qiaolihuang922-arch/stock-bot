@@ -5,7 +5,11 @@ try:
 except ImportError:
     pytz = None
 
-from core.signal_snapshot import apply_snapshot_boundaries, snapshot_from_result
+from core.signal_snapshot import (
+    STRATEGY_FEATURE_FIELDS,
+    apply_snapshot_boundaries,
+    snapshot_from_result,
+)
 from core.signal_validator import validate_snapshots
 from core.watchlist import WATCHLIST_CODES, missing_watchlist_codes
 
@@ -81,8 +85,54 @@ def _signal_payload(snapshot):
         "action": snapshot["action"],
         "reasons": snapshot["reasons"],
         "is_tradeable": snapshot["is_tradeable"],
-        "is_best_candidate": snapshot["is_best_candidate"]
+        "is_best_candidate": snapshot["is_best_candidate"],
+        "raw_result": snapshot.get("raw_result") or {},
+        **{
+            field: snapshot.get(field)
+            for field in STRATEGY_FEATURE_FIELDS
+            if field in snapshot
+        },
     }
+
+
+def _legacy_signal_payload(row):
+    legacy = dict(row)
+    legacy.pop("raw_result", None)
+    for field in STRATEGY_FEATURE_FIELDS:
+        legacy.pop(field, None)
+    return legacy
+
+
+def _is_missing_column_error(error):
+    text = str(error).lower()
+    return (
+        "column" in text
+        and (
+            "could not find" in text
+            or "does not exist" in text
+            or "schema cache" in text
+        )
+    )
+
+
+def _upsert_daily_signal_snapshot(client, signal_rows):
+    try:
+        client.table("daily_signal_snapshot").upsert(
+            signal_rows,
+            on_conflict="stock_id,trade_date,version"
+        ).execute()
+        return {"schema_fallback": False}
+    except Exception as error:
+        if not _is_missing_column_error(error):
+            raise
+        client.table("daily_signal_snapshot").upsert(
+            [_legacy_signal_payload(row) for row in signal_rows],
+            on_conflict="stock_id,trade_date,version"
+        ).execute()
+        return {
+            "schema_fallback": True,
+            "reason": "daily_signal_snapshot_strategy_feature_columns_missing",
+        }
 
 
 def build_daily_snapshot_payloads(version, phase, results_map, now=None, expected_stock_ids=None):
@@ -198,16 +248,15 @@ def record_daily_snapshots(version, phase, results_map, now=None):
             on_conflict="stock_id,trade_date"
         ).execute()
 
+    signal_write = {"schema_fallback": False}
     if signal_rows:
-        client.table("daily_signal_snapshot").upsert(
-            signal_rows,
-            on_conflict="stock_id,trade_date,version"
-        ).execute()
+        signal_write = _upsert_daily_signal_snapshot(client, signal_rows)
 
     return {
         "recorded": True,
         "price_rows": len(price_rows),
-        "signal_rows": len(signal_rows)
+        "signal_rows": len(signal_rows),
+        **signal_write,
     }
 
 

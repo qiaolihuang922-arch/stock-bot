@@ -67,6 +67,33 @@ def _breakout_context(price, closes):
         return {}
 
 
+STRATEGY_FEATURE_FIELDS = [
+    "volume_ratio_10",
+    "volume_ratio_20",
+    "resistance_20",
+    "resistance_60",
+    "breakout_price_20",
+    "breakout_price_60",
+    "breakout_distance_20",
+    "breakout_distance_60",
+    "retest_zone_low",
+    "retest_zone_high",
+    "retest_zone_label",
+]
+
+
+def strategy_feature_payload(source):
+    payload = {}
+    source = source or {}
+    for field in STRATEGY_FEATURE_FIELDS:
+        value = source.get(field)
+        if field == "retest_zone_label":
+            payload[field] = value
+        else:
+            payload[field] = _safe_round(value)
+    return payload
+
+
 def _position_state(distance):
     if distance is None:
         return "UNKNOWN"
@@ -226,6 +253,7 @@ def analyze_ohlcv_snapshot(
         "volume_ratio": volume_ratio_10,
         "volume_ratio_10": volume_ratio_10,
         "volume_ratio_20": volume_ratio_20,
+        **strategy_feature_payload({**result, "volume_ratio_10": volume_ratio_10, "volume_ratio_20": volume_ratio_20}),
         "pattern": result.get("structure_phase"),
         "market_state": result.get("market_grade"),
         "structure_state": result.get("structure_state"),
@@ -242,6 +270,7 @@ def analyze_ohlcv_snapshot(
 
 
 def snapshot_from_result(stock_id, trade_date, version, result, close, volume_ratio, position_state=None):
+    result = result or {}
     reasons = _reason_labels(result)
     is_tradeable = is_tradeable_result(result)
 
@@ -252,8 +281,10 @@ def snapshot_from_result(stock_id, trade_date, version, result, close, volume_ra
         "version": version,
         "close": _safe_round(close),
         "volume_ratio": _safe_round(volume_ratio),
-        "volume_ratio_10": _safe_round(result.get("volume_ratio_10", volume_ratio)),
-        "volume_ratio_20": _safe_round(result.get("volume_ratio_20")),
+        **strategy_feature_payload({
+            **(result or {}),
+            "volume_ratio_10": result.get("volume_ratio_10", volume_ratio),
+        }),
         "pattern": result.get("structure_phase"),
         "market_state": result.get("market_grade"),
         "structure_state": result.get("structure_state"),

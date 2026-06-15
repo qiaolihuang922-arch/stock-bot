@@ -1,48 +1,56 @@
-# QA_REPORT: multi_window_strategy_v21_1_20260615
+# QA_REPORT: strategy_feature_persistence_v21_1_20260615
 
 ## Test Scope
-- V10/V20 strategy metrics.
-- 20D/60D resistance and breakout price fields.
-- Retest-zone payload and Telegram rendering.
-- Acute rebound no-chase wording.
-- Backfill / daily snapshot compatibility.
+- v21.1 strategy-feature snapshot payload.
+- Daily after-close `daily_signal_snapshot` writer payload and schema fallback.
+- Guarded `backfill_signals.py` payload and schema fallback.
+- `signal_items` report item payload.
+- V20-first volume calibration.
+- Official generator dry-run.
+- Backfill dry-run with synthetic and TWSE sources.
 
 ## Risk Scan
-- If V20 is only shown in Telegram, it becomes fake display evidence.
-- If 60D resistance hard-blocks all setups, short-term valid breakouts may disappear.
-- If price is below the breakout zone, calling it a retest zone is misleading.
-- If result fields are not included in snapshot/raw_result, DB/replay evidence can diverge from live report.
+- If fields are only inside Telegram text, later calibration cannot prove whether V20 / resistance / retest gates worked.
+- If fields are only inside raw JSON, DB queries and QA probes become fragile.
+- If schema is not applied yet and runner writes new fields unguarded, the scheduled report path can crash.
+- If backfill uses a short window, 60D resistance and outcome calibration are not reliable.
 
-## Semantic Consistency
-- V10 remains the short-term volume lens.
-- V20 adds swing-volume confirmation and is used in volume state.
-- 20D resistance remains the fast breakout anchor.
-- 60D resistance is carried as higher-timeframe context.
-- Acute rebound remains wait/no-chase.
-- Below-zone acute rebound says `現價未站回`, then waits for reclaim and retest.
+## Cross-block Semantic Consistency
+- `daily_signal_snapshot`, `signal_items`, backfill rows, raw_result, and volume calibration now use the same strategy-feature names.
+- Full OHLCV arrays are not stored in raw_result; OHLCV remains in `daily_price`.
+- V20 is used for calibration buckets first, with legacy `volume_ratio` fallback only when V20 is missing.
+- Backfill recommendation is 730 calendar days plus 120-day warmup.
 
 ## Failure Specimen Countercheck
-- Official dry-run produced `v21.1`.
-- 旺宏 card showed:
-  - `突破區 175.5~176.38（現價未站回）`
-  - `V10 0.52x / V20 0.26x偏弱`
-  - `先站回突破區 175.5~176.38，再回測不破`
-- This resolves the previous ambiguity: `等回測` is no longer a vague phrase.
+- Previous failure: v21.1 report had richer strategy context but durable DB rows did not have typed V20 / resistance / retest-zone features.
+- Countercheck:
+  - daily snapshot test confirms payload includes `volume_ratio_20`, `resistance_20`, `breakout_price_20`, `retest_zone_low`, and `raw_result`.
+  - backfill test confirms historical rows include the same fields.
+  - fallback tests confirm missing production columns do not crash the writer path.
 
 ## Additional Challenge
-- Focused test proves raw snapshot exports V10/V20 and retest-zone fields.
-- Focused test proves price below zone does not render as `區間不破`.
-- Existing limit-up / overheat blockers remain covered in the report suite.
+- Ran a guarded TWSE dry-run backfill:
+  - `daily_price rows: 3`
+  - `daily_signal_snapshot rows: 3`
+  - `VALIDATION OK`
+  - `DRY RUN ONLY: no database writes`
+- Official generator dry-run returned:
+  - `VERSION v21.1`
+  - `messages 4`
+  - `write_results None`
 
 ## Not Tested
 - Live Telegram delivery.
-- Production DB schema write.
-- Broker/order execution.
+- Live Supabase SQL migration execution.
+- Live production DB write/backfill.
 
 ## QA Conclusion
-通過
+conditional pass
+
+Reason: repo implementation, migration artifact, payloads, fallbacks, and dry-run/backfill routes pass locally; production completion still requires manually applying `db/sql/v21_1_strategy_feature_snapshot_columns.sql` and then running approved backfill/write commands.
 
 Evidence:
-- `3 passed` focused v21.1 specimens.
-- `307 passed, 149 warnings, 57 subtests passed` targeted strategy/report/backfill suite.
-- Official dry-run generated `v21.1` with no live Telegram delivery.
+- `19 passed` focused persistence/backfill/calibration tests.
+- `334 passed, 149 warnings, 57 subtests passed` targeted strategy/report/backfill suite.
+- Official generator dry-run produced `v21.1` without live write/delivery.
+- TWSE backfill dry-run produced valid rows without DB writes.

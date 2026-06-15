@@ -5,6 +5,7 @@ import pytz
 from supabase import create_client
 
 from config import SUPABASE_URL, SUPABASE_KEY
+from core.signal_snapshot import STRATEGY_FEATURE_FIELDS, strategy_feature_payload
 from core.watchlist import WATCHLIST_CODES, missing_watchlist_codes
 
 
@@ -42,6 +43,18 @@ def _json_safe(value):
         )
     except:
         return {}
+
+
+def _is_missing_column_error(error):
+    text = str(error).lower()
+    return (
+        "column" in text
+        and (
+            "could not find" in text
+            or "does not exist" in text
+            or "schema cache" in text
+        )
+    )
 
 
 def should_record_daily(phase, now=None):
@@ -90,6 +103,12 @@ def _item_payload(run_id, name, data):
     holding = data.get("holding") or {}
     holding_decision = _holding_decision(data)
 
+    strategy_features = strategy_feature_payload({
+        **(result or {}),
+        "volume_ratio_10": result.get("volume_ratio_10", data.get("volume_ratio")),
+        "volume_ratio_20": result.get("volume_ratio_20"),
+    })
+
     return {
         "run_id": run_id,
         "stock_name": name,
@@ -119,6 +138,7 @@ def _item_payload(run_id, name, data):
         "heat_state": result.get("heat_state"),
         "trade_state": result.get("trade_state"),
         "breakout_distance": _num(result.get("breakout_distance")),
+        **strategy_features,
         # 中文註釋：v19.1.3 raw_result 只存策略核心欄位，不保存完整 K 線，避免免費資料庫膨脹。
         "raw_result": _json_safe({
             "entry_stage": result.get("entry_stage"),
@@ -127,9 +147,33 @@ def _item_payload(run_id, name, data):
             "multi_day_bias": result.get("multi_day_bias"),
             "extended_level": result.get("extended_level"),
             "rank_score": result.get("rank_score"),
-            "price_source": data.get("price_source")
+            "price_source": data.get("price_source"),
+            **strategy_features,
         })
     }
+
+
+def _legacy_item_payload(row):
+    legacy = dict(row)
+    for field in STRATEGY_FEATURE_FIELDS:
+        legacy.pop(field, None)
+    return legacy
+
+
+def _insert_signal_items(item_payloads):
+    try:
+        supabase.table("signal_items").insert(item_payloads).execute()
+        return {"signal_items_schema_fallback": False}
+    except Exception as error:
+        if not _is_missing_column_error(error):
+            raise
+        supabase.table("signal_items").insert(
+            [_legacy_item_payload(row) for row in item_payloads]
+        ).execute()
+        return {
+            "signal_items_schema_fallback": True,
+            "signal_items_schema_fallback_reason": "signal_items_strategy_feature_columns_missing",
+        }
 
 
 def record_daily_signals(version, phase, message, results_map, best_stock, market_summary, now=None):
@@ -185,15 +229,17 @@ def record_daily_signals(version, phase, message, results_map, best_stock, marke
         for name, data in results_map.items()
     ]
 
+    item_write = {"signal_items_schema_fallback": False}
     if item_payloads:
-        supabase.table("signal_items").insert(item_payloads).execute()
+        item_write = _insert_signal_items(item_payloads)
 
     update_due_outcomes(results_map, now)
 
     return {
         "recorded": True,
         "run_id": run_id,
-        "items": len(item_payloads)
+        "items": len(item_payloads),
+        **item_write,
     }
 
 

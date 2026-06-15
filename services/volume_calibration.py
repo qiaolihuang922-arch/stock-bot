@@ -17,6 +17,31 @@ VOLUME_BUCKETS = [
 ]
 
 
+SIGNAL_COLUMNS_V21_1 = (
+    "stock_id,trade_date,version,close,volume_ratio,volume_ratio_10,volume_ratio_20,"
+    "pattern,market_state,structure_state,position_state,rr,score,heat_level,action,"
+    "reasons,is_tradeable,is_best_candidate,breakout_distance_20,breakout_distance_60"
+)
+
+SIGNAL_COLUMNS_LEGACY = (
+    "stock_id,trade_date,version,close,volume_ratio,pattern,market_state,"
+    "structure_state,position_state,rr,score,heat_level,action,reasons,"
+    "is_tradeable,is_best_candidate"
+)
+
+
+def _is_missing_column_error(error):
+    text = str(error).lower()
+    return (
+        "column" in text
+        and (
+            "could not find" in text
+            or "does not exist" in text
+            or "schema cache" in text
+        )
+    )
+
+
 def volume_bucket(value):
     value = _num(value)
     if value is None:
@@ -91,7 +116,7 @@ def build_volume_calibration(signal_rows, price_rows, *, horizon_days=3, min_sam
             "market_state": signal.get("market_state"),
             "pattern": signal.get("pattern"),
         })
-        bucket = volume_bucket(signal.get("volume_ratio"))
+        bucket = volume_bucket(signal.get("volume_ratio_20") if signal.get("volume_ratio_20") is not None else signal.get("volume_ratio"))
         grouped.setdefault(context, {}).setdefault(bucket, []).append(outcome)
 
     contexts = {}
@@ -113,6 +138,7 @@ def build_volume_calibration(signal_rows, price_rows, *, horizon_days=3, min_sam
         "source": "daily_signal_snapshot+daily_price",
         "db_write": False,
         "schema_change": False,
+        "volume_window": "volume_ratio_20_fallback_volume_ratio",
         "horizon_days": horizon_days,
         "min_sample": min_sample,
         "source_status": "available" if ready_count else "insufficient-data",
@@ -121,12 +147,24 @@ def build_volume_calibration(signal_rows, price_rows, *, horizon_days=3, min_sam
 
 
 def load_volume_calibration(client, *, limit=120, horizon_days=3, min_sample=20):
-    signal_rows = _fetch_recent_date_window_rows(
-        client,
-        "daily_signal_snapshot",
-        "stock_id,trade_date,version,close,volume_ratio,pattern,market_state,structure_state,position_state,rr,score,heat_level,action,reasons,is_tradeable,is_best_candidate",
-        limit,
-    )
+    schema_fallback = False
+    try:
+        signal_rows = _fetch_recent_date_window_rows(
+            client,
+            "daily_signal_snapshot",
+            SIGNAL_COLUMNS_V21_1,
+            limit,
+        )
+    except Exception as error:
+        if not _is_missing_column_error(error):
+            raise
+        schema_fallback = True
+        signal_rows = _fetch_recent_date_window_rows(
+            client,
+            "daily_signal_snapshot",
+            SIGNAL_COLUMNS_LEGACY,
+            limit,
+        )
     price_rows = _fetch_recent_date_window_rows(
         client,
         "daily_price",
@@ -138,12 +176,15 @@ def load_volume_calibration(client, *, limit=120, horizon_days=3, min_sample=20)
             "source": "daily_signal_snapshot+daily_price",
             "db_write": False,
             "schema_change": False,
+            "schema_fallback": schema_fallback,
             "source_status": "insufficient-data",
             "contexts": {},
         }
-    return build_volume_calibration(
+    artifact = build_volume_calibration(
         signal_rows,
         price_rows,
         horizon_days=horizon_days,
         min_sample=min_sample,
     )
+    artifact["schema_fallback"] = schema_fallback
+    return artifact

@@ -8,7 +8,11 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.holdings import HOLDING_CODES
-from core.signal_snapshot import analyze_ohlcv_snapshot, apply_snapshot_boundaries
+from core.signal_snapshot import (
+    STRATEGY_FEATURE_FIELDS,
+    analyze_ohlcv_snapshot,
+    apply_snapshot_boundaries,
+)
 from core.signal_validator import validate_snapshots
 from scripts.dry_run_replay import (
     DEFAULT_WATCHLIST,
@@ -24,6 +28,9 @@ from services.strategy_evidence import (
     feature_rows_from_signal_rows,
     market_rows_from_price_rows
 )
+
+BACKFILL_WARMUP_DAYS = 120
+DEFAULT_STRATEGY_FEATURE_BACKFILL_DAYS = 730
 
 
 def resolve_stock_ids(args):
@@ -41,7 +48,7 @@ def resolve_stock_ids(args):
 
 
 def build_rows(stock_ids, start_date, end_date, version, source):
-    warmup_start = start_date - timedelta(days=90)
+    warmup_start = start_date - timedelta(days=BACKFILL_WARMUP_DAYS)
     all_days = trading_days(warmup_start, end_date)
     replay_days = set(trading_days(start_date, end_date))
 
@@ -125,7 +132,7 @@ def build_rows(stock_ids, start_date, end_date, version, source):
 
 
 def build_rows_from_ohlcv(stock_id, ohlcv_rows, start_date, end_date, version):
-    all_days = trading_days(start_date - timedelta(days=90), end_date)
+    all_days = trading_days(start_date - timedelta(days=BACKFILL_WARMUP_DAYS), end_date)
     replay_days = set(trading_days(start_date, end_date))
     history_days, closes, volumes = history_from_ohlcv(ohlcv_rows, all_days)
     price_rows = []
@@ -185,7 +192,13 @@ def snapshot_to_payload(snapshot):
         "action": snapshot["action"],
         "reasons": snapshot["reasons"],
         "is_tradeable": snapshot["is_tradeable"],
-        "is_best_candidate": snapshot["is_best_candidate"]
+        "is_best_candidate": snapshot["is_best_candidate"],
+        "raw_result": snapshot.get("raw_result") or {},
+        **{
+            field: snapshot.get(field)
+            for field in STRATEGY_FEATURE_FIELDS
+            if field in snapshot
+        },
     }
 
 
@@ -239,20 +252,59 @@ def build_evidence_rows(price_rows, signal_rows):
     return market_rows, feature_rows, outcome_rows, audit_rows
 
 
+def _legacy_signal_payload(row):
+    legacy = dict(row)
+    legacy.pop("raw_result", None)
+    for field in STRATEGY_FEATURE_FIELDS:
+        legacy.pop(field, None)
+    return legacy
+
+
+def _is_missing_column_error(error):
+    text = str(error).lower()
+    return (
+        "column" in text
+        and (
+            "could not find" in text
+            or "does not exist" in text
+            or "schema cache" in text
+        )
+    )
+
+
 def upsert_rows(price_rows, signal_rows, evidence_rows=None, client=None):
     client = client or get_supabase_client()
+    result = {
+        "daily_price_rows": 0,
+        "daily_signal_snapshot_rows": 0,
+        "schema_fallback": False,
+    }
 
     if price_rows:
         client.table("daily_price").upsert(
             price_rows,
             on_conflict="stock_id,trade_date"
         ).execute()
+        result["daily_price_rows"] = len(price_rows)
 
     if signal_rows:
-        client.table("daily_signal_snapshot").upsert(
-            signal_rows,
-            on_conflict="stock_id,trade_date,version"
-        ).execute()
+        try:
+            client.table("daily_signal_snapshot").upsert(
+                signal_rows,
+                on_conflict="stock_id,trade_date,version"
+            ).execute()
+        except Exception as error:
+            if not _is_missing_column_error(error):
+                raise
+            client.table("daily_signal_snapshot").upsert(
+                [_legacy_signal_payload(row) for row in signal_rows],
+                on_conflict="stock_id,trade_date,version"
+            ).execute()
+            result["schema_fallback"] = True
+            result["schema_fallback_reason"] = "daily_signal_snapshot_strategy_feature_columns_missing"
+        result["daily_signal_snapshot_rows"] = len(signal_rows)
+
+    return result
 
 
 def print_summary(price_rows, signal_rows, validation_errors, evidence_rows=None, coverage_warnings=None):
@@ -285,9 +337,14 @@ def print_summary(price_rows, signal_rows, validation_errors, evidence_rows=None
 
 
 def main():
-    parser = argparse.ArgumentParser(description="v19 guarded backfill for daily price and signal snapshots")
-    parser.add_argument("--start-date", required=True)
-    parser.add_argument("--end-date", required=True)
+    parser = argparse.ArgumentParser(description="Guarded backfill for daily price and signal snapshots")
+    parser.add_argument("--start-date")
+    parser.add_argument("--end-date")
+    parser.add_argument(
+        "--lookback-days",
+        type=int,
+        help=f"Set start-date to end-date minus N calendar days. Recommended v21.1 feature backfill: {DEFAULT_STRATEGY_FEATURE_BACKFILL_DAYS}.",
+    )
     parser.add_argument("--stock-id")
     parser.add_argument("--watchlist")
     parser.add_argument("--source", choices=["synthetic", "twse"], default="twse")
@@ -309,8 +366,13 @@ def main():
         raise SystemExit("Use --dry-run for preview, or --write --confirm-write for DB upsert")
 
     stock_ids = resolve_stock_ids(args)
-    start_date = parse_date(args.start_date)
-    end_date = parse_date(args.end_date)
+    end_date = parse_date(args.end_date) if args.end_date else datetime.now().date()
+    if args.start_date:
+        start_date = parse_date(args.start_date)
+    elif args.lookback_days:
+        start_date = end_date - timedelta(days=args.lookback_days)
+    else:
+        raise SystemExit("Use --start-date YYYY-MM-DD or --lookback-days N")
     price_rows, signal_rows = build_rows(
         stock_ids,
         start_date,
@@ -345,8 +407,8 @@ def main():
 
     if args.write:
         # 中文註釋：v19.1.3 正式寫入必須通過 validation 且同時帶 --write --confirm-write。
-        upsert_rows(price_rows, signal_rows, evidence_rows)
-        print("WRITE OK")
+        write_result = upsert_rows(price_rows, signal_rows, evidence_rows)
+        print(f"WRITE OK {write_result}")
     else:
         print("DRY RUN ONLY: no database writes")
 

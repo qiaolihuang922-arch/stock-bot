@@ -17,6 +17,8 @@
 - Fixed a strategy wording abstraction gap: strong intraday rebound is now separated from weak rebound. The reusable rule is "raw weak-rebound state can be upgraded to wait-for-retest when live/day change is strong, but it must not become a chase-buy signal."
 - Fixed an acute-rebound report contract gap: wait cards now show both the current no-buy reason and the concrete re-evaluation gates instead of scattering them across blocker / trigger / data lines.
 - Added v21.1 multi-window strategy context: V10/V20, 20D/60D resistance, and concrete retest zones now flow through strategy result, snapshot/raw_result, and official report.
+- Added v21.1 strategy-feature persistence path: typed DB columns are defined in a manual SQL artifact; daily snapshot, signal item, and backfill payloads now carry V10/V20, resistance, breakout distance, retest zone, and compact raw_result.
+- Added guarded schema fallback for writer paths so scheduled runner/backfill do not crash before the SQL migration is applied.
 
 ## Current Post-cycle Review
 
@@ -35,6 +37,8 @@
 - No single-date or single-stock dead rule was added. The new rule is an abstract handoff hygiene invariant.
 - No single-stock buy rule was added. The new formatter contract is abstract: acute rebound remains wait/retest, and only its explanation becomes explicit.
 - v21.1 did not loosen buyability. It expands evidence context and makes the retest anchor explicit; future calibration should use production outcomes before changing thresholds.
+- The persistence gap was real: report/runtime fields existed before typed DB persistence. Root cause category is `證據鏈` and `runner_gap`; fix is an approved migration artifact plus write/backfill payload changes, not a single-stock rule.
+- Backfill window decision is reusable: strategy features with 60D context should backfill two years when source data exists, with enough warmup before the requested start.
 
 ## Active Cleanup Follow-ups
 
@@ -61,7 +65,7 @@
   - Needed fix: future strategy-quality task should define DB-backed transitions from D to B and backtest whether the acute rebound threshold should stay at 7%.
 - `multi_window_threshold_calibration`
   - Current fact: v21.1 carries V10/V20 and 20D/60D levels, but thresholds are still rule-based.
-  - Needed fix: use historical production outcomes to calibrate V20 cutoffs, 60D resistance impact, and retest-zone success rates.
+  - Needed fix: after applying `db/sql/v21_1_strategy_feature_snapshot_columns.sql` and running the two-year backfill, use historical production outcomes to calibrate V20 cutoffs, 60D resistance impact, and retest-zone success rates.
 - `runner_gap: cao_codex_tui_send`
   - Current fact: CAO TUI automation can hang after prompt send.
   - Needed fix: noninteractive fallback or stable `codex exec` runner path.

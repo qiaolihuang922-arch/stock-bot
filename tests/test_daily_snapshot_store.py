@@ -3,8 +3,12 @@ from datetime import datetime
 
 from core.watchlist import WATCHLIST_CODES
 from services.analysis import strategy
-from services.daily_snapshot_store import build_daily_snapshot_payloads, read_daily_signal_snapshot_status
-from services.signal_store import record_daily_signals
+from services.daily_snapshot_store import (
+    _upsert_daily_signal_snapshot,
+    build_daily_snapshot_payloads,
+    read_daily_signal_snapshot_status,
+)
+from services.signal_store import _item_payload, record_daily_signals
 
 
 def sample_result():
@@ -103,6 +107,11 @@ class DailySnapshotStoreTest(unittest.TestCase):
         self.assertEqual(len(payloads["price_rows"]), 0)
         self.assertEqual(len(payloads["signal_rows"]), 1)
         self.assertEqual(payloads["signal_rows"][0]["version"], "v19.1.3")
+        self.assertIn("volume_ratio_20", payloads["signal_rows"][0])
+        self.assertIn("resistance_20", payloads["signal_rows"][0])
+        self.assertIn("breakout_price_20", payloads["signal_rows"][0])
+        self.assertIn("retest_zone_low", payloads["signal_rows"][0])
+        self.assertIn("raw_result", payloads["signal_rows"][0])
 
     def test_daily_price_requires_complete_ohlcv(self):
         result, closes, volumes = sample_result()
@@ -235,6 +244,19 @@ class DailySnapshotStoreTest(unittest.TestCase):
         self.assertEqual(payloads["reason"], "incomplete_watchlist")
         self.assertEqual(payloads["missing_stock_ids"], [missing_code])
 
+    def test_signal_item_payload_persists_strategy_feature_columns(self):
+        payload = _item_payload(
+            "run-1",
+            "測試",
+            sample_payload("9999", with_ohlcv=True),
+        )
+
+        self.assertIn("volume_ratio_20", payload)
+        self.assertIn("resistance_20", payload)
+        self.assertIn("breakout_price_20", payload)
+        self.assertIn("retest_zone_low", payload)
+        self.assertIn("volume_ratio_20", payload["raw_result"])
+
     def test_daily_signal_snapshot_read_after_write_status_detects_missing_rows(self):
         class Query:
             def __init__(self, rows):
@@ -282,6 +304,45 @@ class DailySnapshotStoreTest(unittest.TestCase):
         )
 
         self.assertEqual(ok_status["read_after_write"], "ok")
+
+    def test_daily_snapshot_upsert_falls_back_when_strategy_columns_are_missing(self):
+        class Query:
+            def __init__(self, name, calls):
+                self.name = name
+                self.calls = calls
+
+            def upsert(self, rows, **kwargs):
+                self.calls.append((self.name, "upsert", rows, kwargs))
+                if any("volume_ratio_20" in row for row in rows):
+                    raise Exception("Could not find the 'volume_ratio_20' column of 'daily_signal_snapshot' in the schema cache")
+                return self
+
+            def execute(self):
+                self.calls.append((self.name, "execute"))
+                return type("Result", (), {"data": []})()
+
+        class Client:
+            def __init__(self):
+                self.calls = []
+
+            def table(self, name):
+                return Query(name, self.calls)
+
+        client = Client()
+        result = _upsert_daily_signal_snapshot(client, [{
+            "stock_id": "3231",
+            "trade_date": "2026-06-15",
+            "version": "v21.1",
+            "volume_ratio": 1,
+            "volume_ratio_20": 0.8,
+            "raw_result": {"volume_ratio_20": 0.8},
+        }])
+
+        upserts = [call for call in client.calls if call[1] == "upsert"]
+        self.assertEqual(len(upserts), 2)
+        self.assertTrue(result["schema_fallback"])
+        self.assertNotIn("volume_ratio_20", upserts[-1][2][0])
+        self.assertNotIn("raw_result", upserts[-1][2][0])
 
 
 if __name__ == "__main__":

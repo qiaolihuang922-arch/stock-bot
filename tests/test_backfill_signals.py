@@ -59,6 +59,11 @@ class BackfillSignalsTest(unittest.TestCase):
         self.assertEqual(price_rows[0]["low"], rows[25]["low"])
         self.assertEqual(price_rows[0]["source"], "twse")
         self.assertEqual(validate_signal_payloads(signal_rows), [])
+        self.assertIn("volume_ratio_20", signal_rows[0])
+        self.assertIn("resistance_20", signal_rows[0])
+        self.assertIn("breakout_price_20", signal_rows[0])
+        self.assertIn("retest_zone_low", signal_rows[0])
+        self.assertIn("raw_result", signal_rows[0])
         market_rows, feature_rows, outcome_rows, audit_rows = build_evidence_rows(price_rows, signal_rows)
         self.assertEqual(len(market_rows), 5)
         self.assertEqual(len(feature_rows), 5)
@@ -175,6 +180,50 @@ class BackfillSignalsTest(unittest.TestCase):
         self.assertNotIn("strategy_feature_snapshots", table_names)
         self.assertNotIn("strategy_outcome_metrics", table_names)
         self.assertNotIn("strategy_classification_audit", table_names)
+
+    def test_upsert_rows_falls_back_when_strategy_columns_are_missing(self):
+        class Query:
+            def __init__(self, name, calls):
+                self.name = name
+                self.calls = calls
+
+            def upsert(self, rows, **kwargs):
+                self.calls.append((self.name, "upsert", rows, kwargs))
+                if self.name == "daily_signal_snapshot" and any(
+                    "volume_ratio_20" in row for row in rows
+                ):
+                    raise Exception("Could not find the 'volume_ratio_20' column of 'daily_signal_snapshot' in the schema cache")
+                return self
+
+            def execute(self):
+                self.calls.append((self.name, "execute"))
+                return SimpleNamespace(data=[])
+
+        class Client:
+            def __init__(self):
+                self.calls = []
+
+            def table(self, name):
+                return Query(name, self.calls)
+
+        client = Client()
+        result = upsert_rows([], [{
+            "stock_id": "3231",
+            "trade_date": "2026-05-04",
+            "version": "v21.1",
+            "volume_ratio": 1.0,
+            "volume_ratio_20": 0.8,
+            "raw_result": {"volume_ratio_20": 0.8},
+        }], client=client)
+
+        signal_upserts = [
+            call for call in client.calls
+            if call[0] == "daily_signal_snapshot" and call[1] == "upsert"
+        ]
+        self.assertEqual(len(signal_upserts), 2)
+        self.assertTrue(result["schema_fallback"])
+        self.assertNotIn("volume_ratio_20", signal_upserts[-1][2][0])
+        self.assertNotIn("raw_result", signal_upserts[-1][2][0])
 
 
 if __name__ == "__main__":
