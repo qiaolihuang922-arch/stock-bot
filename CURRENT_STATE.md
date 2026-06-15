@@ -39,6 +39,7 @@
 - Owner applied the SQL migration; schema was verified read-only before backfill.
 - v21.1 strategy-feature backfill has been executed for the 12 tracked stocks.
 - market/theme evidence gaps for `2026-06-11`, `2026-06-12`, and `2026-06-15` have been filled.
+- `daily_signal_snapshot` old-version overlap cleanup has been executed through approved repo script.
 
 ## Backfill Decision
 
@@ -53,6 +54,11 @@
   - All 12 tracked stocks have v21.1 snapshots through `2026-06-15`.
   - v21.1 feature columns are non-null on all `5112` v21.1 rows.
   - No live Telegram delivery.
+- Cleanup result:
+  - Added `scripts/prune_daily_signal_snapshot_versions.py`.
+  - Deleted `1670` old-version rows only where the same `stock_id` / `trade_date` had `v21.1`.
+  - Preserved `118` old-version rows without a `v21.1` replacement.
+  - Post-cleanup total rows: `5230`; v21.1 rows: `5112`; overlap old-with-v21.1: `0`.
 
 ## Verification State
 
@@ -77,6 +83,8 @@
   - `2026-06-15` complete after backfill.
 - Evidence automation tests:
   - `71 passed, 13 subtests passed`.
+- Cleanup script tests:
+  - `tests/test_prune_daily_signal_snapshot_versions.py`: `2 passed`.
 
 ## Git State
 
@@ -89,4 +97,4 @@
 ## Known Follow-ups
 
 - Market/theme evidence should resume through the normal bot workflow after the after-close safe-write window.
-- `trades` appears unused by code and has only one old row, but deletion needs a dedicated cleanup task and evidence review.
+- Owner said `trades` is abandoned and will delete it directly; no repo code depends on `.table("trades")` / `.from("trades")` from the latest scan.

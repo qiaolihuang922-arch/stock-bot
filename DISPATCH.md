@@ -45,6 +45,11 @@
   - All 12 tracked stocks have v21.1 snapshots through `2026-06-15`.
   - All persisted v21.1 feature fields are non-null on those 5112 rows.
   - market/theme evidence gaps for `2026-06-11`, `2026-06-12`, `2026-06-15` were filled by approved script.
+- Cleanup completed:
+  - Added approved cleanup script `scripts/prune_daily_signal_snapshot_versions.py`.
+  - Removed 1670 old `daily_signal_snapshot` rows whose same `stock_id` / `trade_date` already had `v21.1`.
+  - Preserved 118 old-version rows that do not have a `v21.1` replacement.
+  - Post-cleanup overlap with `v21.1`: 0 rows.
 
 ## Verification
 
@@ -85,6 +90,15 @@ Production v21.1 strategy snapshot read-back:
 - Total v21.1 rows: `5112`.
 - Non-null counts for each v21.1 feature column: `5112`.
 
+Duplicate cleanup read-back:
+- `daily_signal_snapshot` total rows after cleanup: `5230`.
+- `v21.1` rows preserved: `5112`.
+- old rows overlapping `v21.1` stock/date keys: `0`.
+- exact duplicate stock/date/version rows: `0`.
+
+Cleanup script tests:
+- `tests/test_prune_daily_signal_snapshot_versions.py`: `2 passed`.
+
 Workflow evidence automation tests:
 - `71 passed, 13 subtests passed`
 
@@ -100,4 +114,4 @@ Workflow evidence automation tests:
 
 - No live Telegram delivery was performed.
 - Normal `run_mode=bot` should fill market/theme evidence going forward after the bot run reaches the after-close safe-write window.
-- Optional cleanup remains: `trades` appears unused by code and has only one old row, but should not be deleted without a dedicated cleanup task.
+- Optional cleanup remains: Owner will delete the abandoned `trades` table manually, or it can be handled by a dedicated DB cleanup task.
