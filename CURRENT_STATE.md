@@ -54,7 +54,6 @@
 
 ## Known Follow-ups
 
-- Commit and push this audit utility / MD closeout.
 - Observe next scheduled `run_mode=bot` report and check fresh `signal_items` strategy fields.
 - Decide whether to enrich or hide `market_theme_index_daily_bars` OHLCV/member placeholder columns.
 - Implement or retire `signal_outcomes` max high/drawdown metrics.

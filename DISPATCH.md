@@ -34,10 +34,12 @@
 
 - branch: `main`
 - upstream: `origin/main`
+- latest commit: `f50e2acd7cde6dd344e7cff264227afde981b9a0`
+- HEAD equals upstream: `true`
+- worktree/index: `clean`
 - closeout uses Windows-equivalent git checks because bash scripts may fail on this machine without WSL/Hyper-V.
 
 ## Next Action
 
-- Commit/push DB health audit utility and MD closeout.
 - Observe next scheduled `run_mode=bot` report and check fresh `signal_items` rows.
 - Plan follow-up for `market_theme_index_daily_bars` OHLCV/member source gap and `signal_outcomes` outcome metrics.
