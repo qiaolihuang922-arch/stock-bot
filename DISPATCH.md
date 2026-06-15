@@ -2,20 +2,21 @@
 
 ## Active
 
-- task_md_holds: `premarket_phase_report_v21_0_6_20260615`
+- task_md_holds: `strong_rebound_not_weak_v21_0_7_20260615`
 - status: `complete`
 - owner_request:
-  - Analyze pasted `06/15 非交易｜v21.0.5` report.
-  - Resolve visible conflict where a trading-day report mixed non-trading, today, and tomorrow wording.
+  - Fix report logic where near-limit-up 旺宏 was still labeled `弱反彈`.
+  - Make strategy wording more adaptive without becoming a chase-buy machine.
   - No live Telegram delivery.
 
 ## Current Result
 
-- Visible version is now `v21.0.6`.
-- Trading weekday before 09:00 now renders as `盤前`, not `非交易`.
-- `盤前` is treated as a today-action phase for summary routing.
-- `盤前` does not append `明日計畫`.
-- Existing `盤中` wording remains unchanged.
+- Visible version is now `v21.0.7`.
+- `WEAK_REBOUND` with live/day change >= 7% is now `急彈待回測`.
+- Strong rebound routes to `等回測`, not `淘汰`.
+- Strong rebound card says `卡關主因：急彈未回測`.
+- Low-change weak rebound still remains weak/rejected.
+- No buy signal is created solely from a sharp rebound.
 
 ## Verification
 
@@ -23,14 +24,13 @@
 .\.venv\Scripts\python.exe -m pytest tests/test_trade_state_machine.py tests/test_generator_report.py tests/test_market_theme_evidence.py -q --tb=short
 ```
 
-Result: `248 passed, 147 warnings, 57 subtests passed`.
+Result: `249 passed, 149 warnings, 57 subtests passed`.
 
-Official patched-time dry-run:
-- simulated time: `2026-06-15 08:00` Taipei.
-- headers: `【06/15 盤前｜v21.0.6】`.
-- phase: `盤前`.
-- no `06/15 非交易`.
-- no `明日計畫`.
+Official dry-run:
+- `version v21.0.7`
+- v21.0.7 messages generated.
+- no live Telegram delivery.
+- no current `【旺宏 2337】⛔ 淘汰｜弱反彈待確認` in official dry-run output.
 
 ## Next Action
 

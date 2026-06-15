@@ -1,44 +1,47 @@
-# QA_REPORT: premarket_phase_report_v21_0_6_20260615
+# QA_REPORT: strong_rebound_not_weak_v21_0_7_20260615
 
 ## Test Scope
-- Trading-day pre-open phase classification.
-- Telegram header and summary wording for `盤前`.
-- Regression risk for existing `盤中` wording.
-- Official generator dry-run path with patched time.
+- Strong intraday rebound display semantics.
+- Weak rebound regression path.
+- Unheld funnel state.
+- Trade state machine visible reason.
+- Telegram unheld card gap/unlock text.
+- Official dry-run path.
 
 ## Risk Scan
-- Fixing `非交易` by forcing everything to `盤中` would be misleading.
-- Treating `盤前` like `盤後` would keep wrong `明日計畫` wording.
-- Changing generic intraday suffixes could break existing phone-readable `盤中` reports.
-- A single-date hard-code would fail the next trading day.
+- If every `WEAK_REBOUND` is upgraded, true weak rebounds stop being filtered.
+- If strong rebound becomes buyable, the system starts chasing near-limit-up moves.
+- If only the title changes, card reason could still say weak rebound and confuse Owner.
+- If trade-state guards are not updated, the line can still say `主因：個股弱勢`.
 
 ## Semantic Consistency
-- `盤前`: same trading day, preparation/observation semantics.
-- `盤中`: live intraday semantics, unchanged.
-- `盤後` / `收盤`: next open / tomorrow confirmation semantics.
-- `假日`: non-trading semantics.
+- Low-change weak rebound: reject as weak / structure not repaired.
+- High-change weak rebound: acknowledge strength as `急彈待回測`.
+- Action remains wait/retest: no buy, no chase.
+- Retest confirmation remains the next condition.
 
 ## Failure Specimen Countercheck
-- Owner pasted `06/15 非交易｜v21.0.5`.
-- Countercheck with patched 2026-06-15 08:00:
-  - generated headers: `【06/15 盤前｜v21.0.6】`;
-  - `phase 盤前`;
-  - no `06/15 非交易`;
-  - no `明日計畫`.
+- Owner failure: 旺宏 near limit-up labeled `弱反彈待確認`.
+- Countercheck:
+  - +8.19% synthetic 旺宏-style case becomes `等回測｜急彈待回測`.
+  - card says `卡關主因：急彈未回測`.
+  - card says `買點：不買，等回測`.
+  - card does not include `弱反彈待確認`.
+  - summary does not list it as `淘汰｜弱反彈待確認`.
 
 ## Additional Challenge
-- Full targeted suite first failed when `盤中` wording regressed from `今日盤中風控建議` to `今日風控建議`.
-- The regression was fixed by preserving the old `盤中` suffix and only adding a separate `盤前` suffix.
+- Original low-change weak rebound test still passes and remains rejected as weak.
+- Full targeted suite confirms existing overheat / limit-up / weak-rebound contracts did not regress.
 
 ## Not Tested
 - Live Telegram delivery.
 - Production DB write/backfill.
-- Official holiday API confirmation beyond the existing source/evidence paths.
+- Broker/order execution.
 
 ## QA Conclusion
 通過
 
 Evidence:
-- `2 passed` targeted phase tests.
-- `248 passed, 147 warnings, 57 subtests passed` targeted report/state/evidence suite.
-- Official dry-run probe produced `盤前` headers and no `明日計畫`.
+- `2 passed` focused strong/weak rebound tests.
+- `249 passed, 149 warnings, 57 subtests passed` targeted report/state/evidence suite.
+- Official dry-run generated `v21.0.7` with no live Telegram delivery.

@@ -350,6 +350,26 @@ def _as_float(value):
         return None
 
 
+def _strong_rebound_change_pct(result):
+    for key in ("live_change", "change", "change_pct", "chg_1d"):
+        value = (result or {}).get(key)
+        if value in [None, ""]:
+            continue
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _is_strong_intraday_rebound(result):
+    result = result or {}
+    if result.get("price_behavior") != "WEAK_REBOUND" and result.get("structure_phase") != "WEAK_REBOUND":
+        return False
+    change = _strong_rebound_change_pct(result)
+    return change is not None and change >= 7
+
+
 def _previous_state(data):
     context = (data or {}).get("cross_day_context") or {}
     value = context.get("previous_state")
@@ -366,7 +386,7 @@ def _risk_flags(data):
     if result.get("structure_phase") in {"FAILED_BREAKOUT", "WEAK_REBOUND", "DISTRIBUTION"}:
         flags.append(str(result.get("structure_phase")))
     if result.get("price_behavior") == "WEAK_REBOUND":
-        flags.append("WEAK_REBOUND")
+        flags.append("STRONG_REBOUND" if _is_strong_intraday_rebound(result) else "WEAK_REBOUND")
     if result.get("trade_state") in {"AVOID", "EXTENDED", "NO_VOLUME", "LATE_ENTRY"}:
         flags.append(str(result.get("trade_state")))
     rr = _as_float(result.get("rr"))
@@ -461,6 +481,8 @@ def _unheld_guard_snapshot(data, source_status=None):
         guards.append("MARKET_WEAK")
     elif result.get("market_grade") in {"D", "E"}:
         guards.append("STOCK_WEAK")
+    if _is_strong_intraday_rebound(result):
+        guards.append("STRONG_REBOUND_NEEDS_PULLBACK")
     setup = _setup_type(result)
     if setup == "NO_SETUP":
         guards.append("SETUP_NOT_READY")
@@ -475,7 +497,9 @@ def _unheld_guard_snapshot(data, source_status=None):
         guards.append("RR_BELOW_MIN")
     if result.get("heat_state") in {"HOT", "EXTREME"} or result.get("trade_state") in {"EXTENDED", "AVOID"}:
         guards.append("HEAT_NOT_COOL")
-    if result.get("structure_phase") in {"FAILED_BREAKOUT", "WEAK_REBOUND", "DISTRIBUTION"}:
+    if result.get("structure_phase") in {"FAILED_BREAKOUT", "DISTRIBUTION"}:
+        guards.append("STRUCTURE_FAILED")
+    elif result.get("structure_phase") == "WEAK_REBOUND" and not _is_strong_intraday_rebound(result):
         guards.append("STRUCTURE_FAILED")
     distance = _as_float(result.get("breakout_distance") or result.get("distance_to_breakout"))
     if _distance_blocks_entry(result, distance):
@@ -526,6 +550,8 @@ def _unheld_event_from_target(target_state, *, source_status=None, guards=None):
     if target_state == "WATCH":
         if "MARKET_WEAK" in guard_set:
             return "MARKET_GATE_FAILED"
+        if "STRONG_REBOUND_NEEDS_PULLBACK" in guard_set:
+            return "PULLBACK_GATE_FAILED"
         if "STOCK_WEAK" in guard_set:
             return "SETUP_NOT_READY"
         if "SETUP_NOT_READY" in guard_set:
@@ -708,6 +734,8 @@ def visible_state_line(machine_state):
         guards = set(machine_state.get("guards") or [])
         if "MARKET_WEAK" in guards and machine_state.get("state") != "WAIT_MARKET":
             parts.append("主因：市場弱")
+        elif "STRONG_REBOUND_NEEDS_PULLBACK" in guards:
+            parts.append("主因：急彈待回測")
         elif "STOCK_WEAK" in guards and machine_state.get("state") != "WAIT_MARKET":
             parts.append("主因：個股弱勢")
         if next_label:

@@ -81,7 +81,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v21.0.6"
+VERSION = "v21.0.7"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -592,6 +592,26 @@ def semantic_trade(result):
     return "✅ 可交易"
 
 
+def strong_rebound_change_pct(result):
+    for key in ("live_change", "change", "change_pct", "chg_1d"):
+        value = (result or {}).get(key)
+        if value is None:
+            continue
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def is_strong_intraday_rebound(result):
+    result = result or {}
+    if result.get("price_behavior") != "WEAK_REBOUND" and result.get("structure_phase") != "WEAK_REBOUND":
+        return False
+    change = strong_rebound_change_pct(result)
+    return change is not None and change >= 7
+
+
 def entry_blockers(result):
 
     labels = []
@@ -610,7 +630,7 @@ def entry_blockers(result):
     elif behavior == "LIMIT_REBOUND":
         labels.append("漲停反彈待確認")
     elif behavior == "WEAK_REBOUND":
-        labels.append("弱反彈待確認")
+        labels.append("急彈待回測" if is_strong_intraday_rebound(result) else "弱反彈待確認")
 
     if heat == "EXTREME":
         labels.append(f"過熱 Lv.{result.get('extended_level', 3)}")
@@ -939,6 +959,9 @@ def entry_conclusion(result):
 
     if "過熱觀察" in blockers or any(item.startswith("過熱") for item in blockers):
         return "過熱風險優先，等待冷卻"
+
+    if "急彈待回測" in blockers:
+        return "急彈不追，等回測確認"
 
     if "弱反彈待確認" in blockers or "漲停反彈待確認" in blockers:
         return "反彈先觀察，等隔日確認"
@@ -1746,6 +1769,9 @@ def snapshot_bucket_from_result(result):
 
     if "過熱觀察" in blockers or any(item.startswith("過熱") for item in blockers):
         return "過熱阻斷"
+
+    if "急彈待回測" in blockers:
+        return "急彈待回測"
 
     if phase == "WEAK_REBOUND":
         return "弱反彈"
@@ -2845,6 +2871,9 @@ def _unheld_structural_reject(result, blockers=None):
     behavior = result.get("price_behavior")
     label = blockers[0] if blockers else final_label(result)
 
+    if is_strong_intraday_rebound(result):
+        return result.get("decision") == "FAIL" or "突破失敗" in blockers
+
     return (
         result.get("decision") == "FAIL"
         or label in ["弱勢", "弱反彈待確認", "突破失敗"]
@@ -2923,6 +2952,9 @@ def tomorrow_watch_state(name, data):
 
     if behavior in ["LIMIT_LOCK", "LIMIT_REBOUND"] or label in ["漲停不追", "漲停反彈待確認"]:
         return "等回測" if behavior == "LIMIT_LOCK" or label == "漲停不追" else "隔日確認"
+
+    if "急彈待回測" in blockers:
+        return "等回測"
 
     if heat in ["HOT", "EXTREME"] or trade in ["EXTENDED", "AVOID"] or label == "過熱觀察":
         return "等冷卻"
@@ -4126,6 +4158,9 @@ def entry_wait_text(result):
     if first == "漲停不追":
         return "等開板回測"
 
+    if first == "急彈待回測":
+        return "等回測不破"
+
     if first in ["弱反彈待確認", "漲停反彈待確認"]:
         return "等隔日確認"
 
@@ -4157,6 +4192,9 @@ def unheld_entry_wait_text(result, state, funnel_state):
 
         if reason in ["結構弱", "弱反彈待確認"]:
             return "等結構修復"
+
+        if reason == "急彈待回測":
+            return "等回測不破"
 
         if reason == "突破失敗":
             return "等重新轉強"
@@ -5922,6 +5960,9 @@ def unheld_funnel_assessment(name, data, market_mode=None, report_context=None):
     ):
         return state if state in ["等冷卻", "等回測"] else "等冷卻", None
 
+    if "急彈待回測" in blockers:
+        return "等回測", None
+
     if any(item in blockers for item in ["弱反彈待確認", "漲停反彈待確認"]):
         return "隔日確認", None
 
@@ -6254,6 +6295,9 @@ def rejected_primary_reason(result):
 
     if result.get("decision") == "FAIL" or phase == "FAILED_BREAKOUT" or "突破失敗" in blockers:
         return "突破失敗"
+
+    if "急彈待回測" in blockers:
+        return "急彈待回測"
 
     if phase == "WEAK_REBOUND" or result.get("price_behavior") == "WEAK_REBOUND" or "弱反彈待確認" in blockers:
         return "弱反彈待確認"
@@ -7723,6 +7767,8 @@ def rejected_transition_reason_line(result):
         cause += "：突破失敗或跌破進場條件"
     elif primary == "RR不可用":
         cause += "：RR不可用"
+    elif primary == "急彈待回測":
+        cause += "：急彈未回測，不追高"
     elif primary == "弱反彈待確認":
         cause += "：結構未修復"
     elif primary:

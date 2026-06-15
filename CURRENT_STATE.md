@@ -2,9 +2,9 @@
 
 ## Current Task
 
-- task_id: `premarket_phase_report_v21_0_6_20260615`
+- task_id: `strong_rebound_not_weak_v21_0_7_20260615`
 - status: `complete`
-- version: `v21.0.6`
+- version: `v21.0.7`
 - no live Telegram delivery.
 
 ## Stable Context
@@ -17,24 +17,24 @@
 
 ## Current Changes
 
-- Trading weekday before 09:00 is `盤前`.
-- `盤前` is a today-action phase:
-  - no `非交易` header;
-  - no `明日計畫`;
-  - unheld trigger wording uses `盤前觀察`.
-- `盤中` wording remains unchanged.
+- Strong intraday rebound semantics were added:
+  - raw `WEAK_REBOUND` plus live/day change >= 7% becomes `急彈待回測`;
+  - state is `等回測`;
+  - action remains wait / no chase;
+  - low-change weak rebound still rejects as weak.
+- Trade state machine can show `主因：急彈待回測`.
+- Telegram card reason can show `卡關主因：急彈未回測`.
 
 ## Verification State
 
 - `tests/test_trade_state_machine.py tests/test_generator_report.py tests/test_market_theme_evidence.py`:
-  - `248 passed, 147 warnings, 57 subtests passed`.
-- Patched-time official dry-run confirmed:
-  - `【06/15 盤前｜v21.0.6】`;
-  - phase `盤前`;
-  - no `06/15 非交易`;
-  - no `明日計畫`.
+  - `249 passed, 149 warnings, 57 subtests passed`.
+- Official dry-run confirmed:
+  - `v21.0.7`;
+  - no live Telegram delivery;
+  - no current 旺宏 weak-rebound reject string in generated dry-run output.
 
 ## Known Follow-ups
 
-- Live Telegram delivery not tested by design.
-- Holiday confirmation beyond weekend checks remains part of the broader source/evidence workflow, not this patch.
+- Strong rebound threshold is rule-based, not learned from DB outcomes yet.
+- Future strategy-quality work should evaluate thresholds from historical outcomes before changing buyability.

@@ -14,6 +14,7 @@
 - Confirmed `reports/backfill/*` and `reports/research/*` are tracked repo artifacts, not disposable runtime output.
 - Added an abstract handoff hygiene rule to `AGENTS.md`: active handoff files must be UTF-8 readable, free of mojibake / stale task state / broken commands, and post-cycle review must not hard-code one-off incidents.
 - Fixed a report phase abstraction gap: trading-day pre-open is now `盤前`, and `盤前` uses today-action summary routing instead of afterhours/tomorrow routing.
+- Fixed a strategy wording abstraction gap: strong intraday rebound is now separated from weak rebound. The reusable rule is "raw weak-rebound state can be upgraded to wait-for-retest when live/day change is strong, but it must not become a chase-buy signal."
 
 ## Current Post-cycle Review
 
@@ -24,6 +25,7 @@
   - Windows shell display created false mojibake noise unless files were read with explicit UTF-8.
   - The bash-based git gates cannot run on this machine because WSL/Hyper-V is unavailable, so Windows-equivalent gate evidence must be recorded.
   - Report phase semantics were scattered: `盤前` was not a first-class today-action phase, so early trading-day reports could fall into `非交易` or tomorrow-plan wording.
+  - Rebound semantics were too rigid: `WEAK_REBOUND` was treated as permanently weak even when live price action had already become a sharp rebound.
 - QA did catch core report conflicts, but did not independently enforce Markdown hygiene.
 - Tech did not change DB schema, live Telegram, or production write paths.
 - No single-date or single-stock dead rule was added. The new rule is an abstract handoff hygiene invariant.
@@ -45,6 +47,9 @@
 - `phase_semantics_gate`
   - Current fact: `盤前`, `盤中`, `收盤`, `盤後`, `假日`, and true `非交易` must not be handled by scattered string checks.
   - Needed fix: keep using shared phase helpers and add tests when a new phase-specific report wording appears.
+- `strategy_semantics_gate`
+  - Current fact: raw strategy states can become stale when live price action changes quickly.
+  - Needed fix: keep separating "market recognition" from "trade permission": acknowledge strong rebound / heat / volume change first, then independently decide buy / wait / reject.
 - `runner_gap: cao_codex_tui_send`
   - Current fact: CAO TUI automation can hang after prompt send.
   - Needed fix: noninteractive fallback or stable `codex exec` runner path.

@@ -521,6 +521,8 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
         )
 
     behavior = stock_result.get("price_behavior")
+    if "急彈待回測" in blocker_text:
+        return evidence_lines("急彈未回測", "漲幅已急，需回測不破後重新評估", "回測不破且非追高時重新評估")
     if behavior in {"LIMIT_LOCK", "LIMIT_REBOUND"} or "漲停" in blocker_text or "不可追高" in blocker_text:
         gates.append(("漲跌停鎖定", "需解除鎖定後重新評估"))
     if behavior == "WEAK_REBOUND" or phase == "WEAK_REBOUND" or "弱反彈" in blocker_text:
@@ -594,6 +596,7 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
         "市場背景": "市場轉強後再評估",
         "漲跌停鎖定": "解除鎖定後重新評估",
         "反彈力道不足": "放量轉強後重新評估",
+        "急彈未回測": "回測不破且非追高時重新評估",
         "市場弱": "市場轉強後重新評估",
         "量能不足": "量能回升後重新評估",
         "樣本不足": "補齊有效策略樣本後重新評估",
