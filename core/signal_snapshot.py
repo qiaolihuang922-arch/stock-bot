@@ -128,6 +128,10 @@ STRATEGY_FEATURE_BOOL_FIELDS = {
     "setup_valid",
 }
 
+STRATEGY_FEATURE_INT_FIELDS = {
+    "retest_days_since_breakout",
+}
+
 STRATEGY_FEATURE_JSON_FIELDS = {
     "setup_blockers",
 }
@@ -142,6 +146,8 @@ def strategy_feature_payload(source):
             payload[field] = value
         elif field in STRATEGY_FEATURE_BOOL_FIELDS:
             payload[field] = None if value is None else bool(value)
+        elif field in STRATEGY_FEATURE_INT_FIELDS:
+            payload[field] = None if value is None else int(value)
         elif field in STRATEGY_FEATURE_JSON_FIELDS:
             payload[field] = value
         else:
