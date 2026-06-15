@@ -33,10 +33,11 @@
 
 - branch: `main`
 - upstream: `origin/main`
-- pending: commit/push this presentation denoise patch.
+- latest commit: `86dd27a848006de51197eee89c24ede5e432f89d`
+- HEAD equals upstream: `true`
+- worktree/index: `clean`
 - closeout uses Windows-equivalent git checks because bash scripts may fail on this machine without WSL/Hyper-V.
 
 ## Next Action
 
-- Commit/push presentation denoise patch.
 - After next scheduled `run_mode=bot`, confirm production Telegram artifact keeps the merged unheld-card layout.

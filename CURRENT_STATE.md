@@ -33,7 +33,6 @@
 
 ## Known Follow-ups
 
-- Commit/push this patch.
 - Observe next scheduled `run_mode=bot` report and confirm merged unheld-card layout in production artifact.
 - Future cleanup candidate: rejected-card `原因` lines can still be verbose.
 - Prior DB follow-ups remain:
