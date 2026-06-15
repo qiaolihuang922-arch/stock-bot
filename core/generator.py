@@ -6159,8 +6159,13 @@ def unheld_funnel_state(name, data, market_mode=None, report_context=None):
         } else "淘汰"
     if state == "隔日確認":
         result = (data or {}).get("result") or {}
+        behavior = result.get("price_behavior")
         quality = result.get("entry_quality")
-        if quality and quality not in {"A+", "A", "B"}:
+        if (
+            behavior not in {"LIMIT_LOCK", "LIMIT_REBOUND", "WEAK_REBOUND"}
+            and quality
+            and quality not in {"A+", "A", "B"}
+        ):
             state = "等型態"
     if reason:
         data["evidence_adjustment_reason"] = reason

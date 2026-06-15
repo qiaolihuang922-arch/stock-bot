@@ -632,6 +632,7 @@ def _compact_gap_text(text):
         ("｜需B以上", "→B以上"),
         (" 未達B", "→B以上"),
         ("→B以上", "→B 以上"),
+        ("需B以上", "需 B 以上"),
         ("（setup未成立）", "僅參考"),
         ("突破區需<=5%", "買點區<=5%"),
         ("突破買點區需<=5%", "買點區<=5%"),
@@ -672,6 +673,19 @@ def _compact_gap_text(text):
     return "；".join(dict.fromkeys(parts))
 
 
+def _quality_wait_gap_text(quality, reason=None, funnel_state=None):
+    quality = str(quality or "").strip()
+    if not quality:
+        return None
+    if quality in {"A+", "A", "B"}:
+        return None
+    if reason in {"急彈未回測", "反彈力道不足", "漲跌停鎖定"} or funnel_state in {"等回測", "隔日確認"}:
+        return "買點品質：回測 / 轉強後重評"
+    if funnel_state == "等冷卻":
+        return "買點品質：降溫後重評"
+    return f"買點品質未過（目前 {quality}，需B以上）"
+
+
 def _compact_unlock_text(text):
     text = str(text or "").strip()
     if not text:
@@ -683,7 +697,8 @@ def _compact_unlock_text(text):
         ("回測不破且非追高時重新評估", "回測不破 + 非追高"),
         ("重新形成突破、回測或趨勢延續 setup", "重新形成突破/回測/趨勢延續買點型態"),
         ("setup", "買點型態"),
-        ("品質B以上", "品質 B 以上"),
+        ("品質B以上", "買點品質 B 以上"),
+        ("品質 B 以上", "買點品質 B 以上"),
         ("風險報酬>=1.5", "風險報酬 >= 1.5"),
         ("明日開盤後仍守突破區 / 不追價", "開盤後守突破區 + 不追價"),
         ("降溫後重新評估", "降溫後重新評估"),
@@ -693,6 +708,7 @@ def _compact_unlock_text(text):
     ]
     for old, new in replacements:
         text = text.replace(old, new)
+    text = text.replace("買點買點品質", "買點品質")
     text = text.replace(" + ", " + ")
     return text
 
@@ -812,8 +828,9 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
                 volume_label = "待確認"
             rebound_gaps.append(f"{volume_text}{volume_label}")
         quality = stock_result.get("entry_quality")
-        if quality and quality not in {"A+", "A", "B"}:
-            rebound_gaps.append(f"品質 {quality} 未達B")
+        quality_gap = _quality_wait_gap_text(quality, reason="急彈未回測", funnel_state=funnel_state)
+        if quality_gap:
+            rebound_gaps.append(quality_gap)
         rr_text = _gate_value_text(stock_result.get("rr"))
         if rr_text:
             rr_label = "達標" if stock_result.get("rr_context") == "actionable" and float(rr_text) >= 1.5 else "僅參考"
@@ -862,7 +879,7 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
     quality = stock_result.get("entry_quality")
     if funnel_state != "等接近" and not is_actionable and quality and quality not in {"A+", "A", "B"}:
         setup_parts = _entry_setup_summary(data, dist, stock_result, reason="進場品質不足", funnel_state=funnel_state)
-        setup_text = f"進場品質 {quality}｜需B以上"
+        setup_text = _quality_wait_gap_text(quality, reason="進場品質不足", funnel_state=funnel_state)
         if setup_parts:
             setup_text += "｜" + "｜".join(setup_parts[:4])
         gates.append(("進場品質不足", setup_text))

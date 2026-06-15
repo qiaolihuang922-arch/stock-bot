@@ -2940,8 +2940,8 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【旺宏 2337】⏳ 等回測｜急彈待回測", card)
         self.assertIn("買點：不買，等回測", card)
         self.assertIn("不能買：急彈後還沒回測確認", card)
-        self.assertIn("還差：急彈後先等回測；回測區 118~118.59不破；量能偏弱（10日量 0.44x / 20日量 0.62x）；品質 D→B 以上；潛在報酬：好（1.6倍），但尚未回測確認", card)
-        self.assertIn("可買條件：回測區 118~118.59不破 + 非漲停追價 + 量能有效 + 品質 B 以上 + 風險報酬 >= 1.5", card)
+        self.assertIn("還差：急彈後先等回測；回測區 118~118.59不破；量能偏弱（10日量 0.44x / 20日量 0.62x）；買點品質：回測 / 轉強後重評；潛在報酬：好（1.6倍），但尚未回測確認", card)
+        self.assertIn("可買條件：回測區 118~118.59不破 + 非漲停追價 + 量能有效 + 買點品質 B 以上 + 風險報酬 >= 1.5", card)
         self.assertIn("盤中觸發：回測不破且非漲停追價", card)
         self.assertIn("數據：潛在報酬：好（1.6倍），但尚未回測確認", card)
         self.assertIn("不適用（等回測）｜原因：等待前高/突破區回測承接", card)
@@ -2977,7 +2977,7 @@ class GeneratorReportTest(unittest.TestCase):
         card = generator.formatTelegramUnheldCard("旺宏", payload, report_phase="盤中")
 
         self.assertIn("站回突破區 118~118.59", card)
-        self.assertIn("可買條件：先站回突破區 118~118.59，再回測不破 + 非漲停追價 + 量能有效 + 品質 B 以上 + 風險報酬 >= 1.5", card)
+        self.assertIn("可買條件：先站回突破區 118~118.59，再回測不破 + 非漲停追價 + 量能有效 + 買點品質 B 以上 + 風險報酬 >= 1.5", card)
         self.assertNotIn("突破區 118~118.59（現價未站回）不破", card)
 
     def test_unheld_price_line_keeps_closing_parenthesis(self):

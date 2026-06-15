@@ -29,7 +29,8 @@
   - Do not delete without proving no runtime / test / replay consumer.
 - `strategy_calibration`
   - v21.1 persists V10/V20, 20D/60D evidence, and now has a prepared RR component schema.
-  - Future work should calibrate V20 cutoffs, retest success, heat/quality transitions, and RR target-basis choices from production outcomes.
+  - 2026-06-15 D-semantics patch clarified that `entry_quality` is an entry setup grade, not a general stock grade.
+  - Future work should calibrate V20 cutoffs, retest success, heat/quality transitions, entry-quality thresholds, and RR target-basis choices from production outcomes.
 - `signal_items_history`
   - Old `signal_items` rows were not reconstructed after RR fields were added.
   - This is acceptable unless a future task specifically needs historical report-run item analytics; new bot runs will write the fields.

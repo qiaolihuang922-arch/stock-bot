@@ -2,37 +2,37 @@
 
 ## Active
 
-- task_md_holds: `strategy_readability_audit_v21_1_20260615`
+- task_md_holds: `entry_quality_d_semantics_v21_1_20260615`
 - status: `implemented + QA passed`
 - current_version: `v21.1`
 - no live Telegram delivery in this cycle.
 
 ## Result Summary
 
-- Owner challenged whether the previous patch was only hard text replacement.
-- Report wording is now tied to strategy state instead of generic potential-reward wording.
-- Summary and unheld cards now render:
-  - `等風險報酬`
-  - `風險報酬不足`
-  - `潛在報酬：好（x倍），但型態/品質未過`
-  - `潛在報酬：好（x倍），但尚未回測確認`
-  - `潛在報酬：好（x倍），但反彈未轉強`
-- Other report noise was normalized:
-  - `setup` -> `買點型態`
-  - `V10 / V20` -> `10日量 / 20日量`
-  - readable spacing for quality and risk/reward thresholds.
-  - duplicate `新增有效進場：無` summary line removed when conclusion already says it.
-- Strategy thresholds, buy/sell decisions, DB schema, and production data were not changed.
+- Owner challenged why many cards show `D`, including limit-up or multi-day rising stocks.
+- Root cause:
+  - `market_grade` is per-stock technical state, not broad market state.
+  - `entry_quality` is current entry setup quality, not a general stock score.
+  - Report wording mixed these concepts, so limit-up / rebound could look like generic `D` weakness.
+- Fix:
+  - rebound/retest cards now say `買點品質：回測 / 轉強後重評`;
+  - true setup cards say `買點品質未過（目前 D，需 B 以上）`;
+  - unlocks say `買點品質 B 以上`;
+  - recognized limit/rebound price behaviors are not overwritten to `等型態` only because entry quality is below B;
+  - snapshot D reason now says `個股弱勢`, not `市場弱`.
+- Strategy thresholds, DB schema, production data, and live Telegram were not changed.
 
 ## Verification
 
-- Formatter/generator regression:
-  - `205 passed, 147 warnings, 44 subtests passed`.
+- Related regression:
+  - `257 passed, 149 warnings, 44 subtests passed`.
 - Official generator dry-run:
-  - printed the unheld message and summary with state-aware wording.
-  - scan confirmed no visible `setup`, `V10`, `V20`, `理論RR`, `理論風險報酬`, or unspaced `風險報酬>=`.
-  - afterhours summary no longer repeats the no-entry conclusion.
+  - generated full message list with the new D semantics.
   - no live Telegram delivery.
+- Snapshot probe:
+  - limit-up sample: `market_grade=A+`, `entry_quality=D`, non-actionable due to chase / heat / RR.
+  - multi-day rise sample: `market_grade=A+`, `entry_quality=C`, observation due to low RR.
+  - weak rebound sample remains D.
 
 ## Current Git State
 
@@ -42,4 +42,4 @@
 
 ## Next Action
 
-- Commit and push this strategy-aware readability patch, then observe next scheduled `run_mode=bot` report.
+- Commit and push `entry_quality_d_semantics_v21_1_20260615`, then observe next scheduled `run_mode=bot` report.

@@ -143,7 +143,7 @@ def _reason_labels(result):
             }
             labels.append(positive.get(item, item))
         elif item == "market":
-            labels.append("市場弱" if result.get("market_grade") == "D" else "市場未強")
+            labels.append("個股弱勢" if result.get("market_grade") == "D" else "市場未強")
         elif item == "trend":
             labels.append("趨勢未轉強")
         elif item == "volume":

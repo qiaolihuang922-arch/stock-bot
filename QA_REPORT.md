@@ -1,58 +1,58 @@
-# QA_REPORT: strategy_readability_audit_v21_1_20260615
+# QA_REPORT: entry_quality_d_semantics_v21_1_20260615
 
 ## Test Scope
 
-- User-visible strategy-aware wording in unheld cards.
-- Summary funnel display label for `等RR修復`.
+- User-visible handling of `entry_quality D`.
+- Unheld funnel state preservation for limit/rebound price behavior.
+- Snapshot reason wording for per-stock `market_grade == D`.
 - Official generator message-list replay.
-- Regression coverage for existing unheld readability paths.
 
 ## Risk Scan
 
-- Replacing `RR` too shallowly could leave old shorthand in summary or data lines.
-- Replacing it too broadly could change internal state compatibility.
-- Potential reward could be misread as buy evidence if it is not tied to the actual blocker.
-- Global shorthand replacement could accidentally mutate stock names or titles.
-- Other jargon (`setup`, `V10`, `V20`) could remain even after RR wording is fixed.
-- Summary could still repeat no-entry statements and make the brief feel noisy.
+- If only text is replaced, D can still mean too many things and confuse Owner.
+- If D is removed entirely, true setup-quality failure may become invisible.
+- If limit-up is upgraded incorrectly, the report may imply chasing a locked/overheated move.
+- If state-machine override remains, `LIMIT_REBOUND` / `WEAK_REBOUND` can be hidden as generic `等型態`.
+- If snapshot reason says `市場弱`, per-stock weakness can be misread as broad market weakness.
 
 ## Cross-Block Semantic Consistency
 
-- Summary still says `新增有效進場：無`.
-- Unheld cards still say `買點：不買...` or `不可買...`.
-- `等風險報酬` in the title matches `風險報酬修復` in the card body and summary funnel.
-- `潛在報酬：好（x倍），但型態/品質未過`, `但尚未回測確認`, and `但反彈未轉強` keep the value direction clear while staying tied to the strategy state.
+- Hot / limit-up cards still say not to chase.
+- Rebound/retest cards say quality will be re-evaluated after retest / strength confirmation.
+- True setup cards still require `買點品質 B 以上`.
+- Summary state names remain aligned with card titles.
+- No card turns a non-actionable high potential reward into a buy recommendation.
 
 ## User Misread Risk
 
-- Reduced: `RR` no longer appears as unexplained shorthand in the checked unheld report and summary.
-- Reduced: `等RR修復` is no longer exposed as a state label.
-- Checked: wording still does not imply current buy when the card is non-actionable.
+- Reduced: `品質 D→B` is no longer used for rebound/retest cards.
+- Reduced: per-stock D is no longer labeled `市場弱` in snapshot reasons.
+- Remaining by design: true setup-quality cards can still show current D, but with explicit `買點品質未過`.
 
 ## Failure Specimen Countercheck
 
-- Owner 06/15 v21.1 sample was replayed through official dry-run.
-- `聯電` now reads `等風險報酬` and `不能買：風險報酬還不夠`.
-- Weak setup cards now show `潛在報酬：好（x倍），但型態/品質未過`.
-- Rebound/retest cards now show `潛在報酬：好（x倍），但尚未回測確認`.
-- Weak rebound / eliminated cards now show `潛在報酬：好（x倍），但反彈未轉強`.
+- Owner 06/15 v21.1 report concern was replayed through official dry-run.
+- `旺宏`-style rebound card now reads `買點品質：回測 / 轉強後重評`.
+- Weak setup cards now read `買點品質未過（目前 D，需 B 以上）`.
+- Limit-up remains non-actionable because the issue is chase / heat / retest, not because the stock is generically bad.
 
 ## Evidence
 
-- `205 passed, 147 warnings, 44 subtests passed`.
-- Official dry-run printed the updated unheld message and summary.
-- Official dry-run scan confirmed no visible `setup`, `V10`, `V20`, `理論RR`, `理論風險報酬`, or unspaced `風險報酬>=`.
-- Official summary dry-run keeps `新增有效進場：無` in the conclusion and removes the adjacent duplicate line.
-- No live Telegram delivery.
+- `257 passed, 149 warnings, 44 subtests passed`.
+- Official dry-run generated full message list without live delivery.
+- Snapshot probe confirmed:
+  - limit-up can be `market_grade=A+` while `entry_quality=D`;
+  - multi-day rise can be `market_grade=A+` while entry remains observation because RR/setup is not actionable;
+  - actual weak rebound remains D.
 
 ## Not Tested
 
 - Live Telegram delivery.
-- Scheduled Render/GitHub runner artifact after push.
-- Production DB writes, because this task is display-only.
+- Scheduled Render/GitHub runner after push.
+- Production DB writes or schema changes.
 
 ## QA Conclusion
 
 通過
 
-Reason: formatter, official generator, and Owner-style dry-run evidence cover the visible terminology problem without strategy or DB changes.
+Reason: formatter, official generator, snapshot, condition, and state-machine tests cover the D-semantics issue without changing thresholds or live systems.
