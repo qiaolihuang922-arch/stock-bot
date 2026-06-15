@@ -23,6 +23,10 @@
   - redundant after-hours internal lines are suppressed when `量化差距` already carries the decision evidence;
   - `距突破：x%｜狀態` is a standalone line for holding and unheld cards whenever data exists;
   - `盤面` no longer embeds `遠離突破（x%）` / `接近突破（x%）`.
+- Strategy-granular report wording added:
+  - `等冷卻` shows heat/cooling blockers and hides internal `RR -（過熱）` / `風控不適用` data noise;
+  - `等型態`, `等回測`, and `等RR修復` use `補充：...但...未過/未確認/未達標` instead of presenting positive evidence as a buy reason;
+  - strong rebound holding watch uses rebound-continuation wording instead of weak-template downgrade wording.
 
 ## Verification
 
@@ -32,6 +36,7 @@
 - Evidence automation tests: `71 passed, 13 subtests passed`.
 - Official generator dry-run: `VERSION v21.1`, `messages 4`, `write_results None`, no live delivery.
 - Dry-run report confirmed standalone `距突破` lines in holding and unheld sections.
+- Dry-run report confirmed strategy-granular wording in cooling, setup, RR-repair, retest, and strong-rebound holding cards.
 
 ## Current Git State
 

@@ -25,6 +25,10 @@
   - removed redundant after-hours internal lines;
   - moved breakout distance to standalone `距突破：x%｜狀態` line for holding and unheld cards;
   - removed breakout distance from `盤面`.
+- Added strategy-granular wording:
+  - cooling cards explain heat/cooling first and hide internal non-actionable data noise;
+  - setup/retest/RR-repair cards keep positive evidence as `補充` with blocker-specific caveats;
+  - strong rebound holding watch gets a rebound-continuation next step.
 
 ## Contract Impact
 
@@ -32,6 +36,7 @@
 - Daily snapshot, report item, and guarded backfill payloads now carry typed v21.1 strategy fields.
 - Report display changed, but buy/sell strategy thresholds did not change.
 - `距突破` visibility no longer depends on strategy branch; it is a stock-card display field when data exists.
+- Non-actionable evidence wording now depends on funnel state instead of a global delete/keep rule.
 
 ## Verification
 

@@ -7484,6 +7484,7 @@ def holding_next_step_line(name, data):
     decision = ensure_holding_decision(name, data)
     action = position_summary_action(name, data)
     level = decision.get("level") if decision else ""
+    result = data.get("result") or {}
 
     if level == "STOP_100":
         return "清出後不急回補，等重新出現買點"
@@ -7535,6 +7536,12 @@ def holding_next_step_line(name, data):
         return "守警戒價，等量價修復"
 
     if action == "續抱觀察":
+        if (
+            result.get("price_behavior") in {"LIMIT_REBOUND", "WEAK_REBOUND"}
+            or result.get("volume_state") in {"EXPLOSIVE", "ATTACK"}
+            or result.get("volume_price_state") in {"EXPLOSIVE", "ATTACK"}
+        ):
+            return "觀察反彈是否延續；未站回關鍵區前不加碼"
         return "盤中先觀察，未修復再降級"
 
     if action == "風控觀察":

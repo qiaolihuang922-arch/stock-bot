@@ -16,6 +16,7 @@
 - Runner must not crash before/after migration because of schema mismatch.
 - Report cards must not hide decision evidence in one special branch while other states show generic blockers.
 - `距突破` must be a visible stock-card field and not depend on whether the current strategy branch is breakout, retest, RR repair, cooling, or rejection.
+- Readability optimization must be strategy-granular, not a global removal of lines.
 
 ## Counterchecks
 
@@ -26,6 +27,8 @@
   - `等型態` and `急彈待回測` expose comparable setup evidence;
   - `距突破：x%｜狀態` appears as a standalone line for holding and unheld cards;
   - `盤面` no longer embeds breakout-distance text.
+- Formatter regression confirms cooling cards suppress internal `RR -（過熱）` / `過熱不適用` data noise and show blocker-aware `補充`.
+- Dry-run confirms strong rebound holding cards use rebound-continuation next-step wording.
 - Official generator dry-run produced v21.1 messages without live delivery.
 
 ## Evidence

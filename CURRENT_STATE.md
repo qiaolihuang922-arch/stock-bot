@@ -28,6 +28,9 @@
   - unheld waiting/rejected cards expose compact setup evidence consistently;
   - `距突破：x%｜狀態` is shown as its own line on holding and unheld stock cards when available;
   - `盤面` no longer includes breakout distance text;
+  - non-actionable positive evidence is shown as state-aware `補充` with a blocker-specific caveat, not as a buy reason;
+  - `等冷卻` cards suppress internal `RR -（過熱）` / `風控不適用` data noise;
+  - strong rebound holdings use rebound-continuation next-step wording;
   - this is display-only and does not change buy/sell thresholds.
 
 ## Verification State
@@ -38,6 +41,7 @@
 - Evidence automation tests: `71 passed, 13 subtests passed`.
 - Official generator dry-run: `v21.1`, `messages 4`, `write_results None`, no live Telegram delivery.
 - Dry-run report confirmed standalone `距突破` in holding and unheld sections.
+- Dry-run report confirmed state-aware wording for `等冷卻`, `等型態`, `等RR修復`, `等回測`, and strong-rebound holding cards.
 
 ## Known Follow-ups
 

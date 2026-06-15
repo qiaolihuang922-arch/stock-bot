@@ -545,6 +545,22 @@ def _supporting_basis_text(data, primary_reason):
     return "；".join(dict.fromkeys(basis))
 
 
+def _strategy_granular_basis_line(funnel_state, primary_reason, basis):
+    if not basis:
+        return None
+    if funnel_state == "可準備" or primary_reason == "開盤確認未完成":
+        return f"依據：{basis}"
+    if primary_reason in {"熱度 Lv.3", "過熱觀察"} or funnel_state == "等冷卻":
+        return f"補充：{basis}，但熱度未降溫"
+    if primary_reason == "急彈未回測" or funnel_state == "等回測":
+        return f"補充：{basis}，但回測未確認"
+    if primary_reason == "RR不足" or funnel_state == "等RR修復":
+        return f"補充：{basis}，但RR未達標"
+    if primary_reason == "進場品質不足" or funnel_state == "等型態":
+        return f"補充：{basis}，但型態/品質未過"
+    return f"補充：{basis}"
+
+
 def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source_status, strategy_source_blocked, title_label=None):
     stock_result = data.get("result") or {}
     is_actionable = valid_entry or funnel_state == "趨勢延續"
@@ -563,7 +579,9 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
             lines.append(f"解鎖：{unlock}")
         basis = basis if basis is not None else _supporting_basis_text(data, reason)
         if basis:
-            lines.append(f"依據：{basis}")
+            basis_line = _strategy_granular_basis_line(funnel_state, reason, basis)
+            if basis_line:
+                lines.append(basis_line)
         return "\n".join(lines)
 
     gates = []
@@ -1324,7 +1342,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         and is_afterhours
         and not post_market_prepare
         and not preserve_strategy_source_card
-        and funnel_state in {"等接近", "等型態", "等回測", "等RR修復", "淘汰"}
+        and funnel_state in {"等冷卻", "等接近", "等型態", "等回測", "等RR修復", "淘汰"}
         and data_line
         and ("不適用" in data_line or "風控不適用" in data_line)
     ):
