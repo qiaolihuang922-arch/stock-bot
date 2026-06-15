@@ -26,6 +26,9 @@
 - Strategy-granular report wording added:
   - `等冷卻` shows heat/cooling blockers and hides internal `RR -（過熱）` / `風控不適用` data noise;
   - `等型態`, `等回測`, and `等RR修復` use `補充：...但...未過/未確認/未達標` instead of presenting positive evidence as a buy reason;
+  - overheat priority no longer blindly overwrites chase/retest states: limit-lock /急彈追價 remains `等回測`, pure overheat remains `等冷卻`;
+  - RR gap text no longer repeats the same unmet RR blocker inside the setup context;
+  - after-hours summary only lists unheld names when the groups are short enough to stay readable; otherwise it falls back to generic/count wording;
   - strong rebound holding watch uses rebound-continuation wording instead of weak-template downgrade wording.
 
 ## Verification
@@ -37,6 +40,7 @@
 - Official generator dry-run: `VERSION v21.1`, `messages 4`, `write_results None`, no live delivery.
 - Dry-run report confirmed standalone `距突破` lines in holding and unheld sections.
 - Dry-run report confirmed strategy-granular wording in cooling, setup, RR-repair, retest, and strong-rebound holding cards.
+- Dry-run report confirmed `已突破，但漲停/過熱不追` context, bounded unheld group summary, and no duplicate RR gap in the RR-repair card.
 
 ## Current Git State
 

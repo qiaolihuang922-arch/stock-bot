@@ -6039,12 +6039,19 @@ def unheld_funnel_assessment(name, data, market_mode=None, report_context=None):
     if state == "弱勢淘汰":
         return "淘汰", None
 
-    if (
+    overheat_blocked = (
         should_show_overheat_rr_blocker(result, holding=False)
         or result.get("heat_state") in ["HOT", "EXTREME"]
         or prepare_label == "過熱降溫"
-    ):
-        return state if state in ["等冷卻", "等回測"] else "等冷卻", None
+    )
+    if overheat_blocked:
+        if (
+            result.get("price_behavior") == "LIMIT_LOCK"
+            or "急彈待回測" in blockers
+            or (state == "等回測" and blockers and blockers[0] == "漲停不追")
+        ):
+            return "等回測", None
+        return "等冷卻", None
 
     if "急彈待回測" in blockers:
         return "等回測", None

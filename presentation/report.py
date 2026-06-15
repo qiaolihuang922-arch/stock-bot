@@ -443,6 +443,8 @@ def _rr_gap_summary(stock_result):
         rr_value = float(rr_text)
     except (TypeError, ValueError):
         return f"RR {rr_text}"
+    if rr_value < 1.5:
+        return None
     return f"RR {rr_text}{'達標' if rr_value >= 1.5 else '未達1.5'}"
 
 
@@ -974,10 +976,21 @@ def _breakout_distance_label(dist):
     return "遠離突破"
 
 
-def _breakout_distance_line(dist):
+def _breakout_distance_line(dist, data=None, funnel_state=None, title_label=None):
     label = _breakout_distance_label(dist)
     if not label:
         return None
+    stock_result = (data or {}).get("result") or {}
+    blocker_text = " ".join(str(item) for item in (stock_result.get("blockers") or []))
+    context_text = " ".join([
+        str(funnel_state or ""),
+        str(title_label or ""),
+        str(stock_result.get("heat_state") or ""),
+        str(stock_result.get("price_behavior") or ""),
+        blocker_text,
+    ])
+    if label == "已突破" and any(token in context_text for token in ["HOT", "EXTREME", "LIMIT", "過熱", "漲停", "不可追高", "等冷卻"]):
+        label = "已突破，但漲停/過熱不追"
     return f"距突破：{_gate_value_text(dist)}%｜{label}"
 
 
@@ -1056,7 +1069,7 @@ def formatTelegramPositionCard(name, data, *, deps, report_context=None):
         execution_line,
         f"風控：{deps['holding_risk_text'](decision)}",
         _score_gated_market_line(report_context, name, data, dist, deps),
-        _breakout_distance_line(dist),
+        _breakout_distance_line(dist, data=data),
         deps["today_buy_holding_context_line"](data) if _report_phase(report_context) == "盤後" else None,
         f"決策：{decision_line}",
         None if is_afterhours or hide_low_signal_detail else f"條件：{condition_line}",
@@ -1366,7 +1379,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         f"【{deps['stock_title'](name, data)}】{title_icon} {title_action}｜{title_label}",
         trade_state_line,
         market_line,
-        _breakout_distance_line(dist),
+        _breakout_distance_line(dist, data=data, funnel_state=funnel_state, title_label=title_label),
         buy_line,
         buy_gap_line,
     ]
@@ -1426,6 +1439,35 @@ def _brief_new_position_line(watch_items, report_context, deps, market_mode=None
     if prepare_count:
         return f"新倉：無有效進場；可準備 {prepare_count} 檔需明日開盤後確認，未確認前不可下單。"
     return "新倉：目前沒有可行動候選。"
+
+
+def _unheld_strategy_group_check(funnel):
+    if not funnel:
+        return None
+    labels = [
+        ("等冷卻", "等冷卻"),
+        ("等回測", "等回測"),
+        ("等RR修復", "等RR"),
+        ("等型態", "等型態"),
+        ("等接近", "等接近"),
+        ("等量能", "等量能"),
+        ("等市場", "等市場"),
+        ("等資料", "等資料"),
+        ("淘汰", "淘汰"),
+    ]
+    total = sum(len(funnel.get(key) or []) for key, _ in labels)
+    if total == 0 or total > 8:
+        return None
+    if any(len(funnel.get(key) or []) > 3 for key, _ in labels):
+        return None
+    parts = []
+    for key, label in labels:
+        names = funnel.get(key) or []
+        if names:
+            parts.append(f"{'、'.join(names)}{label}")
+    if not parts:
+        return None
+    return "未持倉：" + "；".join(parts)
 
 
 def _today_buy_holding_names(holding_items, deps):
@@ -1601,7 +1643,7 @@ def _afterhours_brief_lines(holding_items, watch_items, report_context, deps, ma
     elif prepare_count:
         checks.append("可準備候選需明日開盤後確認，未確認前不可下單")
     elif watch_items:
-        checks.append("未持倉標的重新等待有效進場")
+        checks.append(_unheld_strategy_group_check(funnel) or "未持倉標的重新等待有效進場")
     if not checks:
         checks.append("等下一交易日資料更新")
 

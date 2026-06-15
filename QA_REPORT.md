@@ -17,6 +17,8 @@
 - Report cards must not hide decision evidence in one special branch while other states show generic blockers.
 - `距突破` must be a visible stock-card field and not depend on whether the current strategy branch is breakout, retest, RR repair, cooling, or rejection.
 - Readability optimization must be strategy-granular, not a global removal of lines.
+- Overheat handling must not flatten distinct states: chase/retest risk and pure cooling risk need separate report states.
+- Summary name listing must not recreate the earlier long noisy report.
 
 ## Counterchecks
 
@@ -28,6 +30,9 @@
   - `距突破：x%｜狀態` appears as a standalone line for holding and unheld cards;
   - `盤面` no longer embeds breakout-distance text.
 - Formatter regression confirms cooling cards suppress internal `RR -（過熱）` / `過熱不適用` data noise and show blocker-aware `補充`.
+- Formatter/generator regression confirms sharp rebound and limit-lock states keep `等回測`, while pure overheat keeps `等冷卻`.
+- Regression confirms unmet RR is not duplicated in RR-repair setup context.
+- Dry-run confirms after-hours brief lists only bounded unheld groups and falls back when noisy.
 - Dry-run confirms strong rebound holding cards use rebound-continuation next-step wording.
 - Official generator dry-run produced v21.1 messages without live delivery.
 
