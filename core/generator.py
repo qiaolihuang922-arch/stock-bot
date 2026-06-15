@@ -1759,7 +1759,7 @@ def holding_blocker_text(decision):
         return "趨勢延續、RR足夠、品質達標"
 
     if level == "ADD_10":
-        return "小幅轉強、RR達標、信心達標"
+        return "小幅轉強、風險報酬達標、信心達標"
 
     if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]:
         return "浮盈達標、過熱急漲、分批鎖利"
@@ -4236,7 +4236,7 @@ def entry_wait_text(result):
     first = blockers[0]
 
     if first == "RR不足":
-        return "等RR達標"
+        return "等風險報酬達標"
 
     if first in ["過熱觀察"] or first.startswith("過熱"):
         return "等冷卻"
@@ -6271,7 +6271,7 @@ def unheld_execution_trigger(funnel_state, data):
         return "不追價，回測不破且降溫再評估"
 
     if funnel_state == "等RR修復":
-        return "不追價，等RR達標"
+        return "不追價，等風險報酬達標"
 
     if funnel_state == "等型態":
         return "不買，等型態形成"
@@ -6820,8 +6820,9 @@ def format_unheld_funnel(watch_items, market_mode=None, report_context=None):
     trend_count = len(funnel["趨勢延續"])
     next_day_count = unheld_next_day_count(funnel)
     # 僅追蹤分桶：只有一桶時直接標桶名（不重複數字），多桶時內聯各桶數，避免「拆分」「合計」重複行。
+    display_label = {"等RR修復": "等風險報酬"}
     track_buckets = [
-        (label, len(funnel[label]))
+        (display_label.get(label, label), len(funnel[label]))
         for label in ["等冷卻", "等市場", "等接近", "等型態", "等回測", "等RR修復", "等量能", "等資料"]
         if funnel[label]
     ]
@@ -7645,7 +7646,7 @@ def holding_detail_decision_lines(name, data):
         return f"{action_text}，{note or '趨勢延續'}", "RR足夠，品質達標"
 
     if level == "ADD_10":
-        return f"{action_text}，{note or '小幅轉強'}", "RR達標，信心達標"
+        return f"{action_text}，{note or '小幅轉強'}", "風險報酬達標，信心達標"
 
     if summary_action == "第二段停利後觀察":
         return (

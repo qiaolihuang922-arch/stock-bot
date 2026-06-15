@@ -1,28 +1,29 @@
-# CHANGELOG: unheld_readability_v21_1_20260615
+# CHANGELOG: rr_wording_readability_v21_1_20260615
 
 ## Changes
 
-- Updated `presentation/report.py` unheld blocker formatting:
-  - added decision-first reason mapping;
-  - compacted measurable gaps for RR, quality, breakout/retest zone, volume, heat, source, and sample blockers;
-  - replaced the main diagnostic labels with `不能買 / 還差 / 可買條件`;
-  - suppressed repetitive `補充` lines except true `依據` lines for prepare-style cards.
-- Kept the existing strategy state machine and thresholds unchanged.
-- Updated formatter and official generator tests to lock the new mobile-readable contract.
+- Updated `presentation/report.py` final Telegram wording so risk/reward shorthand is readable:
+  - `RR` becomes `風險報酬`.
+  - `理論RR` becomes `理論風險報酬`.
+  - `等RR修復` becomes `等風險報酬`.
+  - `RR不足` becomes `風險報酬不足`.
+- Updated `core/generator.py` helper and funnel display labels to avoid exposing `等RR修復` in summaries.
+- Updated formatter and official generator tests to lock the new visible wording.
 
 ## Contract Impact
 
-- Telegram unheld cards change visible wording only.
+- Telegram report wording changes only.
 - No payload shape change.
+- No strategy threshold or decision change.
 - No DB schema or persistence change.
 - No live Telegram delivery.
 - Version remains `v21.1`.
 
 ## Direct Consumer Sync
 
-- `core.generator.generate_report(dry_run=True)` uses the new wording through existing formatter helpers.
-- Non-actionable cards still show `買點：不買...` or `不可買...`.
-- `可買條件` is treated as future unlock criteria, not a current recommendation.
+- `core.generator.generate_report(dry_run=True)` now prints unheld cards and summaries with `風險報酬` wording.
+- Internal state-machine values are still compatible with existing code paths.
+- Theoretical values still display as non-actionable reference, e.g. `理論風險報酬 9.94僅參考`.
 
 ## Verification
 
@@ -33,9 +34,9 @@
   Result: `205 passed, 147 warnings, 44 subtests passed`.
 - Official generator dry-run:
   ```powershell
-  $env:PYTHONIOENCODING='utf-8'; .\.venv\Scripts\python.exe -c "from core.generator import generate_report; messages,_=generate_report(dry_run=True); print(messages[1])"
+  $env:PYTHONIOENCODING='utf-8'; .\.venv\Scripts\python.exe -c "from core.generator import generate_report; messages,_=generate_report(dry_run=True); print(messages[1]); print('\n--- SUMMARY ---\n'); print(messages[2])"
   ```
-  Result: unheld message uses `不能買 / 還差 / 可買條件`; no live Telegram delivery.
+  Result: unheld message shows `等風險報酬`, `風險報酬不足`, `理論風險報酬`; no live Telegram delivery.
 
 ## Covered Layers
 
@@ -46,5 +47,4 @@
 
 ## Residual Risk
 
-- Some cards still contain several required data points because the strategy state itself has multiple blockers; this patch groups them into readable clauses rather than removing evidence.
-- Further reduction should be a separate product decision on which evidence can be hidden, not a formatter-only cleanup.
+- The report still includes numeric risk/reward evidence because it is material to buy/no-buy decisions. Future work may add a legend or glossary, but this patch keeps the evidence inline and readable.

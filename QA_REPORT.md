@@ -1,45 +1,41 @@
-# QA_REPORT: unheld_readability_v21_1_20260615
+# QA_REPORT: rr_wording_readability_v21_1_20260615
 
 ## Test Scope
 
-- Unheld blocker wording and ordering.
-- Mobile misread risk for non-actionable cards.
+- User-visible risk/reward terminology in unheld cards.
+- Summary funnel display label for `等RR修復`.
 - Official generator message-list replay.
-- Regression coverage for RR不足, heat, retest, quality/setup, source-error, sample-error, and prepare states.
+- Regression coverage for existing unheld readability paths.
 
 ## Risk Scan
 
-- `可買條件` could be mistaken as a current buy signal if paired with buy-like wording.
-- Removing diagnostics could hide why a stock is blocked.
-- Helper-level formatting could pass while official report still contains old labels.
+- Replacing `RR` too shallowly could leave old shorthand in summary or data lines.
+- Replacing it too broadly could change internal state compatibility.
+- Theoretical risk/reward could be misread as buy evidence if `理論` / `僅參考` is removed.
 
 ## Cross-Block Semantic Consistency
 
 - Summary still says `新增有效進場：無`.
 - Unheld cards still say `買點：不買...` or `不可買...`.
-- `不能買` explains the current blocker.
-- `可買條件` explains future unlock criteria only.
-- Theoretical RR remains `理論RR ...僅參考`.
+- `等風險報酬` in the title matches `風險報酬修復` in the card body and summary funnel.
+- `理論風險報酬 ...僅參考` remains non-actionable when setup is not formed.
 
 ## User Misread Risk
 
-- Reduced: cards no longer lead with internal diagnostic labels.
-- Reduced: long pipes are converted into semicolon clauses.
-- Checked: non-actionable cards do not contain `可立即買` or `建議買入`.
+- Reduced: `RR` no longer appears as unexplained shorthand in the checked unheld report and summary.
+- Reduced: `等RR修復` is no longer exposed as a state label.
+- Checked: wording still does not imply current buy when the card is non-actionable.
 
 ## Failure Specimen Countercheck
 
-- Owner 06/15 v21.1 unheld sample was replayed through official dry-run.
-- `旺宏` now reads:
-  - cannot buy because sharp rebound has not retested;
-  - missing retest / breakout-zone reclaim / volume / quality;
-  - buyable only after reclaim + retest hold + non-chase + volume + quality + RR.
-- Weak setup names now show high RR as theoretical reference, not buy evidence.
+- Owner 06/15 v21.1 sample was replayed through official dry-run.
+- `聯電` now reads `等風險報酬` and `不能買：風險報酬還不夠`.
+- Weak setup cards now show `理論風險報酬 ...僅參考`.
 
 ## Evidence
 
 - `205 passed, 147 warnings, 44 subtests passed`.
-- Official dry-run printed the unheld message with the new three-line blocker structure.
+- Official dry-run printed the updated unheld message and summary.
 - No live Telegram delivery.
 
 ## Not Tested
@@ -52,4 +48,4 @@
 
 通過
 
-Reason: formatter, official generator, and Owner-style dry-run evidence all cover the visible readability problem without strategy or DB changes.
+Reason: formatter, official generator, and Owner-style dry-run evidence cover the visible terminology problem without strategy or DB changes.

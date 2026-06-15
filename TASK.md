@@ -1,69 +1,65 @@
-# TASK: unheld_readability_v21_1_20260615
+# TASK: rr_wording_readability_v21_1_20260615
 
 ## Status
-- task_id: `unheld_readability_v21_1_20260615`
-- task_type: `normal_patch`
+- task_id: `rr_wording_readability_v21_1_20260615`
+- task_type: `tiny_patch`
 - status: `implemented`
 - version: `v21.1`
-- QA level: `L2`
+- QA level: `L1`
 
 ## Owner Problem
-Owner reported the v21.1 unheld Telegram cards are technically richer but still hard to understand on mobile. The cards expose strategy diagnostics (`卡關主因`, `量化差距`, `解鎖`, `補充`) instead of answering the trading question plainly: why can I not buy now, what is missing, and exactly what would make it buyable.
+Owner reported that the report still exposes `RR`, `理論RR`, and `等RR修復`, which are not understandable enough on mobile. The report should say what the term means in the trading decision instead of showing internal shorthand.
 
 ## User Visible Result
-- Unheld blocker cards now use decision-first language:
-  - `不能買：...`
-  - `還差：...`
-  - `可買條件：...`
-- Long diagnostic chains are compacted:
-  - RR不足 becomes `RR 1.32→1.5（差0.18）`.
-  - Quality becomes `品質 D→B以上`.
-  - Volume becomes `量能偏弱（V10 ... / V20 ...）`.
-  - Retest/breakout context becomes `站回突破區 ...` or `回測區 ...不破`.
-- Theoretical RR remains visibly non-actionable: `理論RR ...僅參考`.
-- No buy/sell strategy thresholds, DB schema, or live Telegram delivery are changed.
+- User-visible Telegram report wording changes:
+  - `RR` -> `風險報酬`
+  - `理論RR` -> `理論風險報酬`
+  - `等RR修復` -> `等風險報酬`
+  - `RR不足` -> `風險報酬不足`
+- Example:
+  - before: `不能買：RR 還不夠`
+  - after: `不能買：風險報酬還不夠`
+- The meaning is unchanged: risk/reward is the expected reward divided by the risk from entry to stop. High theoretical values remain reference-only when setup has not formed.
 
 ## Non Goals
 - No live Telegram delivery.
+- No strategy threshold changes.
+- No buy/sell decision changes.
 - No DB schema / RLS / grant / policy / role / index / constraint changes.
 - No backfill or production DML.
-- No loosening of buy rules, RR thresholds, heat gates, volume gates, or state-machine decisions.
 - No version bump beyond existing `v21.1`.
 
 ## Impacted Modules And Direct Consumers
 - `presentation/report.py`
   - Direct consumer: official Telegram message list from `core.generator.generate_report`.
+- `core/generator.py`
+  - Direct consumer: summary funnel labels and helper text.
 - `tests/test_unheld_gap_format.py`
-  - Direct consumer: formatter-level regression for compact blocker text.
+  - Direct consumer: formatter-level wording regression.
 - `tests/test_generator_report.py`
-  - Direct consumer: official report / message-list regression for mobile readability and no-buy semantics.
+  - Direct consumer: official report / message-list wording regression.
 
 ## Output Contract
-- Non-actionable unheld cards must not display old diagnostic labels:
-  - avoid `卡關主因：`, `量化差距：`, `解鎖：`, and repeated `補充：` lines as the main explanation.
-- Required order for blocker evidence:
-  1. `不能買：<human reason>`
-  2. `還差：<compact measurable gap>`
-  3. `可買條件：<specific actionable condition>`
-- `可買條件` must describe future conditions, not imply a current buy recommendation.
-- Actionable cards must not gain `不能買` / `還差` noise.
+- User-visible report text must not require knowing the abbreviation `RR`.
+- Internal state names may remain unchanged where needed for code compatibility, but final Telegram strings must render as `風險報酬`.
+- Non-actionable high theoretical values must remain clearly marked as `理論風險報酬 ...僅參考`.
+- `可買條件` must remain future unlock criteria, not a current buy recommendation.
 
 ## Version Contract
 - Header remains `v21.1`.
-- This is a report readability patch within the v21.1 strategy-evidence contract.
+- This is a wording/readability patch within the existing v21.1 report contract.
 
 ## Acceptance Conditions
-- Official generator dry-run must show the Owner-style unheld cards with the new three-line structure.
-- Tests must cover RR不足, overheat, sharp rebound/retest, weak setup/quality, source-error, and post-market prepare paths.
-- Report must still avoid `可立即買` / `建議買入` wording for non-actionable cards.
+- Official generator dry-run shows `等風險報酬`, `風險報酬不足`, and `理論風險報酬`.
+- Official generator dry-run does not show user-facing `等RR修復` / `RR不足` in the unheld card or summary funnel.
+- Existing formatter/generator tests pass.
 - No live Telegram delivery.
 
 ## Fixture / Failure Specimen
-- Owner sample: 06/15 v21.1 unheld report where `旺宏`, `緯創`, `仁寶`, `技嘉`, `聯電`, `華邦電`, `南亞科`, and `群創` were understandable only by reading internal diagnostics.
+- Owner sample: 06/15 v21.1 report where `RR`, `理論RR`, and `等RR修復` made the report hard to understand.
 - Required replay route: official `generate_report(dry_run=True)` message list plus formatter tests.
 
 ## Forbidden And Blocking Conditions
-- Do not change strategy decisions to make cards look better.
-- Do not hide blockers that explain why a stock is not buyable.
-- Do not present theoretical RR as buy evidence.
-- Do not add DB fields or write production data for this readability-only task.
+- Do not hide the risk/reward evidence.
+- Do not change the calculation formula or threshold in this task.
+- Do not change DB schema or production data.

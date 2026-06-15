@@ -2,14 +2,14 @@
 
 ## Current Task
 
-- task_id: `unheld_readability_v21_1_20260615`
+- task_id: `rr_wording_readability_v21_1_20260615`
 - status: `implemented + QA passed`
 - version: `v21.1`
 - no live Telegram delivery.
 
 ## Stable Context
 
-- Owner reads Telegram on mobile; report wording must be decision-first and avoid internal pipeline noise.
+- Owner reads Telegram on mobile; report wording must be decision-first and avoid unexplained internal shorthand.
 - Production dispatch model: Render web service is called every five minutes, then GitHub workflow dispatch runs `run_mode=bot`.
 - Production source-of-truth is Supabase / runner data, not local cache, worktree state, or agent memory.
 - DB schema/RLS/grant/policy/role/index/constraint changes require Owner approval unless explicitly authorized.
@@ -17,24 +17,24 @@
 
 ## Current Implementation State
 
-- RR remains auditable from the previous v21.1 work:
+- v21.1 risk/reward calculation remains unchanged:
   - `(target-entry)/(entry-stop)`;
-  - non-actionable high RR remains theoretical/reference only;
-  - production `daily_signal_snapshot` backfill was already verified with no duplicate overlap.
-- This cycle changed only report readability:
-  - unheld cards now show `不能買 / 還差 / 可買條件`;
-  - old main diagnostic labels are removed from blocker explanations;
-  - long RR/quality/volume/retest evidence is compacted into readable clauses;
+  - non-actionable high values remain theoretical/reference only;
+  - production `daily_signal_snapshot` backfill was already verified with no duplicate overlap in the prior cycle.
+- This cycle changed only report terminology:
+  - user-visible `RR` is rendered as `風險報酬`;
+  - `理論RR` is rendered as `理論風險報酬`;
+  - `等RR修復` is rendered as `等風險報酬`;
   - strategy decisions and thresholds are unchanged.
 
 ## Verification State
 
 - `205 passed, 147 warnings, 44 subtests passed`.
-- Official generator dry-run printed the updated unheld message.
+- Official generator dry-run printed the updated unheld message and summary.
 - No live Telegram delivery.
 - No DB write, backfill, schema change, RLS, grant, policy, role, index, or constraint change in this task.
 
 ## Known Follow-ups
 
 - Observe next scheduled `run_mode=bot` report after push.
-- Optional future product task: decide whether some secondary evidence can be hidden behind a shorter mode; current patch preserves all material blockers.
+- Optional future product task: add a short glossary/legend if Owner wants more explanation than inline wording.

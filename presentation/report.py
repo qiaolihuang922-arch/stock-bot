@@ -187,6 +187,7 @@ def formatTelegramSummary(
     if strategy_evidence_text:
         lines.extend(["", strategy_evidence_text])
 
+    lines = [_readable_rr_terms(line) for line in lines]
     return "\n".join(lines)
 
 
@@ -385,7 +386,7 @@ def _unheld_score_text_for_state(score_text, rr_text, valid_entry, funnel_state,
         return "不適用（盤後待確認）｜原因：盤後待確認，需開盤後重新確認"
     reason = _hidden_score_reason(rr_text, funnel_state, state)
     if reason == "RR不足":
-        return "不適用（RR不足）｜原因：RR不足，等待RR修復"
+        return "不適用（風險報酬不足）｜原因：風險報酬不足，等待修復"
     if reason == "等回測":
         return "不適用（等回測）｜原因：等待前高/突破區回測承接"
     evidence_text = _evidence_unavailable_text(stock_result or {}, data or {})
@@ -442,12 +443,12 @@ def _rr_gap_summary(stock_result):
     try:
         rr_value = float(rr_text)
     except (TypeError, ValueError):
-        return f"RR {rr_text}"
+        return f"風險報酬 {rr_text}"
     if rr_value < 1.5:
         return None
     if (stock_result or {}).get("rr_context") == "actionable":
-        return f"RR {rr_text}達標"
-    return f"理論RR {rr_text}（setup未成立）"
+        return f"風險報酬 {rr_text}達標"
+    return f"理論風險報酬 {rr_text}（setup未成立）"
 
 
 def _entry_setup_summary(data, dist, stock_result):
@@ -536,9 +537,9 @@ def _supporting_basis_text(data, primary_reason):
     except (TypeError, ValueError):
         rr = None
     if rr is not None and rr >= 1.5 and stock_result.get("rr_context") == "actionable" and "RR" not in primary:
-        basis.append("RR 達標")
+        basis.append("風險報酬達標")
     elif rr is not None and rr >= 1.5 and "RR" not in primary:
-        basis.append("理論RR僅參考")
+        basis.append("理論風險報酬僅參考")
     try:
         volume = float((data or {}).get("volume_ratio"))
     except (TypeError, ValueError):
@@ -569,7 +570,7 @@ def _strategy_granular_basis_line(funnel_state, primary_reason, basis):
 
 def _decision_first_reason_text(reason):
     mapping = {
-        "RR不足": "RR 還不夠",
+        "RR不足": "風險報酬還不夠",
         "距觸發太遠": "還沒到買點區",
         "未站回突破區": "尚未站回突破區",
         "熱度 Lv.3": "漲停/過熱，不追價",
@@ -597,7 +598,7 @@ def _compact_gap_text(text):
         tail = text.split("｜差", 1)
         gap_value = tail[1].split("｜", 1)[0].strip() if len(tail) > 1 else None
         rest = tail[1].split("｜", 1)[1] if len(tail) > 1 and "｜" in tail[1] else ""
-        base = f"RR {rr_value}→1.5"
+        base = f"風險報酬 {rr_value}→1.5"
         if gap_value:
             base += f"（差{gap_value}）"
         text = base + (f"｜{rest}" if rest else "")
@@ -622,7 +623,8 @@ def _compact_gap_text(text):
     for old, new in replacements:
         text = text.replace(old, new)
     text = text.replace("（現價未站回）", "")
-    text = text.replace("理論RR ", "理論RR ")
+    text = text.replace("理論RR ", "理論風險報酬 ")
+    text = text.replace("RR ", "風險報酬 ")
     parts = []
     for part in text.split("｜"):
         part = part.strip()
@@ -636,8 +638,8 @@ def _compact_gap_text(text):
             label = "量能偏弱" if "偏弱" in part else "量能達標"
             raw = part.replace("偏弱", "").replace("達標", "")
             part = f"{label}（{raw}）"
-        elif part.startswith("RR ") and "目標1.5" in part:
-            part = part.replace("RR ", "RR ").replace("｜", " ")
+        elif part.startswith("風險報酬 ") and "目標1.5" in part:
+            part = part.replace("｜", " ")
         parts.append(part)
     return "；".join(dict.fromkeys(parts))
 
@@ -648,7 +650,7 @@ def _compact_unlock_text(text):
         return text
     replacements = [
         ("解除主 blocker 後重新評估", "主條件解除後重新評估"),
-        ("風險報酬比修復到 >=1.5", "RR >= 1.5"),
+        ("風險報酬比修復到 >=1.5", "風險報酬 >= 1.5"),
         ("接近觸發區，或另出現趨勢延續/回測承接setup後再評估", "接近觸發區，或出現趨勢延續/回測承接 setup"),
         ("回測不破且非追高時重新評估", "回測不破 + 非追高"),
         ("重新形成突破、回測或趨勢延續 setup", "重新形成突破/回測/趨勢延續 setup"),
@@ -675,7 +677,32 @@ def _readable_evidence_lines(reason, gap, unlock=None, basis=None, funnel_state=
         basis_line = _strategy_granular_basis_line(funnel_state, reason, basis)
         if basis_line and basis_line.startswith("依據："):
             lines.append(basis_line)
+    lines = [_readable_rr_terms(line) for line in lines]
     return "\n".join(lines)
+
+
+def _readable_rr_terms(text):
+    if text is None:
+        return None
+    text = str(text)
+    replacements = [
+        ("等RR修復", "等風險報酬"),
+        ("等RR達標", "等風險報酬達標"),
+        ("等待RR修復", "等待風險報酬修復"),
+        ("RR修復", "風險報酬修復"),
+        ("RR不足", "風險報酬不足"),
+        ("RR不可用", "風險報酬不可用"),
+        ("RR達標", "風險報酬達標"),
+        ("理論RR", "理論風險報酬"),
+        ("RR：", "風險報酬："),
+        ("RR >=", "風險報酬 >="),
+        ("RR>=", "風險報酬>="),
+        ("RR ", "風險報酬 "),
+        ("等RR", "等風險報酬"),
+    ]
+    for old, new in replacements:
+        text = text.replace(old, new)
+    return text
 
 
 def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source_status, strategy_source_blocked, title_label=None):
@@ -746,11 +773,11 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
         rr_text = _gate_value_text(stock_result.get("rr"))
         if rr_text:
             rr_label = "達標" if stock_result.get("rr_context") == "actionable" and float(rr_text) >= 1.5 else "僅參考"
-            rebound_gaps.append(f"{'RR' if rr_label == '達標' else '理論RR'} {rr_text}{rr_label}")
+            rebound_gaps.append(f"{'風險報酬' if rr_label == '達標' else '理論風險報酬'} {rr_text}{rr_label}")
         return evidence_lines(
             "急彈未回測",
             "｜".join(rebound_gaps),
-            f"{unlock_text} + 非漲停追價 + 量能有效 + 品質B以上 + RR>=1.5",
+            f"{unlock_text} + 非漲停追價 + 量能有效 + 品質B以上 + 風險報酬>=1.5",
             basis="",
         )
     if behavior in {"LIMIT_LOCK", "LIMIT_REBOUND"} or "漲停" in blocker_text or "不可追高" in blocker_text:
@@ -804,7 +831,7 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
     elif not gates and funnel_state == "等回測":
         gates.append(("回測未確認", "需回測不破後重新評估"))
     elif not gates and funnel_state == "等RR修復":
-        gates.append(("RR不足", "RR 不可用｜需>=1.5"))
+        gates.append(("RR不足", "風險報酬不可用｜需>=1.5"))
     elif not gates and funnel_state == "等量能":
         gates.append(("量能不足", "需量能回升後重新評估"))
     elif not gates and funnel_state == "隔日確認":
@@ -829,11 +856,11 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
         "距觸發太遠": "接近觸發區，或另出現趨勢延續/回測承接setup後再評估",
         "市場背景": "市場轉強後再評估",
         "漲跌停鎖定": "解除鎖定後重新評估",
-        "反彈力道不足": "放量轉強 + 品質B以上 + RR>=1.5",
+        "反彈力道不足": "放量轉強 + 品質B以上 + 風險報酬>=1.5",
         "急彈未回測": "回測不破且非追高時重新評估",
         "市場弱": "市場轉強後重新評估",
         "量能不足": "量能回升後重新評估",
-        "進場品質不足": "重新形成 setup + 品質B以上 + 量能有效 + RR>=1.5",
+        "進場品質不足": "重新形成 setup + 品質B以上 + 量能有效 + 風險報酬>=1.5",
         "過熱觀察": "降溫到 Lv.1/觀察以下 + 回測不破",
         "熱度 Lv.3": "降溫到 Lv.1/觀察以下 + 回測不破 + 非漲停追價",
         "樣本不足": "補齊有效策略樣本後重新評估",
@@ -882,7 +909,7 @@ def _decision_reason_text(report_context, name):
             "既有買點與倉位規則通過": "買點成立，倉位規則通過",
             "trend_continuation 同源證據達標，仍限小倉契約": "趨勢延續同源證據達標，仍限小倉",
             "來源可追溯，現狀維持 可準備": "維持可準備，不升格可買",
-            "來源可追溯，現狀維持 等RR修復": "維持等 RR 修復",
+            "來源可追溯，現狀維持 等RR修復": "維持等風險報酬修復",
             "來源可追溯，現狀維持 等冷卻": "維持等冷卻",
             "來源可追溯，現狀維持 淘汰": "維持不可行動",
             "既有持倉依持倉 / ledger / 價格來源判斷，不列新倉 eligibility": "",
@@ -1139,16 +1166,16 @@ def _unheld_rr_text(stock_result, funnel_state, valid_entry, deps, state=None, t
 
 def _rr_data_prefix(stock_result, rr_text):
     if not rr_text or str(rr_text).startswith("-"):
-        return "RR"
+        return "風險報酬"
     try:
         rr_value = float(rr_text)
     except (TypeError, ValueError):
         rr_value = None
     if rr_value is not None and rr_value < 1.5:
-        return "RR"
+        return "風險報酬"
     if (stock_result or {}).get("rr_context") in {"blocked", "setup_pending", "theoretical"}:
-        return "理論RR"
-    return "RR"
+        return "理論風險報酬"
+    return "風險報酬"
 
 
 def formatTelegramPositionCard(name, data, *, deps, report_context=None):
@@ -1180,7 +1207,7 @@ def formatTelegramPositionCard(name, data, *, deps, report_context=None):
     data_line = (
         f"數據：不適用（既有持倉）｜V {data.get('volume_ratio', '-')}x"
         if decision and not is_add_context
-        else f"數據：RR {rr_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
+        else f"數據：風險報酬 {rr_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
     )
 
     is_afterhours = _report_phase(report_context) in {"盤後", "收盤"}
@@ -1225,6 +1252,7 @@ def formatTelegramPositionCard(name, data, *, deps, report_context=None):
     if history_line:
         lines.insert(-1, history_line)
 
+    lines = [_readable_rr_terms(line) for line in lines]
     return "\n".join(lines)
 
 
@@ -1284,6 +1312,8 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         title_label = "開盤後確認"
     elif funnel_state == "可準備" and prepare_label:
         title_label = prepare_label
+    if title_label == "RR不足":
+        title_label = "風險報酬不足"
 
     if valid_entry:
         title_icon = "🟢"
@@ -1311,7 +1341,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         title_action = state
     elif state in ["等RR修復", "等量能", "隔日確認"]:
         title_icon = "👀"
-        title_action = state
+        title_action = "等風險報酬" if state == "等RR修復" else state
     elif funnel_state == "淘汰" and data.get("evidence_adjustment_reason"):
         title_icon = "⛔"
         title_action = "不買"
@@ -1336,7 +1366,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     raw_size_text = deps["entry_size_text"](stock_result)
     score_text = _confidence_data_text(report_context, name, data, deps)
     rr_prefix = _rr_data_prefix(stock_result, rr_text)
-    rr_data_text = f"RR：{rr_text}" if rr_text == "-（不可行動）" else f"{rr_prefix} {rr_text}"
+    rr_data_text = f"風險報酬：{rr_text}" if rr_text == "-（不可行動）" else f"{rr_prefix} {rr_text}"
     display_score_text = _unheld_score_text_for_state(
         score_text,
         rr_text,
@@ -1363,7 +1393,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
             else "資料來源異常"
         )
         buy_line = f"買點：不可買，{source_reason}"
-        data_line = "數據：RR 不可用｜S 不可用｜V 不可用"
+        data_line = "數據：風險報酬不可用｜S 不可用｜V 不可用"
         price_line = f"價格：不可用（{source_reason}）"
     elif valid_entry and funnel_state == "趨勢延續":
         buy_line = "買點：趨勢延續買入｜小倉 <=15%｜回測 55% 勝 / +2.26%"
@@ -1539,6 +1569,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     if history_line:
         lines.insert(-1, history_line)
 
+    lines = [_readable_rr_terms(line) for line in lines]
     return "\n".join(lines)
 
 
@@ -1573,7 +1604,7 @@ def _unheld_strategy_group_check(funnel):
     labels = [
         ("等冷卻", "等冷卻"),
         ("等回測", "等回測"),
-        ("等RR修復", "等RR"),
+        ("等RR修復", "等風險報酬"),
         ("等型態", "等型態"),
         ("等接近", "等接近"),
         ("等量能", "等量能"),
@@ -1821,6 +1852,7 @@ def _afterhours_brief_lines(holding_items, watch_items, report_context, deps, ma
     lines.extend(deps["format_backtest_groups"](watch_items, report_context=report_context))
     if daily_write_warning:
         lines.append(f"資料寫入：{daily_write_warning}，明日前確認補寫狀態。")
+    lines = [_readable_rr_terms(line) for line in lines]
     return lines
 
 
@@ -1991,7 +2023,7 @@ def _evidence_human_status_lines(report_context, deps):
     if candidate_status in {"missing-source", "source-error", "insufficient-data", "unresolved-conflict"}:
         lines.append("未持倉候選：來源不足或有疑義的標的不輸出有效進場。")
 
-    lines.append("持倉 RR：既有持倉若不是加碼情境，只顯示新倉 RR 不適用。持倉主行動以風控為準，避免把持倉誤讀成新買點。")
+    lines.append("持倉風險報酬：既有持倉若不是加碼情境，只顯示新倉風險報酬不適用。持倉主行動以風控為準，避免把持倉誤讀成新買點。")
     return lines
 
 
