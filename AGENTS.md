@@ -209,6 +209,7 @@ Architect 發現以下情況一律退回：
 - 使用者可見版本與實際 header / 常量不一致。
 - QA 只重跑 Tech 測試，沒有新增質疑或反證。
 - 缺資料、缺環境、缺權限或 source-error 時仍宣告通過。
+- 活躍 handoff 文件在 UTF-8 讀取時殘留 mojibake、過期任務狀態、或不可重跑的壞命令。
 
 `TASK.md` 更新後，Tech 必須重讀；`CHANGELOG.md` 更新後，QA 必須重讀。Architect 只吸收一致的交付摘要。
 
@@ -223,4 +224,6 @@ Architect 發現以下情況一律退回：
 - 若 Owner 指出「已修一天仍同樣失敗」，Architect 復盤優先檢查驗收路由是否降層：是否用 synthetic fixture 取代 Owner 標本、是否只驗 helper 未驗 official report、是否未檢 production source artifact。若是，先補任務卡 / agent prompt / runner artifact 流程，再開下一輪產品修復。
 - 若 QA 因 sandbox / network / permission 無法直接讀 production，但 Architect 本地能 read-only 取證，必須改走標準 safe read-only artifact 流程；artifact 需標明 source、版本、無 credential、無 write、無 live delivery，並由 QA 獨立驗證 artifact schema/content。
 - 不把每次事故直接塞進 `AGENTS.md`；優先合併既有規則，具體事故留在 `CURRENT_STATE.md` 或 `CLEANUP_PLAN.md`。
+- 復盤要收斂成可重用抽象：先問「下次如何自然避免同類錯誤」，再決定補 runner gate、驗收腳本、handoff hygiene 或文件壓縮；不得把單一股票、單一日期、單一報文文字直接寫成永久規則。
+- 收口前必須確認 `DISPATCH.md`、`CURRENT_STATE.md`、`TASK.md`、`CHANGELOG.md`、`QA_REPORT.md` 以 UTF-8 讀取時沒有 mojibake，且命令可直接複製執行。
 - `DISPATCH.md` 記當前結果與下一步；`CURRENT_STATE.md` 留高信號狀態；`CLEANUP_PLAN.md` 留待補與已完成壓縮摘要。
