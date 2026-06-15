@@ -60,7 +60,6 @@ TWSE backfill dry-run:
 
 ## Git Completion
 
-- latest commit: `1e9c173d2ff8d92899390398cede8973d34f11f1`
 - branch: `main`
 - upstream: `origin/main`
 - local HEAD equals upstream HEAD: `yes`
