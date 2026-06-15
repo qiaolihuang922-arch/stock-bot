@@ -40,6 +40,7 @@
 - v21.1 strategy-feature backfill has been executed for the 12 tracked stocks.
 - market/theme evidence gaps for `2026-06-11`, `2026-06-12`, and `2026-06-15` have been filled.
 - `daily_signal_snapshot` old-version overlap cleanup has been executed through approved repo script.
+- Residual old-version rows were traced to TWSE historical source gaps for `2303` 2026/04 and `2301` 2026/05; both months existed in `daily_price`.
 
 ## Backfill Decision
 
@@ -56,9 +57,13 @@
   - No live Telegram delivery.
 - Cleanup result:
   - Added `scripts/prune_daily_signal_snapshot_versions.py`.
+  - Added `scripts/backfill_snapshots_from_daily_price.py`.
   - Deleted `1670` old-version rows only where the same `stock_id` / `trade_date` had `v21.1`.
-  - Preserved `118` old-version rows without a `v21.1` replacement.
-  - Post-cleanup total rows: `5230`; v21.1 rows: `5112`; overlap old-with-v21.1: `0`.
+  - Rebuilt missing v21.1 snapshots from existing `daily_price`:
+    - `2303` 2026/04: 20 rows.
+    - `2301` 2026/05: 20 rows.
+  - Deleted the remaining `118` old-version rows after v21.1 replacements existed.
+  - Post-cleanup total rows: `5152`; v21.1 rows: `5152`; old versions: `0`; overlap old-with-v21.1: `0`.
 
 ## Verification State
 

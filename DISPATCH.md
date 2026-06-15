@@ -47,9 +47,17 @@
   - market/theme evidence gaps for `2026-06-11`, `2026-06-12`, `2026-06-15` were filled by approved script.
 - Cleanup completed:
   - Added approved cleanup script `scripts/prune_daily_signal_snapshot_versions.py`.
+  - Added approved recovery script `scripts/backfill_snapshots_from_daily_price.py`.
   - Removed 1670 old `daily_signal_snapshot` rows whose same `stock_id` / `trade_date` already had `v21.1`.
-  - Preserved 118 old-version rows that do not have a `v21.1` replacement.
-  - Post-cleanup overlap with `v21.1`: 0 rows.
+  - Investigated the remaining 118 old-version rows:
+    - `2303` 2026/04 had `daily_price` rows but no v21.1 snapshot.
+    - `2301` 2026/05 had `daily_price` rows but no v21.1 snapshot.
+    - Root cause: TWSE historical backfill source missed those stock/month segments; existing DB `daily_price` had the truth.
+  - Rebuilt missing v21.1 snapshots from existing `daily_price` with full 12-stock context:
+    - `2303` 2026/04: 20 rows.
+    - `2301` 2026/05: 20 rows.
+  - Removed the remaining 118 old-version rows after v21.1 replacements existed.
+  - Post-cleanup `daily_signal_snapshot` versions: only `v21.1`.
 
 ## Verification
 
@@ -91,10 +99,11 @@ Production v21.1 strategy snapshot read-back:
 - Non-null counts for each v21.1 feature column: `5112`.
 
 Duplicate cleanup read-back:
-- `daily_signal_snapshot` total rows after cleanup: `5230`.
-- `v21.1` rows preserved: `5112`.
+- `daily_signal_snapshot` total rows after cleanup: `5152`.
+- `v21.1` rows preserved: `5152`.
 - old rows overlapping `v21.1` stock/date keys: `0`.
 - exact duplicate stock/date/version rows: `0`.
+- preserved old-version rows without v21.1 replacement: `0`.
 
 Cleanup script tests:
 - `tests/test_prune_daily_signal_snapshot_versions.py`: `2 passed`.
