@@ -79,7 +79,23 @@ STRATEGY_FEATURE_FIELDS = [
     "retest_zone_low",
     "retest_zone_high",
     "retest_zone_label",
+    "rr_context",
+    "rr_entry_price",
+    "rr_stop_price",
+    "rr_target_price",
+    "rr_reward_amount",
+    "rr_risk_amount",
+    "rr_risk_pct",
+    "rr_target_basis",
+    "rr_formula",
 ]
+
+STRATEGY_FEATURE_TEXT_FIELDS = {
+    "retest_zone_label",
+    "rr_context",
+    "rr_target_basis",
+    "rr_formula",
+}
 
 
 def strategy_feature_payload(source):
@@ -87,7 +103,7 @@ def strategy_feature_payload(source):
     source = source or {}
     for field in STRATEGY_FEATURE_FIELDS:
         value = source.get(field)
-        if field == "retest_zone_label":
+        if field in STRATEGY_FEATURE_TEXT_FIELDS:
             payload[field] = value
         else:
             payload[field] = _safe_round(value)

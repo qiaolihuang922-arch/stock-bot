@@ -854,9 +854,21 @@ def build_result(**kwargs):
         "retest_zone_low",
         "retest_zone_high",
         "retest_zone_label",
+        "rr_context",
+        "rr_entry_price",
+        "rr_stop_price",
+        "rr_target_price",
+        "rr_reward_amount",
+        "rr_risk_amount",
+        "rr_risk_pct",
+        "rr_target_basis",
+        "rr_formula",
     ]:
         if key in kwargs:
             result[key] = kwargs.get(key)
+
+    if result.get("decision") == "BUY" and result.get("rr", 0) >= MIN_RR_PREBREAK:
+        result["rr_context"] = "actionable"
 
     result["strength"] = strength_score(
         result
@@ -1713,6 +1725,95 @@ def calc_rr(
         reward / risk,
         2
     )
+
+
+def rr_components(
+    price,
+    stop,
+    resistance,
+    setup_type="breakout"
+):
+
+    if not price or not stop or not resistance:
+        return {
+            "rr_entry_price": price,
+            "rr_stop_price": stop,
+            "rr_target_price": None,
+            "rr_reward_amount": None,
+            "rr_risk_amount": None,
+            "rr_risk_pct": None,
+            "rr_target_basis": None,
+            "rr_formula": "(target-entry)/(entry-stop)",
+        }
+
+    min_risk = price * MIN_STOP_BUFFER
+    raw_risk = price - stop
+    risk = max(raw_risk, min_risk)
+
+    if setup_type == "pre_breakout":
+        target = resistance * 1.05
+        target_basis = "resistance_5pct_pre_breakout"
+    elif setup_type == "strong_follow":
+        target = resistance * 1.12
+        target_basis = "resistance_12pct_strong_follow"
+    else:
+        target = resistance * 1.08
+        target_basis = "resistance_8pct_breakout"
+
+    reward = target - price
+    if risk <= 0 or reward <= 0:
+        rr_value = 0
+    else:
+        rr_value = round(reward / risk, 2)
+
+    return {
+        "rr": rr_value,
+        "rr_entry_price": round(price, 4),
+        "rr_stop_price": round(stop, 4),
+        "rr_target_price": round(target, 4),
+        "rr_reward_amount": round(reward, 4),
+        "rr_risk_amount": round(risk, 4),
+        "rr_risk_pct": round(risk / price, 4) if price else None,
+        "rr_target_basis": target_basis,
+        "rr_formula": "(target-entry)/(entry-stop)",
+    }
+
+
+def rr_context_label(
+    decision,
+    decision_type,
+    phase,
+    behavior,
+    quality,
+    heat_state,
+    trade_state,
+    breakout_dist,
+    rr,
+):
+
+    if decision == "BUY" and rr >= MIN_RR_PREBREAK and quality in ["A+", "A", "B"]:
+        return "actionable"
+
+    if (
+        behavior in ["LIMIT_LOCK", "LIMIT_REBOUND", "WEAK_REBOUND"]
+        or heat_state in ["HOT", "EXTREME"]
+        or trade_state in ["AVOID", "EXTENDED"]
+    ):
+        return "blocked"
+
+    if quality not in ["A+", "A", "B"]:
+        return "theoretical"
+
+    if breakout_dist is not None and breakout_dist > 5:
+        return "theoretical"
+
+    if decision_type in ["wait_breakout_confirm", "wait_breakout_low_rr", "wait_pre_breakout", "wait_pre_breakout_low_rr"]:
+        return "setup_pending"
+
+    if phase in ["BREAKOUT_WATCH", "BREAKOUT_CONFIRM", "HEALTHY_PULLBACK", "SHAKEOUT"]:
+        return "setup_pending"
+
+    return "theoretical"
 
 
 # ================================
@@ -2859,12 +2960,13 @@ def strategy(
         2
     )
 
-    rr = calc_rr(
+    rr_plan = rr_components(
         price,
         stop_candidate,
         resistance,
         "breakout"
     )
+    rr = rr_plan.get("rr", 0)
 
     risk = calc_risk(
         price,
@@ -3000,6 +3102,27 @@ def strategy(
         confidence
     )
 
+    rr_plan["rr_context"] = rr_context_label(
+        "WAIT",
+        wait_decision_type(
+            breakout_state,
+            rr,
+            volume
+        ),
+        phase,
+        behavior,
+        quality,
+        heat_state,
+        trade_state,
+        breakout_dist,
+        rr,
+    )
+    rr_feature_tags = {
+        key: value
+        for key, value in rr_plan.items()
+        if key != "rr"
+    }
+
     strategy_tags = {
         "price_behavior": behavior,
         "structure_phase": phase,
@@ -3016,6 +3139,7 @@ def strategy(
         "breakout_price_20": levels.get("breakout_price_20"),
         "breakout_price_60": levels.get("breakout_price_60"),
         **retest_zone,
+        **rr_feature_tags,
     }
 
     trend_continuation_setup = detect_trend_continuation_setup(
@@ -3109,7 +3233,14 @@ def strategy(
             if stop_price is not None:
                 stop_price = round(stop_price * (1 - MIN_STOP_BUFFER), 2)
             trend_risk = calc_risk(price, stop_price)
-            trend_rr = calc_rr(price, stop_price, resistance, "breakout")
+            trend_rr_plan = rr_components(price, stop_price, resistance, "breakout")
+            trend_rr_plan["rr_context"] = "actionable"
+            trend_rr = trend_rr_plan.get("rr", 0)
+            trend_rr_feature_tags = {
+                key: value
+                for key, value in trend_rr_plan.items()
+                if key != "rr"
+            }
             return build_result(
                 decision="BUY",
                 decision_type="trend_continuation",
@@ -3140,7 +3271,10 @@ def strategy(
                 breakout_days=b_days,
                 breakout_hold_days=b_hold_days,
                 **trend_payload,
-                **strategy_tags
+                **{
+                    **strategy_tags,
+                    **trend_rr_feature_tags,
+                }
             )
 
         return build_result(

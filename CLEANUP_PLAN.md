@@ -9,14 +9,16 @@
 
 ## Completed Cleanup / Consolidation
 
-- `DISPATCH.md` now holds only active status, result summary, verification, git state, and next action.
-- `CURRENT_STATE.md` now holds stable project facts, current implementation state, verification state, and known follow-ups.
-- `CHANGELOG.md` and `QA_REPORT.md` keep implementation / QA evidence without duplicated runtime transcripts.
-- Report artifacts and DB cleanup details were reduced to reusable facts instead of per-command logs.
+- `DISPATCH.md` holds active status, result summary, verification, git state, and next action.
+- `CURRENT_STATE.md` holds stable project facts, implementation state, verification state, and known follow-ups.
+- `TASK.md`, `CHANGELOG.md`, and `QA_REPORT.md` describe the current RR context task without terminal transcripts.
 - No fixed Markdown file was deleted.
 
 ## Active Follow-ups
 
+- `db_schema_review: rr_context_columns`
+  - `db/sql/v21_2_rr_context_columns.sql` is a prepared schema artifact, not executed by agent.
+  - Owner review is required before applying because it adds columns.
 - `runner_gap: git_completion_gate_windows`
   - Bash gates fail on this Windows machine when WSL/Hyper-V is unavailable.
   - Add a PowerShell-equivalent completion gate or normalize gate execution.
@@ -26,8 +28,8 @@
   - `reports/backfill/*` and `reports/research/*` are tracked artifacts.
   - Do not delete without proving no runtime / test / replay consumer.
 - `strategy_calibration`
-  - v21.1 persists V10/V20 and 20D/60D evidence, but thresholds remain rule-based.
-  - Future work should calibrate V20 cutoffs, retest success, and heat/quality transitions from production outcomes.
+  - v21.1 persists V10/V20, 20D/60D evidence, and now has a prepared RR component schema.
+  - Future work should calibrate V20 cutoffs, retest success, heat/quality transitions, and RR target-basis choices from production outcomes.
 
 ## Boundaries
 

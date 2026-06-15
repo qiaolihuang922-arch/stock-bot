@@ -445,7 +445,9 @@ def _rr_gap_summary(stock_result):
         return f"RR {rr_text}"
     if rr_value < 1.5:
         return None
-    return f"RR {rr_text}{'達標' if rr_value >= 1.5 else '未達1.5'}"
+    if (stock_result or {}).get("rr_context") == "actionable":
+        return f"RR {rr_text}達標"
+    return f"理論RR {rr_text}（setup未成立）"
 
 
 def _entry_setup_summary(data, dist, stock_result):
@@ -533,8 +535,10 @@ def _supporting_basis_text(data, primary_reason):
         rr = float(stock_result.get("rr"))
     except (TypeError, ValueError):
         rr = None
-    if rr is not None and rr >= 1.5 and "RR" not in primary:
+    if rr is not None and rr >= 1.5 and stock_result.get("rr_context") == "actionable" and "RR" not in primary:
         basis.append("RR 達標")
+    elif rr is not None and rr >= 1.5 and "RR" not in primary:
+        basis.append("理論RR僅參考")
     try:
         volume = float((data or {}).get("volume_ratio"))
     except (TypeError, ValueError):
@@ -637,8 +641,8 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
             rebound_gaps.append(f"品質 {quality} 未達B")
         rr_text = _gate_value_text(stock_result.get("rr"))
         if rr_text:
-            rr_label = "達標" if float(rr_text) >= 1.5 else "未達1.5"
-            rebound_gaps.append(f"RR {rr_text}{rr_label}")
+            rr_label = "達標" if stock_result.get("rr_context") == "actionable" and float(rr_text) >= 1.5 else "僅參考"
+            rebound_gaps.append(f"{'RR' if rr_label == '達標' else '理論RR'} {rr_text}{rr_label}")
         return evidence_lines(
             "急彈未回測",
             "｜".join(rebound_gaps),
@@ -1026,6 +1030,20 @@ def _unheld_rr_text(stock_result, funnel_state, valid_entry, deps, state=None, t
     return deps["rr_display_text"](stock_result, holding=False)
 
 
+def _rr_data_prefix(stock_result, rr_text):
+    if not rr_text or str(rr_text).startswith("-"):
+        return "RR"
+    try:
+        rr_value = float(rr_text)
+    except (TypeError, ValueError):
+        rr_value = None
+    if rr_value is not None and rr_value < 1.5:
+        return "RR"
+    if (stock_result or {}).get("rr_context") in {"blocked", "setup_pending", "theoretical"}:
+        return "理論RR"
+    return "RR"
+
+
 def formatTelegramPositionCard(name, data, *, deps, report_context=None):
     holding = data["holding"]
     decision = deps["ensure_holding_decision"](name, data)
@@ -1210,7 +1228,8 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     detail_size_text = deps["unheld_entry_size_detail_text"](stock_result)
     raw_size_text = deps["entry_size_text"](stock_result)
     score_text = _confidence_data_text(report_context, name, data, deps)
-    rr_data_text = f"RR：{rr_text}" if rr_text == "-（不可行動）" else f"RR {rr_text}"
+    rr_prefix = _rr_data_prefix(stock_result, rr_text)
+    rr_data_text = f"RR：{rr_text}" if rr_text == "-（不可行動）" else f"{rr_prefix} {rr_text}"
     display_score_text = _unheld_score_text_for_state(
         score_text,
         rr_text,

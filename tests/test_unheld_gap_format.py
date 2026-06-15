@@ -29,7 +29,7 @@ def test_unheld_quality_gap_includes_setup_volume_and_rr_context():
     assert "進場品質 D｜需B以上" in line
     assert "突破區 194~194.97（現價未站回）" in line
     assert "V10 0.48x / V20 0.61x偏弱" in line
-    assert "RR 9.94達標" in line
+    assert "理論RR 9.94（setup未成立）" in line
 
 
 def test_unheld_rebound_gap_keeps_retest_unlock_contract():
@@ -61,5 +61,5 @@ def test_unheld_rebound_gap_keeps_retest_unlock_contract():
     assert "突破區 175.5~176.38（現價未站回）" in line
     assert "V10 0.52x / V20 0.26x偏弱" in line
     assert "品質 D 未達B" in line
-    assert "RR 2.21達標" in line
+    assert "理論RR 2.21僅參考" in line
     assert "先站回突破區 175.5~176.38，再回測不破" in line

@@ -1,57 +1,53 @@
-# QA_REPORT: strategy_feature_persistence_v21_1_20260615
+# QA_REPORT: rr_context_standardization_v21_1_20260615
 
 ## Test Scope
 
-- v21.1 strategy-feature snapshot payload and schema fallback.
-- Guarded historical backfill payload.
-- `signal_items` report-run persistence payload.
-- V20-first volume calibration.
-- Market/theme evidence automation path under normal `run_mode=bot`.
-- Telegram unheld-card readability and standalone breakout-distance display.
+- RR formula component generation in strategy output.
+- Snapshot and signal-item persistence payloads for typed RR fields.
+- Backfill payload compatibility.
+- Telegram formatter/generator wording for high RR but blocked setup.
 - Official generator dry-run with no live Telegram delivery.
 
 ## Risk Scan
 
-- Persisted strategy evidence must not exist only inside Telegram text or raw JSON.
-- Runner must not crash before/after migration because of schema mismatch.
-- Report cards must not hide decision evidence in one special branch while other states show generic blockers.
-- `距突破` must be a visible stock-card field and not depend on whether the current strategy branch is breakout, retest, RR repair, cooling, or rejection.
-- Readability optimization must be strategy-granular, not a global removal of lines.
-- Overheat handling must not flatten distinct states: chase/retest risk and pure cooling risk need separate report states.
-- Summary name listing must not recreate the earlier long noisy report.
+- A high RR number can mislead the user into thinking a stock is buyable.
+- RR不足 must remain visibly insufficient and not be hidden as theoretical.
+- Schema extension must not break runner before Owner applies migration.
+- Helper-level tests are not enough; final message list must be replayed.
 
-## Counterchecks
+## Cross-Block Semantic Consistency
 
-- Persistence tests confirm daily snapshot/backfill payloads include V20, resistance, breakout price/distance, retest zone, and compact `raw_result`.
-- Fallback tests confirm missing production columns do not crash write paths.
-- Volume calibration tests confirm V20 is used before legacy `volume_ratio`.
-- Report tests confirm:
-  - `等型態` and `急彈待回測` expose comparable setup evidence;
-  - `距突破：x%｜狀態` appears as a standalone line for holding and unheld cards;
-  - `盤面` no longer embeds breakout-distance text.
-- Formatter regression confirms cooling cards suppress internal `RR -（過熱）` / `過熱不適用` data noise and show blocker-aware `補充`.
-- Formatter/generator regression confirms sharp rebound and limit-lock states keep `等回測`, while pure overheat keeps `等冷卻`.
-- Regression confirms unmet RR is not duplicated in RR-repair setup context.
-- Dry-run confirms after-hours brief lists only bounded unheld groups and falls back when noisy.
-- Dry-run confirms strong rebound holding cards use rebound-continuation next-step wording.
-- Official generator dry-run produced v21.1 messages without live delivery.
+- Unheld card state, blocker, `量化差距`, `補充`, and summary now agree:
+  - `等型態` / quality D: high RR is theoretical.
+  - `等回測` / sharp rebound: high RR is only reference until retest confirms.
+  - `等RR修復`: low RR is shown as the blocker.
+- No card converts `理論RR` into a buy recommendation.
+
+## User Misread Risk
+
+- Reduced: report no longer says `RR 達標` for non-actionable high RR.
+- Remaining: target-basis choice is still a strategy assumption, so the new DB fields are needed for later calibration and audit.
+
+## Failure Specimen Countercheck
+
+- Owner-style dry-run report was replayed through official `generate_report(dry_run=True)`.
+- `旺宏 2337` is still not buyable, but now explains: waiting for retest, current high RR is theoretical/reference only.
+- `緯創 / 仁寶 / 技嘉` no longer display high RR as actionable evidence while quality/setup is D.
 
 ## Evidence
 
-- `19 passed` focused persistence/backfill/calibration tests.
-- `334 passed, 149 warnings, 57 subtests passed` targeted strategy/report/backfill suite.
-- `205 passed, 147 warnings, 44 subtests passed` report formatter/generator regression.
-- `71 passed, 13 subtests passed` evidence automation tests.
-- Dry-run report confirmed standalone `距突破` lines in stock cards.
+- `263 passed, 147 warnings, 44 subtests passed`.
+- Official dry-run generated 4 messages, no live delivery.
+- Dry-run confirmed `理論RR` wording on non-actionable high RR cards and normal `RR` wording on RR不足 card.
 
 ## Not Tested
 
 - Live Telegram delivery.
-- Production runner artifact after the latest push.
-- Broker/order execution.
+- Production DB migration execution.
+- Next scheduled GitHub/Render runner artifact after push.
 
 ## QA Conclusion
 
 conditional pass
 
-Reason: repo implementation, DB payloads, backfill path, report formatter, and dry-run route pass locally. Final production confidence still requires observing the next scheduled `run_mode=bot` after the after-close safe-write window; no live Telegram delivery was performed.
+Reason: repo code, tests, and official dry-run pass. Production DB schema still requires Owner-reviewed SQL execution, and live Telegram delivery was intentionally not performed.

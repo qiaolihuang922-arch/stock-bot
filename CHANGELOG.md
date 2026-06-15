@@ -1,70 +1,55 @@
-# CHANGELOG: strategy_feature_persistence_v21_1_20260615
+# CHANGELOG: rr_context_standardization_v21_1_20260615
 
 ## Changes
 
-- Added v21.1 strategy-feature persistence support:
-  - `db/sql/v21_1_strategy_feature_snapshot_columns.sql`
-  - `core/signal_snapshot.py`
-  - `services/daily_snapshot_store.py`
-  - `services/signal_store.py`
-  - `scripts/backfill_signals.py`
-  - `services/strategy_evidence.py`
-  - `services/volume_calibration.py`
-- Persisted feature set:
-  - V10/V20 volume;
-  - 20D/60D resistance;
-  - 20D/60D breakout prices and distances;
-  - retest zone fields;
-  - compact `raw_result`.
-- Added schema-missing fallbacks so pre-migration runner/backfill paths do not crash.
-- Added `--lookback-days` to guarded backfill; two-year backfill with warmup was used after Owner applied migration.
-- Wired market/theme freshness into normal `run_mode=bot`; `daily_evidence` remains manual recovery.
-- Cleaned duplicate/old `daily_signal_snapshot` versions through approved scripts; final production snapshot rows are `v21.1` only.
-- Improved Telegram report display:
-  - shared compact setup evidence for non-actionable unheld cards;
-  - removed redundant after-hours internal lines;
-  - moved breakout distance to standalone `距突破：x%｜狀態` line for holding and unheld cards;
-  - removed breakout distance from `盤面`.
-- Added strategy-granular wording:
-  - cooling cards explain heat/cooling first and hide internal non-actionable data noise;
-  - setup/retest/RR-repair cards keep positive evidence as `補充` with blocker-specific caveats;
-  - limit-lock and sharp-rebound chase contexts remain `等回測`; pure overheat remains `等冷卻`;
-  - unmet RR is not duplicated inside setup evidence once it is already the main blocker;
-  - after-hours unheld summary lists state-group names only when bounded and readable;
-  - strong rebound holding watch gets a rebound-continuation next step.
+- Added auditable RR components in `services/analysis.py`:
+  - formula: `(target-entry)/(entry-stop)`;
+  - entry, stop, target, reward, risk, risk percentage;
+  - target-basis label;
+  - RR usability context: `actionable`, `setup_pending`, `theoretical`, `blocked`.
+- Extended shared strategy feature persistence in `core/signal_snapshot.py` so daily snapshot, signal items, and backfill paths can carry RR components.
+- Added Owner-reviewed SQL artifact `db/sql/v21_2_rr_context_columns.sql`.
+  - It only adds typed RR columns to existing `daily_signal_snapshot` and `signal_items`.
+  - It does not write data and does not alter RLS, grants, policies, roles, indexes, or constraints.
+- Updated `presentation/report.py`:
+  - actionable RR remains `RR x達標`;
+  - non-actionable high RR becomes `理論RR x（setup未成立）` / `理論RR x僅參考`;
+  - RR不足 stays normal RR instead of being mislabeled theoretical.
+- Updated regression tests for the new contract and added persistence assertions for RR fields.
+
+## Research Alignment
+
+- Common RR calculation uses entry, stop-loss, and take-profit/target.
+- Breakout trading requires support/resistance, volume confirmation, predefined stops, and targets.
+- Therefore this patch separates formula correctness from setup usability: a mathematically high RR is not a buy signal until the setup is actionable.
 
 ## Contract Impact
 
-- DB schema artifact exists and has been applied by Owner; no RLS/grant/policy/role/index/constraint change was introduced by the artifact.
-- Daily snapshot, report item, and guarded backfill payloads now carry typed v21.1 strategy fields.
-- Report display changed, but buy/sell strategy thresholds did not change.
-- `距突破` visibility no longer depends on strategy branch; it is a stock-card display field when data exists.
-- Non-actionable evidence wording now depends on funnel state instead of a global delete/keep rule.
-- Overheat/cooling priority now checks the strategy state before collapsing a card into `等冷卻`; this is a report-state fix, not a threshold loosening.
-- Summary grouping is capped by total/group size to avoid long mobile noise.
+- Report wording changes for non-actionable high RR cards.
+- Strategy payload shape expands with RR component fields.
+- Existing schema fallback remains; runner does not crash if Owner has not applied the new SQL artifact.
+- Buy/sell thresholds are not loosened.
+- No live Telegram delivery and no production DB schema execution were performed.
 
 ## Verification
 
-- Focused persistence/backfill/calibration:
+- Strategy, persistence, backfill, formatter, and generator regression:
   ```powershell
-  .\.venv\Scripts\python.exe -m pytest tests/test_daily_snapshot_store.py tests/test_backfill_signals.py tests/test_volume_calibration.py tests/test_analysis_engine.py::AnalysisEngineTest::test_v21_1_snapshot_exports_multi_window_volume_and_retest_zone -q --tb=short
+  .\.venv\Scripts\python.exe -m pytest tests/test_analysis_engine.py tests/test_daily_snapshot_store.py tests/test_backfill_signals.py tests/test_unheld_gap_format.py tests/test_generator_report.py -q --tb=short
   ```
-  Result: `19 passed`.
-- Report readability / generator regression:
+  Result: `263 passed, 147 warnings, 44 subtests passed`.
+- Official generator dry-run:
   ```powershell
-  .\.venv\Scripts\python.exe -m pytest tests/test_unheld_gap_format.py tests/test_generator_report.py -q --tb=short
+  $env:PYTHONIOENCODING='utf-8'; .\.venv\Scripts\python.exe -c "from core.generator import generate_report, VERSION; messages, write_results = generate_report(dry_run=True); print('VERSION', VERSION); print('messages', len(messages)); print('write_results', write_results); print('\n--- MESSAGE ---\n'.join(messages))"
   ```
-  Result: `205 passed, 147 warnings, 44 subtests passed`.
-- Broader targeted strategy/report/backfill suite: `334 passed, 149 warnings, 57 subtests passed`.
-- Official generator dry-run used `dry_run=True`; no live Telegram delivery.
-- Official generator dry-run confirmed:
-  - `等回測｜急彈待回測` keeps retest context;
-  - `已突破，但漲停/過熱不追` appears for limit-up/overheat breakout;
-  - RR repair cards do not repeat the same unmet RR blocker in setup context;
-  - summary names are bounded by state group.
+  Result: `VERSION v21.1`, `messages 4`, no live Telegram delivery.
+- Dry-run report confirmed:
+  - `緯創 / 仁寶 / 技嘉` show `理論RR ...（setup未成立）`;
+  - `旺宏` shows `理論RR 2.21僅參考` while waiting for retest;
+  - `聯電` RR不足 remains `RR 1.32｜需>=1.5`.
 
 ## Residual Risk
 
-- Next scheduled production `run_mode=bot` should still be observed after the after-close safe-write window.
-- Live Telegram delivery was not performed in this cycle.
-- Future strategy-quality work should calibrate thresholds from persisted outcome data; this cycle did not loosen buy/sell rules.
+- SQL artifact still needs Owner review/execution before production DB typed RR columns exist.
+- Existing RR target basis is now explicit and auditable; future calibration can compare target-basis choices against persisted outcomes.
+- Live production runner artifact after next scheduled `run_mode=bot` was not observed in this cycle.

@@ -108,6 +108,11 @@ class AnalysisEngineTest(unittest.TestCase):
         self.assertIsNotNone(raw.get("breakout_price_20"))
         self.assertIsNotNone(raw.get("retest_zone_low"))
         self.assertIsNotNone(raw.get("retest_zone_high"))
+        self.assertIn(raw.get("rr_context"), ["actionable", "blocked", "setup_pending", "theoretical"])
+        self.assertEqual(raw.get("rr_formula"), "(target-entry)/(entry-stop)")
+        self.assertIsNotNone(raw.get("rr_entry_price"))
+        self.assertIsNotNone(raw.get("rr_stop_price"))
+        self.assertIsNotNone(raw.get("rr_target_price"))
 
     def test_trend_continuation_reuses_research_match_and_buys_small(self):
         rows = trend_continuation_rows()

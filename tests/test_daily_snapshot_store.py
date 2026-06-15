@@ -255,7 +255,14 @@ class DailySnapshotStoreTest(unittest.TestCase):
         self.assertIn("resistance_20", payload)
         self.assertIn("breakout_price_20", payload)
         self.assertIn("retest_zone_low", payload)
+        self.assertIn("rr_context", payload)
+        self.assertIn("rr_entry_price", payload)
+        self.assertIn("rr_stop_price", payload)
+        self.assertIn("rr_target_price", payload)
+        self.assertEqual(payload["rr_formula"], "(target-entry)/(entry-stop)")
         self.assertIn("volume_ratio_20", payload["raw_result"])
+        self.assertIn("rr_context", payload["raw_result"])
+        self.assertEqual(payload["raw_result"]["rr_formula"], "(target-entry)/(entry-stop)")
 
     def test_daily_signal_snapshot_read_after_write_status_detects_missing_rows(self):
         class Query:

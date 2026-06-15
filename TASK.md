@@ -1,80 +1,74 @@
-# TASK: strategy_feature_persistence_v21_1_20260615
+# TASK: rr_context_standardization_v21_1_20260615
 
 ## Status
-- task_id: `strategy_feature_persistence_v21_1_20260615`
-- type: `major`
+- task_id: `rr_context_standardization_v21_1_20260615`
+- task_type: `risk_patch`
 - status: `implemented`
 - version: `v21.1`
 - QA level: `L3`
 
 ## Owner Problem
-Owner asked to re-check from scratch whether v21.1 strategy features are only fixed at runtime instead of being persisted, and authorized adding fields / recording more data if needed. Owner also asked how long to backfill.
+Owner asked why report RR values are often very large, whether the formula matches common trading practice, and asked to fix the strategy/report so it follows normal entry-stop-target risk/reward logic instead of presenting self-made or misleading buy evidence.
 
 ## User Visible Result
-- v21.1 strategy features are now prepared for durable DB storage, not just report-time wording.
-- Daily runner and backfill payloads carry V10/V20, 20D/60D resistance, breakout distances, retest zone, and compact raw_result.
-- A manual SQL migration is provided for Supabase.
-- Backfill CLI supports `--lookback-days`; recommended v21.1 strategy-feature backfill is two years / 730 calendar days, with 120-day warmup.
+- High RR is no longer shown as `達標` unless the setup is actually actionable.
+- Non-actionable high RR is labeled as `理論RR` with the reason: `setup未成立`, `僅參考`, `等回測`, or the active blocker.
+- RR不足 still displays as normal `RR x｜需>=1.5`, not as theoretical RR.
+- Unheld cards keep strategy-granular evidence: blocker first, then distance, breakout/retest zone, V10/V20, quality, and RR context.
 
 ## Non Goals
 - No live Telegram delivery.
-- No live production DB write in this task.
-- No direct hand-written production DML.
+- No live production DB schema change in this task.
+- No direct production DML.
 - No RLS, grant, policy, role, index, or constraint change.
 - No broker/order execution.
 - No buy-rule loosening.
 
-## Impacted Modules And Consumers
-- `db/sql/v21_1_strategy_feature_snapshot_columns.sql`
-  - Consumer: Owner / Supabase SQL editor.
+## Impacted Modules And Direct Consumers
+- `services/analysis.py`
+  - Consumer: strategy result, official generator, daily snapshot/backfill payloads.
 - `core/signal_snapshot.py`
-  - Consumer: official daily snapshot and backfill snapshot payload.
-- `services/daily_snapshot_store.py`
-  - Consumer: after-close daily `daily_signal_snapshot` writer.
+  - Consumer: daily snapshot and backfill feature payload.
 - `services/signal_store.py`
-  - Consumer: `signal_runs` / `signal_items` report-run persistence.
-- `scripts/backfill_signals.py`
-  - Consumer: guarded historical backfill CLI.
-- `services/strategy_evidence.py`
-  - Consumer: derived feature/outcome calibration.
-- `services/volume_calibration.py`
-  - Consumer: DB-backed volume calibration artifact.
+  - Consumer: `signal_items` report-run persistence through shared feature list.
+- `services/daily_snapshot_store.py`
+  - Consumer: `daily_signal_snapshot` payload through shared feature list.
+- `presentation/report.py`
+  - Consumer: Telegram message list.
+- `db/sql/v21_2_rr_context_columns.sql`
+  - Consumer: Owner-reviewed Supabase migration artifact; not executed by agent.
 
 ## Output Contract
-- `daily_signal_snapshot` payload includes:
-  - `volume_ratio_10`, `volume_ratio_20`
-  - `resistance_20`, `resistance_60`
-  - `breakout_price_20`, `breakout_price_60`
-  - `breakout_distance_20`, `breakout_distance_60`
-  - `retest_zone_low`, `retest_zone_high`, `retest_zone_label`
-  - compact `raw_result`
-- `signal_items` payload includes the same typed strategy-feature columns and keeps compact raw_result.
-- If production schema is not applied yet, daily snapshot / backfill / signal item writes fall back to legacy columns instead of crashing the runner.
-- Backfill default recommendation:
-  - apply SQL migration first;
-  - backfill `--lookback-days 730`;
-  - use existing approved repo script `scripts/backfill_signals.py`;
-  - no live Telegram.
+- Strategy result may include:
+  - `rr_context`: `actionable`, `setup_pending`, `theoretical`, or `blocked`.
+  - `rr_entry_price`, `rr_stop_price`, `rr_target_price`.
+  - `rr_reward_amount`, `rr_risk_amount`, `rr_risk_pct`.
+  - `rr_target_basis`.
+  - `rr_formula`: `(target-entry)/(entry-stop)`.
+- `daily_signal_snapshot` and `signal_items` payloads carry these typed RR fields when schema exists; existing schema fallback removes them instead of crashing.
+- Telegram:
+  - actionable RR: `RR x達標`;
+  - non-actionable high RR: `理論RR x（setup未成立）` or `理論RR x僅參考`;
+  - insufficient RR: `RR x｜需>=1.5`.
 
-## Acceptance
-- Tests prove official daily snapshot payload carries new fields.
-- Tests prove guarded backfill payload carries new fields.
-- Tests prove schema-missing fallback removes new fields and does not crash.
-- Tests prove volume calibration uses V20 first and only falls back to legacy volume ratio if V20 is missing.
-- SQL migration is idempotent and contains no RLS/grant/policy/role/index/constraint change.
+## Version Contract
+- Visible report wording remains under current `v21.1` line because this is a v21.1 strategy-evidence correction, not a new trading mode.
+- SQL artifact name is `v21_2_rr_context_columns.sql` because it is a forward schema extension artifact requiring Owner review before execution.
 
-## Failure Specimen And Route
-- Failure: v21.1 report showed better strategy context, but durable DB records did not keep typed V20 / resistance / retest-zone features.
-- Failure layer: persistence / backfill / calibration, not Telegram formatter.
-- Verification route:
-  - `tests/test_daily_snapshot_store.py`
-  - `tests/test_backfill_signals.py`
-  - `tests/test_volume_calibration.py`
-  - focused v21.1 snapshot export test
-  - dry-run backfill command with no DB write
+## Acceptance Conditions
+- Official generator dry-run must show high RR unheld names as theoretical unless setup is actionable.
+- RR不足 cards must not be relabeled as theoretical.
+- Snapshot and signal-item payload tests must prove RR formula inputs are persisted through the shared feature contract.
+- No live Telegram delivery.
+- No production DB schema execution by agent.
 
-## Forbidden / Blocking
-- Do not claim production DB is updated unless SQL migration and write/backfill are actually executed.
-- Do not store full OHLCV arrays inside raw_result.
-- Do not use local cache or runtime dict as cross-day source-of-truth.
-- Do not replace approved backfill/write scripts with manual production DML.
+## Fixture / Failure Specimen
+- Owner sample: `旺宏 2337` showed a strong rebound near limit-up, but report needed to explain why it was not buyable.
+- Owner sample: `緯創 / 仁寶 / 技嘉` showed very high RR while still blocked by weak setup or quality D.
+- Required replay route: official `generate_report(dry_run=True)` message list, not a helper-only fixture.
+
+## Forbidden And Blocking Conditions
+- Do not call non-actionable high RR `達標`.
+- Do not hide RR components behind a single number once persistence fields are available.
+- Do not execute DB schema changes without Owner approval.
+- Do not use synthetic or local-only data as cross-day evidence.

@@ -2,8 +2,8 @@
 
 ## Current Task
 
-- task_id: `strategy_feature_persistence_v21_1_20260615`
-- status: `complete`
+- task_id: `rr_context_standardization_v21_1_20260615`
+- status: `implemented`
 - version: `v21.1`
 - no live Telegram delivery.
 
@@ -17,38 +17,30 @@
 
 ## Current Implementation State
 
-- v21.1 strategy evidence is durable, not report-only:
-  - typed strategy fields exist for `daily_signal_snapshot` and `signal_items` after Owner-applied migration;
-  - daily snapshot, signal item, and backfill paths write V10/V20, 20D/60D resistance, breakout distances, retest zone, and compact `raw_result`;
-  - schema fallback remains for pre-migration safety.
-- `run_mode=bot` now includes market/theme evidence freshness after the bot step; `daily_evidence` is manual recovery.
-- Two-year v21.1 strategy snapshot backfill completed for the 12 tracked stocks; latest tracked rows reach `2026-06-15`.
-- `daily_signal_snapshot` cleanup completed: only `v21.1` rows remain, no old-version overlap remains.
+- RR is now represented as an auditable entry / stop / target calculation:
+  - `rr_formula` is `(target-entry)/(entry-stop)`;
+  - strategy result carries entry, stop, target, reward, risk, risk percent, target basis, and context;
+  - daily snapshot / signal item / backfill feature payloads carry the same fields through shared strategy feature plumbing.
 - Report display state:
-  - unheld waiting/rejected cards expose compact setup evidence consistently;
-  - `距突破：x%｜狀態` is shown as its own line on holding and unheld stock cards when available;
-  - `盤面` no longer includes breakout distance text;
-  - non-actionable positive evidence is shown as state-aware `補充` with a blocker-specific caveat, not as a buy reason;
-  - `等冷卻` cards suppress internal `RR -（過熱）` / `風控不適用` data noise;
-  - limit-lock /急彈追價 overheat keeps `等回測`; pure overheat keeps `等冷卻`;
-  - after-hours brief can show short unheld state groups by names, but falls back when the list would become noisy;
-  - unmet RR is shown once as the primary blocker and not repeated again in setup context;
-  - strong rebound holdings use rebound-continuation next-step wording;
-  - this is display-only and does not change buy/sell thresholds.
+  - non-actionable high RR is `理論RR`, not `RR 達標`;
+  - RR不足 remains normal `RR x｜需>=1.5`;
+  - setup/retest/quality blockers stay primary so high RR cannot read as a buy recommendation.
+- DB state:
+  - `db/sql/v21_2_rr_context_columns.sql` exists for Owner review.
+  - The agent did not execute schema migration or production DML.
 
 ## Verification State
 
-- Focused persistence/backfill/calibration: `19 passed`.
-- Targeted strategy/report/backfill suite: `334 passed, 149 warnings, 57 subtests passed`.
-- Report formatter/generator regression: `205 passed, 147 warnings, 44 subtests passed`.
-- Evidence automation tests: `71 passed, 13 subtests passed`.
-- Official generator dry-run: `v21.1`, `messages 4`, `write_results None`, no live Telegram delivery.
-- Dry-run report confirmed standalone `距突破` in holding and unheld sections.
-- Dry-run report confirmed state-aware wording for `等冷卻`, `等型態`, `等RR修復`, `等回測`, and strong-rebound holding cards.
-- Dry-run report confirmed limit-up/overheat breakout context and bounded unheld group names in the after-hours brief.
+- `263 passed, 147 warnings, 44 subtests passed`.
+- Official generator dry-run: `VERSION v21.1`, `messages 4`, no live Telegram delivery.
+- Dry-run confirmed:
+  - `旺宏` is waiting for retest and shows `理論RR 2.21僅參考`;
+  - high-RR weak setup names show `理論RR ...（setup未成立）`;
+  - RR不足 card remains normal RR blocker.
 
 ## Known Follow-ups
 
-- Confirm the next scheduled `run_mode=bot` writes market/theme evidence after the after-close safe-write window.
+- Owner review/apply `db/sql/v21_2_rr_context_columns.sql`, then run approved backfill/write scripts if production typed RR fields are needed historically.
+- Confirm next scheduled `run_mode=bot` after push.
 - Add a PowerShell-equivalent git completion gate because bash gates fail locally without WSL/Hyper-V.
 - Optional dedicated cleanup task: Owner may delete abandoned `trades` table; current code scan found no consumers.
