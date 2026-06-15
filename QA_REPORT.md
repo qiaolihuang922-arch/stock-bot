@@ -1,78 +1,72 @@
-# QA_REPORT: unheld_card_mobile_denoise_20260616
+# QA_REPORT: summary_brief_mobile_denoise_20260616
 
 ## Test Scope
 
-- Telegram unheld-card presentation.
-- Rebound/retest failure specimen.
-- Non-actionable blocker preservation.
-- Existing unheld gap helper behavior.
-- Structured entry evidence contract for unheld waiting/rejected cards.
+- Telegram third summary/brief message.
+- Owner 06/16 pre-market failure specimen.
+- Stale source warning exception.
+- Existing generator message list regressions.
 
 ## Risk Scan
 
-- Compacting rows could hide why a stock cannot be bought.
-- Compacting rows could accidentally make waiting/淘汰 cards look actionable.
-- Existing tests might pass while mobile output still repeats standalone rows.
-- Over-scoping could remove `距突破`, which Owner explicitly wanted to keep.
-- Under-scoping could keep dumping volume/quality/RR into every waiting card.
-- Keeping both old parser-scoping and new contract-scoping could create two competing display rules.
+- Removing summary lines could hide an actionable warning.
+- Removing normal source line must not hide stale `LAST_OHLCV`.
+- Removing detail index must not affect holding order or card content.
+- Removing generic reason/risk must not change strategy decisions.
 
 ## Cross-Block Semantic Consistency
 
-- `交易狀態` remains the state-machine line; no extra `狀態` hard-concat row is emitted.
-- Non-actionable entry details are split into short `進場` / `缺口` / `可買` rows.
-- `距突破` remains a separate line for every unheld card.
-- Normal waiting/rejected cards no longer show a generic `數據：...` metric dump.
-- Normal waiting/rejected cards no longer repeat `交易狀態` when the title and `進場` already communicate the waiting decision.
-- Ordinary `歷史` failure rows are suppressed; meaningful repair / positive-weight / execution-memory rows remain eligible.
-- State-specific cards expose only the relevant blocker family:
-  - retest: retest / breakout zone;
-  - cooling: heat level;
-  - risk-reward: risk-reward gap;
-  - setup: setup / quality;
-  - rejected: repair requirement.
-- Official formatting consumes structured entry evidence; the old post-format scoping parser is no longer the active rule path.
-- Summary/funnel counts are not changed.
-- Holding cards are not changed.
+- First message still carries holding details.
+- Second message still carries unheld cards.
+- Third message now carries only decision summary and action checklist.
+- `詳情索引` is absent from the summary.
+- Normal source plumbing is absent; stale source warnings remain covered by tests.
+- Rejected main reason remains visible as `淘汰：N 檔｜主因：...`.
+- No live Telegram delivery was performed.
 
 ## User Misread Risk
 
-- Reduced: users no longer read separate `拆解`, `買點`, `不能買`, and `還差` rows that repeat each other.
-- Reduced: users no longer get one wall-like `狀態` / `進場檢查` row on mobile.
-- Preserved: users can still see the blocker and exact unlock condition in the same card.
-- Remaining: rejected-card `原因` lines may still need future cleanup if they repeat source/status details.
+- Reduced: no more "details index" navigation line on mobile.
+- Reduced: no generic source/reason/risk rows that read like system explanation instead of decision.
+- Preserved: user still sees what to do today and which bucket unheld stocks are in.
 
 ## Failure Specimen Countercheck
 
-- Owner sample: 06/16 pre-market unheld report.
-- Countercheck via dry-run:
-  - cards now show `進場：...｜原因：...`;
-  - cards now show `缺口：...`;
-  - cards now show `可買：...`;
-  - cards still show `距突破：...`;
-  - normal unheld cards show no repeated `交易狀態`, ordinary `歷史`, or broad `數據` rows;
-  - helper-level rebound/setup tests no longer allow volume/quality/RR packages to appear outside their state scope;
-  - cards no longer show standalone `拆解`, `買點`, `不能買`, `還差`, or hard-concat `進場檢查`.
+- Owner sample asked to delete `詳情索引` and keep only useful decision info.
+- Dry-run third message now contains:
+  - market/action count;
+  - `新倉：無有效進場`;
+  - risk-control plan;
+  - holding control checklist;
+  - unheld status;
+  - rejected main reason.
+- Dry-run third message no longer contains:
+  - `詳情索引`;
+  - normal `📡 資料`;
+  - `原因：`;
+  - `風險：`;
+  - `持倉：依第一則`;
+  - `詳情見未持倉卡`.
 
 ## Evidence
 
-- Test command:
+- Focused test:
+  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q --tb=short`
+  - result: `203 passed, 44 subtests passed`
+- Full test:
   - `.\.venv\Scripts\python.exe -m pytest -q --tb=short`
   - result: `479 passed, 8 skipped, 108 subtests passed`
 - Dry-run:
   - `generate_report(dry_run=True)`
-  - result checked locally:
-    - current unheld output has `trade_state=0`, `history=0`, `data=0`;
-    - 旺宏 card shows only retest-zone blocker details, not the full metric package.
-  - no live Telegram delivery.
+  - third-message forbidden counts all `0`.
 
 ## Not Tested
 
 - Live Telegram delivery.
-- Full production scheduled run after push.
+- Next production scheduled run after push.
 
 ## QA Conclusion
 
 通過
 
-Reason: the official generator path now renders readable short mobile lines and focused regression tests prevent both the old split-row pattern and the wall-like hard-concat pattern from returning.
+Reason: official dry-run and regression tests confirm the summary is shorter while preserving actionable risk-control and stale-source safeguards.

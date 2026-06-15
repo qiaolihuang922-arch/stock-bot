@@ -1,66 +1,56 @@
-# CHANGELOG: unheld_card_mobile_denoise_20260616
+# CHANGELOG: summary_brief_mobile_denoise_20260616
 
 ## Changes
 
-- Replaced the prior hard-concat mobile layout with structured entry evidence in `presentation/report.py`.
-- Added `_unheld_entry_contract` so the official generator selects the state-specific blocker before formatting.
-- Kept `_unheld_buy_gap_line` as a compatibility wrapper, but it now returns the same scoped contract text instead of the former full metric package.
-- Unheld waiting / rejected cards now render short decision rows:
-  - `進場：...｜原因：...`
-  - `缺口：...`
-  - `可買：...`
-- `距突破：...` is explicitly retained as a standalone line and is not folded into the blocker text.
-- `_entry_check_lines` now consumes structured `缺口` / `可買` evidence instead of parsing old multiline blocker text on the official path:
-  - retest cards focus on the retest / breakout zone;
-  - cooling cards focus on heat;
-  - risk-reward cards focus on the risk-reward gap;
-  - setup cards focus on setup / quality;
-  - rejected cards focus on the repair requirement.
-- Normal waiting / rejected unheld cards no longer print the broad `數據：...` metric dump; source/data failure cards still keep fail-closed evidence.
-- Normal waiting / rejected unheld cards no longer repeat `交易狀態：...` when title and `進場` already carry the same state.
-- Unheld `歷史：...` rows are now gated: repair / positive weight / high-signal prior execution remains visible; ordinary repeated failure history is suppressed.
-- Removed the previous post-format state-scoping parser so there is only one active rule source for unheld entry evidence.
-- Removed standalone display rows for unheld-card `拆解`, `買點`, `不能買`, `還差`, and `可買條件` when they belong to the same entry-check block.
-- Updated `tests/test_generator_report.py` and `tests/test_unheld_gap_format.py` to verify the new compact layout, state-scoped helper contract, and prevent old split rows / full metric packages from returning.
+- Removed `detail_index_text(...)` rendering from `presentation.report.formatTelegramSummary`.
+- Added summary extraction filters for generic rows:
+  - `原因：...`
+  - `風險：...`
+  - `持倉：依第一則...`
+  - `📎 詳情索引：...`
+- Normal source line is removed from the brief when it is only `realtime/yahoo` plumbing.
+- Stale `LAST_OHLCV` source warning remains visible because it affects actionability.
+- `_brief_holding_line` no longer emits the fixed "依第一則既有卡片處理" line for ordinary holdings; it still emits meaningful exceptions such as no holdings or missing profit-taking memory.
+- `rejected_trace_line` now renders `淘汰：N 檔｜主因：...` and no longer appends `詳情見未持倉卡`.
+- Updated generator report tests to enforce the compact summary contract and stale-source exception.
 
 ## Contract Impact
 
-- Telegram unheld-card message layout changes.
-- Strategy calculation, trade state machine, blockers, RR, volume, retest, and unlock logic are unchanged.
-- This is not a hard text-only rename: the displayed blocker details are selected in a structured contract before formatting.
+- Telegram third summary/brief message is shorter and decision-focused.
+- Holding cards, unheld cards, strategy calculations, trade-state machine, DB writes, and live delivery are unchanged.
 - Runtime report version remains `v21.1`.
-- No DB write/schema/backfill.
-- No live Telegram delivery.
 
 ## Direct Consumer Sync
 
-- Owner mobile reading:
-  - state machine remains in `交易狀態`;
-  - market detail remains in `盤面` only when useful;
-  - entry decision is read from `進場`;
-  - missing condition is read from `缺口`;
-  - unlock condition is read from `可買`.
-- Existing blocker semantics remain visible without repeating four separate labels.
+- Owner mobile reading should now see:
+  - market/action count;
+  - new-entry status;
+  - today's risk-control plan;
+  - holding control checklist;
+  - unheld status/funnel;
+  - rejected main reason.
+- Removed rows are plumbing or navigation, not decisions.
 
 ## Verification
 
+- External guideline check:
+  - dashboard / executive summary guidance emphasizes decision-specific KPIs and avoiding clutter.
 - Local dry-run:
   - `generate_report(dry_run=True)`
-  - confirmed unheld cards render `進場` / `缺口` / `可買` without repeated `交易狀態`.
-  - latest dry-run line counts: `trade_state=0`, `history=0`, `data=0` in current unheld output.
-  - 旺宏 example keeps `距突破：10.93%｜遠離突破` and narrows `缺口` to `站回突破區 175.5~176.38`.
-  - `legacy_split_rows=0`; `data_lines_total=0`.
-- Test command:
+  - summary counts: `詳情索引=0`, `📡 資料=0`, `原因=0`, `風險=0`, `持倉：依第一則=0`, `詳情見未持倉卡=0`.
+- Test commands:
+  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q --tb=short`
+  - result: `203 passed, 44 subtests passed`
   - `.\.venv\Scripts\python.exe -m pytest -q --tb=short`
   - result: `479 passed, 8 skipped, 108 subtests passed`
 
 ## Covered Layers
 
-- Presentation helper.
-- Official Telegram generator formatting.
-- User-visible replay via dry-run.
+- Summary formatter.
+- Official Telegram generator message list.
+- User-visible dry-run replay.
 
 ## Residual Risk
 
-- Some old `原因` lines for rejected cards can still be verbose; this task intentionally focused on the duplicated state/entry-check block.
-- Holding cards keep the previous layout.
+- Production scheduled run still needs observation after push.
+- `detail_index_text` helper remains for compatibility but is not rendered in the official summary path.

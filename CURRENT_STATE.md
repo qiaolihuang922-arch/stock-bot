@@ -2,8 +2,8 @@
 
 ## Current Task
 
-- task_id: `unheld_card_mobile_denoise_20260616`
-- status: `implemented + QA passed + pushed`
+- task_id: `summary_brief_mobile_denoise_20260616`
+- status: `implemented + QA passed, pending commit/push`
 - version: `v21.1`
 - no live Telegram delivery.
 
@@ -18,35 +18,33 @@
 ## Current Implementation State
 
 - Runtime report remains `v21.1`.
-- Unheld card presentation now removes the unreadable hard-concat rows:
-  - no standalone `拆解`;
-  - no wall-like `狀態` / `進場檢查`;
-  - non-actionable cards show `進場` / `缺口` / `可買`.
-- Latest adjustment keeps `距突破` as its own line while narrowing `缺口` / `可買` to the current state:
-  - `等回測`: retest / breakout-zone confirmation only;
-  - `等冷卻`: heat/cooling only;
-  - `等風險報酬`: risk-reward gap only;
-  - `等型態`: setup/quality only;
-  - `淘汰`: repair requirement only.
-- Official unheld formatting now uses `_unheld_entry_contract`; state-specific evidence is selected before formatting rather than produced as a broad metric package and cropped later.
-- Normal waiting/rejected unheld cards suppress broad `數據：...` metric dumps; fail-closed source/data evidence remains allowed.
-- Additional denoise now suppresses repeated waiting-card `交易狀態` lines when title + `進場` already carry the same state.
-- Unheld `歷史` rows are gated to meaningful repair / positive-weight / execution-memory signals; ordinary repeated-failure history is hidden.
+- Third summary/brief message is now decision-focused:
+  - no rendered `詳情索引`;
+  - no normal `📡 資料：即時價 realtime｜日線 yahoo`;
+  - no generic `原因：...` / `風險：...`;
+  - no fixed `持倉：依第一則...` line for ordinary holdings;
+  - rejected trace is `淘汰：N 檔｜主因：...`.
+- Actionable summary content remains:
+  - market/action count;
+  - new-entry status;
+  - risk-control plan;
+  - holding control checklist;
+  - unheld status/funnel;
+  - stale data warning when present.
 - Strategy logic is unchanged.
 - No DB operation was performed.
 
 ## Verification State
 
-- Dry-run `generate_report(dry_run=True)` checked locally; unheld cards render readable state-scoped entry lines.
-- Dry-run current output: `trade_state=0`, `history=0`, `data=0`.
+- Dry-run `generate_report(dry_run=True)` checked locally; third-message forbidden counts all zero.
 - Tests:
-  - `479 passed, 8 skipped, 108 subtests passed`
+  - `203 passed, 44 subtests passed` for `tests/test_generator_report.py`
+  - `479 passed, 8 skipped, 108 subtests passed` full suite
 - No live Telegram delivery.
 
 ## Known Follow-ups
 
-- Observe next scheduled `run_mode=bot` report and confirm readable `進場` / `缺口` / `可買` unheld-card layout in production artifact.
-- Future cleanup candidate: rejected-card `原因` lines can still be verbose.
+- Observe next scheduled `run_mode=bot` report and confirm production Telegram artifact keeps the compact third-message summary.
 - Prior DB follow-ups remain:
   - decide whether to enrich or hide `market_theme_index_daily_bars` OHLCV/member placeholder columns;
   - implement or retire `signal_outcomes` max high/drawdown metrics.

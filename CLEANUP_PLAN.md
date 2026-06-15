@@ -35,6 +35,12 @@
   - repeated waiting-card `交易狀態` lines are hidden when title + `進場` already carry the state.
   - unheld `歷史` rows are hidden unless they add repair / positive-weight / execution-memory signal.
   - Strategy calculations are unchanged.
+- Summary brief denoise corrected:
+  - rendered `詳情索引` removed from the third message.
+  - generic normal source/reason/risk rows removed from the third message.
+  - ordinary `持倉：依第一則...` line removed.
+  - stale source warnings remain allowed.
+  - rejected trace keeps only count and main reason.
 
 ## Active Follow-ups
 

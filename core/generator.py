@@ -6913,9 +6913,8 @@ def rejected_trace_line(watch_items, market_mode=None, report_context=None):
         return None
 
     return (
-        f"淘汰 {len(rejected)} 檔｜主因："
+        f"淘汰：{len(rejected)} 檔｜主因："
         f"{dominant_reject_reasons(watch_items, market_mode=market_mode, report_context=report_context)}"
-        "｜詳情見未持倉卡"
     )
 
 

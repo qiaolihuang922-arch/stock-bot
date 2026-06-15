@@ -175,10 +175,6 @@ def formatTelegramSummary(
 
     lines.extend(deps["format_backtest_groups"](watch_items, report_context=report_context))
 
-    lines.extend(["", deps["detail_index_text"](
-        holding_items, watch_items, report_phase=report_phase, market_mode=market_mode, report_context=report_context
-    )])
-
     rejected_line = deps["rejected_trace_line"](watch_items, market_mode=market_mode, report_context=report_context)
     if rejected_line:
         lines.append(rejected_line)
@@ -1787,7 +1783,7 @@ def _brief_holding_line(holding_items, deps):
     if blocked:
         return f"持倉：{'、'.join(blocked)} 先補交易執行記憶；其餘依第一則風控卡處理。"
 
-    return "持倉：依第一則既有卡片處理，不新增第二個主行動。"
+    return None
 
 
 def _brief_new_position_line(watch_items, report_context, deps, market_mode=None):
@@ -2478,9 +2474,16 @@ def render_telegram_messages(
         "市場/結論：",
         "背景：",
         "僅追蹤：",
+        "原因：",
+        "風險：",
+        "持倉：依第一則",
+        "📎 詳情索引：",
     )
     if position_warning:
         summary_excluded_lines.add(f"⚠ {position_warning}，持倉狀態不可信")
+    source_summary_line = deps["source_summary_text"](results_map)
+    if "LAST_OHLCV" not in source_summary_line:
+        summary_excluded_lines.add(source_summary_line)
     summary_excluded_lines.update(deps["format_market_theme_summary_lines"](
         report_context.get("market_theme_evidence") or deps["market_theme_summary_evidence"](results_map, market_summary)
     ))

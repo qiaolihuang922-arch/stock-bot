@@ -1,8 +1,8 @@
-# TASK: unheld_card_mobile_denoise_20260616
+# TASK: summary_brief_mobile_denoise_20260616
 
 ## Status
 
-- task_id: `unheld_card_mobile_denoise_20260616`
+- task_id: `summary_brief_mobile_denoise_20260616`
 - task_type: `normal_patch`
 - status: `implemented`
 - version: `v21.1`
@@ -10,95 +10,77 @@
 
 ## Owner Problem
 
-Owner pasted the 06/16 pre-market unheld report and pointed out repeated mobile-reading lines, then clarified that the fix must not dump every metric into every `等回測` card:
+Owner pasted the 06/16 pre-market decision brief and identified summary noise:
 
-- `拆解` and `盤面` carry overlapping state information.
-- `買點`, `不能買`, `還差`, and `可買條件` repeat the same decision in separate rows.
-- The report should be smarter and strategy-granular, not a hard text rewrite.
-- `距突破` must remain visible for every stock.
+- `📎 詳情索引` has no value on mobile and should be removed.
+- The decision brief contains fixed explanatory rows such as normal source line, generic reason, generic risk, and "持倉依第一則..." that do not change the decision.
+- The summary should follow decision-dashboard practice: keep only actionable information and avoid clutter.
 
 ## User Visible Result
 
-- Unheld cards no longer print standalone `拆解` / duplicate `盤面` state rows.
-- Normal waiting/rejected unheld cards no longer repeat `交易狀態` when title + `進場` already convey the same decision.
-- Non-actionable unheld cards now show a readable entry block:
-  - `進場：...｜原因：...`
-  - `缺口：...`
-  - `可買：...`
-- `距突破：...` remains a standalone line.
-- Waiting/rejected cards scope details by state:
-  - `等回測` shows retest/breakout-zone confirmation, not the full volume/quality/RR package.
-  - `等冷卻` shows heat/cooling.
-  - `等風險報酬` shows risk-reward gap.
-  - `等型態` shows setup/quality gap.
-  - `淘汰` shows the invalidation / repair requirement.
-- Normal waiting/rejected cards suppress noisy `數據：...` rows; source/data failure cards still keep fail-closed evidence.
-- `歷史：...` is shown only when it carries useful memory such as repair / positive weight / high-signal prior execution, not for ordinary repeated failure noise.
-- Strategy fields are still computed separately; only presentation is denoised.
-- Entry evidence is now selected before formatting, not generated as a full metric package and trimmed afterward.
+- Third Telegram message keeps:
+  - market/action count line;
+  - `新倉：無有效進場` or actual new-entry suggestion;
+  - today pre-market/intraday risk-control plan;
+  - holding control checklist;
+  - unheld funnel/status;
+  - rejected-count main reason when present.
+- Third Telegram message removes:
+  - `📎 詳情索引`;
+  - normal `📡 資料：即時價 realtime｜日線 yahoo`;
+  - generic `原因：...`;
+  - generic `風險：...`;
+  - `持倉：依第一則既有卡片處理，不新增第二個主行動。`;
+  - `詳情見未持倉卡`.
+- Abnormal source warnings remain allowed, for example stale `LAST_OHLCV` lines.
 
 ## Non Goals
 
 - No strategy threshold change.
 - No DB schema/write/backfill.
 - No live Telegram delivery.
-- No holding-card rewrite.
-- No version bump; runtime remains `v21.1` because this is presentation denoise inside the same strategy contract.
+- No holding/unheld card strategy rewrite.
+- No version bump; runtime remains `v21.1`.
 
 ## Impacted Modules And Direct Consumers
 
 - `presentation/report.py`
+- `core/generator.py`
 - `tests/test_generator_report.py`
-- Direct consumer: Telegram unheld card message.
+- Direct consumer: Telegram third summary/brief message.
 
 ## Output Contract
 
-- Non-actionable unheld cards should not print standalone duplicate lines:
-  - `拆解：...`
-  - `買點：...`
-  - `不能買：...`
-  - `還差：...`
-- Replacement lines:
-  - existing `交易狀態` stays as the state-machine line;
-  - `盤面` is kept only when it adds useful market detail;
-  - `距突破：...` stays standalone;
-  - `進場：...｜原因：...`;
-  - `缺口：...`;
-  - `可買：...`.
-- Existing decision semantics must remain visible:
-  - why not buy;
-  - what is missing;
-  - what unlocks a buy.
-- Do not display every available metric for every blocker. Show the metric family relevant to the current `funnel_state`.
-- The official generator path must consume structured entry evidence, not parse old `不能買` / `還差` text to decide what to hide.
+- Summary/brief is decision-first:
+  - answer what to do today;
+  - do not repeat where details are located;
+  - do not show normal source plumbing;
+  - keep abnormal data-source warning.
+- `rejected_trace_line` should keep the rejected main reason but not tell the user to see details.
+- `detail_index_text` may remain as an unused helper, but the official summary path must not render it.
 
 ## Version Contract
 
 - Header remains `v21.1`.
-- This task changes Telegram formatting, not strategy/DB version.
 
 ## Acceptance Conditions
 
-- Dry-run unheld card does not show the wall-like `狀態` / `進場檢查` hard-concat format.
-- Dry-run unheld card shows `進場` / `缺口` / `可買` as short decision lines.
-- Dry-run keeps one `距突破` line per unheld card.
-- Dry-run normal unheld waiting/rejected cards have no `數據：` metric dump.
-- Dry-run normal unheld waiting/rejected cards do not repeat `交易狀態` when the same state is already in the title and `進場`.
-- Dry-run suppresses ordinary `歷史` noise while keeping meaningful repair / execution memory available.
-- Generator report tests pass.
-- Regression test prevents standalone duplicate `拆解` / `買點` / `不能買` / `還差` rows from returning in the rebound-retest case.
-- Regression test prevents `等回測` / `等型態` helper output from reintroducing volume/quality/RR metric packages outside their state scope.
+- Dry-run summary has zero `詳情索引`.
+- Dry-run summary has zero normal `📡 資料`, zero `原因：`, zero `風險：`, zero `持倉：依第一則`, and zero `詳情見未持倉卡`.
+- Dry-run summary still shows risk-control plan, holding control checklist, unheld status, and rejected main reason.
+- Stale source warning regression remains covered.
+- Full tests pass.
 - No live Telegram delivery.
 
 ## Fixture / Failure Specimen
 
-- Owner sample: 06/16 pre-market unheld report showing separate `拆解`, `盤面`, `買點`, `不能買`, `還差`, `可買條件`.
+- Owner sample: 06/16 pre-market third message with `詳情索引`, generic data/reason/risk lines, and verbose summary clutter.
 - Replay route:
   - local dry-run `generate_report(dry_run=True)`;
-  - focused generator tests.
+  - focused and full pytest.
 
 ## Forbidden And Blocking Conditions
 
-- Do not remove decision detail by blindly deduplicating.
-- Do not make weak/overheated/retest/RR blockers look buyable.
-- Do not alter strategy decisions to satisfy presentation.
+- Do not hide actionable risk-control items.
+- Do not hide abnormal source/stale data warnings.
+- Do not change buy/sell/hold decisions.
