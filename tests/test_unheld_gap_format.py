@@ -1,7 +1,7 @@
 from presentation.report import _unheld_buy_gap_line
 
 
-def test_unheld_quality_gap_includes_setup_volume_and_rr_context():
+def test_unheld_quality_gap_scopes_to_setup_quality_only():
     data = {
         "price": 161.5,
         "volume_ratio": 0.48,
@@ -27,12 +27,13 @@ def test_unheld_quality_gap_includes_setup_volume_and_rr_context():
 
     assert "不能買：型態/品質還沒過" in line
     assert "買點品質未過（目前 D，需 B 以上）" in line
-    assert "站回突破區 194~194.97" in line
-    assert "量能偏弱（10日量 0.48x / 20日量 0.61x）" in line
-    assert "潛在報酬：好（9.94倍），但型態/品質未過" in line
+    assert "可買條件：重新形成買點型態 + 買點品質 B 以上" in line
+    assert "站回突破區 194~194.97" not in line
+    assert "量能偏弱" not in line
+    assert "潛在報酬" not in line
 
 
-def test_unheld_rebound_gap_keeps_retest_unlock_contract():
+def test_unheld_rebound_gap_scopes_to_retest_zone_only():
     data = {
         "price": 159,
         "volume_ratio": 0.52,
@@ -57,9 +58,8 @@ def test_unheld_rebound_gap_keeps_retest_unlock_contract():
     )
 
     assert "不能買：急彈後還沒回測確認" in line
-    assert "急彈後先等回測" in line
     assert "站回突破區 175.5~176.38" in line
-    assert "量能偏弱（10日量 0.52x / 20日量 0.26x）" in line
-    assert "買點品質：回測 / 轉強後重評" in line
-    assert "潛在報酬：好（2.21倍），但尚未回測確認" in line
     assert "先站回突破區 175.5~176.38，再回測不破" in line
+    assert "量能偏弱" not in line
+    assert "買點品質" not in line
+    assert "潛在報酬" not in line

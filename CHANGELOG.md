@@ -2,27 +2,30 @@
 
 ## Changes
 
-- Replaced the prior hard-concat mobile layout with `_entry_check_lines` in `presentation/report.py`.
+- Replaced the prior hard-concat mobile layout with structured entry evidence in `presentation/report.py`.
+- Added `_unheld_entry_contract` so the official generator selects the state-specific blocker before formatting.
+- Kept `_unheld_buy_gap_line` as a compatibility wrapper, but it now returns the same scoped contract text instead of the former full metric package.
 - Unheld waiting / rejected cards now render short decision rows:
   - `進場：...｜原因：...`
   - `缺口：...`
   - `可買：...`
 - `距突破：...` is explicitly retained as a standalone line and is not folded into the blocker text.
-- `_entry_check_lines` now scopes `缺口` / `可買` by `funnel_state`:
+- `_entry_check_lines` now consumes structured `缺口` / `可買` evidence instead of parsing old multiline blocker text on the official path:
   - retest cards focus on the retest / breakout zone;
   - cooling cards focus on heat;
   - risk-reward cards focus on the risk-reward gap;
   - setup cards focus on setup / quality;
   - rejected cards focus on the repair requirement.
 - Normal waiting / rejected unheld cards no longer print the broad `數據：...` metric dump; source/data failure cards still keep fail-closed evidence.
+- Removed the previous post-format state-scoping parser so there is only one active rule source for unheld entry evidence.
 - Removed standalone display rows for unheld-card `拆解`, `買點`, `不能買`, `還差`, and `可買條件` when they belong to the same entry-check block.
-- Updated `tests/test_generator_report.py` to verify the new compact layout and prevent the old split rows from returning.
+- Updated `tests/test_generator_report.py` and `tests/test_unheld_gap_format.py` to verify the new compact layout, state-scoped helper contract, and prevent old split rows / full metric packages from returning.
 
 ## Contract Impact
 
 - Telegram unheld-card message layout changes.
 - Strategy calculation, trade state machine, blockers, RR, volume, retest, and unlock logic are unchanged.
-- This is not a hard text-only rename: the displayed blocker details are selected from the existing computed state/gap/unlock values.
+- This is not a hard text-only rename: the displayed blocker details are selected in a structured contract before formatting.
 - Runtime report version remains `v21.1`.
 - No DB write/schema/backfill.
 - No live Telegram delivery.
@@ -45,6 +48,7 @@
   - `data_lines=0` in the unheld message.
   - `distance_lines=8` in the unheld message.
   - 旺宏 example keeps `距突破：10.93%｜遠離突破` and narrows `缺口` to `站回突破區 175.5~176.38`.
+  - `legacy_split_rows=0`; `data_lines_total=0`.
 - Test command:
   - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py tests\test_unheld_gap_format.py -q --tb=short`
   - result: `205 passed, 44 subtests passed`

@@ -765,7 +765,39 @@ def _readable_rr_terms(text):
     return text
 
 
-def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source_status, strategy_source_blocked, title_label=None):
+def _entry_contract(reason, gap, unlock=None, *, basis=None):
+    lines = _readable_evidence_lines(reason, gap, unlock, basis=basis)
+    contract = {"reason": None, "gap": None, "unlock": None, "extras": []}
+    for line in lines.splitlines():
+        if line.startswith("不能買："):
+            contract["reason"] = _strip_line_prefix(line, ["不能買："])
+        elif line.startswith("還差："):
+            contract["gap"] = _strip_line_prefix(line, ["還差："])
+        elif line.startswith("可買條件："):
+            contract["unlock"] = _strip_line_prefix(line, ["可買條件："])
+        else:
+            contract["extras"].append(line)
+    return contract
+
+
+def _entry_contract_text(contract):
+    if not contract:
+        return None
+    lines = []
+    reason = contract.get("reason")
+    gap = contract.get("gap")
+    unlock = contract.get("unlock")
+    if reason:
+        lines.append(f"不能買：{reason}")
+    if gap:
+        lines.append(f"還差：{gap}")
+    if unlock:
+        lines.append(f"可買條件：{unlock}")
+    lines.extend(contract.get("extras") or [])
+    return "\n".join(lines) if lines else None
+
+
+def _unheld_entry_contract(data, dist, blockers, valid_entry, funnel_state, source_status, strategy_source_blocked, title_label=None):
     stock_result = data.get("result") or {}
     is_actionable = valid_entry or funnel_state == "趨勢延續"
     post_market_prepare = (
@@ -777,9 +809,9 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
     if is_actionable:
         return None
 
-    def evidence_lines(reason, gap, unlock=None, basis=None):
+    def contract(reason, gap, unlock=None, basis=None):
         basis = basis if basis is not None else _supporting_basis_text(data, reason)
-        return _readable_evidence_lines(reason, gap, unlock, basis=basis, funnel_state=funnel_state)
+        return _entry_contract(reason, gap, unlock, basis=basis)
 
     gates = []
     source_gates = []
@@ -797,17 +829,9 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
     elif "量能不足" in blocker_text:
         gates.append(("量能不足", "需量能回升後重新評估"))
     if "突破失敗" in blocker_text or phase == "FAILED_BREAKOUT":
-        distance_text = _gate_value_text(dist)
-        gap = "需重新站回突破區"
-        policy = _display_entry_distance_policy(stock_result)
-        max_pct = policy.get("max_pct") or 5.0
-        policy_label = policy["label"] if policy.get("hard_gate") else "突破買點區"
-        if distance_text and float(distance_text) > max_pct:
-            distance_gap = _gate_value_text(float(distance_text) - max_pct)
-            gap = f"距突破區 {distance_text}%｜{policy_label}需<={_gate_value_text(max_pct)}%｜差{distance_gap}%"
-        return evidence_lines("未站回突破區", gap, "重新站回突破區後再評估", basis="")
+        return contract("未站回突破區", "尚未站回突破區", "重新站回突破區後再評估", basis="")
     if post_market_prepare:
-        return evidence_lines(
+        return contract(
             "開盤確認未完成",
             "盤後待開盤確認",
             "明日開盤後仍守突破區 / 不追價",
@@ -817,32 +841,10 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
     if "急彈待回測" in blocker_text:
         retest_text = _retest_zone_text(data)
         unlock_text = _retest_unlock_text(data)
-        rebound_gaps = [f"急彈追價區，尚未回測｜{retest_text}"]
-        volume_text = _volume_window_text(data)
-        if volume_text:
-            try:
-                v10 = float((data or {}).get("volume_ratio_10") or (data or {}).get("volume_ratio") or 1)
-                v20 = float((data or {}).get("volume_ratio_20") or v10)
-                volume_label = "偏弱" if min(v10, v20) < 0.8 else "達標"
-            except (TypeError, ValueError):
-                volume_label = "待確認"
-            rebound_gaps.append(f"{volume_text}{volume_label}")
-        quality = stock_result.get("entry_quality")
-        quality_gap = _quality_wait_gap_text(quality, reason="急彈未回測", funnel_state=funnel_state)
-        if quality_gap:
-            rebound_gaps.append(quality_gap)
-        rr_text = _gate_value_text(stock_result.get("rr"))
-        if rr_text:
-            rr_label = "達標" if stock_result.get("rr_context") == "actionable" and float(rr_text) >= 1.5 else "僅參考"
-            rebound_gaps.append(
-                f"風險報酬 {rr_text}達標"
-                if rr_label == "達標"
-                else _potential_reward_text(rr_text, reason="急彈未回測", funnel_state=funnel_state, stock_result=stock_result)
-            )
-        return evidence_lines(
+        return contract(
             "急彈未回測",
-            "｜".join(rebound_gaps),
-            f"{unlock_text} + 非漲停追價 + 量能有效 + 品質B以上 + 風險報酬>=1.5",
+            retest_text,
+            f"{unlock_text} + 非漲停追價 + 量能有效",
             basis="",
         )
     if behavior in {"LIMIT_LOCK", "LIMIT_REBOUND"} or "漲停" in blocker_text or "不可追高" in blocker_text:
@@ -852,9 +854,9 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
 
     heat = stock_result.get("heat_state")
     if heat == "EXTREME":
-        return evidence_lines("熱度 Lv.3", "熱度 Lv.3｜需降至 Lv.1/觀察以下", "降到 Lv.1/觀察以下 + 回測不破 + 非漲停追價")
+        return contract("熱度 Lv.3", "熱度 Lv.3｜需降至 Lv.1/觀察以下", "降到 Lv.1/觀察以下 + 回測不破 + 非漲停追價")
     if heat == "HOT" or "過熱" in blocker_text:
-        return evidence_lines("過熱觀察", "熱度 Lv.2｜需降至 Lv.1/觀察以下", "降到 Lv.1/觀察以下 + 回測不破")
+        return contract("過熱觀察", "熱度 Lv.2｜需降至 Lv.1/觀察以下", "降到 Lv.1/觀察以下 + 回測不破")
 
     rr_text = _gate_value_text(stock_result.get("rr"))
     if not is_actionable and rr_text and ("RR不足" in blocker_text or float(rr_text) < 1.5):
@@ -865,11 +867,10 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
     policy = _display_entry_distance_policy(stock_result)
     max_pct = policy.get("max_pct")
     if distance_text and policy.get("hard_gate") and max_pct is not None and float(distance_text) > max_pct:
-        distance_gap = _gate_value_text(float(distance_text) - max_pct)
         distance_gap_text = (
-            f"距突破 {distance_text}%｜{policy['label']}需<={_gate_value_text(max_pct)}%｜另等趨勢延續/回測承接setup"
+            "尚未進入買點區"
             if funnel_state == "等接近"
-            else f"距突破 {distance_text}%｜{policy['label']}需<={_gate_value_text(max_pct)}%｜差{distance_gap}%｜若走趨勢延續/回測承接，需另見有效setup"
+            else "尚未形成有效買點型態"
         )
         gates.append((
             "距觸發太遠",
@@ -878,10 +879,7 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
 
     quality = stock_result.get("entry_quality")
     if funnel_state != "等接近" and not is_actionable and quality and quality not in {"A+", "A", "B"}:
-        setup_parts = _entry_setup_summary(data, dist, stock_result, reason="進場品質不足", funnel_state=funnel_state)
         setup_text = _quality_wait_gap_text(quality, reason="進場品質不足", funnel_state=funnel_state)
-        if setup_parts:
-            setup_text += "｜" + "｜".join(setup_parts[:4])
         gates.append(("進場品質不足", setup_text))
 
     if not gates:
@@ -932,7 +930,22 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
         "資料來源缺失": "補齊有效行情 / 策略來源後重新評估",
     }.get(primary_reason, "解除主 blocker 後重新評估")
     basis = "" if funnel_state == "等接近" else None
-    return evidence_lines(primary_reason, primary_gap, unlock, basis=basis)
+    return contract(primary_reason, primary_gap, unlock, basis=basis)
+
+
+def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source_status, strategy_source_blocked, title_label=None):
+    return _entry_contract_text(
+        _unheld_entry_contract(
+            data,
+            dist,
+            blockers,
+            valid_entry,
+            funnel_state,
+            source_status,
+            strategy_source_blocked,
+            title_label=title_label,
+        )
+    )
 
 
 def _stock_decision_judgment(report_context, name):
@@ -1157,70 +1170,29 @@ def _strip_line_prefix(text, prefixes):
     return text
 
 
-def _split_gap_parts(text):
-    return [
-        part.strip()
-        for part in str(text or "").replace("｜", "；").split("；")
-        if part.strip()
-    ]
-
-
-def _first_part_matching(parts, patterns):
-    for part in parts:
-        if any(pattern in part for pattern in patterns):
-            return part
-    return None
-
-
-def _state_scoped_entry_texts(funnel_state, reason, gap, unlock):
-    parts = _split_gap_parts(gap)
-    state = str(funnel_state or "")
-    scoped_gap = gap
-    scoped_unlock = unlock
-
-    if state == "等回測":
-        zone = _first_part_matching(parts, ["站回突破區", "回測區", "解除鎖定"])
-        if zone:
-            scoped_gap = zone
-        elif reason:
-            scoped_gap = reason
-        scoped_unlock = _first_part_matching(
-            _split_gap_parts(unlock),
-            ["先站回突破區", "回測區", "回測不破", "解除鎖定"],
-        ) or unlock
-        if scoped_unlock and " + " in scoped_unlock:
-            scoped_unlock = " + ".join(scoped_unlock.split(" + ")[:3])
-    elif state == "等冷卻":
-        scoped_gap = _first_part_matching(parts, ["熱度"]) or gap
-        scoped_unlock = _first_part_matching(_split_gap_parts(unlock), ["降到", "降溫"]) or unlock
-    elif state in {"等RR修復", "等風險報酬"}:
-        scoped_gap = _first_part_matching(parts, ["風險報酬"]) or gap
-        scoped_unlock = "風險報酬 >= 1.5" if "風險報酬" in str(unlock or "") else unlock
-    elif state == "等型態":
-        scoped_gap = _first_part_matching(parts, ["買點品質", "重新形成", "型態"]) or gap
-        scoped_unlock = "重新形成買點型態 + 買點品質 B 以上"
-    elif state == "等接近":
-        scoped_gap = _first_part_matching(parts, ["策略樣本", "資料", "買點區", "距突破"]) or gap
-        if scoped_gap and "距突破" in scoped_gap:
-            scoped_gap = "尚未進入買點區"
-        scoped_unlock = _first_part_matching(_split_gap_parts(unlock), ["接近觸發區", "補齊", "資料"]) or unlock
-    elif state == "淘汰":
-        scoped_gap = _first_part_matching(
-            parts,
-            ["放量轉強", "重新站回突破區", "補齊", "資料", "策略樣本", "解除鎖定"],
-        ) or reason or gap
-        scoped_unlock = _first_part_matching(
-            _split_gap_parts(unlock),
-            ["放量轉強", "重新站回突破區", "補齊", "解除"],
-        ) or unlock
-        if scoped_unlock and " + " in scoped_unlock:
-            scoped_unlock = " + ".join(scoped_unlock.split(" + ")[:2])
-
-    return scoped_gap, scoped_unlock
-
-
 def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None):
     buy_text = str(buy_line or "").strip()
+    if isinstance(buy_gap_line, dict):
+        reason = buy_gap_line.get("reason")
+        gap = buy_gap_line.get("gap")
+        unlock = buy_gap_line.get("unlock")
+        extras = list(buy_gap_line.get("extras") or [])
+        entry_text = _strip_line_prefix(buy_text, ["買點："])
+        entry_parts = []
+        if entry_text:
+            entry_parts.append(entry_text)
+        if reason and reason not in entry_text:
+            entry_parts.append(f"原因：{reason}")
+        lines = []
+        if entry_parts:
+            lines.append("進場：" + "｜".join(dict.fromkeys(entry_parts)))
+        if gap:
+            lines.append(f"缺口：{gap}")
+        if unlock:
+            lines.append(f"可買：{unlock}")
+        lines.extend(extras)
+        return lines
+
     gap_lines = [
         str(line).strip()
         for line in str(buy_gap_line or "").splitlines()
@@ -1253,7 +1225,6 @@ def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None):
     lines = []
     if entry_parts:
         lines.append("進場：" + "｜".join(dict.fromkeys(entry_parts)))
-    gap, unlock = _state_scoped_entry_texts(funnel_state, reason, gap, unlock)
     if gap:
         lines.append(f"缺口：{gap}")
     if unlock:
@@ -1670,7 +1641,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
             "持有：對齊 5 日 edge，5 日內未續漲或跌破回踩低點即了結",
         ]
     low_volume_limit_up_risk = deps["low_volume_limit_up_risk_text"](data)
-    buy_gap_line = _unheld_buy_gap_line(
+    buy_gap_contract = _unheld_entry_contract(
         data_with_context,
         dist,
         blockers,
@@ -1726,7 +1697,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         or (funnel_state == "淘汰" and "交易狀態：等資料" in str(trade_state_line))
     ):
         trade_state_line = None
-    entry_check_lines = _entry_check_lines(buy_line, buy_gap_line, funnel_state=funnel_state)
+    entry_check_lines = _entry_check_lines(buy_line, buy_gap_contract, funnel_state=funnel_state)
     lines = [
         f"【{deps['stock_title'](name, data)}】{title_icon} {title_action}｜{title_label}",
         trade_state_line,

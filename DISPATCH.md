@@ -24,6 +24,10 @@
   - `等風險報酬` focuses on risk-reward;
   - `等型態` focuses on setup / quality;
   - normal waiting/rejected cards suppress noisy `數據：...` rows.
+- Corrected the implementation path:
+  - official formatter now consumes `_unheld_entry_contract`;
+  - state-specific evidence is selected before formatting;
+  - the old post-format parser/crop path is no longer the active rule source.
 - Strategy calculations and blockers are unchanged.
 - Header/runtime version remains `v21.1`.
 
@@ -32,7 +36,7 @@
 - Dry-run:
   - `generate_report(dry_run=True)`
   - confirmed unheld cards render short state-scoped `進場` / `缺口` / `可買` lines.
-  - `data_lines=0`; `distance_lines=8`.
+  - `legacy_split_rows=0`; `data_lines=0`; `distance_lines=8`.
 - Tests:
   - command: `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py tests\test_unheld_gap_format.py -q --tb=short`
   - result: `205 passed, 44 subtests passed`

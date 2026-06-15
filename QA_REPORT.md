@@ -6,6 +6,7 @@
 - Rebound/retest failure specimen.
 - Non-actionable blocker preservation.
 - Existing unheld gap helper behavior.
+- Structured entry evidence contract for unheld waiting/rejected cards.
 
 ## Risk Scan
 
@@ -14,6 +15,7 @@
 - Existing tests might pass while mobile output still repeats standalone rows.
 - Over-scoping could remove `距突破`, which Owner explicitly wanted to keep.
 - Under-scoping could keep dumping volume/quality/RR into every waiting card.
+- Keeping both old parser-scoping and new contract-scoping could create two competing display rules.
 
 ## Cross-Block Semantic Consistency
 
@@ -27,6 +29,7 @@
   - risk-reward: risk-reward gap;
   - setup: setup / quality;
   - rejected: repair requirement.
+- Official formatting consumes structured entry evidence; the old post-format scoping parser is no longer the active rule path.
 - Summary/funnel counts are not changed.
 - Holding cards are not changed.
 
@@ -46,6 +49,7 @@
   - cards now show `可買：...`;
   - cards still show `距突破：...`;
   - normal unheld cards show `data_lines=0`;
+  - helper-level rebound/setup tests no longer allow volume/quality/RR packages to appear outside their state scope;
   - cards no longer show standalone `拆解`, `買點`, `不能買`, `還差`, or hard-concat `進場檢查`.
 
 ## Evidence
@@ -57,6 +61,7 @@
   - `generate_report(dry_run=True)`
   - result checked locally:
     - `data_lines=0`;
+    - `legacy_split_rows=0`;
     - `distance_lines=8`;
     - 旺宏 card shows only retest-zone blocker details, not the full metric package.
   - no live Telegram delivery.

@@ -28,6 +28,7 @@
   - `等風險報酬`: risk-reward gap only;
   - `等型態`: setup/quality only;
   - `淘汰`: repair requirement only.
+- Official unheld formatting now uses `_unheld_entry_contract`; state-specific evidence is selected before formatting rather than produced as a broad metric package and cropped later.
 - Normal waiting/rejected unheld cards suppress broad `數據：...` metric dumps; fail-closed source/data evidence remains allowed.
 - Strategy logic is unchanged.
 - No DB operation was performed.
@@ -35,7 +36,7 @@
 ## Verification State
 
 - Dry-run `generate_report(dry_run=True)` checked locally; unheld cards render readable state-scoped entry lines.
-- Dry-run unheld message: `data_lines=0`, `distance_lines=8`.
+- Dry-run unheld message: `legacy_split_rows=0`, `data_lines=0`, `distance_lines=8`.
 - Tests:
   - `205 passed, 44 subtests passed`
 - No live Telegram delivery.

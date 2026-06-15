@@ -33,6 +33,7 @@ Owner pasted the 06/16 pre-market unheld report and pointed out repeated mobile-
   - `淘汰` shows the invalidation / repair requirement.
 - Normal waiting/rejected cards suppress noisy `數據：...` rows; source/data failure cards still keep fail-closed evidence.
 - Strategy fields are still computed separately; only presentation is denoised.
+- Entry evidence is now selected before formatting, not generated as a full metric package and trimmed afterward.
 
 ## Non Goals
 
@@ -67,6 +68,7 @@ Owner pasted the 06/16 pre-market unheld report and pointed out repeated mobile-
   - what is missing;
   - what unlocks a buy.
 - Do not display every available metric for every blocker. Show the metric family relevant to the current `funnel_state`.
+- The official generator path must consume structured entry evidence, not parse old `不能買` / `還差` text to decide what to hide.
 
 ## Version Contract
 
@@ -81,6 +83,7 @@ Owner pasted the 06/16 pre-market unheld report and pointed out repeated mobile-
 - Dry-run normal unheld waiting/rejected cards have no `數據：` metric dump.
 - Generator report tests pass.
 - Regression test prevents standalone duplicate `拆解` / `買點` / `不能買` / `還差` rows from returning in the rebound-retest case.
+- Regression test prevents `等回測` / `等型態` helper output from reintroducing volume/quality/RR metric packages outside their state scope.
 - No live Telegram delivery.
 
 ## Fixture / Failure Specimen
