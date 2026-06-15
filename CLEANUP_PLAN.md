@@ -12,6 +12,9 @@
 - `daily_signal_snapshot` v21.1 strategy-axis memory backfill completed:
   - `5786` rows upserted from `daily_price`.
   - all `5786` rows have non-null core strategy-axis memory fields.
+- Retest-memory overfill was corrected:
+  - only active retest rows keep `retest_reference_price` and `retest_days_since_breakout`.
+  - non-retest rows are null for those fields.
 - Duplicate/version cleanup completed:
   - exact duplicates: `0`
   - multi-version extras: `0`

@@ -15,6 +15,7 @@
 - If prune deletes without a plan, unique history may be lost.
 - If `signal_items` is fabricated from daily_price, report-run history becomes false.
 - If docs are not updated, the next round may repeat the same missing-memory confusion.
+- If audit fields are populated too broadly, a non-retest day can look like active retest memory.
 
 ## Cross-Block Semantic Consistency
 
@@ -45,6 +46,9 @@
   - `stock_strength_state=5786`
   - `entry_setup_state=5786`
   - `actionability_state=5786`
+  - `retest_reference_price=356`
+  - `retest_days_since_breakout=356`
+  - non-retest rows with retest anchor cleared: `5430`
 - Prune write:
   - `deleted_rows=0`
   - exact duplicate extra rows after prune: `0`

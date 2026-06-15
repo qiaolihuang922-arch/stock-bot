@@ -17,6 +17,7 @@
   - rows written/upserted: `5786`
   - schema fallback: `false`
 - Read-after-write confirmed all `5786` snapshot rows now have non-null strategy-axis memory fields.
+- Follow-up audit found retest fields were too broad; code and production backfill were tightened so retest anchor/days are only populated on active retest rows.
 - Duplicate/version prune ran:
   - keep version: `v21.1`
   - delete candidates: `0`
@@ -34,6 +35,8 @@
   - `data_quality_state`: `5786/5786`
   - `volume_basis`: `5786/5786`
   - `retest_state`: `5786/5786`
+  - `retest_reference_price`: `356/5786`
+  - `retest_days_since_breakout`: `356/5786`
 - Duplicate audit:
   - exact duplicate extra rows: `0`
   - stock/date multi-version extra rows: `0`

@@ -829,9 +829,18 @@ def build_result(**kwargs):
     setup_blockers_value = kwargs.get("setup_blockers")
     if setup_blockers_value is None:
         setup_blockers_value = [] if setup_blocker_value is None else [setup_blocker_value]
+    retest_state_result = kwargs.get("retest_state") or retest_state_value(
+        setup_state_value,
+        decision,
+        phase_value,
+        behavior_value,
+    )
     retest_reference_price_value = kwargs.get("retest_reference_price")
-    if retest_reference_price_value is None:
+    if retest_reference_price_value is None and retest_state_result != "not_applicable":
         retest_reference_price_value = kwargs.get("retest_zone_low") or kwargs.get("resistance_20")
+    retest_days_value = kwargs.get("retest_days_since_breakout")
+    if retest_days_value is None and retest_state_result != "not_applicable":
+        retest_days_value = kwargs.get("breakout_days")
 
     result = {
 
@@ -1007,19 +1016,11 @@ def build_result(**kwargs):
 
         "intraday_volume_run_rate": kwargs.get("intraday_volume_run_rate"),
 
-        "retest_state": kwargs.get("retest_state") or retest_state_value(
-            setup_state_value,
-            decision,
-            phase_value,
-            behavior_value,
-        ),
+        "retest_state": retest_state_result,
 
         "retest_reference_price": retest_reference_price_value,
 
-        "retest_days_since_breakout": kwargs.get(
-            "retest_days_since_breakout",
-            kwargs.get("breakout_days")
-        ),
+        "retest_days_since_breakout": retest_days_value,
 
         "breakout_reference_type": kwargs.get(
             "breakout_reference_type",

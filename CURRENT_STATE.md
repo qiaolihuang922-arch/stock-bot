@@ -22,6 +22,9 @@
 - v21.3 strategy-axis memory schema is applied in production.
 - `daily_signal_snapshot` backfilled from `daily_price`.
 - `daily_signal_snapshot` now has populated strategy-axis memory for `5786` v21.1 rows.
+- Retest memory was tightened after audit:
+  - only `356` active retest rows have `retest_reference_price` / `retest_days_since_breakout`;
+  - non-retest rows keep those fields null.
 - `signal_items` schema exists, but historical rows are not backfilled because report-run history cannot be reconstructed truthfully from daily_price alone.
 - Duplicate/version prune found no rows to delete.
 
@@ -32,6 +35,7 @@
   - `schema_fallback=false`.
 - Production read-after-write:
   - all `5786` rows have non-null `stock_strength_state`, `entry_setup_state`, and `actionability_state`.
+  - `356` rows have active retest anchor/day fields; `5430` non-retest rows do not.
 - Production prune:
   - exact duplicate extra rows: `0`.
   - multi-version extra rows: `0`.

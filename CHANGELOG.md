@@ -2,6 +2,10 @@
 
 ## Changes
 
+- Tightened retest memory semantics after production distribution audit:
+  - `retest_reference_price` is now populated only when `retest_state != not_applicable`.
+  - `retest_days_since_breakout` is now populated only when `retest_state != not_applicable`.
+  - This prevents non-retest days from looking like they have active retest memory.
 - Ran production DB schema read check for v21.3 fields:
   - `daily_signal_snapshot`: all fields readable.
   - `signal_items`: all fields readable.
@@ -67,6 +71,8 @@
   - `data_quality_state` non-null: `5786`
   - `volume_basis` non-null: `5786`
   - `retest_state` non-null: `5786`
+  - `retest_reference_price` non-null after tightening: `356`
+  - `retest_days_since_breakout` non-null after tightening: `356`
   - exact duplicate extra rows: `0`
   - stock/date multi-version extra rows: `0`
 - Prune write:
