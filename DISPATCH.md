@@ -13,6 +13,11 @@
 ## Current Result
 
 - Decision: yes, v21.1 strategy features should be persisted as typed DB columns.
+- Root cause found for market/theme evidence stale rows:
+  - `daily_price` is written inside normal `run_mode=bot` after-close generator path.
+  - market/theme evidence was only wired to `run_mode=daily_evidence`.
+  - GitHub workflow had `workflow_dispatch` only, so `daily_evidence` did not run daily unless manually dispatched.
+- Added weekday scheduled workflow for `daily_evidence` at 14:30 Asia/Taipei.
 - Added migration artifact:
   - `db/sql/v21_1_strategy_feature_snapshot_columns.sql`
 - Target tables:
@@ -58,6 +63,15 @@ TWSE backfill dry-run:
 - `VALIDATION OK`
 - `DRY RUN ONLY: no database writes`
 
+Market/theme evidence freshness read-only check:
+- `2026-06-10`: complete (`market_theme_confirmed_evidence=9`, `market_theme_index_daily_bars=10`)
+- `2026-06-11`: missing both sources
+- `2026-06-12`: missing both sources
+- `2026-06-15`: missing both sources
+
+Workflow evidence automation tests:
+- `71 passed, 13 subtests passed`
+
 ## Git Completion
 
 - branch: `main`
@@ -70,3 +84,4 @@ TWSE backfill dry-run:
 
 - Production DB is not migrated/backfilled by this task.
 - Owner should apply `db/sql/v21_1_strategy_feature_snapshot_columns.sql`, then run approved backfill.
+- GitHub scheduled `daily_evidence` should fill market/theme evidence going forward after the next weekday 14:30 Asia/Taipei run.

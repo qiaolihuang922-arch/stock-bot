@@ -19,6 +19,11 @@
 ## Current Changes
 
 - v21.1 strategy features are no longer report-only.
+- Market/theme evidence stale-row root cause:
+  - normal bot path writes `daily_price` / `daily_signal_snapshot`;
+  - market/theme evidence writes live under `run_mode=daily_evidence`;
+  - workflow previously had no schedule, only manual dispatch.
+- `.github/workflows/stock-bot-clean.yml` now schedules `daily_evidence` on weekdays at 14:30 Asia/Taipei.
 - New SQL artifact adds typed strategy-feature columns to:
   - `daily_signal_snapshot`
   - `signal_items`
@@ -53,6 +58,11 @@
 - TWSE backfill dry-run:
   - valid rows;
   - no database writes.
+- Market/theme freshness read-only check:
+  - `2026-06-10` complete;
+  - `2026-06-11`, `2026-06-12`, `2026-06-15` missing both market/theme sources.
+- Evidence automation tests:
+  - `71 passed, 13 subtests passed`.
 
 ## Git State
 
@@ -67,3 +77,4 @@
 - Apply `db/sql/v21_1_strategy_feature_snapshot_columns.sql` manually in Supabase before expecting typed columns to store in production.
 - After migration, run approved backfill with `--lookback-days 730 --source twse --version v21.1 --write --confirm-write`.
 - Current repo implementation is ready, but production DB is not yet migrated/backfilled from this task.
+- Market/theme evidence should resume daily after the next scheduled GitHub Actions `daily_evidence` run; older missing dates still need approved backfill if historical continuity is required.
