@@ -2,9 +2,9 @@
 
 ## Current Task
 
-- task_id: `strategy_axis_split_v21_1_20260615`
-- status: `implemented + QA passed`
-- version: `v21.1`
+- task_id: `strategy_axis_memory_schema_v21_3_20260615`
+- status: `implemented + QA conditional pass`
+- version: `v21.1 runtime / v21.3 schema artifact`
 - no live Telegram delivery.
 
 ## Stable Context
@@ -17,31 +17,28 @@
 
 ## Current Implementation State
 
-- v21.1 strategy thresholds remain unchanged.
-- Unheld cards now separate:
-  - `強弱`: stock behavior/strength;
-  - `買點`: setup readiness;
-  - `行動`: buy/wait/no-chase/no-buy actionability.
-- New raw-result derived fields:
-  - `stock_strength_state`
-  - `entry_setup_state`
-  - `actionability_state`
-- Display fallback recalculates from explicit behavior if a replay payload has stale derived values.
-- This is not a DB schema change; the fields are derived in the analysis/report path.
+- Runtime report remains `v21.1`.
+- New schema artifact is `db/sql/v21_3_strategy_axis_memory_columns.sql`.
+- Strategy results now emit persistable memory fields for:
+  - strength/setup/action axes;
+  - setup family/blockers;
+  - data quality;
+  - volume basis;
+  - retest memory.
+- `STRATEGY_FEATURE_FIELDS` carries these fields into daily snapshot and signal item payloads.
+- The SQL has not been executed by the agent.
+- Historical rows have not been backfilled in this task.
 
 ## Verification State
 
 - `258 passed, 149 warnings, 44 subtests passed`.
-- Official generator dry-run printed split-axis unheld cards.
-- Snapshot probes confirmed:
-  - confirmed breakout can reach `READY` / `BUYABLE`;
-  - limit-up can be strong while not chaseable;
-  - strong rebound can wait for retest instead of looking like generic D weakness.
+- Official generator dry-run printed the unheld report successfully.
 - No live Telegram delivery.
-- No DB write, backfill, schema change, RLS, grant, policy, role, index, or constraint change in this task.
+- No production DB write, backfill, schema execution, RLS, grant, policy, role, index, or constraint change by agent.
 
 ## Known Follow-ups
 
 - Commit and push current patch.
-- Observe next scheduled `run_mode=bot` report after push.
-- Optional future strategy task: calibrate thresholds from production outcomes, separate from this presentation/derived-state split.
+- Owner applies `db/sql/v21_3_strategy_axis_memory_columns.sql`.
+- After schema confirmation, run backfill via repo script/interface only.
+- Future tightening: source-error / insufficient-data paths should explicitly set data-quality fields instead of relying on normal defaults.

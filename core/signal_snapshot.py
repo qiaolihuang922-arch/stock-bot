@@ -88,6 +88,22 @@ STRATEGY_FEATURE_FIELDS = [
     "rr_risk_pct",
     "rr_target_basis",
     "rr_formula",
+    "stock_strength_state",
+    "entry_setup_state",
+    "actionability_state",
+    "setup_family",
+    "setup_valid",
+    "setup_blocker",
+    "setup_blockers",
+    "data_quality_state",
+    "price_data_state",
+    "volume_data_state",
+    "volume_basis",
+    "intraday_volume_run_rate",
+    "retest_state",
+    "retest_reference_price",
+    "retest_days_since_breakout",
+    "breakout_reference_type",
 ]
 
 STRATEGY_FEATURE_TEXT_FIELDS = {
@@ -95,6 +111,25 @@ STRATEGY_FEATURE_TEXT_FIELDS = {
     "rr_context",
     "rr_target_basis",
     "rr_formula",
+    "stock_strength_state",
+    "entry_setup_state",
+    "actionability_state",
+    "setup_family",
+    "setup_blocker",
+    "data_quality_state",
+    "price_data_state",
+    "volume_data_state",
+    "volume_basis",
+    "retest_state",
+    "breakout_reference_type",
+}
+
+STRATEGY_FEATURE_BOOL_FIELDS = {
+    "setup_valid",
+}
+
+STRATEGY_FEATURE_JSON_FIELDS = {
+    "setup_blockers",
 }
 
 
@@ -104,6 +139,10 @@ def strategy_feature_payload(source):
     for field in STRATEGY_FEATURE_FIELDS:
         value = source.get(field)
         if field in STRATEGY_FEATURE_TEXT_FIELDS:
+            payload[field] = value
+        elif field in STRATEGY_FEATURE_BOOL_FIELDS:
+            payload[field] = None if value is None else bool(value)
+        elif field in STRATEGY_FEATURE_JSON_FIELDS:
             payload[field] = value
         else:
             payload[field] = _safe_round(value)

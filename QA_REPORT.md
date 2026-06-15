@@ -1,60 +1,56 @@
-# QA_REPORT: strategy_axis_split_v21_1_20260615
+# QA_REPORT: strategy_axis_memory_schema_v21_3_20260615
 
 ## Test Scope
 
-- Strategy-axis split for unheld report cards.
-- Derived analysis fields for strength/setup/actionability.
-- Replay payload robustness when explicit behavior changes after raw result creation.
-- Official generator mobile-reading output.
+- Schema artifact for strategy-axis DB memory.
+- Snapshot payload field propagation.
+- Type handling for text/bool/json/numeric strategy feature fields.
+- Official report dry-run compatibility.
 
 ## Risk Scan
 
-- If only text changes, the report may still flatten strength/setup/action into one D-like conclusion.
-- If strength is treated as buyability, limit-up or overheated stocks may become chase recommendations.
-- If stale derived payload fields are trusted over explicit behavior, replay artifacts can still show wrong strength labels.
-- If actionability is too loose, waiting states can look like buy signals.
+- If SQL exists but payload does not write fields, DB memory remains empty.
+- If payload writes JSON/bool fields as numeric, Supabase writes will fail or data will be corrupted.
+- If agent executes SQL directly, it violates DB schema-change boundary.
+- If fallback is removed, production report can break before Owner applies schema.
+- If data-quality defaults are overused, missing evidence can still look normal.
 
 ## Cross-Block Semantic Consistency
 
-- Limit-up can be strong while action remains wait / no chase.
-- Strong rebound can be improving while setup waits for retest.
-- Risk/reward and setup quality remain blockers when not ready.
-- Summary counts and card titles remain aligned with existing funnel states.
-- No non-actionable card uses buy/recommendation wording.
+- `daily_price` remains OHLCV only.
+- Strategy memory belongs to `daily_signal_snapshot` and `signal_items`.
+- Three-axis report states are now persistable as DB fields.
+- Existing report wording still separates strength/setup/action.
 
 ## User Misread Risk
 
-- Reduced: Owner can now read `強弱`, `買點`, and `行動` as separate ideas.
-- Reduced: `D` no longer has to carry every meaning.
-- Remaining by design: a stock can still be strong but not buyable if the setup is chase/cooldown/retest/RR-blocked.
+- Reduced after schema execution: future reports/backtests can audit why a card was waiting or non-actionable.
+- Remaining: until SQL is applied and backfilled, historical rows do not have these explicit columns.
+- Remaining: source-error and insufficient-data paths still need a follow-up tightening pass.
 
 ## Failure Specimen Countercheck
 
-- Official dry-run produced:
-  - 華邦電: `強弱 強勢鎖價｜買點 等回測確認｜行動 等待`.
-  - 旺宏: `強弱 急彈修復｜買點 等回測確認｜行動 等待`.
-  - 聯電: `強弱 轉強中｜買點 等風險報酬｜行動 等待`.
-- Targeted snapshots confirmed:
-  - confirmed breakout: `STRONG` / `READY` / `BUYABLE`;
-  - weak rebound: `WEAK_REBOUND` / `WAIT_RETEST`;
-  - limit rebound: `REBOUND_STRONG` / `WAIT_RETEST`;
-  - limit lock: `LIMIT_STRONG` / `CHASE_BLOCKED` / `NO_CHASE`.
+- Owner concern was that multi-day memory must not be invented.
+- Countermeasure:
+  - explicit columns for setup state, blockers, retest state, data quality, and volume basis;
+  - snapshot payload test proves these fields are emitted from strategy result;
+  - SQL is manual, reviewable, and idempotent.
 
 ## Evidence
 
 - `258 passed, 149 warnings, 44 subtests passed`.
-- Official dry-run generated the unheld message with split axes.
-- No live Telegram delivery.
-- No DB write or schema change.
+- Official dry-run unheld report rendered successfully.
+- SQL artifact exists at `db/sql/v21_3_strategy_axis_memory_columns.sql`.
 
 ## Not Tested
 
+- Production SQL execution.
+- Production backfill.
 - Scheduled Render/GitHub runner after push.
 - Live Telegram delivery.
-- Production DB writes/backfills.
 
 ## QA Conclusion
 
-通過
+conditional pass
 
-Reason: the tested paths prove this is not only a wording change. The analysis payload, official generator, and rendered card now carry separate strength/setup/action semantics.
+Reason: code and SQL artifact are ready and tested locally, but DB persistence is conditional on Owner applying the schema and then running a separate backfill.

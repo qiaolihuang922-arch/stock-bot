@@ -188,6 +188,14 @@ class AnalysisEngineTest(unittest.TestCase):
         self.assertEqual(item["raw_result"]["stock_strength_state"], "STRONG")
         self.assertEqual(item["raw_result"]["entry_setup_state"], "READY")
         self.assertEqual(item["raw_result"]["actionability_state"], "BUYABLE")
+        self.assertEqual(item["stock_strength_state"], "STRONG")
+        self.assertEqual(item["entry_setup_state"], "READY")
+        self.assertEqual(item["actionability_state"], "BUYABLE")
+        self.assertEqual(item["setup_family"], "breakout")
+        self.assertTrue(item["setup_valid"])
+        self.assertEqual(item["setup_blockers"], [])
+        self.assertEqual(item["data_quality_state"], "complete")
+        self.assertEqual(item["volume_basis"], "daily_close_volume")
         self.assertTrue(item["is_tradeable"])
         self.assertIn("RR足夠", item["reasons"])
 
@@ -205,6 +213,10 @@ class AnalysisEngineTest(unittest.TestCase):
         self.assertEqual(item["raw_result"]["stock_strength_state"], "WEAK_REBOUND")
         self.assertEqual(item["raw_result"]["entry_setup_state"], "WAIT_RETEST")
         self.assertEqual(item["raw_result"]["actionability_state"], "WAIT_RETEST")
+        self.assertEqual(item["setup_family"], "rebound_retest")
+        self.assertFalse(item["setup_valid"])
+        self.assertEqual(item["setup_blocker"], "no_retest")
+        self.assertEqual(item["retest_state"], "waiting")
         self.assertFalse(item["is_tradeable"])
 
     def test_limit_rebound_split_keeps_strength_but_waits_for_retest(self):

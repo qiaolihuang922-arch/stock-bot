@@ -518,6 +518,50 @@ def actionability_state(decision, entry_setup_state_value):
     }.get(entry_setup_state_value, "WAIT_CONFIRM")
 
 
+def setup_family_state(decision_type, phase, behavior, breakout_state):
+    if behavior in {"LIMIT_REBOUND", "WEAK_REBOUND"} or phase in {"LIMIT_REBOUND", "WEAK_REBOUND"}:
+        return "rebound_retest"
+    if behavior == "LIMIT_LOCK" or phase == "LOCK_LIMIT":
+        return "limit_chase_blocked"
+    if phase == "FAILED_BREAKOUT" or breakout_state == "FAIL":
+        return "failed_breakout"
+    if decision_type in {"breakout", "wait_breakout_confirm", "wait_breakout_low_rr"}:
+        return "breakout"
+    if decision_type in {"pre_breakout", "wait_pre_breakout", "wait_pre_breakout_low_rr"}:
+        return "pre_breakout"
+    if decision_type == "trend_continuation":
+        return "trend_continuation"
+    if breakout_state == "READY":
+        return "pre_breakout"
+    if breakout_state == "BREAKOUT":
+        return "breakout"
+    return "none"
+
+
+def setup_blocker_state(setup_state):
+    return {
+        "READY": None,
+        "CHASE_BLOCKED": "chase_blocked",
+        "WAIT_RETEST": "no_retest",
+        "WAIT_COOLDOWN": "overheated",
+        "WAIT_RR": "rr_low",
+        "WAIT_VOLUME": "low_volume",
+        "WAIT_SETUP": "quality_low",
+        "WAIT_APPROACH": "far_from_trigger",
+        "WAIT_CONFIRM": "confirmation_missing",
+    }.get(setup_state, "confirmation_missing")
+
+
+def retest_state_value(setup_state, decision, phase, behavior):
+    if setup_state == "WAIT_RETEST":
+        return "waiting"
+    if decision == "BUY" and (phase in {"LIMIT_REBOUND", "WEAK_REBOUND"} or behavior in {"LIMIT_REBOUND", "WEAK_REBOUND"}):
+        return "confirmed"
+    if phase in {"LIMIT_REBOUND", "WEAK_REBOUND"} or behavior in {"LIMIT_REBOUND", "WEAK_REBOUND"}:
+        return "waiting"
+    return "not_applicable"
+
+
 def guard_low_volume_quality(
     score,
     metrics,
@@ -768,15 +812,32 @@ def build_result(**kwargs):
         decision,
         setup_state_value,
     )
+    decision_type_value = kwargs.get("decision_type", "none")
+    breakout_state_value = kwargs.get("breakout_state", "NONE")
+    setup_family_value = kwargs.get("setup_family") or setup_family_state(
+        decision_type_value,
+        phase_value,
+        behavior_value,
+        breakout_state_value,
+    )
+    setup_valid_value = kwargs.get("setup_valid")
+    if setup_valid_value is None:
+        setup_valid_value = actionability_value == "BUYABLE"
+    setup_blocker_value = kwargs.get("setup_blocker")
+    if setup_blocker_value is None:
+        setup_blocker_value = setup_blocker_state(setup_state_value)
+    setup_blockers_value = kwargs.get("setup_blockers")
+    if setup_blockers_value is None:
+        setup_blockers_value = [] if setup_blocker_value is None else [setup_blocker_value]
+    retest_reference_price_value = kwargs.get("retest_reference_price")
+    if retest_reference_price_value is None:
+        retest_reference_price_value = kwargs.get("retest_zone_low") or kwargs.get("resistance_20")
 
     result = {
 
         "decision": decision,
 
-        "decision_type": kwargs.get(
-            "decision_type",
-            "none"
-        ),
+        "decision_type": decision_type_value,
 
         "wait_reason": kwargs.get(
             "wait_reason"
@@ -851,10 +912,7 @@ def build_result(**kwargs):
             "BASE"
         ),
 
-        "breakout_state": kwargs.get(
-            "breakout_state",
-            "NONE"
-        ),
+        "breakout_state": breakout_state_value,
 
         "trade_state": trade_value,
 
@@ -929,7 +987,44 @@ def build_result(**kwargs):
 
         "entry_setup_state": setup_state_value,
 
-        "actionability_state": actionability_value
+        "actionability_state": actionability_value,
+
+        "setup_family": setup_family_value,
+
+        "setup_valid": setup_valid_value,
+
+        "setup_blocker": setup_blocker_value,
+
+        "setup_blockers": setup_blockers_value,
+
+        "data_quality_state": kwargs.get("data_quality_state", "complete"),
+
+        "price_data_state": kwargs.get("price_data_state", "complete"),
+
+        "volume_data_state": kwargs.get("volume_data_state", "complete"),
+
+        "volume_basis": kwargs.get("volume_basis", "daily_close_volume"),
+
+        "intraday_volume_run_rate": kwargs.get("intraday_volume_run_rate"),
+
+        "retest_state": kwargs.get("retest_state") or retest_state_value(
+            setup_state_value,
+            decision,
+            phase_value,
+            behavior_value,
+        ),
+
+        "retest_reference_price": retest_reference_price_value,
+
+        "retest_days_since_breakout": kwargs.get(
+            "retest_days_since_breakout",
+            kwargs.get("breakout_days")
+        ),
+
+        "breakout_reference_type": kwargs.get(
+            "breakout_reference_type",
+            "close_20" if kwargs.get("resistance_20") is not None else None
+        )
     }
 
     for key in [
@@ -957,6 +1052,22 @@ def build_result(**kwargs):
         "rr_risk_pct",
         "rr_target_basis",
         "rr_formula",
+        "stock_strength_state",
+        "entry_setup_state",
+        "actionability_state",
+        "setup_family",
+        "setup_valid",
+        "setup_blocker",
+        "setup_blockers",
+        "data_quality_state",
+        "price_data_state",
+        "volume_data_state",
+        "volume_basis",
+        "intraday_volume_run_rate",
+        "retest_state",
+        "retest_reference_price",
+        "retest_days_since_breakout",
+        "breakout_reference_type",
     ]:
         if key in kwargs:
             result[key] = kwargs.get(key)

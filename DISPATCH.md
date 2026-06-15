@@ -2,35 +2,46 @@
 
 ## Active
 
-- task_md_holds: `strategy_axis_split_v21_1_20260615`
-- status: `implemented + QA passed`
-- current_version: `v21.1`
+- task_md_holds: `strategy_axis_memory_schema_v21_3_20260615`
+- status: `implemented + QA conditional pass`
+- current_version: `v21.1 runtime / v21.3 schema artifact`
 - no live Telegram delivery in this cycle.
 
 ## Result Summary
 
-- Owner said the system still looks unable to buy: lows, limit-up moves, and multi-day rises can all be blocked in the same way.
-- Root cause:
-  - one visible grade was carrying too many meanings: stock strength, entry setup, and executable action;
-  - replay payloads could also keep stale derived labels after explicit behavior was changed.
-- Fix:
-  - add three strategy axes: `強弱`, `買點`, `行動`;
-  - render them in unheld Telegram cards;
-  - make explicit behavior evidence override stale derived labels;
-  - preserve conservative action rules for limit-up, overheated, retest, RR, volume, and setup blockers.
-- Strategy thresholds, DB schema, production data, and live Telegram were not changed.
+- Owner requested DB-backed memory for strategy axes, not local/runtime/report-text memory.
+- Added SQL artifact:
+  - `db/sql/v21_3_strategy_axis_memory_columns.sql`
+- Added persistable fields for:
+  - `stock_strength_state`
+  - `entry_setup_state`
+  - `actionability_state`
+  - `setup_family`
+  - `setup_valid`
+  - `setup_blocker`
+  - `setup_blockers`
+  - `data_quality_state`
+  - `price_data_state`
+  - `volume_data_state`
+  - `volume_basis`
+  - `intraday_volume_run_rate`
+  - `retest_state`
+  - `retest_reference_price`
+  - `retest_days_since_breakout`
+  - `breakout_reference_type`
+- Wired these through snapshot/report item payload paths.
+- Agent did not execute production SQL, write production data, backfill, or send live Telegram.
 
 ## Verification
 
 - Related regression:
   - `258 passed, 149 warnings, 44 subtests passed`.
 - Official generator dry-run:
-  - generated unheld message with split axis lines.
+  - unheld report still renders.
   - no live Telegram delivery.
-- Snapshot probes:
-  - confirmed breakout can be `READY` / `BUYABLE`;
-  - limit-up is strong but not chaseable;
-  - rebound can be strong/improving but still wait for retest.
+- SQL artifact:
+  - idempotent `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`.
+  - no RLS/grant/policy/role/index/constraint change.
 
 ## Current Git State
 
@@ -40,4 +51,6 @@
 
 ## Next Action
 
-- Commit and push `strategy_axis_split_v21_1_20260615`, then observe next scheduled `run_mode=bot` report.
+- Commit/push this patch.
+- Owner applies `db/sql/v21_3_strategy_axis_memory_columns.sql` in Supabase SQL editor.
+- After schema is confirmed, run a separate backfill task; do not claim historical DB memory exists before backfill.
