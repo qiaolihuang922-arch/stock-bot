@@ -3,7 +3,7 @@
 ## Active
 
 - task_md_holds: `strategy_feature_persistence_v21_1_20260615`
-- status: `implemented_pending_commit_push`
+- status: `complete`
 - owner_request:
   - Re-check from scratch whether v21.1 strategy features need DB fields / more recording.
   - Add fields if needed.
@@ -58,7 +58,16 @@ TWSE backfill dry-run:
 - `VALIDATION OK`
 - `DRY RUN ONLY: no database writes`
 
+## Git Completion
+
+- latest commit: `3a4901b6c8aa7ac213811f16c8fe9b0113a910c4`
+- branch: `main`
+- upstream: `origin/main`
+- local HEAD equals upstream HEAD: `yes`
+- worktree: clean except unreadable local `.pytest_cache` warning from PowerShell/git status.
+- bash gate: blocked by local WSL/Hyper-V unavailable; Windows-equivalent git checks passed.
+
 ## Next Action
 
-- Commit and push this repo change.
-- Production is not fully complete until Owner applies `db/sql/v21_1_strategy_feature_snapshot_columns.sql` and runs approved backfill.
+- Production DB is not migrated/backfilled by this task.
+- Owner should apply `db/sql/v21_1_strategy_feature_snapshot_columns.sql`, then run approved backfill.

@@ -3,7 +3,7 @@
 ## Current Task
 
 - task_id: `strategy_feature_persistence_v21_1_20260615`
-- status: `implemented_pending_commit_push`
+- status: `complete`
 - version: `v21.1`
 - no live Telegram delivery.
 - no live production DB write in this task.
@@ -53,6 +53,15 @@
 - TWSE backfill dry-run:
   - valid rows;
   - no database writes.
+
+## Git State
+
+- latest commit: `3a4901b6c8aa7ac213811f16c8fe9b0113a910c4`
+- branch: `main`
+- upstream: `origin/main`
+- HEAD equals upstream: `yes`
+- worktree: clean except local `.pytest_cache` permission warning.
+- bash completion gate could not run because WSL/Hyper-V is unavailable; Windows-equivalent git checks passed.
 
 ## Known Follow-ups
 
