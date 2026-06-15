@@ -17,7 +17,8 @@
   - `daily_price` is written inside normal `run_mode=bot` after-close generator path.
   - market/theme evidence was only wired to `run_mode=daily_evidence`.
   - GitHub workflow had `workflow_dispatch` only, so `daily_evidence` did not run daily unless manually dispatched.
-- Added weekday scheduled workflow for `daily_evidence` at 14:30 Asia/Taipei.
+- Reworked workflow so normal `run_mode=bot` also runs market/theme freshness after the bot step.
+- `daily_evidence` remains as a manual-only recovery mode, not the daily primary path.
 - Added migration artifact:
   - `db/sql/v21_1_strategy_feature_snapshot_columns.sql`
 - Target tables:
@@ -84,4 +85,4 @@ Workflow evidence automation tests:
 
 - Production DB is not migrated/backfilled by this task.
 - Owner should apply `db/sql/v21_1_strategy_feature_snapshot_columns.sql`, then run approved backfill.
-- GitHub scheduled `daily_evidence` should fill market/theme evidence going forward after the next weekday 14:30 Asia/Taipei run.
+- Normal `run_mode=bot` should fill market/theme evidence going forward after the bot run reaches the after-close safe-write window.

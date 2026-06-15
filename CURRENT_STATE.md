@@ -23,7 +23,8 @@
   - normal bot path writes `daily_price` / `daily_signal_snapshot`;
   - market/theme evidence writes live under `run_mode=daily_evidence`;
   - workflow previously had no schedule, only manual dispatch.
-- `.github/workflows/stock-bot-clean.yml` now schedules `daily_evidence` on weekdays at 14:30 Asia/Taipei.
+- `.github/workflows/stock-bot-clean.yml` now runs market/theme freshness inside normal `run_mode=bot` after the bot step.
+- `daily_evidence` remains available only as a manual recovery mode.
 - New SQL artifact adds typed strategy-feature columns to:
   - `daily_signal_snapshot`
   - `signal_items`
@@ -77,4 +78,4 @@
 - Apply `db/sql/v21_1_strategy_feature_snapshot_columns.sql` manually in Supabase before expecting typed columns to store in production.
 - After migration, run approved backfill with `--lookback-days 730 --source twse --version v21.1 --write --confirm-write`.
 - Current repo implementation is ready, but production DB is not yet migrated/backfilled from this task.
-- Market/theme evidence should resume daily after the next scheduled GitHub Actions `daily_evidence` run; older missing dates still need approved backfill if historical continuity is required.
+- Market/theme evidence should resume through the normal bot workflow after the after-close safe-write window; older missing dates still need approved backfill if historical continuity is required.
