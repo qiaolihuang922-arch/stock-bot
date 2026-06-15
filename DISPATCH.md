@@ -50,7 +50,7 @@
 
 - branch: `main`
 - upstream: `origin/main`
-- latest commit: `pending final closeout hash`
+- latest commit: `git log -1 --oneline`
 - HEAD equals upstream: `true after final closeout push`
 - worktree/index: `clean after final closeout push`
 - closeout uses Windows-equivalent git checks because bash scripts may fail on this machine without WSL/Hyper-V.
