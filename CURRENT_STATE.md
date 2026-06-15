@@ -2,7 +2,7 @@
 
 ## Current Task
 
-- task_id: `rr_wording_readability_v21_1_20260615`
+- task_id: `strategy_readability_audit_v21_1_20260615`
 - status: `implemented + QA passed`
 - version: `v21.1`
 - no live Telegram delivery.
@@ -21,16 +21,22 @@
   - `(target-entry)/(entry-stop)`;
   - non-actionable high values remain theoretical/reference only;
   - production `daily_signal_snapshot` backfill was already verified with no duplicate overlap in the prior cycle.
-- This cycle changed only report terminology:
+- This cycle changed only report presentation semantics:
   - user-visible `RR` is rendered as `風險報酬`;
-  - non-actionable high risk/reward is rendered as `潛在報酬：好（x倍），買點未成立`;
+  - non-actionable high risk/reward is rendered according to strategy blocker:
+    - type/quality not passed;
+    - retest not confirmed;
+    - weak rebound not turned strong;
+    - open confirmation still required;
   - `等RR修復` is rendered as `等風險報酬`;
+  - `setup`, `V10`, and `V20` are removed from visible strategy explanations;
   - strategy decisions and thresholds are unchanged.
 
 ## Verification State
 
 - `205 passed, 147 warnings, 44 subtests passed`.
 - Official generator dry-run printed the updated unheld message and summary.
+- Official dry-run scan found no visible `setup`, `V10`, `V20`, `理論RR`, `理論風險報酬`, or unspaced `風險報酬>=`.
 - No live Telegram delivery.
 - No DB write, backfill, schema change, RLS, grant, policy, role, index, or constraint change in this task.
 

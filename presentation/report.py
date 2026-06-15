@@ -436,7 +436,7 @@ def _volume_window_gap_text(data):
     return f"{volume_text}{'偏弱' if min(v10, v20) < 0.8 else '達標'}"
 
 
-def _rr_gap_summary(stock_result):
+def _rr_gap_summary(stock_result, reason=None, funnel_state=None):
     rr_text = _gate_value_text((stock_result or {}).get("rr"))
     if not rr_text:
         return None
@@ -448,16 +448,33 @@ def _rr_gap_summary(stock_result):
         return None
     if (stock_result or {}).get("rr_context") == "actionable":
         return f"風險報酬 {rr_text}達標"
-    return _potential_reward_text(rr_text)
+    return _potential_reward_text(rr_text, reason=reason, funnel_state=funnel_state, stock_result=stock_result)
 
 
-def _potential_reward_text(rr_text):
+def _potential_reward_text(rr_text, reason=None, funnel_state=None, stock_result=None):
     if not rr_text:
         return "潛在報酬：待確認，買點未成立"
-    return f"潛在報酬：好（{rr_text}倍），買點未成立"
+    reason_text = str(reason or "")
+    state_text = str(funnel_state or "")
+    stock_result = stock_result or {}
+    phase = str(stock_result.get("structure_phase") or "")
+    behavior = str(stock_result.get("price_behavior") or "")
+    if "急彈" in reason_text or state_text == "等回測":
+        suffix = "但尚未回測確認"
+    elif "反彈力道不足" in reason_text or state_text == "淘汰" or phase == "WEAK_REBOUND" or behavior == "WEAK_REBOUND":
+        suffix = "但反彈未轉強"
+    elif "進場品質" in reason_text or state_text == "等型態":
+        suffix = "但型態/品質未過"
+    elif "距觸發" in reason_text or state_text == "等接近":
+        suffix = "但距離買點太遠"
+    elif "開盤" in reason_text or state_text == "可準備":
+        suffix = "但需開盤確認"
+    else:
+        suffix = "但買點未成立"
+    return f"潛在報酬：好（{rr_text}倍），{suffix}"
 
 
-def _entry_setup_summary(data, dist, stock_result):
+def _entry_setup_summary(data, dist, stock_result, reason=None, funnel_state=None):
     parts = []
     retest_text = _retest_zone_text(data)
     if retest_text:
@@ -465,7 +482,7 @@ def _entry_setup_summary(data, dist, stock_result):
     volume_text = _volume_window_gap_text(data)
     if volume_text:
         parts.append(volume_text)
-    rr_text = _rr_gap_summary(stock_result)
+    rr_text = _rr_gap_summary(stock_result, reason=reason, funnel_state=funnel_state)
     if rr_text:
         parts.append(rr_text)
     return parts
@@ -545,7 +562,8 @@ def _supporting_basis_text(data, primary_reason):
     if rr is not None and rr >= 1.5 and stock_result.get("rr_context") == "actionable" and "RR" not in primary:
         basis.append("風險報酬達標")
     elif rr is not None and rr >= 1.5 and "RR" not in primary:
-        basis.append("潛在報酬好，但買點未成立")
+        potential = _potential_reward_text(_gate_value_text(rr), reason=primary_reason, funnel_state=(data or {}).get("funnel_state"), stock_result=stock_result)
+        basis.append(potential.replace("潛在報酬：好", "潛在報酬好"))
     try:
         volume = float((data or {}).get("volume_ratio"))
     except (TypeError, ValueError):
@@ -613,11 +631,13 @@ def _compact_gap_text(text):
         ("進場品質 ", "品質 "),
         ("｜需B以上", "→B以上"),
         (" 未達B", "→B以上"),
+        ("→B以上", "→B 以上"),
         ("（setup未成立）", "僅參考"),
         ("突破區需<=5%", "買點區<=5%"),
         ("突破買點區需<=5%", "買點區<=5%"),
-        ("若走趨勢延續/回測承接，需另見有效setup", "另等趨勢延續/回測承接 setup"),
-        ("另等趨勢延續/回測承接setup", "另等趨勢延續/回測承接 setup"),
+        ("若走趨勢延續/回測承接，需另見有效setup", "另等趨勢延續/回測承接買點型態"),
+        ("另等趨勢延續/回測承接setup", "另等趨勢延續/回測承接買點型態"),
+        ("setup", "買點型態"),
         ("急彈追價區，尚未回測", "急彈後先等回測"),
         ("需降至 Lv.1/觀察以下", "降到 Lv.1/觀察以下"),
         ("需解除鎖定後重新評估", "解除鎖定後再評估"),
@@ -644,7 +664,7 @@ def _compact_gap_text(text):
             part = _potential_reward_text(value)
         elif part.startswith("V10 ") and ("偏弱" in part or "達標" in part):
             label = "量能偏弱" if "偏弱" in part else "量能達標"
-            raw = part.replace("偏弱", "").replace("達標", "")
+            raw = part.replace("偏弱", "").replace("達標", "").replace("V10", "10日量").replace("V20", "20日量")
             part = f"{label}（{raw}）"
         elif part.startswith("風險報酬 ") and "目標1.5" in part:
             part = part.replace("｜", " ")
@@ -659,9 +679,12 @@ def _compact_unlock_text(text):
     replacements = [
         ("解除主 blocker 後重新評估", "主條件解除後重新評估"),
         ("風險報酬比修復到 >=1.5", "風險報酬 >= 1.5"),
-        ("接近觸發區，或另出現趨勢延續/回測承接setup後再評估", "接近觸發區，或出現趨勢延續/回測承接 setup"),
+        ("接近觸發區，或另出現趨勢延續/回測承接setup後再評估", "接近觸發區，或出現趨勢延續/回測承接買點型態"),
         ("回測不破且非追高時重新評估", "回測不破 + 非追高"),
-        ("重新形成突破、回測或趨勢延續 setup", "重新形成突破/回測/趨勢延續 setup"),
+        ("重新形成突破、回測或趨勢延續 setup", "重新形成突破/回測/趨勢延續買點型態"),
+        ("setup", "買點型態"),
+        ("品質B以上", "品質 B 以上"),
+        ("風險報酬>=1.5", "風險報酬 >= 1.5"),
         ("明日開盤後仍守突破區 / 不追價", "開盤後守突破區 + 不追價"),
         ("降溫後重新評估", "降溫後重新評估"),
         ("量能回升後重新評估", "量能回升後重新評估"),
@@ -708,9 +731,21 @@ def _readable_rr_terms(text):
         ("RR>=", "風險報酬>="),
         ("RR ", "風險報酬 "),
         ("等RR", "等風險報酬"),
+        ("風險報酬>=", "風險報酬 >="),
+        ("品質B以上", "品質 B 以上"),
     ]
     for old, new in replacements:
         text = text.replace(old, new)
+    if "】" not in text:
+        strategy_replacements = [
+            ("買點 setup", "買點型態"),
+            ("setup", "買點型態"),
+            ("出現 買點型態", "出現買點型態"),
+            ("重新形成 買點型態", "重新形成買點型態"),
+            ("重新形成買點 買點型態", "重新形成買點型態"),
+        ]
+        for old, new in strategy_replacements:
+            text = text.replace(old, new)
     return text
 
 
@@ -782,7 +817,11 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
         rr_text = _gate_value_text(stock_result.get("rr"))
         if rr_text:
             rr_label = "達標" if stock_result.get("rr_context") == "actionable" and float(rr_text) >= 1.5 else "僅參考"
-            rebound_gaps.append(f"風險報酬 {rr_text}達標" if rr_label == "達標" else _potential_reward_text(rr_text))
+            rebound_gaps.append(
+                f"風險報酬 {rr_text}達標"
+                if rr_label == "達標"
+                else _potential_reward_text(rr_text, reason="急彈未回測", funnel_state=funnel_state, stock_result=stock_result)
+            )
         return evidence_lines(
             "急彈未回測",
             "｜".join(rebound_gaps),
@@ -822,7 +861,7 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
 
     quality = stock_result.get("entry_quality")
     if funnel_state != "等接近" and not is_actionable and quality and quality not in {"A+", "A", "B"}:
-        setup_parts = _entry_setup_summary(data, dist, stock_result)
+        setup_parts = _entry_setup_summary(data, dist, stock_result, reason="進場品質不足", funnel_state=funnel_state)
         setup_text = f"進場品質 {quality}｜需B以上"
         if setup_parts:
             setup_text += "｜" + "｜".join(setup_parts[:4])
@@ -1376,7 +1415,12 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     score_text = _confidence_data_text(report_context, name, data, deps)
     rr_prefix = _rr_data_prefix(stock_result, rr_text)
     if rr_prefix == "潛在報酬":
-        rr_data_text = _potential_reward_text(rr_text)
+        rr_data_text = _potential_reward_text(
+            rr_text,
+            reason=title_label,
+            funnel_state=funnel_state,
+            stock_result=stock_result,
+        )
     else:
         rr_data_text = f"風險報酬：{rr_text}" if rr_text == "-（不可行動）" else f"{rr_prefix} {rr_text}"
     display_score_text = _unheld_score_text_for_state(

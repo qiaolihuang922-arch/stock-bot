@@ -1,12 +1,16 @@
-# CHANGELOG: rr_wording_readability_v21_1_20260615
+# CHANGELOG: strategy_readability_audit_v21_1_20260615
 
 ## Changes
 
-- Updated `presentation/report.py` final Telegram wording so risk/reward shorthand is readable:
-  - `RR` becomes `風險報酬`.
-  - `理論RR ...僅參考` becomes `潛在報酬：好（x倍），買點未成立`.
-  - `等RR修復` becomes `等風險報酬`.
-  - `RR不足` becomes `風險報酬不足`.
+- Updated `presentation/report.py` final Telegram wording so evidence is strategy-aware instead of fixed text replacement:
+  - `等型態` potential reward says the blocker is type/quality.
+  - `等回測` potential reward says the blocker is missing retest confirmation.
+  - `淘汰 / 弱反彈` potential reward says the blocker is weak rebound not yet turning strong.
+  - `可準備` basis says open confirmation is still required.
+- Normalized other visible shorthand:
+  - `setup` -> `買點型態` in explanation lines only, without changing stock titles.
+  - `V10 / V20` -> `10日量 / 20日量`.
+  - `品質B以上` and `風險報酬>=1.5` now include readable spacing.
 - Updated `core/generator.py` helper and funnel display labels to avoid exposing `等RR修復` in summaries.
 - Updated formatter and official generator tests to lock the new visible wording.
 
@@ -23,7 +27,7 @@
 
 - `core.generator.generate_report(dry_run=True)` now prints unheld cards and summaries with `風險報酬` wording.
 - Internal state-machine values are still compatible with existing code paths.
-- Non-actionable high values now display as potential, e.g. `潛在報酬：好（9.94倍），買點未成立`.
+- Non-actionable high values now display the active strategy blocker, e.g. `潛在報酬：好（9.94倍），但型態/品質未過`.
 
 ## Verification
 
@@ -36,7 +40,7 @@
   ```powershell
   $env:PYTHONIOENCODING='utf-8'; .\.venv\Scripts\python.exe -c "from core.generator import generate_report; messages,_=generate_report(dry_run=True); print(messages[1]); print('\n--- SUMMARY ---\n'); print(messages[2])"
   ```
-  Result: unheld message shows `等風險報酬`, `風險報酬不足`, and `潛在報酬：好（x倍），買點未成立`; no live Telegram delivery.
+  Result: unheld message shows state-aware potential reward wording and no visible `setup / V10 / V20 / 理論RR`; no live Telegram delivery.
 
 ## Covered Layers
 
@@ -47,4 +51,4 @@
 
 ## Residual Risk
 
-- The report still includes numeric risk/reward evidence because it is material to buy/no-buy decisions. Future work may add a legend or glossary, but this patch keeps the evidence inline and readable.
+- The report still includes numeric evidence because it is material to buy/no-buy decisions. Future work may further shorten cards, but this patch keeps evidence tied to the strategy blocker.

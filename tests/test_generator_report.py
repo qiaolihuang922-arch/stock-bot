@@ -2940,10 +2940,10 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【旺宏 2337】⏳ 等回測｜急彈待回測", card)
         self.assertIn("買點：不買，等回測", card)
         self.assertIn("不能買：急彈後還沒回測確認", card)
-        self.assertIn("還差：急彈後先等回測；回測區 118~118.59不破；量能偏弱（V10 0.44x / V20 0.62x）；品質 D→B以上；潛在報酬：好（1.6倍），買點未成立", card)
-        self.assertIn("可買條件：回測區 118~118.59不破 + 非漲停追價 + 量能有效 + 品質B以上 + 風險報酬>=1.5", card)
+        self.assertIn("還差：急彈後先等回測；回測區 118~118.59不破；量能偏弱（10日量 0.44x / 20日量 0.62x）；品質 D→B 以上；潛在報酬：好（1.6倍），但尚未回測確認", card)
+        self.assertIn("可買條件：回測區 118~118.59不破 + 非漲停追價 + 量能有效 + 品質 B 以上 + 風險報酬 >= 1.5", card)
         self.assertIn("盤中觸發：回測不破且非漲停追價", card)
-        self.assertIn("數據：潛在報酬：好（1.6倍），買點未成立", card)
+        self.assertIn("數據：潛在報酬：好（1.6倍），但尚未回測確認", card)
         self.assertIn("不適用（等回測）｜原因：等待前高/突破區回測承接", card)
         self.assertNotIn("風險報酬：-（不可行動）", card)
         self.assertNotIn("證據：風控不適用", card)
@@ -2977,7 +2977,7 @@ class GeneratorReportTest(unittest.TestCase):
         card = generator.formatTelegramUnheldCard("旺宏", payload, report_phase="盤中")
 
         self.assertIn("站回突破區 118~118.59", card)
-        self.assertIn("可買條件：先站回突破區 118~118.59，再回測不破 + 非漲停追價 + 量能有效 + 品質B以上 + 風險報酬>=1.5", card)
+        self.assertIn("可買條件：先站回突破區 118~118.59，再回測不破 + 非漲停追價 + 量能有效 + 品質 B 以上 + 風險報酬 >= 1.5", card)
         self.assertNotIn("突破區 118~118.59（現價未站回）不破", card)
 
     def test_unheld_price_line_keeps_closing_parenthesis(self):
@@ -3546,7 +3546,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【緯創 3231】⏳ 等接近｜個股弱勢", unheld_message(messages))
         self.assertIn("交易狀態：等接近｜動作：等待｜主因：個股弱勢｜還差：接近觸發", unheld_message(messages))
         self.assertIn("買點：不買，等接近觸發區", unheld_message(messages))
-        self.assertIn("明日觸發：接近觸發區後重新評估 setup", unheld_message(messages))
+        self.assertIn("明日觸發：接近觸發區後重新評估 買點型態", unheld_message(messages))
         self.assertNotIn("【緯創 3231】⛔ 淘汰", unheld_message(messages))
 
     def test_v19_4_backtest_changes_tracking_order_only(self):
@@ -9300,7 +9300,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【台積電 2330】👀 等風險報酬｜風險報酬不足", rr_card)
         self.assertIn("不能買：風險報酬還不夠", rr_card)
         self.assertIn(
-            "還差：風險報酬 0.98→1.5（差0.52）；距突破 6%；買點區<=5%；差1%；另等趨勢延續/回測承接 setup",
+            "還差：風險報酬 0.98→1.5（差0.52）；距突破 6%；買點區<=5%；差1%；另等趨勢延續/回測承接買點型態",
             rr_card,
         )
         self.assertIn("可買條件：風險報酬 >= 1.5", rr_card)
@@ -9333,7 +9333,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("不能買：盤後訊號需開盤確認", prepare_card)
         self.assertIn("還差：盤後待開盤確認", prepare_card)
         self.assertIn("可買條件：開盤後守突破區 + 不追價", prepare_card)
-        self.assertIn("依據：潛在報酬好，但買點未成立；量能達標；回測僅輔助", prepare_card)
+        self.assertIn("依據：潛在報酬好（1.8倍），但需開盤確認；量能達標；回測僅輔助", prepare_card)
         self.assertIn("原因：盤後待確認，需開盤後重新確認", prepare_card)
         self.assertNotIn("既有買點與倉位規則通過", prepare_card)
         self.assertNotIn("買點尚未成立/需觸發", prepare_card)

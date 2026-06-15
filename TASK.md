@@ -1,21 +1,30 @@
-# TASK: rr_wording_readability_v21_1_20260615
+# TASK: strategy_readability_audit_v21_1_20260615
 
 ## Status
-- task_id: `rr_wording_readability_v21_1_20260615`
-- task_type: `tiny_patch`
+- task_id: `strategy_readability_audit_v21_1_20260615`
+- task_type: `normal_patch`
 - status: `implemented`
 - version: `v21.1`
 - QA level: `L1`
 
 ## Owner Problem
-Owner reported that `理論RR 3.82僅參考` is still not understandable. The report should make the value's direction obvious: whether it is good or bad, and whether it is currently buyable.
+Owner challenged whether the previous change only hard-replaced wording. The report must show evidence according to strategy state, not just rename `RR`. The full visible unheld card should be checked for jargon and misleading generic text.
 
 ## User Visible Result
 - User-visible Telegram report wording changes:
   - `RR` -> `風險報酬`
-  - `理論RR 3.82僅參考` -> `潛在報酬：好（3.82倍），買點未成立`
+  - non-actionable high RR now depends on strategy state:
+    - `等型態`: `潛在報酬：好（x倍），但型態/品質未過`
+    - `等回測`: `潛在報酬：好（x倍），但尚未回測確認`
+    - `淘汰 / 弱反彈`: `潛在報酬：好（x倍），但反彈未轉強`
+    - `可準備`: `潛在報酬好（x倍），但需開盤確認`
   - `等RR修復` -> `等風險報酬`
   - `RR不足` -> `風險報酬不足`
+- Other visible details are also normalized:
+  - `setup` -> `買點型態` in strategy explanation lines.
+  - `V10 / V20` -> `10日量 / 20日量`.
+  - `風險報酬>=1.5` -> `風險報酬 >= 1.5`.
+  - `品質B以上` -> `品質 B 以上`.
 - Example:
   - before: `不能買：RR 還不夠`
   - after: `不能買：風險報酬還不夠`
@@ -42,7 +51,8 @@ Owner reported that `理論RR 3.82僅參考` is still not understandable. The re
 ## Output Contract
 - User-visible report text must not require knowing the abbreviation `RR`.
 - Internal state names may remain unchanged where needed for code compatibility, but final Telegram strings must render as `風險報酬`.
-- Non-actionable high values must be rendered as `潛在報酬：好（x倍），買點未成立`, not as `理論RR` or `僅參考`.
+- Non-actionable high values must be rendered with the active blocker reason, not a generic fixed phrase.
+- Visible strategy explanation should avoid raw English/internal shorthand such as `setup`, `V10`, and `V20`.
 - `可買條件` must remain future unlock criteria, not a current buy recommendation.
 
 ## Version Contract
@@ -50,13 +60,14 @@ Owner reported that `理論RR 3.82僅參考` is still not understandable. The re
 - This is a wording/readability patch within the existing v21.1 report contract.
 
 ## Acceptance Conditions
-- Official generator dry-run shows `等風險報酬`, `風險報酬不足`, and `潛在報酬：好（x倍），買點未成立`.
+- Official generator dry-run shows state-aware potential reward wording for at least `等型態`, `等回測`, and `淘汰 / 弱反彈`.
+- Official generator dry-run does not show user-facing `setup`, `V10`, `V20`, `理論RR`, `理論風險報酬`, or unspaced `風險報酬>=`.
 - Official generator dry-run does not show user-facing `等RR修復` / `RR不足` in the unheld card or summary funnel.
 - Existing formatter/generator tests pass.
 - No live Telegram delivery.
 
 ## Fixture / Failure Specimen
-- Owner sample: 06/15 v21.1 report where `RR`, `理論RR`, and `等RR修復` made the report hard to understand.
+- Owner sample: 06/15 v21.1 report where RR-related wording, setup wording, and volume shorthand made the card feel like a hard text replacement rather than strategy-aware explanation.
 - Required replay route: official `generate_report(dry_run=True)` message list plus formatter tests.
 
 ## Forbidden And Blocking Conditions
