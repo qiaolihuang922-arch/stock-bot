@@ -23,7 +23,7 @@
   - production `daily_signal_snapshot` backfill was already verified with no duplicate overlap in the prior cycle.
 - This cycle changed only report terminology:
   - user-visible `RR` is rendered as `風險報酬`;
-  - `理論RR` is rendered as `理論風險報酬`;
+  - non-actionable high risk/reward is rendered as `潛在報酬：好（x倍），買點未成立`;
   - `等RR修復` is rendered as `等風險報酬`;
   - strategy decisions and thresholds are unchanged.
 

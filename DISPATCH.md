@@ -10,11 +10,11 @@
 ## Result Summary
 
 - Owner asked what `RR` means and said the wording is hard to understand.
-- Report wording now uses `風險報酬` instead of raw `RR` in user-visible Telegram output.
+- Report wording now uses `風險報酬` instead of raw `RR`, and replaces unclear theoretical RR wording with a direct potential-reward judgment.
 - Summary and unheld cards now render:
   - `等風險報酬`
   - `風險報酬不足`
-  - `理論風險報酬 ...僅參考`
+  - `潛在報酬：好（x倍），買點未成立`
 - Strategy thresholds, buy/sell decisions, DB schema, and production data were not changed.
 
 ## Verification

@@ -4,7 +4,7 @@
 
 - Updated `presentation/report.py` final Telegram wording so risk/reward shorthand is readable:
   - `RR` becomes `風險報酬`.
-  - `理論RR` becomes `理論風險報酬`.
+  - `理論RR ...僅參考` becomes `潛在報酬：好（x倍），買點未成立`.
   - `等RR修復` becomes `等風險報酬`.
   - `RR不足` becomes `風險報酬不足`.
 - Updated `core/generator.py` helper and funnel display labels to avoid exposing `等RR修復` in summaries.
@@ -23,7 +23,7 @@
 
 - `core.generator.generate_report(dry_run=True)` now prints unheld cards and summaries with `風險報酬` wording.
 - Internal state-machine values are still compatible with existing code paths.
-- Theoretical values still display as non-actionable reference, e.g. `理論風險報酬 9.94僅參考`.
+- Non-actionable high values now display as potential, e.g. `潛在報酬：好（9.94倍），買點未成立`.
 
 ## Verification
 
@@ -36,7 +36,7 @@
   ```powershell
   $env:PYTHONIOENCODING='utf-8'; .\.venv\Scripts\python.exe -c "from core.generator import generate_report; messages,_=generate_report(dry_run=True); print(messages[1]); print('\n--- SUMMARY ---\n'); print(messages[2])"
   ```
-  Result: unheld message shows `等風險報酬`, `風險報酬不足`, `理論風險報酬`; no live Telegram delivery.
+  Result: unheld message shows `等風險報酬`, `風險報酬不足`, and `潛在報酬：好（x倍），買點未成立`; no live Telegram delivery.
 
 ## Covered Layers
 

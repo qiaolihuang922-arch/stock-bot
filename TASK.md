@@ -8,18 +8,18 @@
 - QA level: `L1`
 
 ## Owner Problem
-Owner reported that the report still exposes `RR`, `理論RR`, and `等RR修復`, which are not understandable enough on mobile. The report should say what the term means in the trading decision instead of showing internal shorthand.
+Owner reported that `理論RR 3.82僅參考` is still not understandable. The report should make the value's direction obvious: whether it is good or bad, and whether it is currently buyable.
 
 ## User Visible Result
 - User-visible Telegram report wording changes:
   - `RR` -> `風險報酬`
-  - `理論RR` -> `理論風險報酬`
+  - `理論RR 3.82僅參考` -> `潛在報酬：好（3.82倍），買點未成立`
   - `等RR修復` -> `等風險報酬`
   - `RR不足` -> `風險報酬不足`
 - Example:
   - before: `不能買：RR 還不夠`
   - after: `不能買：風險報酬還不夠`
-- The meaning is unchanged: risk/reward is the expected reward divided by the risk from entry to stop. High theoretical values remain reference-only when setup has not formed.
+- The meaning is unchanged: risk/reward is the expected reward divided by the risk from entry to stop. High non-actionable values are shown as good potential, while explicitly saying the buy setup has not formed.
 
 ## Non Goals
 - No live Telegram delivery.
@@ -42,7 +42,7 @@ Owner reported that the report still exposes `RR`, `理論RR`, and `等RR修復`
 ## Output Contract
 - User-visible report text must not require knowing the abbreviation `RR`.
 - Internal state names may remain unchanged where needed for code compatibility, but final Telegram strings must render as `風險報酬`.
-- Non-actionable high theoretical values must remain clearly marked as `理論風險報酬 ...僅參考`.
+- Non-actionable high values must be rendered as `潛在報酬：好（x倍），買點未成立`, not as `理論RR` or `僅參考`.
 - `可買條件` must remain future unlock criteria, not a current buy recommendation.
 
 ## Version Contract
@@ -50,7 +50,7 @@ Owner reported that the report still exposes `RR`, `理論RR`, and `等RR修復`
 - This is a wording/readability patch within the existing v21.1 report contract.
 
 ## Acceptance Conditions
-- Official generator dry-run shows `等風險報酬`, `風險報酬不足`, and `理論風險報酬`.
+- Official generator dry-run shows `等風險報酬`, `風險報酬不足`, and `潛在報酬：好（x倍），買點未成立`.
 - Official generator dry-run does not show user-facing `等RR修復` / `RR不足` in the unheld card or summary funnel.
 - Existing formatter/generator tests pass.
 - No live Telegram delivery.

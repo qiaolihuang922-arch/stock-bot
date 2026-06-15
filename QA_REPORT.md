@@ -11,14 +11,14 @@
 
 - Replacing `RR` too shallowly could leave old shorthand in summary or data lines.
 - Replacing it too broadly could change internal state compatibility.
-- Theoretical risk/reward could be misread as buy evidence if `理論` / `僅參考` is removed.
+- Potential reward could be misread as buy evidence if `買點未成立` is removed.
 
 ## Cross-Block Semantic Consistency
 
 - Summary still says `新增有效進場：無`.
 - Unheld cards still say `買點：不買...` or `不可買...`.
 - `等風險報酬` in the title matches `風險報酬修復` in the card body and summary funnel.
-- `理論風險報酬 ...僅參考` remains non-actionable when setup is not formed.
+- `潛在報酬：好（x倍），買點未成立` keeps the value direction clear while remaining non-actionable.
 
 ## User Misread Risk
 
@@ -30,7 +30,7 @@
 
 - Owner 06/15 v21.1 sample was replayed through official dry-run.
 - `聯電` now reads `等風險報酬` and `不能買：風險報酬還不夠`.
-- Weak setup cards now show `理論風險報酬 ...僅參考`.
+- Weak setup cards now show `潛在報酬：好（x倍），買點未成立`.
 
 ## Evidence
 

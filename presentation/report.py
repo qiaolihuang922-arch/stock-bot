@@ -448,7 +448,13 @@ def _rr_gap_summary(stock_result):
         return None
     if (stock_result or {}).get("rr_context") == "actionable":
         return f"風險報酬 {rr_text}達標"
-    return f"理論風險報酬 {rr_text}（setup未成立）"
+    return _potential_reward_text(rr_text)
+
+
+def _potential_reward_text(rr_text):
+    if not rr_text:
+        return "潛在報酬：待確認，買點未成立"
+    return f"潛在報酬：好（{rr_text}倍），買點未成立"
 
 
 def _entry_setup_summary(data, dist, stock_result):
@@ -539,7 +545,7 @@ def _supporting_basis_text(data, primary_reason):
     if rr is not None and rr >= 1.5 and stock_result.get("rr_context") == "actionable" and "RR" not in primary:
         basis.append("風險報酬達標")
     elif rr is not None and rr >= 1.5 and "RR" not in primary:
-        basis.append("理論風險報酬僅參考")
+        basis.append("潛在報酬好，但買點未成立")
     try:
         volume = float((data or {}).get("volume_ratio"))
     except (TypeError, ValueError):
@@ -623,7 +629,6 @@ def _compact_gap_text(text):
     for old, new in replacements:
         text = text.replace(old, new)
     text = text.replace("（現價未站回）", "")
-    text = text.replace("理論RR ", "理論風險報酬 ")
     text = text.replace("RR ", "風險報酬 ")
     parts = []
     for part in text.split("｜"):
@@ -634,6 +639,9 @@ def _compact_gap_text(text):
             part = "站回" + part
         elif part.startswith("回測區 "):
             part = part + "不破"
+        elif part.startswith("理論風險報酬 ") or part.startswith("理論RR "):
+            value = part.replace("理論風險報酬 ", "").replace("理論RR ", "").replace("僅參考", "").strip()
+            part = _potential_reward_text(value)
         elif part.startswith("V10 ") and ("偏弱" in part or "達標" in part):
             label = "量能偏弱" if "偏弱" in part else "量能達標"
             raw = part.replace("偏弱", "").replace("達標", "")
@@ -693,7 +701,8 @@ def _readable_rr_terms(text):
         ("RR不足", "風險報酬不足"),
         ("RR不可用", "風險報酬不可用"),
         ("RR達標", "風險報酬達標"),
-        ("理論RR", "理論風險報酬"),
+        ("理論RR", "潛在報酬"),
+        ("理論風險報酬", "潛在報酬"),
         ("RR：", "風險報酬："),
         ("RR >=", "風險報酬 >="),
         ("RR>=", "風險報酬>="),
@@ -773,7 +782,7 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
         rr_text = _gate_value_text(stock_result.get("rr"))
         if rr_text:
             rr_label = "達標" if stock_result.get("rr_context") == "actionable" and float(rr_text) >= 1.5 else "僅參考"
-            rebound_gaps.append(f"{'風險報酬' if rr_label == '達標' else '理論風險報酬'} {rr_text}{rr_label}")
+            rebound_gaps.append(f"風險報酬 {rr_text}達標" if rr_label == "達標" else _potential_reward_text(rr_text))
         return evidence_lines(
             "急彈未回測",
             "｜".join(rebound_gaps),
@@ -1174,7 +1183,7 @@ def _rr_data_prefix(stock_result, rr_text):
     if rr_value is not None and rr_value < 1.5:
         return "風險報酬"
     if (stock_result or {}).get("rr_context") in {"blocked", "setup_pending", "theoretical"}:
-        return "理論風險報酬"
+        return "潛在報酬"
     return "風險報酬"
 
 
@@ -1366,7 +1375,10 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     raw_size_text = deps["entry_size_text"](stock_result)
     score_text = _confidence_data_text(report_context, name, data, deps)
     rr_prefix = _rr_data_prefix(stock_result, rr_text)
-    rr_data_text = f"風險報酬：{rr_text}" if rr_text == "-（不可行動）" else f"{rr_prefix} {rr_text}"
+    if rr_prefix == "潛在報酬":
+        rr_data_text = _potential_reward_text(rr_text)
+    else:
+        rr_data_text = f"風險報酬：{rr_text}" if rr_text == "-（不可行動）" else f"{rr_prefix} {rr_text}"
     display_score_text = _unheld_score_text_for_state(
         score_text,
         rr_text,
