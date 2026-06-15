@@ -81,7 +81,7 @@ from services.market_theme_evidence_store import load_confirmed_market_theme_evi
 
 tz = pytz.timezone("Asia/Taipei")
 
-VERSION = "v21.0.4"
+VERSION = "v21.0.5"
 
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
@@ -612,8 +612,10 @@ def entry_blockers(result):
     if (trade == "NO_VOLUME" or result.get("volume_state") == "WEAK") and volume_is_primary_gate(result):
         labels.append("量能不足")
 
-    if result.get("market_grade") == "D":
+    if result.get("market_state") in {"weak", "bear"}:
         labels.append("市場弱")
+    elif result.get("market_grade") in {"D", "E"}:
+        labels.append("個股弱勢")
 
     if distance_blocks_entry(result, dist) or far_without_actionable_setup(result, dist):
         labels.append("遠離觸發")
@@ -932,6 +934,9 @@ def entry_conclusion(result):
 
     if "市場弱" in blockers:
         return "市場弱，不新增"
+
+    if "個股弱勢" in blockers:
+        return "個股弱勢，不新增"
 
     if "量能不足" in blockers:
         return "量能不足，等量"
@@ -1268,8 +1273,10 @@ def semantic_condition_labels(
     for item in condition_items:
 
         if item == "market":
-            if result.get("market_grade") == "D":
+            if result.get("market_state") in {"weak", "bear"}:
                 label = "市場弱"
+            elif result.get("market_grade") in {"D", "E"}:
+                label = "個股弱勢"
             else:
                 # 中文註釋：v19.1.3 中性盤不是弱勢盤，缺口文字改成未轉強避免顯示衝突。
                 label = "市場未強"
@@ -1738,6 +1745,9 @@ def snapshot_bucket_from_result(result):
     if "市場弱" in blockers:
         return "市場弱"
 
+    if "個股弱勢" in blockers:
+        return "個股弱勢"
+
     if result.get("decision") == "FAIL":
         return "突破失敗"
 
@@ -1770,8 +1780,11 @@ def snapshot_bucket_from_row(row):
     if pattern == "LIMIT_REBOUND":
         return "漲停反彈"
 
-    if row.get("market_state") == "D":
+    if row.get("market_state") in {"weak", "bear"}:
         return "市場弱"
+
+    if row.get("market_state") in {"D", "E"}:
+        return "個股弱勢"
 
     if row.get("action") == "FAIL":
         return "突破失敗"
@@ -2927,6 +2940,9 @@ def tomorrow_watch_state(name, data):
 
     if label == "市場弱" or "市場弱" in blockers:
         return "等市場"
+
+    if label == "個股弱勢" or "個股弱勢" in blockers:
+        return "等型態"
 
     return "隔日確認"
 
@@ -4108,6 +4124,9 @@ def entry_wait_text(result):
     if first == "市場弱":
         return "等市場轉強"
 
+    if first == "個股弱勢":
+        return "等個股型態修復"
+
     if first == "遠離觸發":
         return "等回接近買點"
 
@@ -4121,6 +4140,9 @@ def unheld_entry_wait_text(result, state, funnel_state):
 
         if reason == "市場弱":
             return "等市場轉強"
+
+        if reason == "個股弱勢":
+            return "等個股型態修復"
 
         if reason in ["結構弱", "弱反彈待確認"]:
             return "等結構修復"
@@ -4844,7 +4866,21 @@ def _unheld_decision_source_status(report_context, name):
     )
 
 
+def _has_source_decision_context(report_context):
+    return bool(
+        report_context
+        and (
+            report_context.get("evidence_manifest")
+            or report_context.get("source_status")
+            or report_context.get("source_status_summary")
+            or report_context.get("stock_judgments")
+        )
+    )
+
+
 def _unheld_decision_source_eligible(report_context, name):
+    if not _has_source_decision_context(report_context):
+        return True
     return _unheld_decision_source_status(report_context, name) == "available"
 
 
@@ -4904,6 +4940,16 @@ def _unheld_hard_gate_reasons(result, source_status="available"):
             reasons.append(reason)
     if (result or {}).get("heat_state") in {"HOT", "EXTREME"}:
         reasons.append("overheat / EXTREME")
+    quality = (result or {}).get("entry_quality")
+    quality_low = bool(quality and quality not in {"A+", "A", "B"})
+    try:
+        rr = (result or {}).get("rr")
+        if rr is not None and float(rr) < 1.5 and quality_low:
+            reasons.append("unresolved RR不足")
+    except (TypeError, ValueError):
+        pass
+    if quality and quality not in {"A+", "A", "B"}:
+        reasons.append("進場品質不足")
     if (result or {}).get("decision") == "FAIL" or (result or {}).get("structure_phase") == "FAILED_BREAKOUT":
         reasons.append("failed breakout")
     return list(dict.fromkeys(reasons))
@@ -5790,7 +5836,7 @@ def strong_prepare_bucket(data):
         or behavior == "BREAKOUT_NEAR"
         or (distance is not None and 0 <= distance <= 5)
     )
-    if near_breakout and not blocker_set.intersection({"RR不足", "量能不足", "市場弱", "弱反彈待確認"}):
+    if near_breakout and not blocker_set.intersection({"RR不足", "量能不足", "市場弱", "個股弱勢", "弱反彈待確認"}):
         return "突破回測", "待觸發，不追高"
 
     return None, None
@@ -5921,7 +5967,11 @@ def unheld_funnel_state(name, data, market_mode=None, report_context=None):
         market_mode=market_mode,
         report_context=report_context,
     )
-    source_status = _unheld_decision_source_status(report_context, name)
+    source_status = (
+        _unheld_decision_source_status(report_context, name)
+        if _has_source_decision_context(report_context)
+        else "available"
+    )
     stock_source_status = _stock_decision_source_status(report_context, name)
     strategy_source_status = _strategy_sample_decision_source_status(report_context)
     if (
@@ -5931,13 +5981,24 @@ def unheld_funnel_state(name, data, market_mode=None, report_context=None):
     ):
         return "等資料"
     hard_gate_reasons = _unheld_hard_gate_reasons((data or {}).get("result") or {}, source_status)
-    if hard_gate_reasons and state in {"可買", "趨勢延續", "可準備"}:
+    source_gate_reasons = {"missing-source", "source-error", "conflicting evidence", "insufficient-data"}
+    source_only_gate = bool(hard_gate_reasons) and set(hard_gate_reasons).issubset(source_gate_reasons)
+    result = (data or {}).get("result") or {}
+    if (
+        hard_gate_reasons
+        and state in {"可買", "趨勢延續", "可準備", "隔日確認"}
+        and (not source_only_gate or is_valid_entry(result))
+    ):
         if "unresolved RR不足" in hard_gate_reasons:
             fallback_state = "等RR修復"
         elif "overheat / EXTREME" in hard_gate_reasons:
             fallback_state = "等冷卻"
         elif "volume hard gate" in hard_gate_reasons:
             fallback_state = "等量能"
+        elif "進場品質不足" in hard_gate_reasons:
+            fallback_state = "等型態"
+        elif state != "隔日確認" and any(reason in hard_gate_reasons for reason in ["missing-source", "source-error", "conflicting evidence", "insufficient-data"]):
+            fallback_state = "等資料"
         else:
             fallback_state = tomorrow_watch_state(name, data)
         state = fallback_state if fallback_state in {
@@ -5948,8 +6009,14 @@ def unheld_funnel_state(name, data, market_mode=None, report_context=None):
             "等回測",
             "等RR修復",
             "等量能",
+            "等資料",
             "隔日確認",
         } else "淘汰"
+    if state == "隔日確認":
+        result = (data or {}).get("result") or {}
+        quality = result.get("entry_quality")
+        if quality and quality not in {"A+", "A", "B"}:
+            state = "等型態"
     if reason:
         data["evidence_adjustment_reason"] = reason
     else:
@@ -6183,8 +6250,11 @@ def rejected_primary_reason(result):
     if "量能不足" in blockers:
         return "量能不足"
 
-    if result.get("market_grade") == "D" or "市場弱" in blockers:
+    if result.get("market_state") in {"weak", "bear"} or "市場弱" in blockers:
         return "市場弱"
+
+    if result.get("market_grade") in {"D", "E"} or "個股弱勢" in blockers:
+        return "個股弱勢"
 
     if "RR不足" in blockers:
         return "RR不可用"
@@ -7075,13 +7145,16 @@ def apply_trade_state_machine(results_map, report_context=None, market_mode=None
             report_context=report_context,
         )
         watch_state = tomorrow_watch_state(name, data)
+        source_status = _unheld_decision_source_status(report_context, name)
+        if funnel_state == "可準備" and not is_valid_entry((data.get("result") or {})):
+            source_status = "available"
         data["trade_state_machine"] = evaluate_unheld_state(
             name,
             data,
             funnel_state=funnel_state,
             watch_state=watch_state,
             trigger=tomorrow_trigger_text(watch_state, data),
-            source_status=_unheld_decision_source_status(report_context, name),
+            source_status=source_status,
         )
     return results_map
 
@@ -7167,6 +7240,7 @@ def _telegram_presentation_deps():
         "_stock_decision_source_status": _stock_decision_source_status,
         "_strategy_sample_decision_source_status": _strategy_sample_decision_source_status,
         "_unheld_decision_source_status": _unheld_decision_source_status,
+        "_has_source_decision_context": _has_source_decision_context,
         "is_valid_entry": is_valid_entry,
         "post_market_unheld_buy_requires_open_confirmation": post_market_unheld_buy_requires_open_confirmation,
         "final_label": final_label,
@@ -7653,12 +7727,21 @@ def unheld_buy_risk_label(result, title_label):
     if (
         title_label == "RR不足"
         and (
-            result.get("market_grade") == "D"
+            result.get("market_state") in {"weak", "bear"}
             or result.get("structure_phase") in ["WEAK", "WEAK_REBOUND", "DISTRIBUTION"]
             or "市場弱" in blockers
         )
     ):
         return "市場弱"
+
+    if (
+        title_label == "RR不足"
+        and (
+            result.get("market_grade") in {"D", "E"}
+            or "個股弱勢" in blockers
+        )
+    ):
+        return "個股弱勢"
 
     if title_label == "RR不足" and result.get("heat_state") not in ["HOT", "EXTREME"]:
         return "RR不足"

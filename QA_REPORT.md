@@ -1,41 +1,48 @@
-# QA_REPORT: entry_distance_strategy_v21_0_4_20260611
+# QA_REPORT: report_conflict_entry_gate_v21_0_5_20260615
 
-## Scope
-- Breakout-distance strategy policy.
-- Unheld state machine guard behavior.
-- Telegram card distance wording.
-- Official dry-run message list.
+## Test Scope
+- Owner pasted `06/15 盤中｜v21.0.4` conflict class.
+- Unheld entry blocker wording and state-machine states.
+- Broad market gate versus individual stock gate.
+- False data-source gate on dry-run / report-only paths.
+- Official generator message list.
 
 ## Risk Scan
-- Raising `<=4%` to `<=5%` without setup separation would still be a fake fix.
-- Removing distance gates entirely would allow chasing far non-setup stocks.
-- Pullback/trend continuation must not be blocked by pivot distance alone.
-- Rejected/source-failed cards must not show contradictory `淘汰` + `等資料` main lines.
+- `市場：中性觀察 R2` must not coexist with every unheld stock blocked by `等市場｜市場弱`.
+- Missing source context in a dry-run must not create fake `等資料`.
+- A stock may be blocked by heat, RR, setup, or individual weakness without calling it market-wide weakness.
+- No card should expose internal English noise such as `entry quality low`.
+- No change should create a valid buy when the underlying score remains non-actionable.
 
 ## Semantic Consistency
-- Breakout buy zone: distance gate.
-- Pullback reclaim: setup confirmation gate, not pivot-distance gate.
-- Trend continuation: small-size continuation gate, not pivot-distance gate.
-- No valid setup: wait for setup/approach, not buy.
+- Market gate: only true weak/bear market states block as `市場弱`.
+- Stock gate: low individual grade blocks as `個股弱勢`.
+- Heat gate: limit-up / overheated moves stay non-chase and wait for cooldown or retest.
+- Volume gate: used as confirmation for breakout/setup quality, not a universal buy ban.
+- RR gate: weak reward/risk waits for repair and is not mislabeled as source failure.
 
 ## Failure Specimen Countercheck
-- Owner said all reports used `<=4` and had no strategy.
-- Countercheck:
-  - formatter now emits `突破買點區需<=5%`;
-  - old `突破策略需<=4%` is absent in dry-run;
-  - state-machine tests prove far breakout is blocked but far pullback/trend continuation are not blocked by distance alone.
+- Official dry-run after the patch produced `v21.0.5`.
+- Counterchecks:
+  - `has_R2_market_weak_conflict False`
+  - `has_nextday_data_conflict False`
+  - `has_english_quality_noise False`
+  - `has_buyable False`
+  - `liandian_rr True`
 
 ## Additional Challenge
-- Dry-run also checked that old `今日盤中交易執行` wording remains absent and rejected/source-failed unheld cards do not show the old `淘汰` + `交易狀態：等資料` conflict.
+- QA checked the final official generator path, not only helper fixtures.
+- The current dry-run remains conservative: no valid new entry is emitted.
+- The fix changes labels and gates, not hidden data or fake market evidence.
 
 ## Not Tested
 - Live Telegram delivery.
-- Production DB writes/backfill.
-- Live broker/order execution.
+- Production DB write/backfill.
+- Broker/order execution.
 
 ## QA Conclusion
 通過
 
 Evidence:
 - `246 passed, 145 warnings, 57 subtests passed`.
-- Official dry-run checks passed with no live Telegram delivery.
+- Official dry-run conflict probe passed with no live Telegram delivery.

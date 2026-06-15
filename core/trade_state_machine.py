@@ -79,6 +79,7 @@ UNHELD_FUNNEL_STATE_MAP = {
     "等回測": "WAIT_PULLBACK",
     "等RR修復": "WAIT_RR",
     "等冷卻": "WAIT_COOLDOWN",
+    "等資料": "WAIT_DATA",
     "隔日確認": "WATCH",
     "淘汰": "BLOCKED",
     "弱勢淘汰": "BLOCKED",
@@ -456,8 +457,10 @@ def _unheld_guard_snapshot(data, source_status=None):
     source_blocker = _source_blocker(source_status)
     if source_blocker:
         guards.append(source_blocker)
-    if result.get("market_grade") in {"D", "E"} or result.get("market_state") in {"weak", "bear"}:
+    if result.get("market_state") in {"weak", "bear"}:
         guards.append("MARKET_WEAK")
+    elif result.get("market_grade") in {"D", "E"}:
+        guards.append("STOCK_WEAK")
     setup = _setup_type(result)
     if setup == "NO_SETUP":
         guards.append("SETUP_NOT_READY")
@@ -521,10 +524,10 @@ def _unheld_event_from_target(target_state, *, source_status=None, guards=None):
         return "DATA_GATE_FAILED"
     guard_set = set(guards or [])
     if target_state == "WATCH":
-        if _source_blocker(source_status):
-            return "DATA_GATE_FAILED"
         if "MARKET_WEAK" in guard_set:
             return "MARKET_GATE_FAILED"
+        if "STOCK_WEAK" in guard_set:
+            return "SETUP_NOT_READY"
         if "SETUP_NOT_READY" in guard_set:
             return "SETUP_NOT_READY"
         if "STRUCTURE_FAILED" in guard_set:
@@ -655,7 +658,7 @@ def evaluate_unheld_state(
     elif state == "BLOCKED" and not blocked_by:
         blocked_by.extend(
             guard for guard in guards
-            if guard in {"STRUCTURE_FAILED", "MARKET_WEAK", "DATA_CONFLICT"}
+            if guard in {"STRUCTURE_FAILED", "MARKET_WEAK", "STOCK_WEAK", "DATA_CONFLICT"}
         )
     blocked_by = list(dict.fromkeys(blocked_by))
     return {
@@ -705,6 +708,8 @@ def visible_state_line(machine_state):
         guards = set(machine_state.get("guards") or [])
         if "MARKET_WEAK" in guards and machine_state.get("state") != "WAIT_MARKET":
             parts.append("主因：市場弱")
+        elif "STOCK_WEAK" in guards and machine_state.get("state") != "WAIT_MARKET":
+            parts.append("主因：個股弱勢")
         if next_label:
             prefix = "下一步" if machine_state.get("is_actionable") else "還差"
             if "MARKET_WEAK" in guards and machine_state.get("state") not in {"WAIT_MARKET", "WAIT_DATA"}:

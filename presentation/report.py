@@ -905,6 +905,10 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     stock_source_status = deps["_stock_decision_source_status"](report_context, name)
     strategy_source_status = deps["_strategy_sample_decision_source_status"](report_context)
     source_status = deps["_unheld_decision_source_status"](report_context, name)
+    if not deps["_has_source_decision_context"](report_context):
+        stock_source_status = "available"
+        strategy_source_status = "available"
+        source_status = "available"
     stock_source_eligible = stock_source_status == "available"
     strategy_source_eligible = strategy_source_status == "available"
     strategy_source_blocked = stock_source_eligible and not strategy_source_eligible
@@ -912,8 +916,8 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     valid_entry = deps["is_valid_entry"](stock_result) and source_eligible
     title_label = "買點成立" if valid_entry else (blockers[0] if blockers else deps["final_label"](stock_result))
     state = deps["tomorrow_watch_state"](name, data)
-    data_source_display_blocked = strategy_source_blocked and state == "等資料"
     funnel_state = deps["unheld_funnel_state"](name, data, market_mode=market_mode, report_context=report_context)
+    data_source_display_blocked = strategy_source_blocked and (state == "等資料" or funnel_state == "等資料")
     prepare_label, prepare_action = deps["strong_prepare_bucket"](data)
     post_market_prepare = (
         source_eligible
@@ -933,6 +937,8 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     if not valid_entry and funnel_state in ["等冷卻", "等市場", "等接近", "等型態", "等回測", "等RR修復", "等量能", "等資料", "隔日確認", "淘汰"]:
         state = funnel_state
     if data_source_display_blocked:
+        title_label = "資料不足"
+    elif funnel_state == "等資料":
         title_label = "資料不足"
     elif deps["is_valid_entry"](stock_result) and strategy_source_blocked:
         title_label = {
@@ -1043,6 +1049,10 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         buy_line = "買點：不買，等資料恢復"
         data_line = f"數據：{rr_data_text}｜{display_score_text}｜V {data.get('volume_ratio', '-')}x"
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
+    elif funnel_state == "等資料":
+        buy_line = "買點：不買，等資料恢復"
+        data_line = f"數據：{rr_data_text}｜{display_score_text}｜V {data.get('volume_ratio', '-')}x"
+        price_line = deps["price_change_line"](data.get("price"), data.get("change"))
     elif funnel_state == "可準備" and prepare_action:
         buy_line = f"買點：{prepare_action}"
         data_line = f"數據：{rr_data_text}｜{display_score_text}｜V {data.get('volume_ratio', '-')}x"
@@ -1068,6 +1078,8 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         tomorrow_line = f"{trigger_label}：回踩站回日，小倉執行；不追高加碼"
     elif data_source_display_blocked:
         tomorrow_line = f"{trigger_label}：無有效進場，先補策略樣本證據"
+    elif funnel_state == "等資料":
+        tomorrow_line = f"{trigger_label}：資料恢復後再評估"
     elif deps["is_valid_entry"](stock_result) and strategy_source_blocked:
         tomorrow_line = f"{trigger_label}：無有效進場，先補策略樣本證據"
     else:

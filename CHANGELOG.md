@@ -1,49 +1,58 @@
-# CHANGELOG: entry_distance_strategy_v21_0_4_20260611
+# CHANGELOG: report_conflict_entry_gate_v21_0_5_20260615
 
 ## Changes
 - `core/generator.py`
-  - Bumped visible version to `v21.0.4`.
-  - Added `entry_distance_policy()` and `distance_blocks_entry()`.
-  - Breakout/pre-breakout entries use `<=5%`.
-  - Base-reversal gets its own wider observation policy.
-  - Pullback reclaim and trend continuation are not blocked by breakout distance alone.
-  - Kept far-without-setup as non-actionable wait/approach logic.
+  - Bumped visible version to `v21.0.5`.
+  - Separated broad market weakness from individual stock weakness.
+  - Prevented `市場：中性觀察 R2` from producing unheld cards that say `等市場｜市場弱`.
+  - Added source-context detection so dry-run / owner pasted report paths do not become false `等資料`.
+  - Converted unresolved entry quality and RR gates into Chinese visible reasons.
+  - Made non-actionable prepare/watch cards fail closed without pretending they are valid buys.
 - `core/trade_state_machine.py`
-  - Added matching distance policy helpers.
-  - `TOO_FAR_FROM_TRIGGER` now applies only when the setup type has a distance hard gate.
-  - Added tests to prove far pullback/trend-continuation are not blocked by pivot distance alone.
+  - Added `WAIT_DATA` mapping for real data failures.
+  - Split `MARKET_WEAK` and `STOCK_WEAK` guards.
+  - Stopped WATCH cards from becoming data failures solely because source context is absent.
+  - Display now shows `個股弱勢` when the blocker is stock-level, not market-wide.
 - `presentation/report.py`
-  - Replaced `突破策略需<=4%` display with strategy-specific `突破買點區需<=5%`.
-  - Added display policy helper for gap text.
-  - Suppressed conflicting `交易狀態：等資料` line on rejected/source-failed cards when the card's main action is already non-actionable.
-- Tests updated to `v21.0.4` and new distance wording.
+  - Treats source status as available when the report has no real source-decision context.
+  - Shows `資料不足` only for real `等資料` cards.
+  - Keeps data-recovery wording only on real data-state cards.
+- Tests updated for `v21.0.5`, stock-level weakness wording, and revised unheld state counts.
 
 ## Contract Impact
-- Telegram visible version changes to `v21.0.4`.
-- Unheld gap wording changes from a universal 4% rule to strategy-specific 5% breakout buy-zone wording.
-- State machine guard semantics change:
-  - `TOO_FAR_FROM_TRIGGER` no longer applies to pullback reclaim / trend continuation solely because breakout distance is high.
-- No DB schema or payload shape change.
+- Telegram visible version changes to `v21.0.5`.
+- User-visible unheld gates now distinguish:
+  - market-wide weakness: `市場弱` / `等市場`;
+  - individual stock weakness: `個股弱勢` / `等型態` or setup wait;
+  - real source failure: `等資料`;
+  - RR problem: `等RR修復`.
+- No DB schema, RLS, grant, policy, role, index, payload shape, or live Telegram change.
 
 ## Verification
-- Combined report/state/evidence:
+- Combined state/report/evidence tests:
   ```powershell
-  .\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py tests/test_trade_state_machine.py tests/test_market_theme_evidence.py -q --tb=short
+  .\.venv\Scripts\python.exe -m pytest tests/test_trade_state_machine.py tests/test_generator_report.py tests/test_market_theme_evidence.py -q --tb=short
   ```
   Result: `246 passed, 145 warnings, 57 subtests passed`.
-- Official dry-run:
+- Official dry-run conflict probe:
   ```powershell
-  .\.venv\Scripts\python.exe -c "from core.generator import generate_report; messages,_=generate_report(dry_run=True); print('\n\n--- MESSAGE ---\n\n'.join(messages))"
+  $env:PYTHONIOENCODING='utf-8'; .\.venv\Scripts\python.exe -c "from core.generator import generate_report, VERSION; messages,_=generate_report(dry_run=True); text='\n'.join(messages); print('version', VERSION); print('has_R2_market_weak_conflict', ('市場：中性觀察 R2' in text and '等市場｜市場弱' in text)); print('has_nextday_data_conflict', ('隔日確認' in text and '交易狀態：等資料' in text)); print('has_english_quality_noise', 'entry quality low' in text); print('has_buyable', '可買｜' in text or '趨勢延續買入' in text); print('liandian_rr', '【聯電 2303】👀 等RR修復｜觀察' in text and '交易狀態：等RR修復' in text)"
   ```
-  Checked: `v21.0.4`, no old `<=4%` wording, no old execution wording, no rejected/data-state conflict.
+  Result:
+  - `version v21.0.5`
+  - `has_R2_market_weak_conflict False`
+  - `has_nextday_data_conflict False`
+  - `has_english_quality_noise False`
+  - `has_buyable False`
+  - `liandian_rr True`
 
 ## Coverage Layers
-- Research-informed policy.
-- State machine guard.
-- Official Telegram formatter.
+- Formatter / visible Telegram report.
 - Official generator dry-run.
+- State machine transition and guard behavior.
+- Market/theme evidence tests.
 
 ## Residual Risk
-- This is still rule-based strategy logic, not a learned optimizer.
-- Exact live report classifications may move during market hours as prices update.
-- Live Telegram delivery was intentionally not tested.
+- No live Telegram delivery was performed.
+- No production DB write/backfill was performed.
+- This remains rule-based decision logic; it does not claim to predict bottoms.

@@ -2,9 +2,9 @@
 
 ## Current Task
 
-- task_id: `entry_distance_strategy_v21_0_4_20260611`
+- task_id: `report_conflict_entry_gate_v21_0_5_20260615`
 - status: `complete`
-- version: `v21.0.4`
+- version: `v21.0.5`
 - no live Telegram delivery.
 
 ## Stable Context
@@ -17,23 +17,31 @@
 
 ## Current Changes
 
-- Distance-to-breakout is no longer a universal `<=4%` rule.
-- Breakout/pre-breakout uses `<=5%` pivot buy zone.
-- Pullback reclaim and trend continuation are allowed to use their own setup gates.
-- Far-without-setup remains non-actionable and waits for approach/setup.
-- Telegram display uses strategy-specific distance wording.
+- Market-wide weakness and individual-stock weakness are no longer conflated.
+- Source/data failure is not inferred from missing report-only context.
+- Unheld blockers now separate:
+  - market gate;
+  - individual stock weakness;
+  - setup/distance;
+  - volume confirmation;
+  - heat/cooldown;
+  - RR repair;
+  - real data/source failure.
+- The current official dry-run has no valid buy signal.
 
 ## Verification State
 
-- `tests/test_generator_report.py tests/test_trade_state_machine.py tests/test_market_theme_evidence.py`:
+- `tests/test_trade_state_machine.py tests/test_generator_report.py tests/test_market_theme_evidence.py`:
   - `246 passed, 145 warnings, 57 subtests passed`.
 - Official dry-run confirmed:
-  - `v21.0.4`.
-  - old `<=4%` wording absent.
-  - old intraday execution wording absent.
-  - rejected/data-state conflict absent.
+  - `v21.0.5`.
+  - no R2-versus-market-weak conflict.
+  - no next-day/data-state conflict.
+  - no `entry quality low` visible noise.
+  - no valid new buy emitted.
+  - `聯電` is represented as RR repair, not data failure.
 
 ## Known Follow-ups
 
 - Live Telegram delivery not tested by design.
-- This patch separates rule-based entry paths; it does not yet learn thresholds from historical DB outcomes.
+- Strategy remains rule-based; bottom buying requires confirmed setup/RR/heat cooldown, not just a low price.
