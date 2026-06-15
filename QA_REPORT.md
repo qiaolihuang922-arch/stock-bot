@@ -1,60 +1,55 @@
-# QA_REPORT: rr_context_standardization_v21_1_20260615
+# QA_REPORT: unheld_readability_v21_1_20260615
 
 ## Test Scope
 
-- RR formula component generation in strategy output.
-- Snapshot and signal-item persistence payloads for typed RR fields.
-- Backfill payload compatibility.
-- Telegram formatter/generator wording for high RR but blocked setup.
-- Official generator dry-run with no live Telegram delivery.
+- Unheld blocker wording and ordering.
+- Mobile misread risk for non-actionable cards.
+- Official generator message-list replay.
+- Regression coverage for RR不足, heat, retest, quality/setup, source-error, sample-error, and prepare states.
 
 ## Risk Scan
 
-- A high RR number can mislead the user into thinking a stock is buyable.
-- RR不足 must remain visibly insufficient and not be hidden as theoretical.
-- Schema extension must not break runner before Owner applies migration.
-- Helper-level tests are not enough; final message list must be replayed.
+- `可買條件` could be mistaken as a current buy signal if paired with buy-like wording.
+- Removing diagnostics could hide why a stock is blocked.
+- Helper-level formatting could pass while official report still contains old labels.
 
 ## Cross-Block Semantic Consistency
 
-- Unheld card state, blocker, `量化差距`, `補充`, and summary now agree:
-  - `等型態` / quality D: high RR is theoretical.
-  - `等回測` / sharp rebound: high RR is only reference until retest confirms.
-  - `等RR修復`: low RR is shown as the blocker.
-- No card converts `理論RR` into a buy recommendation.
+- Summary still says `新增有效進場：無`.
+- Unheld cards still say `買點：不買...` or `不可買...`.
+- `不能買` explains the current blocker.
+- `可買條件` explains future unlock criteria only.
+- Theoretical RR remains `理論RR ...僅參考`.
 
 ## User Misread Risk
 
-- Reduced: report no longer says `RR 達標` for non-actionable high RR.
-- Remaining: target-basis choice is still a strategy assumption, so the new DB fields are needed for later calibration and audit.
+- Reduced: cards no longer lead with internal diagnostic labels.
+- Reduced: long pipes are converted into semicolon clauses.
+- Checked: non-actionable cards do not contain `可立即買` or `建議買入`.
 
 ## Failure Specimen Countercheck
 
-- Owner-style dry-run report was replayed through official `generate_report(dry_run=True)`.
-- `旺宏 2337` is still not buyable, but now explains: waiting for retest, current high RR is theoretical/reference only.
-- `緯創 / 仁寶 / 技嘉` no longer display high RR as actionable evidence while quality/setup is D.
+- Owner 06/15 v21.1 unheld sample was replayed through official dry-run.
+- `旺宏` now reads:
+  - cannot buy because sharp rebound has not retested;
+  - missing retest / breakout-zone reclaim / volume / quality;
+  - buyable only after reclaim + retest hold + non-chase + volume + quality + RR.
+- Weak setup names now show high RR as theoretical reference, not buy evidence.
 
 ## Evidence
 
-- `263 passed, 147 warnings, 44 subtests passed`.
-- Official dry-run generated 4 messages, no live delivery.
-- Dry-run confirmed `理論RR` wording on non-actionable high RR cards and normal `RR` wording on RR不足 card.
-- Production DB verification after Owner-applied schema and approved-script backfill:
-  - `daily_signal_snapshot`: 5786 rows, all `v21.1`.
-  - RR component missing rows: 0.
-  - exact duplicate groups: 0.
-  - old-version overlap rows: 0.
-  - prune dry-run delete candidates: 0.
-  - warmup daily_price rows written: 664.
+- `205 passed, 147 warnings, 44 subtests passed`.
+- Official dry-run printed the unheld message with the new three-line blocker structure.
+- No live Telegram delivery.
 
 ## Not Tested
 
 - Live Telegram delivery.
-- Next scheduled GitHub/Render runner artifact after push.
-- Historical `signal_items` reconstruction.
+- Scheduled Render/GitHub runner artifact after push.
+- Production DB writes, because this task is display-only.
 
 ## QA Conclusion
 
-conditional pass
+通過
 
-Reason: repo code, tests, official dry-run, production schema read, approved backfill, and duplicate audit pass. Live Telegram delivery was intentionally not performed, and the next scheduled runner artifact still needs observation.
+Reason: formatter, official generator, and Owner-style dry-run evidence all cover the visible readability problem without strategy or DB changes.

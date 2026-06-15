@@ -567,6 +567,117 @@ def _strategy_granular_basis_line(funnel_state, primary_reason, basis):
     return f"補充：{basis}"
 
 
+def _decision_first_reason_text(reason):
+    mapping = {
+        "RR不足": "RR 還不夠",
+        "距觸發太遠": "還沒到買點區",
+        "未站回突破區": "尚未站回突破區",
+        "熱度 Lv.3": "漲停/過熱，不追價",
+        "過熱觀察": "短線過熱，先等冷卻",
+        "急彈未回測": "急彈後還沒回測確認",
+        "進場品質不足": "型態/品質還沒過",
+        "反彈力道不足": "反彈還沒轉強",
+        "漲跌停鎖定": "漲跌停鎖定，不追價",
+        "開盤確認未完成": "盤後訊號需開盤確認",
+        "量能不足": "量能還沒補上",
+        "樣本不足": "策略樣本不足",
+        "資料來源缺失": "資料來源缺失",
+        "市場背景": "市場背景未轉強",
+        "市場弱": "市場仍弱",
+    }
+    return mapping.get(str(reason or ""), str(reason or "條件未完成"))
+
+
+def _compact_gap_text(text):
+    text = str(text or "").strip()
+    if not text:
+        return text
+    if text.startswith("RR ") and "｜需>=1.5｜差" in text:
+        rr_value = text.split("｜", 1)[0].replace("RR ", "").strip()
+        tail = text.split("｜差", 1)
+        gap_value = tail[1].split("｜", 1)[0].strip() if len(tail) > 1 else None
+        rest = tail[1].split("｜", 1)[1] if len(tail) > 1 and "｜" in tail[1] else ""
+        base = f"RR {rr_value}→1.5"
+        if gap_value:
+            base += f"（差{gap_value}）"
+        text = base + (f"｜{rest}" if rest else "")
+    replacements = [
+        ("需>=1.5", "目標1.5"),
+        ("進場品質 ", "品質 "),
+        ("｜需B以上", "→B以上"),
+        (" 未達B", "→B以上"),
+        ("（setup未成立）", "僅參考"),
+        ("突破區需<=5%", "買點區<=5%"),
+        ("突破買點區需<=5%", "買點區<=5%"),
+        ("若走趨勢延續/回測承接，需另見有效setup", "另等趨勢延續/回測承接 setup"),
+        ("另等趨勢延續/回測承接setup", "另等趨勢延續/回測承接 setup"),
+        ("急彈追價區，尚未回測", "急彈後先等回測"),
+        ("需降至 Lv.1/觀察以下", "降到 Lv.1/觀察以下"),
+        ("需解除鎖定後重新評估", "解除鎖定後再評估"),
+        ("需放量轉強後重新評估", "放量轉強後再評估"),
+        ("需量能回升後重新評估", "量能回升後再評估"),
+        ("需更多有效策略樣本確認", "補足有效策略樣本"),
+        ("需補齊有效行情 / 策略來源", "補齊行情/策略來源"),
+    ]
+    for old, new in replacements:
+        text = text.replace(old, new)
+    text = text.replace("（現價未站回）", "")
+    text = text.replace("理論RR ", "理論RR ")
+    parts = []
+    for part in text.split("｜"):
+        part = part.strip()
+        if not part:
+            continue
+        if part.startswith("突破區 "):
+            part = "站回" + part
+        elif part.startswith("回測區 "):
+            part = part + "不破"
+        elif part.startswith("V10 ") and ("偏弱" in part or "達標" in part):
+            label = "量能偏弱" if "偏弱" in part else "量能達標"
+            raw = part.replace("偏弱", "").replace("達標", "")
+            part = f"{label}（{raw}）"
+        elif part.startswith("RR ") and "目標1.5" in part:
+            part = part.replace("RR ", "RR ").replace("｜", " ")
+        parts.append(part)
+    return "；".join(dict.fromkeys(parts))
+
+
+def _compact_unlock_text(text):
+    text = str(text or "").strip()
+    if not text:
+        return text
+    replacements = [
+        ("解除主 blocker 後重新評估", "主條件解除後重新評估"),
+        ("風險報酬比修復到 >=1.5", "RR >= 1.5"),
+        ("接近觸發區，或另出現趨勢延續/回測承接setup後再評估", "接近觸發區，或出現趨勢延續/回測承接 setup"),
+        ("回測不破且非追高時重新評估", "回測不破 + 非追高"),
+        ("重新形成突破、回測或趨勢延續 setup", "重新形成突破/回測/趨勢延續 setup"),
+        ("明日開盤後仍守突破區 / 不追價", "開盤後守突破區 + 不追價"),
+        ("降溫後重新評估", "降溫後重新評估"),
+        ("量能回升後重新評估", "量能回升後重新評估"),
+        ("補齊有效策略樣本後重新評估", "補齊有效策略樣本後重新評估"),
+        ("補齊有效行情 / 策略來源後重新評估", "補齊行情/策略來源後重新評估"),
+    ]
+    for old, new in replacements:
+        text = text.replace(old, new)
+    text = text.replace(" + ", " + ")
+    return text
+
+
+def _readable_evidence_lines(reason, gap, unlock=None, basis=None, funnel_state=None):
+    lines = [
+        f"不能買：{_decision_first_reason_text(reason)}",
+        f"還差：{_compact_gap_text(gap)}",
+    ]
+    if unlock:
+        lines.append(f"可買條件：{_compact_unlock_text(unlock)}")
+    if basis:
+        basis_line = _strategy_granular_basis_line(funnel_state, reason, basis)
+        if basis_line and basis_line.startswith("依據："):
+            lines.append(basis_line)
+    return "\n".join(lines)
+
+
 def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source_status, strategy_source_blocked, title_label=None):
     stock_result = data.get("result") or {}
     is_actionable = valid_entry or funnel_state == "趨勢延續"
@@ -580,15 +691,8 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
         return None
 
     def evidence_lines(reason, gap, unlock=None, basis=None):
-        lines = [f"卡關主因：{reason}", f"量化差距：{gap}"]
-        if unlock:
-            lines.append(f"解鎖：{unlock}")
         basis = basis if basis is not None else _supporting_basis_text(data, reason)
-        if basis:
-            basis_line = _strategy_granular_basis_line(funnel_state, reason, basis)
-            if basis_line:
-                lines.append(basis_line)
-        return "\n".join(lines)
+        return _readable_evidence_lines(reason, gap, unlock, basis=basis, funnel_state=funnel_state)
 
     gates = []
     source_gates = []
@@ -656,9 +760,9 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
 
     heat = stock_result.get("heat_state")
     if heat == "EXTREME":
-        return evidence_lines("熱度 Lv.3", "熱度 Lv.3｜需降至 Lv.1/觀察以下", "降溫後重新評估")
+        return evidence_lines("熱度 Lv.3", "熱度 Lv.3｜需降至 Lv.1/觀察以下", "降到 Lv.1/觀察以下 + 回測不破 + 非漲停追價")
     if heat == "HOT" or "過熱" in blocker_text:
-        return evidence_lines("過熱觀察", "熱度 Lv.2｜需降至 Lv.1/觀察以下", "降溫後重新評估")
+        return evidence_lines("過熱觀察", "熱度 Lv.2｜需降至 Lv.1/觀察以下", "降到 Lv.1/觀察以下 + 回測不破")
 
     rr_text = _gate_value_text(stock_result.get("rr"))
     if not is_actionable and rr_text and ("RR不足" in blocker_text or float(rr_text) < 1.5):
@@ -725,10 +829,13 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
         "距觸發太遠": "接近觸發區，或另出現趨勢延續/回測承接setup後再評估",
         "市場背景": "市場轉強後再評估",
         "漲跌停鎖定": "解除鎖定後重新評估",
-        "反彈力道不足": "放量轉強後重新評估",
+        "反彈力道不足": "放量轉強 + 品質B以上 + RR>=1.5",
         "急彈未回測": "回測不破且非追高時重新評估",
         "市場弱": "市場轉強後重新評估",
         "量能不足": "量能回升後重新評估",
+        "進場品質不足": "重新形成 setup + 品質B以上 + 量能有效 + RR>=1.5",
+        "過熱觀察": "降溫到 Lv.1/觀察以下 + 回測不破",
+        "熱度 Lv.3": "降溫到 Lv.1/觀察以下 + 回測不破 + 非漲停追價",
         "樣本不足": "補齊有效策略樣本後重新評估",
         "資料來源缺失": "補齊有效行情 / 策略來源後重新評估",
     }.get(primary_reason, "解除主 blocker 後重新評估")

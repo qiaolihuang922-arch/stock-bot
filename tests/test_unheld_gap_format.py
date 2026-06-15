@@ -25,11 +25,11 @@ def test_unheld_quality_gap_includes_setup_volume_and_rr_context():
         strategy_source_blocked=False,
     )
 
-    assert "卡關主因：進場品質不足" in line
-    assert "進場品質 D｜需B以上" in line
-    assert "突破區 194~194.97（現價未站回）" in line
-    assert "V10 0.48x / V20 0.61x偏弱" in line
-    assert "理論RR 9.94（setup未成立）" in line
+    assert "不能買：型態/品質還沒過" in line
+    assert "品質 D→B以上" in line
+    assert "站回突破區 194~194.97" in line
+    assert "量能偏弱（V10 0.48x / V20 0.61x）" in line
+    assert "理論RR 9.94僅參考" in line
 
 
 def test_unheld_rebound_gap_keeps_retest_unlock_contract():
@@ -56,10 +56,10 @@ def test_unheld_rebound_gap_keeps_retest_unlock_contract():
         strategy_source_blocked=False,
     )
 
-    assert "卡關主因：急彈未回測" in line
-    assert "急彈追價區，尚未回測" in line
-    assert "突破區 175.5~176.38（現價未站回）" in line
-    assert "V10 0.52x / V20 0.26x偏弱" in line
-    assert "品質 D 未達B" in line
+    assert "不能買：急彈後還沒回測確認" in line
+    assert "急彈後先等回測" in line
+    assert "站回突破區 175.5~176.38" in line
+    assert "量能偏弱（V10 0.52x / V20 0.26x）" in line
+    assert "品質 D→B以上" in line
     assert "理論RR 2.21僅參考" in line
     assert "先站回突破區 175.5~176.38，再回測不破" in line
