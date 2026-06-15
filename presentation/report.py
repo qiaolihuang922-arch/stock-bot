@@ -1157,7 +1157,69 @@ def _strip_line_prefix(text, prefixes):
     return text
 
 
-def _entry_check_lines(buy_line, buy_gap_line):
+def _split_gap_parts(text):
+    return [
+        part.strip()
+        for part in str(text or "").replace("｜", "；").split("；")
+        if part.strip()
+    ]
+
+
+def _first_part_matching(parts, patterns):
+    for part in parts:
+        if any(pattern in part for pattern in patterns):
+            return part
+    return None
+
+
+def _state_scoped_entry_texts(funnel_state, reason, gap, unlock):
+    parts = _split_gap_parts(gap)
+    state = str(funnel_state or "")
+    scoped_gap = gap
+    scoped_unlock = unlock
+
+    if state == "等回測":
+        zone = _first_part_matching(parts, ["站回突破區", "回測區", "解除鎖定"])
+        if zone:
+            scoped_gap = zone
+        elif reason:
+            scoped_gap = reason
+        scoped_unlock = _first_part_matching(
+            _split_gap_parts(unlock),
+            ["先站回突破區", "回測區", "回測不破", "解除鎖定"],
+        ) or unlock
+        if scoped_unlock and " + " in scoped_unlock:
+            scoped_unlock = " + ".join(scoped_unlock.split(" + ")[:3])
+    elif state == "等冷卻":
+        scoped_gap = _first_part_matching(parts, ["熱度"]) or gap
+        scoped_unlock = _first_part_matching(_split_gap_parts(unlock), ["降到", "降溫"]) or unlock
+    elif state in {"等RR修復", "等風險報酬"}:
+        scoped_gap = _first_part_matching(parts, ["風險報酬"]) or gap
+        scoped_unlock = "風險報酬 >= 1.5" if "風險報酬" in str(unlock or "") else unlock
+    elif state == "等型態":
+        scoped_gap = _first_part_matching(parts, ["買點品質", "重新形成", "型態"]) or gap
+        scoped_unlock = "重新形成買點型態 + 買點品質 B 以上"
+    elif state == "等接近":
+        scoped_gap = _first_part_matching(parts, ["策略樣本", "資料", "買點區", "距突破"]) or gap
+        if scoped_gap and "距突破" in scoped_gap:
+            scoped_gap = "尚未進入買點區"
+        scoped_unlock = _first_part_matching(_split_gap_parts(unlock), ["接近觸發區", "補齊", "資料"]) or unlock
+    elif state == "淘汰":
+        scoped_gap = _first_part_matching(
+            parts,
+            ["放量轉強", "重新站回突破區", "補齊", "資料", "策略樣本", "解除鎖定"],
+        ) or reason or gap
+        scoped_unlock = _first_part_matching(
+            _split_gap_parts(unlock),
+            ["放量轉強", "重新站回突破區", "補齊", "解除"],
+        ) or unlock
+        if scoped_unlock and " + " in scoped_unlock:
+            scoped_unlock = " + ".join(scoped_unlock.split(" + ")[:2])
+
+    return scoped_gap, scoped_unlock
+
+
+def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None):
     buy_text = str(buy_line or "").strip()
     gap_lines = [
         str(line).strip()
@@ -1191,6 +1253,7 @@ def _entry_check_lines(buy_line, buy_gap_line):
     lines = []
     if entry_parts:
         lines.append("進場：" + "｜".join(dict.fromkeys(entry_parts)))
+    gap, unlock = _state_scoped_entry_texts(funnel_state, reason, gap, unlock)
     if gap:
         lines.append(f"缺口：{gap}")
     if unlock:
@@ -1639,6 +1702,15 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         and ("不適用" in data_line or "風控不適用" in data_line)
     ):
         data_line = None
+    if (
+        not valid_entry
+        and not post_market_prepare
+        and not data_source_display_blocked
+        and "資料來源" not in str(title_label or "")
+        and "策略樣本" not in str(title_label or "")
+        and funnel_state in {"等冷卻", "等回測", "等型態", "等接近", "等RR修復", "淘汰"}
+    ):
+        data_line = None
     market_line = None if is_afterhours_rejected else (
         "盤面：證據不足｜待確認"
         if strategy_source_blocked
@@ -1654,7 +1726,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         or (funnel_state == "淘汰" and "交易狀態：等資料" in str(trade_state_line))
     ):
         trade_state_line = None
-    entry_check_lines = _entry_check_lines(buy_line, buy_gap_line)
+    entry_check_lines = _entry_check_lines(buy_line, buy_gap_line, funnel_state=funnel_state)
     lines = [
         f"【{deps['stock_title'](name, data)}】{title_icon} {title_action}｜{title_label}",
         trade_state_line,

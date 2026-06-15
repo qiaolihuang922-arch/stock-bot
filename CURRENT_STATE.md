@@ -22,12 +22,20 @@
   - no standalone `拆解`;
   - no wall-like `狀態` / `進場檢查`;
   - non-actionable cards show `進場` / `缺口` / `可買`.
+- Latest adjustment keeps `距突破` as its own line while narrowing `缺口` / `可買` to the current state:
+  - `等回測`: retest / breakout-zone confirmation only;
+  - `等冷卻`: heat/cooling only;
+  - `等風險報酬`: risk-reward gap only;
+  - `等型態`: setup/quality only;
+  - `淘汰`: repair requirement only.
+- Normal waiting/rejected unheld cards suppress broad `數據：...` metric dumps; fail-closed source/data evidence remains allowed.
 - Strategy logic is unchanged.
 - No DB operation was performed.
 
 ## Verification State
 
-- Dry-run `generate_report(dry_run=True)` checked locally; unheld cards render readable short entry lines.
+- Dry-run `generate_report(dry_run=True)` checked locally; unheld cards render readable state-scoped entry lines.
+- Dry-run unheld message: `data_lines=0`, `distance_lines=8`.
 - Tests:
   - `205 passed, 44 subtests passed`
 - No live Telegram delivery.

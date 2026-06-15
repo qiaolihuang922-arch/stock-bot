@@ -12,11 +12,21 @@
 - Compacting rows could hide why a stock cannot be bought.
 - Compacting rows could accidentally make waiting/淘汰 cards look actionable.
 - Existing tests might pass while mobile output still repeats standalone rows.
+- Over-scoping could remove `距突破`, which Owner explicitly wanted to keep.
+- Under-scoping could keep dumping volume/quality/RR into every waiting card.
 
 ## Cross-Block Semantic Consistency
 
 - `交易狀態` remains the state-machine line; no extra `狀態` hard-concat row is emitted.
 - Non-actionable entry details are split into short `進場` / `缺口` / `可買` rows.
+- `距突破` remains a separate line for every unheld card.
+- Normal waiting/rejected cards no longer show a generic `數據：...` metric dump.
+- State-specific cards expose only the relevant blocker family:
+  - retest: retest / breakout zone;
+  - cooling: heat level;
+  - risk-reward: risk-reward gap;
+  - setup: setup / quality;
+  - rejected: repair requirement.
 - Summary/funnel counts are not changed.
 - Holding cards are not changed.
 
@@ -34,6 +44,8 @@
   - cards now show `進場：...｜原因：...`;
   - cards now show `缺口：...`;
   - cards now show `可買：...`;
+  - cards still show `距突破：...`;
+  - normal unheld cards show `data_lines=0`;
   - cards no longer show standalone `拆解`, `買點`, `不能買`, `還差`, or hard-concat `進場檢查`.
 
 ## Evidence
@@ -43,7 +55,11 @@
   - result: `205 passed, 44 subtests passed`
 - Dry-run:
   - `generate_report(dry_run=True)`
-  - result checked locally, no live Telegram delivery.
+  - result checked locally:
+    - `data_lines=0`;
+    - `distance_lines=8`;
+    - 旺宏 card shows only retest-zone blocker details, not the full metric package.
+  - no live Telegram delivery.
 
 ## Not Tested
 

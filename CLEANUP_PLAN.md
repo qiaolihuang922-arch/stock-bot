@@ -28,6 +28,9 @@
 - Unheld-card mobile denoise corrected:
   - the wall-like `狀態` / `進場檢查` hard-concat layout was removed after mobile screenshot review.
   - non-actionable cards now use short `進場` / `缺口` / `可買` lines.
+  - `距突破` remains standalone.
+  - blocker details are scoped by state instead of dumping every metric into every waiting card.
+  - normal waiting/rejected cards suppress noisy `數據：...` rows while fail-closed source/data evidence remains available.
   - Strategy calculations are unchanged.
 
 ## Active Follow-ups

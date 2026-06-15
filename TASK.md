@@ -10,11 +10,12 @@
 
 ## Owner Problem
 
-Owner pasted the 06/16 pre-market unheld report and pointed out repeated mobile-reading lines:
+Owner pasted the 06/16 pre-market unheld report and pointed out repeated mobile-reading lines, then clarified that the fix must not dump every metric into every `等回測` card:
 
 - `拆解` and `盤面` carry overlapping state information.
 - `買點`, `不能買`, `還差`, and `可買條件` repeat the same decision in separate rows.
 - The report should be smarter and strategy-granular, not a hard text rewrite.
+- `距突破` must remain visible for every stock.
 
 ## User Visible Result
 
@@ -23,6 +24,14 @@ Owner pasted the 06/16 pre-market unheld report and pointed out repeated mobile-
   - `進場：...｜原因：...`
   - `缺口：...`
   - `可買：...`
+- `距突破：...` remains a standalone line.
+- Waiting/rejected cards scope details by state:
+  - `等回測` shows retest/breakout-zone confirmation, not the full volume/quality/RR package.
+  - `等冷卻` shows heat/cooling.
+  - `等風險報酬` shows risk-reward gap.
+  - `等型態` shows setup/quality gap.
+  - `淘汰` shows the invalidation / repair requirement.
+- Normal waiting/rejected cards suppress noisy `數據：...` rows; source/data failure cards still keep fail-closed evidence.
 - Strategy fields are still computed separately; only presentation is denoised.
 
 ## Non Goals
@@ -49,6 +58,7 @@ Owner pasted the 06/16 pre-market unheld report and pointed out repeated mobile-
 - Replacement lines:
   - existing `交易狀態` stays as the state-machine line;
   - `盤面` is kept only when it adds useful market detail;
+  - `距突破：...` stays standalone;
   - `進場：...｜原因：...`;
   - `缺口：...`;
   - `可買：...`.
@@ -56,6 +66,7 @@ Owner pasted the 06/16 pre-market unheld report and pointed out repeated mobile-
   - why not buy;
   - what is missing;
   - what unlocks a buy.
+- Do not display every available metric for every blocker. Show the metric family relevant to the current `funnel_state`.
 
 ## Version Contract
 
@@ -66,6 +77,8 @@ Owner pasted the 06/16 pre-market unheld report and pointed out repeated mobile-
 
 - Dry-run unheld card does not show the wall-like `狀態` / `進場檢查` hard-concat format.
 - Dry-run unheld card shows `進場` / `缺口` / `可買` as short decision lines.
+- Dry-run keeps one `距突破` line per unheld card.
+- Dry-run normal unheld waiting/rejected cards have no `數據：` metric dump.
 - Generator report tests pass.
 - Regression test prevents standalone duplicate `拆解` / `買點` / `不能買` / `還差` rows from returning in the rebound-retest case.
 - No live Telegram delivery.
