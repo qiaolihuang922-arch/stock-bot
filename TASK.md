@@ -1,86 +1,77 @@
-# TASK: summary_brief_mobile_denoise_20260616
+# TASK: entry_quality_priority_v21_1_20260616
 
-## Status
+## 任務狀態
 
-- task_id: `summary_brief_mobile_denoise_20260616`
-- task_type: `normal_patch`
-- status: `implemented`
-- version: `v21.1`
-- QA level: `L2`
+- task_id: `entry_quality_priority_v21_1_20260616`
+- 任務類型: `normal_patch`
+- 狀態: `QA passed, pending commit/push`
+- 版本建議: 報文 header 維持 `v21.1`
+- QA 分級: L2
 
-## Owner Problem
+## Owner 問題
 
-Owner pasted the 06/16 pre-market decision brief and identified summary noise:
+06/16 盤前未持倉報文仍把 `個股弱勢 / 買點品質 D` 放成主要阻擋，造成「跌到低點不能買、連漲也不能買、永遠 D」的誤讀。Owner 要求依策略顆粒度顯示，不要只硬改文字。
 
-- `📎 詳情索引` has no value on mobile and should be removed.
-- The decision brief contains fixed explanatory rows such as normal source line, generic reason, generic risk, and "持倉依第一則..." that do not change the decision.
-- The summary should follow decision-dashboard practice: keep only actionable information and avoid clutter.
+## 使用者可見結果
 
-## User Visible Result
+- 未持倉卡片主因要依策略路徑排序：
+  - 漲停/過熱: 等冷卻或等回測。
+  - 急彈: 等回測。
+  - 風險報酬不足: 等風險報酬。
+  - 距突破很遠: 等接近。
+  - 真的沒有買點型態時才顯示等型態 / 品質未過。
+- `market_grade D` / `entry_quality D` 不得單獨搶成主阻擋。
+- `距突破` 仍保留獨立顯示。
+- 不做 live Telegram delivery。
+- 不做 DB schema / write / backfill。
 
-- Third Telegram message keeps:
-  - market/action count line;
-  - `新倉：無有效進場` or actual new-entry suggestion;
-  - today pre-market/intraday risk-control plan;
-  - holding control checklist;
-  - unheld funnel/status;
-  - rejected-count main reason when present.
-- Third Telegram message removes:
-  - `📎 詳情索引`;
-  - normal `📡 資料：即時價 realtime｜日線 yahoo`;
-  - generic `原因：...`;
-  - generic `風險：...`;
-  - `持倉：依第一則既有卡片處理，不新增第二個主行動。`;
-  - `詳情見未持倉卡`.
-- Abnormal source warnings remain allowed, for example stale `LAST_OHLCV` lines.
+## 非目標
 
-## Non Goals
+- 不重新設計所有交易策略。
+- 不修改 Supabase schema、RLS、grant、policy、role、index。
+- 不做 production DB DML。
+- 不改版本號到 `v21.2` 或 `v22`。
 
-- No strategy threshold change.
-- No DB schema/write/backfill.
-- No live Telegram delivery.
-- No holding/unheld card strategy rewrite.
-- No version bump; runtime remains `v21.1`.
+## 影響模組與直接消費者
 
-## Impacted Modules And Direct Consumers
+- `services.analysis`: entry setup state 與 setup blocker 語義。
+- `core.trade_state_machine`: 未持倉 guard / transition fallback。
+- `core.generator`: blocker 排序、watch state、funnel state。
+- `presentation.report`: Telegram 未持倉卡片標題與策略主因顯示。
+- 直接消費者: official `generate_report(dry_run=True)` message list、runner/bot Telegram artifact。
 
-- `presentation/report.py`
-- `core/generator.py`
-- `tests/test_generator_report.py`
-- Direct consumer: Telegram third summary/brief message.
+## 輸出契約
 
-## Output Contract
+- 未持倉卡片保留順序：
+  - title
+  - 距突破
+  - 進場
+  - 缺口
+  - 可買
+  - 盤前/盤中/明日觀察
+  - 必要補充、歷史、價格
+- `買點品質 D` 只能作為缺口補充或等型態主因，不得覆蓋急彈、過熱、RR、距離等更具體 blocker。
+- `等型態 + 距突破 > 12%` 的顯示主狀態改為 `等接近｜遠離觸發`。
 
-- Summary/brief is decision-first:
-  - answer what to do today;
-  - do not repeat where details are located;
-  - do not show normal source plumbing;
-  - keep abnormal data-source warning.
-- `rejected_trace_line` should keep the rejected main reason but not tell the user to see details.
-- `detail_index_text` may remain as an unused helper, but the official summary path must not render it.
+## 驗收條件
 
-## Version Contract
+- Owner 樣本等價 dry-run 中，緯創/仁寶/技嘉不再顯示 `等型態｜個股弱勢`。
+- 旺宏仍保留 `等回測｜急彈待回測`，不被距突破覆蓋。
+- 華邦電仍保留 `等回測｜漲停不追`。
+- 聯電仍保留 `等風險報酬`。
+- full pytest 通過。
 
-- Header remains `v21.1`.
+## 失敗標本與驗收路由
 
-## Acceptance Conditions
+- 失敗標本: Owner 貼出的 06/16 盤前未持倉報文。
+- 驗收路由:
+  - helper/state: `tests/test_analysis_engine.py`, `tests/test_trade_state_machine.py`
+  - formatter: `tests/test_unheld_gap_format.py`
+  - official generator: `tests/test_generator_report.py`
+  - official dry-run: `generate_report(dry_run=True)`
 
-- Dry-run summary has zero `詳情索引`.
-- Dry-run summary has zero normal `📡 資料`, zero `原因：`, zero `風險：`, zero `持倉：依第一則`, and zero `詳情見未持倉卡`.
-- Dry-run summary still shows risk-control plan, holding control checklist, unheld status, and rejected main reason.
-- Stale source warning regression remains covered.
-- Full tests pass.
-- No live Telegram delivery.
+## 禁止事項與阻塞條件
 
-## Fixture / Failure Specimen
-
-- Owner sample: 06/16 pre-market third message with `詳情索引`, generic data/reason/risk lines, and verbose summary clutter.
-- Replay route:
-  - local dry-run `generate_report(dry_run=True)`;
-  - focused and full pytest.
-
-## Forbidden And Blocking Conditions
-
-- Do not hide actionable risk-control items.
-- Do not hide abnormal source/stale data warnings.
-- Do not change buy/sell/hold decisions.
+- 禁止 live Telegram delivery。
+- 禁止手寫 production DML。
+- 若 dry-run 只能局部驗證，不得宣稱 production delivery 已完成。

@@ -219,7 +219,7 @@ class TradeStateMachineTest(unittest.TestCase):
         unheld = messages[1]
         self.assertIn("【06/08 盤後｜v21.1】", unheld)
         self.assertNotIn("交易狀態：等接近｜動作：等待｜主因：個股弱勢｜還差：接近觸發", unheld)
-        self.assertIn("【緯創 3231】⏳ 等接近｜個股弱勢", unheld)
+        self.assertIn("【緯創 3231】⏳ 等接近｜遠離觸發", unheld)
         self.assertIn("進場：不買，等接近觸發區", unheld)
         self.assertIn("缺口：補齊行情/策略來源", unheld)
         self.assertNotIn("交易狀態：不可行動", unheld)

@@ -2,10 +2,11 @@
 
 ## Current Task
 
-- task_id: `summary_brief_mobile_denoise_20260616`
-- status: `implemented + QA passed + pushed`
+- task_id: `entry_quality_priority_v21_1_20260616`
+- status: `implemented + QA passed, pending commit/push`
 - version: `v21.1`
 - no live Telegram delivery.
+- no DB schema/write/backfill.
 
 ## Stable Context
 
@@ -18,33 +19,29 @@
 ## Current Implementation State
 
 - Runtime report remains `v21.1`.
-- Third summary/brief message is now decision-focused:
-  - no rendered `詳情索引`;
-  - no normal `📡 資料：即時價 realtime｜日線 yahoo`;
-  - no generic `原因：...` / `風險：...`;
-  - no fixed `持倉：依第一則...` line for ordinary holdings;
-  - rejected trace is `淘汰：N 檔｜主因：...`.
-- Actionable summary content remains:
-  - market/action count;
-  - new-entry status;
-  - risk-control plan;
-  - holding control checklist;
-  - unheld status/funnel;
-  - stale data warning when present.
-- Strategy logic is unchanged.
-- No DB operation was performed.
+- Strategy display priority is now:
+  1. limit-up / overheat / cooldown;
+  2. rebound and retest confirmation;
+  3. risk-reward repair;
+  4. approach / distance to trigger;
+  5. setup quality only when no clearer blocker exists.
+- `entry_quality D` no longer creates an `ENTRY_QUALITY_LOW` state-machine guard.
+- `market_grade D/E` is treated as background stock weakness unless the state is only `WATCH/WAIT_SETUP`.
+- Official dry-run unheld sample:
+  - `緯創 / 仁寶 / 技嘉`: `等接近｜遠離觸發`;
+  - `旺宏`: `等回測｜急彈待回測`;
+  - `華邦電`: `等回測｜漲停不追`;
+  - `聯電`: `等風險報酬｜觀察`.
 
 ## Verification State
 
-- Dry-run `generate_report(dry_run=True)` checked locally; third-message forbidden counts all zero.
-- Tests:
-  - `203 passed, 44 subtests passed` for `tests/test_generator_report.py`
-  - `479 passed, 8 skipped, 108 subtests passed` full suite
-- No live Telegram delivery.
+- Targeted tests: `257 passed, 44 subtests passed`.
+- Full tests: `479 passed, 8 skipped, 108 subtests passed`.
+- Dry-run official generator checked locally.
 
 ## Known Follow-ups
 
-- Observe next scheduled `run_mode=bot` report and confirm production Telegram artifact keeps the compact third-message summary.
+- Observe next scheduled `run_mode=bot` report and confirm production Telegram artifact matches dry-run priority ordering.
 - Prior DB follow-ups remain:
   - decide whether to enrich or hide `market_theme_index_daily_bars` OHLCV/member placeholder columns;
   - implement or retire `signal_outcomes` max high/drawdown metrics.

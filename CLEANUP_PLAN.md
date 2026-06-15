@@ -1,75 +1,25 @@
 # CLEANUP_PLAN.md
 
-## Cleanup Status
+## Completed This Cycle
 
-- Fixed 8 Markdown files are present and must be kept:
-  - `AGENTS.md`, `DISPATCH.md`, `RESEARCH.md`, `CURRENT_STATE.md`, `CLEANUP_PLAN.md`, `TASK.md`, `CHANGELOG.md`, `QA_REPORT.md`.
-- Active handoff files are compressed and UTF-8 readable.
-- No fixed Markdown file was deleted.
+- Compressed current handoff files for `entry_quality_priority_v21_1_20260616`.
+- No runtime output, SQL draft, or temporary artifact was added.
+- No DB rows/tables were changed.
 
-## Completed Cleanup / Consolidation
+## Cleanup Notes
 
-- `daily_signal_snapshot` v21.1 strategy-axis memory backfill completed:
-  - `5786` rows upserted from `daily_price`.
-  - all `5786` rows have non-null core strategy-axis memory fields.
-- Retest-memory overfill was corrected:
-  - only active retest rows keep `retest_reference_price` and `retest_days_since_breakout`.
-  - non-retest rows are null for those fields.
-- Duplicate/version cleanup completed:
-  - exact duplicates: `0`
-  - multi-version extras: `0`
-  - deleted rows: `0`
-- DB table health audit utility added:
-  - `scripts/audit_db_table_health.py`
-  - read-only, no schema change, no live Telegram.
-- False duplicate risk reduced:
-  - duplicate checks now use table-specific keys;
-  - event tables are not treated as duplicate only because stock code/name repeats.
-- Unheld-card mobile denoise corrected:
-  - the wall-like `狀態` / `進場檢查` hard-concat layout was removed after mobile screenshot review.
-  - non-actionable cards now use short `進場` / `缺口` / `可買` lines.
-  - `距突破` remains standalone.
-  - blocker details are scoped by state instead of dumping every metric into every waiting card.
-  - official formatting uses `_unheld_entry_contract`; the old post-format parser/crop path is not the active rule source.
-  - normal waiting/rejected cards suppress noisy `數據：...` rows while fail-closed source/data evidence remains available.
-  - repeated waiting-card `交易狀態` lines are hidden when title + `進場` already carry the state.
-  - unheld `歷史` rows are hidden unless they add repair / positive-weight / execution-memory signal.
-  - Strategy calculations are unchanged.
-- Summary brief denoise corrected:
-  - rendered `詳情索引` removed from the third message.
-  - generic normal source/reason/risk rows removed from the third message.
-  - ordinary `持倉：依第一則...` line removed.
-  - stale source warnings remain allowed.
-  - rejected trace keeps only count and main reason.
+- `.pytest_cache` remains inaccessible to pytest cache writes on this machine (`WinError 5`); this is a local cache warning, not product data. No cleanup action taken.
+- Fixed active task docs are now UTF-8 readable:
+  - `TASK.md`
+  - `CHANGELOG.md`
+  - `QA_REPORT.md`
+  - `DISPATCH.md`
+  - `CURRENT_STATE.md`
 
-## Active Follow-ups
+## Pending Cleanup / Follow-ups
 
-- `signal_items_future_fill_check`
-  - Historical `signal_items` rows were not fabricated.
-  - Next real bot run should create fresh rows with strategy-memory fields.
-- `market_theme_index_daily_bars_ohlcv_gap`
-  - `open`, `high`, `low`, `volume`, `turnover`, `member_count` are all null in current production rows.
-  - Decide whether to find a real official source, guard consumers, or hide/deprecate those placeholders.
-- `signal_outcomes_metric_gap`
-  - `max_high_pct` and `max_drawdown_pct` are all null.
-  - Implement a real outcome metric job or remove those fields from any active strategy expectation.
-- `data_quality_tightening`
-  - Replace remaining source/volume fallback paths that can make missing data look normal.
-  - Missing data should become `insufficient`, `source_error`, `stale`, or `missing_source`.
-- `telegram_rejected_reason_denoise`
-  - Some rejected-card `原因` lines still repeat source/status detail.
-  - Future cleanup should compress them without hiding the primary blocker.
-- `runner_gap: git_completion_gate_windows`
-  - Bash gates may fail on this Windows machine when WSL/Hyper-V is unavailable.
-  - Add a PowerShell-equivalent completion gate or normalize gate execution.
-- `cleanup_candidate: tracked_reports`
-  - `reports/backfill/*` and `reports/research/*` are tracked artifacts.
-  - Do not delete without proving no runtime / test / replay consumer.
-
-## Boundaries
-
-- Do not delete the fixed 8 Markdown files.
-- Do not delete tracked reports, SQL, replay artifacts, or production data without consumer evidence.
-- Do not fabricate historical `signal_items` from daily_price.
-- Do not use local runtime output as cross-run evidence.
-- Do not interpret expected source/formula/version constants as broken strategy data.
+- Observe next production `run_mode=bot` artifact for the new unheld-card priority ordering.
+- Review older mojibake in long-lived docs only in a dedicated documentation hygiene cycle; avoid mixing with product strategy patches.
+- Prior DB cleanup follow-ups:
+  - `market_theme_index_daily_bars`: decide whether placeholder OHLCV/member columns should be populated or hidden.
+  - `signal_outcomes`: implement or retire max-high/drawdown metrics.

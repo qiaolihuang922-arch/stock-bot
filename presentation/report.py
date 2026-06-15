@@ -1467,6 +1467,19 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         )
     if not valid_entry and funnel_state in ["等冷卻", "等市場", "等接近", "等型態", "等回測", "等RR修復", "等量能", "等資料", "隔日確認", "淘汰"]:
         state = funnel_state
+    try:
+        distance_value = float(str(dist).replace("%", "").strip()) if dist is not None else None
+    except (TypeError, ValueError):
+        distance_value = None
+    if (
+        not valid_entry
+        and state == "等型態"
+        and distance_value is not None
+        and distance_value > 12
+    ):
+        state = "等接近"
+        funnel_state = "等接近"
+        title_label = "遠離觸發"
     if data_source_display_blocked:
         title_label = "資料不足"
     elif funnel_state == "等資料":

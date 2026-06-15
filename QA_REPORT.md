@@ -1,72 +1,55 @@
-# QA_REPORT: summary_brief_mobile_denoise_20260616
+# QA_REPORT: entry_quality_priority_v21_1_20260616
 
-## Test Scope
+## 測試範圍
 
-- Telegram third summary/brief message.
-- Owner 06/16 pre-market failure specimen.
-- Stale source warning exception.
-- Existing generator message list regressions.
+- 未持倉策略主因排序。
+- `entry_quality D` / `market_grade D` 不再單獨搶主因。
+- Telegram 未持倉卡片手機閱讀路徑。
+- official generator dry-run。
 
-## Risk Scan
+## 關聯風險掃描
 
-- Removing summary lines could hide an actionable warning.
-- Removing normal source line must not hide stale `LAST_OHLCV`.
-- Removing detail index must not affect holding order or card content.
-- Removing generic reason/risk must not change strategy decisions.
+- 持倉主行動未改。
+- live Telegram 未執行。
+- DB schema/write/backfill 未執行。
+- 版本 header 維持 `v21.1`。
 
-## Cross-Block Semantic Consistency
+## 跨區塊語意一致性
 
-- First message still carries holding details.
-- Second message still carries unheld cards.
-- Third message now carries only decision summary and action checklist.
-- `詳情索引` is absent from the summary.
-- Normal source plumbing is absent; stale source warnings remain covered by tests.
-- Rejected main reason remains visible as `淘汰：N 檔｜主因：...`.
-- No live Telegram delivery was performed.
+- 未持倉 title、進場、缺口、可買、觀察均使用同一主因排序。
+- `距突破` 保留獨立顯示，但不覆蓋急彈/漲停/過熱/RR。
+- 品質 D 只在缺型態時顯示，不再覆蓋具體 blocker。
 
-## User Misread Risk
+## 使用者誤讀風險
 
-- Reduced: no more "details index" navigation line on mobile.
-- Reduced: no generic source/reason/risk rows that read like system explanation instead of decision.
-- Preserved: user still sees what to do today and which bucket unheld stocks are in.
+- 已降低「永遠 D、永遠個股弱勢」誤讀。
+- `等接近` 仍不是買進訊號；報文明確顯示 `進場：不買`。
+- `策略樣本不足` 仍可能出現，代表 source fail-closed，不可改成假資料。
 
-## Failure Specimen Countercheck
+## 失敗標本反證
 
-- Owner sample asked to delete `詳情索引` and keep only useful decision info.
-- Dry-run third message now contains:
-  - market/action count;
-  - `新倉：無有效進場`;
-  - risk-control plan;
-  - holding control checklist;
-  - unheld status;
-  - rejected main reason.
-- Dry-run third message no longer contains:
-  - `詳情索引`;
-  - normal `📡 資料`;
-  - `原因：`;
-  - `風險：`;
-  - `持倉：依第一則`;
-  - `詳情見未持倉卡`.
+- Owner 06/16 盤前未持倉報文等價 dry-run:
+  - 華邦電: `等回測｜漲停不追`
+  - 南亞科: `等冷卻｜過熱觀察`
+  - 聯電: `等風險報酬｜觀察`
+  - 緯創/仁寶/技嘉: `等接近｜遠離觸發`
+  - 旺宏: `等回測｜急彈待回測`
+  - 群創: `淘汰｜弱反彈待確認`
 
-## Evidence
+## 質疑與反證
 
-- Focused test:
-  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q --tb=short`
-  - result: `203 passed, 44 subtests passed`
-- Full test:
-  - `.\.venv\Scripts\python.exe -m pytest -q --tb=short`
-  - result: `479 passed, 8 skipped, 108 subtests passed`
-- Dry-run:
-  - `generate_report(dry_run=True)`
-  - third-message forbidden counts all `0`.
+- 質疑: 是否只是硬改文字？
+  - 反證: 修改 `entry_setup_state`、state machine guard、generator blocker ordering、presentation fallback，多層均同步。
+- 質疑: 是否把距離變成死規則？
+  - 反證: 急彈/漲停/過熱/RR 優先於距離；旺宏仍是等回測，不被距離覆蓋。
+- 質疑: 是否產生假資料？
+  - 反證: 沒有新增 DB 欄位、沒有回寫、沒有 synthetic cross-day memory。
 
-## Not Tested
+## 未測項目
 
-- Live Telegram delivery.
-- Next production scheduled run after push.
+- 未送 live Telegram。
+- 未驗 GitHub scheduled runner 實際 artifact；需等下次 `run_mode=bot`。
 
-## QA Conclusion
+## QA 結論
 
-通過
-
-Reason: official dry-run and regression tests confirm the summary is shorter while preserving actionable risk-control and stale-source safeguards.
+通過。

@@ -479,6 +479,10 @@ def entry_setup_state(decision, quality, phase, behavior, heat_state, trade_stat
         rr_value = float(rr) if rr is not None else None
     except (TypeError, ValueError):
         rr_value = None
+    try:
+        distance_value = float(distance) if distance is not None else None
+    except (TypeError, ValueError):
+        distance_value = None
 
     if decision == "BUY" and quality in {"A+", "A", "B"}:
         return "READY"
@@ -492,14 +496,10 @@ def entry_setup_state(decision, quality, phase, behavior, heat_state, trade_stat
         return "WAIT_RR"
     if volume == "WEAK" or trade_state == "NO_VOLUME":
         return "WAIT_VOLUME"
+    if distance_value is not None and distance_value > 5:
+        return "WAIT_APPROACH"
     if quality in {"C", "D"}:
-        return "WAIT_SETUP"
-    if distance is not None:
-        try:
-            if float(distance) > 5:
-                return "WAIT_APPROACH"
-        except (TypeError, ValueError):
-            pass
+        return "WAIT_CONFIRM"
     return "WAIT_CONFIRM"
 
 
@@ -546,7 +546,7 @@ def setup_blocker_state(setup_state):
         "WAIT_COOLDOWN": "overheated",
         "WAIT_RR": "rr_low",
         "WAIT_VOLUME": "low_volume",
-        "WAIT_SETUP": "quality_low",
+        "WAIT_SETUP": "setup_missing",
         "WAIT_APPROACH": "far_from_trigger",
         "WAIT_CONFIRM": "confirmation_missing",
     }.get(setup_state, "confirmation_missing")

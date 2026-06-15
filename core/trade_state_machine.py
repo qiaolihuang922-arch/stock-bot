@@ -504,9 +504,6 @@ def _unheld_guard_snapshot(data, source_status=None):
     distance = _as_float(result.get("breakout_distance") or result.get("distance_to_breakout"))
     if _distance_blocks_entry(result, distance):
         guards.append("TOO_FAR_FROM_TRIGGER")
-    quality = result.get("entry_quality")
-    if quality and quality not in {"A+", "A", "B"}:
-        guards.append("ENTRY_QUALITY_LOW")
     return list(dict.fromkeys(guards))
 
 
@@ -548,14 +545,8 @@ def _unheld_event_from_target(target_state, *, source_status=None, guards=None):
         return "DATA_GATE_FAILED"
     guard_set = set(guards or [])
     if target_state == "WATCH":
-        if "MARKET_WEAK" in guard_set:
-            return "MARKET_GATE_FAILED"
         if "STRONG_REBOUND_NEEDS_PULLBACK" in guard_set:
             return "PULLBACK_GATE_FAILED"
-        if "STOCK_WEAK" in guard_set:
-            return "SETUP_NOT_READY"
-        if "SETUP_NOT_READY" in guard_set:
-            return "SETUP_NOT_READY"
         if "STRUCTURE_FAILED" in guard_set:
             return "PULLBACK_GATE_FAILED"
         if "HEAT_NOT_COOL" in guard_set:
@@ -564,10 +555,16 @@ def _unheld_event_from_target(target_state, *, source_status=None, guards=None):
             return "VOLUME_GATE_FAILED"
         if "RR_BELOW_MIN" in guard_set or "RR_MISSING" in guard_set:
             return "RR_GATE_FAILED"
+        if "TOO_FAR_FROM_TRIGGER" in guard_set:
+            return "APPROACH_GATE_FAILED"
+        if "SETUP_NOT_READY" in guard_set:
+            return "SETUP_NOT_READY"
         if "VOLUME_WEAK" in guard_set:
             return "VOLUME_GATE_FAILED"
-        if "TOO_FAR_FROM_TRIGGER" in guard_set:
-            return "PULLBACK_GATE_FAILED"
+        if "MARKET_WEAK" in guard_set:
+            return "MARKET_GATE_FAILED"
+        if "STOCK_WEAK" in guard_set:
+            return "SETUP_NOT_READY"
     return _transition_event_for_state(target_state, source_status=source_status)
 
 
@@ -736,7 +733,7 @@ def visible_state_line(machine_state):
             parts.append("主因：市場弱")
         elif "STRONG_REBOUND_NEEDS_PULLBACK" in guards:
             parts.append("主因：急彈待回測")
-        elif "STOCK_WEAK" in guards and machine_state.get("state") != "WAIT_MARKET":
+        elif "STOCK_WEAK" in guards and machine_state.get("state") in {"WATCH", "WAIT_SETUP"}:
             parts.append("主因：個股弱勢")
         if next_label:
             prefix = "下一步" if machine_state.get("is_actionable") else "還差"

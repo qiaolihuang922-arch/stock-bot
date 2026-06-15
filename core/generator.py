@@ -704,13 +704,13 @@ def entry_blockers(result):
     if (trade == "NO_VOLUME" or result.get("volume_state") == "WEAK") and volume_is_primary_gate(result):
         labels.append("量能不足")
 
+    if distance_blocks_entry(result, dist) or far_without_actionable_setup(result, dist):
+        labels.append("遠離觸發")
+
     if result.get("market_state") in {"weak", "bear"}:
         labels.append("市場弱")
     elif result.get("market_grade") in {"D", "E"}:
         labels.append("個股弱勢")
-
-    if distance_blocks_entry(result, dist) or far_without_actionable_setup(result, dist):
-        labels.append("遠離觸發")
 
     return list(dict.fromkeys(labels))
 
@@ -3051,18 +3051,15 @@ def tomorrow_watch_state(name, data):
     if label == "RR不足" or trade == "LATE_ENTRY" or "RR不足" in blockers:
         return "等RR修復"
 
-    if result_setup_type(result) == "NO_SETUP" and (
-        label == "遠離觸發"
-        or "遠離觸發" in blockers
-        or not blockers
-    ):
+    if result_setup_type(result) == "NO_SETUP":
         try:
             distance = result.get("breakout_distance")
             if distance is not None and float(distance) > 12:
                 return "等接近"
         except (TypeError, ValueError):
             pass
-        return "等型態"
+        if label == "遠離觸發" or "遠離觸發" in blockers or not blockers:
+            return "等型態"
 
     if label == "遠離觸發" or "遠離觸發" in blockers:
         return "等回測"
@@ -5083,8 +5080,6 @@ def _unheld_hard_gate_reasons(result, source_status="available"):
             reasons.append("unresolved RR不足")
     except (TypeError, ValueError):
         pass
-    if quality and quality not in {"A+", "A", "B"}:
-        reasons.append("進場品質不足")
     if (result or {}).get("decision") == "FAIL" or (result or {}).get("structure_phase") == "FAILED_BREAKOUT":
         reasons.append("failed breakout")
     return list(dict.fromkeys(reasons))
@@ -6140,8 +6135,6 @@ def unheld_funnel_state(name, data, market_mode=None, report_context=None):
             fallback_state = "等冷卻"
         elif "volume hard gate" in hard_gate_reasons:
             fallback_state = "等量能"
-        elif "進場品質不足" in hard_gate_reasons:
-            fallback_state = "等型態"
         elif state != "隔日確認" and any(reason in hard_gate_reasons for reason in ["missing-source", "source-error", "conflicting evidence", "insufficient-data"]):
             fallback_state = "等資料"
         else:
@@ -6160,13 +6153,34 @@ def unheld_funnel_state(name, data, market_mode=None, report_context=None):
     if state == "隔日確認":
         result = (data or {}).get("result") or {}
         behavior = result.get("price_behavior")
-        quality = result.get("entry_quality")
         if (
             behavior not in {"LIMIT_LOCK", "LIMIT_REBOUND", "WEAK_REBOUND"}
-            and quality
-            and quality not in {"A+", "A", "B"}
+            and result.get("structure_phase") not in {"LIMIT_REBOUND", "WEAK_REBOUND"}
+            and result_setup_type(result) == "NO_SETUP"
         ):
             state = "等型態"
+    if state == "等型態":
+        result = (data or {}).get("result") or {}
+        blockers = entry_blockers(result)
+        distance_value = None
+        for raw_distance in [
+            result.get("breakout_distance"),
+            result.get("distance_to_breakout"),
+            (data or {}).get("breakout_distance"),
+            (data or {}).get("distance_to_breakout"),
+            card_breakout_distance(data),
+        ]:
+            try:
+                distance_value = float(str(raw_distance).replace("%", "").strip())
+                break
+            except (TypeError, ValueError):
+                continue
+        far_from_trigger = distance_value is not None and distance_value > 5
+        if ("遠離觸發" in blockers or far_from_trigger) and not any(
+            reason in blockers
+            for reason in ["急彈待回測", "弱反彈待確認", "漲停不追", "漲停反彈待確認", "過熱觀察", "RR不足"]
+        ):
+            state = "等接近"
     if reason:
         data["evidence_adjustment_reason"] = reason
     else:
@@ -6403,12 +6417,6 @@ def rejected_primary_reason(result):
     if "量能不足" in blockers:
         return "量能不足"
 
-    if result.get("market_state") in {"weak", "bear"} or "市場弱" in blockers:
-        return "市場弱"
-
-    if result.get("market_grade") in {"D", "E"} or "個股弱勢" in blockers:
-        return "個股弱勢"
-
     if "RR不足" in blockers:
         return "RR不可用"
 
@@ -6417,6 +6425,12 @@ def rejected_primary_reason(result):
 
     if "遠離觸發" in blockers:
         return "遠離觸發"
+
+    if result.get("market_state") in {"weak", "bear"} or "市場弱" in blockers:
+        return "市場弱"
+
+    if result.get("market_grade") in {"D", "E"} or "個股弱勢" in blockers:
+        return "個股弱勢"
 
     for reason in blockers:
         if reason not in ["RR不足", "量能不足", "遠離觸發", "過熱觀察"] and not reason.startswith("過熱"):
@@ -7504,6 +7518,7 @@ def _telegram_presentation_deps():
         "is_valid_entry": is_valid_entry,
         "post_market_unheld_buy_requires_open_confirmation": post_market_unheld_buy_requires_open_confirmation,
         "final_label": final_label,
+        "result_setup_type": result_setup_type,
         "tomorrow_watch_state": tomorrow_watch_state,
         "unheld_funnel_state": unheld_funnel_state,
         "strong_prepare_bucket": strong_prepare_bucket,
