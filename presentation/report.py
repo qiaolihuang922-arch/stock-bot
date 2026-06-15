@@ -522,7 +522,24 @@ def _unheld_buy_gap_line(data, dist, blockers, valid_entry, funnel_state, source
 
     behavior = stock_result.get("price_behavior")
     if "急彈待回測" in blocker_text:
-        return evidence_lines("急彈未回測", "漲幅已急，需回測不破後重新評估", "回測不破且非追高時重新評估")
+        rebound_gaps = ["急彈追價區，尚未回測"]
+        volume_text = _gate_value_text((data or {}).get("volume_ratio"))
+        if volume_text:
+            volume_label = "偏弱" if float(volume_text) < 1.0 else "達標"
+            rebound_gaps.append(f"V {volume_text}x{volume_label}")
+        quality = stock_result.get("entry_quality")
+        if quality and quality not in {"A+", "A", "B"}:
+            rebound_gaps.append(f"品質 {quality} 未達B")
+        rr_text = _gate_value_text(stock_result.get("rr"))
+        if rr_text:
+            rr_label = "達標" if float(rr_text) >= 1.5 else "未達1.5"
+            rebound_gaps.append(f"RR {rr_text}{rr_label}")
+        return evidence_lines(
+            "急彈未回測",
+            "｜".join(rebound_gaps),
+            "回測不破 + 非漲停追價 + 量能有效 + 品質B以上 + RR>=1.5",
+            basis="",
+        )
     if behavior in {"LIMIT_LOCK", "LIMIT_REBOUND"} or "漲停" in blocker_text or "不可追高" in blocker_text:
         gates.append(("漲跌停鎖定", "需解除鎖定後重新評估"))
     if behavior == "WEAK_REBOUND" or phase == "WEAK_REBOUND" or "弱反彈" in blocker_text:
@@ -819,7 +836,25 @@ def _score_gated_market_line(report_context, name, data, dist, deps):
     return "盤面：強弱證據不足｜待確認"
 
 
-def _unheld_rr_text(stock_result, funnel_state, valid_entry, deps):
+def _unheld_rr_text(stock_result, funnel_state, valid_entry, deps, state=None, title_label=None, blockers=None):
+    blockers = set(blockers or stock_result.get("blockers") or [])
+    title_text = str(title_label or "")
+    try:
+        rebound_change = float(stock_result.get("live_change", stock_result.get("change", 0)) or 0)
+    except (TypeError, ValueError):
+        rebound_change = 0
+    strong_rebound_wait = (
+        "急彈待回測" in blockers
+        or "急彈待回測" in title_text
+        or (
+            (funnel_state == "等回測" or state == "等回測")
+            and stock_result.get("price_behavior") == "WEAK_REBOUND"
+            and rebound_change >= 7.0
+        )
+    )
+    if strong_rebound_wait:
+        raw_rr_text = _gate_value_text(stock_result.get("rr"))
+        return raw_rr_text or deps["rr_display_text"](stock_result, holding=False)
     weak_structure = (
         stock_result.get("decision") in {"NO_TRADE", "FAIL"}
         or stock_result.get("structure_phase") in {"FAILED_BREAKOUT", "WEAK", "DISTRIBUTION", "WEAK_REBOUND"}
@@ -1003,7 +1038,15 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         title_icon = "⛔"
         title_action = "不買"
 
-    rr_text = _unheld_rr_text(stock_result, funnel_state, valid_entry, deps)
+    rr_text = _unheld_rr_text(
+        stock_result,
+        funnel_state,
+        valid_entry,
+        deps,
+        state=state,
+        title_label=title_label,
+        blockers=blockers,
+    )
     wait_text = deps["unheld_entry_wait_text"](stock_result, state, funnel_state)
     detail_size_text = deps["unheld_entry_size_detail_text"](stock_result)
     raw_size_text = deps["entry_size_text"](stock_result)

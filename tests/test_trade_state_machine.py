@@ -1,4 +1,4 @@
-﻿import unittest
+import unittest
 from datetime import datetime
 from unittest.mock import patch
 
@@ -217,7 +217,7 @@ class TradeStateMachineTest(unittest.TestCase):
             )
 
         unheld = messages[1]
-        self.assertIn("【06/08 盤後｜v21.0.7】", unheld)
+        self.assertIn("【06/08 盤後｜v21.0.8】", unheld)
         self.assertIn("交易狀態：等接近｜動作：等待｜主因：個股弱勢｜還差：接近觸發", unheld)
         self.assertNotIn("交易狀態：不可行動", unheld)
 
@@ -274,3 +274,4 @@ class TradeStateMachineTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -1,64 +1,62 @@
-# TASK: strong_rebound_not_weak_v21_0_7_20260615
+# TASK: acute_rebound_buy_conditions_v21_0_8_20260615
 
 ## Status
-- task_id: `strong_rebound_not_weak_v21_0_7_20260615`
+- task_id: `acute_rebound_buy_conditions_v21_0_8_20260615`
 - type: `risk_patch`
 - status: `complete`
-- version: `v21.0.7`
+- version: `v21.0.8`
 - QA level: `L2`
 
 ## Owner Problem
-Owner pointed out that a stock such as 旺宏 can be near limit-up while the report still labels it `弱反彈待確認`. The visible problem is that the report behaves like a rigid machine: it keeps an old weak-rebound label even when live price action has clearly strengthened.
+Owner asked why a stock such as 旺宏 can be up strongly but still read like a weak rebound, and why the report does not plainly say: current state is a chase-risk zone, and buyability needs retest hold, non-limit-up chasing, volume confirmation, quality B+, and RR >= 1.5.
 
 ## User Visible Result
-- Strong intraday rebounds are no longer labeled as weak rebound.
-- `WEAK_REBOUND` with live/day change >= 7% becomes `急彈待回測`.
-- The action remains conservative: no chase, wait for pullback/retest confirmation.
-- Low-change weak rebound still remains weak/rejected.
-- Version bumps to `v21.0.7`.
+- `急彈待回測` cards now show a compact not-buy reason and buy-condition line.
+- The card says the issue is `急彈追價區，尚未回測`, and lists live blockers such as weak volume, D quality, and current RR.
+- The unlock line is explicit: `回測不破 + 非漲停追價 + 量能有效 + 品質B以上 + RR>=1.5`.
+- RR is no longer hidden as `-（不可行動）` on acute rebound wait cards when a real RR exists.
+- Limit-up / locked-overheat cards still hide RR as overheat and remain hard blocked.
 
 ## Non Goals
 - No live Telegram delivery.
 - No DB schema or production DB writes.
 - No broker/order execution.
-- No blanket permission to buy limit-up / near-limit-up stocks.
+- No blanket permission to buy sharp rebound, limit-up, or near-limit-up stocks.
+- No hard-code of 旺宏 or a single date.
 
 ## Impacted Modules And Consumers
-- `core/generator.py`
-  - Consumer: blocker labels, unheld funnel, rejected reason, wait text, summary.
-- `core/trade_state_machine.py`
-  - Consumer: visible unheld trade-state line and guards.
 - `presentation/report.py`
-  - Consumer: Telegram unheld card reason / gap / unlock text.
+  - Consumer: Telegram unheld card reason / gap / unlock / data line.
+- `core/generator.py`
+  - Consumer: visible report version.
 - `tests/test_generator_report.py`
-- `tests/test_market_theme_evidence.py`
-- `tests/test_trade_state_machine.py`
+  - Consumer: owner-style replay specimens and conflict guards.
 
 ## Output Contract
-- If `price_behavior=WEAK_REBOUND` but live/day change >= 7%, visible state must be `急彈待回測`, not `弱反彈待確認`.
-- Such cards must be tracking/wait states, not buy states.
-- Card reason must say `急彈未回測`.
-- Trigger must wait for retest / non-chase confirmation.
-- Existing lower-change weak rebound behavior must remain rejected as weak.
+- For `急彈待回測`, the unheld card must remain a wait state.
+- It must show:
+  - `卡關主因：急彈未回測`
+  - `量化差距：急彈追價區，尚未回測...`
+  - `解鎖：回測不破 + 非漲停追價 + 量能有效 + 品質B以上 + RR>=1.5`
+- If a real RR exists for acute rebound wait, the data line may show that RR while still saying the card is not actionable.
+- For true limit-up / locked-overheat cards, existing `RR -（過熱）` hard blocker behavior must remain.
 
 ## Acceptance
-- Focused tests prove:
-  - low-change weak rebound still rejects as weak;
-  - +8% weak-rebound raw state becomes `等回測｜急彈待回測`.
+- Focused owner specimen proves 旺宏-style +8% acute rebound is `等回測｜急彈待回測`, not weak rebound.
+- Focused negative cases prove limit-up and low-volume limit-up still remain overheat / no-chase.
 - Targeted report/state/evidence suites pass.
-- Official dry-run generates `v21.0.7` and no live Telegram delivery.
+- Official dry-run generates `v21.0.8` with no live Telegram delivery and contains the new condition line.
 
 ## Failure Specimen And Route
-- Owner failure: pasted report where 旺宏 near limit-up remained `弱反彈待確認`.
-- Failure layer: official generator + trade state machine + Telegram formatter.
+- Owner failure: pasted report where 旺宏 near limit-up / sharp rebound still looked like weak rebound and did not say what conditions would make it buyable.
+- Failure layer: official generator + Telegram formatter.
 - Verification route:
-  - `tests/test_generator_report.py`
-  - `tests/test_trade_state_machine.py`
-  - `tests/test_market_theme_evidence.py`
+  - `tests/test_generator_report.py::GeneratorReportTest::test_v21_0_8_strong_rebound_is_not_labeled_weak_rebound`
+  - limit-up / low-volume limit-up regression tests
   - official `generate_report(dry_run=True)` message list.
 
 ## Forbidden / Blocking
-- Do not relabel a strong rebound as buyable without setup/RR/retest.
-- Do not hard-code 旺宏 or a single date.
-- Do not remove weak-rebound rejection for genuinely weak rebounds.
+- Do not change DB schema, RLS, grants, policies, roles, index, or constraints.
 - Do not live-send Telegram.
+- Do not loosen the trade state machine into buying acute rebounds without retest and confirmation.
+- Do not remove existing overheat / limit-up hard blockers.
