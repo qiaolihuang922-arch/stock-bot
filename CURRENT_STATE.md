@@ -35,6 +35,7 @@
 - Targeted official formatter tests passed.
 - Full pytest passed: `484 passed, 8 skipped, 165 warnings, 110 subtests passed`.
 - Official dry-run 群創 / 旺宏 cards match the new wording.
+- Code and closeout docs pushed in commit `c555562`; git completion passed.
 
 ## Known Follow-ups
 
