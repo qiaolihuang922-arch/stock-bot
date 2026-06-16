@@ -2,8 +2,8 @@
 
 ## Current Task
 
-- task_id: `afterhours_summary_trade_plan_v21_1_20260616`
-- status: `implemented + QA passed + full pytest passed + pushed`
+- task_id: `explicit_approach_zone_wording_v21_1_20260616`
+- status: `implemented + QA passed + full pytest passed`
 - version: `v21.1`
 - no live Telegram delivery.
 - no DB schema/write/backfill/prune.
@@ -20,21 +20,18 @@
 ## Current Implementation State
 
 - Runtime report remains `v21.1`.
-- Afterhours summary now:
-  - removes market/count line;
-  - removes duplicate today-buy status line;
-  - removes empty `新增有效進場：無` line;
-  - hides `未持倉狀態` when there is no actionable / prepare candidate;
-  - keeps `結論`, `明日計畫`, and `持倉風控檢查`.
+- `等接近` unheld cards now show concrete zones:
+  - `等接近突破區 399~400.99`
+  - `尚未接近突破區 399~400.99`
+  - fallback only when no zone exists: `突破區/回測支撐`.
 
 ## Verification State
 
-- Targeted summary tests passed.
+- Targeted等接近 tests passed.
 - Full pytest passed: `484 passed, 8 skipped, 165 warnings, 110 subtests passed`.
-- Official dry-run summary matches Owner-visible route.
-- Code and closeout docs pushed; git completion passed.
+- Official dry-run 技嘉 card matches Owner-visible route.
+- Pending commit / push.
 
 ## Known Follow-ups
 
 - Observe next production `run_mode=bot` artifact after push.
-- If Owner wants even shorter summary, next iteration should tune `明日計畫` grouping only, not re-add counts.

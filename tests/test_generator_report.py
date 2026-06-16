@@ -3741,10 +3741,10 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【緯創 3231】⏳ 等接近｜遠離觸發", unheld_message(messages))
         self.assertNotIn("交易狀態：等接近｜動作：等待｜主因：個股弱勢｜還差：接近觸發", unheld_message(messages))
         self.assertIn("距突破：19.25%｜遠離突破", unheld_message(messages))
-        self.assertIn("進場：不買，等接近觸發區｜原因：還沒到買點區", unheld_message(messages))
-        self.assertIn("缺口：距突破 19.25%，仍未進入觸發區", unheld_message(messages))
-        self.assertIn("可買：接近觸發區，或出現趨勢延續/回測承接買點型態", unheld_message(messages))
-        self.assertIn("明日觸發：接近觸發區後重新評估 買點型態", unheld_message(messages))
+        self.assertIn("進場：不買，等接近突破區/回測支撐｜原因：尚未接近突破區", unheld_message(messages))
+        self.assertIn("缺口：距突破 19.25%，尚未接近突破區/回測支撐", unheld_message(messages))
+        self.assertIn("可買：接近突破區/回測支撐，或出現趨勢延續/回測承接買點型態", unheld_message(messages))
+        self.assertIn("明日觸發：接近突破區/回測支撐 後重新評估買點型態", unheld_message(messages))
         self.assertNotIn("【緯創 3231】⛔ 淘汰", unheld_message(messages))
 
     def test_v19_4_backtest_changes_tracking_order_only(self):
@@ -5359,7 +5359,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertEqual(generator.position_summary_note("台積電", holding_payload), "現有持倉保留，按風控續抱；新增倉位等觸發")
         self.assertNotIn("主線持倉保留", summary + position)
         self.assertIn("【世芯-KY 3661】⏳ 等回測｜遠離觸發", unheld)
-        self.assertIn("進場：不買，等回測｜原因：還沒到買點區", unheld)
+        self.assertIn("進場：不買，等回測｜原因：尚未接近突破區", unheld)
         self.assertIn("【台達電 2308】⏳ 等冷卻｜過熱觀察", unheld)
         self.assertIn("進場：不買，等冷卻｜原因：短線過熱，先等冷卻", unheld)
         self.assertIn("【範例股 0000】⛔ 淘汰｜突破失敗", unheld)

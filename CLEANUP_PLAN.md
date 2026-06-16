@@ -2,6 +2,13 @@
 
 ## Completed This Cycle
 
+- Compressed current handoff files for `explicit_approach_zone_wording_v21_1_20260616`.
+- Fixed vague `等接近` wording:
+  - `買點區 / 觸發區` replaced with concrete `突破區 low~high` when data exists;
+  - no strategy threshold / DB write / live Telegram change.
+
+## Previous Cycle Summary
+
 - Compressed current handoff files for `afterhours_summary_trade_plan_v21_1_20260616`.
 - Fixed afterhours summary noise:
   - removed market/count line and duplicate today-buy status line;
@@ -10,7 +17,7 @@
   - summary now keeps conclusion, tomorrow plan and holding risk checklist.
 - No DB rows/tables were changed.
 
-## Previous Cycle Summary
+## Earlier Cycle Summary
 
 - Compressed current handoff files for `dry_run_strategy_evidence_near_breakout_v21_1_20260616`.
 - Fixed local dry-run false source-missing:

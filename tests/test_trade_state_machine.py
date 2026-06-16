@@ -220,8 +220,8 @@ class TradeStateMachineTest(unittest.TestCase):
         self.assertIn("【06/08 盤後｜v21.1】", unheld)
         self.assertNotIn("交易狀態：等接近｜動作：等待｜主因：個股弱勢｜還差：接近觸發", unheld)
         self.assertIn("【緯創 3231】⏳ 等接近｜遠離觸發", unheld)
-        self.assertIn("進場：不買，等接近觸發區", unheld)
-        self.assertIn("缺口：距突破 19.25%，仍未進入觸發區", unheld)
+        self.assertIn("進場：不買，等接近突破區/回測支撐", unheld)
+        self.assertIn("缺口：距突破 19.25%，尚未接近突破區/回測支撐", unheld)
         self.assertNotIn("交易狀態：不可行動", unheld)
 
     def test_breakout_distance_gate_only_blocks_breakout_setup(self):

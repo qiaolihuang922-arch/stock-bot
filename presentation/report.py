@@ -498,6 +498,16 @@ def _retest_zone_text(data):
     return "回測前高/突破區"
 
 
+def _breakout_trigger_zone_text(data):
+    low = _gate_value_text((data or {}).get("retest_zone_low"))
+    high = _gate_value_text((data or {}).get("retest_zone_high"))
+    if low and high:
+        return f"突破區 {low}~{high}"
+    if low:
+        return f"突破區 {low} 附近"
+    return "突破區/回測支撐"
+
+
 def _retest_unlock_text(data):
     low = _gate_value_text((data or {}).get("retest_zone_low"))
     high = _gate_value_text((data or {}).get("retest_zone_high"))
@@ -636,7 +646,7 @@ def _strategy_granular_basis_line(funnel_state, primary_reason, basis):
 def _decision_first_reason_text(reason):
     mapping = {
         "RR不足": "風險報酬還不夠",
-        "距觸發太遠": "還沒到買點區",
+        "距觸發太遠": "尚未接近突破區",
         "未站回突破區": "尚未站回突破區",
         "熱度 Lv.3": "漲停/過熱，不追價",
         "過熱觀察": "短線過熱，先等冷卻",
@@ -925,15 +935,16 @@ def _unheld_entry_contract(data, dist, blockers, valid_entry, funnel_state, sour
     policy = _display_entry_distance_policy(stock_result)
     max_pct = policy.get("max_pct")
     if funnel_state == "等接近":
+        zone_text = _breakout_trigger_zone_text(data)
         distance_gap_text = (
-            f"距突破 {distance_text}%，仍未進入觸發區"
+            f"距突破 {distance_text}%，尚未接近{zone_text}"
             if distance_text
-            else "尚未進入觸發區"
+            else f"尚未接近{zone_text}"
         )
         gates.append(("距觸發太遠", distance_gap_text))
     if distance_text and policy.get("hard_gate") and max_pct is not None and float(distance_text) > max_pct:
         distance_gap_text = (
-            "尚未進入買點區"
+            f"尚未接近{_breakout_trigger_zone_text(data)}"
             if funnel_state == "等接近"
             else "尚未形成有效買點型態"
         )
@@ -981,7 +992,7 @@ def _unheld_entry_contract(data, dist, blockers, valid_entry, funnel_state, sour
         primary_gap = f"{primary_gap}｜" + "｜".join(extra_gaps)
     unlock = {
         "RR不足": "風險報酬比修復到 >=1.5",
-        "距觸發太遠": "接近觸發區，或另出現趨勢延續/回測承接setup後再評估",
+        "距觸發太遠": f"接近{_breakout_trigger_zone_text(data)}，或出現趨勢延續/回測承接setup",
         "市場背景": "市場轉強後再評估",
         "漲跌停鎖定": "解除鎖定後重新評估",
         "反彈力道不足": "放量轉強 + 品質B以上 + 風險報酬>=1.5",
@@ -1782,7 +1793,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         data_line = f"數據：{rr_data_text}｜{display_score_text}｜V {data.get('volume_ratio', '-')}x"
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
     elif funnel_state == "等接近":
-        buy_line = "買點：不買，等接近觸發區"
+        buy_line = f"買點：不買，等接近{_breakout_trigger_zone_text(data)}"
         data_line = f"數據：{rr_data_text}｜{display_score_text}｜V {data.get('volume_ratio', '-')}x"
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
     elif funnel_state == "淘汰":
@@ -1802,6 +1813,8 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         tomorrow_line = f"{trigger_label}：資料恢復後再評估"
     elif deps["is_valid_entry"](stock_result) and strategy_source_blocked:
         tomorrow_line = f"{trigger_label}：無有效進場，先補策略樣本證據"
+    elif funnel_state == "等接近":
+        tomorrow_line = f"{trigger_label}：接近{_breakout_trigger_zone_text(data)} 後重新評估買點型態"
     else:
         tomorrow_line = f"{trigger_label}：{deps['tomorrow_trigger_text'](state, data)}"
     reason_line = (

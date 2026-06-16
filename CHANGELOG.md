@@ -1,28 +1,23 @@
-# CHANGELOG: afterhours_summary_trade_plan_v21_1_20260616
+# CHANGELOG: explicit_approach_zone_wording_v21_1_20260616
 
 ## 修改內容與檔案
 
 - `presentation/report.py`
-  - `_afterhours_brief_lines` 改為交易計畫摘要。
-  - 移除盤後 summary 的市場統計流水與今日買入重複行。
-  - 新增 `明日計畫` 聚合：
-    - 今日買入風控優先。
-    - 今日買入觀察守警戒。
-    - 有新倉候選 / 可準備時列明開盤確認。
-    - 無新倉候選時用未持倉策略分組作明日追蹤。
-  - `未持倉狀態` 僅在 actionable / prepare 存在時顯示。
+  - 新增 `_breakout_trigger_zone_text`，從 `retest_zone_low/high` 產生 `突破區 low~high`。
+  - `等接近` 的 `進場 / 缺口 / 可買 / 明日觸發` 改用具體突破區。
+  - 無價位時 fallback 成 `突破區/回測支撐`。
 - `tests/test_generator_report.py`
-  - 更新盤後 summary regression，防止市場統計流水、空新倉占位、無操作漏斗回退。
+  - 更新 far-from-trigger regression。
+- `tests/test_trade_state_machine.py`
+  - 更新等接近卡片契約。
 
 ## 契約影響
 
-- 盤後 summary message list 變短：
-  - 保留結論 / 明日計畫 / 持倉風控檢查。
-  - 不再輸出空的新倉占位與純統計漏斗。
-- 策略判斷不變：
-  - 不新增可買。
-  - 不改持倉減碼 / 停損 / 續抱。
-  - 不改未持倉卡片判斷。
+- 使用者可見文案變清楚。
+- 策略決策不變：仍是不買，等接近或形成其他買點型態。
+- DB:
+  - 無 schema change。
+  - 無 write/backfill/prune。
 
 ## 版本同步
 
@@ -30,37 +25,34 @@
 
 ## 直接消費者同步
 
-- `generate_report(dry_run=True)` official summary covered。
-- `formatTelegramMessages` targeted summary tests covered。
+- Official unheld card covered。
+- Summary 未改。
 - live Telegram 未執行。
 
 ## 未影響模組
 
-- `core/generator.py` 策略核心未改。
-- DB schema / write / backfill / prune 未改。
-- future watch、財報、歷史類比未改。
+- 持倉風控未改。
+- 交易狀態機判斷未改。
+- 距突破計算未改。
 
 ## 自檢命令與結果
 
 - Targeted:
-  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q --tb=short -k "afterhours or brief or summary or today_buy or funnel"`
-  - `37 passed, 169 deselected, 49 warnings, 3 subtests passed`
+  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py tests\test_trade_state_machine.py -q --tb=short -k "far_low_volume or breakout_distance_gate or unheld_far_from_trigger or 等接近"`
+  - `3 passed, 212 deselected, 5 warnings`
 - Full:
   - `.\.venv\Scripts\python.exe -m pytest -q --tb=short`
   - `484 passed, 8 skipped, 165 warnings, 110 subtests passed`
 - Official dry-run:
-  - `generate_report(dry_run=True)`
-  - Summary now:
-    - `結論：新倉無有效進場；今日買入紀錄已轉風控。`
-    - `明日計畫：英業達、建準減碼/停損優先；未持倉：華邦電、南亞科等冷卻；旺宏、群創等回測；聯電等型態；仁寶、技嘉、緯創等接近。`
-    - `持倉風控檢查`
+  - 技嘉:
+    - `進場：不買，等接近突破區 399~400.99｜原因：尚未接近突破區`
+    - `缺口：距突破 15.23%，尚未接近突破區 399~400.99`
 
 ## 覆蓋層級
 
 - formatter: covered。
-- official generator message list: covered。
-- dry-run artifact: covered。
-- production runner / live Telegram: not run by design。
+- official generator dry-run: covered。
+- live Telegram: not run by design。
 
 ## 殘留風險
 
