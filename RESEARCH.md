@@ -1,6 +1,6 @@
 # RESEARCH.md
 
-## Topic: Breakout / Retest Buy Path Sanity Check
+## Topic: Breakout / Retest Strategy Evidence
 
 ## Date
 
@@ -29,7 +29,7 @@ References reviewed:
 - StockCharts scanning guidance: consolidation + prior trend + breakout + sharp volume increase.
 - Investopedia range-breakout risks: false breakouts and corrections back to breakout point are common.
 
-## Local Replay Conclusion
+## Local Buy-Path Replay
 
 - Read-only DB replay artifact:
   - `reports/audit/strategy_buy_path_replay_v21_1_20260616.json`
@@ -44,21 +44,40 @@ References reviewed:
   - raw snapshot tradeable but blocked by funnel: 0 days
   - deadlock suspected: false
 
+## Local Rule Outcome Replay
+
+- Read-only DB outcome artifact:
+  - `reports/audit/strategy_rule_outcomes_v21_1_20260616.json`
+- Scope:
+  - same 5798 stock-days
+  - forward 1/3/5/10 day return, MFE and MAE
+- Main flags:
+  - `隔日確認`: 5 日 `+8.5878%`，勝率 `78.26%`
+  - `漲停不追`: 5 日 `+3.288%`，勝率 `63.04%`
+  - `漲停反彈待確認`: 5 日 `+9.1624%`，勝率 `73.91%`
+  - `買點品質D`: 5 日 `+2.1268%`，勝率 `59.83%`
+  - `過熱觀察`: 5 日 `+6.1338%`，勝率 `61.67%`
+  - `wait_breakout_low_rr`: 5 日 `+3.7397%`，勝率 `57.46%`
+  - `HOT`: 5 日 `+5.5882%`，勝率 `61.76%`
+
 ## Interpretation
 
 - Current strategy can produce real buyable cases on historical DB data.
 - `等回測` does not guarantee a later buy:
   - next-state replay shows it can become `可買`, `可準備`, `等冷卻`, `等RR修復`, `等接近`, or `淘汰`.
-- This is consistent with common breakout/retest practice:
-  - wait for retest;
-  - buy only if retest holds and other gates remain valid.
+- Some conservative gates have statistical warning signs:
+  - hot / limit-up related cases often continue after 5 days;
+  - quality D is too broad and likely mixes weak structures with early repair structures;
+  - low-RR breakout waiting may be too strict or may be using an overly conservative target/stop.
 
-## Follow-up Research
+## Next Strategy Direction
 
-- If Owner wants execution-grade validation, next step is outcome replay:
-  - when a signal was `可買`, compute next 1/3/5/10 day return, max drawdown and stop-hit rate.
-- If Owner wants support-quality wording, implement real support sources:
-  - swing low;
-  - moving average support;
-  - volume-by-price / price-volume shelf;
-  - prior resistance turned support.
+- Do not turn all flags into buys.
+- Split hot / limit-up cases:
+  - no chase at lock price;
+  - but allow next-day watch/prepare if support holds and volume remains valid.
+- Split quality D:
+  - weak D remains blocked;
+  - repair D with multi-day rising close and support hold should become `等回測` or `可準備`, not permanent reject.
+- Re-check RR:
+  - validate target and stop anchors before using RR as a hard gate.

@@ -2,8 +2,8 @@
 
 ## Current Task
 
-- task_id: `strategy_buy_path_db_replay_audit_v21_1_20260616`
-- status: `implemented + QA passed + full pytest passed`
+- task_id: `strategy_rule_outcome_audit_v21_1_20260616`
+- status: `implemented + QA conditional pass + full pytest passed`
 - version: `v21.1`
 - no live Telegram delivery.
 - no DB schema/write/backfill/prune.
@@ -20,24 +20,31 @@
 ## Current Implementation State
 
 - Runtime report remains `v21.1`.
-- New read-only strategy replay tool:
+- Existing read-only buy-path replay:
   - `scripts/audit_strategy_buy_path_replay.py`
-- New replay artifact:
   - `reports/audit/strategy_buy_path_replay_v21_1_20260616.json`
-- Replay result:
+- New read-only rule outcome replay:
+  - `scripts/audit_strategy_rule_outcomes.py`
+  - `reports/audit/strategy_rule_outcomes_v21_1_20260616.json`
+- Rule outcome result:
   - events: `5798`
-  - buyable/trend stock-days: `700`
-  - buy-like including prepare: `1035`
-  - snapshot tradeable blocked by funnel: `0`
-  - deadlock suspected: `false`
+  - events_with_10d_outcome: `5678`
+  - flags: `7`
 
 ## Verification State
 
-- Targeted replay tests passed: `6 passed, 1 warning`.
-- Full pytest passed: `486 passed, 8 skipped, 165 warnings, 110 subtests passed`.
-- Code, tests, artifact and closeout docs pushed in commit `1b0ec5f`; git completion passed.
+- Targeted rule replay tests passed: `5 passed, 1 warning`.
+- Full pytest passed: `489 passed, 8 skipped, 165 warnings, 110 subtests passed`.
 
-## Known Follow-ups
+## Known Findings
 
-- Run full pytest and complete git closeout.
-- If Owner wants next strategy audit, run outcome replay for buyable days: next 1/3/5/10 day returns, MAE/MFE and stop-hit rate.
+- `等量能` is not currently the strongest over-strict signal.
+- `急彈待回測` has support as a blocker on 5-day outcome.
+- Hot / limit-up / low-RR / broad quality-D gates need next strategy patch:
+  - `隔日確認`
+  - `漲停不追`
+  - `漲停反彈待確認`
+  - `買點品質D`
+  - `過熱觀察`
+  - `wait_breakout_low_rr`
+  - `HOT`

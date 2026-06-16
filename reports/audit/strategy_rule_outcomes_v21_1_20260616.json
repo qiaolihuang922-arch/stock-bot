@@ -1,0 +1,1973 @@
+{
+  "by_decision_type": {
+    "breakout": {
+      "10d": {
+        "avg_mae_pct": -3.6346,
+        "avg_mfe_pct": 5.6578,
+        "avg_return_pct": 1.8662,
+        "median_return_pct": 0.7689,
+        "ready_sample": 214,
+        "win_rate_pct": 54.67
+      },
+      "1d": {
+        "avg_mae_pct": -0.0501,
+        "avg_mfe_pct": -0.0501,
+        "avg_return_pct": -0.0501,
+        "median_return_pct": -0.1096,
+        "ready_sample": 216,
+        "win_rate_pct": 43.52
+      },
+      "3d": {
+        "avg_mae_pct": -1.5481,
+        "avg_mfe_pct": 1.6646,
+        "avg_return_pct": 0.0562,
+        "median_return_pct": -0.4674,
+        "ready_sample": 216,
+        "win_rate_pct": 43.52
+      },
+      "5d": {
+        "avg_mae_pct": -2.4691,
+        "avg_mfe_pct": 2.8524,
+        "avg_return_pct": 0.3327,
+        "median_return_pct": -0.4044,
+        "ready_sample": 216,
+        "win_rate_pct": 44.44
+      },
+      "sample": 216,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續偏弱，阻擋有依據",
+        "verdict": "block_supported"
+      }
+    },
+    "extended": {
+      "10d": {
+        "avg_mae_pct": -7.4807,
+        "avg_mfe_pct": 17.3655,
+        "avg_return_pct": 9.2437,
+        "median_return_pct": 8.6538,
+        "ready_sample": 209,
+        "win_rate_pct": 63.64
+      },
+      "1d": {
+        "avg_mae_pct": 0.801,
+        "avg_mfe_pct": 0.801,
+        "avg_return_pct": 0.801,
+        "median_return_pct": 0.76,
+        "ready_sample": 219,
+        "win_rate_pct": 53.88
+      },
+      "3d": {
+        "avg_mae_pct": -3.1633,
+        "avg_mfe_pct": 5.0871,
+        "avg_return_pct": 1.1495,
+        "median_return_pct": 0.8061,
+        "ready_sample": 218,
+        "win_rate_pct": 52.29
+      },
+      "5d": {
+        "avg_mae_pct": -5.4205,
+        "avg_mfe_pct": 8.165,
+        "avg_return_pct": 1.785,
+        "median_return_pct": 1.1686,
+        "ready_sample": 218,
+        "win_rate_pct": 51.83
+      },
+      "sample": 220,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    },
+    "none": {
+      "10d": {
+        "avg_mae_pct": -4.3184,
+        "avg_mfe_pct": 6.3276,
+        "avg_return_pct": 1.6796,
+        "median_return_pct": 0.5291,
+        "ready_sample": 3373,
+        "win_rate_pct": 52.36
+      },
+      "1d": {
+        "avg_mae_pct": 0.1777,
+        "avg_mfe_pct": 0.1777,
+        "avg_return_pct": 0.1777,
+        "median_return_pct": 0.0,
+        "ready_sample": 3437,
+        "win_rate_pct": 47.98
+      },
+      "3d": {
+        "avg_mae_pct": -1.5369,
+        "avg_mfe_pct": 2.2306,
+        "avg_return_pct": 0.5172,
+        "median_return_pct": 0.2225,
+        "ready_sample": 3422,
+        "win_rate_pct": 50.76
+      },
+      "5d": {
+        "avg_mae_pct": -2.6141,
+        "avg_mfe_pct": 3.5571,
+        "avg_return_pct": 0.8211,
+        "median_return_pct": 0.3663,
+        "ready_sample": 3403,
+        "win_rate_pct": 51.84
+      },
+      "sample": 3443,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    },
+    "pre_breakout": {
+      "10d": {
+        "avg_mae_pct": -3.8058,
+        "avg_mfe_pct": 5.242,
+        "avg_return_pct": 0.6633,
+        "median_return_pct": 0.2354,
+        "ready_sample": 356,
+        "win_rate_pct": 51.4
+      },
+      "1d": {
+        "avg_mae_pct": 0.0862,
+        "avg_mfe_pct": 0.0862,
+        "avg_return_pct": 0.0862,
+        "median_return_pct": 0.0,
+        "ready_sample": 356,
+        "win_rate_pct": 46.07
+      },
+      "3d": {
+        "avg_mae_pct": -1.1634,
+        "avg_mfe_pct": 1.9447,
+        "avg_return_pct": 0.6842,
+        "median_return_pct": 0.0,
+        "ready_sample": 356,
+        "win_rate_pct": 49.44
+      },
+      "5d": {
+        "avg_mae_pct": -2.0947,
+        "avg_mfe_pct": 3.1923,
+        "avg_return_pct": 0.7801,
+        "median_return_pct": 0.2265,
+        "ready_sample": 356,
+        "win_rate_pct": 51.69
+      },
+      "sample": 356,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    },
+    "strong_follow": {
+      "10d": {
+        "avg_mae_pct": -4.0387,
+        "avg_mfe_pct": 6.1167,
+        "avg_return_pct": 1.9625,
+        "median_return_pct": -0.3333,
+        "ready_sample": 155,
+        "win_rate_pct": 47.74
+      },
+      "1d": {
+        "avg_mae_pct": 0.0002,
+        "avg_mfe_pct": 0.0002,
+        "avg_return_pct": 0.0002,
+        "median_return_pct": -0.1757,
+        "ready_sample": 156,
+        "win_rate_pct": 42.95
+      },
+      "3d": {
+        "avg_mae_pct": -1.5418,
+        "avg_mfe_pct": 2.008,
+        "avg_return_pct": 0.4382,
+        "median_return_pct": 0.0,
+        "ready_sample": 156,
+        "win_rate_pct": 45.51
+      },
+      "5d": {
+        "avg_mae_pct": -2.555,
+        "avg_mfe_pct": 3.3286,
+        "avg_return_pct": 0.7549,
+        "median_return_pct": -0.4605,
+        "ready_sample": 156,
+        "win_rate_pct": 45.51
+      },
+      "sample": 156,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    },
+    "wait_breakout_confirm": {
+      "10d": {
+        "avg_mae_pct": -5.0333,
+        "avg_mfe_pct": 11.1405,
+        "avg_return_pct": 6.2998,
+        "median_return_pct": 1.3514,
+        "ready_sample": 9,
+        "win_rate_pct": 66.67
+      },
+      "1d": {
+        "avg_mae_pct": -1.1791,
+        "avg_mfe_pct": -1.1791,
+        "avg_return_pct": -1.1791,
+        "median_return_pct": -0.9016,
+        "ready_sample": 10,
+        "win_rate_pct": 20.0
+      },
+      "3d": {
+        "avg_mae_pct": -3.8357,
+        "avg_mfe_pct": 2.1918,
+        "avg_return_pct": -0.0921,
+        "median_return_pct": -1.66,
+        "ready_sample": 10,
+        "win_rate_pct": 30.0
+      },
+      "5d": {
+        "avg_mae_pct": -5.5268,
+        "avg_mfe_pct": 2.8995,
+        "avg_return_pct": -0.5928,
+        "median_return_pct": -3.0587,
+        "ready_sample": 10,
+        "win_rate_pct": 30.0
+      },
+      "sample": 10,
+      "verdict": {
+        "reason": "5d樣本 10 < 20",
+        "verdict": "insufficient_sample"
+      }
+    },
+    "wait_breakout_low_rr": {
+      "10d": {
+        "avg_mae_pct": -4.1204,
+        "avg_mfe_pct": 12.092,
+        "avg_return_pct": 4.6646,
+        "median_return_pct": 1.0204,
+        "ready_sample": 227,
+        "win_rate_pct": 55.51
+      },
+      "1d": {
+        "avg_mae_pct": 1.0306,
+        "avg_mfe_pct": 1.0306,
+        "avg_return_pct": 1.0306,
+        "median_return_pct": 0.489,
+        "ready_sample": 228,
+        "win_rate_pct": 53.51
+      },
+      "3d": {
+        "avg_mae_pct": -1.0662,
+        "avg_mfe_pct": 4.8393,
+        "avg_return_pct": 2.6604,
+        "median_return_pct": 1.061,
+        "ready_sample": 228,
+        "win_rate_pct": 54.39
+      },
+      "5d": {
+        "avg_mae_pct": -2.1406,
+        "avg_mfe_pct": 7.6714,
+        "avg_return_pct": 3.7397,
+        "median_return_pct": 1.5269,
+        "ready_sample": 228,
+        "win_rate_pct": 57.46
+      },
+      "sample": 229,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續偏強，gate 可能太嚴",
+        "verdict": "audit_needed_maybe_too_strict"
+      }
+    },
+    "wait_pre_breakout": {
+      "10d": {
+        "avg_mae_pct": -3.6983,
+        "avg_mfe_pct": 5.2074,
+        "avg_return_pct": 1.6652,
+        "median_return_pct": 0.0865,
+        "ready_sample": 202,
+        "win_rate_pct": 50.0
+      },
+      "1d": {
+        "avg_mae_pct": 0.1153,
+        "avg_mfe_pct": 0.1153,
+        "avg_return_pct": 0.1153,
+        "median_return_pct": 0.0,
+        "ready_sample": 202,
+        "win_rate_pct": 46.04
+      },
+      "3d": {
+        "avg_mae_pct": -1.2471,
+        "avg_mfe_pct": 1.4507,
+        "avg_return_pct": 0.1457,
+        "median_return_pct": 0.2861,
+        "ready_sample": 202,
+        "win_rate_pct": 51.49
+      },
+      "5d": {
+        "avg_mae_pct": -2.1868,
+        "avg_mfe_pct": 2.5766,
+        "avg_return_pct": 0.3226,
+        "median_return_pct": 0.0,
+        "ready_sample": 202,
+        "win_rate_pct": 48.02
+      },
+      "sample": 202,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    },
+    "wait_pre_breakout_low_rr": {
+      "10d": {
+        "avg_mae_pct": 6.3467,
+        "avg_mfe_pct": 32.8173,
+        "avg_return_pct": 16.8731,
+        "median_return_pct": 16.8731,
+        "ready_sample": 1,
+        "win_rate_pct": 100.0
+      },
+      "1d": {
+        "avg_mae_pct": 6.3467,
+        "avg_mfe_pct": 6.3467,
+        "avg_return_pct": 6.3467,
+        "median_return_pct": 6.3467,
+        "ready_sample": 1,
+        "win_rate_pct": 100.0
+      },
+      "3d": {
+        "avg_mae_pct": 6.3467,
+        "avg_mfe_pct": 21.2074,
+        "avg_return_pct": 21.2074,
+        "median_return_pct": 21.2074,
+        "ready_sample": 1,
+        "win_rate_pct": 100.0
+      },
+      "5d": {
+        "avg_mae_pct": 6.3467,
+        "avg_mfe_pct": 28.3282,
+        "avg_return_pct": 28.3282,
+        "median_return_pct": 28.3282,
+        "ready_sample": 1,
+        "win_rate_pct": 100.0
+      },
+      "sample": 1,
+      "verdict": {
+        "reason": "5d樣本 1 < 20",
+        "verdict": "insufficient_sample"
+      }
+    },
+    "wait_volume": {
+      "10d": {
+        "avg_mae_pct": -4.462,
+        "avg_mfe_pct": 7.2358,
+        "avg_return_pct": 2.4997,
+        "median_return_pct": 0.3667,
+        "ready_sample": 593,
+        "win_rate_pct": 51.26
+      },
+      "1d": {
+        "avg_mae_pct": 0.0831,
+        "avg_mfe_pct": 0.0831,
+        "avg_return_pct": 0.0831,
+        "median_return_pct": 0.0,
+        "ready_sample": 620,
+        "win_rate_pct": 45.48
+      },
+      "3d": {
+        "avg_mae_pct": -1.557,
+        "avg_mfe_pct": 2.2994,
+        "avg_return_pct": 0.7589,
+        "median_return_pct": 0.2215,
+        "ready_sample": 612,
+        "win_rate_pct": 50.49
+      },
+      "5d": {
+        "avg_mae_pct": -2.5147,
+        "avg_mfe_pct": 4.0404,
+        "avg_return_pct": 1.4066,
+        "median_return_pct": 0.0,
+        "ready_sample": 607,
+        "win_rate_pct": 49.26
+      },
+      "sample": 623,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    },
+    "watch_quality_c": {
+      "10d": {
+        "avg_mae_pct": -4.2124,
+        "avg_mfe_pct": 7.1792,
+        "avg_return_pct": 1.919,
+        "median_return_pct": 0.3676,
+        "ready_sample": 339,
+        "win_rate_pct": 51.62
+      },
+      "1d": {
+        "avg_mae_pct": 0.3258,
+        "avg_mfe_pct": 0.3258,
+        "avg_return_pct": 0.3258,
+        "median_return_pct": 0.0,
+        "ready_sample": 341,
+        "win_rate_pct": 48.39
+      },
+      "3d": {
+        "avg_mae_pct": -1.4992,
+        "avg_mfe_pct": 2.4485,
+        "avg_return_pct": 0.5965,
+        "median_return_pct": -0.1754,
+        "ready_sample": 341,
+        "win_rate_pct": 46.04
+      },
+      "5d": {
+        "avg_mae_pct": -2.4816,
+        "avg_mfe_pct": 4.0967,
+        "avg_return_pct": 1.3373,
+        "median_return_pct": 0.0,
+        "ready_sample": 341,
+        "win_rate_pct": 48.97
+      },
+      "sample": 342,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    }
+  },
+  "by_entry_quality": {
+    "A": {
+      "10d": {
+        "avg_mae_pct": -4.2952,
+        "avg_mfe_pct": 6.63,
+        "avg_return_pct": 1.4731,
+        "median_return_pct": -0.1488,
+        "ready_sample": 132,
+        "win_rate_pct": 49.24
+      },
+      "1d": {
+        "avg_mae_pct": 0.3364,
+        "avg_mfe_pct": 0.3364,
+        "avg_return_pct": 0.3364,
+        "median_return_pct": 0.0561,
+        "ready_sample": 132,
+        "win_rate_pct": 50.0
+      },
+      "3d": {
+        "avg_mae_pct": -1.349,
+        "avg_mfe_pct": 2.2065,
+        "avg_return_pct": 0.4743,
+        "median_return_pct": -0.3126,
+        "ready_sample": 132,
+        "win_rate_pct": 43.94
+      },
+      "5d": {
+        "avg_mae_pct": -2.3828,
+        "avg_mfe_pct": 3.8321,
+        "avg_return_pct": 0.9559,
+        "median_return_pct": -0.0871,
+        "ready_sample": 132,
+        "win_rate_pct": 49.24
+      },
+      "sample": 132,
+      "verdict": {
+        "reason": "可行動組 5d 報酬與勝率訊號不一致",
+        "verdict": "mixed"
+      }
+    },
+    "A+": {
+      "10d": {
+        "avg_mae_pct": -3.9369,
+        "avg_mfe_pct": 5.4873,
+        "avg_return_pct": 1.1976,
+        "median_return_pct": 0.1698,
+        "ready_sample": 664,
+        "win_rate_pct": 50.45
+      },
+      "1d": {
+        "avg_mae_pct": -0.0135,
+        "avg_mfe_pct": -0.0135,
+        "avg_return_pct": -0.0135,
+        "median_return_pct": -0.1131,
+        "ready_sample": 668,
+        "win_rate_pct": 43.56
+      },
+      "3d": {
+        "avg_mae_pct": -1.4072,
+        "avg_mfe_pct": 1.8511,
+        "avg_return_pct": 0.4136,
+        "median_return_pct": -0.1618,
+        "ready_sample": 667,
+        "win_rate_pct": 45.88
+      },
+      "5d": {
+        "avg_mae_pct": -2.3799,
+        "avg_mfe_pct": 3.0245,
+        "avg_return_pct": 0.4873,
+        "median_return_pct": -0.1848,
+        "ready_sample": 667,
+        "win_rate_pct": 47.08
+      },
+      "sample": 668,
+      "verdict": {
+        "reason": "可行動組 5d 報酬與勝率訊號不一致",
+        "verdict": "mixed"
+      }
+    },
+    "B": {
+      "10d": {
+        "avg_mae_pct": -4.2501,
+        "avg_mfe_pct": 6.5002,
+        "avg_return_pct": 1.5225,
+        "median_return_pct": 0.5183,
+        "ready_sample": 180,
+        "win_rate_pct": 52.22
+      },
+      "1d": {
+        "avg_mae_pct": 0.2497,
+        "avg_mfe_pct": 0.2497,
+        "avg_return_pct": 0.2497,
+        "median_return_pct": -0.1302,
+        "ready_sample": 181,
+        "win_rate_pct": 45.86
+      },
+      "3d": {
+        "avg_mae_pct": -1.4761,
+        "avg_mfe_pct": 2.3628,
+        "avg_return_pct": 0.6228,
+        "median_return_pct": 0.0,
+        "ready_sample": 180,
+        "win_rate_pct": 47.78
+      },
+      "5d": {
+        "avg_mae_pct": -2.528,
+        "avg_mfe_pct": 3.9076,
+        "avg_return_pct": 0.9295,
+        "median_return_pct": 0.2182,
+        "ready_sample": 180,
+        "win_rate_pct": 50.56
+      },
+      "sample": 181,
+      "verdict": {
+        "reason": "可行動組 5d 平均報酬為正且勝率>=50%",
+        "verdict": "supported"
+      }
+    },
+    "C": {
+      "10d": {
+        "avg_mae_pct": -4.3459,
+        "avg_mfe_pct": 7.4441,
+        "avg_return_pct": 2.1348,
+        "median_return_pct": 0.4175,
+        "ready_sample": 351,
+        "win_rate_pct": 51.85
+      },
+      "1d": {
+        "avg_mae_pct": 0.2786,
+        "avg_mfe_pct": 0.2786,
+        "avg_return_pct": 0.2786,
+        "median_return_pct": 0.0,
+        "ready_sample": 354,
+        "win_rate_pct": 48.02
+      },
+      "3d": {
+        "avg_mae_pct": -1.584,
+        "avg_mfe_pct": 2.5195,
+        "avg_return_pct": 0.6193,
+        "median_return_pct": -0.0877,
+        "ready_sample": 354,
+        "win_rate_pct": 46.05
+      },
+      "5d": {
+        "avg_mae_pct": -2.5852,
+        "avg_mfe_pct": 4.2497,
+        "avg_return_pct": 1.3438,
+        "median_return_pct": 0.0,
+        "ready_sample": 354,
+        "win_rate_pct": 48.87
+      },
+      "sample": 355,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    },
+    "D": {
+      "10d": {
+        "avg_mae_pct": -4.4155,
+        "avg_mfe_pct": 7.2053,
+        "avg_return_pct": 2.3272,
+        "median_return_pct": 0.6711,
+        "ready_sample": 4351,
+        "win_rate_pct": 53.09
+      },
+      "1d": {
+        "avg_mae_pct": 0.2341,
+        "avg_mfe_pct": 0.2341,
+        "avg_return_pct": 0.2341,
+        "median_return_pct": 0.0,
+        "ready_sample": 4451,
+        "win_rate_pct": 48.24
+      },
+      "3d": {
+        "avg_mae_pct": -1.5773,
+        "avg_mfe_pct": 2.4714,
+        "avg_return_pct": 0.6771,
+        "median_return_pct": 0.3226,
+        "ready_sample": 4429,
+        "win_rate_pct": 51.41
+      },
+      "5d": {
+        "avg_mae_pct": -2.6865,
+        "avg_mfe_pct": 3.9959,
+        "avg_return_pct": 1.0912,
+        "median_return_pct": 0.3597,
+        "ready_sample": 4405,
+        "win_rate_pct": 51.83
+      },
+      "sample": 4462,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    }
+  },
+  "by_funnel_state": {
+    "可準備": {
+      "10d": {
+        "avg_mae_pct": -4.7196,
+        "avg_mfe_pct": 6.3084,
+        "avg_return_pct": 0.7955,
+        "median_return_pct": -0.3165,
+        "ready_sample": 335,
+        "win_rate_pct": 47.46
+      },
+      "1d": {
+        "avg_mae_pct": 0.1651,
+        "avg_mfe_pct": 0.1651,
+        "avg_return_pct": 0.1651,
+        "median_return_pct": 0.0,
+        "ready_sample": 335,
+        "win_rate_pct": 46.57
+      },
+      "3d": {
+        "avg_mae_pct": -1.577,
+        "avg_mfe_pct": 2.2357,
+        "avg_return_pct": 0.4141,
+        "median_return_pct": 0.0,
+        "ready_sample": 335,
+        "win_rate_pct": 44.48
+      },
+      "5d": {
+        "avg_mae_pct": -2.7115,
+        "avg_mfe_pct": 3.6792,
+        "avg_return_pct": 0.6299,
+        "median_return_pct": -0.1214,
+        "ready_sample": 335,
+        "win_rate_pct": 47.16
+      },
+      "sample": 335,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    },
+    "可買": {
+      "10d": {
+        "avg_mae_pct": -3.811,
+        "avg_mfe_pct": 5.4319,
+        "avg_return_pct": 1.1385,
+        "median_return_pct": 0.2252,
+        "ready_sample": 697,
+        "win_rate_pct": 51.08
+      },
+      "1d": {
+        "avg_mae_pct": 0.0263,
+        "avg_mfe_pct": 0.0263,
+        "avg_return_pct": 0.0263,
+        "median_return_pct": 0.0,
+        "ready_sample": 700,
+        "win_rate_pct": 44.71
+      },
+      "3d": {
+        "avg_mae_pct": -1.3449,
+        "avg_mfe_pct": 1.9001,
+        "avg_return_pct": 0.4723,
+        "median_return_pct": 0.0,
+        "ready_sample": 700,
+        "win_rate_pct": 47.0
+      },
+      "5d": {
+        "avg_mae_pct": -2.2843,
+        "avg_mfe_pct": 3.1153,
+        "avg_return_pct": 0.647,
+        "median_return_pct": 0.0,
+        "ready_sample": 700,
+        "win_rate_pct": 48.43
+      },
+      "sample": 700,
+      "verdict": {
+        "reason": "可行動組 5d 報酬與勝率訊號不一致",
+        "verdict": "mixed"
+      }
+    },
+    "淘汰": {
+      "10d": {
+        "avg_mae_pct": -4.3721,
+        "avg_mfe_pct": 8.1035,
+        "avg_return_pct": 3.2114,
+        "median_return_pct": 1.1853,
+        "ready_sample": 707,
+        "win_rate_pct": 55.87
+      },
+      "1d": {
+        "avg_mae_pct": 0.1678,
+        "avg_mfe_pct": 0.1678,
+        "avg_return_pct": 0.1678,
+        "median_return_pct": 0.0,
+        "ready_sample": 734,
+        "win_rate_pct": 47.68
+      },
+      "3d": {
+        "avg_mae_pct": -1.8699,
+        "avg_mfe_pct": 2.5736,
+        "avg_return_pct": 0.5287,
+        "median_return_pct": 0.0,
+        "ready_sample": 729,
+        "win_rate_pct": 48.42
+      },
+      "5d": {
+        "avg_mae_pct": -3.0047,
+        "avg_mfe_pct": 4.3975,
+        "avg_return_pct": 1.464,
+        "median_return_pct": 0.4975,
+        "ready_sample": 725,
+        "win_rate_pct": 53.1
+      },
+      "sample": 734,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    },
+    "等RR修復": {
+      "10d": {
+        "avg_mae_pct": -4.819,
+        "avg_mfe_pct": 8.8152,
+        "avg_return_pct": 2.8836,
+        "median_return_pct": 0.4405,
+        "ready_sample": 177,
+        "win_rate_pct": 51.41
+      },
+      "1d": {
+        "avg_mae_pct": 0.1622,
+        "avg_mfe_pct": 0.1622,
+        "avg_return_pct": 0.1622,
+        "median_return_pct": 0.0,
+        "ready_sample": 178,
+        "win_rate_pct": 46.07
+      },
+      "3d": {
+        "avg_mae_pct": -1.9221,
+        "avg_mfe_pct": 2.7462,
+        "avg_return_pct": 0.7219,
+        "median_return_pct": -0.3731,
+        "ready_sample": 177,
+        "win_rate_pct": 44.07
+      },
+      "5d": {
+        "avg_mae_pct": -2.9991,
+        "avg_mfe_pct": 4.8772,
+        "avg_return_pct": 1.4921,
+        "median_return_pct": -0.1848,
+        "ready_sample": 177,
+        "win_rate_pct": 48.02
+      },
+      "sample": 178,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    },
+    "等冷卻": {
+      "10d": {
+        "avg_mae_pct": -5.9078,
+        "avg_mfe_pct": 16.8783,
+        "avg_return_pct": 8.9341,
+        "median_return_pct": 7.5014,
+        "ready_sample": 272,
+        "win_rate_pct": 65.44
+      },
+      "1d": {
+        "avg_mae_pct": 0.7014,
+        "avg_mfe_pct": 0.7014,
+        "avg_return_pct": 0.7014,
+        "median_return_pct": 0.3067,
+        "ready_sample": 285,
+        "win_rate_pct": 51.58
+      },
+      "3d": {
+        "avg_mae_pct": -2.4957,
+        "avg_mfe_pct": 5.3123,
+        "avg_return_pct": 2.1705,
+        "median_return_pct": 0.8957,
+        "ready_sample": 284,
+        "win_rate_pct": 52.11
+      },
+      "5d": {
+        "avg_mae_pct": -4.2095,
+        "avg_mfe_pct": 8.8715,
+        "avg_return_pct": 3.5933,
+        "median_return_pct": 2.1336,
+        "ready_sample": 284,
+        "win_rate_pct": 54.23
+      },
+      "sample": 287,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    },
+    "等回測": {
+      "10d": {
+        "avg_mae_pct": -5.6951,
+        "avg_mfe_pct": 13.7342,
+        "avg_return_pct": 5.5023,
+        "median_return_pct": 1.5625,
+        "ready_sample": 147,
+        "win_rate_pct": 53.74
+      },
+      "1d": {
+        "avg_mae_pct": 1.9032,
+        "avg_mfe_pct": 1.9032,
+        "avg_return_pct": 1.9032,
+        "median_return_pct": 1.8519,
+        "ready_sample": 153,
+        "win_rate_pct": 58.17
+      },
+      "3d": {
+        "avg_mae_pct": -1.4912,
+        "avg_mfe_pct": 5.8889,
+        "avg_return_pct": 2.4905,
+        "median_return_pct": 1.458,
+        "ready_sample": 148,
+        "win_rate_pct": 60.81
+      },
+      "5d": {
+        "avg_mae_pct": -3.3351,
+        "avg_mfe_pct": 8.1735,
+        "avg_return_pct": 2.1742,
+        "median_return_pct": 2.0606,
+        "ready_sample": 148,
+        "win_rate_pct": 54.05
+      },
+      "sample": 155,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    },
+    "等型態": {
+      "10d": {
+        "avg_mae_pct": -3.6402,
+        "avg_mfe_pct": 5.4225,
+        "avg_return_pct": 1.3536,
+        "median_return_pct": 0.3367,
+        "ready_sample": 535,
+        "win_rate_pct": 51.03
+      },
+      "1d": {
+        "avg_mae_pct": 0.2327,
+        "avg_mfe_pct": 0.2327,
+        "avg_return_pct": 0.2327,
+        "median_return_pct": 0.0,
+        "ready_sample": 535,
+        "win_rate_pct": 48.04
+      },
+      "3d": {
+        "avg_mae_pct": -0.9964,
+        "avg_mfe_pct": 1.8349,
+        "avg_return_pct": 0.6236,
+        "median_return_pct": 0.4785,
+        "ready_sample": 535,
+        "win_rate_pct": 53.83
+      },
+      "5d": {
+        "avg_mae_pct": -1.9556,
+        "avg_mfe_pct": 2.9676,
+        "avg_return_pct": 0.6434,
+        "median_return_pct": 0.4348,
+        "ready_sample": 535,
+        "win_rate_pct": 53.46
+      },
+      "sample": 536,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    },
+    "等接近": {
+      "10d": {
+        "avg_mae_pct": -4.4147,
+        "avg_mfe_pct": 6.0005,
+        "avg_return_pct": 1.5192,
+        "median_return_pct": 0.4587,
+        "ready_sample": 2399,
+        "win_rate_pct": 51.9
+      },
+      "1d": {
+        "avg_mae_pct": 0.1093,
+        "avg_mfe_pct": 0.1093,
+        "avg_return_pct": 0.1093,
+        "median_return_pct": 0.0,
+        "ready_sample": 2456,
+        "win_rate_pct": 47.39
+      },
+      "3d": {
+        "avg_mae_pct": -1.5791,
+        "avg_mfe_pct": 2.0853,
+        "avg_return_pct": 0.4179,
+        "median_return_pct": 0.2558,
+        "ready_sample": 2445,
+        "win_rate_pct": 51.12
+      },
+      "5d": {
+        "avg_mae_pct": -2.6264,
+        "avg_mfe_pct": 3.3517,
+        "avg_return_pct": 0.7215,
+        "median_return_pct": 0.3003,
+        "ready_sample": 2425,
+        "win_rate_pct": 50.97
+      },
+      "sample": 2463,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    },
+    "等量能": {
+      "10d": {
+        "avg_mae_pct": -3.917,
+        "avg_mfe_pct": 4.8179,
+        "avg_return_pct": 0.7394,
+        "median_return_pct": -0.4566,
+        "ready_sample": 363,
+        "win_rate_pct": 48.21
+      },
+      "1d": {
+        "avg_mae_pct": 0.0454,
+        "avg_mfe_pct": 0.0454,
+        "avg_return_pct": 0.0454,
+        "median_return_pct": 0.0,
+        "ready_sample": 363,
+        "win_rate_pct": 45.45
+      },
+      "3d": {
+        "avg_mae_pct": -1.2411,
+        "avg_mfe_pct": 1.3494,
+        "avg_return_pct": 0.0838,
+        "median_return_pct": 0.0,
+        "ready_sample": 363,
+        "win_rate_pct": 47.11
+      },
+      "5d": {
+        "avg_mae_pct": -2.1078,
+        "avg_mfe_pct": 2.4311,
+        "avg_return_pct": 0.221,
+        "median_return_pct": -0.3257,
+        "ready_sample": 363,
+        "win_rate_pct": 46.01
+      },
+      "sample": 363,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    },
+    "隔日確認": {
+      "10d": {
+        "avg_mae_pct": -2.1231,
+        "avg_mfe_pct": 17.5674,
+        "avg_return_pct": 9.1655,
+        "median_return_pct": 6.3972,
+        "ready_sample": 46,
+        "win_rate_pct": 76.09
+      },
+      "1d": {
+        "avg_mae_pct": 2.027,
+        "avg_mfe_pct": 2.027,
+        "avg_return_pct": 2.027,
+        "median_return_pct": 1.5094,
+        "ready_sample": 47,
+        "win_rate_pct": 72.34
+      },
+      "3d": {
+        "avg_mae_pct": 0.3938,
+        "avg_mfe_pct": 8.6315,
+        "avg_return_pct": 6.8568,
+        "median_return_pct": 6.5918,
+        "ready_sample": 46,
+        "win_rate_pct": 73.91
+      },
+      "5d": {
+        "avg_mae_pct": -0.4415,
+        "avg_mfe_pct": 11.7678,
+        "avg_return_pct": 8.5878,
+        "median_return_pct": 7.0725,
+        "ready_sample": 46,
+        "win_rate_pct": 78.26
+      },
+      "sample": 47,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續偏強，gate 可能太嚴",
+        "verdict": "audit_needed_maybe_too_strict"
+      }
+    }
+  },
+  "by_heat_state": {
+    "EXTREME": {
+      "10d": {
+        "avg_mae_pct": -7.2929,
+        "avg_mfe_pct": 17.8592,
+        "avg_return_pct": 9.6333,
+        "median_return_pct": 8.796,
+        "ready_sample": 214,
+        "win_rate_pct": 64.49
+      },
+      "1d": {
+        "avg_mae_pct": 0.8245,
+        "avg_mfe_pct": 0.8245,
+        "avg_return_pct": 0.8245,
+        "median_return_pct": 0.7661,
+        "ready_sample": 226,
+        "win_rate_pct": 53.98
+      },
+      "3d": {
+        "avg_mae_pct": -3.109,
+        "avg_mfe_pct": 5.2262,
+        "avg_return_pct": 1.3246,
+        "median_return_pct": 0.8206,
+        "ready_sample": 225,
+        "win_rate_pct": 52.44
+      },
+      "5d": {
+        "avg_mae_pct": -5.3329,
+        "avg_mfe_pct": 8.3825,
+        "avg_return_pct": 2.0872,
+        "median_return_pct": 1.3289,
+        "ready_sample": 225,
+        "win_rate_pct": 52.44
+      },
+      "sample": 227,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    },
+    "HOT": {
+      "10d": {
+        "avg_mae_pct": -4.0132,
+        "avg_mfe_pct": 16.7778,
+        "avg_return_pct": 8.2278,
+        "median_return_pct": 5.6757,
+        "ready_sample": 165,
+        "win_rate_pct": 67.27
+      },
+      "1d": {
+        "avg_mae_pct": 1.6094,
+        "avg_mfe_pct": 1.6094,
+        "avg_return_pct": 1.6094,
+        "median_return_pct": 1.5569,
+        "ready_sample": 172,
+        "win_rate_pct": 57.56
+      },
+      "3d": {
+        "avg_mae_pct": -1.0166,
+        "avg_mfe_pct": 6.5681,
+        "avg_return_pct": 3.9272,
+        "median_return_pct": 2.1452,
+        "ready_sample": 170,
+        "win_rate_pct": 57.65
+      },
+      "5d": {
+        "avg_mae_pct": -2.3303,
+        "avg_mfe_pct": 10.1541,
+        "avg_return_pct": 5.5882,
+        "median_return_pct": 3.7665,
+        "ready_sample": 170,
+        "win_rate_pct": 61.76
+      },
+      "sample": 173,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續偏強，gate 可能太嚴",
+        "verdict": "audit_needed_maybe_too_strict"
+      }
+    },
+    "NORMAL": {
+      "10d": {
+        "avg_mae_pct": -4.2386,
+        "avg_mfe_pct": 6.2392,
+        "avg_return_pct": 1.6455,
+        "median_return_pct": 0.4175,
+        "ready_sample": 5299,
+        "win_rate_pct": 51.65
+      },
+      "1d": {
+        "avg_mae_pct": 0.1407,
+        "avg_mfe_pct": 0.1407,
+        "avg_return_pct": 0.1407,
+        "median_return_pct": 0.0,
+        "ready_sample": 5388,
+        "win_rate_pct": 47.07
+      },
+      "3d": {
+        "avg_mae_pct": -1.5011,
+        "avg_mfe_pct": 2.142,
+        "avg_return_pct": 0.5036,
+        "median_return_pct": 0.0,
+        "ready_sample": 5367,
+        "win_rate_pct": 49.82
+      },
+      "5d": {
+        "avg_mae_pct": -2.5286,
+        "avg_mfe_pct": 3.5038,
+        "avg_return_pct": 0.8387,
+        "median_return_pct": 0.1919,
+        "ready_sample": 5343,
+        "win_rate_pct": 50.59
+      },
+      "sample": 5398,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    }
+  },
+  "by_primary_blocker": {
+    "RR不足": {
+      "10d": {
+        "avg_mae_pct": -4.7705,
+        "avg_mfe_pct": 8.3166,
+        "avg_return_pct": 2.6109,
+        "median_return_pct": 0.4405,
+        "ready_sample": 137,
+        "win_rate_pct": 51.82
+      },
+      "1d": {
+        "avg_mae_pct": 0.0812,
+        "avg_mfe_pct": 0.0812,
+        "avg_return_pct": 0.0812,
+        "median_return_pct": 0.0,
+        "ready_sample": 137,
+        "win_rate_pct": 48.18
+      },
+      "3d": {
+        "avg_mae_pct": -1.9361,
+        "avg_mfe_pct": 2.8168,
+        "avg_return_pct": 0.9022,
+        "median_return_pct": -0.2105,
+        "ready_sample": 137,
+        "win_rate_pct": 44.53
+      },
+      "5d": {
+        "avg_mae_pct": -2.9206,
+        "avg_mfe_pct": 4.6032,
+        "avg_return_pct": 1.2548,
+        "median_return_pct": 0.3155,
+        "ready_sample": 137,
+        "win_rate_pct": 50.36
+      },
+      "sample": 137,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    },
+    "個股弱勢": {
+      "10d": {
+        "avg_mae_pct": -4.0837,
+        "avg_mfe_pct": 5.0607,
+        "avg_return_pct": 0.8189,
+        "median_return_pct": 0.0,
+        "ready_sample": 937,
+        "win_rate_pct": 49.2
+      },
+      "1d": {
+        "avg_mae_pct": 0.1527,
+        "avg_mfe_pct": 0.1527,
+        "avg_return_pct": 0.1527,
+        "median_return_pct": 0.0,
+        "ready_sample": 941,
+        "win_rate_pct": 44.42
+      },
+      "3d": {
+        "avg_mae_pct": -1.294,
+        "avg_mfe_pct": 1.745,
+        "avg_return_pct": 0.3241,
+        "median_return_pct": 0.152,
+        "ready_sample": 938,
+        "win_rate_pct": 50.53
+      },
+      "5d": {
+        "avg_mae_pct": -2.3073,
+        "avg_mfe_pct": 2.8412,
+        "avg_return_pct": 0.3558,
+        "median_return_pct": 0.0,
+        "ready_sample": 938,
+        "win_rate_pct": 48.61
+      },
+      "sample": 947,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    },
+    "可準備": {
+      "10d": {
+        "avg_mae_pct": -4.7196,
+        "avg_mfe_pct": 6.3084,
+        "avg_return_pct": 0.7955,
+        "median_return_pct": -0.3165,
+        "ready_sample": 335,
+        "win_rate_pct": 47.46
+      },
+      "1d": {
+        "avg_mae_pct": 0.1651,
+        "avg_mfe_pct": 0.1651,
+        "avg_return_pct": 0.1651,
+        "median_return_pct": 0.0,
+        "ready_sample": 335,
+        "win_rate_pct": 46.57
+      },
+      "3d": {
+        "avg_mae_pct": -1.577,
+        "avg_mfe_pct": 2.2357,
+        "avg_return_pct": 0.4141,
+        "median_return_pct": 0.0,
+        "ready_sample": 335,
+        "win_rate_pct": 44.48
+      },
+      "5d": {
+        "avg_mae_pct": -2.7115,
+        "avg_mfe_pct": 3.6792,
+        "avg_return_pct": 0.6299,
+        "median_return_pct": -0.1214,
+        "ready_sample": 335,
+        "win_rate_pct": 47.16
+      },
+      "sample": 335,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    },
+    "可買": {
+      "10d": {
+        "avg_mae_pct": -3.811,
+        "avg_mfe_pct": 5.4319,
+        "avg_return_pct": 1.1385,
+        "median_return_pct": 0.2252,
+        "ready_sample": 697,
+        "win_rate_pct": 51.08
+      },
+      "1d": {
+        "avg_mae_pct": 0.0263,
+        "avg_mfe_pct": 0.0263,
+        "avg_return_pct": 0.0263,
+        "median_return_pct": 0.0,
+        "ready_sample": 700,
+        "win_rate_pct": 44.71
+      },
+      "3d": {
+        "avg_mae_pct": -1.3449,
+        "avg_mfe_pct": 1.9001,
+        "avg_return_pct": 0.4723,
+        "median_return_pct": 0.0,
+        "ready_sample": 700,
+        "win_rate_pct": 47.0
+      },
+      "5d": {
+        "avg_mae_pct": -2.2843,
+        "avg_mfe_pct": 3.1153,
+        "avg_return_pct": 0.647,
+        "median_return_pct": 0.0,
+        "ready_sample": 700,
+        "win_rate_pct": 48.43
+      },
+      "sample": 700,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    },
+    "弱反彈待確認": {
+      "10d": {
+        "avg_mae_pct": -4.7419,
+        "avg_mfe_pct": 7.5478,
+        "avg_return_pct": 3.0205,
+        "median_return_pct": 1.0585,
+        "ready_sample": 250,
+        "win_rate_pct": 56.0
+      },
+      "1d": {
+        "avg_mae_pct": -0.0351,
+        "avg_mfe_pct": -0.0351,
+        "avg_return_pct": -0.0351,
+        "median_return_pct": -0.4762,
+        "ready_sample": 263,
+        "win_rate_pct": 39.54
+      },
+      "3d": {
+        "avg_mae_pct": -2.4568,
+        "avg_mfe_pct": 2.1223,
+        "avg_return_pct": -0.1566,
+        "median_return_pct": -0.3317,
+        "ready_sample": 257,
+        "win_rate_pct": 45.91
+      },
+      "5d": {
+        "avg_mae_pct": -3.6206,
+        "avg_mfe_pct": 4.0703,
+        "avg_return_pct": 1.1289,
+        "median_return_pct": 0.5902,
+        "ready_sample": 254,
+        "win_rate_pct": 52.76
+      },
+      "sample": 265,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    },
+    "急彈待回測": {
+      "10d": {
+        "avg_mae_pct": -6.1698,
+        "avg_mfe_pct": 7.7261,
+        "avg_return_pct": 1.9122,
+        "median_return_pct": -1.7937,
+        "ready_sample": 21,
+        "win_rate_pct": 42.86
+      },
+      "1d": {
+        "avg_mae_pct": -0.0281,
+        "avg_mfe_pct": -0.0281,
+        "avg_return_pct": -0.0281,
+        "median_return_pct": -0.3671,
+        "ready_sample": 22,
+        "win_rate_pct": 45.45
+      },
+      "3d": {
+        "avg_mae_pct": -3.3245,
+        "avg_mfe_pct": 2.7262,
+        "avg_return_pct": 0.1492,
+        "median_return_pct": 1.0,
+        "ready_sample": 21,
+        "win_rate_pct": 61.9
+      },
+      "5d": {
+        "avg_mae_pct": -4.1337,
+        "avg_mfe_pct": 4.6464,
+        "avg_return_pct": 0.1287,
+        "median_return_pct": -0.5917,
+        "ready_sample": 21,
+        "win_rate_pct": 42.86
+      },
+      "sample": 22,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續偏弱，阻擋有依據",
+        "verdict": "block_supported"
+      }
+    },
+    "漲停不追": {
+      "10d": {
+        "avg_mae_pct": -5.9057,
+        "avg_mfe_pct": 17.4707,
+        "avg_return_pct": 7.3614,
+        "median_return_pct": 5.8104,
+        "ready_sample": 91,
+        "win_rate_pct": 58.24
+      },
+      "1d": {
+        "avg_mae_pct": 3.2787,
+        "avg_mfe_pct": 3.2787,
+        "avg_return_pct": 3.2787,
+        "median_return_pct": 4.4,
+        "ready_sample": 95,
+        "win_rate_pct": 72.63
+      },
+      "3d": {
+        "avg_mae_pct": -0.6393,
+        "avg_mfe_pct": 8.0716,
+        "avg_return_pct": 3.9188,
+        "median_return_pct": 3.7387,
+        "ready_sample": 92,
+        "win_rate_pct": 66.3
+      },
+      "5d": {
+        "avg_mae_pct": -2.9146,
+        "avg_mfe_pct": 10.3849,
+        "avg_return_pct": 3.288,
+        "median_return_pct": 3.6303,
+        "ready_sample": 92,
+        "win_rate_pct": 63.04
+      },
+      "sample": 95,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續偏強，gate 可能太嚴",
+        "verdict": "audit_needed_maybe_too_strict"
+      }
+    },
+    "漲停反彈待確認": {
+      "10d": {
+        "avg_mae_pct": -2.8365,
+        "avg_mfe_pct": 19.9274,
+        "avg_return_pct": 10.5868,
+        "median_return_pct": 7.1141,
+        "ready_sample": 69,
+        "win_rate_pct": 69.57
+      },
+      "1d": {
+        "avg_mae_pct": 2.2494,
+        "avg_mfe_pct": 2.2494,
+        "avg_return_pct": 2.2494,
+        "median_return_pct": 1.5531,
+        "ready_sample": 70,
+        "win_rate_pct": 70.0
+      },
+      "3d": {
+        "avg_mae_pct": 0.3251,
+        "avg_mfe_pct": 8.6114,
+        "avg_return_pct": 6.3576,
+        "median_return_pct": 6.2069,
+        "ready_sample": 69,
+        "win_rate_pct": 68.12
+      },
+      "5d": {
+        "avg_mae_pct": -0.6652,
+        "avg_mfe_pct": 13.0948,
+        "avg_return_pct": 9.1624,
+        "median_return_pct": 8.3019,
+        "ready_sample": 69,
+        "win_rate_pct": 73.91
+      },
+      "sample": 70,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續偏強，gate 可能太嚴",
+        "verdict": "audit_needed_maybe_too_strict"
+      }
+    },
+    "突破失敗": {
+      "10d": {
+        "avg_mae_pct": -4.7164,
+        "avg_mfe_pct": 10.0602,
+        "avg_return_pct": 4.5456,
+        "median_return_pct": 1.6871,
+        "ready_sample": 210,
+        "win_rate_pct": 56.67
+      },
+      "1d": {
+        "avg_mae_pct": 0.0624,
+        "avg_mfe_pct": 0.0624,
+        "avg_return_pct": 0.0624,
+        "median_return_pct": 0.0,
+        "ready_sample": 223,
+        "win_rate_pct": 49.33
+      },
+      "3d": {
+        "avg_mae_pct": -2.3803,
+        "avg_mfe_pct": 2.5629,
+        "avg_return_pct": 0.0288,
+        "median_return_pct": -0.8743,
+        "ready_sample": 223,
+        "win_rate_pct": 43.95
+      },
+      "5d": {
+        "avg_mae_pct": -3.6014,
+        "avg_mfe_pct": 4.5917,
+        "avg_return_pct": 1.0889,
+        "median_return_pct": -0.6494,
+        "ready_sample": 223,
+        "win_rate_pct": 46.64
+      },
+      "sample": 223,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    },
+    "買點品質C": {
+      "10d": {
+        "avg_mae_pct": -3.976,
+        "avg_mfe_pct": 5.7914,
+        "avg_return_pct": 1.3118,
+        "median_return_pct": 0.2156,
+        "ready_sample": 102,
+        "win_rate_pct": 51.96
+      },
+      "1d": {
+        "avg_mae_pct": 0.0596,
+        "avg_mfe_pct": 0.0596,
+        "avg_return_pct": 0.0596,
+        "median_return_pct": 0.0,
+        "ready_sample": 102,
+        "win_rate_pct": 49.02
+      },
+      "3d": {
+        "avg_mae_pct": -1.5312,
+        "avg_mfe_pct": 1.7646,
+        "avg_return_pct": 0.1628,
+        "median_return_pct": -0.243,
+        "ready_sample": 102,
+        "win_rate_pct": 46.08
+      },
+      "5d": {
+        "avg_mae_pct": -2.3505,
+        "avg_mfe_pct": 2.9462,
+        "avg_return_pct": 0.6634,
+        "median_return_pct": -0.1158,
+        "ready_sample": 102,
+        "win_rate_pct": 49.02
+      },
+      "sample": 103,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    },
+    "買點品質D": {
+      "10d": {
+        "avg_mae_pct": -3.1237,
+        "avg_mfe_pct": 7.0712,
+        "avg_return_pct": 1.9578,
+        "median_return_pct": 0.2738,
+        "ready_sample": 116,
+        "win_rate_pct": 50.86
+      },
+      "1d": {
+        "avg_mae_pct": 0.5577,
+        "avg_mfe_pct": 0.5577,
+        "avg_return_pct": 0.5577,
+        "median_return_pct": 0.5272,
+        "ready_sample": 119,
+        "win_rate_pct": 57.98
+      },
+      "3d": {
+        "avg_mae_pct": -0.6202,
+        "avg_mfe_pct": 2.6248,
+        "avg_return_pct": 1.3766,
+        "median_return_pct": 0.7534,
+        "ready_sample": 118,
+        "win_rate_pct": 61.02
+      },
+      "5d": {
+        "avg_mae_pct": -1.5836,
+        "avg_mfe_pct": 4.2431,
+        "avg_return_pct": 2.1268,
+        "median_return_pct": 1.147,
+        "ready_sample": 117,
+        "win_rate_pct": 59.83
+      },
+      "sample": 119,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續偏強，gate 可能太嚴",
+        "verdict": "audit_needed_maybe_too_strict"
+      }
+    },
+    "過熱 Lv.3": {
+      "10d": {
+        "avg_mae_pct": -7.8078,
+        "avg_mfe_pct": 16.6904,
+        "avg_return_pct": 9.6302,
+        "median_return_pct": 8.6925,
+        "ready_sample": 142,
+        "win_rate_pct": 64.79
+      },
+      "1d": {
+        "avg_mae_pct": -0.2593,
+        "avg_mfe_pct": -0.2593,
+        "avg_return_pct": -0.2593,
+        "median_return_pct": -0.4902,
+        "ready_sample": 151,
+        "win_rate_pct": 46.36
+      },
+      "3d": {
+        "avg_mae_pct": -4.1825,
+        "avg_mfe_pct": 3.6444,
+        "avg_return_pct": -0.0615,
+        "median_return_pct": -0.7322,
+        "ready_sample": 151,
+        "win_rate_pct": 46.36
+      },
+      "5d": {
+        "avg_mae_pct": -6.2869,
+        "avg_mfe_pct": 6.9454,
+        "avg_return_pct": 1.0161,
+        "median_return_pct": -0.7812,
+        "ready_sample": 151,
+        "win_rate_pct": 47.02
+      },
+      "sample": 152,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    },
+    "過熱觀察": {
+      "10d": {
+        "avg_mae_pct": -3.7378,
+        "avg_mfe_pct": 16.4312,
+        "avg_return_pct": 7.9865,
+        "median_return_pct": 6.0714,
+        "ready_sample": 117,
+        "win_rate_pct": 66.67
+      },
+      "1d": {
+        "avg_mae_pct": 1.6121,
+        "avg_mfe_pct": 1.6121,
+        "avg_return_pct": 1.6121,
+        "median_return_pct": 0.9044,
+        "ready_sample": 121,
+        "win_rate_pct": 55.37
+      },
+      "3d": {
+        "avg_mae_pct": -0.7201,
+        "avg_mfe_pct": 6.9162,
+        "avg_return_pct": 4.5279,
+        "median_return_pct": 3.1155,
+        "ready_sample": 120,
+        "win_rate_pct": 60.0
+      },
+      "5d": {
+        "avg_mae_pct": -1.976,
+        "avg_mfe_pct": 10.5139,
+        "avg_return_pct": 6.1338,
+        "median_return_pct": 3.4234,
+        "ready_sample": 120,
+        "win_rate_pct": 61.67
+      },
+      "sample": 122,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續偏強，gate 可能太嚴",
+        "verdict": "audit_needed_maybe_too_strict"
+      }
+    },
+    "遠離觸發": {
+      "10d": {
+        "avg_mae_pct": -4.3954,
+        "avg_mfe_pct": 6.3714,
+        "avg_return_pct": 1.8633,
+        "median_return_pct": 0.6469,
+        "ready_sample": 2094,
+        "win_rate_pct": 53.25
+      },
+      "1d": {
+        "avg_mae_pct": 0.1308,
+        "avg_mfe_pct": 0.1308,
+        "avg_return_pct": 0.1308,
+        "median_return_pct": 0.0,
+        "ready_sample": 2147,
+        "win_rate_pct": 48.63
+      },
+      "3d": {
+        "avg_mae_pct": -1.5477,
+        "avg_mfe_pct": 2.2641,
+        "avg_return_pct": 0.6015,
+        "median_return_pct": 0.3632,
+        "ready_sample": 2139,
+        "win_rate_pct": 51.94
+      },
+      "5d": {
+        "avg_mae_pct": -2.6102,
+        "avg_mfe_pct": 3.6087,
+        "avg_return_pct": 0.94,
+        "median_return_pct": 0.4695,
+        "ready_sample": 2119,
+        "win_rate_pct": 52.81
+      },
+      "sample": 2148,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    },
+    "量能不足": {
+      "10d": {
+        "avg_mae_pct": -3.9154,
+        "avg_mfe_pct": 4.7206,
+        "avg_return_pct": 0.6635,
+        "median_return_pct": -0.4722,
+        "ready_sample": 360,
+        "win_rate_pct": 48.06
+      },
+      "1d": {
+        "avg_mae_pct": 0.0295,
+        "avg_mfe_pct": 0.0295,
+        "avg_return_pct": 0.0295,
+        "median_return_pct": 0.0,
+        "ready_sample": 360,
+        "win_rate_pct": 45.0
+      },
+      "3d": {
+        "avg_mae_pct": -1.2608,
+        "avg_mfe_pct": 1.2861,
+        "avg_return_pct": 0.0099,
+        "median_return_pct": 0.0,
+        "ready_sample": 360,
+        "win_rate_pct": 46.67
+      },
+      "5d": {
+        "avg_mae_pct": -2.1347,
+        "avg_mfe_pct": 2.3768,
+        "avg_return_pct": 0.1849,
+        "median_return_pct": -0.3488,
+        "ready_sample": 360,
+        "win_rate_pct": 45.56
+      },
+      "sample": 360,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    }
+  },
+  "by_volume_state": {
+    "EXPLOSIVE": {
+      "10d": {
+        "avg_mae_pct": -4.6575,
+        "avg_mfe_pct": 8.5909,
+        "avg_return_pct": 2.7996,
+        "median_return_pct": 0.495,
+        "ready_sample": 715,
+        "win_rate_pct": 52.45
+      },
+      "1d": {
+        "avg_mae_pct": 0.2858,
+        "avg_mfe_pct": 0.2858,
+        "avg_return_pct": 0.2858,
+        "median_return_pct": 0.0,
+        "ready_sample": 717,
+        "win_rate_pct": 47.84
+      },
+      "3d": {
+        "avg_mae_pct": -1.7174,
+        "avg_mfe_pct": 3.2101,
+        "avg_return_pct": 1.1455,
+        "median_return_pct": 0.0,
+        "ready_sample": 717,
+        "win_rate_pct": 49.23
+      },
+      "5d": {
+        "avg_mae_pct": -2.8883,
+        "avg_mfe_pct": 5.1013,
+        "avg_return_pct": 1.5429,
+        "median_return_pct": 0.1789,
+        "ready_sample": 717,
+        "win_rate_pct": 50.21
+      },
+      "sample": 717,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    },
+    "NORMAL": {
+      "10d": {
+        "avg_mae_pct": -4.2302,
+        "avg_mfe_pct": 6.6601,
+        "avg_return_pct": 2.0099,
+        "median_return_pct": 0.6674,
+        "ready_sample": 1570,
+        "win_rate_pct": 52.93
+      },
+      "1d": {
+        "avg_mae_pct": 0.2106,
+        "avg_mfe_pct": 0.2106,
+        "avg_return_pct": 0.2106,
+        "median_return_pct": 0.0,
+        "ready_sample": 1595,
+        "win_rate_pct": 48.65
+      },
+      "3d": {
+        "avg_mae_pct": -1.4394,
+        "avg_mfe_pct": 2.2456,
+        "avg_return_pct": 0.5729,
+        "median_return_pct": 0.2336,
+        "ready_sample": 1591,
+        "win_rate_pct": 50.53
+      },
+      "5d": {
+        "avg_mae_pct": -2.5192,
+        "avg_mfe_pct": 3.6067,
+        "avg_return_pct": 0.8948,
+        "median_return_pct": 0.4329,
+        "ready_sample": 1585,
+        "win_rate_pct": 52.56
+      },
+      "sample": 1596,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    },
+    "STRONG": {
+      "10d": {
+        "avg_mae_pct": -4.6106,
+        "avg_mfe_pct": 7.3188,
+        "avg_return_pct": 2.1308,
+        "median_return_pct": 0.4762,
+        "ready_sample": 1155,
+        "win_rate_pct": 51.77
+      },
+      "1d": {
+        "avg_mae_pct": 0.3666,
+        "avg_mfe_pct": 0.3666,
+        "avg_return_pct": 0.3666,
+        "median_return_pct": 0.0,
+        "ready_sample": 1173,
+        "win_rate_pct": 49.19
+      },
+      "3d": {
+        "avg_mae_pct": -1.6079,
+        "avg_mfe_pct": 2.5013,
+        "avg_return_pct": 0.5151,
+        "median_return_pct": 0.0,
+        "ready_sample": 1170,
+        "win_rate_pct": 48.8
+      },
+      "5d": {
+        "avg_mae_pct": -2.8146,
+        "avg_mfe_pct": 3.9889,
+        "avg_return_pct": 0.7975,
+        "median_return_pct": 0.1126,
+        "ready_sample": 1169,
+        "win_rate_pct": 50.04
+      },
+      "sample": 1175,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    },
+    "WEAK": {
+      "10d": {
+        "avg_mae_pct": -4.1942,
+        "avg_mfe_pct": 6.5236,
+        "avg_return_pct": 2.0197,
+        "median_return_pct": 0.4987,
+        "ready_sample": 2238,
+        "win_rate_pct": 52.82
+      },
+      "1d": {
+        "avg_mae_pct": 0.1089,
+        "avg_mfe_pct": 0.1089,
+        "avg_return_pct": 0.1089,
+        "median_return_pct": 0.0,
+        "ready_sample": 2301,
+        "win_rate_pct": 46.11
+      },
+      "3d": {
+        "avg_mae_pct": -1.5439,
+        "avg_mfe_pct": 2.1838,
+        "avg_return_pct": 0.5837,
+        "median_return_pct": 0.2458,
+        "ready_sample": 2284,
+        "win_rate_pct": 50.88
+      },
+      "5d": {
+        "avg_mae_pct": -2.5374,
+        "avg_mfe_pct": 3.6594,
+        "avg_return_pct": 1.0781,
+        "median_return_pct": 0.1972,
+        "ready_sample": 2267,
+        "win_rate_pct": 50.64
+      },
+      "sample": 2310,
+      "verdict": {
+        "reason": "被阻擋組 5d 後續普通，需看子分類",
+        "verdict": "mixed"
+      }
+    }
+  },
+  "date_range": {
+    "end": "2026-06-16",
+    "start": "2024-06-16"
+  },
+  "db_write": false,
+  "flags": [
+    {
+      "avg_return_5d": 8.5878,
+      "group": "by_funnel_state",
+      "label": "隔日確認",
+      "reason": "被阻擋組 5d 後續偏強，gate 可能太嚴",
+      "sample_5d": 46,
+      "verdict": "audit_needed_maybe_too_strict",
+      "win_rate_5d": 78.26
+    },
+    {
+      "avg_return_5d": 3.288,
+      "group": "by_primary_blocker",
+      "label": "漲停不追",
+      "reason": "被阻擋組 5d 後續偏強，gate 可能太嚴",
+      "sample_5d": 92,
+      "verdict": "audit_needed_maybe_too_strict",
+      "win_rate_5d": 63.04
+    },
+    {
+      "avg_return_5d": 9.1624,
+      "group": "by_primary_blocker",
+      "label": "漲停反彈待確認",
+      "reason": "被阻擋組 5d 後續偏強，gate 可能太嚴",
+      "sample_5d": 69,
+      "verdict": "audit_needed_maybe_too_strict",
+      "win_rate_5d": 73.91
+    },
+    {
+      "avg_return_5d": 2.1268,
+      "group": "by_primary_blocker",
+      "label": "買點品質D",
+      "reason": "被阻擋組 5d 後續偏強，gate 可能太嚴",
+      "sample_5d": 117,
+      "verdict": "audit_needed_maybe_too_strict",
+      "win_rate_5d": 59.83
+    },
+    {
+      "avg_return_5d": 6.1338,
+      "group": "by_primary_blocker",
+      "label": "過熱觀察",
+      "reason": "被阻擋組 5d 後續偏強，gate 可能太嚴",
+      "sample_5d": 120,
+      "verdict": "audit_needed_maybe_too_strict",
+      "win_rate_5d": 61.67
+    },
+    {
+      "avg_return_5d": 3.7397,
+      "group": "by_decision_type",
+      "label": "wait_breakout_low_rr",
+      "reason": "被阻擋組 5d 後續偏強，gate 可能太嚴",
+      "sample_5d": 228,
+      "verdict": "audit_needed_maybe_too_strict",
+      "win_rate_5d": 57.46
+    },
+    {
+      "avg_return_5d": 5.5882,
+      "group": "by_heat_state",
+      "label": "HOT",
+      "reason": "被阻擋組 5d 後續偏強，gate 可能太嚴",
+      "sample_5d": 170,
+      "verdict": "audit_needed_maybe_too_strict",
+      "win_rate_5d": 61.76
+    }
+  ],
+  "generated_at": "2026-06-16T10:27:48.168741+00:00",
+  "horizons": [
+    1,
+    3,
+    5,
+    10
+  ],
+  "live_telegram": false,
+  "mode": "strategy_rule_outcome_audit",
+  "read_only": true,
+  "schema_change": false,
+  "source": "Supabase daily_price read-only",
+  "totals": {
+    "events": 5798,
+    "events_with_10d_outcome": 5678
+  },
+  "version": "v21.1"
+}
