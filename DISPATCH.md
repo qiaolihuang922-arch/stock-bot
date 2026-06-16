@@ -3,7 +3,7 @@
 ## Active
 
 - task_md_holds: `afterhours_summary_trade_plan_v21_1_20260616`
-- status: `implemented + QA passed + full pytest passed`
+- status: `implemented + QA passed + full pytest passed + pushed`
 - current_version: `v21.1`
 - no live Telegram delivery in this cycle.
 - no DB schema/write/backfill/prune in this cycle.
@@ -39,8 +39,8 @@
 ## Current Git State
 
 - branch: `main`
-- completion: pending commit / push.
+- completion: git completion pending after closeout doc commit.
 
 ## Next Action
 
-- Commit and push if full pytest passes.
+- Run git completion after closeout doc commit.

@@ -3,7 +3,7 @@
 ## Current Task
 
 - task_id: `afterhours_summary_trade_plan_v21_1_20260616`
-- status: `implemented + QA passed + full pytest passed`
+- status: `implemented + QA passed + full pytest passed + pushed`
 - version: `v21.1`
 - no live Telegram delivery.
 - no DB schema/write/backfill/prune.
@@ -32,6 +32,7 @@
 - Targeted summary tests passed.
 - Full pytest passed: `484 passed, 8 skipped, 165 warnings, 110 subtests passed`.
 - Official dry-run summary matches Owner-visible route.
+- Code commit pushed; closeout doc commit pending git completion.
 
 ## Known Follow-ups
 
