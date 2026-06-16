@@ -35,7 +35,7 @@
 
 - Targeted replay tests passed: `6 passed, 1 warning`.
 - Full pytest passed: `486 passed, 8 skipped, 165 warnings, 110 subtests passed`.
-- Commit/push pending.
+- Code, tests, artifact and closeout docs pushed in commit `1b0ec5f`; git completion passed.
 
 ## Known Follow-ups
 
