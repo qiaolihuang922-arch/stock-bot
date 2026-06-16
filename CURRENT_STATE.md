@@ -24,6 +24,10 @@
   - `core/generator.py`
   - `presentation/report.py`
   - `tests/test_generator_report.py`
+- `等接近` card contract now uses:
+  - `進場：不買｜尚未接近突破區 ...`
+  - `等待：距突破 ...；有效買點只看：接近突破區 / 回測承接型態`
+  - trigger line without repeating the exact same breakout zone.
 - Current hard gates:
   - limit-up lock / `LIMIT_LOCK`
   - `EXTREME`

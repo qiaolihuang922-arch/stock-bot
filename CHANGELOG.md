@@ -11,9 +11,15 @@
 - `presentation/report.py`
   - HOT / EXTENDED / LIMIT_REBOUND 不再預設顯示成 evidence unavailable。
   - `可準備` 顯示保留 score/evidence，不再全部變成不適用。
+  - `等接近` card de-duplicates entry/gap/unlock/trigger:
+    - removes repeated `可買：接近突破區...` line for far-from-trigger cards.
+    - uses `等待：距突破...；有效買點只看：接近突破區 / 回測承接型態`.
+    - trigger no longer repeats the exact breakout zone.
 - `tests/test_generator_report.py`
   - 更新 soft-gate 報文契約。
   - 補 HOT evidence、低 RR、漲停反彈、summary funnel regression。
+- `tests/test_trade_state_machine.py`
+  - 同步 `等接近` mobile-readable card contract。
 - Audit artifacts:
   - `reports/audit/strategy_buy_path_replay_v21_1_soft_gates_20260616.json`
   - `reports/audit/strategy_rule_outcomes_v21_1_soft_gates_20260616.json`
@@ -45,6 +51,9 @@
 - Full:
   - `.\.venv\Scripts\python.exe -m pytest -q --tb=short`
   - result: `489 passed, 8 skipped, 165 warnings, 110 subtests passed`
+- Official generator dry-run:
+  - `from core.generator import generate_report; generate_report(dry_run=True)`
+  - result: `4` messages generated, no live Telegram.
 - DB buy-path replay:
   - `.\.venv\Scripts\python.exe scripts\audit_strategy_buy_path_replay.py --lookback-days 730 --version v21.1 --output reports\audit\strategy_buy_path_replay_v21_1_soft_gates_20260616.json`
   - result:

@@ -6,6 +6,9 @@
   - HOT / EXTENDED / LIMIT_REBOUND no longer always hard-block.
   - EXTREME / AVOID / LIMIT_LOCK / failed breakout / RR<1.0 remain hard-block.
   - Soft gates can become `可準備` with supporting/confirmed evidence, not `可買`.
+- De-duplicated `等接近` mobile card:
+  - one breakout zone reference only.
+  - no repeated `進場 / 缺口 / 可買 / 觸發` copy for the same condition.
 - Added post-patch replay artifacts:
   - `reports/audit/strategy_buy_path_replay_v21_1_soft_gates_20260616.json`
   - `reports/audit/strategy_rule_outcomes_v21_1_soft_gates_20260616.json`

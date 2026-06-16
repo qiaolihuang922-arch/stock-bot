@@ -17,6 +17,10 @@
   - Limit-up rebound no longer becomes fake `等資料`; it is `隔日確認`.
   - Confirmed/supporting evidence can promote soft-gated names to `可準備`, not `可買`.
 - Mobile report wording is unchanged in version header but no longer marks HOT / LIMIT_REBOUND evidence as unavailable by default.
+- `等接近` mobile card was de-duplicated:
+  - keeps breakout distance and one breakout zone reference.
+  - replaces repeated `進場 / 缺口 / 可買 / 明日觸發` wording with `進場 / 等待 / 觸發`.
+  - no DB or strategy threshold change.
 
 ## Verification
 
@@ -26,6 +30,8 @@
 - Full tests:
   - `.\.venv\Scripts\python.exe -m pytest -q --tb=short`
   - result: `489 passed, 8 skipped, 165 warnings, 110 subtests passed`
+- Dry-run official generator:
+  - result: `4` messages generated, no live Telegram.
 - DB replay after patch:
   - `reports/audit/strategy_buy_path_replay_v21_1_soft_gates_20260616.json`
   - `deadlock_suspected=false`

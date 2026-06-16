@@ -3742,10 +3742,10 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【緯創 3231】⏳ 等接近｜遠離觸發", unheld_message(messages))
         self.assertNotIn("交易狀態：等接近｜動作：等待｜主因：個股弱勢｜還差：接近觸發", unheld_message(messages))
         self.assertIn("距突破：19.25%｜遠離突破", unheld_message(messages))
-        self.assertIn("進場：不買，等接近突破區/回測支撐｜原因：尚未接近突破區", unheld_message(messages))
-        self.assertIn("缺口：距突破 19.25%，尚未接近突破區/回測支撐", unheld_message(messages))
-        self.assertIn("可買：接近突破區/回測支撐，或出現趨勢延續/回測承接買點型態", unheld_message(messages))
-        self.assertIn("明日觸發：接近突破區/回測支撐 後重新評估買點型態", unheld_message(messages))
+        self.assertIn("進場：不買｜尚未接近突破區/回測支撐", unheld_message(messages))
+        self.assertIn("等待：距突破 19.25%；有效買點只看：接近突破區 / 回測承接型態", unheld_message(messages))
+        self.assertNotIn("可買：接近突破區/回測支撐", unheld_message(messages))
+        self.assertIn("明日觸發：進入突破區附近，或形成回測承接型態再重評", unheld_message(messages))
         self.assertNotIn("【緯創 3231】⛔ 淘汰", unheld_message(messages))
 
     def test_v19_4_backtest_changes_tracking_order_only(self):

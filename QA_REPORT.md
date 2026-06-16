@@ -6,6 +6,7 @@
 - HOT / EXTENDED / LIMIT_REBOUND display and funnel state。
 - Low-RR gate behavior。
 - Official generator message list regression。
+- `等接近` mobile card de-duplication。
 - DB replay after patch。
 
 ## 關聯風險掃描
@@ -18,6 +19,8 @@
   - 反證: missing source remains hard in `_unheld_hard_gate_reasons`; only LIMIT_REBOUND source-only display avoids fake `等資料`.
 - 風險 4: 只改文案，策略沒變。
   - 反證: DB replay state counts changed after patch: `可準備 364`, `可買 700`, `deadlock_suspected=false`.
+- 風險 5: 為了降噪刪掉突破區資訊。
+  - 反證: card still keeps `距突破` and one explicit breakout zone reference in `進場`。
 
 ## 跨區塊語意一致性
 
@@ -25,6 +28,7 @@
 - `隔日確認` is used for limit-up rebound / follow-through that cannot be chased.
 - HOT / EXTENDED is no longer always evidence-unavailable; EXTREME / AVOID remains hard.
 - Low RR is hard only when risk is genuinely poor (`RR<1.0`) or low quality + no setup.
+- `等接近` no longer shows redundant `可買` line; waiting rule is explicit but compact.
 
 ## 使用者誤讀風險
 

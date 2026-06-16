@@ -944,7 +944,7 @@ def _unheld_entry_contract(data, dist, blockers, valid_entry, funnel_state, sour
             else f"尚未接近{zone_text}"
         )
         gates.append(("距觸發太遠", distance_gap_text))
-    if distance_text and policy.get("hard_gate") and max_pct is not None and float(distance_text) > max_pct:
+    if funnel_state != "等接近" and distance_text and policy.get("hard_gate") and max_pct is not None and float(distance_text) > max_pct:
         distance_gap_text = (
             f"尚未接近{_breakout_trigger_zone_text(data)}"
             if funnel_state == "等接近"
@@ -1262,6 +1262,23 @@ def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None):
         if reason and reason not in entry_text:
             entry_parts.append(f"原因：{reason}")
         lines = []
+        if funnel_state == "等接近":
+            zone = None
+            gap_text = str(gap or "")
+            if "尚未接近" in gap_text:
+                zone = gap_text.split("尚未接近", 1)[1].strip()
+            entry_line = "進場：不買"
+            if zone:
+                entry_line += f"｜尚未接近{zone}"
+            wait_text = gap_text
+            if zone:
+                wait_text = wait_text.replace(f"，尚未接近{zone}", "").replace(f"；尚未接近{zone}", "")
+            wait_text = wait_text.strip("；， ")
+            if wait_text:
+                wait_text += "；"
+            wait_text += "有效買點只看：接近突破區 / 回測承接型態"
+            return [entry_line, f"等待：{wait_text}"]
+
         if entry_parts:
             lines.append("進場：" + "｜".join(dict.fromkeys(entry_parts)))
         if gap:
@@ -1301,6 +1318,23 @@ def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None):
         entry_parts.append(f"原因：{reason}")
 
     lines = []
+    if funnel_state == "等接近":
+        zone = None
+        gap_text = str(gap or "")
+        if "尚未接近" in gap_text:
+            zone = gap_text.split("尚未接近", 1)[1].strip()
+        entry_line = "進場：不買"
+        if zone:
+            entry_line += f"｜尚未接近{zone}"
+        wait_text = gap_text
+        if zone:
+            wait_text = wait_text.replace(f"，尚未接近{zone}", "").replace(f"；尚未接近{zone}", "")
+        wait_text = wait_text.strip("；， ")
+        if wait_text:
+            wait_text += "；"
+        wait_text += "有效買點只看：接近突破區 / 回測承接型態"
+        return [entry_line, f"等待：{wait_text}"]
+
     if entry_parts:
         lines.append("進場：" + "｜".join(dict.fromkeys(entry_parts)))
     if gap:
@@ -1816,7 +1850,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     elif deps["is_valid_entry"](stock_result) and strategy_source_blocked:
         tomorrow_line = f"{trigger_label}：無有效進場，先補策略樣本證據"
     elif funnel_state == "等接近":
-        tomorrow_line = f"{trigger_label}：接近{_breakout_trigger_zone_text(data)} 後重新評估買點型態"
+        tomorrow_line = f"{trigger_label}：進入突破區附近，或形成回測承接型態再重評"
     else:
         tomorrow_line = f"{trigger_label}：{deps['tomorrow_trigger_text'](state, data)}"
     reason_line = (
