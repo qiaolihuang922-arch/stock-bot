@@ -2,12 +2,11 @@
 
 ## Current Task
 
-- task_id: `cross_day_source_truth_v21_1_20260616`
-- status: `implemented + QA passed + pushed`
+- task_id: `near_breakout_tracking_contract_v21_1_20260616`
+- status: `implemented + QA passed + full pytest passed + pushed`
 - version: `v21.1`
 - no live Telegram delivery.
 - no DB schema/write/backfill/prune.
-- DB read-only verification performed for `daily_price`.
 
 ## Stable Context
 
@@ -21,27 +20,26 @@
 ## Current Implementation State
 
 - Runtime report remains `v21.1`.
-- Multi-day rebound repair now requires DB daily_price:
-  - `cross_day_context.source_of_truth` must include `daily_price`.
-  - `cross_day_context.recent_daily_price_points` must contain at least 4 DB close points.
-  - payload `closes` / live `price` alone cannot trigger `反彈修復待回測`.
-- `build_cross_day_contexts` reads `daily_price` along with `daily_signal_snapshot` and `position_events`.
+- Distance contract:
+  - `<0`: 已突破
+  - `<1`: 臨界突破
+  - `<=5`: 接近突破
+  - `>5`: 遠離突破
+- Near-breakout C-quality observation no longer falls through to淘汰.
 - Hard failure remains hard:
   - `decision=FAIL`
+  - `突破失敗`
   - `FAILED_BREAKOUT`
-  - `reject_family=突破失敗`
-- No DB write/backfill/schema change was performed.
+  - `DISTRIBUTION`
+- Weak rebound remains conservative and is not loosened by near-distance alone.
 
 ## Verification State
 
-- Targeted tests: `3 passed`.
-- Broader strategy/report tests: `260 passed, 44 subtests passed`.
-- Evidence tests: `53 passed, 13 subtests passed`.
-- Full tests: `481 passed, 8 skipped, 108 subtests passed`.
-- Official dry-run checked locally.
-- Production DB read-only checked for 旺宏 recent `daily_price` close points.
+- Targeted tests: `6 passed, 12 subtests passed`.
+- Broader report / strategy tests: `255 passed, 46 subtests passed`.
+- Full pytest: `482 passed, 8 skipped, 110 subtests passed`.
 
 ## Known Follow-ups
 
-- Observe next scheduled `run_mode=bot` report and confirm production Telegram artifact matches dry-run wording.
+- Observe next scheduled `run_mode=bot` report and confirm production Telegram artifact matches the fixed wording.
 - If production still shows old classification, inspect runner commit/deployment path before changing strategy again.

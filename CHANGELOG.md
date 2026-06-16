@@ -1,37 +1,30 @@
-# CHANGELOG: cross_day_source_truth_v21_1_20260616
+# CHANGELOG: near_breakout_tracking_contract_v21_1_20260616
 
 ## 修改內容與檔案
 
-- `services/cross_day_context.py`
-  - 將 `daily_price` 加入 persistent cross-day source 白名單。
-  - `build_cross_day_contexts` 讀取 `daily_price.stock_id/trade_date/close`。
-  - 每檔輸出 `recent_daily_price_points`，只保存 DB 讀出的 close points。
+- `presentation/report.py`
+  - `_breakout_distance_label` 改為 `<=5%` 顯示 `接近突破`。
 - `core/generator.py`
-  - 將 `daily_price` 加入 `PERSISTENT_CROSS_DAY_SOURCES`。
-  - 新增 `persistent_recent_price_values(data)`。
-  - `multi_day_rebound_needs_retest(data)` 不再讀 `data["closes"]` / `data["price"]`。
-  - 多日反彈修復必須有 ready cross-day context 且 `source_of_truth` 包含 `daily_price`。
-- `tests/test_cross_day_context.py`
-  - 新增 `daily_price` 價格點會進 cross-day context 的測試。
+  - `_unheld_structural_reject` 拆出硬失敗與軟阻擋。
+  - 接近突破區內的非硬失敗觀察，不再被弱勢/品質軟阻擋直接打成淘汰。
+  - 弱反彈仍排除在接近突破保護之外，避免把弱反彈誤放寬。
+  - `unheld_funnel_assessment` 接住 `entry_quality=C`、接近突破、非硬失敗的 `隔日確認` 中間態。
+  - `should_hide_rr` / `hidden_rr_reason` / final label 遠離判斷同步為 `>5%`。
 - `tests/test_generator_report.py`
-  - 新增沒有 DB context 時不得用 payload closes 觸發多日修復的負面案例。
-  - 多日修復正面案例改為明確帶 `daily_price` context。
-  - 綜合手機閱讀 replay 補上 DB context，避免舊測試繼續驗假跨日路徑。
+  - 新增聯電等價 replay：`4.25%` 接近突破 + C 品質觀察不得顯示 `淘汰` / `遠離突破` / `遠離觸發`。
+  - 距突破 label 測試補 `4.25%`。
 
 ## 契約影響
 
-- 函式回傳:
-  - `multi_day_rebound_needs_retest` 現在依賴 DB daily_price context。
-  - `unheld_funnel_state` 不會因本次 payload closes 自行升級成 `等回測｜反彈修復待回測`。
-- payload:
-  - `cross_day_context.recent_daily_price_points` 新增可讀欄位。
+- 報文:
+  - `4.25%` 從 `遠離突破` 改為 `接近突破`。
+  - 接近突破但品質 C 的觀察股，維持追蹤 / 隔日確認，不再掉入淘汰。
+- 策略:
+  - 沒有新增買入條件。
+  - 弱反彈與突破失敗仍按既有硬風險處理。
 - DB:
   - 無 schema change。
   - 無 write/backfill/prune。
-  - 只有 read-only `daily_price` 查詢。
-- message list:
-  - 有 DB daily_price 最近點且符合條件時，仍可顯示 `反彈修復待回測`。
-  - 沒有 DB daily_price 時，不能顯示多日修復升級。
 
 ## 版本同步
 
@@ -39,51 +32,37 @@
 
 ## 直接消費者同步
 
-- `formatTelegramMessages` / `unheld_funnel_state` tests 已更新。
-- official `generate_report(dry_run=True)` 已驗，旺宏仍為 `等回測｜反彈修復待回測`，來源由 DB daily_price 支撐。
+- `formatTelegramMessages` replay covered。
+- `formatTelegramUnheldCard` / summary funnel covered。
+- Runner / live Telegram 未執行。
 
 ## 未影響模組
 
 - 持倉停損 / 減碼 / 停利未改。
-- DB schema / backfill / prune 未改。
-- live Telegram 未觸發。
-- 趨勢延續研究 artifact 未改；既有測試覆蓋缺 OHLCV rows 時 fail closed。
+- cross-day DB source gate 未改。
+- market/theme evidence、future watch、fundamentals 未改。
 
 ## 自檢命令與結果
 
 - Targeted:
-  - `.\.venv\Scripts\python.exe -m pytest tests\test_cross_day_context.py tests\test_generator_report.py -q --tb=short -k "multi_day_weak_rebound or daily_price_points or weak_rebound or rebound"`
-  - `3 passed`
-- Broader strategy/report:
-  - `.\.venv\Scripts\python.exe -m pytest tests\test_cross_day_context.py tests\test_generator_report.py tests\test_analysis_engine.py tests\test_trend_continuation.py -q --tb=short`
-  - `260 passed, 44 subtests passed`
-- Evidence related:
-  - `.\.venv\Scripts\python.exe -m pytest tests\test_strategy_evidence.py tests\test_market_theme_evidence.py tests\test_volume_calibration.py -q --tb=short`
-  - `53 passed, 13 subtests passed`
+  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q --tb=short -k "near_breakout_soft_blocker or breakout_distance or rejected_weak_rr or far_from_trigger_tracks"`
+  - `6 passed, 12 subtests passed`
+- Broader report / strategy:
+  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py tests\test_analysis_engine.py tests\test_trend_continuation.py -q --tb=short`
+  - `255 passed, 46 subtests passed`
 - Full:
   - `.\.venv\Scripts\python.exe -m pytest -q --tb=short`
-  - `481 passed, 8 skipped, 108 subtests passed`
-- Dry-run:
-  - `generate_report(dry_run=True)`
-  - 旺宏顯示 `等回測｜反彈修復待回測`
-  - 報文不含 `淘汰｜弱反彈待確認`
-- Production DB read-only:
-  - `daily_price` 2337 recent rows:
-    - 2026-06-15 close 159.0
-    - 2026-06-12 close 146.5
-    - 2026-06-11 close 140.0
-    - 2026-06-10 close 135.0
+  - `482 passed, 8 skipped, 110 subtests passed`
 
 ## 覆蓋層級
 
-- cross-day DB context: covered。
-- strategy helper: covered。
-- formatter/message list: covered。
-- official generator dry-run: covered。
-- production read-only source: covered。
+- helper label: covered。
+- official card formatter: covered。
+- official message list / summary: covered。
+- weak rebound negative path: covered。
 - live Telegram: not run by design。
 
 ## 殘留風險
 
-- 如果 production runner 仍顯示舊文案，優先查 runner commit / deployment path。
-- PowerShell 中文 stdout 會 mojibake；測試與文件均以 UTF-8 檔案為準。
+- 若 production runner 仍顯示舊文案，優先查 runner commit / deployment path。
+- `.pytest_cache` local cache write 仍有 WinError 5 warning，不影響測試結果。

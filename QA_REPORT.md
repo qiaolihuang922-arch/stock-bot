@@ -1,55 +1,58 @@
-# QA_REPORT: cross_day_source_truth_v21_1_20260616
+# QA_REPORT: near_breakout_tracking_contract_v21_1_20260616
 
 ## 測試範圍
 
-- cross-day source-of-truth contract。
-- `daily_price` recent close points ingestion。
-- 多日弱反彈修復升級。
-- 手機報文 replay summary / card。
-- 趨勢延續與策略證據相關回歸。
+- 距突破顯示閾值。
+- 未持倉追蹤 / 淘汰 funnel。
+- 接近突破 C 品質觀察。
+- 弱反彈與突破失敗負面路徑。
+- 官方 Telegram message list。
 
 ## 關聯風險掃描
 
-- 原問題是驗收降層：前一輪只驗 payload `closes`，沒有驗 DB source。
-- 新負面測試確認：沒有 DB `daily_price` context 時，即使 payload closes 連漲，也不能觸發 `反彈修復待回測`。
-- 新正面測試確認：有 DB `daily_price` context 且最近點連續抬高，才可觸發等回測。
-- `daily_price` read error 會透過 cross-day source-error fail closed。
-- 技術指標仍可用 Yahoo/TWSE payload，但不得被標成跨日記憶。
+- 風險 1: 只改 `距突破` 文案但 `數據 / RR` 行仍顯示 `遠離觸發`。
+  - 反證: 測試要求聯電 replay 卡片不含 `遠離突破` 與 `遠離觸發`。
+- 風險 2: 放寬接近突破後，弱反彈也被放過。
+  - 反證: `rejected_weak_rr` 與大範圍 generator tests 仍通過；弱反彈真淘汰不回退。
+- 風險 3: 中間態接住太寬，影響可準備 / 淘汰統計。
+  - 反證: 第一次大範圍測試曾抓到此問題，已收窄後重跑通過。
 
 ## 跨區塊語意一致性
 
-- `source_of_truth` 包含 `daily_price` 時才有 `recent_daily_price_points`。
-- 多日修復仍只到 `等回測`，不會變成可買或可準備。
-- 報文保留「不買，等回測」與可買條件，不會誤導追高。
+- `<=5%` 在 display、RR hidden reason、final label 均不再被稱為遠離。
+- 接近突破但品質未過，卡片應是追蹤 / 觀察，不是策略淘汰。
+- 真正不可買仍由「可買條件未滿」表達，不升格為有效進場。
 
 ## 使用者誤讀風險
 
-- 報文目前不直接顯示 `daily_price` source，避免噪音；但策略內部已改為 DB source gate。
-- 若 Owner 需要可視化來源，可下一輪在 debug artifact 或報文 source line 加簡短 `來源：daily_price`，不建議每張卡常駐顯示。
+- `隔日確認` 可能仍需要後續簡化文案，但本輪先解決錯誤狀態：4.25% 不應遠離，也不應掉到淘汰。
+- 資料來源缺失仍 fail closed；本輪不把 source missing 改成可買或可準備。
 
 ## 失敗標本反證
 
-- Owner 質疑：「最近四個價格點不查數據庫怎麼來的」。
-- 反證結果：
-  - 之前來源確實是 payload closes。
-  - 現在 `multi_day_rebound_needs_retest` 只讀 `cross_day_context.recent_daily_price_points`。
-  - read-only DB 查到旺宏 `daily_price` 最近點：135.0 -> 140.0 -> 146.5 -> 159.0。
-  - official dry-run 旺宏顯示 `等回測｜反彈修復待回測`，不是 `淘汰｜弱反彈待確認`。
+- Owner 樣本：聯電 `4.25%` 同時顯示 `遠離突破` 與 `⛔ 淘汰｜觀察`。
+- 反證 replay:
+  - `breakout_distance=4.25`
+  - `entry_quality=C`
+  - `market_grade=C`
+  - 非 `FAIL` / 非 `WEAK_REBOUND`
+  - 結果: card 包含 `距突破：4.25%｜接近突破`，不含 `⛔ 淘汰` / `遠離突破` / `遠離觸發`。
 
 ## 質疑與反證
 
 - 質疑: 是否只是硬改文字？
-  - 反證: 沒有 DB context 的同樣 closes fixture 現在回 `淘汰`，有 DB context 才回 `等回測`。
-- 質疑: 是否用了假 DB rows？
-  - 反證: `build_cross_day_contexts` 直接從 Supabase client 的 `daily_price` 查詢結果組 points；測試 fixture 明確標 source，production dry-run另用 read-only DB 查證。
-- 質疑: 是否誤傷趨勢延續？
-  - 反證: `test_trend_continuation` 與 generator 趨勢延續 tests 通過；缺 OHLCV source rows 時仍 fail closed。
+  - 反證: 修改同時覆蓋 display label、structural reject、funnel state、RR hidden reason。
+- 質疑: 是否破壞原本淘汰規則？
+  - 反證: 弱反彈、突破失敗、遠離觸發追蹤測試仍通過。
+- 質疑: 是否新增買點？
+  - 反證: 測試結果是追蹤 / 隔日確認，不是可買。
 
 ## 未測項目
 
 - 未做 live Telegram delivery。
-- 未做 GitHub scheduled runner artifact 驗證。
+- 未跑 GitHub runner artifact。
 - 未做 DB write/backfill/prune。
+- Full pytest 已通過：`482 passed, 8 skipped, 110 subtests passed`。
 
 ## QA 結論
 

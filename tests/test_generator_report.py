@@ -970,6 +970,7 @@ class GeneratorReportTest(unittest.TestCase):
             (-1, "距突破：-1%｜已突破"),
             (0, "距突破：0%｜臨界突破"),
             (2, "距突破：2%｜接近突破"),
+            (4.25, "距突破：4.25%｜接近突破"),
             (7, "距突破：7%｜遠離突破"),
         ]
 
@@ -989,6 +990,7 @@ class GeneratorReportTest(unittest.TestCase):
             (-1, "距突破：-1%｜已突破"),
             (0, "距突破：0%｜臨界突破"),
             (2, "距突破：2%｜接近突破"),
+            (4.25, "距突破：4.25%｜接近突破"),
             (7, "距突破：7%｜遠離突破"),
         ]
 
@@ -1003,6 +1005,35 @@ class GeneratorReportTest(unittest.TestCase):
                 self.assertIn("盤面：突破確認｜偏強｜普通", card)
                 self.assertIn(expected, card)
                 self.assertNotIn("盤面：突破確認｜偏強｜普通｜", card)
+
+    def test_v21_1_near_breakout_soft_blocker_tracks_instead_of_rejecting(self):
+        payload = self.breakout_distance_payload(4.25)
+        payload["stock_code"] = "2303"
+        payload["result"].update({
+            "decision": "WAIT",
+            "price_behavior": "NORMAL",
+            "structure_phase": "BREAKOUT_NEAR",
+            "market_grade": "C",
+            "entry_quality": "C",
+            "rr": 1.6,
+        })
+
+        messages = generator.formatTelegramMessages(
+            {"聯電": payload},
+            "FULL DETAIL",
+            None,
+            None,
+            {"trade_date": "2026-06-16"},
+            datetime(2026, 6, 16),
+            report_phase="盤中",
+        )
+
+        card = card_block(unheld_message(messages), "【聯電 2303】")
+        self.assertIn("距突破：4.25%｜接近突破", card)
+        self.assertNotIn("⛔ 淘汰", card)
+        self.assertNotIn("遠離突破", card)
+        self.assertNotIn("遠離觸發", card)
+        self.assertNotIn("淘汰 1", summary_message(messages))
 
     def test_v20_2_1_card_breakout_distance_falls_back_to_result_and_omits_missing(self):
         holding_card = generator.formatTelegramPositionCard(

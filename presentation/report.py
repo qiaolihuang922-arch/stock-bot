@@ -1298,7 +1298,7 @@ def _breakout_distance_label(dist):
         return "已突破"
     if value < 1:
         return "臨界突破"
-    if value < 4:
+    if value <= 5:
         return "接近突破"
     return "遠離突破"
 

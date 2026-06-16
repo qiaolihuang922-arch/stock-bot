@@ -1277,12 +1277,12 @@ def semantic_reason(result):
         if trade == "NO_VOLUME" or result.get("volume_state") == "WEAK":
             return "量能不足"
 
-        if dist is not None and dist > 4:
+        if dist is not None and dist > 5:
             return "遠離觸發"
 
         return "不交易"
 
-    if dist is not None and dist > 4:
+    if dist is not None and dist > 5:
         return "遠離觸發"
 
     if rr >= 3:
@@ -1477,7 +1477,7 @@ def should_hide_rr(result):
     if result.get("volume_state") == "WEAK":
         return True
 
-    if dist is not None and dist > 4:
+    if dist is not None and dist > 5:
         return True
 
     # 中文註釋：v19.1.3 弱勢 / 遠離 / 無量時 RR 只作內部判斷，不在報文顯示成可交易誘因。
@@ -1500,7 +1500,7 @@ def hidden_rr_reason(result, holding=False):
     if result.get("volume_state") == "WEAK" or result.get("trade_state") == "NO_VOLUME":
         return "量能不足"
 
-    if dist is not None and dist > 4:
+    if dist is not None and dist > 5:
         return "遠離觸發"
 
     if result.get("price_behavior") in ["LIMIT_LOCK", "LIMIT_REBOUND"]:
@@ -3009,12 +3009,30 @@ def _unheld_structural_reject(result, blockers=None):
     phase = result.get("structure_phase")
     behavior = result.get("price_behavior")
     label = blockers[0] if blockers else final_label(result)
+    hard_reject = (
+        result.get("decision") == "FAIL"
+        or label == "突破失敗"
+        or "突破失敗" in blockers
+        or behavior == "FAILED_BREAKOUT"
+        or phase in ["FAILED_BREAKOUT", "DISTRIBUTION"]
+        or result.get("reject_family") in ["突破失敗", "出貨分配"]
+    )
 
     if is_strong_intraday_rebound(result):
-        return result.get("decision") == "FAIL" or "突破失敗" in blockers
+        return hard_reject
+
+    if (
+        not hard_reject
+        and result_setup_type(result) in {"PRE_BREAKOUT", "BREAKOUT_CONFIRM"}
+        and label not in ["弱勢", "弱反彈待確認"]
+        and "弱反彈待確認" not in blockers
+        and behavior != "WEAK_REBOUND"
+        and phase != "WEAK_REBOUND"
+    ):
+        return False
 
     return (
-        result.get("decision") == "FAIL"
+        hard_reject
         or label in ["弱勢", "弱反彈待確認", "突破失敗"]
         or "突破失敗" in blockers
         or "弱反彈待確認" in blockers
@@ -6161,6 +6179,15 @@ def unheld_funnel_assessment(name, data, market_mode=None, report_context=None):
 
     if result.get("market_grade") in ["A+", "A", "B"] or result.get("entry_quality") in ["A+", "A", "B"]:
         return "可準備", None
+
+    if (
+        state == "隔日確認"
+        and result_setup_type(result) in {"PRE_BREAKOUT", "BREAKOUT_CONFIRM"}
+        and result.get("entry_quality") == "C"
+        and result.get("market_grade") not in {"D", "E"}
+        and not any(item in blockers for item in ["突破失敗", "弱反彈待確認", "漲停反彈待確認"])
+    ):
+        return "隔日確認", None
 
     return "淘汰", None
 

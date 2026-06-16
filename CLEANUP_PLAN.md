@@ -2,6 +2,17 @@
 
 ## Completed This Cycle
 
+- Compressed current handoff files for `near_breakout_tracking_contract_v21_1_20260616`.
+- Fixed near-breakout contract mismatch:
+  - `<=5%` is now consistently `接近突破`;
+  - `>5%` is the consistent遠離 threshold;
+  - near-breakout C-quality observation no longer falls through to `淘汰`;
+  - weak rebound / hard failure paths remain conservative.
+- Added official message-list regression for the Owner-style 聯電 `4.25%` failure specimen.
+- No DB rows/tables were changed.
+
+## Previous Cycle Summary
+
 - Compressed current handoff files for `cross_day_source_truth_v21_1_20260616`.
 - Fixed the multi-day rebound source contract:
   - no DB `daily_price` context means no multi-day rebound upgrade;
@@ -10,13 +21,13 @@
 - No runtime output, SQL draft, or temporary artifact was added.
 - No DB rows/tables were changed.
 
-## Previous Cycle Summary
+## Earlier Cycle Summary
 
 - Compressed current handoff files for `multi_day_rebound_retest_v21_1_20260616`.
 - Added a reusable multi-day rebound repair rule instead of hard-coding 旺宏.
 - Follow-up from that cycle is now closed by this cycle: the repair rule is DB source-gated.
 
-## Earlier Cycle Summary
+## Older Cycle Summary
 
 - Compressed current handoff files for `holding_card_contract_v21_1_20260616`.
 - Holding-card report rows were reduced by moving from verbose state/stat/history rows to a decision contract.
