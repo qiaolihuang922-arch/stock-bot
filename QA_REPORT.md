@@ -2,69 +2,61 @@
 
 ## 測試範圍
 
-- Strategy hard / soft gate split。
-- HOT / EXTENDED / LIMIT_REBOUND display and funnel state。
-- Low-RR gate behavior。
-- Official generator message list regression。
-- `等接近` mobile card de-duplication。
-- DB replay after patch。
+- Telegram holding card contract。
+- Unheld `等冷卻` / `等回測` / `等型態` / `等接近` mobile card contract。
+- Official generator message list dry-run。
+- Full regression suite。
 
 ## 關聯風險掃描
 
-- 風險 1: 軟阻擋被誤升成可買。
-  - 反證: soft-gate promotion only returns `可準備`; tests assert hot confirmed evidence is prepare, not buy.
-- 風險 2: 真硬阻擋被放行。
-  - 反證: LIMIT_LOCK / EXTREME / AVOID / failed breakout / RR<1.0 still hard gate.
-- 風險 3: source-error 被掩蓋成可準備。
-  - 反證: missing source remains hard in `_unheld_hard_gate_reasons`; only LIMIT_REBOUND source-only display avoids fake `等資料`.
-- 風險 4: 只改文案，策略沒變。
-  - 反證: DB replay state counts changed after patch: `可準備 364`, `可買 700`, `deadlock_suspected=false`.
-- 風險 5: 為了降噪刪掉突破區資訊。
-  - 反證: card still keeps `距突破` and one explicit breakout zone reference in `進場`。
+- 風險 1: 只刪字導致策略條件消失。
+  - 反證: `距突破`、突破區、回測 anchor、熱度、品質、有效買點仍保留在對應 state。
+- 風險 2: `等回測` 不知道在等哪個回測。
+  - 反證: dry-run 顯示 `回測：最近反彈收盤 166.5 附近不破` / `53.3 附近不破`。
+- 風險 3: `等冷卻` 被誤讀成可追。
+  - 反證: card shows `狀態：漲停/過熱，不追價` and only a cooling wait condition.
+- 風險 4: 持倉同一股票出現多個主行動。
+  - 反證: holding card now has one `決策` and one `明日處理` line.
+- 風險 5: State-specific formatter breaks existing report tests.
+  - 反證: targeted and full pytest passed.
 
 ## 跨區塊語意一致性
 
-- `可準備` remains non-actionable preparation.
-- `隔日確認` is used for limit-up rebound / follow-through that cannot be chased.
-- HOT / EXTENDED is no longer always evidence-unavailable; EXTREME / AVOID remains hard.
-- Low RR is hard only when risk is genuinely poor (`RR<1.0`) or low quality + no setup.
-- `等接近` no longer shows redundant `可買` line; waiting rule is explicit but compact.
+- Holdings answer what to do tomorrow, not a duplicate entry checklist.
+- `等冷卻` answers what must cool down.
+- `等回測` answers which anchor must hold.
+- `等型態` answers which setup/quality condition is missing.
+- `等接近` answers whether price is near the breakout zone or needs a separate continuation/retest setup.
 
 ## 使用者誤讀風險
 
-- `可準備` can still be read as recommendation; summary/card wording must continue saying open/retest confirmation before action.
-- Outcome audit still flags several categories; this means further calibration is needed, not that every flagged group should be bought.
+- `有效買點` can still be read as an immediate buy if the state header is ignored; current card keeps state header first and retains `不買 / 等待` semantics through the title and trigger.
+- `等接近` still includes “進場：不買” because it is a location gate; this is intentional and not a buy recommendation.
 
 ## 失敗標本反證
 
-- Owner failure specimen:
-  - multi-day rebound still shown as淘汰/等資料/等接近.
-  - strategy appeared to never generate buy or add paths.
-- Replayed evidence:
-  - `has_real_buyable_path=true`
-  - `has_prepare_path=true`
-  - `funnel_blocks_snapshot_tradeable=false`
-  - `snapshot_tradeable_blocked_by_funnel_days=0`
-  - `可買 700`
-  - `可準備 364`
+- Owner specimen: `進場 / 缺口 / 可買 / 明日觸發` repeated the same breakout or retest condition.
+- Dry-run result:
+  - `等冷卻`: uses `狀態` + `等待`.
+  - `等回測`: uses `狀態` + `回測` + `有效買點`.
+  - `等型態`: uses `狀態` + `等待` + `有效買點`.
+  - `等接近`: uses `進場` + `等待`.
 
 ## 質疑與反證
 
-- 質疑: HOT / 漲停反彈是否仍被硬擋？
-  - 反證: HOT + supporting/confirmed evidence can become `可準備`; LIMIT_REBOUND becomes `隔日確認`.
-- 質疑: RR 是否仍無腦卡 1.5？
-  - 反證: RR hard gate now only hard at `<1.0`, or `<1.5` with low quality and `NO_SETUP`.
-- 質疑: 是否用了假跨日資料？
-  - 反證: replay artifacts read DB daily-price paths; no runtime memory or local cache is used as proof.
+- 質疑: 是否硬改文字而非按策略狀態顯示？
+  - 反證: formatter branches by `funnel_state`; each state maps to a different card contract.
+- 質疑: 是否刪掉策略所需資訊？
+  - 反證: tests and dry-run still include distance, anchor, heat, quality, and effective trigger where relevant.
 
 ## 未測項目
 
 - 未 live Telegram。
 - 未 DB write / backfill / prune。
-- 未驗證實際券商下單或 intraday fill。
+- 未驗證實際手機 Telegram push，只驗 official generator message text。
 
 ## QA 結論
 
 通過。
 
-本輪修正已落地並通過 full pytest + DB replay。策略仍有後續細分空間，但原本「硬阻擋導致沒有買點路徑」的主要問題已被 replay 反證。
+本輪修正已覆蓋 Owner 貼出的手機閱讀問題；策略計算與 DB 資料未變更。

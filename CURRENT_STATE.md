@@ -3,14 +3,14 @@
 ## Current Task
 
 - task_id: `strategy_soft_gate_patch_v21_1_20260616`
-- status: `implemented + QA pass + git closeout ready`
+- status: `implemented + QA pass`
 - version: `v21.1`
 - no live Telegram delivery.
 - no DB schema/write/backfill/prune.
 
 ## Stable Context
 
-- Owner reads Telegram on mobile; summary must answer decision and next action without repeating raw counts.
+- Owner reads Telegram on mobile; card wording must show the current actionable state, not repeat the same condition under several labels.
 - Production dispatch model: Render web service is called every five minutes, then GitHub workflow dispatch runs `run_mode=bot`.
 - Production source-of-truth is Supabase / runner data, not local cache, worktree state, runtime dict, or agent memory.
 - Cross-day memory must be DB backed.
@@ -20,56 +20,30 @@
 ## Current Implementation State
 
 - Runtime report remains `v21.1`.
-- Strategy soft gate patch is implemented in:
-  - `core/generator.py`
-  - `presentation/report.py`
-  - `tests/test_generator_report.py`
-- `等接近` card contract now uses:
-  - `進場：不買｜尚未接近突破區 ...`
-  - `等待：距突破 ...；有效買點只看：接近突破區 / 回測承接型態`
-  - trigger line without repeating the exact same breakout zone.
-- Current hard gates:
-  - limit-up lock / `LIMIT_LOCK`
-  - `EXTREME`
-  - `AVOID`
-  - failed breakout / hard failure
-  - `RR < 1.0`
-- Current soft gates:
-  - `HOT`
-  - `EXTENDED`
-  - `LIMIT_REBOUND`
-  - `漲停反彈待確認`
-  - low-RR near setup when RR is still >= 1.0
-- Soft gates can only become `可準備`, not `可買`, and require supporting/confirmed evidence plus non-weak volume and acceptable quality.
+- Strategy soft-gate patch remains in place:
+  - `LIMIT_LOCK`, `EXTREME`, `AVOID`, failed breakout, and `RR < 1.0` are hard gates.
+  - HOT / EXTENDED / LIMIT_REBOUND / low-RR-near-setup are soft gates when evidence supports preparation.
+  - Soft gates can become `可準備`, not direct `可買`.
+- Telegram card display is now state-specific:
+  - holdings: `決策` plus `明日處理`.
+  - `等冷卻`: `狀態` plus `等待`.
+  - `等回測`: `狀態` plus concrete `回測` anchor plus `有效買點`.
+  - `等型態`: `狀態` plus `等待` plus `有效買點`.
+  - `等接近`: `進場` plus `等待`, with only one breakout zone reference.
 
 ## Verification State
 
 - Full pytest passed:
   - `489 passed, 8 skipped, 165 warnings, 110 subtests passed`
-- Generator report tests passed:
-  - `206 passed, 153 warnings, 46 subtests passed`
-- DB replay artifacts:
-  - `reports/audit/strategy_buy_path_replay_v21_1_soft_gates_20260616.json`
-  - `reports/audit/strategy_rule_outcomes_v21_1_soft_gates_20260616.json`
+- Targeted report/state tests passed:
+  - `215 passed, 155 warnings, 46 subtests passed`
+- Official generator dry-run generated `4` messages and showed the updated mobile card contract.
 
 ## Known Findings
 
-- Buy-path replay after patch shows:
-  - `deadlock_suspected=false`
-  - `has_real_buyable_path=true`
-  - `has_prepare_path=true`
-  - snapshot tradeable funnel rejection days: `0`
-  - `可買 700`
-  - `可準備 364`
-- Rule outcome audit still flags these categories for future sub-classification:
-  - `隔日確認`
-  - `漲停不追`
-  - `漲停反彈待確認`
-  - `買點品質D`
-  - `過熱觀察`
-  - `wait_breakout_low_rr`
-  - `HOT`
+- `.pytest_cache` cannot be written on this machine because of local `WinError 5`; tests still execute and pass.
+- Rule outcome audit from the earlier soft-gate cycle still has future calibration work, but this display cycle did not alter strategy thresholds.
 
 ## Next Action
 
-- Push current branch, then run git completion and closeout gates.
+- Watch the next official runner artifact / Telegram dry-run for mobile readability regressions.

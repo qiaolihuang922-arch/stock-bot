@@ -10,42 +10,39 @@
 
 ## Owner 問題
 
-Owner 指出 DB replay 後仍有策略不合理：
+Owner 指出 DB replay 後仍有策略與報文可讀性問題：
 
-- 漲停 / 過熱 / 連漲後永遠不能買。
-- `等回測`、`等接近`、`買點品質 D`、`RR不足` 可能變成死規則。
-- 策略應該能產生真實股市會出現的 `可買` 與 `可準備`，不能只顯示等待。
-- 修正必須使用 DB replay 和既有資料，不得用對話記憶或假跨日資料。
-- Owner 追加指出 `等接近` 報文中 `進場 / 缺口 / 可買 / 明日觸發` 四行都在重複突破區，手機上難讀且不像交易計畫。
+- 漲停 / 過熱 / 連漲後不應永遠不能買，已由 soft-gate replay 修正。
+- `等接近`、`等回測`、`等型態` 的手機卡片不應把同一件事拆成 `進場 / 缺口 / 可買 / 明日觸發` 重複說。
+- 持倉卡片不應同時顯示 `缺口 / 可恢復 / 下一步`，因為 Owner 要的是明日怎麼處理。
+- 修正必須沿 official generator / runner 報文路徑驗證，不得只改 helper fixture。
 
 ## 使用者可見結果
 
-- HOT / EXTENDED / LIMIT_REBOUND 不再一律視為硬性不可行動。
-- 漲停鎖死仍不追；漲停後反彈改成隔日確認 / 回測承接邏輯。
-- 低 RR 不再全部硬擋：
-  - `RR < 1.0` 仍硬擋。
-  - `1.0 <= RR < 1.5` 只有在無 setup 且品質低時硬擋。
-- 強證據可把軟阻擋股票推到 `可準備`，但不直接變成 `可買`。
-- `等接近` 卡片改成：
-  - `進場`：只說不買與尚未接近哪個區。
-  - `等待`：只說距離與可接受 setup 類型。
-  - `觸發`：只說進入區域或形成回測承接後重評。
+- 持倉卡片只保留:
+  - `決策：...｜原因：...`
+  - `明日處理：...`
+- 未持倉依狀態顯示:
+  - `等冷卻`: `狀態` + `等待`
+  - `等回測`: `狀態` + `回測` + `有效買點`
+  - `等型態`: `狀態` + `等待` + `有效買點`
+  - `等接近`: `進場` + `等待`
+- `距突破` 保留，因為它是 Owner 要看的固定定位資訊。
 
 ## 非目標
 
 - 不做 live Telegram delivery。
 - 不寫 DB / 不回寫 / 不去重。
 - 不新增 DB schema。
+- 不改策略門檻或回測資料。
 - 不承諾任何單一標的必買。
 
 ## 影響模組與直接消費者
 
-- `core/generator.py`
-  - strategy gate / funnel decision。
 - `presentation/report.py`
-  - evidence / score 顯示契約。
+  - Telegram card formatter。
 - `tests/test_generator_report.py`
-  - 使用者可見報文與 funnel regression。
+  - 使用者可見報文與 regression。
 - 直接消費者:
   - official generator message list。
   - dry-run / runner artifact。
@@ -53,38 +50,36 @@ Owner 指出 DB replay 後仍有策略不合理：
 
 ## 輸出契約
 
-- `可買`、`可準備`、`隔日確認`、`等冷卻`、`等回測`、`等接近` 必須語意分開。
-- `可準備` 是不可直接下單的準備區，不得升格成買入建議。
-- `等接近` 不得同時用 `進場 / 缺口 / 可買 / 觸發` 重複同一突破區。
-- 熱度 / 漲停反彈 / 低 RR 屬軟阻擋時，要能被 evidence 推進到 `可準備`。
-- 硬阻擋仍 fail closed。
-- 缺資料仍不得產生可買。
+- 不同 funnel state 不能共用同一套重複文案。
+- `等冷卻` 不顯示一般 `進場 / 缺口 / 可買` 三行。
+- `等回測` 必須明確說回測哪個 anchor，且 `有效買點` 不重複同一 anchor。
+- `等型態` 必須說明等待的 setup / quality 條件，不把它寫成資料缺口。
+- `等接近` 必須保留突破區與距離，但不能重複同一突破區三次。
+- 持倉同一股票同一報文只能有一個主行動與一個明日處理。
 
 ## 驗收條件
 
-- Generator report tests 通過。
+- Generator report + trade state tests 通過。
 - Full pytest 通過。
-- DB replay artifact 證明：
-  - strategy 不再 deadlock。
-  - 存在真實 `可買` 路徑。
-  - 存在 `可準備` 路徑。
-  - snapshot tradeable 不被 funnel 擋掉。
+- Official generator dry-run 顯示:
+  - holdings 使用 `明日處理`。
+  - cold / retest / setup / near-trigger cards 使用各自模板。
 - 不做 DB write / schema change / live TG。
 
 ## 失敗標本與驗收路由
 
 - 失敗標本:
-  - Owner 貼出的 `06/16` 報文中，多檔連漲後仍被 `淘汰 / 等接近 / 等資料`。
-  - Owner 質疑「為什麼連續十幾天沒有可買 / 加碼點」。
+  - Owner 貼出的 `06/16` 報文中，`等接近` 和 `等回測` 同一條件被多行重複。
+  - Owner 截圖顯示手機閱讀時單一卡片過長且語意重複。
 - 驗收路由:
-  - official generator tests。
-  - DB replay artifact:
-    - `reports/audit/strategy_buy_path_replay_v21_1_soft_gates_20260616.json`
-    - `reports/audit/strategy_rule_outcomes_v21_1_soft_gates_20260616.json`
+  - `tests/test_generator_report.py`
+  - `tests/test_trade_state_machine.py`
+  - official `generate_report(dry_run=True)` message list。
 
 ## 禁止事項與阻塞條件
 
-- 禁止用 helper fixture 宣告 production replay 完成。
-- 禁止用 runtime dict / 對話記憶當跨日資料。
+- 禁止只做文字替換而不按 state 分流。
+- 禁止刪除 Owner 指定要保留的 `距突破`。
+- 禁止用對話記憶或假跨日資料。
 - 禁止 live Telegram。
 - 禁止手寫 production DML。
