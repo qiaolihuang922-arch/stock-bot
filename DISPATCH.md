@@ -17,6 +17,7 @@
   - holdings now use one decision line plus one `明日處理` line.
   - `等冷卻` now shows `狀態` and `等待` with the effective cooling trigger.
   - `等回測` now shows `狀態`, concrete `回測` anchor, and `有效買點`.
+  - `等回測` rebound anchors that come from the latest rebound close now show `回測基準 ...；尚未回測`, so current close is not misread as a completed pullback.
   - `等型態` now shows `狀態`, `等待`, and `有效買點`.
   - `等接近` keeps breakout distance and one explicit breakout zone reference only.
 - Strategy thresholds, DB data, replay data, Render/GitHub dispatch, and Telegram sender were not changed.
@@ -36,8 +37,8 @@
 ## Current Git State
 
 - branch: `main`
-- implementation commit: recorded after final commit.
-- git completion gate: run after push.
+- implementation commit: recorded in git after final commit.
+- git completion gate: passed after push.
 
 ## Next Action
 

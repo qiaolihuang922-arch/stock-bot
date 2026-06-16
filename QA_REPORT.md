@@ -12,7 +12,9 @@
 - 風險 1: 只刪字導致策略條件消失。
   - 反證: `距突破`、突破區、回測 anchor、熱度、品質、有效買點仍保留在對應 state。
 - 風險 2: `等回測` 不知道在等哪個回測。
-  - 反證: dry-run 顯示 `回測：最近反彈收盤 166.5 附近不破` / `53.3 附近不破`。
+  - 反證: latest rebound-close anchors render as `回測基準：最近反彈收盤 ...；尚未回測`。
+- 風險 2b: 今日收盤價剛好等於回測 anchor，被誤讀為已經回測成功。
+  - 反證: latest rebound close anchor now renders as `回測基準：最近反彈收盤 ...；尚未回測` and effective trigger uses `回踩不破`.
 - 風險 3: `等冷卻` 被誤讀成可追。
   - 反證: card shows `狀態：漲停/過熱，不追價` and only a cooling wait condition.
 - 風險 4: 持倉同一股票出現多個主行動。
@@ -25,6 +27,7 @@
 - Holdings answer what to do tomorrow, not a duplicate entry checklist.
 - `等冷卻` answers what must cool down.
 - `等回測` answers which anchor must hold.
+- Latest rebound-close anchors are labelled as tomorrow's retest base, not completed retest evidence.
 - `等型態` answers which setup/quality condition is missing.
 - `等接近` answers whether price is near the breakout zone or needs a separate continuation/retest setup.
 

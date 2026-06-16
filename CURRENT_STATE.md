@@ -28,6 +28,7 @@
   - holdings: `決策` plus `明日處理`.
   - `等冷卻`: `狀態` plus `等待`.
   - `等回測`: `狀態` plus concrete `回測` anchor plus `有效買點`.
+  - rebound-close `等回測`: `回測基準 ...；尚未回測`, not completed retest wording.
   - `等型態`: `狀態` plus `等待` plus `有效買點`.
   - `等接近`: `進場` plus `等待`, with only one breakout zone reference.
 

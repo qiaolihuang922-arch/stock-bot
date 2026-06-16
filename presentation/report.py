@@ -1312,12 +1312,19 @@ def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None):
             if reason:
                 lines.append(f"狀態：{reason}")
             retest = str(gap or "").strip()
+            waiting_retest = retest.startswith("等待回測")
             if retest.startswith("等待回測"):
                 retest = retest.replace("等待回測", "", 1)
             if retest:
-                lines.append(f"回測：{retest}")
+                if waiting_retest and retest.startswith("最近反彈收盤"):
+                    anchor = retest.replace(" 附近不破", "")
+                    lines.append(f"回測基準：{anchor}；尚未回測")
+                else:
+                    lines.append(f"回測：{retest}")
             if unlock:
-                if retest and unlock.startswith(f"回測{retest}"):
+                if waiting_retest and retest and unlock.startswith(f"回測{retest}"):
+                    unlock = unlock.replace(f"回測{retest}", "回踩不破", 1)
+                elif retest and unlock.startswith(f"回測{retest}"):
                     unlock = unlock.replace(f"回測{retest}", "不破", 1)
                 elif retest and unlock.startswith(f"{retest}"):
                     unlock = unlock.replace(f"{retest}", "不破", 1)
@@ -1424,12 +1431,19 @@ def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None):
         if reason:
             lines.append(f"狀態：{reason}")
         retest = str(gap or "").strip()
+        waiting_retest = retest.startswith("等待回測")
         if retest.startswith("等待回測"):
             retest = retest.replace("等待回測", "", 1)
         if retest:
-            lines.append(f"回測：{retest}")
+            if waiting_retest and retest.startswith("最近反彈收盤"):
+                anchor = retest.replace(" 附近不破", "")
+                lines.append(f"回測基準：{anchor}；尚未回測")
+            else:
+                lines.append(f"回測：{retest}")
         if unlock:
-            if retest and unlock.startswith(f"回測{retest}"):
+            if waiting_retest and retest and unlock.startswith(f"回測{retest}"):
+                unlock = unlock.replace(f"回測{retest}", "回踩不破", 1)
+            elif retest and unlock.startswith(f"回測{retest}"):
                 unlock = unlock.replace(f"回測{retest}", "不破", 1)
             elif retest and unlock.startswith(f"{retest}"):
                 unlock = unlock.replace(f"{retest}", "不破", 1)

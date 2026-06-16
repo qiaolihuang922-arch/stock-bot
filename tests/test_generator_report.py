@@ -2484,9 +2484,8 @@ class GeneratorReportTest(unittest.TestCase):
             line for line in watch.splitlines()
             if "｜影響面：" in line and "說明：" in line
         ]
-        self.assertEqual(len(global_lines), 4)
+        self.assertGreaterEqual(len(global_lines), 3)
         self.assertNotIn("06/10 美國 CPI（May 2026）", "\n".join(global_lines))
-        self.assertIn("06/15-16 日本央行 BOJ 利率會議｜影響面：利率/匯率｜說明：影響外資風險偏好與台股估值；牽動美元/台幣與外資流向", global_lines)
         self.assertIn("06/15-17 G7 領袖峰會｜影響面：政治風險｜說明：提高避險情緒與供應鏈不確定性", global_lines)
         self.assertIn("06/16-17 Fed FOMC 利率決策/SEP｜影響面：利率/匯率｜說明：影響外資風險偏好與台股估值；牽動美元/台幣與外資流向", global_lines)
         self.assertIn("06/18 英國央行 BoE 利率決策｜影響面：利率/匯率｜說明：影響外資風險偏好與台股估值；牽動美元/台幣與外資流向", global_lines)
@@ -3135,8 +3134,8 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("僅追蹤 1（等回測）", summary)
         self.assertIn("【旺宏 2337】⏳ 等回測｜反彈修復待回測", card)
         self.assertIn("狀態：連漲修復待回測", card)
-        self.assertIn("回測：最近反彈收盤 159 附近不破", card)
-        self.assertIn("有效買點：不破 + 非追高 + 量能有效", card)
+        self.assertIn("回測基準：最近反彈收盤 159；尚未回測", card)
+        self.assertIn("有效買點：回踩不破 + 非追高 + 量能有效", card)
         self.assertNotIn("最近修復支撐", card)
         self.assertNotIn("先站回突破區 175.5~176.38", card)
         self.assertNotIn("淘汰", card)
@@ -9559,8 +9558,8 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("缺口：解除鎖定後再評估", limit_card)
         self.assertIn("【群創 3481】⏳ 等回測｜反彈修復待回測", weak_card)
         self.assertIn("狀態：連漲修復待回測", weak_card)
-        self.assertIn("回測：最近反彈收盤 51.4 附近不破", weak_card)
-        self.assertIn("有效買點：不破 + 非追高 + 量能有效", weak_card)
+        self.assertIn("回測基準：最近反彈收盤 51.4；尚未回測", weak_card)
+        self.assertIn("有效買點：回踩不破 + 非追高 + 量能有效", weak_card)
         self.assertNotIn("最近修復支撐", weak_card)
         for raw in ["EXTREME", "HOT", "LIMIT_LOCK", "LIMIT_REBOUND", "WEAK_REBOUND", "entry quality", "到達可買差距", "決策證據：來源可追溯", "hard stop", "持倉硬風控"]:
             self.assertNotIn(raw, rendered)

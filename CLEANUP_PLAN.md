@@ -6,6 +6,7 @@
   - holdings: one `決策` plus one `明日處理`.
   - `等冷卻`: `狀態` plus `等待`.
   - `等回測`: `狀態` plus concrete `回測` anchor plus `有效買點`.
+  - latest rebound-close retest anchor: `回測基準 ...；尚未回測`.
   - `等型態`: `狀態` plus `等待` plus `有效買點`.
   - `等接近`: one breakout zone reference plus concise wait condition.
 - Preserved `距突破` on all relevant cards.
