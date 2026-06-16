@@ -6188,6 +6188,28 @@ def unheld_funnel_assessment(name, data, market_mode=None, report_context=None):
         and not any(item in blockers for item in ["突破失敗", "弱反彈待確認", "漲停反彈待確認"])
     ):
         return "隔日確認", None
+    near_distance = None
+    for raw_distance in [
+        result.get("breakout_distance"),
+        result.get("distance_to_breakout"),
+        (data or {}).get("breakout_distance"),
+        (data or {}).get("distance_to_breakout"),
+        card_breakout_distance(data),
+    ]:
+        try:
+            near_distance = float(str(raw_distance).replace("%", "").strip())
+            break
+        except (TypeError, ValueError):
+            continue
+    if (
+        near_distance is not None
+        and near_distance <= 5
+        and result.get("entry_quality") == "C"
+        and result.get("market_grade") not in {"D", "E"}
+        and not _unheld_structural_reject(result, blockers)
+        and not any(item in blockers for item in ["RR不足", "量能不足", "市場弱", "個股弱勢", "弱反彈待確認", "漲停反彈待確認"])
+    ):
+        return "等型態", None
 
     return "淘汰", None
 
@@ -9677,7 +9699,17 @@ def generate_report(dry_run=False, return_write_results=False):
 
     if dry_run:
         daily_write_warning = None
-        strategy_evidence_summary = None
+        try:
+            # dry-run must remain read-only, but it should still inspect the same
+            # strategy evidence source used by production reports.
+            strategy_evidence_summary = load_strategy_evidence_summary(
+                get_supabase_client(),
+                VERSION
+            )
+        except Exception as summary_error:
+            strategy_evidence_summary = format_strategy_evidence_summary(
+                error=summary_error
+            )
     else:
         try:
             # 中文註釋：v19.1.3 只在收盤/盤後把每日穩定訊號寫入 Supabase，盤中不入庫。

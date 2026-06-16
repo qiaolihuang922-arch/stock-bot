@@ -1017,6 +1017,24 @@ class GeneratorReportTest(unittest.TestCase):
             "entry_quality": "C",
             "rr": 1.6,
         })
+        context = {
+            "evidence_manifest": [
+                {"field_name": "evidence.strategy_sample", "source_status": "available"},
+                {"field_name": "stock.聯電.price", "source_status": "available"},
+                {"field_name": "stock.聯電.daily_ohlcv", "source_status": "available"},
+                {"field_name": "stock.聯電.rr", "source_status": "derived"},
+            ],
+            "strategy_sample_structured_status": {
+                "source_status": "available",
+                "row_count": 30,
+            },
+            "results_map": {"聯電": payload},
+        }
+
+        self.assertIn(
+            generator.unheld_funnel_state("聯電", payload, report_context=context),
+            {"隔日確認", "等型態"},
+        )
 
         messages = generator.formatTelegramMessages(
             {"聯電": payload},

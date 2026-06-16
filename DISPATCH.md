@@ -2,7 +2,7 @@
 
 ## Active
 
-- task_md_holds: `rebound_retest_source_gate_v21_1_20260616`
+- task_md_holds: `dry_run_strategy_evidence_near_breakout_v21_1_20260616`
 - status: `implemented + QA passed + full pytest passed + pushed`
 - current_version: `v21.1`
 - no live Telegram delivery in this cycle.
@@ -10,28 +10,24 @@
 
 ## Result Summary
 
-- Owner challenged whether the current per-stock feedback still matches common trading practice, because:
-  - 旺宏 / 群創 had multi-day repair but previously still read like淘汰;
-  - 聯電 near-breakout / source-missing could still become淘汰;
-  - report wording made 回測 look like every stock must first reclaim the old breakout high.
+- Owner challenged why 聯電 would show `策略樣本證據不足`.
+- Root cause:
+  - 聯電行情 was not missing.
+  - local `generate_report(dry_run=True)` skipped read-only strategy evidence loading, so the report context marked strategy evidence as missing.
+  - after restoring read-only evidence, near-breakout C-quality tracking still fell through to `淘汰`; this was a state-machine bug.
 - Implemented:
-  - `can_buy` distance policy now rejects only `>5%`, consistent with the displayed near-breakout zone.
-  - multi-day rebound repair now waits for a DB-backed recent repair support retest, not a mandatory old-high reclaim.
-  - source-only missing / source-error is fail-closed as `等資料` / `不可行動`, not strategy淘汰.
-  - source/strategy unavailable cards no longer show actionable RR numbers.
-  - 等資料 card noise reduced for mobile reading.
+  - dry-run now read-only loads strategy evidence while still not writing DB.
+  - near-breakout C-quality non-hard-failure state is kept as tracking / setup wait, not淘汰.
 
 ## Verification
 
-- Focused report / strategy:
-  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py tests\test_analysis_engine.py tests\test_trade_state_machine.py tests\test_unheld_gap_format.py tests\test_trend_continuation.py -q --tb=short`
-  - result: `268 passed, 46 subtests passed`
 - Full:
   - `.\.venv\Scripts\python.exe -m pytest -q --tb=short`
   - result: `484 passed, 8 skipped, 110 subtests passed`
 - Official dry-run:
-  - `generate_report(dry_run=True)`
-  - result: 聯電=`等資料`; 旺宏/群創=`等回測｜反彈修復待回測`.
+  - 聯電: `等型態｜觀察`
+  - `距突破：4.06%｜接近突破`
+  - summary: 未持倉 `僅追蹤8`, no 聯電淘汰.
 
 ## Current Git State
 

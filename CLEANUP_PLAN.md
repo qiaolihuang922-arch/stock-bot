@@ -2,6 +2,14 @@
 
 ## Completed This Cycle
 
+- Compressed current handoff files for `dry_run_strategy_evidence_near_breakout_v21_1_20260616`.
+- Fixed local dry-run false source-missing:
+  - dry-run now read-only loads strategy evidence;
+  - no DB write/live Telegram added;
+  - near-breakout C-quality tracking no longer falls through to `淘汰`.
+
+## Previous Cycle Summary
+
 - Compressed current handoff files for `rebound_retest_source_gate_v21_1_20260616`.
 - Fixed rebound / source-gate report contract:
   - multi-day rebound repair now waits for DB-backed recent support retest;
@@ -9,7 +17,7 @@
   - source-unavailable cards no longer show actionable RR;
   - no DB rows/tables were changed.
 
-## Previous Cycle Summary
+## Earlier Cycle Summary
 
 - Compressed current handoff files for `near_breakout_tracking_contract_v21_1_20260616`.
 - Fixed near-breakout contract mismatch:
@@ -20,7 +28,7 @@
 - Added official message-list regression for the Owner-style 聯電 `4.25%` failure specimen.
 - No DB rows/tables were changed.
 
-## Earlier Cycle Summary
+## Older Cycle Summary
 
 - Compressed current handoff files for `cross_day_source_truth_v21_1_20260616`.
 - Fixed the multi-day rebound source contract:
@@ -30,13 +38,13 @@
 - No runtime output, SQL draft, or temporary artifact was added.
 - No DB rows/tables were changed.
 
-## Older Cycle Summary
+## Archived Cycle Summary
 
 - Compressed current handoff files for `multi_day_rebound_retest_v21_1_20260616`.
 - Added a reusable multi-day rebound repair rule instead of hard-coding 旺宏.
 - Follow-up from that cycle is now closed by this cycle: the repair rule is DB source-gated.
 
-## Archived Cycle Summary
+## Archived Cycle Summary 2
 
 - Compressed current handoff files for `holding_card_contract_v21_1_20260616`.
 - Holding-card report rows were reduced by moving from verbose state/stat/history rows to a decision contract.
