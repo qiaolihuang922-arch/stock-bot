@@ -3,7 +3,7 @@
 ## Current Task
 
 - task_id: `strategy_soft_gate_patch_v21_1_20260616`
-- status: `implemented + QA pass + pending git completion`
+- status: `implemented + QA pass + git closeout ready`
 - version: `v21.1`
 - no live Telegram delivery.
 - no DB schema/write/backfill/prune.
@@ -68,4 +68,4 @@
 
 ## Next Action
 
-- Finish git commit / push / completion gate.
+- Push current branch, then run git completion and closeout gates.
