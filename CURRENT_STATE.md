@@ -35,7 +35,9 @@
 
 - Targeted rule replay tests passed: `5 passed, 1 warning`.
 - Full pytest passed: `489 passed, 8 skipped, 165 warnings, 110 subtests passed`.
-- Code, tests, artifact and handoff docs pushed in commit `1c5babf`; git completion gate pending.
+- Code, tests and artifact pushed in implementation commit `1c5babf`.
+- Closeout docs pushed in commit `31d8661`.
+- Git completion passed after push.
 
 ## Known Findings
 
