@@ -255,11 +255,19 @@ def _recent_daily_price_points(rows, symbol, max_points=8):
             close = float(row.get("close"))
         except (TypeError, ValueError):
             continue
-        points.append({
+        point = {
             "trade_date": str(trade_date),
             "close": close,
             "source": "daily_price",
-        })
+        }
+        for key in ["open", "high", "low", "volume"]:
+            try:
+                raw_value = row.get(key)
+                if raw_value is not None:
+                    point[key] = float(raw_value)
+            except (TypeError, ValueError):
+                pass
+        points.append(point)
         seen_dates.add(trade_date)
         if len(points) >= max_points:
             break
@@ -316,7 +324,7 @@ def build_cross_day_contexts(results_map, client=None, today_position_events=Non
     rows_by_table = {}
     for table, fields in [
         ("daily_signal_snapshot", "stock_id,trade_date,version,action,is_tradeable,position_state,reasons"),
-        ("daily_price", "stock_id,trade_date,close"),
+        ("daily_price", "stock_id,trade_date,open,high,low,close,volume,source"),
     ]:
         try:
             rows_by_table[table] = _fetch_rows(client, table, fields, limit)

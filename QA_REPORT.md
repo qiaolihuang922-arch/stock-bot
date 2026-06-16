@@ -1,65 +1,61 @@
-# QA_REPORT: strategy_soft_gate_patch_v21_1_20260616
+# QA_REPORT: db_backed_low_repair_v21_1_20260616
 
 ## 測試範圍
 
-- Telegram holding card contract。
-- Unheld `等冷卻` / `等回測` / `等型態` / `等接近` mobile card contract。
-- Official generator message list dry-run。
+- DB-backed cross-day OHLCV read path。
+- 未持倉遠離突破時的 low-repair funnel classification。
+- `PULLBACK_RECLAIM` 遠離時不得退回只等突破區。
+- Telegram low-repair card contract。
 - Full regression suite。
 
 ## 關聯風險掃描
 
-- 風險 1: 只刪字導致策略條件消失。
-  - 反證: `距突破`、突破區、回測 anchor、熱度、品質、有效買點仍保留在對應 state。
-- 風險 2: `等回測` 不知道在等哪個回測。
-  - 反證: latest rebound-close anchors render as `回測基準：最近反彈收盤 ...；尚未回測`。
-- 風險 2b: 今日收盤價剛好等於回測 anchor，被誤讀為已經回測成功。
-  - 反證: latest rebound close anchor now renders as `回測基準：最近反彈收盤 ...；尚未回測` and effective trigger uses `回踩不破`.
-- 風險 3: `等冷卻` 被誤讀成可追。
-  - 反證: card shows `狀態：漲停/過熱，不追價` and only a cooling wait condition.
-- 風險 4: 持倉同一股票出現多個主行動。
-  - 反證: holding card now has one `決策` and one `明日處理` line.
-- 風險 5: State-specific formatter breaks existing report tests.
-  - 反證: targeted and full pytest passed.
+- 風險 1: 只改文字，策略仍等回前高。
+  - 反證: `unheld_funnel_state` 對 DB-backed far `PULLBACK_RECLAIM` 回傳 `等低位修復`，不再回傳 `等接近`。
+- 風險 2: 假跨日資料。
+  - 反證: `has_daily_price_repair_basis` 要求 `cross_day_context.source_of_truth` 包含 `daily_price` 且來源 ready。
+- 風險 3: DB 欄位不足。
+  - 反證: read probe 顯示仁寶 / 緯創 / 技嘉 / 旺宏 / 群創皆有 8 筆 OHLCV；unit test 驗證 OHLCV 進入 context。
+- 風險 4: 低位修復被誤讀成可買。
+  - 反證: card header 是 `等低位修復`，有效買點列為條件，不產生可買或可準備行動。
+- 風險 5: Summary / artifact 與卡片狀態衝突。
+  - 反證: funnel buckets、summary bucket、trade state machine 均接上 `等低位修復` / `WAIT_LOW_REPAIR`。
 
 ## 跨區塊語意一致性
 
-- Holdings answer what to do tomorrow, not a duplicate entry checklist.
-- `等冷卻` answers what must cool down.
-- `等回測` answers which anchor must hold.
-- Latest rebound-close anchors are labelled as tomorrow's retest base, not completed retest evidence.
-- `等型態` answers which setup/quality condition is missing.
-- `等接近` answers whether price is near the breakout zone or needs a separate continuation/retest setup.
+- `距突破` 保留，仍說明距離前高突破區很遠。
+- 遠離突破不再只剩「等接近突破區」；DB 有日線時改看低位修復。
+- `等回測` 仍用於連漲修復後的回踩確認；`等低位修復` 用於低位支撐 / 短均 / 量能修復觀察。
 
 ## 使用者誤讀風險
 
-- `有效買點` can still be read as an immediate buy if the state header is ignored; current card keeps state header first and retains `不買 / 等待` semantics through the title and trigger.
-- `等接近` still includes “進場：不買” because it is a location gate; this is intentional and not a buy recommendation.
+- `近期支撐` 可能被誤讀成買價；卡片用 `有效買點：近期支撐不破 + 站回5日均 + 量能轉強 + 風險報酬 >= 1.5` 避免單一價格變成下單指令。
 
 ## 失敗標本反證
 
-- Owner specimen: `進場 / 缺口 / 可買 / 明日觸發` repeated the same breakout or retest condition.
+- Owner specimen: 仁寶 / 緯創 / 技嘉遠離突破，報文要求接近突破區才重評。
 - Dry-run result:
-  - `等冷卻`: uses `狀態` + `等待`.
-  - `等回測`: uses `狀態` + `回測` + `有效買點`.
-  - `等型態`: uses `狀態` + `等待` + `有效買點`.
-  - `等接近`: uses `進場` + `等待`.
+  - 仁寶: `等低位修復｜低位修復觀察`，顯示近期支撐 / 5日均 / 量能。
+  - 緯創: `等低位修復｜低位修復觀察`。
+  - 技嘉: `等低位修復｜低位修復觀察`。
 
 ## 質疑與反證
 
-- 質疑: 是否硬改文字而非按策略狀態顯示？
-  - 反證: formatter branches by `funnel_state`; each state maps to a different card contract.
-- 質疑: 是否刪掉策略所需資訊？
-  - 反證: tests and dry-run still include distance, anchor, heat, quality, and effective trigger where relevant.
+- 質疑: DB 是否支援？
+  - 反證: `daily_price` 已有 OHLCV，不需要擴 schema。
+- 質疑: 沒 DB 時是否亂判？
+  - 反證: existing far no-DB regression 仍維持 `等接近`。
+- 質疑: PULLBACK_RECLAIM 是否還會被降成等接近？
+  - 反證: 新增 regression 鎖定 `等低位修復`。
 
 ## 未測項目
 
 - 未 live Telegram。
 - 未 DB write / backfill / prune。
-- 未驗證實際手機 Telegram push，只驗 official generator message text。
+- 未驗實際 GitHub runner artifact，只驗 official local dry-run equivalent。
 
 ## QA 結論
 
 通過。
 
-本輪修正已覆蓋 Owner 貼出的手機閱讀問題；策略計算與 DB 資料未變更。
+本輪修正解決 Owner 指出的「遠離突破只能等回前高」策略/顯示問題；資料來源為 production DB `daily_price` 只讀資料，沒有假跨日記憶。

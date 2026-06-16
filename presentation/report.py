@@ -544,6 +544,58 @@ def _recent_rebound_close_text(data):
     return "最近反彈收盤"
 
 
+def _daily_price_points(data):
+    context = ((data or {}).get("cross_day_context") or {})
+    sources = context.get("source_of_truth") or []
+    if isinstance(sources, str):
+        sources = [sources]
+    if "daily_price" not in sources:
+        return []
+    points = []
+    for point in context.get("recent_daily_price_points") or []:
+        if (point or {}).get("source") != "daily_price":
+            continue
+        try:
+            close = float(point.get("close"))
+        except (AttributeError, TypeError, ValueError):
+            continue
+        normalized = {"close": close}
+        for key in ["open", "high", "low", "volume"]:
+            try:
+                raw_value = point.get(key)
+                if raw_value is not None:
+                    normalized[key] = float(raw_value)
+            except (AttributeError, TypeError, ValueError):
+                pass
+        points.append(normalized)
+    return points
+
+
+def _low_repair_anchor_text(data):
+    points = _daily_price_points(data)
+    if len(points) < 4:
+        return "DB 日線不足，先不判斷低位修復"
+    closes = [point["close"] for point in points]
+    lows = [point.get("low", point["close"]) for point in points]
+    recent_lows = lows[-5:] if len(lows) >= 5 else lows
+    support = min(recent_lows)
+    parts = [f"近期支撐 {_gate_value_text(support)}"]
+    if len(closes) >= 5:
+        ma5 = sum(closes[-5:]) / 5
+        parts.append(f"5日均 {_gate_value_text(ma5)}")
+    volume_values = [point.get("volume") for point in points if point.get("volume") is not None]
+    if len(volume_values) >= 5:
+        avg_volume = sum(volume_values[-5:]) / 5
+        latest_volume = volume_values[-1]
+        if avg_volume:
+            parts.append(f"量能 {_gate_value_text(latest_volume / avg_volume)}x")
+    return "｜".join(parts)
+
+
+def _low_repair_unlock_text(data):
+    return "近期支撐不破 + 站回5日均 + 量能轉強 + 風險報酬>=1.5"
+
+
 def _repair_retest_gap_text(data):
     return f"等待回測{_recent_rebound_close_text(data)}不破"
 
@@ -906,6 +958,13 @@ def _unheld_entry_contract(data, dist, blockers, valid_entry, funnel_state, sour
             "連漲修復待回測",
             retest_text,
             f"{unlock_text} + 非追高 + 量能有效",
+            basis="",
+        )
+    if funnel_state == "等低位修復":
+        return contract(
+            "突破買點太遠，改看低位修復",
+            _low_repair_anchor_text(data),
+            _low_repair_unlock_text(data),
             basis="",
         )
     if "急彈待回測" in blocker_text:
@@ -1331,6 +1390,16 @@ def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None):
                 lines.append(f"有效買點：{unlock}")
             return lines
 
+        if funnel_state == "等低位修復":
+            lines = []
+            if reason:
+                lines.append(f"路線：{reason}")
+            if gap:
+                lines.append(f"觀察：{gap}")
+            if unlock:
+                lines.append(f"有效買點：{unlock}")
+            return lines
+
         if funnel_state == "等型態":
             lines = []
             if reason:
@@ -1450,6 +1519,16 @@ def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None):
             lines.append(f"有效買點：{unlock}")
         return lines
 
+    if funnel_state == "等低位修復":
+        lines = []
+        if reason:
+            lines.append(f"路線：{reason}")
+        if gap:
+            lines.append(f"觀察：{gap}")
+        if unlock:
+            lines.append(f"有效買點：{unlock}")
+        return lines
+
     if funnel_state == "等型態":
         lines = []
         if reason:
@@ -1478,7 +1557,7 @@ def _compact_unheld_trade_state_line(line, *, valid_entry=False, post_market_pre
         return line
     if data_source_blocked:
         return None
-    if funnel_state in {"等冷卻", "等回測", "等型態", "等接近", "等RR修復", "淘汰"}:
+    if funnel_state in {"等冷卻", "等回測", "等型態", "等接近", "等低位修復", "等RR修復", "淘汰"}:
         return None
     return line
 
@@ -1797,7 +1876,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
             if funnel_state == "淘汰"
             else (blockers[0] if blockers else deps["final_label"](stock_result))
         )
-    if not valid_entry and funnel_state in ["等冷卻", "等市場", "等接近", "等型態", "等回測", "等RR修復", "等量能", "等資料", "隔日確認", "淘汰"]:
+    if not valid_entry and funnel_state in ["等冷卻", "等市場", "等接近", "等低位修復", "等型態", "等回測", "等RR修復", "等量能", "等資料", "隔日確認", "淘汰"]:
         state = funnel_state
     try:
         distance_value = float(str(dist).replace("%", "").strip()) if dist is not None else None
@@ -1809,8 +1888,12 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         and distance_value is not None
         and distance_value > 12
     ):
-        state = "等接近"
-        funnel_state = "等接近"
+        if _daily_price_points(data):
+            state = "等低位修復"
+            funnel_state = "等低位修復"
+        else:
+            state = "等接近"
+            funnel_state = "等接近"
     if not valid_entry and funnel_state == "等接近" and distance_value is not None and distance_value > 5:
         title_label = "遠離觸發"
     if data_source_display_blocked:
@@ -1821,6 +1904,8 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         title_label = _decision_source_title_label(source_status)
     elif funnel_state == "等回測" and (data.get("multi_day_rebound_wait") or stock_result.get("multi_day_rebound_wait")):
         title_label = "反彈修復待回測"
+    elif funnel_state == "等低位修復":
+        title_label = "低位修復觀察"
     elif deps["is_valid_entry"](stock_result) and strategy_source_blocked:
         title_label = _strategy_source_title_label(strategy_source_status)
     elif deps["is_valid_entry"](stock_result) and not source_eligible:
@@ -1855,7 +1940,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     elif funnel_state == "可準備":
         title_icon = "👀"
         title_action = "可準備" if data.get("evidence_adjustment_reason") else deps["unheld_non_actionable_prepare_label"](data)
-    elif state in ["等冷卻", "等市場", "等接近", "等型態", "等回測", "等資料"]:
+    elif state in ["等冷卻", "等市場", "等接近", "等低位修復", "等型態", "等回測", "等資料"]:
         title_icon = "⏳"
         title_action = state
     elif state in ["等RR修復", "等量能", "隔日確認"]:
@@ -1958,6 +2043,10 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         buy_line = "買點：不買，等回測"
         data_line = f"數據：{rr_data_text}｜{display_score_text}｜V {data.get('volume_ratio', '-')}x"
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
+    elif funnel_state == "等低位修復":
+        buy_line = "買點：不買，等低位修復"
+        data_line = f"數據：{rr_data_text}｜{display_score_text}｜V {data.get('volume_ratio', '-')}x"
+        price_line = deps["price_change_line"](data.get("price"), data.get("change"))
     elif funnel_state == "等接近":
         buy_line = f"買點：不買，等接近{_breakout_trigger_zone_text(data)}"
         data_line = f"數據：{rr_data_text}｜{display_score_text}｜V {data.get('volume_ratio', '-')}x"
@@ -2031,7 +2120,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         and not strategy_source_blocked
         and source_eligible
         and (
-            funnel_state in {"等接近", "等型態", "淘汰"}
+            funnel_state in {"等接近", "等低位修復", "等型態", "淘汰"}
             or state in {"等資料", "不可行動"}
         )
     )
@@ -2043,7 +2132,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         and is_afterhours
         and not post_market_prepare
         and not preserve_strategy_source_card
-        and funnel_state in {"等冷卻", "等接近", "等型態", "等回測", "等RR修復", "淘汰"}
+        and funnel_state in {"等冷卻", "等接近", "等低位修復", "等型態", "等回測", "等RR修復", "淘汰"}
         and data_line
         and ("不適用" in data_line or "風控不適用" in data_line)
     ):
@@ -2054,7 +2143,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         and not data_source_display_blocked
         and "資料來源" not in str(title_label or "")
         and "策略樣本" not in str(title_label or "")
-        and funnel_state in {"等冷卻", "等回測", "等型態", "等接近", "等RR修復", "淘汰"}
+        and funnel_state in {"等冷卻", "等回測", "等型態", "等接近", "等低位修復", "等RR修復", "淘汰"}
     ):
         data_line = None
     market_line = None if is_afterhours_rejected else (
@@ -2158,6 +2247,7 @@ def _unheld_strategy_group_check(funnel):
         ("等RR修復", "等風險報酬"),
         ("等型態", "等型態"),
         ("等接近", "等接近"),
+        ("等低位修復", "等低位修復"),
         ("等量能", "等量能"),
         ("等市場", "等市場"),
         ("等資料", "等資料"),

@@ -695,6 +695,21 @@ def persistent_recent_price_values(data, min_points=4):
     return values
 
 
+def has_daily_price_repair_basis(data, min_points=4):
+    data = data or {}
+    context = cross_day_context(data)
+    sources = context.get("source_of_truth") or []
+    if isinstance(sources, str):
+        sources = [sources]
+    if not cross_day_ready(data) or "daily_price" not in sources:
+        return False
+    points = [
+        point for point in context.get("recent_daily_price_points") or []
+        if (point or {}).get("source") == "daily_price"
+    ]
+    return len(points) >= min_points
+
+
 def multi_day_rebound_needs_retest(data):
     data = data or {}
     result = data.get("result") or {}
@@ -3132,6 +3147,8 @@ def tomorrow_watch_state(name, data):
         try:
             distance = result.get("breakout_distance")
             if distance is not None and float(distance) > 12:
+                if has_daily_price_repair_basis(data):
+                    return "等低位修復"
                 return "等接近"
         except (TypeError, ValueError):
             pass
@@ -3165,6 +3182,9 @@ def tomorrow_trigger_text(state, data):
 
     if state == "等接近":
         return "接近觸發區後重新評估 setup"
+
+    if state == "等低位修復":
+        return "守近期支撐並站回短均線，再評估"
 
     if state == "等型態":
         return "重新形成買點 setup，再評估"
@@ -3473,6 +3493,7 @@ def tracking_sort_key(index, name, data):
         "等冷卻": 1,
         "等市場": 2,
         "等接近": 2,
+        "等低位修復": 2,
         "等型態": 3,
         "等回測": 2,
         "等RR修復": 3,
@@ -3533,6 +3554,7 @@ def format_pending_candidates_grouped(watch_items):
         "等冷卻": [],
         "等市場": [],
         "等接近": [],
+        "等低位修復": [],
         "等型態": [],
         "等回測": [],
         "等RR修復": [],
@@ -3547,7 +3569,7 @@ def format_pending_candidates_grouped(watch_items):
         groups.setdefault(state, []).append((index, name, data))
 
     lines = []
-    for label in ["可買", "等冷卻", "等市場", "等接近", "等型態", "等回測", "等RR修復", "等量能", "等資料", "隔日確認", "弱勢淘汰"]:
+    for label in ["可買", "等冷卻", "等市場", "等接近", "等低位修復", "等型態", "等回測", "等RR修復", "等量能", "等資料", "隔日確認", "弱勢淘汰"]:
         values = sorted(
             groups.get(label, []),
             key=lambda item: tracking_sort_key(item[0], item[1], item[2])
@@ -6244,6 +6266,9 @@ def unheld_funnel_assessment(name, data, market_mode=None, report_context=None):
     if state == "等接近":
         return "等接近", None
 
+    if state == "等低位修復":
+        return "等低位修復", None
+
     if state == "等型態":
         return "等型態", None
 
@@ -6342,6 +6367,7 @@ def unheld_funnel_state(name, data, market_mode=None, report_context=None):
             "等冷卻",
             "等市場",
             "等接近",
+            "等低位修復",
             "等型態",
             "等回測",
             "等RR修復",
@@ -6379,7 +6405,7 @@ def unheld_funnel_state(name, data, market_mode=None, report_context=None):
             reason in blockers
             for reason in ["急彈待回測", "弱反彈待確認", "漲停不追", "漲停反彈待確認", "過熱觀察", "RR不足"]
         ):
-            state = "等接近"
+            state = "等低位修復" if has_daily_price_repair_basis(data) else "等接近"
     if reason:
         data["evidence_adjustment_reason"] = reason
     else:
@@ -6485,6 +6511,9 @@ def unheld_execution_trigger(funnel_state, data):
     if funnel_state == "等接近":
         return "不買，等接近觸發區"
 
+    if funnel_state == "等低位修復":
+        return "不買，等低位修復確認"
+
     if funnel_state == "等回測":
         return "不追價，回測不破且降溫再評估"
 
@@ -6510,6 +6539,7 @@ def unheld_execution_priority(index, name, data, market_mode=None, report_contex
         "等冷卻": 4,
         "等市場": 5,
         "等接近": 5,
+        "等低位修復": 5,
         "等型態": 6,
         "等回測": 5,
         "等RR修復": 6,
@@ -6563,6 +6593,7 @@ def build_unheld_funnel(watch_items, market_mode=None, report_context=None):
         "等冷卻": [],
         "等市場": [],
         "等接近": [],
+        "等低位修復": [],
         "等型態": [],
         "等回測": [],
         "等RR修復": [],
@@ -6642,7 +6673,7 @@ def unheld_tracking_count(funnel):
 
     return sum(
         len(funnel[label])
-        for label in ["可準備", "等冷卻", "等市場", "等接近", "等型態", "等回測", "等RR修復", "等量能", "等資料", "隔日確認"]
+        for label in ["可準備", "等冷卻", "等市場", "等接近", "等低位修復", "等型態", "等回測", "等RR修復", "等量能", "等資料", "隔日確認"]
     )
 
 
@@ -6650,7 +6681,7 @@ def unheld_tracking_only_count(funnel):
 
     return sum(
         len(funnel[label])
-        for label in ["等冷卻", "等市場", "等接近", "等型態", "等回測", "等RR修復", "等量能", "等資料", "隔日確認"]
+        for label in ["等冷卻", "等市場", "等接近", "等低位修復", "等型態", "等回測", "等RR修復", "等量能", "等資料", "隔日確認"]
     )
 
 
@@ -6774,6 +6805,9 @@ def today_reason_text(watch_items, market_mode, report_phase=None, report_contex
 
     if funnel["等回測"]:
         return "追價風險仍在，等回測確認"
+
+    if funnel["等低位修復"]:
+        return "遠離突破不追高，改看低位修復是否成立"
 
     return "依今日條件排序，未觸發不新增"
 
@@ -7041,7 +7075,7 @@ def format_unheld_funnel(watch_items, market_mode=None, report_context=None):
     display_label = {"等RR修復": "等風險報酬"}
     track_buckets = [
         (display_label.get(label, label), len(funnel[label]))
-        for label in ["等冷卻", "等市場", "等接近", "等型態", "等回測", "等RR修復", "等量能", "等資料"]
+        for label in ["等冷卻", "等市場", "等接近", "等低位修復", "等型態", "等回測", "等RR修復", "等量能", "等資料"]
         if funnel[label]
     ]
     if len(track_buckets) == 1:
@@ -7272,7 +7306,7 @@ def _report_conflicts(messages):
     summary = messages[-1]
     conflicts = []
     buy_markers = re.findall(r"新倉[:：][^\n]*?([\u4e00-\u9fffA-Za-z0-9]{2,12})\s*可買", summary)
-    blocking_terms = ("不可買", "等冷卻", "等市場", "等接近", "等型態", "等回測", "等RR修復", "等量能", "等資料", "淘汰")
+    blocking_terms = ("不可買", "等冷卻", "等市場", "等接近", "等低位修復", "等型態", "等回測", "等RR修復", "等量能", "等資料", "淘汰")
     for marker in buy_markers:
         if marker in {"無有效進場", "無", "今日"}:
             continue
@@ -7586,6 +7620,7 @@ def strategy_axis_line(data, funnel_state=None):
         "WAIT_VOLUME": "等量能",
         "WAIT_SETUP": "等型態",
         "WAIT_APPROACH": "等接近",
+        "WAIT_LOW_REPAIR": "等低位修復",
         "WAIT_CONFIRM": "等確認",
     }
     action_labels = {
@@ -7597,6 +7632,7 @@ def strategy_axis_line(data, funnel_state=None):
         "WAIT_VOLUME": "等待",
         "WAIT_SETUP": "等待",
         "WAIT_APPROACH": "等待",
+        "WAIT_LOW_REPAIR": "等待",
         "WAIT_CONFIRM": "等待",
     }
     funnel_setup_labels = {
@@ -7606,6 +7642,7 @@ def strategy_axis_line(data, funnel_state=None):
         "等冷卻": "等冷卻",
         "等市場": "等市場",
         "等接近": "等接近",
+        "等低位修復": "等低位修復",
         "等型態": "等型態",
         "等回測": "等回測確認",
         "等RR修復": "等風險報酬",
@@ -7621,6 +7658,7 @@ def strategy_axis_line(data, funnel_state=None):
         "等冷卻": "等待",
         "等市場": "等待",
         "等接近": "等待",
+        "等低位修復": "等待",
         "等型態": "等待",
         "等回測": "等待",
         "等RR修復": "等待",

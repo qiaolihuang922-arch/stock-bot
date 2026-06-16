@@ -175,10 +175,10 @@ class CrossDayContextTest(unittest.TestCase):
             "daily_signal_snapshot": [],
             "position_events": [],
             "daily_price": [
-                {"stock_id": "2337", "trade_date": "2026-06-16", "close": 159},
-                {"stock_id": "2337", "trade_date": "2026-06-15", "close": 155},
-                {"stock_id": "2337", "trade_date": "2026-06-14", "close": 150},
-                {"stock_id": "2337", "trade_date": "2026-06-13", "close": 148},
+                {"stock_id": "2337", "trade_date": "2026-06-16", "open": 156, "high": 160, "low": 154, "close": 159, "volume": 1200},
+                {"stock_id": "2337", "trade_date": "2026-06-15", "open": 151, "high": 156, "low": 150, "close": 155, "volume": 1000},
+                {"stock_id": "2337", "trade_date": "2026-06-14", "open": 149, "high": 151, "low": 148, "close": 150, "volume": 900},
+                {"stock_id": "2337", "trade_date": "2026-06-13", "open": 147, "high": 149, "low": 146, "close": 148, "volume": 800},
                 {"stock_id": "3481", "trade_date": "2026-06-16", "close": 51.4},
             ],
         })
@@ -195,6 +195,14 @@ class CrossDayContextTest(unittest.TestCase):
         self.assertEqual(
             [point["close"] for point in context["recent_daily_price_points"]],
             [148.0, 150.0, 155.0, 159.0],
+        )
+        self.assertEqual(
+            [point["low"] for point in context["recent_daily_price_points"]],
+            [146.0, 148.0, 150.0, 154.0],
+        )
+        self.assertEqual(
+            [point["volume"] for point in context["recent_daily_price_points"]],
+            [800.0, 900.0, 1000.0, 1200.0],
         )
 
 

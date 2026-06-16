@@ -3746,6 +3746,106 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("明日觸發：進入突破區附近，或形成回測承接型態再重評", unheld_message(messages))
         self.assertNotIn("【緯創 3231】⛔ 淘汰", unheld_message(messages))
 
+    def test_far_from_breakout_with_db_daily_price_uses_low_repair_not_high_only_wait(self):
+        payload = {
+            "stock_code": "3231",
+            "price": 158.0,
+            "change": -2.17,
+            "price_source": "realtime",
+            "daily_source": "yahoo",
+            "result": {
+                "decision": "WAIT",
+                "action": 0,
+                "rr": 1.6,
+                "heat_state": "NORMAL",
+                "trade_state": "NO_VOLUME",
+                "structure_phase": "BREAKOUT",
+                "price_behavior": "NORMAL",
+                "market_grade": "D",
+                "volume_state": "WEAK",
+                "volume_price_state": "COILING",
+                "structure_state": "NORMAL",
+                "entry_quality": "D",
+                "confidence_score": 55,
+                "breakout_distance": 23.4,
+                "breakout_trigger_price": 194,
+            },
+            "cross_day_context": db_price_context("3231", [162, 160, 159, 158, 158]),
+            "holding": None,
+            "structure_score": 2,
+            "volume_ratio": 0.48,
+        }
+
+        messages = generator.formatTelegramMessages(
+            {"緯創": payload},
+            "FULL DETAIL",
+            None,
+            None,
+            "⏳ 觀望",
+            datetime(2026, 6, 16),
+            report_phase="盤後",
+        )
+        unheld = unheld_message(messages)
+
+        self.assertEqual(generator.tomorrow_watch_state("緯創", payload), "等低位修復")
+        self.assertEqual(generator.unheld_funnel_state("緯創", payload), "等低位修復")
+        self.assertIn("【緯創 3231】⏳ 等低位修復｜低位修復觀察", unheld)
+        self.assertIn("距突破：23.4%｜遠離突破", unheld)
+        self.assertIn("路線：突破買點太遠，改看低位修復", unheld)
+        self.assertIn("觀察：近期支撐 158", unheld)
+        self.assertIn("5日均 159.4", unheld)
+        self.assertIn("有效買點：近期支撐不破 + 站回5日均 + 量能轉強 + 風險報酬 >= 1.5", unheld)
+        self.assertNotIn("不適用（不可行動）", unheld)
+        self.assertNotIn("尚未接近突破區", unheld)
+
+    def test_far_pullback_reclaim_with_db_daily_price_downgrades_to_low_repair_not_approach(self):
+        payload = {
+            "stock_code": "3231",
+            "price": 158.0,
+            "change": -2.17,
+            "price_source": "realtime",
+            "daily_source": "yahoo",
+            "result": {
+                "decision": "WAIT",
+                "action": 0,
+                "rr": 1.6,
+                "heat_state": "NORMAL",
+                "trade_state": "NO_VOLUME",
+                "structure_phase": "NORMAL",
+                "price_behavior": "NORMAL",
+                "entry_stage": "PULLBACK_RECLAIM",
+                "market_grade": "D",
+                "volume_state": "WEAK",
+                "volume_price_state": "COILING",
+                "structure_state": "NORMAL",
+                "entry_quality": "D",
+                "confidence_score": 55,
+                "breakout_distance": 23.4,
+                "breakout_trigger_price": 194,
+            },
+            "cross_day_context": db_price_context("3231", [162, 160, 159, 158, 158]),
+            "holding": None,
+            "structure_score": 2,
+            "volume_ratio": 0.48,
+        }
+
+        messages = generator.formatTelegramMessages(
+            {"緯創": payload},
+            "FULL DETAIL",
+            None,
+            None,
+            "⏳ 觀望",
+            datetime(2026, 6, 16),
+            report_phase="盤後",
+        )
+        unheld = unheld_message(messages)
+
+        self.assertEqual(generator.tomorrow_watch_state("緯創", payload), "等型態")
+        self.assertEqual(generator.unheld_funnel_state("緯創", payload), "等低位修復")
+        self.assertIn("【緯創 3231】⏳ 等低位修復｜低位修復觀察", unheld)
+        self.assertIn("路線：突破買點太遠，改看低位修復", unheld)
+        self.assertNotIn("等待：距突破 23.4%；有效買點只看：接近突破區", unheld)
+
     def test_v19_4_backtest_changes_tracking_order_only(self):
         weak_context = {
             "sample": 35,
