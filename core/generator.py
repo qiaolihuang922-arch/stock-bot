@@ -910,10 +910,10 @@ def has_chase_hard_blocker(result, blockers=None):
 
     blockers = blockers if blockers is not None else entry_blockers(result)
     behavior = result.get("price_behavior")
-    if behavior in ["LIMIT_LOCK", "LIMIT_REBOUND"]:
+    if behavior == "LIMIT_LOCK":
         return True
     return any(
-        item in ["漲停不追", "漲停反彈待確認"] or "不可追高" in str(item)
+        item == "漲停不追" or "不可追高" in str(item)
         for item in blockers
     )
 
@@ -1515,10 +1515,16 @@ def should_show_overheat_rr_blocker(result, holding=False):
         return False
 
     blockers = entry_blockers(result)
+    rr = _float_or_none((result or {}).get("rr"))
     return (
-        result.get("heat_state") in ["HOT", "EXTREME"]
-        or result.get("trade_state") in ["EXTENDED", "AVOID"]
-        or any(item.startswith("過熱") for item in blockers)
+        result.get("heat_state") == "EXTREME"
+        or result.get("trade_state") == "AVOID"
+        or any(item.startswith("過熱 Lv.") for item in blockers)
+        or (
+            (result.get("heat_state") == "HOT" or result.get("trade_state") == "EXTENDED")
+            and rr is not None
+            and rr < 1.0
+        )
     )
 
 
@@ -4902,9 +4908,9 @@ def apply_evidence_confidence(report_context, name, data):
     boost_blocked = (
         result.get("decision") == "FAIL"
         or result.get("structure_phase") in {"FAILED_BREAKOUT", "WEAK", "DISTRIBUTION"}
-        or result.get("heat_state") in {"HOT", "EXTREME"}
-        or result.get("trade_state") in {"EXTENDED", "AVOID"}
-        or result.get("price_behavior") in {"LIMIT_LOCK", "LIMIT_REBOUND"}
+        or result.get("heat_state") == "EXTREME"
+        or result.get("trade_state") == "AVOID"
+        or result.get("price_behavior") == "LIMIT_LOCK"
         or should_show_overheat_rr_blocker(result, holding=False)
         or technical <= 0
     )
@@ -4924,6 +4930,11 @@ def apply_evidence_confidence(report_context, name, data):
 def _strong_confirmed_evidence(report_context, name):
     score, status = compute_evidence_score(report_context, name)
     return score is not None and score >= 0.9 and status == "confirmed"
+
+
+def _strong_supporting_evidence(report_context, name):
+    score, status = compute_evidence_score(report_context, name)
+    return score is not None and score >= 0.85 and status in {"confirmed", "supporting"}
 
 
 def _technical_setup_near_funnel_boundary(result, state, prepare_label=None):
@@ -5133,21 +5144,23 @@ def _unheld_hard_gate_reasons(result, source_status="available"):
             "insufficient-data": "insufficient-data",
         }.get(source_status, source_status))
     for token, reason in [
-        ("RR不足", "unresolved RR不足"),
-        ("過熱", "overheat / EXTREME"),
         ("突破失敗", "failed breakout"),
-        ("漲停", "漲跌停 / 追高 hard gate"),
+        ("漲停不追", "漲跌停 / 追高 hard gate"),
         ("量能不足", "volume hard gate"),
     ]:
         if token in blocker_text:
             reasons.append(reason)
-    if (result or {}).get("heat_state") in {"HOT", "EXTREME"}:
+    if (result or {}).get("heat_state") == "EXTREME" or (result or {}).get("trade_state") == "AVOID":
         reasons.append("overheat / EXTREME")
     quality = (result or {}).get("entry_quality")
     quality_low = bool(quality and quality not in {"A+", "A", "B"})
     try:
         rr = (result or {}).get("rr")
-        if rr is not None and float(rr) < 1.5 and quality_low:
+        setup = result_setup_type(result or {})
+        if rr is not None and (
+            float(rr) < 1.0
+            or (float(rr) < 1.5 and quality_low and setup == "NO_SETUP")
+        ):
             reasons.append("unresolved RR不足")
     except (TypeError, ValueError):
         pass
@@ -6021,15 +6034,21 @@ def strong_prepare_bucket(data):
     distance = result.get("breakout_distance")
     phase = result.get("structure_phase")
 
-    if behavior in ["LIMIT_LOCK", "LIMIT_REBOUND"] or any(item in blockers for item in ["漲停不追", "漲停反彈待確認"]):
+    if behavior == "LIMIT_LOCK" or "漲停不追" in blockers:
         return "漲停鎖價", "不可追高，待開板回測"
 
+    if behavior == "LIMIT_REBOUND" or "漲停反彈待確認" in blockers:
+        return "漲停反彈", "隔日不追高，待回測承接"
+
     if (
-        heat in ["HOT", "EXTREME"]
-        or trade in ["EXTENDED", "AVOID"]
-        or any(item.startswith("過熱") for item in blockers)
+        heat == "EXTREME"
+        or trade == "AVOID"
+        or any(item.startswith("過熱 Lv.") for item in blockers)
     ):
         return "過熱降溫", "不可買，待降溫後重評"
+
+    if heat == "HOT" or trade == "EXTENDED" or "過熱觀察" in blockers:
+        return "過熱回測", "不追高，待回測或降溫承接"
 
     blocker_set = set(blockers)
     near_breakout = (
@@ -6041,6 +6060,53 @@ def strong_prepare_bucket(data):
         return "突破回測", "待觸發，不追高"
 
     return None, None
+
+
+def _soft_blocker_prepare_candidate(data, state=None, prepare_label=None):
+
+    result = (data or {}).get("result") or {}
+    blockers = entry_blockers(result)
+    behavior = result.get("price_behavior")
+    heat = result.get("heat_state")
+    trade = result.get("trade_state")
+    if behavior == "LIMIT_LOCK" or heat == "EXTREME" or trade == "AVOID":
+        return False
+    if result.get("decision") == "FAIL" or result.get("structure_phase") == "FAILED_BREAKOUT":
+        return False
+
+    soft_gate = (
+        behavior == "LIMIT_REBOUND"
+        or "漲停反彈待確認" in blockers
+        or heat == "HOT"
+        or trade == "EXTENDED"
+        or "過熱觀察" in blockers
+        or result.get("decision_type") in {"wait_breakout_low_rr", "wait_pre_breakout_low_rr"}
+        or prepare_label in {"漲停反彈", "過熱回測"}
+    )
+    if not soft_gate:
+        return False
+
+    rr = _float_or_none(result.get("rr"))
+    if rr is None or rr < 1.0:
+        return False
+
+    distance = _float_or_none(
+        result.get("breakout_distance")
+        if result.get("breakout_distance") is not None
+        else result.get("distance_to_breakout")
+    )
+    if distance is not None and distance > 5 and not (data or {}).get("multi_day_rebound_wait"):
+        return False
+
+    quality = result.get("entry_quality")
+    grade = result.get("market_grade")
+    if quality not in {"A+", "A", "B", "C"} and grade not in {"A+", "A", "B"}:
+        return False
+
+    if result.get("volume_state") == "WEAK":
+        return False
+
+    return True
 
 
 def low_volume_limit_up_risk_text(data):
@@ -6115,9 +6181,19 @@ def unheld_funnel_assessment(name, data, market_mode=None, report_context=None):
     if state == "弱勢淘汰":
         return "淘汰", None
 
+    soft_prepare_candidate = _soft_blocker_prepare_candidate(data, state=state, prepare_label=prepare_label)
+    if soft_prepare_candidate and (
+        result.get("price_behavior") == "LIMIT_REBOUND" or "漲停反彈待確認" in blockers
+    ):
+        return "隔日確認", "漲停反彈屬軟阻擋：不追價，等隔日回測承接與量能確認。"
+
+    if soft_prepare_candidate and _strong_supporting_evidence(report_context, name):
+        return "可準備", "過熱/低風險報酬屬軟阻擋：不追價，等回測承接與量能確認。"
+
     overheat_blocked = (
         should_show_overheat_rr_blocker(result, holding=False)
-        or result.get("heat_state") in ["HOT", "EXTREME"]
+        or result.get("heat_state") == "EXTREME"
+        or result.get("trade_state") == "AVOID"
         or prepare_label == "過熱降溫"
     )
     if overheat_blocked:
@@ -6141,7 +6217,7 @@ def unheld_funnel_assessment(name, data, market_mode=None, report_context=None):
     if cross_day_prepare_promotion(data):
         return "可準備", None
 
-    if market_mode == "進攻偏熱" and prepare_label:
+    if market_mode == "進攻偏熱" and prepare_label and prepare_label not in {"過熱回測", "漲停反彈"}:
         return "可準備", None
 
     if state == "等冷卻":
@@ -6243,6 +6319,8 @@ def unheld_funnel_state(name, data, market_mode=None, report_context=None):
         source_only_gate
         and state in {"淘汰", "隔日確認"}
         and not _unheld_structural_reject(result, entry_blockers(result))
+        and result.get("price_behavior") != "LIMIT_REBOUND"
+        and "漲停反彈待確認" not in entry_blockers(result)
     ):
         state = "等資料"
     if (

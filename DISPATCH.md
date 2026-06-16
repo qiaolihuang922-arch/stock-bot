@@ -2,44 +2,47 @@
 
 ## Active
 
-- task_md_holds: `strategy_rule_outcome_audit_v21_1_20260616`
-- status: `implemented + QA conditional pass + full pytest passed`
+- task_md_holds: `strategy_soft_gate_patch_v21_1_20260616`
+- status: `implemented + QA pass + pending git completion`
 - current_version: `v21.1`
 - no live Telegram delivery in this cycle.
 - no DB schema/write/backfill/prune in this cycle.
 
 ## Result Summary
 
-- Owner asked to verify every strategy gate after DB replay.
-- Implemented read-only outcome audit:
-  - `scripts/audit_strategy_rule_outcomes.py`
-  - artifact: `reports/audit/strategy_rule_outcomes_v21_1_20260616.json`
-- Main result:
-  - events: `5798`
-  - events_with_10d_outcome: `5678`
-  - audit flags: `7`
-  - `等量能` and `急彈待回測` are not the main over-strict gates.
-  - hot / limit-up / low-RR / broad quality-D gates need next strategy patch.
+- Owner asked to stop strategy deadlocks after DB replay showed hot / limit-up / low-RR / broad quality-D gates could be too strict.
+- Implemented soft-gate strategy split:
+  - `LIMIT_LOCK`, `EXTREME`, `AVOID`, `RR < 1.0`, failed breakout remain hard blocks.
+  - `HOT`, `EXTENDED`, `LIMIT_REBOUND`, and low-RR near setup become soft blocks only when evidence/shape supports preparation.
+  - Limit-up rebound no longer becomes fake `等資料`; it is `隔日確認`.
+  - Confirmed/supporting evidence can promote soft blocked names to `可準備`, not `可買`.
+- Mobile report wording is unchanged in version header but no longer marks HOT / LIMIT_REBOUND evidence as unavailable by default.
 
 ## Verification
 
-- Targeted tests:
-  - `.\.venv\Scripts\python.exe -m pytest tests\test_strategy_rule_outcomes.py tests\test_strategy_buy_path_replay.py -q --tb=short`
-  - result: `5 passed, 1 warning`
-- Full:
+- Generator report tests:
+  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q --tb=short`
+  - result: `206 passed, 153 warnings, 46 subtests passed`
+- Full tests:
   - `.\.venv\Scripts\python.exe -m pytest -q --tb=short`
   - result: `489 passed, 8 skipped, 165 warnings, 110 subtests passed`
-- DB replay:
-  - `.\.venv\Scripts\python.exe scripts\audit_strategy_rule_outcomes.py --lookback-days 730 --version v21.1 --output reports\audit\strategy_rule_outcomes_v21_1_20260616.json`
-  - result: artifact generated.
+- DB replay after patch:
+  - `reports/audit/strategy_buy_path_replay_v21_1_soft_gates_20260616.json`
+  - `deadlock_suspected=false`
+  - `has_real_buyable_path=true`
+  - `has_prepare_path=true`
+  - `funnel_blocks_snapshot_tradeable=false`
+  - `可買 700`, `可準備 364`
+- Rule outcome audit after patch:
+  - `reports/audit/strategy_rule_outcomes_v21_1_soft_gates_20260616.json`
+  - still flags 7 categories for future sub-classification, but current hard-gate deadlock is reduced.
 
 ## Current Git State
 
 - branch: `main`
-- implementation commit: `1c5babf`
-- closeout commit: `31d8661`
-- completion: git completion passed after push.
+- implementation commit: pending
+- completion: pending commit / push / git completion gate.
 
 ## Next Action
 
-- Review outcome-audit flags with Owner; next strategy patch should split hot / limit-up / low-RR / broad quality-D gates.
+- Commit, push, then run git completion and closeout gates.

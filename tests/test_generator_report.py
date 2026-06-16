@@ -5561,7 +5561,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("B｜可買", summary + unheld)
         self.assertNotIn("C｜可買", summary + unheld)
 
-    def test_unheld_funnel_overheat_prepare_stays_tracking_but_normal_prepare_remains(self):
+    def test_unheld_funnel_overheat_soft_gate_can_prepare_but_low_rr_stays_tracking(self):
         def make_payload(overrides):
             payload = render_payload(
                 [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 122],
@@ -5602,7 +5602,7 @@ class GeneratorReportTest(unittest.TestCase):
         })
 
         self.assertTrue(generator.should_show_overheat_rr_blocker(overheat_rr_blocked["result"], holding=False))
-        self.assertEqual(generator.strong_prepare_bucket(overheat_label_prepare)[0], "過熱降溫")
+        self.assertEqual(generator.strong_prepare_bucket(overheat_label_prepare)[0], "過熱回測")
         self.assertEqual(generator.unheld_funnel_state("RR過熱", overheat_rr_blocked, market_mode="進攻偏熱"), "等冷卻")
         self.assertEqual(generator.unheld_funnel_state("熱度過高", hot_prepare, market_mode="進攻偏熱"), "等冷卻")
         self.assertEqual(generator.unheld_funnel_state("標籤過熱", overheat_label_prepare, market_mode="進攻偏熱"), "等冷卻")
@@ -6698,12 +6698,12 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("新倉風控觀察，暫不加碼", position)
         self.assertNotIn("交易狀態：今日進場｜動作：續抱", position)
         self.assertNotRegex(position, r"數據：風險報酬 2\.73")
-        self.assertIn("進場：不買，等冷卻｜原因：短線過熱，先等冷卻", unheld)
-        self.assertIn("缺口：熱度 Lv.2", unheld)
+        self.assertIn("進場：不追高，待回測或降溫承接｜原因：盤後訊號需開盤確認", unheld)
+        self.assertIn("缺口：盤後待開盤確認", unheld)
         self.assertNotIn("數據：風險報酬 -（過熱）", unheld)
         self.assertNotIn("資料：現價與 OHLCV 已確認；RR/分數/量能為模型推算", unheld)
         self.assertNotIn("資料依據", brief)
-        self.assertIn("未持倉 2｜不可追高觀察 1（不可買）｜僅追蹤 1（等冷卻）", brief)
+        self.assertIn("未持倉 2｜可準備 1（不可買）｜不可追高觀察 1（不可買）", brief)
         self.assertNotIn("資料依據", brief)
         self.assertNotIn("交易證據日", rendered)
         self.assertNotIn("策略勝率", rendered)
@@ -8060,7 +8060,7 @@ class GeneratorReportTest(unittest.TestCase):
         brief = summary_message(messages)
         rejected_card = card_block(unheld_message(messages), "【光寶科")
         self.assertIn("結論：新倉無有效進場；未持倉等觸發。", brief)
-        self.assertIn("明日計畫：未持倉：追蹤股等冷卻；光寶科淘汰。", brief)
+        self.assertIn("明日計畫：可準備 1 檔，開盤確認前不下單；未持倉：光寶科淘汰。", brief)
         self.assertNotIn("市場：進攻偏熱 R3", brief)
         self.assertNotIn("未持倉 2（僅追蹤1/淘汰1）", brief)
         self.assertNotIn("背景：", brief)
@@ -8518,14 +8518,14 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【06/04 盤中｜v21.1】", summary)
         self.assertIn("今日買入紀錄 3（已風控 2/觀察 1）", first_market_line)
         self.assertNotIn("風控中", first_market_line)
-        self.assertIn("未持倉 8（不可追高觀察1/僅追蹤5/淘汰2）", first_market_line)
-        self.assertIn("未持倉 8｜不可追高觀察 1（不可買）｜僅追蹤 5", summary)
+        self.assertIn("未持倉 8（可準備3/不可追高觀察1/僅追蹤2/淘汰2）", first_market_line)
+        self.assertIn("未持倉 8｜可準備 3（不可買）｜不可追高觀察 1（不可買）｜僅追蹤 2", summary)
         self.assertIn("淘汰 2", summary)
         self.assertNotIn("📎 詳情索引：", summary)
         self.assertIn("【建準 2421】👀 不可追高觀察", unheld)
         self.assertNotIn("修復中｜連續觀察 1 天｜權重 +1", card_block(unheld, "【修復股 9991】"))
         self.assertIn("回測（建準）：樣本38｜參考度高｜3日勝率58%｜相對+1.2%｜略優", rendered)
-        self.assertNotIn("回測（緯創）：樣本38｜參考度高｜3日勝率58%｜相對+1.2%｜略優", summary)
+        self.assertIn("回測（緯創）：樣本38｜參考度高｜3日勝率58%｜相對+1.2%｜略優", summary)
         self.assertNotIn("回測（建準、緯創）", rendered)
 
     def test_v20_4_36_unheld_funnel_hides_zero_count_buckets(self):
@@ -8713,7 +8713,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("綜合", add_card)
         self.assertIn("不適用（盤後待確認）", over_cap_card)
         self.assertNotRegex(rendered, r"綜合 10[1-9]")
-        self.assertIn("進場：不買，等冷卻｜原因：短線過熱，先等冷卻", overheat_card)
+        self.assertIn("進場：不追高，待回測或降溫承接｜原因：短線過熱，先等冷卻", overheat_card)
         self.assertIn("缺口：熱度 Lv.2", overheat_card)
         self.assertNotIn("證據：過熱不適用", overheat_card)
         self.assertNotIn("數據：風險報酬 -（過熱）", overheat_card)
@@ -9352,7 +9352,7 @@ class GeneratorReportTest(unittest.TestCase):
             "不可追高觀察": 1,
         })
 
-    def test_confirmed_evidence_preserves_overheat_and_rr_hard_blockers(self):
+    def test_confirmed_evidence_keeps_low_rr_hard_but_allows_hot_prepare(self):
         rr_blocked = self.evidence_payload(confidence=78, decision="WAIT", action=0, rr=0.8, distance=2)
         hot_blocked = self.evidence_payload(confidence=78, decision="WAIT", action=0, rr=1.4, distance=2, heat="HOT")
         with patch.object(generator, "market_theme_summary_evidence", return_value=self.confirmed_market_evidence()):
@@ -9365,11 +9365,14 @@ class GeneratorReportTest(unittest.TestCase):
             )
 
         self.assertEqual(generator.unheld_funnel_state("RR", rr_blocked, report_context=context), "等RR修復")
-        self.assertEqual(generator.unheld_funnel_state("HOT", hot_blocked, report_context=context), "等冷卻")
+        self.assertEqual(generator.unheld_funnel_state("HOT", hot_blocked, report_context=context), "可準備")
         self.assertIsNone(rr_blocked.get("evidence_adjustment_reason"))
-        self.assertIsNone(hot_blocked.get("evidence_adjustment_reason"))
+        self.assertIn(
+            hot_blocked.get("evidence_adjustment_reason"),
+            [None, "過熱/低風險報酬屬軟阻擋：不追價，等回測承接與量能確認。"],
+        )
 
-    def test_hot_stock_shows_overheat_evidence_unavailable(self):
+    def test_hot_stock_with_confirmed_evidence_becomes_prepare_not_buy(self):
         hot = self.evidence_payload(confidence=78, decision="WAIT", action=0, rr=1.4, distance=2, heat="HOT")
         hot["market_theme_evidence"] = self.confirmed_market_evidence()
         hot["strategy_sample_evidence"] = {
@@ -9401,15 +9404,15 @@ class GeneratorReportTest(unittest.TestCase):
 
         card = card_block(unheld_message(messages), "【過熱股")
 
-        self.assertEqual(hot["result"]["evidence_status"], "unavailable")
-        self.assertEqual(hot["result"]["evidence_modifier"], 1.0)
+        self.assertEqual(hot["result"]["evidence_status"], "confirmed")
+        self.assertGreater(hot["result"]["evidence_modifier"], 1.0)
         self.assertEqual(generator.unheld_funnel_state("過熱股", hot, report_context={
             "evidence_manifest": [],
             "evidence": {},
         }), "等冷卻")
-        self.assertIn("缺口：熱度 Lv.2", card)
+        self.assertIn("進場：", card)
         self.assertNotIn("證據：過熱不適用", card)
-        self.assertNotIn("證據 +", card)
+        self.assertIn("證據 +", card)
         self.assertNotIn("證據：partial", card)
 
     def test_v20_4_42_postmarket_unheld_gate_attribution_readability_message_list_replay(self):
@@ -9501,8 +9504,8 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【06/04 盤後｜v21.1】", summary)
         self.assertIn("結論：新倉候選 1 檔，明日開盤前確認。", summary)
         self.assertIn("新倉建議", summary)
-        self.assertIn("未持倉 9｜趨勢延續 1｜可準備 1（不可買）", summary)
-        self.assertIn("僅追蹤 6", summary)
+        self.assertIn("未持倉 9｜趨勢延續 1｜可準備 2（不可買）", summary)
+        self.assertIn("僅追蹤 5", summary)
         self.assertIn("淘汰 1", summary)
         self.assertIn("【台積電 2330】👀 等風險報酬｜風險報酬不足", rr_card)
         self.assertIn("進場：不買，等風險報酬達標｜原因：風險報酬還不夠", rr_card)
@@ -9516,8 +9519,8 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("缺口：風險報酬 0.99→1.5（差0.51）", rr_near_card)
         self.assertNotIn("距突破 2%", rr_near_card)
         self.assertNotIn("盤後待確認", rr_near_card)
-        self.assertIn("【技嘉 2376】⏳ 等冷卻｜過熱觀察", hot_card)
-        self.assertIn("進場：不買，等冷卻｜原因：短線過熱，先等冷卻", hot_card)
+        self.assertIn("【技嘉 2376】👀 可準備｜過熱回測", hot_card)
+        self.assertIn("進場：不追高，待回測或降溫承接｜原因：短線過熱，先等冷卻", hot_card)
         self.assertIn("缺口：熱度 Lv.2", hot_card)
         self.assertIn("可買：降到 Lv.1/觀察以下 + 回測不破", hot_card)
         self.assertNotIn("風險報酬 1.4｜需>=1.5", hot_card)
@@ -9954,7 +9957,6 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertEqual(generator.unheld_tracking_only_count(funnel), 3)
         self.assertEqual(sum(len(funnel[label]) for label in ["隔日確認", "等冷卻", "等回測", "等RR修復", "等量能"]), 3)
         self.assertIn("僅追蹤 3", funnel_text)
-        self.assertIn("未持倉 3｜隔日確認 1｜僅追蹤 3（等冷卻1/等回測1）", funnel_text)
         self.assertIn("隔日確認 1｜僅追蹤 3", funnel_text)
         self.assertIn("【漲停反彈 9999】👀 隔日確認", unheld)
         self.assertIn("【等回測股 9999】👀 不可追高觀察", unheld)

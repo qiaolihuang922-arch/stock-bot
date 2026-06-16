@@ -2,15 +2,15 @@
 
 ## Current Task
 
-- task_id: `strategy_rule_outcome_audit_v21_1_20260616`
-- status: `implemented + QA conditional pass + full pytest passed`
+- task_id: `strategy_soft_gate_patch_v21_1_20260616`
+- status: `implemented + QA pass + pending git completion`
 - version: `v21.1`
 - no live Telegram delivery.
 - no DB schema/write/backfill/prune.
 
 ## Stable Context
 
-- Owner reads Telegram on mobile; summary must answer decision, next action and risk, not repeat raw counts.
+- Owner reads Telegram on mobile; summary must answer decision and next action without repeating raw counts.
 - Production dispatch model: Render web service is called every five minutes, then GitHub workflow dispatch runs `run_mode=bot`.
 - Production source-of-truth is Supabase / runner data, not local cache, worktree state, runtime dict, or agent memory.
 - Cross-day memory must be DB backed.
@@ -20,30 +20,44 @@
 ## Current Implementation State
 
 - Runtime report remains `v21.1`.
-- Existing read-only buy-path replay:
-  - `scripts/audit_strategy_buy_path_replay.py`
-  - `reports/audit/strategy_buy_path_replay_v21_1_20260616.json`
-- New read-only rule outcome replay:
-  - `scripts/audit_strategy_rule_outcomes.py`
-  - `reports/audit/strategy_rule_outcomes_v21_1_20260616.json`
-- Rule outcome result:
-  - events: `5798`
-  - events_with_10d_outcome: `5678`
-  - flags: `7`
+- Strategy soft gate patch is implemented in:
+  - `core/generator.py`
+  - `presentation/report.py`
+  - `tests/test_generator_report.py`
+- Current hard gates:
+  - limit-up lock / `LIMIT_LOCK`
+  - `EXTREME`
+  - `AVOID`
+  - failed breakout / hard failure
+  - `RR < 1.0`
+- Current soft gates:
+  - `HOT`
+  - `EXTENDED`
+  - `LIMIT_REBOUND`
+  - `漲停反彈待確認`
+  - low-RR near setup when RR is still >= 1.0
+- Soft gates can only become `可準備`, not `可買`, and require supporting/confirmed evidence plus non-weak volume and acceptable quality.
 
 ## Verification State
 
-- Targeted rule replay tests passed: `5 passed, 1 warning`.
-- Full pytest passed: `489 passed, 8 skipped, 165 warnings, 110 subtests passed`.
-- Code, tests and artifact pushed in implementation commit `1c5babf`.
-- Closeout docs pushed in commit `31d8661`.
-- Git completion passed after push.
+- Full pytest passed:
+  - `489 passed, 8 skipped, 165 warnings, 110 subtests passed`
+- Generator report tests passed:
+  - `206 passed, 153 warnings, 46 subtests passed`
+- DB replay artifacts:
+  - `reports/audit/strategy_buy_path_replay_v21_1_soft_gates_20260616.json`
+  - `reports/audit/strategy_rule_outcomes_v21_1_soft_gates_20260616.json`
 
 ## Known Findings
 
-- `等量能` is not currently the strongest over-strict signal.
-- `急彈待回測` has support as a blocker on 5-day outcome.
-- Hot / limit-up / low-RR / broad quality-D gates need next strategy patch:
+- Buy-path replay after patch shows:
+  - `deadlock_suspected=false`
+  - `has_real_buyable_path=true`
+  - `has_prepare_path=true`
+  - `snapshot_tradeable_blocked_by_funnel_days=0`
+  - `可買 700`
+  - `可準備 364`
+- Rule outcome audit still flags these categories for future sub-classification:
   - `隔日確認`
   - `漲停不追`
   - `漲停反彈待確認`
@@ -51,3 +65,7 @@
   - `過熱觀察`
   - `wait_breakout_low_rr`
   - `HOT`
+
+## Next Action
+
+- Finish git commit / push / completion gate.

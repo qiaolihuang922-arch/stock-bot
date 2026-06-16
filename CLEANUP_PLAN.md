@@ -2,86 +2,61 @@
 
 ## Completed This Cycle
 
-- Added read-only strategy rule outcome audit:
-  - script: `scripts/audit_strategy_rule_outcomes.py`;
-  - artifact: `reports/audit/strategy_rule_outcomes_v21_1_20260616.json`;
-  - no DB write / no schema change / no live Telegram.
-- Outcome audit now validates strategy gates by real forward DB daily-price outcomes.
-- Recorded flags for next strategy patch instead of pretending the current strategy is complete.
+- Implemented strategy soft-gate patch:
+  - HOT / EXTENDED / LIMIT_REBOUND no longer always hard-block.
+  - EXTREME / AVOID / LIMIT_LOCK / failed breakout / RR<1.0 remain hard-block.
+  - Soft gates can become `可準備` with supporting/confirmed evidence, not `可買`.
+- Added post-patch replay artifacts:
+  - `reports/audit/strategy_buy_path_replay_v21_1_soft_gates_20260616.json`
+  - `reports/audit/strategy_rule_outcomes_v21_1_soft_gates_20260616.json`
+- No DB write / no schema change / no live Telegram.
+- Full pytest passed.
+
+## Replay Evidence
+
+- Buy-path replay after patch:
+  - events: `5798`
+  - stocks: `12`
+  - `deadlock_suspected=false`
+  - `has_real_buyable_path=true`
+  - `has_prepare_path=true`
+  - `snapshot_tradeable_blocked_by_funnel_days=0`
+  - state counts:
+    - `可買 700`
+    - `可準備 364`
+    - `等冷卻 285`
+    - `等回測 155`
+    - `等接近 2463`
+- Rule outcome replay still flags:
+  - `隔日確認`
+  - `漲停不追`
+  - `漲停反彈待確認`
+  - `買點品質D`
+  - `過熱觀察`
+  - `wait_breakout_low_rr`
+  - `HOT`
 
 ## Previous Cycle Summary
 
+- Added read-only strategy rule outcome audit:
+  - script: `scripts/audit_strategy_rule_outcomes.py`
+  - artifact: `reports/audit/strategy_rule_outcomes_v21_1_20260616.json`
 - Added read-only strategy buy-path DB replay audit:
-  - script: `scripts/audit_strategy_buy_path_replay.py`;
-  - artifact: `reports/audit/strategy_buy_path_replay_v21_1_20260616.json`;
-  - no DB write / no schema change / no live Telegram.
-
-## Earlier Cycle Summary
-
-- Fixed overclaimed rebound retest wording:
-  - `最近修復支撐` replaced by `最近反彈收盤`;
-  - cross-day memory remains DB `daily_price` gated;
-  - no strategy threshold / DB write / live Telegram change.
-
-## Earlier Cycle Summary
-
-- Fixed vague `等接近` wording:
-  - `買點區 / 觸發區` replaced with concrete `突破區 low~high` when data exists;
-  - no strategy threshold / DB write / live Telegram change.
-
-## Earlier Cycle Summary
-
-- Fixed afterhours summary noise:
-  - removed market/count line and duplicate today-buy status line;
-  - removed empty `新增有效進場：無` placeholder;
-  - hides no-action `未持倉狀態` funnel;
-  - summary now keeps conclusion, tomorrow plan and holding risk checklist.
-
-## Earlier Cycle Summary
-
-- Fixed local dry-run false source-missing:
-  - dry-run now read-only loads strategy evidence;
-  - no DB write/live Telegram added;
-  - near-breakout C-quality tracking no longer falls through to `淘汰`.
-
-## Earlier Cycle Summary
-
-- Fixed rebound / source-gate report contract:
-  - multi-day rebound repair now waits for DB-backed recent support retest;
-  - source-only missing/error no longer displays as strategy淘汰;
-  - source-unavailable cards no longer show actionable RR;
-  - no DB rows/tables were changed.
-
-## Older Cycle Summary
-
-- Fixed near-breakout contract mismatch:
-  - `<=5%` is now consistently `接近突破`;
-  - `>5%` is the consistent遠離 threshold;
-  - near-breakout C-quality observation no longer falls through to `淘汰`;
-  - weak rebound / hard failure paths remain conservative.
+  - script: `scripts/audit_strategy_buy_path_replay.py`
+  - artifact: `reports/audit/strategy_buy_path_replay_v21_1_20260616.json`
 
 ## Cleanup Notes
 
-- `.pytest_cache` remains inaccessible to pytest cache writes on this machine (`WinError 5`); this is a local cache warning, not product data. No cleanup action taken.
-- Fixed active task docs are UTF-8 readable:
-  - `TASK.md`
-  - `CHANGELOG.md`
-  - `QA_REPORT.md`
-  - `DISPATCH.md`
-  - `CURRENT_STATE.md`
-- Global source scan notes:
-  - DB-backed cross-day memory: `services/cross_day_context.py`, `load_backtest_context`, market/theme evidence.
-  - Same-run technical indicators: `services/analysis.py`, `core/signal_snapshot.py`, `load_report_daily_kline`.
-  - Trend continuation uses a fixed research artifact plus OHLCV rows; existing tests ensure missing OHLCV source rows fail closed.
+- `.pytest_cache` remains inaccessible to pytest cache writes on this machine (`WinError 5`); this is a local cache warning, not product data.
+- No obsolete production DB rows were touched.
+- No table was deleted.
+- No runtime output was added as source-of-truth.
 
 ## Pending Cleanup / Follow-ups
 
-- Next strategy patch should address outcome-audit flags:
-  - split hot / limit-up follow-through from pure chase risk;
-  - split quality D into weak-D vs repair-D;
-  - re-check low-RR target/stop anchors.
-- Observe next production `run_mode=bot` artifact for DB-gated multi-day rebound repair wording.
-- Review older mojibake in long-lived docs only in a dedicated documentation hygiene cycle; avoid mixing with product strategy patches.
-- Prior DB cleanup follow-ups:
-  - `market_theme_index_daily_bars`: decide whether placeholder OHLCV/member columns should be populated or hidden.
-  - `signal_outcomes`: implement or retire max-high/drawdown metrics.
+- Further split rule-outcome flags into sub-cases:
+  - limit-up lock vs limit-up rebound follow-through.
+  - HOT with supporting evidence vs pure chase.
+  - quality D caused by no setup vs quality D caused by scoring too strict.
+  - low RR caused by bad stop/target vs low RR caused by real poor reward.
+- Improve mobile summary only after next strategy replay shows which new `可準備` cases are genuinely useful.

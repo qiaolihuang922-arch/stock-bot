@@ -1,65 +1,66 @@
-# QA_REPORT: strategy_rule_outcome_audit_v21_1_20260616
+# QA_REPORT: strategy_soft_gate_patch_v21_1_20260616
 
 ## 測試範圍
 
-- DB read-only outcome audit tool。
-- Forward 1/3/5/10 日 outcome 對齊。
-- 每條 strategy gate 分組驗證。
-- Artifact read-only contract。
+- Strategy hard / soft gate split。
+- HOT / EXTENDED / LIMIT_REBOUND display and funnel state。
+- Low-RR gate behavior。
+- Official generator message list regression。
+- DB replay after patch。
 
 ## 關聯風險掃描
 
-- 風險 1: 工具寫 DB。
-  - 反證: artifact 固定 `db_write=false` / `schema_change=false` / `live_telegram=false`，腳本只讀 `daily_price`。
-- 風險 2: outcome 用假資料。
-  - 反證: `attach_outcomes` 只從 `rows_by_stock` 的 forward daily_price rows 取未來 close；測試覆蓋 1/3/10 日 return。
-- 風險 3: 只驗證可買，不驗證阻擋 gate。
-  - 反證: artifact 分別輸出 `by_funnel_state`、`by_primary_blocker`、`by_decision_type`、`by_entry_quality`、`by_volume_state`、`by_heat_state`。
-- 風險 4: 把 audit flag 誤當可買建議。
-  - 反證: QA 結論只說需要下一輪策略檢討，不宣告任何標的可買。
+- 風險 1: 軟阻擋被誤升成可買。
+  - 反證: soft-gate promotion only returns `可準備`; tests assert hot confirmed evidence is prepare, not buy.
+- 風險 2: 真硬阻擋被放行。
+  - 反證: LIMIT_LOCK / EXTREME / AVOID / failed breakout / RR<1.0 still hard gate.
+- 風險 3: source-error 被掩蓋成可準備。
+  - 反證: missing source remains hard in `_unheld_hard_gate_reasons`; only LIMIT_REBOUND source-only display avoids fake `等資料`.
+- 風險 4: 只改文案，策略沒變。
+  - 反證: DB replay state counts changed after patch: `可準備 364`, `可買 700`, `deadlock_suspected=false`.
 
 ## 跨區塊語意一致性
 
-- Outcome audit 與前一輪 buy-path replay 一致：
-  - 系統不是 deadlock。
-  - `等回測` 不是承諾可買。
-  - 有些 gate 可能偏嚴，需要下一輪策略調整。
+- `可準備` remains non-actionable preparation.
+- `隔日確認` is used for limit-up rebound / follow-through that cannot be chased.
+- HOT / EXTENDED is no longer always evidence-unavailable; EXTREME / AVOID remains hard.
+- Low RR is hard only when risk is genuinely poor (`RR<1.0`) or low quality + no setup.
 
 ## 使用者誤讀風險
 
-- `買點品質D` 整體後續偏強，不代表所有 D 都該買；它代表品質分數目前可能混入了「強勢但還沒確認」的案例。
-- `HOT / 漲停不追` 後續偏強，不代表能追漲停；它代表過熱 gate 可能需要拆成「完全不追」與「隔日可準備 / 分批觀察」。
-- `wait_breakout_low_rr` 偏強，代表 RR gate 可能太硬，下一輪要檢查 stop/target 設定是否導致 RR 被低估。
+- `可準備` can still be read as recommendation; summary/card wording must continue saying open/retest confirmation before action.
+- Outcome audit still flags several categories; this means further calibration is needed, not that every flagged group should be bought.
 
 ## 失敗標本反證
 
-- 原質疑: 多日連漲仍被擋，策略是否假判斷。
-- 反證:
-  - artifact 顯示多個偏強被擋 gate：
-    - `漲停反彈待確認` 5 日勝率 `73.91%`。
-    - `漲停不追` 5 日勝率 `63.04%`。
-    - `HOT` 5 日勝率 `61.76%`。
-  - 這證明 Owner 的質疑成立一部分：策略不是死機，但部分 gate 偏保守。
+- Owner failure specimen:
+  - multi-day rebound still shown as淘汰/等資料/等接近.
+  - strategy appeared to never generate buy or add paths.
+- Replayed evidence:
+  - `has_real_buyable_path=true`
+  - `has_prepare_path=true`
+  - `funnel_blocks_snapshot_tradeable=false`
+  - `snapshot_tradeable_blocked_by_funnel_days=0`
+  - `可買 700`
+  - `可準備 364`
 
 ## 質疑與反證
 
-- 質疑: `等量能` 是否太嚴？
-  - 反證: `等量能` 5 日勝率 `46.01%`，平均 `+0.221%`，目前不算主要過嚴 gate。
-- 質疑: `急彈待回測` 是否太嚴？
-  - 反證: `急彈待回測` 5 日勝率 `42.86%`，平均 `+0.1287%`，等回測有依據。
-- 質疑: `過熱 / 漲停不追` 是否太嚴？
-  - 反證: 是，artifact flags 指向需要下一輪分層修正。
+- 質疑: HOT / 漲停反彈是否仍被硬擋？
+  - 反證: HOT + supporting/confirmed evidence can become `可準備`; LIMIT_REBOUND becomes `隔日確認`.
+- 質疑: RR 是否仍無腦卡 1.5？
+  - 反證: RR hard gate now only hard at `<1.0`, or `<1.5` with low quality and `NO_SETUP`.
+- 質疑: 是否用了假跨日資料？
+  - 反證: replay artifacts read DB daily-price paths; no runtime memory or local cache is used as proof.
 
 ## 未測項目
 
-- 未模擬 intraday fill。
-- 未模擬實際下單 / position event。
-- 未做 live Telegram。
-- 未寫 DB。
-- 未修改策略，故尚未驗證修正後報文。
+- 未 live Telegram。
+- 未 DB write / backfill / prune。
+- 未驗證實際券商下單或 intraday fill。
 
 ## QA 結論
 
-conditional pass。
+通過。
 
-Outcome audit 工具與 artifact 通過；但策略本身暴露出 7 個需要下一輪修正的 gate，不能宣告策略完成。
+本輪修正已落地並通過 full pytest + DB replay。策略仍有後續細分空間，但原本「硬阻擋導致沒有買點路徑」的主要問題已被 replay 反證。

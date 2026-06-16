@@ -1,85 +1,72 @@
-# CHANGELOG: strategy_rule_outcome_audit_v21_1_20260616
+# CHANGELOG: strategy_soft_gate_patch_v21_1_20260616
 
 ## 修改內容與檔案
 
-- `scripts/audit_strategy_rule_outcomes.py`
-  - 新增 Supabase `daily_price` read-only outcome audit。
-  - 對前一輪 replay event 補 1/3/5/10 日 forward return。
-  - 計算每組平均報酬、勝率、平均 MFE、平均 MAE。
-  - 依 `funnel_state / primary_blocker / decision_type / entry_quality / volume_state / heat_state` 分組。
-  - 產生 `flags`，標出後續偏強但仍被 gate 擋住的規則。
-- `tests/test_strategy_rule_outcomes.py`
-  - 驗證 outcome 使用 forward DB 日線序列。
-  - 驗證 read-only artifact contract。
-  - 驗證偏強 blocker 會被標成 audit flag。
-- `reports/audit/strategy_rule_outcomes_v21_1_20260616.json`
-  - 產出本輪 rule outcome artifact。
+- `core/generator.py`
+  - `LIMIT_REBOUND` / `漲停反彈待確認` 從硬追高 blocker 拆出，改為隔日確認 / 回測承接。
+  - HOT / EXTENDED 不再一律視為硬過熱；只有 EXTREME / AVOID / LIMIT_LOCK / RR<1.0 保持硬擋。
+  - 新增 soft-gate candidate 判斷：需要 RR>=1.0、距離合理、品質可接受、量能不弱。
+  - confirmed/supporting evidence 可以把軟阻擋推到 `可準備`，但不會直接推到 `可買`。
+  - source-only missing 不再把漲停反彈誤改成 `等資料`。
+- `presentation/report.py`
+  - HOT / EXTENDED / LIMIT_REBOUND 不再預設顯示成 evidence unavailable。
+  - `可準備` 顯示保留 score/evidence，不再全部變成不適用。
+- `tests/test_generator_report.py`
+  - 更新 soft-gate 報文契約。
+  - 補 HOT evidence、低 RR、漲停反彈、summary funnel regression。
+- Audit artifacts:
+  - `reports/audit/strategy_buy_path_replay_v21_1_soft_gates_20260616.json`
+  - `reports/audit/strategy_rule_outcomes_v21_1_soft_gates_20260616.json`
 
 ## 契約影響
 
-- 新增審計工具，不改正式策略。
+- 報文版本仍為 `v21.1`。
+- 使用者可見 funnel 可能增加 `可準備`，減少把 HOT / LIMIT_REBOUND 直接打成硬不可行動。
+- `可準備` 仍不是下單訊號。
 - DB:
-  - read-only select from `daily_price`。
+  - read-only replay only。
   - 無 schema change。
   - 無 write/backfill/prune。
 - Telegram:
-  - 未改報文。
   - 未 live delivery。
-
-## 版本同步
-
-- Runtime 報文版本維持 `v21.1`。
-
-## 直接消費者同步
-
-- Owner / Architect 可用 artifact 判斷哪些 gate 需要下一輪策略修正。
-- Production runner 不受影響。
 
 ## 未影響模組
 
-- `core/generator.py` strategy/funnel 未改。
-- `services/analysis.py` 策略計算未改。
-- `presentation/report.py` 未改。
+- 不改 DB schema。
+- 不改 Render/GitHub dispatch。
+- 不改 holdings position source。
+- 不改 live Telegram sender。
 
 ## 自檢命令與結果
 
-- Targeted tests:
-  - `.\.venv\Scripts\python.exe -m pytest tests\test_strategy_rule_outcomes.py tests\test_strategy_buy_path_replay.py -q --tb=short`
-  - result: `5 passed, 1 warning`
+- Generator report:
+  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q --tb=short`
+  - result: `206 passed, 153 warnings, 46 subtests passed`
 - Full:
   - `.\.venv\Scripts\python.exe -m pytest -q --tb=short`
   - result: `489 passed, 8 skipped, 165 warnings, 110 subtests passed`
-- DB outcome replay:
-  - `.\.venv\Scripts\python.exe scripts\audit_strategy_rule_outcomes.py --lookback-days 730 --version v21.1 --output reports\audit\strategy_rule_outcomes_v21_1_20260616.json`
+- DB buy-path replay:
+  - `.\.venv\Scripts\python.exe scripts\audit_strategy_buy_path_replay.py --lookback-days 730 --version v21.1 --output reports\audit\strategy_buy_path_replay_v21_1_soft_gates_20260616.json`
   - result:
-    - events: `5798`
-    - events_with_10d_outcome: `5678`
-    - flags: `7`
-
-## 主要發現
-
-- `可買` 組 5 日平均報酬 `+0.647%`，勝率 `48.43%`，屬 mixed，不是完全錯也不是強優勢。
-- `等量能` 5 日平均報酬 `+0.221%`，勝率 `46.01%`，阻擋大致合理。
-- `急彈待回測` 5 日平均報酬 `+0.1287%`，勝率 `42.86%`，等回測有依據。
-- 需要下一輪策略檢討的 flags:
-  - `隔日確認`: 5 日 `+8.5878%`，勝率 `78.26%`。
-  - `漲停不追`: 5 日 `+3.288%`，勝率 `63.04%`。
-  - `漲停反彈待確認`: 5 日 `+9.1624%`，勝率 `73.91%`。
-  - `買點品質D`: 5 日 `+2.1268%`，勝率 `59.83%`。
-  - `過熱觀察`: 5 日 `+6.1338%`，勝率 `61.67%`。
-  - `wait_breakout_low_rr`: 5 日 `+3.7397%`，勝率 `57.46%`。
-  - `HOT`: 5 日 `+5.5882%`，勝率 `61.76%`。
+    - `deadlock_suspected=false`
+    - `has_real_buyable_path=true`
+    - `has_prepare_path=true`
+    - `snapshot_tradeable_blocked_by_funnel_days=0`
+    - `可買 700`
+    - `可準備 364`
+- DB rule outcome replay:
+  - `.\.venv\Scripts\python.exe scripts\audit_strategy_rule_outcomes.py --lookback-days 730 --version v21.1 --output reports\audit\strategy_rule_outcomes_v21_1_soft_gates_20260616.json`
+  - result: still flags 7 categories for future sub-classification.
 
 ## 覆蓋層級
 
-- production DB read-only: covered via `daily_price` replay。
-- helper/script: covered。
-- official generator: reused through previous replay event generation。
-- runner artifact: not changed in this cycle。
+- helper / formatter: covered。
+- official generator: covered by generator report tests。
+- DB replay artifact: covered。
+- production DB write: not run by design。
 - live Telegram: not run by design。
 
 ## 殘留風險
 
-- Outcome replay 使用日收盤，不模擬盤中成交、滑價與停損觸發。
-- flags 只代表「需要檢討」，不能直接等於「立刻買」。
-- 下一輪若要修策略，應針對 flags 補分層規則，而不是硬改文案。
+- Rule outcome audit still says hot / limit-up / quality-D categories need finer sub-classification.
+- Current patch reduces hard-gate deadlock; it does not prove every candidate should become buyable.

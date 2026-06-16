@@ -302,9 +302,9 @@ def _score_data_text(report_context, name, data, deps):
 
 def _is_heat_blocked(stock_result):
     return (
-        stock_result.get("heat_state") in {"HOT", "EXTREME"}
-        or stock_result.get("trade_state") in {"EXTENDED", "AVOID"}
-        or stock_result.get("price_behavior") in {"LIMIT_LOCK", "LIMIT_REBOUND"}
+        stock_result.get("heat_state") == "EXTREME"
+        or stock_result.get("trade_state") == "AVOID"
+        or stock_result.get("price_behavior") == "LIMIT_LOCK"
         or str(stock_result.get("extended_level") or "") in {"3", "4", "5"}
     )
 
@@ -380,6 +380,8 @@ def _unheld_score_text_for_state(score_text, rr_text, valid_entry, funnel_state,
         and funnel_state == "可準備"
     ):
         return "不適用（盤後待確認）｜原因：盤後待確認，需開盤後重新確認"
+    if funnel_state == "可準備":
+        return score_text
     reason = _hidden_score_reason(rr_text, funnel_state, state)
     if reason == "RR不足":
         return "不適用（風險報酬不足）｜原因：風險報酬不足，等待修復"
