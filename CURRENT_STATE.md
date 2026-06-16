@@ -32,7 +32,7 @@
 - Targeted summary tests passed.
 - Full pytest passed: `484 passed, 8 skipped, 165 warnings, 110 subtests passed`.
 - Official dry-run summary matches Owner-visible route.
-- Code commit pushed; closeout doc commit pending git completion.
+- Code and closeout docs pushed; git completion passed.
 
 ## Known Follow-ups
 

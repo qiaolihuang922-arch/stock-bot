@@ -39,8 +39,8 @@
 ## Current Git State
 
 - branch: `main`
-- completion: git completion pending after closeout doc commit.
+- completion: git completion passed after push.
 
 ## Next Action
 
-- Run git completion after closeout doc commit.
+- Observe next production `run_mode=bot` artifact.
