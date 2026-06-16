@@ -45,10 +45,10 @@
 
 - branch: `main`
 - implementation commit: `cd3017a Add DB-backed low repair state`
-- readability follow-up: local changes ready for commit.
-- pushed to upstream: previous closeout yes.
-- git completion gate: run after readability follow-up commit.
+- readability follow-up commit: `cd78bc8 Clarify low repair entry progress`
+- pushed to upstream: yes.
+- git completion gate: run after closeout doc update.
 
 ## Next Action
 
-- Commit and push readability follow-up, then run git completion gate.
+- Push closeout doc update and run git completion gate.
