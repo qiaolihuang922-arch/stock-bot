@@ -3,7 +3,7 @@
 ## Active
 
 - task_md_holds: `multi_day_rebound_retest_v21_1_20260616`
-- status: `implemented + QA passed, pending commit/push`
+- status: `implemented + QA passed + pushed`
 - current_version: `v21.1`
 - no live Telegram delivery in this cycle.
 - no DB schema/write/backfill in this cycle.
@@ -34,12 +34,11 @@
 
 ## Current Git State
 
-- pending commit/push for:
-  - `core/generator.py`
-  - `presentation/report.py`
-  - `tests/test_generator_report.py`
-  - handoff docs
+- branch: `main`
+- upstream: `origin/main`
+- worktree/index: clean after closeout push
+- HEAD equals upstream: true after closeout push
 
 ## Next Action
 
-- Commit and push this cycle, then run git completion gate.
+- Observe next scheduled `run_mode=bot` report and confirm production Telegram artifact matches dry-run wording.
