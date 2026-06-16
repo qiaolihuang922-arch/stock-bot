@@ -25,8 +25,13 @@
   - `等低位修復` is allowed only when `cross_day_context.source_of_truth` includes `daily_price` and enough DB daily points exist.
   - It is not a buy signal.
   - Effective buy requires support hold + reclaim 5-day MA + volume repair + risk/reward >= 1.5.
+  - Telegram now shows condition progress: `已滿足 ...；還差 ...`.
 - Far pullback/reclaim stocks with DB daily_price no longer get forced back to `等接近突破區`.
 - Missing / insufficient DB daily_price still fails closed.
+- Readability audit rule from Owner:
+  - keep lines only if they help answer what the reader should wait for.
+  - do not broad-delete evidence lines; confirmed / insufficient-evidence data can be useful.
+  - hide misleading helper lines when they conflict with the visible action.
 
 ## Verification State
 
@@ -36,6 +41,8 @@
 - Full pytest passed:
   - `491 passed, 8 skipped, 169 warnings, 110 subtests passed`
 - Official generator dry-run generated `4` messages and showed 仁寶 / 緯創 / 技嘉 as `等低位修復`.
+- Follow-up full pytest passed after condition-progress patch:
+  - `491 passed, 8 skipped, 169 warnings, 110 subtests passed`
 
 ## Known Findings
 
@@ -44,4 +51,4 @@
 
 ## Next Action
 
-- Push closeout doc update and run git completion gate.
+- Commit and push readability follow-up, then run git completion gate.

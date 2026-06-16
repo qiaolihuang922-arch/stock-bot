@@ -15,6 +15,8 @@
 - `presentation/report.py`
   - 新增低位修復卡片:
     - 路線、近期支撐、5日均、量能比、有效買點。
+    - 條件進度: 已滿足項目與還差項目。
+  - 非買入的 `可準備` 卡隱藏容易誤讀的 `交易狀態：可準備` helper line。
   - 盤後等待卡隱藏不適用型 `數據` 噪音。
 - `tests/test_generator_report.py`
   - 新增 DB-backed low repair regression。
@@ -59,6 +61,7 @@
 - Official generator dry-run:
   - result: `4` messages generated, no live Telegram.
   - unheld cards now show 仁寶 / 緯創 / 技嘉 as `等低位修復` with DB-backed support / 5-day MA / volume evidence.
+  - condition progress now shows `已滿足` and `還差`, so the reader can see what is actually blocking entry.
 
 ## 覆蓋層級
 

@@ -3794,6 +3794,8 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("路線：突破買點太遠，改看低位修復", unheld)
         self.assertIn("觀察：近期支撐 158", unheld)
         self.assertIn("5日均 159.4", unheld)
+        self.assertIn("條件：已滿足 支撐未破", unheld)
+        self.assertIn("還差 站回5日均 159.4、量能資料補齊", unheld)
         self.assertIn("有效買點：近期支撐不破 + 站回5日均 + 量能轉強 + 風險報酬 >= 1.5", unheld)
         self.assertNotIn("不適用（不可行動）", unheld)
         self.assertNotIn("尚未接近突破區", unheld)

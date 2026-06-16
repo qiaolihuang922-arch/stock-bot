@@ -592,6 +592,65 @@ def _low_repair_anchor_text(data):
     return "｜".join(parts)
 
 
+def _low_repair_progress_text(data):
+    points = _daily_price_points(data)
+    if len(points) < 4:
+        return "還差 DB日線補齊"
+    stock_result = (data or {}).get("result") or {}
+    closes = [point["close"] for point in points]
+    lows = [point.get("low", point["close"]) for point in points]
+    support = min((lows[-5:] if len(lows) >= 5 else lows))
+    latest_close = closes[-1]
+    met = []
+    missing = []
+
+    if latest_close >= support:
+        met.append("支撐未破")
+    else:
+        missing.append(f"守回支撐 {_gate_value_text(support)}")
+
+    if len(closes) >= 5:
+        ma5 = sum(closes[-5:]) / 5
+        if latest_close >= ma5:
+            met.append("站上5日均")
+        else:
+            missing.append(f"站回5日均 {_gate_value_text(ma5)}")
+    else:
+        missing.append("5日均資料補齊")
+
+    volume_values = [point.get("volume") for point in points if point.get("volume") is not None]
+    if len(volume_values) >= 5:
+        avg_volume = sum(volume_values[-5:]) / 5
+        latest_volume = volume_values[-1]
+        volume_ratio = latest_volume / avg_volume if avg_volume else None
+        if volume_ratio is not None and volume_ratio >= 1:
+            met.append(f"量能有效 {_gate_value_text(volume_ratio)}x")
+        elif volume_ratio is not None:
+            missing.append(f"量能轉強（目前 {_gate_value_text(volume_ratio)}x）")
+        else:
+            missing.append("量能資料補齊")
+    else:
+        missing.append("量能資料補齊")
+
+    try:
+        rr_value = float(stock_result.get("rr"))
+    except (TypeError, ValueError):
+        rr_value = None
+    if rr_value is not None and rr_value >= 1.5:
+        met.append("風險報酬達標")
+    elif rr_value is not None:
+        missing.append(f"風險報酬 {_gate_value_text(rr_value)}→1.5")
+    else:
+        missing.append("風險報酬資料補齊")
+
+    parts = []
+    if met:
+        parts.append("已滿足 " + "、".join(met))
+    if missing:
+        parts.append("還差 " + "、".join(missing))
+    return "；".join(parts) if parts else "等待低位修復確認"
+
+
 def _low_repair_unlock_text(data):
     return "近期支撐不破 + 站回5日均 + 量能轉強 + 風險報酬>=1.5"
 
@@ -853,6 +912,7 @@ def _readable_rr_terms(text):
         ("RR ", "風險報酬 "),
         ("等RR", "等風險報酬"),
         ("風險報酬>=", "風險報酬 >="),
+        ("風險報酬 >=1.5", "風險報酬 >= 1.5"),
         ("品質B以上", "品質 B 以上"),
     ]
     for old, new in replacements:
@@ -961,12 +1021,12 @@ def _unheld_entry_contract(data, dist, blockers, valid_entry, funnel_state, sour
             basis="",
         )
     if funnel_state == "等低位修復":
-        return contract(
-            "突破買點太遠，改看低位修復",
-            _low_repair_anchor_text(data),
-            _low_repair_unlock_text(data),
-            basis="",
-        )
+        return {
+            "reason": "突破買點太遠，改看低位修復",
+            "gap": _low_repair_anchor_text(data),
+            "unlock": _low_repair_unlock_text(data),
+            "extras": [f"條件：{_low_repair_progress_text(data)}"],
+        }
     if "急彈待回測" in blocker_text:
         retest_text = _retest_zone_text(data)
         unlock_text = _retest_unlock_text(data)
@@ -1396,6 +1456,7 @@ def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None):
                 lines.append(f"路線：{reason}")
             if gap:
                 lines.append(f"觀察：{gap}")
+            lines.extend(extras)
             if unlock:
                 lines.append(f"有效買點：{unlock}")
             return lines
@@ -1525,6 +1586,7 @@ def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None):
             lines.append(f"路線：{reason}")
         if gap:
             lines.append(f"觀察：{gap}")
+        lines.extend(extras)
         if unlock:
             lines.append(f"有效買點：{unlock}")
         return lines
@@ -1557,7 +1619,7 @@ def _compact_unheld_trade_state_line(line, *, valid_entry=False, post_market_pre
         return line
     if data_source_blocked:
         return None
-    if funnel_state in {"等冷卻", "等回測", "等型態", "等接近", "等低位修復", "等RR修復", "淘汰"}:
+    if funnel_state in {"可準備", "等冷卻", "等回測", "等型態", "等接近", "等低位修復", "等RR修復", "淘汰"}:
         return None
     return line
 

@@ -20,7 +20,12 @@
 - User-visible dry-run result:
   - 仁寶、緯創、技嘉 now show `等低位修復｜低位修復觀察`.
   - card shows `近期支撐`, `5日均`, `量能`, and effective buy conditions.
+  - card now also shows condition progress: which low-repair requirements are already met and what still blocks entry.
   - `距突破` remains visible.
+- Follow-up readability audit:
+  - kept useful evidence lines for confirmed / insufficient-evidence prepare cards.
+  - hid only the misleading `交易狀態：可準備` helper line from non-buy prepare cards.
+  - did not broad-delete data lines after tests showed it would remove useful evidence.
 
 ## Verification
 
@@ -34,14 +39,16 @@
   - result: `491 passed, 8 skipped, 169 warnings, 110 subtests passed`
 - Official generator dry-run:
   - result: `4` messages generated, no live Telegram.
+  - low-repair cards show `條件：已滿足 ...；還差 ...`.
 
 ## Current Git State
 
 - branch: `main`
 - implementation commit: `cd3017a Add DB-backed low repair state`
-- pushed to upstream: yes.
-- git completion gate: run after closeout doc commit.
+- readability follow-up: local changes ready for commit.
+- pushed to upstream: previous closeout yes.
+- git completion gate: run after readability follow-up commit.
 
 ## Next Action
 
-- Push closeout doc update and run git completion gate.
+- Commit and push readability follow-up, then run git completion gate.
