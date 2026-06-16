@@ -2,7 +2,7 @@
 
 ## Current Task
 
-- task_id: `rebound_retest_anchor_wording_v21_1_20260616`
+- task_id: `strategy_buy_path_db_replay_audit_v21_1_20260616`
 - status: `implemented + QA passed + full pytest passed`
 - version: `v21.1`
 - no live Telegram delivery.
@@ -20,24 +20,24 @@
 ## Current Implementation State
 
 - Runtime report remains `v21.1`.
-- Multi-day rebound retest cards still require DB-backed `daily_price` cross-day context.
-- The user-visible retest anchor now says:
-  - `最近反彈收盤 N 附近`
-- It no longer says:
-  - `最近修復支撐 N 附近`
-- Meaning:
-  - the bot is waiting for a pullback/retest near the latest rebound close and confirmation that it does not break;
-  - it is not claiming the retest already happened;
-  - it is not claiming a true support level was computed.
+- New read-only strategy replay tool:
+  - `scripts/audit_strategy_buy_path_replay.py`
+- New replay artifact:
+  - `reports/audit/strategy_buy_path_replay_v21_1_20260616.json`
+- Replay result:
+  - events: `5798`
+  - buyable/trend stock-days: `700`
+  - buy-like including prepare: `1035`
+  - snapshot tradeable blocked by funnel: `0`
+  - deadlock suspected: `false`
 
 ## Verification State
 
-- Targeted official formatter tests passed.
-- Full pytest passed: `484 passed, 8 skipped, 165 warnings, 110 subtests passed`.
-- Official dry-run 群創 / 旺宏 cards match the new wording.
-- Code and closeout docs pushed in commit `c555562`; git completion passed.
+- Targeted replay tests passed: `6 passed, 1 warning`.
+- Full pytest passed: `486 passed, 8 skipped, 165 warnings, 110 subtests passed`.
+- Commit/push pending.
 
 ## Known Follow-ups
 
-- Observe next production `run_mode=bot` artifact after push.
-- If Owner wants true support wording later, implement a real support source first: swing low / moving average / volume area / pivot, with DB-backed evidence and tests.
+- Run full pytest and complete git closeout.
+- If Owner wants next strategy audit, run outcome replay for buyable days: next 1/3/5/10 day returns, MAE/MFE and stop-hit rate.

@@ -2,13 +2,20 @@
 
 ## Completed This Cycle
 
+- Added read-only strategy buy-path DB replay audit:
+  - script: `scripts/audit_strategy_buy_path_replay.py`;
+  - artifact: `reports/audit/strategy_buy_path_replay_v21_1_20260616.json`;
+  - no DB write / no schema change / no live Telegram.
+
+## Previous Cycle Summary
+
 - Compressed current handoff files for `rebound_retest_anchor_wording_v21_1_20260616`.
 - Fixed overclaimed rebound retest wording:
   - `最近修復支撐` replaced by `最近反彈收盤`;
   - cross-day memory remains DB `daily_price` gated;
   - no strategy threshold / DB write / live Telegram change.
 
-## Previous Cycle Summary
+## Earlier Cycle Summary
 
 - Compressed current handoff files for `explicit_approach_zone_wording_v21_1_20260616`.
 - Fixed vague `等接近` wording:
