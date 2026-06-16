@@ -99,6 +99,28 @@ def render_payload(closes, holding=None, price=None, change=0):
     }
 
 
+def db_price_context(stock_code, closes, start_day=10):
+    points = []
+    for index, close in enumerate(closes):
+        points.append({
+            "trade_date": f"2026-06-{start_day + index:02d}",
+            "close": close,
+            "source": "daily_price",
+        })
+    return {
+        "symbol": stock_code,
+        "source_status": "ready",
+        "source_of_truth": ["daily_price"],
+        "previous_state": "unknown",
+        "consecutive_observe_days": 0,
+        "repair_status": "unknown",
+        "failure_status": "unknown",
+        "historical_evidence_weight": 0,
+        "weight_reason": [],
+        "recent_daily_price_points": points,
+    }
+
+
 def trend_continuation_rows():
     rows = []
     for idx in range(26):
@@ -2962,6 +2984,26 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("建議買入", card)
 
     def test_v21_1_multi_day_weak_rebound_repairs_from_rejected_to_retest_wait(self):
+        no_db_payload = render_payload(
+            [190, 186, 182, 178, 174, 170, 166, 162, 158, 154, 150, 147, 144, 142, 140, 145, 148, 150, 155, 159],
+            None,
+            price=165,
+            change=3.77,
+        )
+        no_db_payload["stock_code"] = "2337"
+        no_db_payload["result"].update({
+            "decision": "WAIT",
+            "price_behavior": "WEAK_REBOUND",
+            "structure_phase": "WEAK_REBOUND",
+            "market_grade": "D",
+            "entry_quality": "D",
+            "rr": 2.2,
+            "live_change": 3.77,
+            "breakout_distance": 6.9,
+        })
+        self.assertEqual(generator.unheld_funnel_state("旺宏", no_db_payload), "淘汰")
+        self.assertFalse(generator.multi_day_rebound_needs_retest(no_db_payload))
+
         payload = render_payload(
             [190, 186, 182, 178, 174, 170, 166, 162, 158, 154, 150, 147, 144, 142, 140, 145, 148, 150, 155, 159],
             None,
@@ -2974,6 +3016,10 @@ class GeneratorReportTest(unittest.TestCase):
         payload["volume_ratio_20"] = 0.26
         payload["retest_zone_low"] = 175.5
         payload["retest_zone_high"] = 176.38
+        payload["cross_day_context"] = db_price_context(
+            "2337",
+            [140, 145, 148, 150, 155, 159],
+        )
         payload["result"].update({
             "decision": "WAIT",
             "price_behavior": "WEAK_REBOUND",
@@ -9289,6 +9335,10 @@ class GeneratorReportTest(unittest.TestCase):
         weak_rebound["result"]["price_behavior"] = "WEAK_REBOUND"
         weak_rebound["result"]["structure_phase"] = "WEAK_REBOUND"
         weak_rebound["result"]["entry_quality"] = "D"
+        weak_rebound["cross_day_context"] = db_price_context(
+            "3481",
+            [42, 44, 47, 49, 51.4],
+        )
         prepare = self.evidence_payload(confidence=86, decision="BUY", action=0.1, rr=1.8, distance=0.5)
         prepare["stock_code"] = "2301"
         prepare["backtest_context"] = {"sample": 36, "reference": "高", "win_rate": 58, "avg_return": 1.2}

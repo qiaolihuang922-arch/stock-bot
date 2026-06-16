@@ -88,6 +88,7 @@ VERSION = "v21.1"
 PERSISTENT_CROSS_DAY_SOURCES = {
     "positions",
     "position_events",
+    "daily_price",
     "daily_signal_snapshot",
     "signal_runs",
     "signal_items",
@@ -673,6 +674,27 @@ def is_strong_intraday_rebound(result):
     return change is not None and change >= 7
 
 
+def persistent_recent_price_values(data, min_points=4):
+    context = cross_day_context(data)
+    sources = context.get("source_of_truth") or []
+    if isinstance(sources, str):
+        sources = [sources]
+    if not cross_day_ready(data) or "daily_price" not in sources:
+        return []
+
+    values = []
+    for point in context.get("recent_daily_price_points") or []:
+        if (point or {}).get("source") != "daily_price":
+            continue
+        try:
+            values.append(float(point.get("close")))
+        except (AttributeError, TypeError, ValueError):
+            continue
+    if len(values) < min_points:
+        return []
+    return values
+
+
 def multi_day_rebound_needs_retest(data):
     data = data or {}
     result = data.get("result") or {}
@@ -688,22 +710,7 @@ def multi_day_rebound_needs_retest(data):
     ):
         return False
 
-    values = []
-    for value in data.get("closes") or []:
-        try:
-            number = float(value)
-        except (TypeError, ValueError):
-            continue
-        values.append(number)
-
-    price = data.get("price")
-    try:
-        live_price = float(price)
-    except (TypeError, ValueError):
-        live_price = None
-    if live_price is not None and (not values or abs(values[-1] - live_price) > 1e-9):
-        values.append(live_price)
-
+    values = persistent_recent_price_values(data, min_points=4)
     if len(values) < 4:
         return False
 

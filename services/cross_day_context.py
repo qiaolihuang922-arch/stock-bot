@@ -31,6 +31,7 @@ ACTION_ALIASES = {
 PERSISTENT_SOURCE_TABLES = {
     "positions",
     "position_events",
+    "daily_price",
     "daily_signal_snapshot",
     "signal_runs",
     "signal_items",
@@ -241,6 +242,30 @@ def _latest_execution_memory(rows):
     }
 
 
+def _recent_daily_price_points(rows, symbol, max_points=8):
+    points = []
+    seen_dates = set()
+    for row in rows or []:
+        if str(row.get("stock_id")) != str(symbol):
+            continue
+        trade_date = row.get("trade_date")
+        if not trade_date or trade_date in seen_dates:
+            continue
+        try:
+            close = float(row.get("close"))
+        except (TypeError, ValueError):
+            continue
+        points.append({
+            "trade_date": str(trade_date),
+            "close": close,
+            "source": "daily_price",
+        })
+        seen_dates.add(trade_date)
+        if len(points) >= max_points:
+            break
+    return list(reversed(points))
+
+
 def _today_event_guard(today_events):
     today_events = today_events or {}
     if today_events.get("bought_shares", 0) > 0:
@@ -291,6 +316,7 @@ def build_cross_day_contexts(results_map, client=None, today_position_events=Non
     rows_by_table = {}
     for table, fields in [
         ("daily_signal_snapshot", "stock_id,trade_date,version,action,is_tradeable,position_state,reasons"),
+        ("daily_price", "stock_id,trade_date,close"),
     ]:
         try:
             rows_by_table[table] = _fetch_rows(client, table, fields, limit)
@@ -320,6 +346,10 @@ def build_cross_day_contexts(results_map, client=None, today_position_events=Non
             row for row in rows_by_table.get("position_events", [])
             if str(row.get("stock_code")) == symbol or row.get("stock_name") == name
         ]
+        recent_price_points = _recent_daily_price_points(
+            rows_by_table.get("daily_price", []),
+            symbol,
+        )
         latest_snapshot = snapshot_rows[0] if snapshot_rows else None
         previous_state = _state_from_snapshot(latest_snapshot)
         today_state = _today_state(data)
@@ -348,6 +378,8 @@ def build_cross_day_contexts(results_map, client=None, today_position_events=Non
             context_sources.append("daily_signal_snapshot")
         if event_rows:
             context_sources.append("position_events")
+        if recent_price_points:
+            context_sources.append("daily_price")
         context_sources = [
             source for source in context_sources
             if source in PERSISTENT_SOURCE_TABLES
@@ -367,6 +399,7 @@ def build_cross_day_contexts(results_map, client=None, today_position_events=Non
             reasons = []
             dedupe_guard = "unknown"
             execution_memory = None
+            recent_price_points = []
         contexts[name] = {
             **empty_cross_day_context(symbol, status=status, sources=context_sources),
             "source_status": status,
@@ -379,6 +412,7 @@ def build_cross_day_contexts(results_map, client=None, today_position_events=Non
             "failure_status": failure_status,
             "historical_evidence_weight": max(-2, min(2, weight)),
             "weight_reason": reasons[:3],
+            "recent_daily_price_points": recent_price_points,
             "dedupe_guard": dedupe_guard,
             "execution_memory": execution_memory,
             "same_run_guard": today_guard,

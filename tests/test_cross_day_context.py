@@ -170,6 +170,33 @@ class CrossDayContextTest(unittest.TestCase):
         self.assertEqual(context["previous_state"], "observe")
         self.assertEqual(context["repair_status"], "repaired")
 
+    def test_daily_price_points_are_persistent_cross_day_source(self):
+        client = Client({
+            "daily_signal_snapshot": [],
+            "position_events": [],
+            "daily_price": [
+                {"stock_id": "2337", "trade_date": "2026-06-16", "close": 159},
+                {"stock_id": "2337", "trade_date": "2026-06-15", "close": 155},
+                {"stock_id": "2337", "trade_date": "2026-06-14", "close": 150},
+                {"stock_id": "2337", "trade_date": "2026-06-13", "close": 148},
+                {"stock_id": "3481", "trade_date": "2026-06-16", "close": 51.4},
+            ],
+        })
+
+        contexts = build_cross_day_contexts(
+            {"旺宏": payload()},
+            client=client,
+            now=datetime(2026, 6, 16),
+        )
+
+        context = contexts["旺宏"]
+        self.assertEqual(context["source_status"], "ready")
+        self.assertEqual(context["source_of_truth"], ["daily_price"])
+        self.assertEqual(
+            [point["close"] for point in context["recent_daily_price_points"]],
+            [148.0, 150.0, 155.0, 159.0],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

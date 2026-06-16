@@ -1,49 +1,55 @@
-# QA_REPORT: multi_day_rebound_retest_v21_1_20260616
+# QA_REPORT: cross_day_source_truth_v21_1_20260616
 
 ## 測試範圍
 
-- 未持倉 `WEAK_REBOUND` 多日修復分類。
-- 單日急彈分類不回退。
-- 突破失敗仍淘汰。
-- official generator dry-run。
+- cross-day source-of-truth contract。
+- `daily_price` recent close points ingestion。
+- 多日弱反彈修復升級。
+- 手機報文 replay summary / card。
+- 趨勢延續與策略證據相關回歸。
 
 ## 關聯風險掃描
 
-- 多日修復只把狀態從淘汰改成等回測，不會直接變可買。
-- 使用當次 payload 的 `closes` 與 `price`，沒有假裝跨日記憶。
-- 硬失敗 (`decision=FAIL` / `FAILED_BREAKOUT`) 不被覆蓋。
-- DB 未改，無 live Telegram。
+- 原問題是驗收降層：前一輪只驗 payload `closes`，沒有驗 DB source。
+- 新負面測試確認：沒有 DB `daily_price` context 時，即使 payload closes 連漲，也不能觸發 `反彈修復待回測`。
+- 新正面測試確認：有 DB `daily_price` context 且最近點連續抬高，才可觸發等回測。
+- `daily_price` read error 會透過 cross-day source-error fail closed。
+- 技術指標仍可用 Yahoo/TWSE payload，但不得被標成跨日記憶。
 
 ## 跨區塊語意一致性
 
-- 卡片 title、進場、缺口、summary funnel 都一致為 `等回測`。
-- summary 不再把多日修復弱反彈列入淘汰。
-- 回測條件仍要求非追高與量能有效。
+- `source_of_truth` 包含 `daily_price` 時才有 `recent_daily_price_points`。
+- 多日修復仍只到 `等回測`，不會變成可買或可準備。
+- 報文保留「不買，等回測」與可買條件，不會誤導追高。
 
 ## 使用者誤讀風險
 
-- `等回測` 明確表示不是可買。
-- `反彈修復待回測` 比 `弱反彈待確認` 更符合連漲後狀態。
-- 突破失敗仍顯示淘汰，避免把失敗型態誤升級。
+- 報文目前不直接顯示 `daily_price` source，避免噪音；但策略內部已改為 DB source gate。
+- 若 Owner 需要可視化來源，可下一輪在 debug artifact 或報文 source line 加簡短 `來源：daily_price`，不建議每張卡常駐顯示。
 
 ## 失敗標本反證
 
-- Owner 06/16 盤中旺宏樣本對照 dry-run:
-  - before: `淘汰｜弱反彈待確認`
-  - after: `等回測｜反彈修復待回測`
-  - 可買條件: `先站回突破區 175.5~176.38，再回測不破 + 非追高 + 量能有效`
+- Owner 質疑：「最近四個價格點不查數據庫怎麼來的」。
+- 反證結果：
+  - 之前來源確實是 payload closes。
+  - 現在 `multi_day_rebound_needs_retest` 只讀 `cross_day_context.recent_daily_price_points`。
+  - read-only DB 查到旺宏 `daily_price` 最近點：135.0 -> 140.0 -> 146.5 -> 159.0。
+  - official dry-run 旺宏顯示 `等回測｜反彈修復待回測`，不是 `淘汰｜弱反彈待確認`。
 
 ## 質疑與反證
 
-- 質疑: 是否因為旺宏單檔硬寫？
-  - 反證: 規則用 `closes` / `price` / `WEAK_REBOUND` / hard-fail exclusion，群創符合時同樣升為等回測。
-- 質疑: 是否放寬成追高買？
-  - 反證: 狀態只到 `等回測`，沒有進入 `可買` 或 `可準備`。
+- 質疑: 是否只是硬改文字？
+  - 反證: 沒有 DB context 的同樣 closes fixture 現在回 `淘汰`，有 DB context 才回 `等回測`。
+- 質疑: 是否用了假 DB rows？
+  - 反證: `build_cross_day_contexts` 直接從 Supabase client 的 `daily_price` 查詢結果組 points；測試 fixture 明確標 source，production dry-run另用 read-only DB 查證。
+- 質疑: 是否誤傷趨勢延續？
+  - 反證: `test_trend_continuation` 與 generator 趨勢延續 tests 通過；缺 OHLCV source rows 時仍 fail closed。
 
 ## 未測項目
 
-- 未送 live Telegram。
-- 未驗 GitHub scheduled runner 實際 artifact。
+- 未做 live Telegram delivery。
+- 未做 GitHub scheduled runner artifact 驗證。
+- 未做 DB write/backfill/prune。
 
 ## QA 結論
 
