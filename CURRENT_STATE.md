@@ -30,7 +30,7 @@
 - Targeted等接近 tests passed.
 - Full pytest passed: `484 passed, 8 skipped, 165 warnings, 110 subtests passed`.
 - Official dry-run 技嘉 card matches Owner-visible route.
-- Pending commit / push.
+- Code and closeout docs pushed; git completion passed.
 
 ## Known Follow-ups
 

@@ -32,8 +32,8 @@
 ## Current Git State
 
 - branch: `main`
-- completion: pending commit / push.
+- completion: git completion passed after push.
 
 ## Next Action
 
-- Commit and push.
+- Observe next production `run_mode=bot` artifact.
