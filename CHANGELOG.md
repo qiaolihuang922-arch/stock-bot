@@ -1,22 +1,28 @@
-# CHANGELOG: dry_run_strategy_evidence_near_breakout_v21_1_20260616
+# CHANGELOG: afterhours_summary_trade_plan_v21_1_20260616
 
 ## 修改內容與檔案
 
-- `core/generator.py`
-  - `generate_report(dry_run=True)` 改為 read-only 載入 `load_strategy_evidence_summary(get_supabase_client(), VERSION)`。
-  - dry-run 仍不寫 DB；讀取失敗時沿用 `format_strategy_evidence_summary(error=...)` fail closed。
-  - `unheld_funnel_assessment` 在掉入淘汰前，接住 `<=5%` 接近突破、`entry_quality=C`、非 D/E、非硬結構失敗的追蹤態。
+- `presentation/report.py`
+  - `_afterhours_brief_lines` 改為交易計畫摘要。
+  - 移除盤後 summary 的市場統計流水與今日買入重複行。
+  - 新增 `明日計畫` 聚合：
+    - 今日買入風控優先。
+    - 今日買入觀察守警戒。
+    - 有新倉候選 / 可準備時列明開盤確認。
+    - 無新倉候選時用未持倉策略分組作明日追蹤。
+  - `未持倉狀態` 僅在 actionable / prepare 存在時顯示。
 - `tests/test_generator_report.py`
-  - near-breakout C 品質 regression 直接驗證 funnel state 是追蹤態，不是淘汰。
+  - 更新盤後 summary regression，防止市場統計流水、空新倉占位、無操作漏斗回退。
 
 ## 契約影響
 
-- 本地 dry-run 報文與 production strategy evidence 判斷更一致。
-- 聯電這類接近突破 C 品質標的，不再因追蹤態未接住而變淘汰。
-- 沒有新增可買 / 加碼。
-- DB:
-  - 無 schema change。
-  - 無 write/backfill/prune。
+- 盤後 summary message list 變短：
+  - 保留結論 / 明日計畫 / 持倉風控檢查。
+  - 不再輸出空的新倉占位與純統計漏斗。
+- 策略判斷不變：
+  - 不新增可買。
+  - 不改持倉減碼 / 停損 / 續抱。
+  - 不改未持倉卡片判斷。
 
 ## 版本同步
 
@@ -24,35 +30,38 @@
 
 ## 直接消費者同步
 
-- `generate_report(dry_run=True)` covered。
-- `formatTelegramMessages` official message list covered。
-- runner / live Telegram 未執行。
+- `generate_report(dry_run=True)` official summary covered。
+- `formatTelegramMessages` targeted summary tests covered。
+- live Telegram 未執行。
 
 ## 未影響模組
 
-- 持倉風控核心未改。
-- future watch / fundamentals / history analogy 未改。
-- DB schema、RLS、grant、policy、role 未改。
+- `core/generator.py` 策略核心未改。
+- DB schema / write / backfill / prune 未改。
+- future watch、財報、歷史類比未改。
 
 ## 自檢命令與結果
 
+- Targeted:
+  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q --tb=short -k "afterhours or brief or summary or today_buy or funnel"`
+  - `37 passed, 169 deselected, 49 warnings, 3 subtests passed`
 - Full:
   - `.\.venv\Scripts\python.exe -m pytest -q --tb=short`
-  - `484 passed, 8 skipped, 110 subtests passed`
+  - `484 passed, 8 skipped, 165 warnings, 110 subtests passed`
 - Official dry-run:
   - `generate_report(dry_run=True)`
-  - 聯電可見結果: `等型態｜觀察`，`距突破：4.06%｜接近突破`
-  - summary: 未持倉 `僅追蹤8`，不含聯電淘汰。
+  - Summary now:
+    - `結論：新倉無有效進場；今日買入紀錄已轉風控。`
+    - `明日計畫：英業達、建準減碼/停損優先；未持倉：華邦電、南亞科等冷卻；旺宏、群創等回測；聯電等型態；仁寶、技嘉、緯創等接近。`
+    - `持倉風控檢查`
 
 ## 覆蓋層級
 
-- official generator dry-run: covered。
-- official message list: covered。
-- funnel helper: covered。
-- live Telegram: not run by design。
-- production runner artifact: not run。
+- formatter: covered。
+- official generator message list: covered。
+- dry-run artifact: covered。
+- production runner / live Telegram: not run by design。
 
 ## 殘留風險
 
-- 若 production runner 仍顯示 `等資料`，優先查 runner 是否已部署本 commit。
-- `.pytest_cache` local cache write 仍有 WinError 5 warning，不影響測試結果。
+- `.pytest_cache` 仍有 WinError 5 warning，不影響測試結果。
