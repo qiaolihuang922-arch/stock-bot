@@ -239,6 +239,17 @@ class AnalysisEngineTest(unittest.TestCase):
             entry_quality="B",
         ))
 
+    def test_can_buy_allows_near_breakout_until_five_percent(self):
+        self.assertTrue(can_buy(
+            "BASE",
+            "NORMAL",
+            "WAIT",
+            "READY",
+            4.8,
+            price_behavior="NORMAL",
+            entry_quality="B",
+        ))
+
     def test_limit_up_locked_is_not_tradeable(self):
         item = snap("limit_lock", [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 130], VOL_ATTACK)
         self.assertEqual(item["pattern"], "LOCK_LIMIT")

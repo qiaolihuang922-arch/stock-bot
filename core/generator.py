@@ -6218,6 +6218,12 @@ def unheld_funnel_state(name, data, market_mode=None, report_context=None):
     source_only_gate = bool(hard_gate_reasons) and set(hard_gate_reasons).issubset(source_gate_reasons)
     result = (data or {}).get("result") or {}
     if (
+        source_only_gate
+        and state in {"淘汰", "隔日確認"}
+        and not _unheld_structural_reject(result, entry_blockers(result))
+    ):
+        state = "等資料"
+    if (
         hard_gate_reasons
         and state in {"可買", "趨勢延續", "可準備", "隔日確認"}
         and (not source_only_gate or is_valid_entry(result))

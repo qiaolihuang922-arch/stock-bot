@@ -1,58 +1,60 @@
-# QA_REPORT: near_breakout_tracking_contract_v21_1_20260616
+# QA_REPORT: rebound_retest_source_gate_v21_1_20260616
 
 ## 測試範圍
 
-- 距突破顯示閾值。
-- 未持倉追蹤 / 淘汰 funnel。
-- 接近突破 C 品質觀察。
-- 弱反彈與突破失敗負面路徑。
-- 官方 Telegram message list。
+- 未持倉突破距離門檻。
+- 多日反彈修復 / 等回測文案。
+- source-only 缺失的 funnel 與報文。
+- 策略樣本 source-error 的 fail-closed 顯示。
+- official generator dry-run 使用者可見報文。
 
 ## 關聯風險掃描
 
-- 風險 1: 只改 `距突破` 文案但 `數據 / RR` 行仍顯示 `遠離觸發`。
-  - 反證: 測試要求聯電 replay 卡片不含 `遠離突破` 與 `遠離觸發`。
-- 風險 2: 放寬接近突破後，弱反彈也被放過。
-  - 反證: `rejected_weak_rr` 與大範圍 generator tests 仍通過；弱反彈真淘汰不回退。
-- 風險 3: 中間態接住太寬，影響可準備 / 淘汰統計。
-  - 反證: 第一次大範圍測試曾抓到此問題，已收窄後重跑通過。
+- 風險 1: 只改文案，策略仍淘汰。
+  - 反證: `unheld_funnel_state` regression 要求 source-only 缺失回 `等資料`，非 `淘汰`。
+- 風險 2: 連漲修復被直接放寬成可買。
+  - 反證: dry-run 仍顯示 `等回測`，不是 `可買`。
+- 風險 3: 急彈追價被誤用最近支撐回測。
+  - 反證: `tests/test_unheld_gap_format.py` 保留急彈待回測的前高/突破區分支。
+- 風險 4: source-error 還顯示可用風險報酬。
+  - 反證: source-error regression 不允許 `數據：風險報酬 2.1`。
 
 ## 跨區塊語意一致性
 
-- `<=5%` 在 display、RR hidden reason、final label 均不再被稱為遠離。
-- 接近突破但品質未過，卡片應是追蹤 / 觀察，不是策略淘汰。
-- 真正不可買仍由「可買條件未滿」表達，不升格為有效進場。
+- `<=5%` 接近突破契約與 `can_buy` 距離拒絕一致。
+- source 缺失的 title、進場、缺口、可買條件都指向補資料，不再混成策略淘汰。
+- 多日修復回測條件和可買條件都以「最近修復支撐不破」描述。
+- summary 只列追蹤，不新增可買。
 
 ## 使用者誤讀風險
 
-- `隔日確認` 可能仍需要後續簡化文案，但本輪先解決錯誤狀態：4.25% 不應遠離，也不應掉到淘汰。
-- 資料來源缺失仍 fail closed；本輪不把 source missing 改成可買或可準備。
+- `等回測` 仍可能被誤讀成「快可買」；本輪用 `進場：不買` 與 `可買：回測不破 + 非追高 + 量能有效` 限定。
+- source 缺失仍可能看起來像資料壞；這是正確 fail-closed，不用 RR 數字掩蓋。
 
 ## 失敗標本反證
 
-- Owner 樣本：聯電 `4.25%` 同時顯示 `遠離突破` 與 `⛔ 淘汰｜觀察`。
-- 反證 replay:
-  - `breakout_distance=4.25`
-  - `entry_quality=C`
-  - `market_grade=C`
-  - 非 `FAIL` / 非 `WEAK_REBOUND`
-  - 結果: card 包含 `距突破：4.25%｜接近突破`，不含 `⛔ 淘汰` / `遠離突破` / `遠離觸發`。
+- Owner 樣本 1: 聯電 source 缺失 / 接近區卻顯示 `淘汰`。
+  - 反證: official dry-run 顯示 `【聯電 2303】⏳ 等資料｜策略樣本證據不足`。
+- Owner 樣本 2: 旺宏連漲修復仍淘汰。
+  - 反證: official dry-run 顯示 `【旺宏 2337】⏳ 等回測｜反彈修復待回測`。
+- Owner 樣本 3: 群創連漲修復仍淘汰。
+  - 反證: official dry-run 顯示 `【群創 3481】⏳ 等回測｜反彈修復待回測`。
 
 ## 質疑與反證
 
-- 質疑: 是否只是硬改文字？
-  - 反證: 修改同時覆蓋 display label、structural reject、funnel state、RR hidden reason。
-- 質疑: 是否破壞原本淘汰規則？
-  - 反證: 弱反彈、突破失敗、遠離觸發追蹤測試仍通過。
-- 質疑: 是否新增買點？
-  - 反證: 測試結果是追蹤 / 隔日確認，不是可買。
+- 質疑: 是否用假多日資料？
+  - 反證: 最近支撐只讀 `cross_day_context.recent_daily_price_points` 中 `source=daily_price` 的 close；沒有資料時只顯示泛稱，不補價。
+- 質疑: 是否不符合常規？
+  - 反證: 外部對照確認突破買區、量能確認、回測支撐與風險報酬是常見交易檢查；本輪未新增裸追高。
+- 質疑: 是否只是刪文案？
+  - 反證: 修改包含 `can_buy`、`unheld_funnel_state`、entry contract、RR display 和 tests。
 
 ## 未測項目
 
 - 未做 live Telegram delivery。
 - 未跑 GitHub runner artifact。
 - 未做 DB write/backfill/prune。
-- Full pytest 已通過：`482 passed, 8 skipped, 110 subtests passed`。
+- 未驗 production scheduled artifact。
 
 ## QA 結論
 

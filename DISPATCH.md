@@ -2,7 +2,7 @@
 
 ## Active
 
-- task_md_holds: `near_breakout_tracking_contract_v21_1_20260616`
+- task_md_holds: `rebound_retest_source_gate_v21_1_20260616`
 - status: `implemented + QA passed + full pytest passed + pushed`
 - current_version: `v21.1`
 - no live Telegram delivery in this cycle.
@@ -10,29 +10,28 @@
 
 ## Result Summary
 
-- Owner challenged why 聯電 `距突破 4.25%` showed `遠離突破` and `⛔ 淘汰｜觀察`.
-- Root cause:
-  - Display layer used `<4%` for `接近突破`.
-  - Strategy distance policy already uses `<=5%` as near breakout.
-  - RR hidden reason / final label still used `>4%` as遠離.
-  - Funnel did not preserve the near-breakout C-quality observation middle state, so it could fall to default `淘汰`.
+- Owner challenged whether the current per-stock feedback still matches common trading practice, because:
+  - 旺宏 / 群創 had multi-day repair but previously still read like淘汰;
+  - 聯電 near-breakout / source-missing could still become淘汰;
+  - report wording made 回測 look like every stock must first reclaim the old breakout high.
 - Implemented:
-  - `<=5%` now displays `接近突破`.
-  - `>5%` is the consistent `遠離` threshold.
-  - Near-breakout, non-hard-fail, C-quality observation remains tracked / confirmation, not淘汰.
-  - Weak rebound and hard failure remain conservative and are not loosened.
+  - `can_buy` distance policy now rejects only `>5%`, consistent with the displayed near-breakout zone.
+  - multi-day rebound repair now waits for a DB-backed recent repair support retest, not a mandatory old-high reclaim.
+  - source-only missing / source-error is fail-closed as `等資料` / `不可行動`, not strategy淘汰.
+  - source/strategy unavailable cards no longer show actionable RR numbers.
+  - 等資料 card noise reduced for mobile reading.
 
 ## Verification
 
-- Targeted:
-  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q --tb=short -k "near_breakout_soft_blocker or breakout_distance or rejected_weak_rr or far_from_trigger_tracks"`
-  - result: `6 passed, 12 subtests passed`
-- Broader:
-  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py tests\test_analysis_engine.py tests\test_trend_continuation.py -q --tb=short`
-  - result: `255 passed, 46 subtests passed`
+- Focused report / strategy:
+  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py tests\test_analysis_engine.py tests\test_trade_state_machine.py tests\test_unheld_gap_format.py tests\test_trend_continuation.py -q --tb=short`
+  - result: `268 passed, 46 subtests passed`
 - Full:
   - `.\.venv\Scripts\python.exe -m pytest -q --tb=short`
-  - result: `482 passed, 8 skipped, 110 subtests passed`
+  - result: `484 passed, 8 skipped, 110 subtests passed`
+- Official dry-run:
+  - `generate_report(dry_run=True)`
+  - result: 聯電=`等資料`; 旺宏/群創=`等回測｜反彈修復待回測`.
 
 ## Current Git State
 

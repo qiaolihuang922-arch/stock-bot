@@ -1035,6 +1035,44 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("遠離觸發", card)
         self.assertNotIn("淘汰 1", summary_message(messages))
 
+    def test_v21_1_near_breakout_source_missing_waits_for_data_not_reject(self):
+        payload = self.breakout_distance_payload(4.62)
+        payload["stock_code"] = "2303"
+        payload["result"].update({
+            "decision": "WAIT",
+            "price_behavior": "NORMAL",
+            "structure_phase": "BREAKOUT_NEAR",
+            "market_grade": "C",
+            "entry_quality": "C",
+            "rr": 1.6,
+        })
+        context = {
+            "report_context": {"report_phase": "盤中", "version": generator.VERSION},
+            "evidence_manifest": [
+                {"field_name": "stock.聯電.price", "source_status": "available"},
+                {"field_name": "stock.聯電.daily_ohlcv", "source_status": "available"},
+                {"field_name": "stock.聯電.rr", "source_status": "derived"},
+                {"field_name": "stock.聯電.score", "source_status": "derived"},
+                {"field_name": "stock.聯電.volume", "source_status": "derived"},
+                {"field_name": "evidence.strategy_sample", "source_status": "missing-source"},
+            ],
+        }
+
+        self.assertEqual(
+            generator.unheld_funnel_state("聯電", payload, report_context=context),
+            "等資料",
+        )
+        card = generator.formatTelegramUnheldCard(
+            "聯電",
+            payload,
+            report_phase="盤中",
+            report_context=context,
+        )
+
+        self.assertIn("距突破：4.62%｜接近突破", card)
+        self.assertIn("等資料", card)
+        self.assertNotIn("⛔ 淘汰", card)
+
     def test_v20_2_1_card_breakout_distance_falls_back_to_result_and_omits_missing(self):
         holding_card = generator.formatTelegramPositionCard(
             "範例股",
@@ -3079,8 +3117,9 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("僅追蹤 1（等回測）", summary)
         self.assertIn("【旺宏 2337】⏳ 等回測｜反彈修復待回測", card)
         self.assertIn("進場：不買，等回測｜原因：連漲修復待回測", card)
-        self.assertIn("缺口：站回突破區 175.5~176.38", card)
-        self.assertIn("可買：先站回突破區 175.5~176.38，再回測不破 + 非追高 + 量能有效", card)
+        self.assertIn("缺口：等待回測最近修復支撐 159 附近不破", card)
+        self.assertIn("可買：回測最近修復支撐 159 附近不破 + 非追高 + 量能有效", card)
+        self.assertNotIn("先站回突破區 175.5~176.38", card)
         self.assertNotIn("淘汰", card)
         self.assertNotIn("弱反彈待確認", card)
         self.assertNotIn("可立即買", card)
@@ -7520,14 +7559,15 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("光寶科 可買（分批，不追價）", summary)
         self.assertNotIn("新倉：無有效進場", summary)
         self.assertNotIn("🔥 最強", summary)
-        self.assertIn("未持倉 2｜可買 1｜淘汰 1", summary)
+        self.assertIn("未持倉 2｜可買 1｜僅追蹤 1（等資料）", summary)
         self.assertNotIn("Source：漏斗 count", summary)
         self.assertIn("【建準 2421】⛔ 不可行動｜資料來源缺失", invalid_card)
         self.assertIn("進場：不可買，資料來源缺失", invalid_card)
         self.assertIn("缺口：補齊行情/策略來源", invalid_card)
         self.assertIn("價格：不可用（資料來源缺失）", invalid_card)
         self.assertNotIn("missing-source", invalid_card)
-        self.assertIn("數據：風險報酬不可用｜S 不可用｜V 不可用", invalid_card)
+        self.assertIn("資料：缺現價/OHLCV，停止新倉判斷", invalid_card)
+        self.assertNotIn("數據：風險報酬不可用｜S 不可用｜V 不可用", invalid_card)
         self.assertNotIn("風險報酬 2.1", invalid_card)
         self.assertNotIn("S 5/5", invalid_card)
         self.assertNotIn("V 1.5x", invalid_card)
@@ -7594,10 +7634,11 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("盤面：證據不足｜待確認", card)
         self.assertIn("進場：不可買，策略樣本來源讀取異常｜原因：策略樣本不足", card)
         self.assertIn("缺口：補足有效策略樣本", card)
-        self.assertIn("原因：策略樣本不可用，高置信 S 分數 / 強弱分類暫不採用", card)
+        self.assertNotIn("原因：策略樣本不可用，高置信 S 分數 / 強弱分類暫不採用", card)
         self.assertIn("盤中觸發：無有效進場，先補策略樣本證據", card)
         self.assertNotIn("交易狀態：等資料｜動作：等待", card)
-        self.assertIn("數據：風險報酬：-（不可行動）｜S 證據不足｜V 1.5x", card)
+        self.assertNotIn("數據：風險報酬 2.1", card)
+        self.assertNotIn("數據：風險報酬：-（不可行動）｜S 證據不足｜V 1.5x", card)
         self.assertIn("價格：100.0（+1.20%）", card)
         self.assertNotIn("價格：不可用（資料來源缺失）", card)
         self.assertNotIn("source missing", card)
@@ -9488,7 +9529,8 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("缺口：解除鎖定後再評估", limit_card)
         self.assertIn("【群創 3481】⏳ 等回測｜反彈修復待回測", weak_card)
         self.assertIn("進場：不買，等回測｜原因：連漲修復待回測", weak_card)
-        self.assertIn("缺口：回測前高/突破區", weak_card)
+        self.assertIn("缺口：等待回測最近修復支撐 51.4 附近不破", weak_card)
+        self.assertIn("可買：回測最近修復支撐 51.4 附近不破 + 非追高 + 量能有效", weak_card)
         for raw in ["EXTREME", "HOT", "LIMIT_LOCK", "LIMIT_REBOUND", "WEAK_REBOUND", "entry quality", "到達可買差距", "決策證據：來源可追溯", "hard stop", "持倉硬風控"]:
             self.assertNotIn(raw, rendered)
         self.assertNotIn("建議買入", rr_card + hot_card + extreme_card + failed_card)

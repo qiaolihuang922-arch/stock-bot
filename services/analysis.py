@@ -2291,7 +2291,7 @@ def can_buy(
     ]:
         return False
 
-    if distance is not None and distance > 4:
+    if distance is not None and distance > 5:
         return False
 
     if entry_quality == "D":

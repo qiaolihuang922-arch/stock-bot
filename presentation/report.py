@@ -512,6 +512,51 @@ def _retest_unlock_text(data):
     return "回測前高/突破區不破"
 
 
+def _recent_repair_support_text(data):
+    points = (
+        ((data or {}).get("cross_day_context") or {})
+        .get("recent_daily_price_points")
+        or []
+    )
+    closes = []
+    for point in points:
+        if (point or {}).get("source") != "daily_price":
+            continue
+        try:
+            closes.append(float(point.get("close")))
+        except (AttributeError, TypeError, ValueError):
+            continue
+    if closes:
+        support = _gate_value_text(closes[-1])
+        return f"最近修復支撐 {support} 附近"
+    return "最近修復支撐"
+
+
+def _repair_retest_gap_text(data):
+    return f"等待回測{_recent_repair_support_text(data)}不破"
+
+
+def _repair_retest_unlock_text(data):
+    return f"回測{_recent_repair_support_text(data)}不破"
+
+
+def _strategy_source_title_label(source_status):
+    return {
+        "source-error": "策略樣本來源異常",
+        "unresolved-conflict": "策略樣本來源衝突",
+        "missing-source": "策略樣本證據不足",
+        "insufficient-data": "策略樣本證據不足",
+    }.get(source_status, "策略樣本證據不足")
+
+
+def _decision_source_title_label(source_status):
+    return (
+        "資料來源缺失"
+        if source_status in {"missing-source", "insufficient-data"}
+        else "資料來源異常"
+    )
+
+
 def _display_entry_distance_policy(stock_result):
     stock_result = stock_result or {}
     decision_type = stock_result.get("decision_type")
@@ -832,12 +877,19 @@ def _unheld_entry_contract(data, dist, blockers, valid_entry, funnel_state, sour
             "盤後待開盤確認",
             "明日開盤後仍守突破區 / 不追價",
         )
+    if funnel_state == "等資料" and source_gates:
+        primary_reason, primary_gap = source_gates[0]
+        unlock = {
+            "樣本不足": "補齊有效策略樣本後重新評估",
+            "資料來源缺失": "補齊有效行情 / 策略來源後重新評估",
+        }.get(primary_reason, "資料恢復後重新評估")
+        return contract(primary_reason, primary_gap, unlock, basis="")
 
     behavior = stock_result.get("price_behavior")
     multi_day_rebound_wait = bool(data.get("multi_day_rebound_wait") or stock_result.get("multi_day_rebound_wait"))
     if multi_day_rebound_wait:
-        retest_text = _retest_zone_text(data)
-        unlock_text = _retest_unlock_text(data)
+        retest_text = _repair_retest_gap_text(data)
+        unlock_text = _repair_retest_unlock_text(data)
         return contract(
             "連漲修復待回測",
             retest_text,
@@ -1249,8 +1301,10 @@ def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None):
 def _compact_unheld_trade_state_line(line, *, valid_entry=False, post_market_prepare=False, data_source_blocked=False, funnel_state=None):
     if not line:
         return None
-    if valid_entry or post_market_prepare or data_source_blocked:
+    if valid_entry or post_market_prepare:
         return line
+    if data_source_blocked:
+        return None
     if funnel_state in {"等冷卻", "等回測", "等型態", "等接近", "等RR修復", "淘汰"}:
         return None
     return line
@@ -1328,6 +1382,8 @@ def _unheld_rr_text(stock_result, funnel_state, valid_entry, deps, state=None, t
         rebound_change = float(stock_result.get("live_change", stock_result.get("change", 0)) or 0)
     except (TypeError, ValueError):
         rebound_change = 0
+    if any(token in title_text for token in ["策略樣本", "資料來源"]):
+        return "-（不可行動）"
     strong_rebound_wait = (
         "急彈待回測" in blockers
         or "急彈待回測" in title_text
@@ -1581,18 +1637,17 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     if not valid_entry and funnel_state == "等接近" and distance_value is not None and distance_value > 5:
         title_label = "遠離觸發"
     if data_source_display_blocked:
-        title_label = "資料不足"
+        title_label = _strategy_source_title_label(strategy_source_status)
+    elif funnel_state == "等資料" and strategy_source_blocked:
+        title_label = _strategy_source_title_label(strategy_source_status)
     elif funnel_state == "等資料":
-        title_label = "資料不足"
+        title_label = _decision_source_title_label(source_status)
     elif funnel_state == "等回測" and (data.get("multi_day_rebound_wait") or stock_result.get("multi_day_rebound_wait")):
         title_label = "反彈修復待回測"
     elif deps["is_valid_entry"](stock_result) and strategy_source_blocked:
-        title_label = {
-            "source-error": "策略樣本來源異常",
-            "unresolved-conflict": "策略樣本來源衝突",
-        }.get(strategy_source_status, "策略樣本證據不足")
+        title_label = _strategy_source_title_label(strategy_source_status)
     elif deps["is_valid_entry"](stock_result) and not source_eligible:
-        title_label = "資料來源缺失" if source_status in {"missing-source", "insufficient-data"} else "資料來源異常"
+        title_label = _decision_source_title_label(source_status)
     elif (state == "弱勢淘汰" or funnel_state == "淘汰") and not data.get("evidence_adjustment_reason"):
         title_label = deps["rejected_primary_reason"](stock_result)
     elif post_market_prepare:
@@ -1763,6 +1818,9 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         if data_source_display_blocked
         else f"理由：{data.get('evidence_adjustment_reason')}" if data.get("evidence_adjustment_reason") else deps["rejected_transition_reason_line"](stock_result) if funnel_state == "淘汰" else None
     )
+    if data_source_display_blocked or funnel_state == "等資料":
+        reason_line = None
+        data_line = None
     show_source_decision_reason = (
         bool(reason_line)
         or valid_entry
