@@ -2081,6 +2081,8 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("最接近樣本：", line)
         self.assertIn("相似度 50%", line)
         self.assertIn("用途：僅作壓力參考；相似度低於60%時不升格為行情判斷", line)
+        self.assertIn("下一步觀察：是否重新站回短線高點", line)
+        self.assertEqual(line.count("站回短線高點"), 1)
         self.assertIn("資料：TWSE近5日｜樣本庫台股急跌 19件", line)
         self.assertNotIn("歷史類比：2001 911 恐攻全球風險事件｜相似度 50%", line)
         self.assertNotIn("\n\n", line)

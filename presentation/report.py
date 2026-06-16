@@ -2202,6 +2202,16 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     if (
         not valid_entry
         and not post_market_prepare
+        and funnel_state == "可準備"
+        and data_line
+        and "風控不適用" in data_line
+        and "證據 +" not in data_line
+        and "證據：資料不足" not in data_line
+    ):
+        data_line = None
+    if (
+        not valid_entry
+        and not post_market_prepare
         and not data_source_display_blocked
         and "資料來源" not in str(title_label or "")
         and "策略樣本" not in str(title_label or "")

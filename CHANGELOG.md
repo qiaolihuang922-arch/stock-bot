@@ -17,10 +17,14 @@
     - 路線、近期支撐、5日均、量能比、有效買點。
     - 條件進度: 已滿足項目與還差項目。
   - 非買入的 `可準備` 卡隱藏容易誤讀的 `交易狀態：可準備` helper line。
+  - 非買入 `可準備` 卡只在 `證據：風控不適用` 且沒有 confirmed / insufficient evidence 時隱藏無效 `數據` 行；保留 `證據 +` 與 `證據：資料不足`，避免把可解釋判斷的 evidence 砍掉。
   - 盤後等待卡隱藏不適用型 `數據` 噪音。
+- `core/future_watch.py`
+  - 歷史類比 `下一步觀察` 做語意去重，避免 `是否重新站回短線高點` 與 `觀察是否重新站回短線高點` 同時出現。
 - `tests/test_generator_report.py`
   - 新增 DB-backed low repair regression。
   - 新增 PULLBACK_RECLAIM 遠離時不得退回 `等接近` 的 regression。
+  - 新增歷史類比下一步觀察去重 regression。
 - `tests/test_cross_day_context.py`
   - 驗證 `daily_price` OHLCV 會進入 `recent_daily_price_points`。
 
@@ -62,6 +66,10 @@
   - result: `4` messages generated, no live Telegram.
   - unheld cards now show 仁寶 / 緯創 / 技嘉 as `等低位修復` with DB-backed support / 5-day MA / volume evidence.
   - condition progress now shows `已滿足` and `還差`, so the reader can see what is actually blocking entry.
+  - dry-run visible checks:
+    - `has_detail_index=False`
+    - `has_duplicate_history_watch=1` (only one `站回短線高點` mention)
+    - `has_umc_wind_control_unused=False`
 
 ## 覆蓋層級
 
@@ -76,3 +84,4 @@
 
 - `等低位修復` only creates a better observation route; it does not decide a stock is buyable.
 - Future calibration can further tune what counts as support repair / volume repair, but must remain DB-backed.
+- Summary was not broad-deleted because regression tests show some `今日盤中風控建議` and `回測摘要` lines are still contractual in buy/prepare replay paths; future summary slimming must split by scenario instead of globally excluding sections.

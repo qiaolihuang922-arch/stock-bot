@@ -25,7 +25,9 @@
 - Follow-up readability audit:
   - kept useful evidence lines for confirmed / insufficient-evidence prepare cards.
   - hid only the misleading `交易狀態：可準備` helper line from non-buy prepare cards.
-  - did not broad-delete data lines after tests showed it would remove useful evidence.
+  - hid non-actionable `證據：風控不適用` data rows from ordinary non-buy prepare cards, but kept confirmed / insufficient-evidence rows.
+  - historical analogy follow-up text now dedupes same-meaning `站回短線高點` checks.
+  - did not broad-delete summary sections after tests showed `今日盤中風控建議` / `回測摘要` are still contractual in buy/prepare replay paths.
 
 ## Verification
 
@@ -40,15 +42,19 @@
 - Official generator dry-run:
   - result: `4` messages generated, no live Telegram.
   - low-repair cards show `條件：已滿足 ...；還差 ...`.
+  - no `📎 詳情索引`.
+  - no duplicated `站回短線高點`.
+  - no `證據：風控不適用` on the current 聯電 visible card.
 
 ## Current Git State
 
 - branch: `main`
 - implementation commit: `cd3017a Add DB-backed low repair state`
 - readability follow-up commit: `cd78bc8 Clarify low repair entry progress`
+- final readability/noise follow-up: included in latest HEAD.
 - pushed to upstream: yes.
-- git completion gate: run after closeout doc update.
+- git completion gate: passed.
 
 ## Next Action
 
-- Push closeout doc update and run git completion gate.
+- No active follow-up in this cycle.

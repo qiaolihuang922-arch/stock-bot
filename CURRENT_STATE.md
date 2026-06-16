@@ -32,6 +32,8 @@
   - keep lines only if they help answer what the reader should wait for.
   - do not broad-delete evidence lines; confirmed / insufficient-evidence data can be useful.
   - hide misleading helper lines when they conflict with the visible action.
+  - ordinary non-buy prepare cards hide `證據：風控不適用`, but confirmed / insufficient-evidence cards keep useful evidence.
+  - summary slimming must be scenario-aware; do not globally remove `今日盤中風控建議` or `回測摘要` without replacing their buy/prepare replay contract.
 
 ## Verification State
 
@@ -43,6 +45,10 @@
 - Official generator dry-run generated `4` messages and showed 仁寶 / 緯創 / 技嘉 as `等低位修復`.
 - Follow-up full pytest passed after condition-progress patch:
   - `491 passed, 8 skipped, 169 warnings, 110 subtests passed`
+- Final dry-run visible checks:
+  - no detail index.
+  - history follow-up has only one `站回短線高點` mention.
+  - current 聯電 card does not show `證據：風控不適用`.
 
 ## Known Findings
 
@@ -51,4 +57,4 @@
 
 ## Next Action
 
-- Push closeout doc update and run git completion gate.
+- No active follow-up in this cycle.

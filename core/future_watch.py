@@ -844,6 +844,12 @@ def _historical_module_score_line(template):
 
 
 def _historical_followup_line(template, features):
+    def normalize_check(text):
+        text = str(text or "").strip()
+        if text in {"觀察是否重新站回短線高點", "是否重新站回短線高點"}:
+            return "是否重新站回短線高點"
+        return text
+
     checks = []
     if _value_or_zero(features.get("change_pct")) <= -1.2:
         checks.append("隔日是否續破當日低點")
@@ -856,7 +862,9 @@ def _historical_followup_line(template, features):
     if not checks:
         checks.append("是否重新站回短線高點")
     checks.append(template["watch"])
-    return "；".join(dict.fromkeys(checks[:4]))
+    normalized = [normalize_check(item) for item in checks]
+    normalized = [item for item in normalized if item]
+    return "；".join(dict.fromkeys(normalized[:4]))
 
 
 def _build_twse_pressure_line(features):
