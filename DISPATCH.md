@@ -3,7 +3,7 @@
 ## Active
 
 - task_md_holds: `approach_distance_gap_v21_1_20260616`
-- status: `implemented + QA passed, pending commit/push`
+- status: `implemented + QA passed + pushed`
 - current_version: `v21.1`
 - no live Telegram delivery in this cycle.
 - no DB schema/write/backfill in this cycle.
@@ -35,10 +35,10 @@
 
 - branch: `main`
 - upstream: `origin/main`
-- latest commit: pending
-- HEAD equals upstream: pending commit/push
-- worktree/index: dirty until closeout commit.
+- latest commit: `4d4fd8e Clarify approach distance gaps`
+- HEAD equals upstream: true after push
+- worktree/index: clean after closeout push
 
 ## Next Action
 
-- Commit and push `approach_distance_gap_v21_1_20260616`, then run git completion gate.
+- Observe next scheduled `run_mode=bot` report and confirm production Telegram artifact matches dry-run wording.
