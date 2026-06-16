@@ -38,9 +38,10 @@
 ## Current Git State
 
 - branch: `main`
-- implementation commit: pending final commit.
-- git completion gate: pending commit / push.
+- implementation commit: `cd3017a Add DB-backed low repair state`
+- pushed to upstream: yes.
+- git completion gate: run after closeout doc commit.
 
 ## Next Action
 
-- Commit and push the DB-backed low-repair patch, then run git completion gate.
+- Push closeout doc update and run git completion gate.

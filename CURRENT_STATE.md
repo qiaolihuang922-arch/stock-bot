@@ -44,4 +44,4 @@
 
 ## Next Action
 
-- Commit and push the patch, then run git completion gate.
+- Push closeout doc update and run git completion gate.
