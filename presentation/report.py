@@ -522,7 +522,7 @@ def _retest_unlock_text(data):
     return "回測前高/突破區不破"
 
 
-def _recent_repair_support_text(data):
+def _recent_rebound_close_text(data):
     points = (
         ((data or {}).get("cross_day_context") or {})
         .get("recent_daily_price_points")
@@ -537,17 +537,17 @@ def _recent_repair_support_text(data):
         except (AttributeError, TypeError, ValueError):
             continue
     if closes:
-        support = _gate_value_text(closes[-1])
-        return f"最近修復支撐 {support} 附近"
-    return "最近修復支撐"
+        close = _gate_value_text(closes[-1])
+        return f"最近反彈收盤 {close} 附近"
+    return "最近反彈收盤"
 
 
 def _repair_retest_gap_text(data):
-    return f"等待回測{_recent_repair_support_text(data)}不破"
+    return f"等待回測{_recent_rebound_close_text(data)}不破"
 
 
 def _repair_retest_unlock_text(data):
-    return f"回測{_recent_repair_support_text(data)}不破"
+    return f"回測{_recent_rebound_close_text(data)}不破"
 
 
 def _strategy_source_title_label(source_status):

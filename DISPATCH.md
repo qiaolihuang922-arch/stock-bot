@@ -2,7 +2,7 @@
 
 ## Active
 
-- task_md_holds: `explicit_approach_zone_wording_v21_1_20260616`
+- task_md_holds: `rebound_retest_anchor_wording_v21_1_20260616`
 - status: `implemented + QA passed + full pytest passed`
 - current_version: `v21.1`
 - no live Telegram delivery in this cycle.
@@ -10,30 +10,34 @@
 
 ## Result Summary
 
-- Owner challenged `等接近` card wording: `還沒到買點區` was too vague and did not say which zone.
+- Owner challenged `等回測｜反彈修復待回測` wording:
+  - `最近修復支撐 53.3` looked like a computed/confirmed support level.
+  - Actual source is DB-backed `daily_price` recent closes, not a support algorithm.
 - Implemented:
-  - `等接近` now names the concrete breakout zone when available.
-  - fallback is `突破區/回測支撐`, not `買點區`.
-  - strategy thresholds and DB were not changed.
+  - report now says `最近反彈收盤 N 附近`;
+  - removed user-visible overclaim that the recent close is a confirmed support;
+  - strategy gates and DB read/write paths were not changed.
 
 ## Verification
 
-- Targeted:
-  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py tests\test_trade_state_machine.py -q --tb=short -k "far_low_volume or breakout_distance_gate or unheld_far_from_trigger or 等接近"`
-  - result: `3 passed, 212 deselected, 5 warnings`
+- Targeted official formatter:
+  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py::GeneratorReportTest::test_v21_1_strong_rebound_uses_multi_window_retest_context tests\test_generator_report.py::GeneratorReportTest::test_v21_1_multi_day_weak_rebound_repairs_from_rejected_to_retest_wait tests\test_generator_report.py::GeneratorReportTest::test_v21_1_retest_anchor_says_breakout_zone_when_price_is_below_zone -q --tb=short`
+  - result: `3 passed, 5 warnings`
+- Official dry-run:
+  - 群創:
+    - `缺口：等待回測最近反彈收盤 53.3 附近不破`
+    - `可買：回測最近反彈收盤 53.3 附近不破 + 非追高 + 量能有效`
+  - 旺宏:
+    - `缺口：等待回測最近反彈收盤 166.5 附近不破`
 - Full:
   - `.\.venv\Scripts\python.exe -m pytest -q --tb=short`
   - result: `484 passed, 8 skipped, 165 warnings, 110 subtests passed`
-- Official dry-run:
-  - 技嘉:
-    - `進場：不買，等接近突破區 399~400.99｜原因：尚未接近突破區`
-    - `缺口：距突破 15.23%，尚未接近突破區 399~400.99`
 
 ## Current Git State
 
 - branch: `main`
-- completion: git completion passed after push.
+- completion: pending commit/push.
 
 ## Next Action
 
-- Observe next production `run_mode=bot` artifact.
+- Commit, push, then run git completion gate.

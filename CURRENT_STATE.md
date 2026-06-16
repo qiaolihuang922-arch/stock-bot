@@ -2,7 +2,7 @@
 
 ## Current Task
 
-- task_id: `explicit_approach_zone_wording_v21_1_20260616`
+- task_id: `rebound_retest_anchor_wording_v21_1_20260616`
 - status: `implemented + QA passed + full pytest passed`
 - version: `v21.1`
 - no live Telegram delivery.
@@ -20,18 +20,23 @@
 ## Current Implementation State
 
 - Runtime report remains `v21.1`.
-- `等接近` unheld cards now show concrete zones:
-  - `等接近突破區 399~400.99`
-  - `尚未接近突破區 399~400.99`
-  - fallback only when no zone exists: `突破區/回測支撐`.
+- Multi-day rebound retest cards still require DB-backed `daily_price` cross-day context.
+- The user-visible retest anchor now says:
+  - `最近反彈收盤 N 附近`
+- It no longer says:
+  - `最近修復支撐 N 附近`
+- Meaning:
+  - the bot is waiting for a pullback/retest near the latest rebound close and confirmation that it does not break;
+  - it is not claiming the retest already happened;
+  - it is not claiming a true support level was computed.
 
 ## Verification State
 
-- Targeted等接近 tests passed.
+- Targeted official formatter tests passed.
 - Full pytest passed: `484 passed, 8 skipped, 165 warnings, 110 subtests passed`.
-- Official dry-run 技嘉 card matches Owner-visible route.
-- Code and closeout docs pushed; git completion passed.
+- Official dry-run 群創 / 旺宏 cards match the new wording.
 
 ## Known Follow-ups
 
 - Observe next production `run_mode=bot` artifact after push.
+- If Owner wants true support wording later, implement a real support source first: swing low / moving average / volume area / pivot, with DB-backed evidence and tests.

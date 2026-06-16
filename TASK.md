@@ -1,69 +1,69 @@
-# TASK: explicit_approach_zone_wording_v21_1_20260616
+# TASK: rebound_retest_anchor_wording_v21_1_20260616
 
 ## 任務狀態
 
-- task_id: `explicit_approach_zone_wording_v21_1_20260616`
+- task_id: `rebound_retest_anchor_wording_v21_1_20260616`
 - 任務類型: `tiny_patch`
-- 狀態: `implemented + full pytest passed`
+- 狀態: `implemented + targeted QA passed`
 - 版本建議: 報文 header 維持 `v21.1`
 - QA 分級: L1
 
 ## Owner 問題
 
-Owner 指出未持倉卡片中的：
+Owner 指出未持倉卡片：
 
-- `進場：不買，等接近觸發區｜原因：還沒到買點區`
-- `缺口：距突破 15.23%，仍未進入觸發區`
+- `等回測｜反彈修復待回測`
+- `缺口：等待回測最近修復支撐 53.3 附近不破`
 
-語意太抽象，不知道「買點區 / 觸發區」到底是哪個區。
+看起來像系統已經識別出有效支撐，但實際策略來源是 DB `daily_price` 的最近跨日收盤序列。若只取最近收盤，不得稱為已驗證支撐，否則會讓 Owner 懷疑是假資料或假記憶。
 
 ## 使用者可見結果
 
-- `等接近` 卡片會明確顯示突破區價位：
-  - `進場：不買，等接近突破區 399~400.99`
-  - `缺口：距突破 15.23%，尚未接近突破區 399~400.99`
-  - `可買：接近突破區 399~400.99，或出現趨勢延續/回測承接買點型態`
-  - `明日觸發：接近突破區 399~400.99 後重新評估買點型態`
-- 若 payload 沒有突破區價位，fallback 為 `突破區/回測支撐`，不再顯示抽象 `買點區`。
+- 反彈修復待回測卡片改為：
+  - `缺口：等待回測最近反彈收盤 53.3 附近不破`
+  - `可買：回測最近反彈收盤 53.3 附近不破 + 非追高 + 量能有效`
+- 不再使用 `最近修復支撐`。
+- `等回測` 仍只代表等待下一次回測確認，不代表已經完成回測。
 
 ## 非目標
 
-- 不修改策略判斷。
-- 不修改距突破計算。
-- 不修改 DB schema/write/backfill/prune。
+- 不修改策略門檻。
+- 不修改跨日判斷邏輯。
+- 不修改 DB schema / write / backfill / prune。
 - 不做 live Telegram delivery。
 
 ## 影響模組與直接消費者
 
 - `presentation/report.py`
-  - `等接近` 的 entry / gap / unlock / trigger 文案。
+  - multi-day rebound retest anchor wording。
 - `tests/test_generator_report.py`
-- `tests/test_trade_state_machine.py`
+  - official formatter regressions。
 - 直接消費者:
   - 未持倉 Telegram card。
 
 ## 輸出契約
 
-- 禁止在 `等接近` 使用抽象原因 `還沒到買點區`。
-- 優先顯示 `突破區 low~high`。
-- 沒有價位資料時才使用 `突破區/回測支撐` fallback。
+- 若使用 `recent_daily_price_points` 的最後一筆日收盤作回測錨點，只能稱為 `最近反彈收盤`。
+- 禁止稱為 `支撐`，除非策略實際計算 swing low / 均線 / 成交密集區等支撐來源。
+- `等回測` 必須保持不可買語氣。
 
 ## 驗收條件
 
-- 技嘉 dry-run card 顯示 `突破區 399~400.99`。
-- 等接近 regression 不再包含 `還沒到買點區` / `仍未進入觸發區`。
-- Targeted tests 與 full pytest 通過。
+- 群創 / 旺宏官方 dry-run card 顯示 `最近反彈收盤`。
+- 報文與 tests 不再出現 `最近修復支撐`。
+- Targeted official formatter tests 通過。
+- Full pytest 通過後才能 commit/push。
 
 ## 失敗標本與驗收路由
 
 - 失敗標本:
-  - Owner 貼出的技嘉 `等接近｜遠離觸發` 卡片。
+  - Owner 貼出的群創 `等待回測最近修復支撐 53.3 附近不破` 卡片。
 - 驗收路由:
-  - `generate_report(dry_run=True)`
-  - official unheld message。
+  - `generate_report(dry_run=True)` official unheld message。
+  - `tests/test_generator_report.py` official formatter tests。
 
 ## 禁止事項與阻塞條件
 
-- 禁止只把文字換成另一個抽象詞。
-- 禁止更動策略門檻。
+- 禁止用 runtime dict / agent memory 解釋跨日狀態。
+- 禁止把最近收盤誇大成已確認支撐。
 - 禁止 live Telegram delivery。
