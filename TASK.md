@@ -4,7 +4,7 @@
 
 - task_id: `holding_card_contract_v21_1_20260616`
 - 任務類型: `normal_patch`
-- 狀態: `QA passed, pending commit/push`
+- 狀態: `QA passed + pushed`
 - 版本建議: 報文 header 維持 `v21.1`
 - QA 分級: L2
 
