@@ -15,7 +15,7 @@
   - `LIMIT_LOCK`, `EXTREME`, `AVOID`, `RR < 1.0`, failed breakout remain hard blocks.
   - `HOT`, `EXTENDED`, `LIMIT_REBOUND`, and low-RR near setup become soft blocks only when evidence/shape supports preparation.
   - Limit-up rebound no longer becomes fake `等資料`; it is `隔日確認`.
-  - Confirmed/supporting evidence can promote soft blocked names to `可準備`, not `可買`.
+  - Confirmed/supporting evidence can promote soft-gated names to `可準備`, not `可買`.
 - Mobile report wording is unchanged in version header but no longer marks HOT / LIMIT_REBOUND evidence as unavailable by default.
 
 ## Verification

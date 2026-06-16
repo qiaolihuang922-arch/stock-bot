@@ -54,7 +54,7 @@
   - `deadlock_suspected=false`
   - `has_real_buyable_path=true`
   - `has_prepare_path=true`
-  - `snapshot_tradeable_blocked_by_funnel_days=0`
+  - snapshot tradeable funnel rejection days: `0`
   - `可買 700`
   - `可準備 364`
 - Rule outcome audit still flags these categories for future sub-classification:
