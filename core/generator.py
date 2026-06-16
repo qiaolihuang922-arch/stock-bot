@@ -673,6 +673,52 @@ def is_strong_intraday_rebound(result):
     return change is not None and change >= 7
 
 
+def multi_day_rebound_needs_retest(data):
+    data = data or {}
+    result = data.get("result") or {}
+    if result.get("price_behavior") != "WEAK_REBOUND" and result.get("structure_phase") != "WEAK_REBOUND":
+        return False
+    if is_strong_intraday_rebound(result):
+        return False
+    if (
+        result.get("decision") == "FAIL"
+        or result.get("structure_phase") == "FAILED_BREAKOUT"
+        or result.get("price_behavior") == "FAILED_BREAKOUT"
+        or result.get("reject_family") == "突破失敗"
+    ):
+        return False
+
+    values = []
+    for value in data.get("closes") or []:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            continue
+        values.append(number)
+
+    price = data.get("price")
+    try:
+        live_price = float(price)
+    except (TypeError, ValueError):
+        live_price = None
+    if live_price is not None and (not values or abs(values[-1] - live_price) > 1e-9):
+        values.append(live_price)
+
+    if len(values) < 4:
+        return False
+
+    recent = values[-4:]
+    up_moves = sum(1 for left, right in zip(recent, recent[1:]) if right > left)
+    if up_moves < 3:
+        return False
+
+    try:
+        rebound_pct = (recent[-1] / recent[0] - 1) * 100
+    except ZeroDivisionError:
+        return False
+    return rebound_pct >= 5
+
+
 def entry_blockers(result):
 
     labels = []
@@ -6017,6 +6063,13 @@ def unheld_funnel_assessment(name, data, market_mode=None, report_context=None):
     state = tomorrow_watch_state(name, data)
     blockers = entry_blockers(result)
     prepare_label, _prepare_action = strong_prepare_bucket(data)
+    multi_day_rebound_wait = multi_day_rebound_needs_retest(data)
+    if multi_day_rebound_wait:
+        data["multi_day_rebound_wait"] = True
+        result["multi_day_rebound_wait"] = True
+    else:
+        data.pop("multi_day_rebound_wait", None)
+        result.pop("multi_day_rebound_wait", None)
 
     if is_valid_entry(result) and not _unheld_decision_source_eligible(report_context, name):
         return "淘汰", None
@@ -6030,6 +6083,9 @@ def unheld_funnel_assessment(name, data, market_mode=None, report_context=None):
         if post_market_unheld_buy_requires_open_confirmation(data, report_context=report_context):
             return "可準備", None
         return "可買", None
+
+    if state == "弱勢淘汰" and multi_day_rebound_wait:
+        return "等回測", None
 
     if state == "弱勢淘汰":
         return "淘汰", None
@@ -6049,6 +6105,9 @@ def unheld_funnel_assessment(name, data, market_mode=None, report_context=None):
         return "等冷卻", None
 
     if "急彈待回測" in blockers:
+        return "等回測", None
+
+    if "弱反彈待確認" in blockers and multi_day_rebound_wait:
         return "等回測", None
 
     if any(item in blockers for item in ["弱反彈待確認", "漲停反彈待確認"]):

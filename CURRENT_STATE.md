@@ -2,8 +2,8 @@
 
 ## Current Task
 
-- task_id: `holding_card_contract_v21_1_20260616`
-- status: `implemented + QA passed + pushed`
+- task_id: `multi_day_rebound_retest_v21_1_20260616`
+- status: `implemented + QA passed, pending commit/push`
 - version: `v21.1`
 - no live Telegram delivery.
 - no DB schema/write/backfill.
@@ -19,19 +19,23 @@
 ## Current Implementation State
 
 - Runtime report remains `v21.1`.
-- Holding card contract:
-  - visible: `倉位 / 風控 / 盤面 / 距突破 / 決策 / 缺口 / 可續抱或可恢復或再進場 / 下一步 / 價格`;
-  - hidden from holding cards: `交易狀態 / 數據 / 回測 / 歷史`;
-  - stop-loss and take-profit execution-memory fail-closed wording remains visible when needed.
+- Multi-day rebound repair:
+  - `WEAK_REBOUND` + three rising moves + >=5% rebound => `等回測`;
+  - display label: `反彈修復待回測`;
+  - still not buyable until standing back / retest holds / non-chase / volume valid.
+- Hard failure remains hard:
+  - `decision=FAIL`
+  - `FAILED_BREAKOUT`
+  - `reject_family=突破失敗`
 - No DB operation was performed.
 
 ## Verification State
 
-- Targeted tests: `203 passed, 44 subtests passed`.
-- Full tests: `479 passed, 8 skipped, 108 subtests passed`.
+- Targeted tests: `2 passed`.
+- Full tests: `480 passed, 8 skipped, 108 subtests passed`.
 - Dry-run official generator checked locally.
 
 ## Known Follow-ups
 
 - Observe next scheduled `run_mode=bot` report and confirm production Telegram artifact matches dry-run wording.
-- If production still shows old holding-card rows, inspect runner commit/deployment path first.
+- If production still shows 旺宏 as `淘汰｜弱反彈待確認`, inspect runner commit/deployment path first.

@@ -834,6 +834,16 @@ def _unheld_entry_contract(data, dist, blockers, valid_entry, funnel_state, sour
         )
 
     behavior = stock_result.get("price_behavior")
+    multi_day_rebound_wait = bool(data.get("multi_day_rebound_wait") or stock_result.get("multi_day_rebound_wait"))
+    if multi_day_rebound_wait:
+        retest_text = _retest_zone_text(data)
+        unlock_text = _retest_unlock_text(data)
+        return contract(
+            "連漲修復待回測",
+            retest_text,
+            f"{unlock_text} + 非追高 + 量能有效",
+            basis="",
+        )
     if "急彈待回測" in blocker_text:
         retest_text = _retest_zone_text(data)
         unlock_text = _retest_unlock_text(data)
@@ -1574,6 +1584,8 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         title_label = "資料不足"
     elif funnel_state == "等資料":
         title_label = "資料不足"
+    elif funnel_state == "等回測" and (data.get("multi_day_rebound_wait") or stock_result.get("multi_day_rebound_wait")):
+        title_label = "反彈修復待回測"
     elif deps["is_valid_entry"](stock_result) and strategy_source_blocked:
         title_label = {
             "source-error": "策略樣本來源異常",

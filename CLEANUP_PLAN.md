@@ -2,12 +2,19 @@
 
 ## Completed This Cycle
 
+- Compressed current handoff files for `multi_day_rebound_retest_v21_1_20260616`.
+- Added a reusable multi-day rebound repair rule instead of hard-coding 旺宏.
+- No runtime output, SQL draft, or temporary artifact was added for this cycle.
+- No DB rows/tables were changed.
+
+## Previous Cycle Summary
+
 - Compressed current handoff files for `holding_card_contract_v21_1_20260616`.
 - Holding-card report rows were reduced by moving from verbose state/stat/history rows to a decision contract.
 - No runtime output, SQL draft, or temporary artifact was added for this cycle.
 - No DB rows/tables were changed.
 
-## Previous Cycle Summary
+## Earlier Cycle Summary
 
 - Compressed current handoff files for `approach_distance_gap_v21_1_20260616`.
 - No runtime output, SQL draft, or temporary artifact was added.
@@ -25,6 +32,7 @@
 
 ## Pending Cleanup / Follow-ups
 
+- Observe next production `run_mode=bot` artifact for the multi-day rebound repair wording.
 - Observe next production `run_mode=bot` artifact for the new holding-card decision contract.
 - Observe next production `run_mode=bot` artifact for the new unheld-card priority ordering.
 - Review older mojibake in long-lived docs only in a dedicated documentation hygiene cycle; avoid mixing with product strategy patches.

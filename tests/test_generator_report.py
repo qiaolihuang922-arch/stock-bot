@@ -2961,6 +2961,54 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("可立即買", card)
         self.assertNotIn("建議買入", card)
 
+    def test_v21_1_multi_day_weak_rebound_repairs_from_rejected_to_retest_wait(self):
+        payload = render_payload(
+            [190, 186, 182, 178, 174, 170, 166, 162, 158, 154, 150, 147, 144, 142, 140, 145, 148, 150, 155, 159],
+            None,
+            price=165,
+            change=3.77,
+        )
+        payload["stock_code"] = "2337"
+        payload["volume_ratio"] = 0.5
+        payload["volume_ratio_10"] = 0.5
+        payload["volume_ratio_20"] = 0.26
+        payload["retest_zone_low"] = 175.5
+        payload["retest_zone_high"] = 176.38
+        payload["result"].update({
+            "decision": "WAIT",
+            "price_behavior": "WEAK_REBOUND",
+            "structure_phase": "WEAK_REBOUND",
+            "market_grade": "D",
+            "entry_quality": "D",
+            "rr": 2.2,
+            "live_change": 3.77,
+            "breakout_distance": 6.9,
+        })
+
+        messages = generator.formatTelegramMessages(
+            {"旺宏": payload},
+            "FULL DETAIL",
+            None,
+            None,
+            "⏳ 觀望",
+            datetime(2026, 6, 16),
+            report_phase="盤中",
+        )
+
+        summary = summary_message(messages)
+        card = card_block(unheld_message(messages), "【旺宏 2337】")
+
+        self.assertEqual(generator.unheld_funnel_state("旺宏", payload), "等回測")
+        self.assertIn("僅追蹤 1（等回測）", summary)
+        self.assertIn("【旺宏 2337】⏳ 等回測｜反彈修復待回測", card)
+        self.assertIn("進場：不買，等回測｜原因：連漲修復待回測", card)
+        self.assertIn("缺口：站回突破區 175.5~176.38", card)
+        self.assertIn("可買：先站回突破區 175.5~176.38，再回測不破 + 非追高 + 量能有效", card)
+        self.assertNotIn("淘汰", card)
+        self.assertNotIn("弱反彈待確認", card)
+        self.assertNotIn("可立即買", card)
+        self.assertNotIn("建議買入", card)
+
     def test_v21_1_retest_anchor_says_breakout_zone_when_price_is_below_zone(self):
         payload = render_payload(
             [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 128.5],
@@ -9304,8 +9352,8 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【06/04 盤後｜v21.1】", summary)
         self.assertIn("新倉建議 1", summary)
         self.assertIn("未持倉 9｜趨勢延續 1｜可準備 1（不可買）", summary)
-        self.assertIn("僅追蹤 5", summary)
-        self.assertIn("淘汰 2", summary)
+        self.assertIn("僅追蹤 6", summary)
+        self.assertIn("淘汰 1", summary)
         self.assertIn("【台積電 2330】👀 等風險報酬｜風險報酬不足", rr_card)
         self.assertIn("進場：不買，等風險報酬達標｜原因：風險報酬還不夠", rr_card)
         self.assertIn("缺口：風險報酬 0.98→1.5（差0.52）", rr_card)
@@ -9357,8 +9405,9 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("買點距離已觸發/不追價", actionable_trend_card)
         self.assertIn("進場：不買，等隔日確認｜原因：漲跌停鎖定，不追價", limit_card)
         self.assertIn("缺口：解除鎖定後再評估", limit_card)
-        self.assertIn("進場：不可買，等結構修復｜原因：反彈還沒轉強", weak_card)
-        self.assertIn("缺口：放量轉強後再評估", weak_card)
+        self.assertIn("【群創 3481】⏳ 等回測｜反彈修復待回測", weak_card)
+        self.assertIn("進場：不買，等回測｜原因：連漲修復待回測", weak_card)
+        self.assertIn("缺口：回測前高/突破區", weak_card)
         for raw in ["EXTREME", "HOT", "LIMIT_LOCK", "LIMIT_REBOUND", "WEAK_REBOUND", "entry quality", "到達可買差距", "決策證據：來源可追溯", "hard stop", "持倉硬風控"]:
             self.assertNotIn(raw, rendered)
         self.assertNotIn("建議買入", rr_card + hot_card + extreme_card + failed_card)
