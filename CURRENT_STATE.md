@@ -3,7 +3,7 @@
 ## Current Task
 
 - task_id: `cross_day_source_truth_v21_1_20260616`
-- status: `implemented + QA passed, pending commit/push`
+- status: `implemented + QA passed + pushed`
 - version: `v21.1`
 - no live Telegram delivery.
 - no DB schema/write/backfill/prune.
@@ -43,6 +43,5 @@
 
 ## Known Follow-ups
 
-- Commit/push current source-of-truth fix.
 - Observe next scheduled `run_mode=bot` report and confirm production Telegram artifact matches dry-run wording.
 - If production still shows old classification, inspect runner commit/deployment path before changing strategy again.

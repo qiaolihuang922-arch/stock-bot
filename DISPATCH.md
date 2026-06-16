@@ -3,7 +3,7 @@
 ## Active
 
 - task_md_holds: `cross_day_source_truth_v21_1_20260616`
-- status: `implemented + QA passed, pending commit/push`
+- status: `implemented + QA passed + pushed`
 - current_version: `v21.1`
 - no live Telegram delivery in this cycle.
 - no DB schema/write/backfill/prune in this cycle.
@@ -42,11 +42,12 @@
 
 ## Current Git State
 
-- pending final git completion:
-  - commit current code/docs changes.
-  - push to upstream.
-  - run git completion gate.
+- branch: `main`
+- upstream: `origin/main`
+- worktree/index: clean after closeout push
+- HEAD equals upstream: true after closeout push
+- bash gate note: WSL unavailable on this machine (`HYPERV_NOT_INSTALLED`); PowerShell equivalent gate used.
 
 ## Next Action
 
-- Commit/push this source-of-truth fix, then observe next scheduled `run_mode=bot` artifact.
+- Observe next scheduled `run_mode=bot` artifact.
