@@ -2,8 +2,8 @@
 
 ## Current Task
 
-- task_id: `entry_quality_priority_v21_1_20260616`
-- status: `implemented + QA passed + pushed`
+- task_id: `approach_distance_gap_v21_1_20260616`
+- status: `implemented + QA passed, pending commit/push`
 - version: `v21.1`
 - no live Telegram delivery.
 - no DB schema/write/backfill.
@@ -19,29 +19,20 @@
 ## Current Implementation State
 
 - Runtime report remains `v21.1`.
-- Strategy display priority is now:
-  1. limit-up / overheat / cooldown;
-  2. rebound and retest confirmation;
-  3. risk-reward repair;
-  4. approach / distance to trigger;
-  5. setup quality only when no clearer blocker exists.
-- `entry_quality D` no longer creates an `ENTRY_QUALITY_LOW` state-machine guard.
-- `market_grade D/E` is treated as background stock weakness unless the state is only `WATCH/WAIT_SETUP`.
-- Official dry-run unheld sample:
-  - `緯創 / 仁寶 / 技嘉`: `等接近｜遠離觸發`;
-  - `旺宏`: `等回測｜急彈待回測`;
-  - `華邦電`: `等回測｜漲停不追`;
-  - `聯電`: `等風險報酬｜觀察`.
+- `等接近` card contract:
+  - title label: `遠離觸發`;
+  - reason: `還沒到買點區`;
+  - gap: `距突破 X%，仍未進入觸發區`;
+  - can-buy condition: `接近觸發區，或出現趨勢延續/回測承接買點型態`.
+- No DB operation was performed.
 
 ## Verification State
 
-- Targeted tests: `257 passed, 44 subtests passed`.
+- Targeted tests: `212 passed, 44 subtests passed`.
 - Full tests: `479 passed, 8 skipped, 108 subtests passed`.
 - Dry-run official generator checked locally.
 
 ## Known Follow-ups
 
-- Observe next scheduled `run_mode=bot` report and confirm production Telegram artifact matches dry-run priority ordering.
-- Prior DB follow-ups remain:
-  - decide whether to enrich or hide `market_theme_index_daily_bars` OHLCV/member placeholder columns;
-  - implement or retire `signal_outcomes` max high/drawdown metrics.
+- Observe next scheduled `run_mode=bot` report and confirm production Telegram artifact matches dry-run wording.
+- If production still shows old `等接近｜個股弱勢`, inspect runner commit/deployment path first.

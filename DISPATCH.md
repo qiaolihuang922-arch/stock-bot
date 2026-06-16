@@ -2,29 +2,20 @@
 
 ## Active
 
-- task_md_holds: `entry_quality_priority_v21_1_20260616`
-- status: `implemented + QA passed + pushed`
+- task_md_holds: `approach_distance_gap_v21_1_20260616`
+- status: `implemented + QA passed, pending commit/push`
 - current_version: `v21.1`
 - no live Telegram delivery in this cycle.
 - no DB schema/write/backfill in this cycle.
 
 ## Result Summary
 
-- Owner reported that 06/16 pre-market unheld cards still looked like `market/quality D` was the main blocker, making the system appear unable to find any buy timing.
-- Implemented strategy-priority ordering:
-  - heat / limit-up / overheat before quality;
-  - rebound before quality;
-  - RR before quality;
-  - distance / approach before stock weakness where applicable;
-  - quality D only remains as setup-quality detail or fallback when no clearer blocker exists.
-- Official dry-run now shows:
-  - `華邦電`: `等回測｜漲停不追`;
-  - `南亞科`: `等冷卻｜過熱觀察`;
-  - `聯電`: `等風險報酬｜觀察`;
-  - `緯創 / 仁寶 / 技嘉`: `等接近｜遠離觸發`;
-  - `旺宏`: `等回測｜急彈待回測`;
-  - `群創`: `淘汰｜弱反彈待確認`.
-- `距突破` remains independently displayed.
+- Owner reported that `等接近` cards still showed `個股弱勢` and generic gap/unlock text.
+- Implemented formatter correction:
+  - `等接近` title label is `遠離觸發`;
+  - gap is distance-specific: `距突破 X%，仍未進入觸發區`;
+  - unlock is actionable: `接近觸發區，或出現趨勢延續/回測承接買點型態`.
+- Official dry-run now shows `等接近｜遠離觸發` for approach cards and no generic `需解除後重新評估` in those cards.
 
 ## Verification
 
@@ -32,8 +23,8 @@
   - `generate_report(dry_run=True)`
   - checked unheld official message.
 - Targeted tests:
-  - `.\.venv\Scripts\python.exe -m pytest tests\test_analysis_engine.py tests\test_trade_state_machine.py tests\test_unheld_gap_format.py tests\test_generator_report.py -q --tb=short`
-  - result: `257 passed, 44 subtests passed`
+  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py tests\test_trade_state_machine.py -q --tb=short`
+  - result: `212 passed, 44 subtests passed`
 - Full tests:
   - `.\.venv\Scripts\python.exe -m pytest -q --tb=short`
   - result: `479 passed, 8 skipped, 108 subtests passed`
@@ -44,10 +35,10 @@
 
 - branch: `main`
 - upstream: `origin/main`
-- latest commit: `cae33d3 Prioritize actionable unheld blockers`
-- HEAD equals upstream: true after push
-- worktree/index: clean after closeout push
+- latest commit: pending
+- HEAD equals upstream: pending commit/push
+- worktree/index: dirty until closeout commit.
 
 ## Next Action
 
-- Observe next scheduled `run_mode=bot` report and confirm production Telegram artifact matches dry-run priority ordering.
+- Commit and push `approach_distance_gap_v21_1_20260616`, then run git completion gate.

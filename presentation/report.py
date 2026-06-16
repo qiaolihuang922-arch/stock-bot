@@ -862,6 +862,13 @@ def _unheld_entry_contract(data, dist, blockers, valid_entry, funnel_state, sour
     distance_text = _gate_value_text(dist)
     policy = _display_entry_distance_policy(stock_result)
     max_pct = policy.get("max_pct")
+    if funnel_state == "等接近":
+        distance_gap_text = (
+            f"距突破 {distance_text}%，仍未進入觸發區"
+            if distance_text
+            else "尚未進入觸發區"
+        )
+        gates.append(("距觸發太遠", distance_gap_text))
     if distance_text and policy.get("hard_gate") and max_pct is not None and float(distance_text) > max_pct:
         distance_gap_text = (
             "尚未進入買點區"
@@ -1479,6 +1486,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     ):
         state = "等接近"
         funnel_state = "等接近"
+    if not valid_entry and funnel_state == "等接近" and distance_value is not None and distance_value > 5:
         title_label = "遠離觸發"
     if data_source_display_blocked:
         title_label = "資料不足"

@@ -2,7 +2,7 @@
 
 ## Completed This Cycle
 
-- Compressed current handoff files for `entry_quality_priority_v21_1_20260616`.
+- Compressed current handoff files for `approach_distance_gap_v21_1_20260616`.
 - No runtime output, SQL draft, or temporary artifact was added.
 - No DB rows/tables were changed.
 
