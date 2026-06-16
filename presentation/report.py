@@ -1343,6 +1343,88 @@ def _unheld_rr_text(stock_result, funnel_state, valid_entry, deps, state=None, t
     return deps["rr_display_text"](stock_result, holding=False)
 
 
+def _holding_action_contract(summary_action, decision_line, reason_line, condition_line, next_step):
+    action = str(summary_action or "")
+    decision_text = str(decision_line or "").strip()
+    risk_text = str(reason_line or "").strip()
+    if risk_text.startswith("原因："):
+        risk_text = risk_text.replace("原因：", "", 1).strip()
+    condition_text = str(condition_line or "").strip()
+    next_text = str(next_step or "").strip()
+    combined_text = " ".join([action, decision_text, risk_text, condition_text, next_text])
+
+    if "停利記憶不足" in combined_text or "execution memory 不足" in combined_text:
+        return {
+            "action_label": "決策",
+            "unlock_label": "可恢復",
+            "entry": decision_text or "停利記憶不足，暫不輸出賣出股數",
+            "reason": "execution memory 不足，fail closed 不輸出停利股數",
+            "gap": "production execution memory 缺失或矛盾，fail closed",
+            "unlock": "補齊 production execution memory 後再評估停利",
+            "next": next_text or "先不輸出賣出股數，避免重複或錯誤停利",
+        }
+
+    if action == "停損":
+        return {
+            "action_label": "決策",
+            "unlock_label": "再進場",
+            "entry": decision_text or "停損 100%，硬停損觸發",
+            "reason": risk_text or "跌破停損線，避免虧損擴大",
+            "gap": "已跌破停損線",
+            "unlock": "清出後重新等待買點，不急回補",
+            "next": next_text or "清出後不急回補，等重新出現買點",
+        }
+    if action == "減碼":
+        return {
+            "action_label": "決策",
+            "unlock_label": "可恢復",
+            "entry": decision_text or "減碼，先降風險",
+            "reason": risk_text or "結構轉弱或跌破快速風控",
+            "gap": condition_text or "未重新站回關鍵區",
+            "unlock": "重新站回關鍵區且量價修復後再評估",
+            "next": next_text or "若無法重新站回突破區，繼續降低優先級",
+        }
+    if action == "停利":
+        return {
+            "action_label": "決策",
+            "unlock_label": "可續抱",
+            "entry": decision_text or "分批落袋",
+            "reason": risk_text or "達到停利或過熱延伸",
+            "gap": condition_text or "保留核心倉觀察",
+            "unlock": "冷卻後再評估是否續攻",
+            "next": next_text or "保留核心倉，等待冷卻後再評估",
+        }
+    if action == "洗盤續抱":
+        return {
+            "action_label": "決策",
+            "unlock_label": "可續抱",
+            "entry": decision_text or "續抱，不加碼",
+            "reason": risk_text or "洗盤回測未跌破風控",
+            "gap": condition_text or "守警戒價，等量價修復",
+            "unlock": "守住警戒價 + 量價修復",
+            "next": next_text or "守警戒價，等量價修復",
+        }
+    if action == "新倉風控觀察":
+        return {
+            "action_label": "決策",
+            "unlock_label": "可續抱",
+            "entry": decision_text or "續抱觀察，暫不加碼",
+            "reason": risk_text or "今日剛進場，先看風控",
+            "gap": condition_text or "守警戒價，跌破停損或轉弱優先風控",
+            "unlock": "守住警戒且結構修復後再評估",
+            "next": next_text or "明日觀察是否守住警戒，未修復再降級",
+        }
+    return {
+        "action_label": "決策",
+        "unlock_label": "可續抱",
+        "entry": decision_text or "續抱，不加碼",
+        "reason": risk_text or "未跌破風控，但尚未重新轉強",
+        "gap": condition_text or "守警戒價，等量價修復",
+        "unlock": "守住警戒價 + 量價修復",
+        "next": next_text or "觀察是否守住警戒，未修復再降級",
+    }
+
+
 def _rr_data_prefix(stock_result, rr_text):
     if not rr_text or str(rr_text).startswith("-"):
         return "風險報酬"
@@ -1396,19 +1478,12 @@ def formatTelegramPositionCard(name, data, *, deps, report_context=None):
     )
     lines = [
         f"【{deps['stock_title'](name, data)}】📌 {summary_action}｜{deps['signed_pct'](deps['stock_pnl'](data))}",
-        deps["trade_state_machine_line"](data),
         execution_line,
         f"風控：{deps['holding_risk_text'](decision)}",
         _score_gated_market_line(report_context, name, data, dist, deps),
         _breakout_distance_line(dist, data=data),
         deps["today_buy_holding_context_line"](data) if _report_phase(report_context) == "盤後" else None,
-        f"決策：{decision_line}",
-        None if is_afterhours or hide_low_signal_detail else f"條件：{condition_line}",
-        f"下一步：{next_step}",
         deps["_source_status_line"](report_context, name, holding=True) if report_context else None,
-        None if is_afterhours or hide_low_signal_detail else data_line,
-        _card_history_line(data, report_context, deps),
-        deps["price_change_line"](data.get("price"), data.get("change")),
     ]
     lines = [line for line in lines if line is not None]
     lines = [_afterhours_card_text(line, report_context) for line in lines]
@@ -1425,11 +1500,18 @@ def formatTelegramPositionCard(name, data, *, deps, report_context=None):
             name,
             default_prefix="原因",
         )
-    if reason_line:
-        lines.insert(6, reason_line)
-    history_line = None if is_afterhours else deps["cross_day_detail_line"](data)
-    if history_line:
-        lines.insert(-1, history_line)
+    contract = _holding_action_contract(summary_action, decision_line, reason_line, condition_line, next_step)
+    insert_at = 6
+    contract_lines = [
+        f"{contract['action_label']}：{contract['entry']}｜原因：{contract['reason']}",
+        f"缺口：{contract['gap']}",
+        f"{contract['unlock_label']}：{contract['unlock']}",
+        f"下一步：{contract['next']}",
+    ]
+    contract_lines = [_afterhours_card_text(line, report_context) for line in contract_lines]
+    for offset, line in enumerate(contract_lines):
+        lines.insert(insert_at + offset, line)
+    lines.append(deps["price_change_line"](data.get("price"), data.get("change")))
 
     lines = [_readable_rr_terms(line) for line in lines]
     return "\n".join(lines)

@@ -2,29 +2,30 @@
 
 ## Active
 
-- task_md_holds: `approach_distance_gap_v21_1_20260616`
-- status: `implemented + QA passed + pushed`
+- task_md_holds: `holding_card_contract_v21_1_20260616`
+- status: `implemented + QA passed, pending commit/push`
 - current_version: `v21.1`
 - no live Telegram delivery in this cycle.
 - no DB schema/write/backfill in this cycle.
 
 ## Result Summary
 
-- Owner reported that `等接近` cards still showed `個股弱勢` and generic gap/unlock text.
-- Implemented formatter correction:
-  - `等接近` title label is `遠離觸發`;
-  - gap is distance-specific: `距突破 X%，仍未進入觸發區`;
-  - unlock is actionable: `接近觸發區，或出現趨勢延續/回測承接買點型態`.
-- Official dry-run now shows `等接近｜遠離觸發` for approach cards and no generic `需解除後重新評估` in those cards.
+- Owner reported that 06/16 holding cards were still noisy and unlike the optimized unheld cards.
+- Implemented holding-card formatter correction:
+  - removed visible holding-card `交易狀態 / 數據 / 回測 / 歷史`;
+  - retained position-critical fields: `倉位 / 風控 / 盤面 / 距突破 / 價格`;
+  - added decision contract: `決策 / 缺口 / 可續抱或可恢復或再進場 / 下一步`;
+  - kept fail-closed execution-memory wording for take-profit memory gaps.
+- Official dry-run now shows compact holding cards aligned with unheld-card readability.
 
 ## Verification
 
 - Dry-run:
   - `generate_report(dry_run=True)`
-  - checked unheld official message.
+  - checked official holding message.
 - Targeted tests:
-  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py tests\test_trade_state_machine.py -q --tb=short`
-  - result: `212 passed, 44 subtests passed`
+  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q --tb=short`
+  - result: `203 passed, 44 subtests passed`
 - Full tests:
   - `.\.venv\Scripts\python.exe -m pytest -q --tb=short`
   - result: `479 passed, 8 skipped, 108 subtests passed`
@@ -33,12 +34,11 @@
 
 ## Current Git State
 
-- branch: `main`
-- upstream: `origin/main`
-- latest commit: `4d4fd8e Clarify approach distance gaps`
-- HEAD equals upstream: true after push
-- worktree/index: clean after closeout push
+- pending commit/push for:
+  - `presentation/report.py`
+  - `tests/test_generator_report.py`
+  - handoff docs
 
 ## Next Action
 
-- Observe next scheduled `run_mode=bot` report and confirm production Telegram artifact matches dry-run wording.
+- Commit and push this cycle, then run git completion gate.

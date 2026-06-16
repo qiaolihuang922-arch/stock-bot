@@ -2,8 +2,8 @@
 
 ## Current Task
 
-- task_id: `approach_distance_gap_v21_1_20260616`
-- status: `implemented + QA passed + pushed`
+- task_id: `holding_card_contract_v21_1_20260616`
+- status: `implemented + QA passed, pending commit/push`
 - version: `v21.1`
 - no live Telegram delivery.
 - no DB schema/write/backfill.
@@ -19,20 +19,19 @@
 ## Current Implementation State
 
 - Runtime report remains `v21.1`.
-- `等接近` card contract:
-  - title label: `遠離觸發`;
-  - reason: `還沒到買點區`;
-  - gap: `距突破 X%，仍未進入觸發區`;
-  - can-buy condition: `接近觸發區，或出現趨勢延續/回測承接買點型態`.
+- Holding card contract:
+  - visible: `倉位 / 風控 / 盤面 / 距突破 / 決策 / 缺口 / 可續抱或可恢復或再進場 / 下一步 / 價格`;
+  - hidden from holding cards: `交易狀態 / 數據 / 回測 / 歷史`;
+  - stop-loss and take-profit execution-memory fail-closed wording remains visible when needed.
 - No DB operation was performed.
 
 ## Verification State
 
-- Targeted tests: `212 passed, 44 subtests passed`.
+- Targeted tests: `203 passed, 44 subtests passed`.
 - Full tests: `479 passed, 8 skipped, 108 subtests passed`.
 - Dry-run official generator checked locally.
 
 ## Known Follow-ups
 
 - Observe next scheduled `run_mode=bot` report and confirm production Telegram artifact matches dry-run wording.
-- If production still shows old `等接近｜個股弱勢`, inspect runner commit/deployment path first.
+- If production still shows old holding-card rows, inspect runner commit/deployment path first.
