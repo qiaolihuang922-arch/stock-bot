@@ -2,46 +2,52 @@
 
 ## Active
 
-- task_md_holds: `db_backed_price_transition_v21_1_20260617`
+- task_md_holds: `db_data_quality_multiday_audit_v21_1_20260617`
 - status: `implemented + QA pass`
 - current_version: `v21.1`
-- no live Telegram delivery in this cycle.
-- no DB schema/write/backfill/prune in this cycle.
+- live Telegram delivery: `not run`
+- DB schema change: `none`
 
 ## Result Summary
 
-- Owner asked to correct 06/17 intraday cards whose visible strategy state did not match this week's price changes.
-- Implemented DB-backed recent price transition:
-  - reads `daily_price` recent closes from cross-day context.
-  - compares latest DB close to current price.
-  - separates yesterday-up/today-down, yesterday-down/today-up, continuous-up, continuous-down.
-- Fixed visible conflicts:
-  - 旺宏:連漲後當日回落 now routes to `等回測｜反彈修復待回測`, not trend continuation.
-  - 群創: V >= 1.1 from report payload no longer displays `量能不足`.
-  - 聯電: V < 1.1 near setup now routes to `等量能`, not `不可追高觀察｜等量`.
-  - 遠離 20%+ names keep low-repair / approach route; volume does not become the primary blocker there.
-- No DB writes, schema changes, backfill, prune, or live Telegram.
+- Added a reusable read-only DB data-quality audit.
+- Audited 11 known production tables:
+  - `daily_price`
+  - `daily_signal_snapshot`
+  - `market_theme_confirmed_evidence`
+  - `market_theme_index_daily_bars`
+  - `position_events`
+  - `positions`
+  - `sector_theme_members`
+  - `signal_items`
+  - `signal_outcomes`
+  - `signal_runs`
+  - `trades`
+- Confirmed no duplicate business keys in the checked tables.
+- Confirmed `daily_price` has no invalid OHLCV rows.
+- Fixed 3 stale `daily_signal_snapshot` rows on `2026-06-16` by approved backfill from `daily_price`:
+  - `2408`
+  - `3035`
+  - `2337`
+- No rows were deleted.
+- Current strategy-window snapshot gap is `0`.
 
 ## Verification
 
-- `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q --tb=short`
-  - result: `211 passed, 163 warnings, 46 subtests passed`
-- `.\.venv\Scripts\python.exe -m pytest -q --tb=short`
-  - result: `494 passed, 8 skipped, 175 warnings, 110 subtests passed`
-- Official dry-run:
-  - `generate_report(dry_run=True)` returned `4` messages.
-  - 聯電 visible as `等量能｜等量`.
-  - 旺宏 visible as `等回測｜反彈修復待回測`.
-  - 群創 not visible as `等量能｜量能不足`.
-  - 緯創 / 技嘉 / 仁寶 remain `等低位修復`.
+- `.\.venv\Scripts\python.exe -m pytest tests\test_audit_db_data_quality.py tests\test_audit_db_table_health.py -q --tb=short`
+  - result: `7 passed`
+- `scripts\audit_db_data_quality.py --coverage-start-date 2024-06-17`
+  - result: `fix_issue_count=0`, `review_item_count=0`, `current_window_missing_snapshot_rows=0`
+- `scripts\prune_daily_signal_snapshot_versions.py --keep-version v21.1 --dry-run`
+  - result: `delete_candidate_rows=0`
+- `generate_report(dry_run=True)`
+  - result: `4` messages, no live Telegram.
 
 ## Current Git State
 
-- branch: `main`
-- latest implementation commit: current `HEAD` for this cycle.
-- pushed to upstream: yes.
-- git completion gate: passed.
+- implementation and verification complete for this cycle.
 
 ## Next Action
 
-- No active follow-up in this cycle.
+- No DB cleanup remains for this cycle.
+- Strategy gate calibration from replay outcome flags is a separate follow-up task.

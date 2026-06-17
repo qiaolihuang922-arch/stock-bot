@@ -2,57 +2,57 @@
 
 ## Current Task
 
-- task_id: `db_backed_price_transition_v21_1_20260617`
+- task_id: `db_data_quality_multiday_audit_v21_1_20260617`
 - status: `implemented + QA pass`
 - version: `v21.1`
-- no live Telegram delivery.
-- no DB schema/write/backfill/prune.
+- live Telegram delivery: not run
+- DB schema change: none
 
 ## Stable Context
 
-- Owner reads Telegram on mobile; report wording must explain what is being waited for without repeated filler lines.
-- Production dispatch model: Render web service is called every five minutes, then GitHub workflow dispatch runs `run_mode=bot`.
+- Owner reads Telegram on mobile; report wording must be useful and not repeat filler.
+- Production dispatch model: Render service is called every five minutes, then GitHub workflow dispatch runs `run_mode=bot`.
 - Production source-of-truth is Supabase / runner data, not local cache, worktree state, runtime dict, or agent memory.
 - Cross-day memory must be DB backed.
-- DB schema/RLS/grant/policy/role/index/constraint changes require Owner approval unless explicitly authorized.
+- DB schema/RLS/grant/policy/role/index/constraint changes require Owner approval.
 - Non-schema DB writes/backfills must use approved repo scripts or service APIs; direct hand-written production DML is forbidden.
 
 ## Current Implementation State
 
-- Runtime report remains `v21.1`.
-- Cross-day price transition now uses DB-backed `daily_price` recent closes plus current price:
-  - `UP_THEN_DOWN`
-  - `DOWN_THEN_UP`
-  - `CONTINUOUS_UP`
-  - `CONTINUOUS_DOWN`
-- Multi-day rebound / pullback route:
-  - DB-confirmed multi-day rebound followed by current pullback becomes `等回測`.
-  - It no longer depends on a prior `WEAK_REBOUND` label.
-- Volume gate:
-  - data/report `volume_ratio >= 1.1` releases visible `量能不足`.
-  - data/report `volume_ratio < 1.1` is primary only near setup; far names keep `等低位修復` / `等接近`.
-  - data-aware result is local only and does not mutate original payload.
-- Formatter:
-  - cards use the same data-aware volume/distance as core state.
-  - DB-backed continuous down prevents `極強` / `不可追高觀察` misread.
+- Added `scripts/audit_db_data_quality.py`.
+- Added `tests/test_audit_db_data_quality.py`.
+- Added `artifacts/` to `.gitignore`.
+- Local artifact directory contains this cycle's DB evidence and is intentionally not committed.
+- Approved DB repair performed:
+  - upserted `v21.1` `daily_signal_snapshot` rows from `daily_price` for `2408`, `3035`, and `2337` on `2026-06-16`.
+- No DB rows were deleted.
 
-## Verification State
+## Data Quality State
 
-- Generator report tests passed:
-  - `211 passed, 163 warnings, 46 subtests passed`
-- Full pytest passed:
-  - `494 passed, 8 skipped, 175 warnings, 110 subtests passed`
-- Official generator dry-run generated `4` messages and showed:
-  - 聯電: `等量能｜等量`.
-  - 旺宏: `等回測｜反彈修復待回測`.
-  - 群創: not `等量能｜量能不足`.
-  - 緯創 / 技嘉 / 仁寶: `等低位修復`.
+- Checked tables: 11.
+- `daily_price` duplicate `(stock_id, trade_date)`: 0.
+- `daily_price` invalid OHLCV: 0.
+- `daily_signal_snapshot` duplicate `(stock_id, trade_date, version)`: 0.
+- `daily_signal_snapshot` prune candidates: 0.
+- Current strategy-window missing snapshots from `2024-06-17`: 0.
+- Read-after-write data-quality audit:
+  - `fix_issue_count=0`
+  - `review_item_count=0`
+
+## Strategy Replay State
+
+- DB replay does not show a dead strategy machine:
+  - `has_real_buyable_path=True`
+  - `has_prepare_path=True`
+  - `deadlock_suspected=False`
+- Outcome audit still flags blocked groups as possibly too strict; this is a follow-up strategy calibration task, not a DB data-quality failure.
 
 ## Known Findings
 
 - `.pytest_cache` cannot be written on this machine because of local `WinError 5`; tests still execute and pass.
-- No schema expansion was needed for this task.
+- `trades` still has one legacy row and no current `supabase.table("trades")` consumer was found. Deletion needs a dedicated approved prune/delete interface if Owner still wants it removed.
 
 ## Next Action
 
-- No active follow-up in this cycle.
+- No DB cleanup remains for this cycle.
+- Strategy gate calibration from replay outcome flags is a separate follow-up task.

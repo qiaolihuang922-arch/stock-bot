@@ -1,71 +1,71 @@
-# CHANGELOG: db_backed_price_transition_v21_1_20260617
+# CHANGELOG: db_data_quality_multiday_audit_v21_1_20260617
 
-## 修改內容與檔案
+## Changes
 
-- `core/generator.py`
-  - 新增 `recent_price_transition`，用 DB `daily_price` 最近收盤與當前價判斷 `UP_THEN_DOWN` / `DOWN_THEN_UP` / `CONTINUOUS_UP` / `CONTINUOUS_DOWN`。
-  - `multi_day_rebound_needs_retest` 不再要求先被標成 `WEAK_REBOUND`；若 DB 日線確認連漲修復、當前價相對最新日線回落，直接進入待回測。
-  - 新增 data-aware result merge，將 top-level `volume_ratio` / distance 合入局部 result，但不污染原始 payload。
-  - `volume_ratio >= 1.1` 時，不再被舊 `NO_VOLUME` / `volume_state=WEAK` 硬打成 `量能不足`。
-  - `volume_ratio < 1.1` 只在接近買點區時作主 blocker；遠離區仍優先走低位修復 / 等接近。
-- `presentation/report.py`
-  - formatter 改用 data-aware result，避免核心判斷與卡片數據行衝突。
-  - 盤面文字會根據 DB-backed recent transition 移除不合理的 `趨勢延續` / `極強`。
-  - evidence unavailable 的量能判斷同步尊重 data volume ratio。
-- `tests/test_generator_report.py`
-  - 新增旺宏昨日漲今日跌後應等回測 regression。
-  - 新增群創 V 1.18x 不得顯示量能不足 regression。
-  - 新增聯電連續轉弱不得顯示極強 / 不可追高 regression。
-  - 修正舊 low-volume fixture，明確使用 `volume_ratio=0.7`。
+- Added `scripts/audit_db_data_quality.py`
+  - Read-only Supabase audit for current production tables.
+  - Checks duplicate business keys for known tables.
+  - Checks `daily_price` OHLCV legality.
+  - Recomputes `daily_signal_snapshot` close, volume ratios, breakout levels, and retest zones from `daily_price`.
+  - Separates all-history snapshot gaps from current strategy-window gaps.
+  - Classifies expected constant/null fields so source-limited fields are not mistaken for fake data.
+- Added `tests/test_audit_db_data_quality.py`
+  - Invalid OHLC detection.
+  - Snapshot-vs-price mismatch detection.
+  - Expected constants not becoming review noise.
+  - Current-window coverage separation.
+- Updated `.gitignore`
+  - Ignore local `artifacts/` DB audit evidence.
 
-## 契約影響
+## Production DB Actions
 
-- 報文版本仍為 `v21.1`。
-- Telegram message list shape 不變。
-- DB:
-  - no schema change。
-  - no write/backfill/prune。
-  - 只讀既有 `daily_price` cross-day context。
-- Telegram:
-  - no live delivery。
+- No schema change.
+- No live Telegram.
+- No hand-written DML.
+- Prune dry-run:
+  - `daily_signal_snapshot` delete candidates: `0`
+  - exact duplicate `(stock_id, trade_date, version)`: `0`
+- Approved snapshot backfill writes:
+  - `2408` on `2026-06-16`: 1 `v21.1` row upserted from `daily_price`
+  - `3035` on `2026-06-16`: 1 `v21.1` row upserted from `daily_price`
+  - `2337` on `2026-06-16`: 1 `v21.1` row upserted from `daily_price`
 
-## 直接消費者同步
+## Evidence Artifacts
 
-- official generator dry-run 已覆蓋。
-- formatter、funnel state、summary bucket 使用同一個 data-aware 判斷，降低卡片與 summary 不一致。
+Local artifacts were generated under `D:\reserch\stock-bot\artifacts\` and are intentionally ignored by git:
 
-## 未影響模組
+- `db_table_health_20260617.json`
+- `daily_signal_snapshot_prune_plan_20260617.json`
+- `db_data_quality_20260617.json`
+- `snapshot_backfill_*_20260616_dry_run.json`
+- `snapshot_backfill_*_20260616_write.json`
+- `db_data_quality_20260617_after_write.json`
+- `daily_signal_snapshot_prune_plan_20260617_after_write.json`
+- `strategy_buy_path_replay_30d_20260617_after_write.json`
+- `strategy_rule_outcomes_120d_20260617_after_write.json`
 
-- 不改 Supabase schema / RLS / grant / policy。
-- 不改 Render/GitHub dispatch。
-- 不改 live Telegram sender。
-- 不改持倉 hard-stop / 減碼規則。
+## Verification
 
-## 自檢命令與結果
-
-- Generator report tests:
-  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q --tb=short`
-  - result: `211 passed, 163 warnings, 46 subtests passed`
-- Full:
-  - `.\.venv\Scripts\python.exe -m pytest -q --tb=short`
-  - result: `494 passed, 8 skipped, 175 warnings, 110 subtests passed`
+- Targeted tests:
+  - `.\.venv\Scripts\python.exe -m pytest tests\test_audit_db_data_quality.py tests\test_audit_db_table_health.py -q --tb=short`
+  - result: `7 passed`
+- Read-after-write DB quality audit:
+  - tables checked: `11`
+  - `fix_issue_count=0`
+  - `review_item_count=0`
+  - `current_window_missing_snapshot_rows=0`
+  - `safe_to_delete_rows=0`
+- Prune read-after dry-run:
+  - `delete_candidate_rows=0`
+  - `exact_duplicate_extra_rows=0`
+- Strategy replay:
+  - `deadlock_suspected=False`
+  - `has_real_buyable_path=True`
+  - `has_prepare_path=True`
 - Official generator dry-run:
-  - `generate_report(dry_run=True)` returned `4` messages, no live Telegram。
-  - visible checks:
-    - 聯電: `等量能｜等量` with V around `0.46x`。
-    - 旺宏: `等回測｜反彈修復待回測`。
-    - 群創: `等冷卻｜漲停反彈待確認`，not `等量能｜量能不足`。
-    - 緯創 / 技嘉 / 仁寶 remain `等低位修復` with support / 5-day MA / volume gap。
+  - `generate_report(dry_run=True)` returned `4` messages.
 
-## 覆蓋層級
+## Residual Risk
 
-- helper: covered by direct tests for transition / blockers。
-- formatter: covered by `formatTelegramUnheldCard` direct tests。
-- official generator message list: covered by dry-run。
-- production DB write: not run by design。
-- live Telegram: not run by design。
-
-## 殘留風險
-
-- `volume_ratio >= 1.1` is now the effective volume recovery threshold for display / blocker release; future calibration may tune it, but must remain DB/report data backed.
-- `等回測` still is not a buy signal. It only says the next useful observation is a pullback / retest that holds.
+- `strategy_rule_outcomes_120d` still flags several blocked groups as possibly too strict. That is a strategy-calibration task, not a DB data-quality failure.
+- `trades` still exists with a legacy row but no current code path was found consuming `supabase.table("trades")`; deletion needs a dedicated approved prune/delete interface if Owner still wants it removed.
