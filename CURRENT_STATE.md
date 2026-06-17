@@ -3,7 +3,7 @@
 ## Current Task
 
 - task_id: `report_state_sync_v21_1_20260617`
-- status: `implemented + QA pass`
+- status: `implemented + QA pass + git completion passed`
 - version: `v21.1`
 - live Telegram delivery: not run
 - DB schema change: none
@@ -36,6 +36,11 @@
 - Adjacent state/replay tests passed:
   - `16 passed`
 - Official `generate_report(dry_run=True)` returned 4 messages and no live Telegram.
+- Git completion gate passed by PowerShell equivalent:
+  - branch: `main`
+  - upstream: `origin/main`
+  - HEAD: local matches upstream after push
+  - worktree: clean
 
 ## Known Findings
 

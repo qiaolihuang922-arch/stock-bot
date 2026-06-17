@@ -3,7 +3,7 @@
 ## Active
 
 - task_md_holds: `report_state_sync_v21_1_20260617`
-- status: `implemented + QA pass`
+- status: `implemented + QA pass + git completion passed`
 - current_version: `v21.1`
 - live Telegram delivery: `not run`
 - DB schema change: `none`
@@ -33,7 +33,12 @@
 ## Current Git State
 
 - Implementation and verification complete for this cycle.
+- Git completion gate passed by PowerShell equivalent: `main` matches `origin/main`, worktree clean.
 
 ## Next Action
 
 - No further product action remains for this cycle.
+
+## Recently Done
+
+- `report_state_sync_v21_1_20260617`: report-state sync fixed, QA passed, Git completion gate passed.
