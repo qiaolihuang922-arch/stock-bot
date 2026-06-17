@@ -1,69 +1,64 @@
-# QA_REPORT: db_backed_low_repair_v21_1_20260616
+# QA_REPORT: db_backed_price_transition_v21_1_20260617
 
 ## 測試範圍
 
-- DB-backed cross-day OHLCV read path。
-- 未持倉遠離突破時的 low-repair funnel classification。
-- `PULLBACK_RECLAIM` 遠離時不得退回只等突破區。
-- Telegram low-repair card contract。
+- DB-backed recent price transition。
+- 連漲後當日回落的未持倉分類。
+- data volume ratio 與舊 `NO_VOLUME` / `volume_state=WEAK` 的衝突。
+- formatter 盤面文字、數據行與 funnel state 一致性。
 - Full regression suite。
 
 ## 關聯風險掃描
 
-- 風險 1: 只改文字，策略仍等回前高。
-  - 反證: `unheld_funnel_state` 對 DB-backed far `PULLBACK_RECLAIM` 回傳 `等低位修復`，不再回傳 `等接近`。
-- 風險 2: 假跨日資料。
-  - 反證: `has_daily_price_repair_basis` 要求 `cross_day_context.source_of_truth` 包含 `daily_price` 且來源 ready。
-- 風險 3: DB 欄位不足。
-  - 反證: read probe 顯示仁寶 / 緯創 / 技嘉 / 旺宏 / 群創皆有 8 筆 OHLCV；unit test 驗證 OHLCV 進入 context。
-- 風險 4: 低位修復被誤讀成可買。
-  - 反證: card header 是 `等低位修復`，有效買點列為條件，不產生可買或可準備行動。
-- 風險 5: Summary / artifact 與卡片狀態衝突。
-  - 反證: funnel buckets、summary bucket、trade state machine 均接上 `等低位修復` / `WAIT_LOW_REPAIR`。
-- 風險 6: 為了去噪音，把有用 evidence 一起刪除。
-  - 反證: confirmed evidence prepare card 仍保留 `證據 +...`；普通非行動 prepare card 不再顯示 `證據：風控不適用`。
-- 風險 7: 歷史類比下一步觀察重複同義句。
-  - 反證: `站回短線高點` 在低相似歷史類比中只出現一次。
+- 風險 1: 旺宏這類昨日漲今日跌仍顯示趨勢延續。
+  - 反證: regression 驗證 DB 日線連漲 + 當前價回落時 `multi_day_rebound_needs_retest=True` 且 funnel state 為 `等回測`。
+- 風險 2: 群創 V 1.18x 仍被舊欄位打成量能不足。
+  - 反證: regression 驗證 data-aware result 中 `volume_ratio=1.18` 不產生 `量能不足`，卡片不出 `等量能｜量能不足` 或 `風險報酬 -（量能不足）`。
+- 風險 3: 聯電連續轉弱仍顯示極強 / 不可追高。
+  - 反證: formatter direct test 驗證 DB-backed continuous-down 不顯示 `極強` / `不可追高觀察`。
+- 風險 4: 遠離突破股票被量能搶成主 blocker。
+  - 反證: 既有遠離低位修復 regression 仍通過，遠離約 20% 的緯創維持 `等低位修復` / `等接近`，不被低量覆蓋。
+- 風險 5: 修正污染原始 payload，造成同一 run 前後狀態不一致。
+  - 反證: implementation 改為 local data-aware result，不回寫 `_volume_ratio_from_data` 到原 result。
 
 ## 跨區塊語意一致性
 
-- `距突破` 保留，仍說明距離前高突破區很遠。
-- 遠離突破不再只剩「等接近突破區」；DB 有日線時改看低位修復。
-- `等回測` 仍用於連漲修復後的回踩確認；`等低位修復` 用於低位支撐 / 短均 / 量能修復觀察。
-- `不可追高觀察` 類卡片不再把 `交易狀態：可準備` 或 `證據：風控不適用` 放到手機可見層，避免使用者誤讀成可以準備下單。
+- Summary / card / data row 對聯電一致為量能未過，不再同時寫不可追高與等量。
+- 旺宏卡片保留 `距突破`，但主狀態是 `等回測｜反彈修復待回測`，避免讀者誤解成趨勢延續可追。
+- 群創連漲並接近突破時，主阻擋為過熱 / 漲停反彈待確認，不再被舊量能欄位誤導。
 
 ## 使用者誤讀風險
 
-- `近期支撐` 可能被誤讀成買價；卡片用 `有效買點：近期支撐不破 + 站回5日均 + 量能轉強 + 風險報酬 >= 1.5` 避免單一價格變成下單指令。
+- `等回測` 不是可買，只代表要等回踩不破與非追高。
+- `volume_ratio >= 1.1` 解除「量能不足」文字，不代表買點成立；仍需風險報酬、型態與熱度條件。
+- 遠離區的量能不足不應成主因，因為讀者真正要等的是低位修復或重新接近有效區。
 
 ## 失敗標本反證
 
-- Owner specimen: 仁寶 / 緯創 / 技嘉遠離突破，報文要求接近突破區才重評。
+- Owner specimen: 06/17 盤中旺宏、群創、聯電卡片。
 - Dry-run result:
-  - 仁寶: `等低位修復｜低位修復觀察`，顯示近期支撐 / 5日均 / 量能。
-  - 緯創: `等低位修復｜低位修復觀察`。
-  - 技嘉: `等低位修復｜低位修復觀察`。
-  - 聯電: `不可追高觀察｜突破回測` 不再顯示 `證據：風控不適用`。
-  - 歷史類比: `下一步觀察：是否重新站回短線高點` 不再重複。
+  - 聯電: `等量能｜等量` with V around `0.46x`。
+  - 旺宏: `等回測｜反彈修復待回測`，回測基準為最近反彈收盤。
+  - 群創: `等冷卻｜漲停反彈待確認`，未顯示量能不足。
+  - 緯創 / 技嘉 / 仁寶: `等低位修復`，保留支撐 / 5日均 / 量能缺口。
 
 ## 質疑與反證
 
-- 質疑: DB 是否支援？
-  - 反證: `daily_price` 已有 OHLCV，不需要擴 schema。
-- 質疑: 沒 DB 時是否亂判？
-  - 反證: existing far no-DB regression 仍維持 `等接近`。
-- 質疑: PULLBACK_RECLAIM 是否還會被降成等接近？
-  - 反證: 新增 regression 鎖定 `等低位修復`。
+- 質疑: 是否用假跨日資料？
+  - 反證: transition helper 只讀 `cross_day_context.recent_daily_price_points` 且要求 source 為 `daily_price`。
+- 質疑: 是否只改文字？
+  - 反證: `unheld_funnel_state`、`multi_day_rebound_needs_retest`、formatter direct test、official dry-run 均覆蓋。
+- 質疑: 量能門檻是否過度擴張？
+  - 反證: `volume_ratio < 1.1` 只在接近區作主 blocker；遠離區 regressions 仍保留低位修復 / 等接近。
 
 ## 未測項目
 
 - 未 live Telegram。
 - 未 DB write / backfill / prune。
-- 未驗實際 GitHub runner artifact，只驗 official local dry-run equivalent。
-- 未做 summary 全域刪減；測試顯示該區仍承載可買、可準備與回測 replay 契約。後續若要瘦 summary，需分情境改，不可全域刪 section。
+- 未實際 GitHub runner artifact；已用 official local dry-run equivalent 驗 message list。
 
 ## QA 結論
 
 通過。
 
-本輪修正解決 Owner 指出的「遠離突破只能等回前高」策略/顯示問題；資料來源為 production DB `daily_price` 只讀資料，沒有假跨日記憶。
+本輪修正把 06/17 盤中標本的跨日價格變化與量能 blocker 對齊到 DB-backed / report-backed 資料，不新增 schema、不寫 DB、不 live TG。

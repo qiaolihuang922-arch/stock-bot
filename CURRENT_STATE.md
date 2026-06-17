@@ -2,7 +2,7 @@
 
 ## Current Task
 
-- task_id: `db_backed_low_repair_v21_1_20260616`
+- task_id: `db_backed_price_transition_v21_1_20260617`
 - status: `implemented + QA pass`
 - version: `v21.1`
 - no live Telegram delivery.
@@ -20,35 +20,33 @@
 ## Current Implementation State
 
 - Runtime report remains `v21.1`.
-- `daily_price` read path now preserves OHLCV in `recent_daily_price_points`.
-- New DB-backed observation route:
-  - `等低位修復` is allowed only when `cross_day_context.source_of_truth` includes `daily_price` and enough DB daily points exist.
-  - It is not a buy signal.
-  - Effective buy requires support hold + reclaim 5-day MA + volume repair + risk/reward >= 1.5.
-  - Telegram now shows condition progress: `已滿足 ...；還差 ...`.
-- Far pullback/reclaim stocks with DB daily_price no longer get forced back to `等接近突破區`.
-- Missing / insufficient DB daily_price still fails closed.
-- Readability audit rule from Owner:
-  - keep lines only if they help answer what the reader should wait for.
-  - do not broad-delete evidence lines; confirmed / insufficient-evidence data can be useful.
-  - hide misleading helper lines when they conflict with the visible action.
-  - ordinary non-buy prepare cards hide `證據：風控不適用`, but confirmed / insufficient-evidence cards keep useful evidence.
-  - summary slimming must be scenario-aware; do not globally remove `今日盤中風控建議` or `回測摘要` without replacing their buy/prepare replay contract.
+- Cross-day price transition now uses DB-backed `daily_price` recent closes plus current price:
+  - `UP_THEN_DOWN`
+  - `DOWN_THEN_UP`
+  - `CONTINUOUS_UP`
+  - `CONTINUOUS_DOWN`
+- Multi-day rebound / pullback route:
+  - DB-confirmed multi-day rebound followed by current pullback becomes `等回測`.
+  - It no longer depends on a prior `WEAK_REBOUND` label.
+- Volume gate:
+  - data/report `volume_ratio >= 1.1` releases visible `量能不足`.
+  - data/report `volume_ratio < 1.1` is primary only near setup; far names keep `等低位修復` / `等接近`.
+  - data-aware result is local only and does not mutate original payload.
+- Formatter:
+  - cards use the same data-aware volume/distance as core state.
+  - DB-backed continuous down prevents `極強` / `不可追高觀察` misread.
 
 ## Verification State
 
-- DB read probe confirmed daily OHLCV for 2324 / 3231 / 2376 / 2337 / 3481.
-- Targeted tests passed:
-  - `223 passed, 159 warnings, 46 subtests passed`
+- Generator report tests passed:
+  - `211 passed, 163 warnings, 46 subtests passed`
 - Full pytest passed:
-  - `491 passed, 8 skipped, 169 warnings, 110 subtests passed`
-- Official generator dry-run generated `4` messages and showed 仁寶 / 緯創 / 技嘉 as `等低位修復`.
-- Follow-up full pytest passed after condition-progress patch:
-  - `491 passed, 8 skipped, 169 warnings, 110 subtests passed`
-- Final dry-run visible checks:
-  - no detail index.
-  - history follow-up has only one `站回短線高點` mention.
-  - current 聯電 card does not show `證據：風控不適用`.
+  - `494 passed, 8 skipped, 175 warnings, 110 subtests passed`
+- Official generator dry-run generated `4` messages and showed:
+  - 聯電: `等量能｜等量`.
+  - 旺宏: `等回測｜反彈修復待回測`.
+  - 群創: not `等量能｜量能不足`.
+  - 緯創 / 技嘉 / 仁寶: `等低位修復`.
 
 ## Known Findings
 

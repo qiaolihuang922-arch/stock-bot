@@ -3850,6 +3850,160 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("路線：突破買點太遠，改看低位修復", unheld)
         self.assertNotIn("等待：距突破 23.4%；有效買點只看：接近突破區", unheld)
 
+    def test_db_backed_rebound_pullback_waits_retest_not_trend_continuation(self):
+        payload = {
+            "stock_code": "2337",
+            "price": 159.75,
+            "change": -4.05,
+            "price_source": "realtime",
+            "daily_source": "yahoo",
+            "result": {
+                "decision": "WAIT",
+                "action": 0,
+                "rr": 1.8,
+                "heat_state": "NORMAL",
+                "trade_state": "WAIT",
+                "structure_phase": "NORMAL",
+                "price_behavior": "NORMAL",
+                "market_grade": "B",
+                "volume_state": "NORMAL",
+                "volume_price_state": "EXPANSION",
+                "structure_state": "NORMAL",
+                "entry_quality": "D",
+                "confidence_score": 45,
+                "breakout_distance": 10.41,
+                "breakout_trigger_price": 175.5,
+                "retest_zone_low": 175.5,
+                "retest_zone_high": 176.38,
+            },
+            "cross_day_context": db_price_context("2337", [135, 140, 146.5, 159, 166.5]),
+            "holding": None,
+            "volume_ratio": 2.43,
+        }
+
+        messages = generator.formatTelegramMessages(
+            {"旺宏": payload},
+            "FULL DETAIL",
+            None,
+            None,
+            "⏳ 觀望",
+            datetime(2026, 6, 17),
+            report_phase="盤中",
+        )
+        unheld = unheld_message(messages)
+        card = card_block(unheld, "【旺宏 2337】")
+
+        self.assertTrue(generator.multi_day_rebound_needs_retest(payload))
+        self.assertEqual(generator.unheld_funnel_state("旺宏", payload), "等回測")
+        self.assertIn("【旺宏 2337】⏳ 等回測｜反彈修復待回測", card)
+        self.assertIn("回測基準：最近反彈收盤 166.5；尚未回測", card)
+        self.assertNotIn("趨勢延續", card)
+
+        direct_card = presentation_report.formatTelegramUnheldCard(
+            "旺宏",
+            payload,
+            deps=generator._telegram_presentation_deps(),
+            report_phase="盤中",
+            report_context=self.score_source_report_context("旺宏", "available"),
+        )
+        self.assertIn("盤面：弱勢｜偏強", direct_card)
+        self.assertNotIn("趨勢延續", direct_card)
+
+    def test_volume_ratio_recovered_does_not_show_wait_volume(self):
+        payload = {
+            "stock_code": "3481",
+            "price": 57.8,
+            "change": 8.44,
+            "price_source": "realtime",
+            "daily_source": "yahoo",
+            "result": {
+                "decision": "WAIT",
+                "action": 0,
+                "rr": 1.03,
+                "heat_state": "NORMAL",
+                "trade_state": "NO_VOLUME",
+                "structure_phase": "BREAKOUT_NEAR",
+                "price_behavior": "NORMAL",
+                "market_grade": "B",
+                "volume_state": "WEAK",
+                "volume_price_state": "EXPANSION",
+                "structure_state": "NORMAL",
+                "entry_quality": "D",
+                "confidence_score": 56,
+                "breakout_distance": 3.28,
+                "breakout_trigger_price": 59.4,
+            },
+            "cross_day_context": db_price_context("3481", [44.3, 46.95, 48.55, 51.4, 53.3]),
+            "holding": None,
+            "volume_ratio": 1.18,
+        }
+
+        messages = generator.formatTelegramMessages(
+            {"群創": payload},
+            "FULL DETAIL",
+            None,
+            None,
+            "⏳ 觀望",
+            datetime(2026, 6, 17),
+            report_phase="盤中",
+        )
+        card = card_block(unheld_message(messages), "【群創 3481】")
+
+        self.assertNotIn("量能不足", generator.entry_blockers({**payload["result"], "volume_ratio": 1.18, "_volume_ratio_from_data": True}))
+        self.assertNotEqual(generator.unheld_funnel_state("群創", payload), "等量能")
+        self.assertNotIn("等量能｜量能不足", card)
+        self.assertNotIn("風險報酬 -（量能不足）", card)
+
+    def test_continuous_down_does_not_render_extreme_strength(self):
+        payload = {
+            "stock_code": "2303",
+            "price": 137.75,
+            "change": -2.30,
+            "price_source": "realtime",
+            "daily_source": "yahoo",
+            "result": {
+                "decision": "WAIT",
+                "action": 0,
+                "rr": 1.2,
+                "heat_state": "NORMAL",
+                "trade_state": "WAIT",
+                "structure_phase": "WEAK_PULLBACK",
+                "price_behavior": "PULLBACK",
+                "market_grade": "A",
+                "volume_state": "NORMAL",
+                "volume_price_state": "COILING",
+                "structure_state": "NORMAL",
+                "entry_quality": "D",
+                "confidence_score": 81,
+                "breakout_distance": 6.52,
+                "breakout_trigger_price": 146,
+            },
+            "cross_day_context": db_price_context("2303", [118.5, 125, 133.5, 141.5, 141]),
+            "holding": None,
+            "volume_ratio": 0.37,
+        }
+
+        messages = generator.formatTelegramMessages(
+            {"聯電": payload},
+            "FULL DETAIL",
+            None,
+            None,
+            "⏳ 觀望",
+            datetime(2026, 6, 17),
+            report_phase="盤中",
+        )
+        direct_card = presentation_report.formatTelegramUnheldCard(
+            "聯電",
+            payload,
+            deps=generator._telegram_presentation_deps(),
+            report_phase="盤中",
+            report_context=self.score_source_report_context("聯電", "available"),
+        )
+
+        self.assertIn("盤面：", direct_card)
+        self.assertNotIn("極強", direct_card)
+        self.assertNotIn("不可追高觀察", direct_card)
+
     def test_v19_4_backtest_changes_tracking_order_only(self):
         weak_context = {
             "sample": 35,
@@ -8635,6 +8789,7 @@ class GeneratorReportTest(unittest.TestCase):
         cooldown["result"]["trade_state"] = "EXTENDED"
         low_volume = self.evidence_payload(confidence=70, decision="WAIT", action=0, rr=1.4, distance=1)
         low_volume["result"].update({"trade_state": "NO_VOLUME", "volume_state": "WEAK"})
+        low_volume["volume_ratio"] = 0.7
         rejected = self.evidence_payload(confidence=40, decision="FAIL", action=0, rr=1.4, distance=1)
         rejected["result"].update({"structure_phase": "FAILED_BREAKOUT", "market_grade": "D"})
 

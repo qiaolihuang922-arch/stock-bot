@@ -323,6 +323,17 @@ def _is_risk_blocked(stock_result, data):
 
 
 def _is_volume_blocked(stock_result, data):
+    if stock_result.get("_volume_ratio_from_data"):
+        for key in ["volume_ratio", "volume_ratio_10", "volume_ratio_20"]:
+            try:
+                value = stock_result.get(key)
+            except AttributeError:
+                value = None
+            try:
+                if value is not None and float(value) >= 1.1:
+                    return False
+            except (TypeError, ValueError):
+                continue
     text = " ".join(
         str(value or "")
         for value in [
@@ -1330,6 +1341,71 @@ def _low_volume_ratio(data):
         return None
 
 
+def _stock_result_with_data_overrides(data):
+    data = data or {}
+    stock_result = dict(data.get("result") or {})
+    for key in [
+        "volume_ratio",
+        "volume_ratio_10",
+        "volume_ratio_20",
+        "breakout_distance",
+        "distance_to_breakout",
+    ]:
+        if stock_result.get(key) is None and data.get(key) is not None:
+            stock_result[key] = data.get(key)
+            if key.startswith("volume_ratio"):
+                stock_result["_volume_ratio_from_data"] = True
+    return stock_result
+
+
+def _recent_price_transition(data):
+    points = _daily_price_points(data)
+    if len(points) < 2:
+        return {}
+    try:
+        latest_close = float(points[-1]["close"])
+        previous_close = float(points[-2]["close"])
+        current = float((data or {}).get("price"))
+    except (KeyError, TypeError, ValueError):
+        return {}
+    if latest_close == 0 or previous_close == 0:
+        return {}
+    previous_change_pct = (latest_close / previous_close - 1) * 100
+    current_change_pct = (current / latest_close - 1) * 100
+    eps = 0.15
+    if previous_change_pct > eps and current_change_pct < -eps:
+        pattern = "UP_THEN_DOWN"
+    elif previous_change_pct < -eps and current_change_pct > eps:
+        pattern = "DOWN_THEN_UP"
+    elif previous_change_pct > eps and current_change_pct > eps:
+        pattern = "CONTINUOUS_UP"
+    elif previous_change_pct < -eps and current_change_pct < -eps:
+        pattern = "CONTINUOUS_DOWN"
+    else:
+        pattern = "FLAT"
+    return {
+        "pattern": pattern,
+        "previous_change_pct": previous_change_pct,
+        "current_change_pct": current_change_pct,
+    }
+
+
+def _adjust_market_text_by_recent_price_transition(market_text, data):
+    transition = _recent_price_transition(data)
+    pattern = transition.get("pattern")
+    if pattern == "UP_THEN_DOWN":
+        if "趨勢延續" in market_text:
+            market_text = market_text.replace("趨勢延續", "反彈回測", 1)
+        if "極強" in market_text:
+            market_text = market_text.replace("極強", "待確認", 1)
+    elif pattern == "CONTINUOUS_DOWN":
+        if "極強" in market_text:
+            market_text = market_text.replace("極強", "待確認", 1)
+        if "洗盤回測" in market_text:
+            market_text = market_text.replace("洗盤回測", "回踩轉弱", 1)
+    return market_text
+
+
 def _is_low_volume_consolidation(report_context, data, stock_result):
     if _report_phase(report_context) != "盤後":
         return False
@@ -1344,10 +1420,11 @@ def _is_low_volume_consolidation(report_context, data, stock_result):
 
 
 def _score_gated_market_line(report_context, name, data, dist, deps):
-    stock_result = data.get("result") or {}
+    stock_result = _stock_result_with_data_overrides(data)
     if _score_source_available(report_context, name, deps):
         market_text = deps["plain_label"](deps["compact_market_line"](stock_result, dist))
         market_text = _strip_breakout_position_segment(market_text)
+        market_text = _adjust_market_text_by_recent_price_transition(market_text, data)
         if ("弱勢" in market_text or "遠離突破" in market_text) and "極強" in market_text:
             market_text = market_text.replace("極強", "待確認")
         if _is_low_volume_consolidation(report_context, data, stock_result):
@@ -1902,7 +1979,9 @@ def formatTelegramPositionCard(name, data, *, deps, report_context=None):
 
 
 def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode=None, report_context=None):
-    stock_result = data["result"]
+    stock_result = _stock_result_with_data_overrides(data)
+    data = dict(data)
+    data["result"] = stock_result
     effective_report_phase = report_phase or _report_phase(report_context)
     dist = deps["card_breakout_distance"](data)
     blockers = deps["entry_blockers"](stock_result)

@@ -1,87 +1,71 @@
-# CHANGELOG: db_backed_low_repair_v21_1_20260616
+# CHANGELOG: db_backed_price_transition_v21_1_20260617
 
 ## 修改內容與檔案
 
-- `services/cross_day_context.py`
-  - `daily_price` 讀取欄位由 `close` 擴成 `open/high/low/close/volume/source`。
-  - `recent_daily_price_points` 保留 OHLCV，作為跨日低位修復判斷資料。
 - `core/generator.py`
-  - 新增 `has_daily_price_repair_basis`，只有 production cross-day context ready 且 source 包含 `daily_price` 時才允許低位修復路線。
-  - 新增 funnel state `等低位修復`。
-  - 遠離突破但 DB 有日線支援時，不再把 pullback/reclaim 類型降成 `等接近`，改為 `等低位修復`。
-  - 同步未持倉 funnel 統計、排序、summary、衝突掃描。
-- `core/trade_state_machine.py`
-  - 新增 `WAIT_LOW_REPAIR` label / action / meta。
+  - 新增 `recent_price_transition`，用 DB `daily_price` 最近收盤與當前價判斷 `UP_THEN_DOWN` / `DOWN_THEN_UP` / `CONTINUOUS_UP` / `CONTINUOUS_DOWN`。
+  - `multi_day_rebound_needs_retest` 不再要求先被標成 `WEAK_REBOUND`；若 DB 日線確認連漲修復、當前價相對最新日線回落，直接進入待回測。
+  - 新增 data-aware result merge，將 top-level `volume_ratio` / distance 合入局部 result，但不污染原始 payload。
+  - `volume_ratio >= 1.1` 時，不再被舊 `NO_VOLUME` / `volume_state=WEAK` 硬打成 `量能不足`。
+  - `volume_ratio < 1.1` 只在接近買點區時作主 blocker；遠離區仍優先走低位修復 / 等接近。
 - `presentation/report.py`
-  - 新增低位修復卡片:
-    - 路線、近期支撐、5日均、量能比、有效買點。
-    - 條件進度: 已滿足項目與還差項目。
-  - 非買入的 `可準備` 卡隱藏容易誤讀的 `交易狀態：可準備` helper line。
-  - 非買入 `可準備` 卡只在 `證據：風控不適用` 且沒有 confirmed / insufficient evidence 時隱藏無效 `數據` 行；保留 `證據 +` 與 `證據：資料不足`，避免把可解釋判斷的 evidence 砍掉。
-  - 盤後等待卡隱藏不適用型 `數據` 噪音。
-- `core/future_watch.py`
-  - 歷史類比 `下一步觀察` 做語意去重，避免 `是否重新站回短線高點` 與 `觀察是否重新站回短線高點` 同時出現。
+  - formatter 改用 data-aware result，避免核心判斷與卡片數據行衝突。
+  - 盤面文字會根據 DB-backed recent transition 移除不合理的 `趨勢延續` / `極強`。
+  - evidence unavailable 的量能判斷同步尊重 data volume ratio。
 - `tests/test_generator_report.py`
-  - 新增 DB-backed low repair regression。
-  - 新增 PULLBACK_RECLAIM 遠離時不得退回 `等接近` 的 regression。
-  - 新增歷史類比下一步觀察去重 regression。
-- `tests/test_cross_day_context.py`
-  - 驗證 `daily_price` OHLCV 會進入 `recent_daily_price_points`。
+  - 新增旺宏昨日漲今日跌後應等回測 regression。
+  - 新增群創 V 1.18x 不得顯示量能不足 regression。
+  - 新增聯電連續轉弱不得顯示極強 / 不可追高 regression。
+  - 修正舊 low-volume fixture，明確使用 `volume_ratio=0.7`。
 
 ## 契約影響
 
 - 報文版本仍為 `v21.1`。
 - Telegram message list shape 不變。
-- 新增使用者可見等待狀態: `等低位修復`。
 - DB:
   - no schema change。
   - no write/backfill/prune。
-  - 只讀既有 `daily_price` 欄位。
+  - 只讀既有 `daily_price` cross-day context。
 - Telegram:
   - no live delivery。
 
 ## 直接消費者同步
 
 - official generator dry-run 已覆蓋。
-- trade state artifact 已同步 `WAIT_LOW_REPAIR`，避免 artifact 與報文狀態不一致。
+- formatter、funnel state、summary bucket 使用同一個 data-aware 判斷，降低卡片與 summary 不一致。
 
 ## 未影響模組
 
-- 不改 `daily_price` 表結構。
+- 不改 Supabase schema / RLS / grant / policy。
 - 不改 Render/GitHub dispatch。
 - 不改 live Telegram sender。
-- 不改持倉停損 / 減碼 hard-stop 邏輯。
+- 不改持倉 hard-stop / 減碼規則。
 
 ## 自檢命令與結果
 
-- DB read probe:
-  - 仁寶、緯創、技嘉、旺宏、群創皆有 `source_of_truth` 包含 `daily_price`，各 8 筆 OHLCV。
-- Targeted report/state/cross-day tests:
-  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py tests\test_trade_state_machine.py tests\test_cross_day_context.py -q --tb=short`
-  - result: `223 passed, 159 warnings, 46 subtests passed`
+- Generator report tests:
+  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q --tb=short`
+  - result: `211 passed, 163 warnings, 46 subtests passed`
 - Full:
   - `.\.venv\Scripts\python.exe -m pytest -q --tb=short`
-  - result: `491 passed, 8 skipped, 169 warnings, 110 subtests passed`
+  - result: `494 passed, 8 skipped, 175 warnings, 110 subtests passed`
 - Official generator dry-run:
-  - result: `4` messages generated, no live Telegram.
-  - unheld cards now show 仁寶 / 緯創 / 技嘉 as `等低位修復` with DB-backed support / 5-day MA / volume evidence.
-  - condition progress now shows `已滿足` and `還差`, so the reader can see what is actually blocking entry.
-  - dry-run visible checks:
-    - `has_detail_index=False`
-    - `has_duplicate_history_watch=1` (only one `站回短線高點` mention)
-    - `has_umc_wind_control_unused=False`
+  - `generate_report(dry_run=True)` returned `4` messages, no live Telegram。
+  - visible checks:
+    - 聯電: `等量能｜等量` with V around `0.46x`。
+    - 旺宏: `等回測｜反彈修復待回測`。
+    - 群創: `等冷卻｜漲停反彈待確認`，not `等量能｜量能不足`。
+    - 緯創 / 技嘉 / 仁寶 remain `等低位修復` with support / 5-day MA / volume gap。
 
 ## 覆蓋層級
 
-- data load: covered by DB read probe and cross-day unit test。
-- formatter: covered。
+- helper: covered by direct tests for transition / blockers。
+- formatter: covered by `formatTelegramUnheldCard` direct tests。
 - official generator message list: covered by dry-run。
-- runner artifact: equivalent local dry-run path covered。
 - production DB write: not run by design。
 - live Telegram: not run by design。
 
 ## 殘留風險
 
-- `等低位修復` only creates a better observation route; it does not decide a stock is buyable.
-- Future calibration can further tune what counts as support repair / volume repair, but must remain DB-backed.
-- Summary was not broad-deleted because regression tests show some `今日盤中風控建議` and `回測摘要` lines are still contractual in buy/prepare replay paths; future summary slimming must split by scenario instead of globally excluding sections.
+- `volume_ratio >= 1.1` is now the effective volume recovery threshold for display / blocker release; future calibration may tune it, but must remain DB/report data backed.
+- `等回測` still is not a buy signal. It only says the next useful observation is a pullback / retest that holds.

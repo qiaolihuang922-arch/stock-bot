@@ -695,6 +695,72 @@ def persistent_recent_price_values(data, min_points=4):
     return values
 
 
+def _data_float(data, *keys):
+    data = data or {}
+    for key in keys:
+        try:
+            value = data.get(key)
+        except AttributeError:
+            value = None
+        try:
+            if value is not None and value != "":
+                return float(value)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _result_with_data_overrides(data):
+    data = data or {}
+    result = dict(data.get("result") or {})
+    for key in [
+        "volume_ratio",
+        "volume_ratio_10",
+        "volume_ratio_20",
+        "breakout_distance",
+        "distance_to_breakout",
+    ]:
+        if result.get(key) is None and data.get(key) is not None:
+            result[key] = data.get(key)
+            if key.startswith("volume_ratio"):
+                result["_volume_ratio_from_data"] = True
+    return result
+
+
+def recent_price_transition(data, min_points=3):
+    values = persistent_recent_price_values(data, min_points=min_points)
+    current = _data_float(data, "price", "current_price", "last_price")
+    if len(values) < 2 or current is None:
+        return {}
+
+    prev_close = values[-2]
+    latest_close = values[-1]
+    if prev_close == 0 or latest_close == 0:
+        return {}
+
+    previous_change_pct = (latest_close / prev_close - 1) * 100
+    current_change_pct = (current / latest_close - 1) * 100
+    eps = 0.15
+    if previous_change_pct > eps and current_change_pct < -eps:
+        pattern = "UP_THEN_DOWN"
+    elif previous_change_pct < -eps and current_change_pct > eps:
+        pattern = "DOWN_THEN_UP"
+    elif previous_change_pct > eps and current_change_pct > eps:
+        pattern = "CONTINUOUS_UP"
+    elif previous_change_pct < -eps and current_change_pct < -eps:
+        pattern = "CONTINUOUS_DOWN"
+    else:
+        pattern = "FLAT"
+    return {
+        "pattern": pattern,
+        "previous_close": prev_close,
+        "latest_close": latest_close,
+        "current_price": current,
+        "previous_change_pct": previous_change_pct,
+        "current_change_pct": current_change_pct,
+    }
+
+
 def has_daily_price_repair_basis(data, min_points=4):
     data = data or {}
     context = cross_day_context(data)
@@ -713,10 +779,6 @@ def has_daily_price_repair_basis(data, min_points=4):
 def multi_day_rebound_needs_retest(data):
     data = data or {}
     result = data.get("result") or {}
-    if result.get("price_behavior") != "WEAK_REBOUND" and result.get("structure_phase") != "WEAK_REBOUND":
-        return False
-    if is_strong_intraday_rebound(result):
-        return False
     if (
         result.get("decision") == "FAIL"
         or result.get("structure_phase") == "FAILED_BREAKOUT"
@@ -738,7 +800,65 @@ def multi_day_rebound_needs_retest(data):
         rebound_pct = (recent[-1] / recent[0] - 1) * 100
     except ZeroDivisionError:
         return False
-    return rebound_pct >= 5
+    if rebound_pct < 5:
+        return False
+
+    transition = recent_price_transition(data)
+    if transition.get("pattern") == "UP_THEN_DOWN":
+        return (
+            transition.get("previous_change_pct", 0) >= 1.0
+            and transition.get("current_change_pct", 0) <= -1.0
+        )
+
+    if result.get("price_behavior") != "WEAK_REBOUND" and result.get("structure_phase") != "WEAK_REBOUND":
+        return False
+    if is_strong_intraday_rebound(result):
+        return False
+    return True
+
+
+def volume_ratio_recovered(result):
+    result = result or {}
+    if not result.get("_volume_ratio_from_data"):
+        return False
+    for key in ["volume_ratio", "volume_ratio_10", "volume_ratio_20"]:
+        try:
+            value = result.get(key)
+        except AttributeError:
+            value = None
+        try:
+            if value is not None and float(value) >= 1.1:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
+def volume_ratio_wait_needed(result):
+    result = result or {}
+    if result.get("trade_state") != "NO_VOLUME" and result.get("volume_state") != "WEAK":
+        return False
+    try:
+        distance = float(
+            result.get("breakout_distance")
+            if result.get("breakout_distance") is not None
+            else result.get("distance_to_breakout")
+        )
+    except (TypeError, ValueError):
+        distance = None
+    if distance is not None and distance > 8:
+        return False
+    for key in ["volume_ratio", "volume_ratio_10", "volume_ratio_20"]:
+        try:
+            value = result.get(key)
+        except AttributeError:
+            value = None
+        try:
+            if value is not None:
+                return float(value) < 1.1
+        except (TypeError, ValueError):
+            continue
+    return False
 
 
 def entry_blockers(result):
@@ -769,7 +889,11 @@ def entry_blockers(result):
     if rr is not None and rr < 1 and result.get("decision") != "FAIL":
         labels.append("RR不足")
 
-    if (trade == "NO_VOLUME" or result.get("volume_state") == "WEAK") and volume_is_primary_gate(result):
+    if (
+        (trade == "NO_VOLUME" or result.get("volume_state") == "WEAK")
+        and not volume_ratio_recovered(result)
+        and volume_is_primary_gate(result)
+    ):
         labels.append("量能不足")
 
     if distance_blocks_entry(result, dist) or far_without_actionable_setup(result, dist):
@@ -1289,7 +1413,7 @@ def semantic_reason(result):
         if result.get("market_grade") == "D":
             return "個股弱勢"
 
-        if trade == "NO_VOLUME" or result.get("volume_state") == "WEAK":
+        if (trade == "NO_VOLUME" or result.get("volume_state") == "WEAK") and not volume_ratio_recovered(result):
             return "量能不足"
 
         if dist is not None and dist > 5:
@@ -1489,7 +1613,7 @@ def should_hide_rr(result):
     if result.get("market_grade") == "D":
         return True
 
-    if result.get("volume_state") == "WEAK":
+    if result.get("volume_state") == "WEAK" and not volume_ratio_recovered(result):
         return True
 
     if dist is not None and dist > 5:
@@ -1512,7 +1636,7 @@ def hidden_rr_reason(result, holding=False):
     if result.get("market_grade") == "D" or result.get("structure_phase") in ["WEAK", "WEAK_REBOUND"]:
         return "弱勢"
 
-    if result.get("volume_state") == "WEAK" or result.get("trade_state") == "NO_VOLUME":
+    if (result.get("volume_state") == "WEAK" or result.get("trade_state") == "NO_VOLUME") and not volume_ratio_recovered(result):
         return "量能不足"
 
     if dist is not None and dist > 5:
@@ -3112,7 +3236,7 @@ def classify_watchlist_group(name, data):
 
 def tomorrow_watch_state(name, data):
 
-    result = data["result"]
+    result = _result_with_data_overrides(data)
     blockers = entry_blockers(result)
 
     if is_valid_entry(result):
@@ -3132,6 +3256,9 @@ def tomorrow_watch_state(name, data):
         return "等回測" if behavior == "LIMIT_LOCK" or label == "漲停不追" else "隔日確認"
 
     if "急彈待回測" in blockers:
+        return "等回測"
+
+    if multi_day_rebound_needs_retest(data):
         return "等回測"
 
     if heat in ["HOT", "EXTREME"] or trade in ["EXTENDED", "AVOID"] or label == "過熱觀察":
@@ -6048,7 +6175,7 @@ def holding_execution_item(name, data):
 
 def strong_prepare_bucket(data):
 
-    result = data.get("result") or {}
+    result = _result_with_data_overrides(data)
     blockers = entry_blockers(result)
     behavior = result.get("price_behavior")
     heat = result.get("heat_state")
@@ -6086,7 +6213,7 @@ def strong_prepare_bucket(data):
 
 def _soft_blocker_prepare_candidate(data, state=None, prepare_label=None):
 
-    result = (data or {}).get("result") or {}
+    result = _result_with_data_overrides(data)
     blockers = entry_blockers(result)
     behavior = result.get("price_behavior")
     heat = result.get("heat_state")
@@ -6172,7 +6299,7 @@ def post_market_unheld_buy_requires_open_confirmation(data, report_context=None)
 
 
 def unheld_funnel_assessment(name, data, market_mode=None, report_context=None):
-    result = data.get("result") or {}
+    result = _result_with_data_overrides(data)
     state = tomorrow_watch_state(name, data)
     blockers = entry_blockers(result)
     prepare_label, _prepare_action = strong_prepare_bucket(data)
@@ -6229,6 +6356,9 @@ def unheld_funnel_assessment(name, data, market_mode=None, report_context=None):
 
     if "急彈待回測" in blockers:
         return "等回測", None
+
+    if volume_ratio_wait_needed(result):
+        return "等量能", None
 
     if "弱反彈待確認" in blockers and multi_day_rebound_wait:
         return "等回測", None
@@ -6336,10 +6466,10 @@ def unheld_funnel_state(name, data, market_mode=None, report_context=None):
         and tomorrow_watch_state(name, data) == "等資料"
     ):
         return "等資料"
-    hard_gate_reasons = _unheld_hard_gate_reasons((data or {}).get("result") or {}, source_status)
+    result = _result_with_data_overrides(data)
+    hard_gate_reasons = _unheld_hard_gate_reasons(result, source_status)
     source_gate_reasons = {"missing-source", "source-error", "conflicting evidence", "insufficient-data"}
     source_only_gate = bool(hard_gate_reasons) and set(hard_gate_reasons).issubset(source_gate_reasons)
-    result = (data or {}).get("result") or {}
     if (
         source_only_gate
         and state in {"淘汰", "隔日確認"}
@@ -6376,7 +6506,6 @@ def unheld_funnel_state(name, data, market_mode=None, report_context=None):
             "隔日確認",
         } else "淘汰"
     if state == "隔日確認":
-        result = (data or {}).get("result") or {}
         behavior = result.get("price_behavior")
         if (
             behavior not in {"LIMIT_LOCK", "LIMIT_REBOUND", "WEAK_REBOUND"}
@@ -6385,7 +6514,6 @@ def unheld_funnel_state(name, data, market_mode=None, report_context=None):
         ):
             state = "等型態"
     if state == "等型態":
-        result = (data or {}).get("result") or {}
         blockers = entry_blockers(result)
         distance_value = None
         for raw_distance in [
