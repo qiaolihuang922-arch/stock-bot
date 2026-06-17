@@ -1,71 +1,65 @@
-# CHANGELOG: db_data_quality_multiday_audit_v21_1_20260617
+# CHANGELOG: report_state_sync_v21_1_20260617
 
 ## Changes
 
-- Added `scripts/audit_db_data_quality.py`
-  - Read-only Supabase audit for current production tables.
-  - Checks duplicate business keys for known tables.
-  - Checks `daily_price` OHLCV legality.
-  - Recomputes `daily_signal_snapshot` close, volume ratios, breakout levels, and retest zones from `daily_price`.
-  - Separates all-history snapshot gaps from current strategy-window gaps.
-  - Classifies expected constant/null fields so source-limited fields are not mistaken for fake data.
-- Added `tests/test_audit_db_data_quality.py`
-  - Invalid OHLC detection.
-  - Snapshot-vs-price mismatch detection.
-  - Expected constants not becoming review noise.
-  - Current-window coverage separation.
-- Updated `.gitignore`
-  - Ignore local `artifacts/` DB audit evidence.
+- Updated `presentation/report.py`
+  - Added data-aware retest wording for rebound/retest cards.
+  - Retest cards now distinguish:
+    - current price above basis: `尚未回測`
+    - current price near basis: `回測中，觀察能否守住`
+    - current price below basis: `已跌破，等待重新站回或形成新支撐`
+  - Added holding warning-breach guard so holding cards cannot say `未跌破風控` when current price is already below warning.
+  - Split overheat wording:
+    - near/at limit-up: `漲停/過熱，不追價`
+    - non-limit overheat: `短線過熱，先等冷卻`
+  - Split breakout-distance wording so non-limit overheat does not render `已突破，但漲停/過熱不追`.
+  - Added concrete volume-wait gap text: `目前量能 Xx，需至少 0.8x`.
+  - Removed after-hours summary filler:
+    - empty `今日交易 / 新增交易建議：無`
+    - duplicate `明日計畫`
+    - duplicate `未持倉僅追蹤，不列入明日計畫`
+- Updated `tests/test_generator_report.py`
+  - Added/updated regression specimens for the Owner-pasted conflicts.
 
-## Production DB Actions
+## Contract Impact
 
-- No schema change.
-- No live Telegram.
-- No hand-written DML.
-- Prune dry-run:
-  - `daily_signal_snapshot` delete candidates: `0`
-  - exact duplicate `(stock_id, trade_date, version)`: `0`
-- Approved snapshot backfill writes:
-  - `2408` on `2026-06-16`: 1 `v21.1` row upserted from `daily_price`
-  - `3035` on `2026-06-16`: 1 `v21.1` row upserted from `daily_price`
-  - `2337` on `2026-06-16`: 1 `v21.1` row upserted from `daily_price`
+- User-visible Telegram report wording changes only.
+- Runtime report version remains `v21.1`.
+- No DB schema change.
+- No DB write/backfill/delete.
+- No live Telegram delivery.
+- No change to persisted production data.
 
-## Evidence Artifacts
+## Direct Consumer Sync
 
-Local artifacts were generated under `D:\reserch\stock-bot\artifacts\` and are intentionally ignored by git:
-
-- `db_table_health_20260617.json`
-- `daily_signal_snapshot_prune_plan_20260617.json`
-- `db_data_quality_20260617.json`
-- `snapshot_backfill_*_20260616_dry_run.json`
-- `snapshot_backfill_*_20260616_write.json`
-- `db_data_quality_20260617_after_write.json`
-- `daily_signal_snapshot_prune_plan_20260617_after_write.json`
-- `strategy_buy_path_replay_30d_20260617_after_write.json`
-- `strategy_rule_outcomes_120d_20260617_after_write.json`
+- Official consumer covered: `generate_report(dry_run=True)` message list.
+- Mobile readability covered by generator report snapshots and absence checks.
 
 ## Verification
 
-- Targeted tests:
-  - `.\.venv\Scripts\python.exe -m pytest tests\test_audit_db_data_quality.py tests\test_audit_db_table_health.py -q --tb=short`
-  - result: `7 passed`
-- Read-after-write DB quality audit:
-  - tables checked: `11`
-  - `fix_issue_count=0`
-  - `review_item_count=0`
-  - `current_window_missing_snapshot_rows=0`
-  - `safe_to_delete_rows=0`
-- Prune read-after dry-run:
-  - `delete_candidate_rows=0`
-  - `exact_duplicate_extra_rows=0`
-- Strategy replay:
-  - `deadlock_suspected=False`
-  - `has_real_buyable_path=True`
-  - `has_prepare_path=True`
+- Targeted report tests:
+  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q -k "retest_basis or warning_breached or non_limit_overheat or wait_volume_card or db_backed_rebound_pullback" --tb=short`
+  - result: `5 passed`
+- Full generator report tests:
+  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q --tb=short`
+  - result: `215 passed`, `46 subtests passed`
+- Adjacent state/replay tests:
+  - `.\.venv\Scripts\python.exe -m pytest tests\test_unheld_gap_format.py tests\test_trade_state_machine.py tests\test_strategy_buy_path_replay.py tests\test_strategy_rule_outcomes.py -q --tb=short`
+  - result: `16 passed`
 - Official generator dry-run:
-  - `generate_report(dry_run=True)` returned `4` messages.
+  - `generate_report(dry_run=True)`
+  - result: `4` messages, no live Telegram.
+
+## Official Dry-Run Rechecks
+
+- `2337 旺宏` no longer renders `回測基準 ... 尚未回測` when current price is below the retest basis.
+- `2421 建準` renders `已跌破警戒，未到停損` and warning-first handling.
+- `2344 華邦電` / `2408 南亞科` non-limit overheat renders `短線過熱，先等冷卻`, not limit-up wording.
+- `2303 聯電` wait-volume card renders `目前量能 0.53x，需至少 0.8x`.
+- Summary no longer renders empty `新增交易建議：無`, duplicate `明日計畫`, or duplicate unheld non-execution filler.
 
 ## Residual Risk
 
-- `strategy_rule_outcomes_120d` still flags several blocked groups as possibly too strict. That is a strategy-calibration task, not a DB data-quality failure.
-- `trades` still exists with a legacy row but no current code path was found consuming `supabase.table("trades")`; deletion needs a dedicated approved prune/delete interface if Owner still wants it removed.
+- This cycle corrects report-state/display conflicts; it does not redesign the underlying strategy gates.
+- Official dry-run may change state as live/realtime data changes during the day; the added guards are data-aware and should remain valid across those changes.
+- `.pytest_cache` still cannot be written on this machine because of local `WinError 5`; tests execute and pass despite the cache warning.

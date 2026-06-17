@@ -8,6 +8,13 @@ preparation and passes the formatter helpers needed for compatibility.
 SHOW_DATA_BASIS = False
 
 
+def _float_or_none(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _is_today_action_phase(report_phase):
     return report_phase in (None, "盤前", "盤中")
 
@@ -136,10 +143,6 @@ def formatTelegramSummary(
         )
         if unheld_non_execution_lines:
             lines.extend(unheld_non_execution_lines)
-    else:
-        lines.extend(["", "今日交易"])
-        lines.append("新增交易建議：無")
-
     executed_lines = deps["format_executed_checklist"](holding_items, watch_items)
     if executed_lines:
         lines.extend(["", "已執行（不重複下單）"])
@@ -149,25 +152,12 @@ def formatTelegramSummary(
     lines.extend(deps["format_holding_control_checklist"](holding_items, report_phase=report_phase))
 
     if not _is_today_action_phase(report_phase):
-        plan_count = len(deps["pending_trade_items"](
-            holding_items, watch_items, market_mode=market_mode, report_context=report_context
-        ))
-        if plan_count:
-            lines.extend(["", f"明日計畫 {plan_count}"])
-            lines.extend(deps["format_execution_checklist"](
-                holding_items, watch_items, report_phase=report_phase, market_mode=market_mode, report_context=report_context
-            ))
         new_entry_lines = deps["format_new_entry_suggestions"](
             watch_items, report_phase=report_phase, market_mode=market_mode, report_context=report_context
         )
         if new_entry_lines:
             lines.extend(["", "新倉建議"])
             lines.extend(new_entry_lines)
-        unheld_non_execution_lines = deps["format_unheld_non_execution_lines"](
-            watch_items, report_phase=report_phase, market_mode=market_mode, report_context=report_context
-        )
-        if unheld_non_execution_lines:
-            lines.extend(unheld_non_execution_lines)
 
     unheld_funnel_text = deps["format_unheld_funnel"](watch_items, market_mode=market_mode, report_context=report_context)
     if unheld_funnel_text:
@@ -555,6 +545,33 @@ def _recent_rebound_close_text(data):
     return "最近反彈收盤"
 
 
+def _retest_anchor_value_from_text(retest_text):
+    text = str(retest_text or "")
+    marker = "最近反彈收盤"
+    if marker not in text:
+        return None
+    tail = text.split(marker, 1)[1].strip()
+    if tail.startswith("："):
+        tail = tail[1:].strip()
+    token = tail.split(" ", 1)[0].split("附近", 1)[0].split("；", 1)[0]
+    return _float_or_none(token)
+
+
+def _rebound_retest_basis_line(data, retest_text):
+    anchor = str(retest_text or "").replace(" 附近不破", "").strip()
+    anchor_value = _retest_anchor_value_from_text(retest_text)
+    current_value = _float_or_none((data or {}).get("price"))
+    if anchor_value is None or current_value is None:
+        return f"回測基準：{anchor}；等待回測確認"
+
+    tolerance = anchor_value * 0.005
+    if current_value < anchor_value - tolerance:
+        return f"回測基準：{anchor}；已跌破，等待重新站回或形成新支撐"
+    if current_value <= anchor_value + tolerance:
+        return f"回測基準：{anchor}；回測中，觀察能否守住"
+    return f"回測基準：{anchor}；尚未回測"
+
+
 def _daily_price_points(data):
     context = ((data or {}).get("cross_day_context") or {})
     sources = context.get("source_of_truth") or []
@@ -672,6 +689,24 @@ def _repair_retest_gap_text(data):
 
 def _repair_retest_unlock_text(data):
     return f"回測{_recent_rebound_close_text(data)}不破"
+
+
+def _volume_wait_gap_text(data, target=0.8):
+    ratio = _float_or_none((data or {}).get("volume_ratio"))
+    if ratio is None:
+        ratio = _float_or_none(((data or {}).get("result") or {}).get("volume_ratio"))
+    if ratio is None:
+        return "量能資料補齊後再評估"
+    return f"目前量能 {_gate_value_text(ratio)}x，需至少 {_gate_value_text(target)}x"
+
+
+def _overheat_chase_reason(data, fallback="短線過熱，先等冷卻"):
+    stock_result = (data or {}).get("result") or {}
+    change = _float_or_none((data or {}).get("change"))
+    behavior = str(stock_result.get("price_behavior") or "")
+    if behavior in {"LIMIT_LOCK", "LIMIT_REBOUND"} or (change is not None and change >= 9.0):
+        return "漲停/過熱，不追價"
+    return fallback
 
 
 def _strategy_source_title_label(source_status):
@@ -1001,9 +1036,9 @@ def _unheld_entry_contract(data, dist, blockers, valid_entry, funnel_state, sour
     title_text = str(title_label or "")
     market_background = "市場弱" in title_text or "市場弱" in blocker_text
     if "量能不足" in title_text:
-        gates.append(("量能不足", "需量能回升後重新評估"))
+        gates.append(("量能不足", _volume_wait_gap_text(data)))
     elif "量能不足" in blocker_text:
-        gates.append(("量能不足", "需量能回升後重新評估"))
+        gates.append(("量能不足", _volume_wait_gap_text(data)))
     if "突破失敗" in blocker_text or phase == "FAILED_BREAKOUT":
         return contract("未站回突破區", "尚未站回突破區", "重新站回突破區後再評估", basis="")
     if post_market_prepare:
@@ -1054,9 +1089,17 @@ def _unheld_entry_contract(data, dist, blockers, valid_entry, funnel_state, sour
 
     heat = stock_result.get("heat_state")
     if heat == "EXTREME":
-        return contract("熱度 Lv.3", "熱度 Lv.3｜需降至 Lv.1/觀察以下", "降到 Lv.1/觀察以下 + 回測不破 + 非漲停追價")
+        return contract(
+            _overheat_chase_reason(data),
+            "熱度 Lv.3｜需降至 Lv.1/觀察以下",
+            "降到 Lv.1/觀察以下 + 回測不破 + 非漲停追價",
+        )
     if heat == "HOT" or "過熱" in blocker_text:
-        return contract("過熱觀察", "熱度 Lv.2｜需降至 Lv.1/觀察以下", "降到 Lv.1/觀察以下 + 回測不破")
+        return contract(
+            _overheat_chase_reason(data),
+            "熱度 Lv.2｜需降至 Lv.1/觀察以下",
+            "降到 Lv.1/觀察以下 + 回測不破",
+        )
 
     rr_text = _gate_value_text(stock_result.get("rr"))
     if not is_actionable and rr_text and ("RR不足" in blocker_text or float(rr_text) < 1.5):
@@ -1104,7 +1147,7 @@ def _unheld_entry_contract(data, dist, blockers, valid_entry, funnel_state, sour
     elif not gates and funnel_state == "等RR修復":
         gates.append(("RR不足", "風險報酬不可用｜需>=1.5"))
     elif not gates and funnel_state == "等量能":
-        gates.append(("量能不足", "需量能回升後重新評估"))
+        gates.append(("量能不足", _volume_wait_gap_text(data)))
     elif not gates and funnel_state == "隔日確認":
         gates.append(("隔日確認", "需轉強後重新評估"))
     elif not gates and funnel_state == "淘汰":
@@ -1130,7 +1173,7 @@ def _unheld_entry_contract(data, dist, blockers, valid_entry, funnel_state, sour
         "反彈力道不足": "放量轉強 + 品質B以上 + 風險報酬>=1.5",
         "急彈未回測": "回測不破且非追高時重新評估",
         "市場弱": "市場轉強後重新評估",
-        "量能不足": "量能回升後重新評估",
+        "量能不足": "量能 >= 0.8x 且非追高時重新評估",
         "進場品質不足": "重新形成 setup + 品質B以上 + 量能有效 + 風險報酬>=1.5",
         "過熱觀察": "降溫到 Lv.1/觀察以下 + 回測不破",
         "熱度 Lv.3": "降溫到 Lv.1/觀察以下 + 回測不破 + 非漲停追價",
@@ -1444,7 +1487,7 @@ def _strip_line_prefix(text, prefixes):
     return text
 
 
-def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None):
+def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None, data=None):
     buy_text = str(buy_line or "").strip()
     if isinstance(buy_gap_line, dict):
         reason = buy_gap_line.get("reason")
@@ -1513,8 +1556,7 @@ def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None):
                 retest = retest.replace("等待回測", "", 1)
             if retest:
                 if waiting_retest and retest.startswith("最近反彈收盤"):
-                    anchor = retest.replace(" 附近不破", "")
-                    lines.append(f"回測基準：{anchor}；尚未回測")
+                    lines.append(_rebound_retest_basis_line(data, retest))
                 else:
                     lines.append(f"回測：{retest}")
             if unlock:
@@ -1643,8 +1685,7 @@ def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None):
             retest = retest.replace("等待回測", "", 1)
         if retest:
             if waiting_retest and retest.startswith("最近反彈收盤"):
-                anchor = retest.replace(" 附近不破", "")
-                lines.append(f"回測基準：{anchor}；尚未回測")
+                lines.append(_rebound_retest_basis_line(data, retest))
             else:
                 lines.append(f"回測：{retest}")
         if unlock:
@@ -1762,7 +1803,10 @@ def _breakout_distance_line(dist, data=None, funnel_state=None, title_label=None
         blocker_text,
     ])
     if label == "已突破" and any(token in context_text for token in ["HOT", "EXTREME", "LIMIT", "過熱", "漲停", "不可追高", "等冷卻"]):
-        label = "已突破，但漲停/過熱不追"
+        change = _float_or_none((data or {}).get("change"))
+        behavior = str(stock_result.get("price_behavior") or "")
+        limit_like = behavior in {"LIMIT_LOCK", "LIMIT_REBOUND"} or (change is not None and change >= 9.0)
+        label = "已突破，但漲停/過熱不追" if limit_like else "已突破，但短線過熱不追"
     return f"距突破：{_gate_value_text(dist)}%｜{label}"
 
 
@@ -1800,7 +1844,22 @@ def _unheld_rr_text(stock_result, funnel_state, valid_entry, deps, state=None, t
     return deps["rr_display_text"](stock_result, holding=False)
 
 
-def _holding_action_contract(summary_action, decision_line, reason_line, condition_line, next_step):
+def _holding_warning_breach_text(data, decision):
+    if not decision:
+        return None
+    price = _float_or_none((data or {}).get("price"))
+    warning = _float_or_none(decision.get("warning_price"))
+    hard_stop = _float_or_none(decision.get("hard_stop_price"))
+    if price is None or warning is None:
+        return None
+    if hard_stop is not None and price <= hard_stop:
+        return "已跌破停損，優先停損"
+    if price < warning:
+        return "已跌破警戒，未到停損"
+    return None
+
+
+def _holding_action_contract(summary_action, decision_line, reason_line, condition_line, next_step, *, data=None, decision=None):
     action = str(summary_action or "")
     decision_text = str(decision_line or "").strip()
     risk_text = str(reason_line or "").strip()
@@ -1808,6 +1867,9 @@ def _holding_action_contract(summary_action, decision_line, reason_line, conditi
         risk_text = risk_text.replace("原因：", "", 1).strip()
     condition_text = str(condition_line or "").strip()
     next_text = str(next_step or "").strip()
+    warning_breach = _holding_warning_breach_text(data, decision)
+    if warning_breach and "未跌破風控" in risk_text:
+        risk_text = warning_breach
     combined_text = " ".join([action, decision_text, risk_text, condition_text, next_text])
 
     if "停利記憶不足" in combined_text or "execution memory 不足" in combined_text:
@@ -1875,10 +1937,10 @@ def _holding_action_contract(summary_action, decision_line, reason_line, conditi
         "action_label": "決策",
         "unlock_label": "可續抱",
         "entry": decision_text or "續抱，不加碼",
-        "reason": risk_text or "未跌破風控，但尚未重新轉強",
-        "gap": condition_text or "守警戒價，等量價修復",
+        "reason": risk_text or warning_breach or "未跌破風控，但尚未重新轉強",
+        "gap": "跌破警戒後先看能否收復，跌破停損則優先風控" if warning_breach else (condition_text or "守警戒價，等量價修復"),
         "unlock": "守住警戒價 + 量價修復",
-        "next": next_text or "觀察是否守住警戒，未修復再降級",
+        "next": "收復警戒才恢復觀察；跌破停損優先風控" if warning_breach else (next_text or "觀察是否守住警戒，未修復再降級"),
     }
 
 
@@ -1957,7 +2019,15 @@ def formatTelegramPositionCard(name, data, *, deps, report_context=None):
             name,
             default_prefix="原因",
         )
-    contract = _holding_action_contract(summary_action, decision_line, reason_line, condition_line, next_step)
+    contract = _holding_action_contract(
+        summary_action,
+        decision_line,
+        reason_line,
+        condition_line,
+        next_step,
+        data=data,
+        decision=decision,
+    )
     insert_at = 6
     gap_text = contract.get("gap")
     next_text = contract.get("next")
@@ -2319,7 +2389,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         data_source_blocked=data_source_display_blocked or (deps["is_valid_entry"](stock_result) and not source_eligible),
         funnel_state=funnel_state,
     )
-    entry_check_lines = _entry_check_lines(buy_line, buy_gap_contract, funnel_state=funnel_state)
+    entry_check_lines = _entry_check_lines(buy_line, buy_gap_contract, funnel_state=funnel_state, data=data)
     lines = [
         f"【{deps['stock_title'](name, data)}】{title_icon} {title_action}｜{title_label}",
         trade_state_line,

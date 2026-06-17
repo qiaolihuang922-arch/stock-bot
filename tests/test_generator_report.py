@@ -3896,7 +3896,8 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertTrue(generator.multi_day_rebound_needs_retest(payload))
         self.assertEqual(generator.unheld_funnel_state("旺宏", payload), "等回測")
         self.assertIn("【旺宏 2337】⏳ 等回測｜反彈修復待回測", card)
-        self.assertIn("回測基準：最近反彈收盤 166.5；尚未回測", card)
+        self.assertIn("回測基準：最近反彈收盤 166.5；已跌破，等待重新站回或形成新支撐", card)
+        self.assertNotIn("回測基準：最近反彈收盤 166.5；尚未回測", card)
         self.assertNotIn("趨勢延續", card)
 
         direct_card = presentation_report.formatTelegramUnheldCard(
@@ -3908,6 +3909,175 @@ class GeneratorReportTest(unittest.TestCase):
         )
         self.assertIn("盤面：弱勢｜偏強", direct_card)
         self.assertNotIn("趨勢延續", direct_card)
+
+    def test_retest_basis_above_current_is_not_rendered_as_not_retested(self):
+        payload = {
+            "stock_code": "2337",
+            "price": 161.5,
+            "change": -3.00,
+            "price_source": "realtime",
+            "daily_source": "yahoo",
+            "result": {
+                "decision": "WAIT",
+                "action": 0,
+                "rr": 1.8,
+                "heat_state": "NORMAL",
+                "trade_state": "WAIT",
+                "structure_phase": "NORMAL",
+                "price_behavior": "NORMAL",
+                "market_grade": "B",
+                "volume_state": "NORMAL",
+                "volume_price_state": "ATTACK",
+                "structure_state": "NORMAL",
+                "entry_quality": "D",
+                "confidence_score": 45,
+                "breakout_distance": 9.21,
+                "breakout_trigger_price": 175.5,
+            },
+            "cross_day_context": db_price_context("2337", [135, 140, 146.5, 159, 166.5]),
+            "holding": None,
+            "volume_ratio": 1.2,
+        }
+
+        messages = generator.formatTelegramMessages(
+            {"旺宏": payload},
+            "FULL DETAIL",
+            None,
+            None,
+            "⏳ 觀望",
+            datetime(2026, 6, 17),
+            report_phase="收盤",
+        )
+        card = card_block(unheld_message(messages), "【旺宏 2337】")
+
+        self.assertIn("回測基準：最近反彈收盤 166.5；已跌破，等待重新站回或形成新支撐", card)
+        self.assertNotIn("尚未回測", card)
+
+    def test_warning_breached_holding_does_not_claim_risk_not_breached(self):
+        payload = {
+            "stock_code": "2421",
+            "price": 144.5,
+            "change": 1.40,
+            "price_source": "realtime",
+            "daily_source": "yahoo",
+            "result": {
+                "decision": "WAIT",
+                "action": 0,
+                "rr": 1.0,
+                "heat_state": "NORMAL",
+                "trade_state": "WAIT",
+                "structure_phase": "WEAK",
+                "price_behavior": "NORMAL",
+                "market_grade": "D",
+                "volume_state": "WEAK",
+                "volume_price_state": "COILING",
+                "structure_state": "WEAK",
+                "entry_quality": "D",
+                "confidence_score": 35,
+                "breakout_distance": 17.19,
+            },
+            "holding": {"shares": 380, "avg_price": 152.83},
+            "holding_decision": {
+                "action": "續抱觀察",
+                "level": "HOLD_WATCH",
+                "note": "輕虧不加碼",
+                "warning_price": 145.19,
+                "hard_stop_price": 140.60,
+            },
+            "volume_ratio": 0.5,
+        }
+
+        card = presentation_report.formatTelegramPositionCard(
+            "建準",
+            payload,
+            deps=generator._telegram_presentation_deps(),
+            report_context=self.score_source_report_context("建準", "available", report_phase="收盤"),
+        )
+
+        self.assertIn("原因：已跌破警戒，未到停損", card)
+        self.assertNotIn("未跌破風控", card)
+
+    def test_non_limit_overheat_breakout_does_not_say_limit_up(self):
+        payload = {
+            "stock_code": "2344",
+            "price": 199.0,
+            "change": 1.02,
+            "price_source": "realtime",
+            "daily_source": "yahoo",
+            "result": {
+                "decision": "WAIT",
+                "action": 0,
+                "rr": 1.2,
+                "heat_state": "EXTREME",
+                "trade_state": "HOT",
+                "structure_phase": "BREAKOUT_CONFIRM",
+                "price_behavior": "NORMAL",
+                "market_grade": "A",
+                "volume_state": "ATTACK",
+                "volume_price_state": "ATTACK",
+                "structure_state": "NORMAL",
+                "entry_quality": "B",
+                "confidence_score": 80,
+                "breakout_distance": -6.82,
+            },
+            "holding": None,
+            "volume_ratio": 1.3,
+        }
+
+        card = presentation_report.formatTelegramUnheldCard(
+            "華邦電",
+            payload,
+            deps=generator._telegram_presentation_deps(),
+            report_phase="收盤",
+            report_context=self.score_source_report_context("華邦電", "available", report_phase="收盤"),
+        )
+
+        self.assertIn("距突破：-6.82%｜已突破，但短線過熱不追", card)
+        self.assertNotIn("已突破，但漲停/過熱不追", card)
+
+    def test_wait_volume_card_shows_current_ratio_and_target(self):
+        payload = {
+            "stock_code": "2303",
+            "price": 140.0,
+            "change": -0.71,
+            "price_source": "realtime",
+            "daily_source": "yahoo",
+            "result": {
+                "decision": "WAIT",
+                "action": 0,
+                "rr": 1.8,
+                "heat_state": "NORMAL",
+                "trade_state": "NO_VOLUME",
+                "structure_phase": "BREAKOUT_NEAR",
+                "price_behavior": "NORMAL",
+                "market_grade": "B",
+                "volume_state": "WEAK",
+                "volume_price_state": "COILING",
+                "structure_state": "NORMAL",
+                "entry_quality": "B",
+                "confidence_score": 72,
+                "breakout_distance": 4.81,
+                "breakout_trigger_price": 146.0,
+            },
+            "cross_day_context": db_price_context("2303", [118.5, 125, 133.5, 141.5, 141]),
+            "holding": None,
+            "volume_ratio": 0.49,
+        }
+
+        messages = generator.formatTelegramMessages(
+            {"聯電": payload},
+            "FULL DETAIL",
+            None,
+            None,
+            "⏳ 觀望",
+            datetime(2026, 6, 17),
+            report_phase="收盤",
+        )
+        card = card_block(unheld_message(messages), "【聯電 2303】")
+
+        self.assertIn("目前量能 0.49x，需至少 0.8x", card)
+        self.assertIn("量能 >= 0.8x", card)
+        self.assertNotIn("量能回升後重新評估", card)
 
     def test_volume_ratio_recovered_does_not_show_wait_volume(self):
         payload = {
@@ -9783,7 +9953,8 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("風險報酬 1.4｜需>=1.5", hot_card)
         self.assertNotIn("進場品質", hot_card)
         self.assertIn("【華邦電 2344】⏳ 等冷卻｜過熱 Lv.3", extreme_card)
-        self.assertIn("狀態：漲停/過熱，不追價", extreme_card)
+        self.assertIn("狀態：短線過熱，先等冷卻", extreme_card)
+        self.assertNotIn("狀態：漲停/過熱，不追價", extreme_card)
         self.assertIn("等待：熱度 Lv.3", extreme_card)
         self.assertIn("等待：熱度 Lv.3；有效買點：降溫到 Lv.1 + 回測不破 + 非漲停追價", extreme_card)
         self.assertNotIn("風險報酬 0.7｜需>=1.5", extreme_card)
