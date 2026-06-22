@@ -720,6 +720,24 @@ def _overheat_chase_reason(data, fallback="短線過熱，先等冷卻"):
     return fallback
 
 
+def _limit_chase_display_kind(data, blockers=None):
+    stock_result = (data or {}).get("result") or {}
+    blockers = set(blockers or stock_result.get("blockers") or [])
+    if (
+        stock_result.get("decision") == "FAIL"
+        or stock_result.get("structure_phase") == "FAILED_BREAKOUT"
+        or "突破失敗" in blockers
+    ):
+        return None
+    behavior = str(stock_result.get("price_behavior") or "")
+    change = _float_or_none((data or {}).get("change"))
+    if behavior == "LIMIT_LOCK" or "漲停不追" in blockers or (change is not None and change >= 9.0):
+        return "lock"
+    if behavior == "LIMIT_REBOUND" or "漲停反彈待確認" in blockers:
+        return "rebound"
+    return None
+
+
 def _strategy_source_title_label(source_status):
     return {
         "source-error": "策略樣本來源異常",
@@ -1092,6 +1110,21 @@ def _unheld_entry_contract(data, dist, blockers, valid_entry, funnel_state, sour
             "unlock": _low_repair_unlock_text(data),
             "extras": [f"條件：{_low_repair_progress_text(data)}"],
         }
+    limit_display_kind = _limit_chase_display_kind(data, blockers)
+    if limit_display_kind:
+        if limit_display_kind == "rebound":
+            return contract(
+                "漲停反彈，隔日確認",
+                "解除鎖定後，看回測是否守住",
+                "開板/降溫 + 回測不破 + 非追高",
+                basis="",
+            )
+        return contract(
+            "漲停/過熱，不追價",
+            "解除鎖定後，看開板回測是否守住",
+            "開板/降溫 + 回測不破 + 非追高",
+            basis="",
+        )
     if "急彈待回測" in blocker_text:
         retest_text = _retest_zone_text(data)
         unlock_text = _retest_unlock_text(data)
@@ -1101,8 +1134,6 @@ def _unheld_entry_contract(data, dist, blockers, valid_entry, funnel_state, sour
             f"{unlock_text} + 非漲停追價 + 量能有效",
             basis="",
         )
-    if behavior in {"LIMIT_LOCK", "LIMIT_REBOUND"} or "漲停" in blocker_text or "不可追高" in blocker_text:
-        gates.append(("漲跌停鎖定", "需解除鎖定後重新評估"))
     if behavior == "WEAK_REBOUND" or phase == "WEAK_REBOUND" or "弱反彈" in blocker_text:
         gates.append(("反彈力道不足", "需放量轉強後重新評估"))
 
@@ -1532,6 +1563,14 @@ def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None, data=None):
                 wait = f"{wait}；有效買點：{unlock}" if wait else f"有效買點：{unlock}"
             if wait:
                 lines.append(f"等待：{wait}")
+            return lines
+
+        if reason and ("漲停" in str(reason) or "鎖定" in str(reason)):
+            lines = [f"狀態：{reason}"]
+            if gap:
+                lines.append(f"等待：{gap}")
+            if unlock:
+                lines.append(f"有效買點：{unlock}")
             return lines
 
         if funnel_state == "等接近":
@@ -2083,6 +2122,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     effective_report_phase = report_phase or _report_phase(report_context)
     dist = deps["card_breakout_distance"](data)
     blockers = deps["entry_blockers"](stock_result)
+    limit_display_kind = _limit_chase_display_kind(data, blockers)
     stock_source_status = deps["_stock_decision_source_status"](report_context, name)
     strategy_source_status = deps["_strategy_sample_decision_source_status"](report_context)
     source_status = deps["_unheld_decision_source_status"](report_context, name)
@@ -2176,6 +2216,14 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
             title_action = f"明日追蹤｜{deps['unheld_entry_size_detail_text'](stock_result)}"
         else:
             title_action = f"可買｜{deps['unheld_entry_size_detail_text'](stock_result)}"
+    elif limit_display_kind == "lock":
+        title_icon = "⏳"
+        title_action = "等回測"
+        title_label = "漲停不追"
+    elif limit_display_kind == "rebound":
+        title_icon = "👀"
+        title_action = "隔日確認"
+        title_label = "漲停反彈待確認"
     elif deps["is_valid_entry"](stock_result) and not source_eligible:
         title_icon = "⛔"
         title_action = "不可行動"
@@ -2325,6 +2373,8 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         tomorrow_line = f"{trigger_label}：守支撐/5日均 + 量能不失控，小倉試單"
     elif is_low_repair_prepare:
         tomorrow_line = f"{trigger_label}：開盤不追高；守支撐/5日均 + 量能不失控，小倉確認"
+    elif limit_display_kind:
+        tomorrow_line = f"{trigger_label}：開板/降溫後回測不破，且非追高"
     elif data_source_display_blocked:
         tomorrow_line = f"{trigger_label}：無有效進場，先補策略樣本證據"
     elif funnel_state == "等資料":
@@ -2381,6 +2431,9 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     if is_low_repair_prepare:
         reason_line = None
         data_line = None
+    if limit_display_kind:
+        reason_line = None
+        data_line = None
     compact_wait_card = (
         not valid_entry
         and not strategy_source_blocked
@@ -2398,7 +2451,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         and is_afterhours
         and not post_market_prepare
         and not preserve_strategy_source_card
-        and funnel_state in {"等冷卻", "等接近", "等低位修復", "等型態", "等回測", "等RR修復", "淘汰"}
+        and funnel_state in {"等冷卻", "等接近", "等低位修復", "等型態", "等回測", "等RR修復", "隔日確認", "淘汰"}
         and data_line
         and ("不適用" in data_line or "風控不適用" in data_line)
     ):
@@ -2419,7 +2472,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         and not data_source_display_blocked
         and "資料來源" not in str(title_label or "")
         and "策略樣本" not in str(title_label or "")
-        and funnel_state in {"等冷卻", "等回測", "等型態", "等接近", "等低位修復", "等RR修復", "淘汰"}
+        and funnel_state in {"等冷卻", "等回測", "等型態", "等接近", "等低位修復", "等RR修復", "隔日確認", "淘汰"}
     ):
         data_line = None
     market_line = None if is_afterhours_rejected else (

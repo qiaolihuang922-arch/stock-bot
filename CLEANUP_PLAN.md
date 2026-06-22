@@ -2,13 +2,10 @@
 
 ## Completed This Cycle
 
-- Removed a user-visible contradiction in intraday low-repair cards:
-  - before: `可買｜小倉` could coexist with `交易狀態：等資料`
-  - after: executable low-repair cards show `交易狀態：可買｜動作：小倉試單`
-- Clarified after-hours low-repair:
-  - after-hours is preparation only
-  - next action requires open confirmation, support / 5-day MA hold, and volume not losing control
-- Added regression coverage for both visible cases.
+- Removed noisy RR / quality / score display from lock-up cards.
+- Promoted lock-up / no-chase as the visible primary reason for limit-like unheld candidates.
+- Preserved structure-failure priority over lock-up display.
+- Added regression coverage to prevent `等風險報酬` from reappearing on pure lock-up cards.
 
 ## Cleanup Notes
 
@@ -27,6 +24,6 @@
 
 ## Persistent Rule Reminder
 
-- If a card title says a stock is executable, state line, buy line, and trigger must also say executable.
-- If a card is only after-hours preparation, it must not read like an immediate buy.
-- Avoid generic blockers such as `等資料` unless the actual hard source failure is named.
+- A card should show only the active primary blocker first.
+- Lock-up / overheated names should not expose RR or score as the active reason until the stock is tradable again.
+- If structure has failed, keep structure failure ahead of lock-up display.

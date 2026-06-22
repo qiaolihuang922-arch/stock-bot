@@ -6466,6 +6466,15 @@ def unheld_funnel_assessment(name, data, market_mode=None, report_context=None):
         return "淘汰", None
 
     soft_prepare_candidate = _soft_blocker_prepare_candidate(data, state=state, prepare_label=prepare_label)
+    structure_failed = (
+        result.get("decision") == "FAIL"
+        or result.get("structure_phase") == "FAILED_BREAKOUT"
+        or "突破失敗" in blockers
+    )
+    if not structure_failed and (result.get("price_behavior") == "LIMIT_LOCK" or "漲停不追" in blockers):
+        return "等回測", None
+    if not structure_failed and (result.get("price_behavior") == "LIMIT_REBOUND" or "漲停反彈待確認" in blockers):
+        return "隔日確認", "漲停反彈屬軟阻擋：不追價，等隔日回測承接與量能確認。"
     if soft_prepare_candidate and (
         result.get("price_behavior") == "LIMIT_REBOUND" or "漲停反彈待確認" in blockers
     ):
