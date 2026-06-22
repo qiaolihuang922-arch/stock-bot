@@ -3954,7 +3954,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("盤後不追價", card)
         self.assertNotIn("資料來源未完整", card)
 
-        error_messages = generator.formatTelegramMessages(
+        strategy_error_messages = generator.formatTelegramMessages(
             {"緯創": copy.deepcopy(payload)},
             "FULL DETAIL",
             None,
@@ -3964,9 +3964,28 @@ class GeneratorReportTest(unittest.TestCase):
             strategy_evidence_summary=structured_strategy_evidence("source-error", row_count=0),
             report_phase="盤中",
         )
-        error_card = card_block(unheld_message(error_messages), "【緯創 3231】")
-        self.assertNotIn("可買｜小倉", error_card)
-        self.assertIn("策略樣本來源異常", error_card)
+        strategy_error_card = card_block(unheld_message(strategy_error_messages), "【緯創 3231】")
+        self.assertIn("可買｜小倉", strategy_error_card)
+        self.assertNotIn("策略樣本來源異常", strategy_error_card)
+
+        core_source_error_context = {
+            "report_context": {"report_phase": "盤中", "version": generator.VERSION},
+            "evidence_manifest": [
+                {"field_name": "stock.緯創.price", "source_status": "source-error"},
+                {"field_name": "stock.緯創.daily_ohlcv", "source_status": "available"},
+                {"field_name": "stock.緯創.rr", "source_status": "derived"},
+                {"field_name": "evidence.strategy_sample", "source_status": "source-error"},
+            ],
+        }
+        direct_card = presentation_report.formatTelegramUnheldCard(
+            "緯創",
+            copy.deepcopy(payload),
+            deps=generator._telegram_presentation_deps(),
+            report_phase="盤中",
+            report_context=core_source_error_context,
+        )
+        self.assertNotIn("可買｜小倉", direct_card)
+        self.assertIn("資料來源異常", direct_card)
 
     def test_db_backed_rebound_pullback_waits_retest_not_trend_continuation(self):
         payload = {

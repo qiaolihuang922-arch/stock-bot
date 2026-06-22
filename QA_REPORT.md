@@ -5,7 +5,7 @@
 - Low-repair executable transition.
 - User-visible unheld card wording.
 - Summary execution bridge and new-entry suggestion.
-- Missing context and explicit source-error paths.
+- Missing context, strategy evidence source-error, and core price source-error paths.
 - Official dry-run safety.
 
 ## Risk Scan
@@ -22,15 +22,17 @@
 - After-hours complete low-repair card remains `可準備`.
 - Summary no longer says no buy exists when a low-repair intraday buy is present.
 - Missing strategy context does not block low-repair buy.
-- Explicit source-error does not become a buy recommendation.
+- Strategy evidence source-error does not block a DB-backed setup.
+- Core price source-error does not become a buy recommendation.
 
 ## Failure Specimen Rebuttal
 
 - Owner question: "資料來源可信又是什麼，目前不是沒作用嗎?"
 - Answer in behavior:
-  - `盤中` + DB-backed checklist complete + no explicit source-error/conflict -> `可買｜小倉`
+  - `盤中` + DB-backed checklist complete + no core market-data source-error/conflict -> `可買｜小倉`
   - `盤後` / `收盤` + checklist complete -> `可準備`
-  - explicit source-error / conflict -> not `可買`
+  - strategy evidence source-error -> evidence unavailable, not a trade blocker
+  - core price / OHLCV / RR source-error or conflict -> not `可買`
 
 ## Commands And Results
 
@@ -38,8 +40,9 @@
   - result: `4 passed, 213 deselected`
 - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q -k "low_repair or unheld_funnel or postmarket_unheld_gate or next_day_confirmation or trend_continuation or confirmed_evidence_near_boundary" --tb=short`
   - result: `17 passed, 200 deselected`
-- Source-error negative case:
-  - result: no `可買｜小倉`
+- Evidence/source split case:
+  - strategy evidence source-error still allowed DB-backed low-repair `可買｜小倉`
+  - core price source-error did not produce `可買｜小倉`
 - Official dry-run:
   - result: `messages=4`, no live Telegram
 
@@ -53,4 +56,4 @@
 
 conditional pass.
 
-The meaningless source gate has been removed from the low-repair route, while explicit source-error / conflict still fails closed. Conditional because full repository-wide tests were not rerun in this follow-up.
+The meaningless source gate has been removed from the low-repair route. Strategy evidence is auxiliary; core market-data source failure still fails closed. Conditional because full repository-wide tests were not rerun in this follow-up.

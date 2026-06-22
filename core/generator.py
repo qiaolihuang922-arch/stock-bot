@@ -5339,13 +5339,13 @@ def _has_source_decision_context(report_context):
 def _unheld_decision_source_eligible(report_context, name):
     if not _has_source_decision_context(report_context):
         return True
-    return _unheld_decision_source_status(report_context, name) == "available"
+    return _stock_decision_source_status(report_context, name) == "available"
 
 
 def _unheld_decision_source_error_blocked(report_context, name):
     if not _has_source_decision_context(report_context):
         return False
-    return _unheld_decision_source_status(report_context, name) in {"source-error", "unresolved-conflict"}
+    return _stock_decision_source_status(report_context, name) in {"source-error", "unresolved-conflict"}
 
 
 def _unheld_source_status_from_fields(price_status, daily_status, rr_status, strategy_status="available"):

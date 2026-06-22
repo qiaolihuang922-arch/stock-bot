@@ -15,7 +15,8 @@ Owner pointed out that the phrase "source is trusted" is not a meaningful user-f
 The concrete failure pattern is:
 
 - Low-repair should not require a generic strategy-sample `available` flag when DB-backed low-repair conditions are already present.
-- The only source-related hard stop for this route should be explicit source failure or conflict.
+- The only source-related hard stop for this route should be core market-data failure or conflict.
+- Strategy / backtest evidence must remain supporting evidence, not a trade blocker.
 - The report must not explain low-repair blocking with vague "source trusted" wording.
 
 ## User-Visible Result
@@ -28,7 +29,8 @@ The concrete failure pattern is:
   - `可準備｜低位修復成立`
   - next action is opening / next-session confirmation, not immediate buy.
 - Missing strategy context or insufficient strategy sample alone does not block low-repair `可買`.
-- Explicit source-error or unresolved conflict still blocks.
+- Explicit core price / OHLCV / RR source-error or unresolved conflict still blocks.
+- Strategy evidence source-error is reported as evidence unavailable, but it does not block the DB-backed setup.
 
 ## Non-Goals
 
@@ -58,10 +60,11 @@ The concrete failure pattern is:
   - DB-backed low-repair status is ready
   - hard blockers are absent
   - heat is not `HOT` / `EXTREME`
-  - no explicit source-error / unresolved conflict is present
+  - no explicit core market-data source-error / unresolved conflict is present
 - `可準備` is used when low-repair is ready but the report phase is not intraday.
 - Missing strategy context is not a blocker for this DB-backed route.
-- Explicit source-error / unresolved conflict must fail closed and not show a buy recommendation.
+- Explicit core market-data source-error / unresolved conflict must fail closed and not show a buy recommendation.
+- Strategy evidence source-error must not be upgraded into a hard trade gate.
 - Summary must not say `新增買點未成立` when a low-repair intraday buy exists.
 
 ## Acceptance Criteria
@@ -69,6 +72,7 @@ The concrete failure pattern is:
 - Regression proves complete intraday low-repair promotes to `可買｜小倉`.
 - Regression proves after-hours low-repair remains `可準備`.
 - Regression proves missing strategy context still allows low-repair `可買`.
-- Regression proves explicit source-error does not become `可買`.
+- Regression proves strategy evidence source-error still allows DB-backed low-repair `可買`.
+- Regression proves core price source-error does not become `可買`.
 - Official dry-run sends no live Telegram and keeps after-hours output conservative.
 - No DB writes are performed.

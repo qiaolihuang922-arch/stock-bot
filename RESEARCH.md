@@ -31,7 +31,9 @@ Common breakout and retest strategy references generally agree on these points:
 - `盤中` complete low-repair can become `可買｜小倉`.
 - `盤後` / `收盤` complete low-repair remains `可準備`.
 - Low-repair should not depend on generic strategy sample availability once DB-backed low-repair conditions are available.
-- Explicit source-error / unresolved conflict still fails closed.
+- Strategy / backtest evidence measures signal quality and economic value; it should affect confidence, ranking, or display context, not act as a standalone hard gate.
+- Core market-data quality remains a hard gate: price, OHLCV, RR derivation, staleness, corruption, and conflict can fail closed.
+- Strategy evidence source-error means "auxiliary evidence unavailable", not "market data unusable".
 - Locked / overheated limit-up names are not chased; they wait for cooling or a tradable retest.
 
 ## Open Research Follow-Up

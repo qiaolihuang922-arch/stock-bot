@@ -12,8 +12,9 @@
 ## Result Summary
 
 - Removed the meaningless generic source-eligibility gate from low-repair `可買`.
-- Low-repair now blocks only explicit source-error / unresolved-conflict.
+- Low-repair now blocks only explicit core market-data source-error / unresolved-conflict.
 - Missing context or strategy sample insufficiency no longer blocks a DB-backed low-repair setup.
+- Strategy/backtest evidence stays in confidence/display, not trade gating.
 - Low-repair `可買` is deliberately conservative:
   - small position only
   - no chasing
@@ -26,8 +27,9 @@
   - `4 passed, 213 deselected`
 - Related report tests:
   - `17 passed, 200 deselected`
-- Source-error negative case:
-  - no `可買｜小倉`
+- Evidence/source split case:
+  - strategy evidence source-error still allowed DB-backed low-repair `可買｜小倉`
+  - core price source-error did not produce `可買｜小倉`
 - Official dry-run:
   - `messages=4`
   - no live Telegram
@@ -39,4 +41,4 @@
 
 ## Next Action
 
-- Monitor the next intraday low-repair candidate: missing strategy context should not block `可買｜小倉`; explicit source-error/conflict should still block.
+- Monitor the next intraday low-repair candidate: missing/failed strategy evidence should not block `可買｜小倉`; core market-data source-error/conflict should still block.

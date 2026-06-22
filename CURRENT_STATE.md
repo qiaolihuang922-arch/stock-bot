@@ -22,7 +22,8 @@
   - complete low-repair can promote to intraday `可買`
   - after-hours complete low-repair remains `可準備`
   - missing strategy context no longer blocks low-repair
-  - explicit source-error / unresolved-conflict still fails closed
+  - missing or failed strategy evidence no longer blocks low-repair
+  - explicit core market-data source-error / unresolved-conflict still fails closed
   - low-repair buys appear in execution bridge and new-entry suggestions
 - `presentation/report.py`
   - intraday low-repair card title: `可買｜小倉｜低位修復成立`
@@ -36,7 +37,7 @@
 
 - Targeted low-repair tests: `4 passed, 213 deselected`
 - Broader related report tests: `17 passed, 200 deselected`
-- Source-error negative case: no buy-ready title
+- Evidence/source split case: strategy evidence source-error still allows DB-backed setup; core price source-error blocks
 - Official dry-run: `messages=4`, no live Telegram
 
 ## Known Findings
@@ -46,4 +47,4 @@
 
 ## Next Action
 
-- Monitor the next intraday low-repair candidate: missing strategy context should not block `可買｜小倉`; explicit source-error/conflict should still block.
+- Monitor the next intraday low-repair candidate: missing/failed strategy evidence should not block `可買｜小倉`; core market-data source-error/conflict should still block.

@@ -2092,8 +2092,8 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         source_status = "available"
     stock_source_eligible = stock_source_status == "available"
     strategy_source_eligible = strategy_source_status == "available"
-    strategy_source_blocked = stock_source_eligible and not strategy_source_eligible
-    source_eligible = source_status == "available"
+    strategy_source_blocked = False
+    source_eligible = stock_source_eligible
     valid_entry = deps["is_valid_entry"](stock_result) and source_eligible
     title_label = "買點成立" if valid_entry else (blockers[0] if blockers else deps["final_label"](stock_result))
     state = deps["tomorrow_watch_state"](name, data)
