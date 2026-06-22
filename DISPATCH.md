@@ -2,7 +2,7 @@
 
 ## Active
 
-- task_md_holds: `low_repair_intraday_buy_v21_1_20260622`
+- task_md_holds: `low_repair_remove_meaningless_source_gate_v21_1_20260622`
 - status: `implemented + verification passed + git completion passed`
 - current_version: `v21.1`
 - live Telegram delivery: `not run`
@@ -11,10 +11,9 @@
 
 ## Result Summary
 
-- Fixed the remaining low-repair transition gap:
-  - after-hours complete low-repair stays `可準備`
-  - intraday complete low-repair can become `可買｜小倉`
-  - incomplete / source-ineligible cases do not become buy recommendations
+- Removed the meaningless generic source-eligibility gate from low-repair `可買`.
+- Low-repair now blocks only explicit source-error / unresolved-conflict.
+- Missing context or strategy sample insufficiency no longer blocks a DB-backed low-repair setup.
 - Low-repair `可買` is deliberately conservative:
   - small position only
   - no chasing
@@ -27,7 +26,7 @@
   - `4 passed, 213 deselected`
 - Related report tests:
   - `17 passed, 200 deselected`
-- Manual negative source probe:
+- Source-error negative case:
   - no `可買｜小倉`
 - Official dry-run:
   - `messages=4`
@@ -35,9 +34,9 @@
 
 ## Current Git State
 
-- This cycle is committed and pushed to `origin/main`.
+- This follow-up is committed and pushed to `origin/main`.
 - Git completion gate passed.
 
 ## Next Action
 
-- Monitor the next intraday run: complete low-repair candidates should show `可買｜小倉`; after-hours should remain `可準備`.
+- Monitor the next intraday low-repair candidate: missing strategy context should not block `可買｜小倉`; explicit source-error/conflict should still block.

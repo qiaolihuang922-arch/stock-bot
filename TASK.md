@@ -1,8 +1,8 @@
-# TASK: low_repair_intraday_buy_v21_1_20260622
+# TASK: low_repair_remove_meaningless_source_gate_v21_1_20260622
 
 ## Task Status
 
-- task_id: `low_repair_intraday_buy_v21_1_20260622`
+- task_id: `low_repair_remove_meaningless_source_gate_v21_1_20260622`
 - task_type: `risk_patch`
 - status: `implemented`
 - version_contract: report header remains `v21.1`
@@ -10,24 +10,25 @@
 
 ## Owner Problem
 
-Owner asked why a stock that already satisfies the low-repair checklist still only shows `可準備`, and when it actually becomes `可買`.
+Owner pointed out that the phrase "source is trusted" is not a meaningful user-facing trading condition, and in many paths the source eligibility helper is effectively a no-op.
 
 The concrete failure pattern is:
 
-- After-hours output correctly says all low-repair conditions are met, but the report does not explain that this is not yet an intraday executable signal.
-- Intraday output needs a real promotion path from `可準備` to `可買` when the same DB-backed low-repair checklist remains valid.
-- The system must not fake memory or promote a buy when source evidence is incomplete.
+- Low-repair should not require a generic strategy-sample `available` flag when DB-backed low-repair conditions are already present.
+- The only source-related hard stop for this route should be explicit source failure or conflict.
+- The report must not explain low-repair blocking with vague "source trusted" wording.
 
 ## User-Visible Result
 
-- In `盤中`, a low-repair candidate whose DB-backed conditions are fully satisfied and whose strategy source is eligible becomes:
+- In `盤中`, a low-repair candidate whose DB-backed conditions are fully satisfied becomes:
   - `🟢 可買｜小倉｜低位修復成立`
   - buy text: `守支撐/5日均，不追價`
   - execution suggestion: small position only, `小倉<=10%`.
 - In `盤後` / `收盤`, the same candidate remains:
   - `可準備｜低位修復成立`
   - next action is opening / next-session confirmation, not immediate buy.
-- If strategy source evidence is missing, source-error, insufficient, or conflicting, the candidate cannot become `可買`.
+- Missing strategy context or insufficient strategy sample alone does not block low-repair `可買`.
+- Explicit source-error or unresolved conflict still blocks.
 
 ## Non-Goals
 
@@ -52,20 +53,22 @@ The concrete failure pattern is:
 
 ## Output Contract
 
-- `可買` is allowed only when all of the following are true:
+- `可買` is allowed when all of the following are true:
   - report phase is `盤中`
   - DB-backed low-repair status is ready
   - hard blockers are absent
   - heat is not `HOT` / `EXTREME`
-  - strategy evidence source is eligible
+  - no explicit source-error / unresolved conflict is present
 - `可準備` is used when low-repair is ready but the report phase is not intraday.
-- Missing / bad source evidence must fail closed and not show a buy recommendation.
+- Missing strategy context is not a blocker for this DB-backed route.
+- Explicit source-error / unresolved conflict must fail closed and not show a buy recommendation.
 - Summary must not say `新增買點未成立` when a low-repair intraday buy exists.
 
 ## Acceptance Criteria
 
 - Regression proves complete intraday low-repair promotes to `可買｜小倉`.
 - Regression proves after-hours low-repair remains `可準備`.
-- Regression / probe proves incomplete source evidence does not become `可買`.
+- Regression proves missing strategy context still allows low-repair `可買`.
+- Regression proves explicit source-error does not become `可買`.
 - Official dry-run sends no live Telegram and keeps after-hours output conservative.
 - No DB writes are performed.

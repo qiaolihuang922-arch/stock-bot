@@ -2,7 +2,7 @@
 
 ## Current Task
 
-- task_id: `low_repair_intraday_buy_v21_1_20260622`
+- task_id: `low_repair_remove_meaningless_source_gate_v21_1_20260622`
 - status: `implemented + verification passed + git completion passed`
 - version: `v21.1`
 - live Telegram delivery: not run
@@ -21,7 +21,8 @@
 - `core/generator.py`
   - complete low-repair can promote to intraday `可買`
   - after-hours complete low-repair remains `可準備`
-  - bad / incomplete strategy source evidence fails closed
+  - missing strategy context no longer blocks low-repair
+  - explicit source-error / unresolved-conflict still fails closed
   - low-repair buys appear in execution bridge and new-entry suggestions
 - `presentation/report.py`
   - intraday low-repair card title: `可買｜小倉｜低位修復成立`
@@ -35,7 +36,7 @@
 
 - Targeted low-repair tests: `4 passed, 213 deselected`
 - Broader related report tests: `17 passed, 200 deselected`
-- Manual source-negative probe: no buy-ready title
+- Source-error negative case: no buy-ready title
 - Official dry-run: `messages=4`, no live Telegram
 
 ## Known Findings
@@ -45,4 +46,4 @@
 
 ## Next Action
 
-- Monitor the next intraday run: complete low-repair candidates should show `可買｜小倉`; after-hours should remain `可準備`.
+- Monitor the next intraday low-repair candidate: missing strategy context should not block `可買｜小倉`; explicit source-error/conflict should still block.

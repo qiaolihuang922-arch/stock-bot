@@ -1,5 +1,6 @@
 import unittest
 import ast
+import copy
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -3937,7 +3938,6 @@ class GeneratorReportTest(unittest.TestCase):
             None,
             {"trade_date": "2026-06-22"},
             datetime(2026, 6, 22),
-            strategy_evidence_summary=structured_strategy_evidence("available", row_count=30),
             report_phase="盤中",
         )
         unheld = unheld_message(messages)
@@ -3952,6 +3952,21 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("緯創 低位修復可買（小倉<=10%）｜尚未買入｜守支撐/5日均｜盤中觸發", summary)
         self.assertNotIn("新增買點未成立", summary)
         self.assertNotIn("盤後不追價", card)
+        self.assertNotIn("資料來源未完整", card)
+
+        error_messages = generator.formatTelegramMessages(
+            {"緯創": copy.deepcopy(payload)},
+            "FULL DETAIL",
+            None,
+            None,
+            {"trade_date": "2026-06-22"},
+            datetime(2026, 6, 22),
+            strategy_evidence_summary=structured_strategy_evidence("source-error", row_count=0),
+            report_phase="盤中",
+        )
+        error_card = card_block(unheld_message(error_messages), "【緯創 3231】")
+        self.assertNotIn("可買｜小倉", error_card)
+        self.assertIn("策略樣本來源異常", error_card)
 
     def test_db_backed_rebound_pullback_waits_retest_not_trend_continuation(self):
         payload = {

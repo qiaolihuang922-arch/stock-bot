@@ -30,7 +30,8 @@ Common breakout and retest strategy references generally agree on these points:
 
 - `盤中` complete low-repair can become `可買｜小倉`.
 - `盤後` / `收盤` complete low-repair remains `可準備`.
-- Missing or unreliable source evidence fails closed.
+- Low-repair should not depend on generic strategy sample availability once DB-backed low-repair conditions are available.
+- Explicit source-error / unresolved conflict still fails closed.
 - Locked / overheated limit-up names are not chased; they wait for cooling or a tradable retest.
 
 ## Open Research Follow-Up

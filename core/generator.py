@@ -5342,6 +5342,12 @@ def _unheld_decision_source_eligible(report_context, name):
     return _unheld_decision_source_status(report_context, name) == "available"
 
 
+def _unheld_decision_source_error_blocked(report_context, name):
+    if not _has_source_decision_context(report_context):
+        return False
+    return _unheld_decision_source_status(report_context, name) in {"source-error", "unresolved-conflict"}
+
+
 def _unheld_source_status_from_fields(price_status, daily_status, rr_status, strategy_status="available"):
     statuses = [price_status, daily_status, rr_status, strategy_status]
     if all(status in {"available", "derived"} for status in statuses):
@@ -6496,13 +6502,14 @@ def unheld_funnel_assessment(name, data, market_mode=None, report_context=None):
         low_repair = daily_price_low_repair_status(data)
         data["low_repair_status"] = low_repair
         if low_repair.get("ready"):
+            if _unheld_decision_source_error_blocked(report_context, name):
+                return "等資料", "資料來源異常或衝突，暫不升格可買。"
             if (
-                _unheld_decision_source_eligible(report_context, name)
-                and low_repair_intraday_buy_ready(data, report_context=report_context)
+                low_repair_intraday_buy_ready(data, report_context=report_context)
             ):
                 return "可買", "低位修復盤中條件成立；小倉試單，不追價。"
             if (report_context or {}).get("report_context", {}).get("report_phase") == "盤中":
-                return "可準備", "低位修復條件成立；資料來源未完整，暫不升格可買。"
+                return "可準備", "低位修復條件成立；盤中未觸發可買條件。"
             return "可準備", "低位修復條件成立；盤後不追價，等明日開盤確認。"
 
     if any(item in blockers for item in ["弱反彈待確認", "漲停反彈待確認"]):
@@ -6680,15 +6687,17 @@ def unheld_funnel_state(name, data, market_mode=None, report_context=None):
                 state = "等低位修復"
                 data["low_repair_status"] = daily_price_low_repair_status(data)
                 if data["low_repair_status"].get("ready"):
-                    if (
-                        _unheld_decision_source_eligible(report_context, name)
-                        and low_repair_intraday_buy_ready(data, report_context=report_context)
+                    if _unheld_decision_source_error_blocked(report_context, name):
+                        state = "等資料"
+                        reason = "資料來源異常或衝突，暫不升格可買。"
+                    elif (
+                        low_repair_intraday_buy_ready(data, report_context=report_context)
                     ):
                         state = "可買"
                         reason = "低位修復盤中條件成立；小倉試單，不追價。"
                     elif (report_context or {}).get("report_context", {}).get("report_phase") == "盤中":
                         state = "可準備"
-                        reason = "低位修復條件成立；資料來源未完整，暫不升格可買。"
+                        reason = "低位修復條件成立；盤中未觸發可買條件。"
                     else:
                         state = "可準備"
                         reason = "低位修復條件成立；盤後不追價，等明日開盤確認。"
