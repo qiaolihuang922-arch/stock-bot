@@ -2707,8 +2707,8 @@ class GeneratorReportTest(unittest.TestCase):
         with patch.object(generator, "unheld_funnel_state", side_effect=lambda name, _data, **_kwargs: states[name]):
             text = generator.format_unheld_funnel([(name, {}) for name in states])
 
-        self.assertIn("未持倉 1｜隔日確認 1｜僅追蹤 1", text)
-        self.assertIn("隔日確認 1｜僅追蹤 1", text)
+        self.assertIn("未持倉 1｜隔日確認 1", text)
+        self.assertNotIn("僅追蹤 1", text)
         self.assertNotIn("未持倉總數 1 檔", text)
         self.assertNotIn("其中僅追蹤 1 檔拆分", text)
         self.assertNotIn("非執行準備/追蹤合計", text)
@@ -2746,7 +2746,9 @@ class GeneratorReportTest(unittest.TestCase):
         summary = summary_message(messages)
         unheld = unheld_message(messages)
 
-        self.assertIn("隔日確認 1｜僅追蹤 1", summary)
+        self.assertIn("未持倉 1", summary)
+        self.assertIn("隔日確認 1", summary)
+        self.assertNotIn("僅追蹤 1", summary)
         self.assertNotIn("其中僅追蹤 1 檔拆分", summary)
         self.assertNotIn("非執行準備/追蹤合計", summary)
         self.assertIn("【智原 3035】👀 隔日確認｜漲停反彈待確認", unheld)
@@ -2801,7 +2803,7 @@ class GeneratorReportTest(unittest.TestCase):
         summary = summary_message(messages)
         unheld = unheld_message(messages)
 
-        self.assertIn("未持倉 2｜隔日確認 1｜僅追蹤 2（等冷卻）", summary)
+        self.assertIn("未持倉 2｜隔日確認 1｜僅追蹤 1（等冷卻）", summary)
         self.assertIn("【智原 3035】👀 隔日確認｜漲停反彈待確認", unheld)
         self.assertIn("【光寶科 2301】⏳ 等冷卻｜過熱觀察", unheld)
         self.assertEqual(summary.count("隔日確認 1"), 1)
@@ -3849,6 +3851,54 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【緯創 3231】⏳ 等低位修復｜低位修復觀察", unheld)
         self.assertIn("路線：突破買點太遠，改看低位修復", unheld)
         self.assertNotIn("等待：距突破 23.4%；有效買點只看：接近突破區", unheld)
+
+    def test_low_repair_all_conditions_met_promotes_to_prepare_not_waiting(self):
+        payload = {
+            "stock_code": "3231",
+            "price": 162.5,
+            "change": 0.62,
+            "price_source": "realtime",
+            "daily_source": "yahoo",
+            "result": {
+                "decision": "WAIT",
+                "action": 0,
+                "rr": 2.2,
+                "heat_state": "NORMAL",
+                "trade_state": "WAIT",
+                "structure_phase": "BREAKOUT",
+                "price_behavior": "NORMAL",
+                "market_grade": "D",
+                "volume_state": "NORMAL",
+                "volume_price_state": "NORMAL",
+                "structure_state": "NORMAL",
+                "entry_quality": "D",
+                "confidence_score": 55,
+                "breakout_distance": 19.98,
+                "breakout_trigger_price": 194,
+            },
+            "cross_day_context": db_price_context("3231", [158, 160, 161, 162, 162.5]),
+            "holding": None,
+            "structure_score": 2,
+            "volume_ratio": 1.06,
+        }
+
+        messages = generator.formatTelegramMessages(
+            {"緯創": payload},
+            "FULL DETAIL",
+            None,
+            None,
+            "⏳ 觀望",
+            datetime(2026, 6, 22),
+            report_phase="盤後",
+        )
+        unheld = unheld_message(messages)
+
+        self.assertEqual(generator.unheld_funnel_state("緯創", payload), "可準備")
+        self.assertIn("【緯創 3231】👀 可準備｜低位修復成立", unheld)
+        self.assertIn("狀態：低位修復條件成立；盤後不追價", unheld)
+        self.assertIn("條件：已滿足 支撐未破、站上5日均、量能有效、風險報酬達標", unheld)
+        self.assertNotIn("【緯創 3231】⏳ 等低位修復", unheld)
+        self.assertNotIn("路線：突破買點太遠，改看低位修復", unheld)
 
     def test_db_backed_rebound_pullback_waits_retest_not_trend_continuation(self):
         payload = {
@@ -9932,7 +9982,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("結論：新倉候選 1 檔，明日開盤前確認。", summary)
         self.assertIn("新倉建議", summary)
         self.assertIn("未持倉 9｜趨勢延續 1｜可準備 2（不可買）", summary)
-        self.assertIn("僅追蹤 5", summary)
+        self.assertIn("僅追蹤 4", summary)
         self.assertIn("淘汰 1", summary)
         self.assertIn("【台積電 2330】👀 等風險報酬｜風險報酬不足", rr_card)
         self.assertIn("進場：不買，等風險報酬達標｜原因：風險報酬還不夠", rr_card)
@@ -10382,10 +10432,10 @@ class GeneratorReportTest(unittest.TestCase):
 
         self.assertEqual(generator.tomorrow_watch_state("漲停反彈", next_day), "隔日確認")
         self.assertEqual(generator.unheld_funnel_state("漲停反彈", next_day, report_context=context), "隔日確認")
-        self.assertEqual(generator.unheld_tracking_only_count(funnel), 3)
+        self.assertEqual(generator.unheld_tracking_only_count(funnel), 2)
         self.assertEqual(sum(len(funnel[label]) for label in ["隔日確認", "等冷卻", "等回測", "等RR修復", "等量能"]), 3)
-        self.assertIn("僅追蹤 3", funnel_text)
-        self.assertIn("隔日確認 1｜僅追蹤 3", funnel_text)
+        self.assertIn("僅追蹤 2", funnel_text)
+        self.assertIn("隔日確認 1｜僅追蹤 2", funnel_text)
         self.assertIn("【漲停反彈 9999】👀 隔日確認", unheld)
         self.assertIn("【等回測股 9999】👀 不可追高觀察", unheld)
         self.assertIn("【等冷卻股 9999】⏳ 等冷卻", unheld)

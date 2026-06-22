@@ -621,6 +621,10 @@ def _low_repair_anchor_text(data):
 
 
 def _low_repair_progress_text(data):
+    status = (data or {}).get("low_repair_status")
+    if isinstance(status, dict) and status.get("ready"):
+        met = status.get("met") or ["支撐未破", "站上5日均", "量能有效", "風險報酬達標"]
+        return "已滿足 " + "、".join(met)
     points = _daily_price_points(data)
     if len(points) < 4:
         return "還差 DB日線補齊"
@@ -628,7 +632,8 @@ def _low_repair_progress_text(data):
     closes = [point["close"] for point in points]
     lows = [point.get("low", point["close"]) for point in points]
     support = min((lows[-5:] if len(lows) >= 5 else lows))
-    latest_close = closes[-1]
+    latest_price = _float_or_none((data or {}).get("price"))
+    latest_close = latest_price if latest_price is not None else closes[-1]
     met = []
     missing = []
 
@@ -1066,6 +1071,14 @@ def _unheld_entry_contract(data, dist, blockers, valid_entry, funnel_state, sour
             f"{unlock_text} + 非追高 + 量能有效",
             basis="",
         )
+    evidence_reason = str((data or {}).get("evidence_adjustment_reason") or "")
+    if funnel_state == "可準備" and "低位修復" in evidence_reason:
+        return {
+            "reason": "低位修復條件成立；盤後不追價",
+            "gap": _low_repair_anchor_text(data),
+            "unlock": "明日開盤不追高 + 守支撐/5日均 + 量能不失控",
+            "extras": [f"條件：{_low_repair_progress_text(data)}"],
+        }
     if funnel_state == "等低位修復":
         return {
             "reason": "突破買點太遠，改看低位修復",
@@ -1567,6 +1580,15 @@ def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None, data=None):
                 elif retest and unlock.startswith(f"{retest}"):
                     unlock = unlock.replace(f"{retest}", "不破", 1)
                 lines.append(f"有效買點：{unlock}")
+            return lines
+
+        if funnel_state == "可準備" and reason and "低位修復" in str(reason):
+            lines = [f"狀態：{reason}"]
+            if gap:
+                lines.append(f"觀察：{gap}")
+            lines.extend(extras)
+            if unlock:
+                lines.append(f"可買：{unlock}")
             return lines
 
         if funnel_state == "等低位修復":
@@ -2125,6 +2147,8 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         title_label = deps["rejected_primary_reason"](stock_result)
     elif post_market_prepare:
         title_label = "開盤後確認"
+    elif funnel_state == "可準備" and "低位修復" in str(data.get("evidence_adjustment_reason") or ""):
+        title_label = "低位修復成立"
     elif funnel_state == "可準備" and prepare_label:
         title_label = prepare_label
     if title_label == "RR不足":
@@ -2326,6 +2350,13 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         strategy_source_blocked,
         title_label=title_label,
     )
+    is_low_repair_prepare = (
+        funnel_state == "可準備"
+        and "低位修復" in str(data.get("evidence_adjustment_reason") or "")
+    )
+    if is_low_repair_prepare:
+        reason_line = None
+        data_line = None
     compact_wait_card = (
         not valid_entry
         and not strategy_source_blocked
@@ -2613,7 +2644,7 @@ def _compact_market_overview_line(holding_items, watch_items, report_context, de
         f"執行動作 {pending_count}{action_suffix}",
         today_entry_text,
         f"持倉風控 {len(holding_items)}",
-        f"未持倉 {unheld_count}（{'/'.join(unheld_parts)}）",
+        f"未持倉 {unheld_count}" + (f"（{'/'.join(unheld_parts)}）" if unheld_parts else ""),
     ]
     if new_entry_count:
         parts.insert(2, f"新倉建議 {new_entry_count}")

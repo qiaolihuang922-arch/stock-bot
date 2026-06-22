@@ -2,8 +2,8 @@
 
 ## Current Task
 
-- task_id: `report_state_sync_v21_1_20260617`
-- status: `implemented + QA pass + git completion passed`
+- task_id: `low_repair_ready_state_v21_1_20260622`
+- status: `implemented + QA conditional pass + pending commit/push`
 - version: `v21.1`
 - live Telegram delivery: not run
 - DB schema change: none
@@ -19,34 +19,39 @@
 
 ## Current Implementation State
 
+- `core/generator.py`
+  - Added `daily_price_low_repair_status`.
+  - `等低位修復` now promotes to `可準備` when the low-repair checklist is complete.
+  - `僅追蹤` count excludes `隔日確認`.
 - `presentation/report.py`
-  - Retest basis wording is data-aware.
-  - Warning-line breach overrides stale `未跌破風控` wording.
-  - Overheat / limit-up wording is separated.
-  - Wait-volume cards show current ratio and threshold.
-  - After-hours summary filler is removed.
+  - Low-repair-ready cards render as `可準備｜低位修復成立`.
+  - The card says after-hours confirmation is still required and suppresses duplicate generic data/source lines.
+  - Empty summary parentheses are suppressed.
 - `tests/test_generator_report.py`
-  - Regression specimens added/updated for retest lost, warning breached, non-limit overheat, and wait-volume threshold.
+  - Regression coverage added for the `3231 緯創` all-met low-repair conflict.
+  - Funnel count tests updated so `隔日確認` and `僅追蹤` are mutually exclusive.
 - `TASK.md`, `CHANGELOG.md`, `QA_REPORT.md` updated for this cycle.
 
 ## Verification State
 
-- Generator report suite passed:
-  - `215 passed`, `46 subtests passed`
+- Targeted report tests passed:
+  - `12 passed`
 - Adjacent state/replay tests passed:
   - `16 passed`
-- Official `generate_report(dry_run=True)` returned 4 messages and no live Telegram.
-- Git completion gate passed by PowerShell equivalent:
-  - branch: `main`
-  - upstream: `origin/main`
-  - HEAD: local matches upstream after push
-  - worktree: clean
+- Full generator report suite:
+  - `215 passed`, `1 failed`
+  - failure is `test_v20_4_47_generate_report_appends_live_readonly_future_watch_sources`, unrelated to low-repair state/display.
+- Official `generate_report(dry_run=True)`:
+  - `3231 緯創` renders `可準備｜低位修復成立`
+  - `2324 仁寶` remains `等低位修復` because it has not stood back above 5-day MA
+  - no live Telegram
 
 ## Known Findings
 
-- `.pytest_cache` still cannot be written on this machine because of local `WinError 5`; tests execute and pass despite the cache warning.
-- This cycle did not redesign strategy gates. It corrected report-state/display conflicts using existing payload and DB-backed context.
+- `.pytest_cache` still cannot be written on this machine because of local `WinError 5`; tests execute despite the cache warning.
+- Future-watch source test currently fails with `global_lines=0`; track separately.
 
 ## Next Action
 
-- No further product action remains for this cycle.
+- Commit/push this cycle and run git completion gate.
+- Open a separate task for the unrelated future-watch source test if Owner wants repo-wide green tests.

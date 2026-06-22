@@ -1,65 +1,60 @@
-# CHANGELOG: report_state_sync_v21_1_20260617
+# CHANGELOG: low_repair_ready_state_v21_1_20260622
 
 ## Changes
 
+- Updated `core/generator.py`
+  - Added `daily_price_low_repair_status`.
+  - Low-repair readiness now uses persistent DB-backed daily price context plus current report price.
+  - Checks support, 5-day MA, volume ratio, and risk/reward from one shared helper.
+  - `等低位修復` promotes to `可準備` when all low-repair conditions are satisfied.
+  - `僅追蹤` count no longer includes `隔日確認`.
+
 - Updated `presentation/report.py`
-  - Added data-aware retest wording for rebound/retest cards.
-  - Retest cards now distinguish:
-    - current price above basis: `尚未回測`
-    - current price near basis: `回測中，觀察能否守住`
-    - current price below basis: `已跌破，等待重新站回或形成新支撐`
-  - Added holding warning-breach guard so holding cards cannot say `未跌破風控` when current price is already below warning.
-  - Split overheat wording:
-    - near/at limit-up: `漲停/過熱，不追價`
-    - non-limit overheat: `短線過熱，先等冷卻`
-  - Split breakout-distance wording so non-limit overheat does not render `已突破，但漲停/過熱不追`.
-  - Added concrete volume-wait gap text: `目前量能 Xx，需至少 0.8x`.
-  - Removed after-hours summary filler:
-    - empty `今日交易 / 新增交易建議：無`
-    - duplicate `明日計畫`
-    - duplicate `未持倉僅追蹤，不列入明日計畫`
+  - Low-repair-ready cards render as `可準備｜低位修復成立`.
+  - Low-repair-ready cards use a compact dedicated card body:
+    - status
+    - support/5-day/volume observation
+    - satisfied checklist
+    - next-session buy condition
+  - Summary first line no longer renders empty parentheses.
+  - Low-repair-ready cards suppress duplicate generic source/data lines.
+
 - Updated `tests/test_generator_report.py`
-  - Added/updated regression specimens for the Owner-pasted conflicts.
+  - Added regression for `3231 緯創` style all-met low-repair conflict.
+  - Updated funnel count tests so `隔日確認` is not double-counted as `僅追蹤`.
 
 ## Contract Impact
 
-- User-visible Telegram report wording changes only.
+- User-visible Telegram report wording and state classification changed for low-repair-ready candidates.
 - Runtime report version remains `v21.1`.
 - No DB schema change.
 - No DB write/backfill/delete.
 - No live Telegram delivery.
-- No change to persisted production data.
-
-## Direct Consumer Sync
-
-- Official consumer covered: `generate_report(dry_run=True)` message list.
-- Mobile readability covered by generator report snapshots and absence checks.
 
 ## Verification
 
-- Targeted report tests:
-  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q -k "retest_basis or warning_breached or non_limit_overheat or wait_volume_card or db_backed_rebound_pullback" --tb=short`
-  - result: `5 passed`
-- Full generator report tests:
-  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q --tb=short`
-  - result: `215 passed`, `46 subtests passed`
+- Low-repair / summary targeted tests:
+  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q -k "low_repair or unheld_funnel or next_day_confirmation or cooling_and_next_day or b5_tracking or postmarket_unheld_gate" --tb=short`
+  - result: `12 passed`
 - Adjacent state/replay tests:
   - `.\.venv\Scripts\python.exe -m pytest tests\test_unheld_gap_format.py tests\test_trade_state_machine.py tests\test_strategy_buy_path_replay.py tests\test_strategy_rule_outcomes.py -q --tb=short`
   - result: `16 passed`
-- Official generator dry-run:
+- Full report tests:
+  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q --tb=short`
+  - result: `215 passed`, `1 failed`
+  - remaining failure: `test_v20_4_47_generate_report_appends_live_readonly_future_watch_sources`, global future-watch lines count is `0`; this is outside the low-repair state/display path.
+- Official dry-run:
   - `generate_report(dry_run=True)`
-  - result: `4` messages, no live Telegram.
+  - result: `top_messages=2`, `flat_messages=5`, no live Telegram.
 
 ## Official Dry-Run Rechecks
 
-- `2337 旺宏` no longer renders `回測基準 ... 尚未回測` when current price is below the retest basis.
-- `2421 建準` renders `已跌破警戒，未到停損` and warning-first handling.
-- `2344 華邦電` / `2408 南亞科` non-limit overheat renders `短線過熱，先等冷卻`, not limit-up wording.
-- `2303 聯電` wait-volume card renders `目前量能 0.53x，需至少 0.8x`.
-- Summary no longer renders empty `新增交易建議：無`, duplicate `明日計畫`, or duplicate unheld non-execution filler.
+- `3231 緯創` now renders `👀 可準備｜低位修復成立`.
+- `3231 緯創` shows all low-repair conditions satisfied and next-session confirmation wording.
+- `2324 仁寶` remains `等低位修復` and shows `還差 站回5日均 37.54`.
+- Summary now renders `未持倉 9｜可準備 1（不可買）｜隔日確認 1｜僅追蹤 7...`, avoiding double-counting `隔日確認` inside `僅追蹤`.
 
 ## Residual Risk
 
-- This cycle corrects report-state/display conflicts; it does not redesign the underlying strategy gates.
-- Official dry-run may change state as live/realtime data changes during the day; the added guards are data-aware and should remain valid across those changes.
-- `.pytest_cache` still cannot be written on this machine because of local `WinError 5`; tests execute and pass despite the cache warning.
+- The live readonly future-watch source test still fails and should be tracked separately.
+- `.pytest_cache` remains unwritable on this machine due local `WinError 5`; test execution itself succeeds.

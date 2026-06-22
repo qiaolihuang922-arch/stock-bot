@@ -2,8 +2,8 @@
 
 ## Active
 
-- task_md_holds: `report_state_sync_v21_1_20260617`
-- status: `implemented + QA pass + git completion passed`
+- task_md_holds: `low_repair_ready_state_v21_1_20260622`
+- status: `implemented + QA conditional pass + pending commit/push`
 - current_version: `v21.1`
 - live Telegram delivery: `not run`
 - DB schema change: `none`
@@ -11,34 +11,43 @@
 
 ## Result Summary
 
-- Fixed user-visible Telegram report-state conflicts from the Owner-pasted `06/17 收盤｜v21.1` report.
-- Retest cards now compare current price with the DB-backed retest basis:
-  - above basis: `尚未回測`
-  - near basis: `回測中，觀察能否守住`
-  - below basis: `已跌破，等待重新站回或形成新支撐`
-- Holding cards now override stale `未跌破風控` wording when price is below warning.
-- Non-limit overheat no longer says `漲停/過熱`; true near-limit cards can still say limit-up.
-- Wait-volume cards now show current volume ratio and target threshold.
-- After-hours summary no longer includes empty `今日交易 / 新增交易建議：無`, duplicate `明日計畫`, or duplicate unheld non-execution filler.
+- Fixed the Owner-pasted `06/22 盤後｜v21.1` conflict where `3231 緯創` displayed all low-repair conditions as satisfied but still stayed in `等低位修復`.
+- Added DB-backed low-repair readiness status:
+  - support not broken
+  - price above 5-day MA
+  - volume effective
+  - risk/reward >= 1.5
+- Low-repair-ready candidates now promote to `可準備｜低位修復成立`, not immediate `可買` in after-hours.
+- Incomplete low-repair cards continue to show missing conditions, e.g. `2324 仁寶` still missing `站回5日均 37.54`.
+- Summary funnel count no longer double-counts `隔日確認` as `僅追蹤`.
 
 ## Verification
 
-- `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q --tb=short`
-  - result: `215 passed`, `46 subtests passed`
-- `.\.venv\Scripts\python.exe -m pytest tests\test_unheld_gap_format.py tests\test_trade_state_machine.py tests\test_strategy_buy_path_replay.py tests\test_strategy_rule_outcomes.py -q --tb=short`
+- Targeted report tests:
+  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q -k "low_repair or unheld_funnel or next_day_confirmation or cooling_and_next_day or b5_tracking or postmarket_unheld_gate" --tb=short`
+  - result: `12 passed`
+- Adjacent state/replay tests:
+  - `.\.venv\Scripts\python.exe -m pytest tests\test_unheld_gap_format.py tests\test_trade_state_machine.py tests\test_strategy_buy_path_replay.py tests\test_strategy_rule_outcomes.py -q --tb=short`
   - result: `16 passed`
-- `generate_report(dry_run=True)`
-  - result: `4` messages, no live Telegram.
+- Full report tests:
+  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q --tb=short`
+  - result: `215 passed`, `1 failed`
+  - remaining unrelated failure: `test_v20_4_47_generate_report_appends_live_readonly_future_watch_sources`
+- Official dry-run:
+  - `generate_report(dry_run=True)`
+  - result: `top_messages=2`, `flat_messages=5`, no live Telegram.
 
 ## Current Git State
 
-- Implementation and verification complete for this cycle.
-- Git completion gate passed by PowerShell equivalent: `main` matches `origin/main`, worktree clean.
+- Worktree has uncommitted implementation and documentation changes.
+- Git completion gate not yet run for this cycle.
 
 ## Next Action
 
-- No further product action remains for this cycle.
+- Commit and push this cycle, then run git completion gate.
+- Track the unrelated future-watch source test separately; do not mix it into this low-repair fix.
 
 ## Recently Done
 
 - `report_state_sync_v21_1_20260617`: report-state sync fixed, QA passed, Git completion gate passed.
+- `low_repair_ready_state_v21_1_20260622`: low-repair-ready state/display conflict fixed; QA conditional pass pending git closeout.

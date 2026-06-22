@@ -776,6 +776,101 @@ def has_daily_price_repair_basis(data, min_points=4):
     return len(points) >= min_points
 
 
+def daily_price_low_repair_status(data, *, min_points=4, volume_threshold=1.0, rr_threshold=1.5):
+    data = data or {}
+    context = cross_day_context(data)
+    sources = context.get("source_of_truth") or []
+    if isinstance(sources, str):
+        sources = [sources]
+    points = []
+    if cross_day_ready(data) and "daily_price" in sources:
+        for point in context.get("recent_daily_price_points") or []:
+            if (point or {}).get("source") != "daily_price":
+                continue
+            try:
+                normalized = {"close": float(point.get("close"))}
+            except (AttributeError, TypeError, ValueError):
+                continue
+            for key in ["low", "volume"]:
+                try:
+                    raw_value = point.get(key)
+                    if raw_value is not None:
+                        normalized[key] = float(raw_value)
+                except (AttributeError, TypeError, ValueError):
+                    pass
+            points.append(normalized)
+    if len(points) < min_points:
+        return {"ready": False, "met": [], "missing": ["DB日線補齊"], "reason": "insufficient-daily-price"}
+
+    result = _result_with_data_overrides(data)
+    closes = [point["close"] for point in points]
+    lows = [point.get("low", point["close"]) for point in points]
+    latest_price = _data_float(data, "price", "current_price", "last_price")
+    latest_close = latest_price if latest_price is not None else closes[-1]
+    support = min(lows[-5:] if len(lows) >= 5 else lows)
+    met = []
+    missing = []
+
+    if latest_close >= support:
+        met.append("支撐未破")
+    else:
+        missing.append("守回支撐")
+
+    ma5 = None
+    if len(closes) >= 5:
+        ma5 = sum(closes[-5:]) / 5
+        if latest_close >= ma5:
+            met.append("站上5日均")
+        else:
+            missing.append("站回5日均")
+    else:
+        missing.append("5日均資料補齊")
+
+    volume_ratio = None
+    volume_values = [point.get("volume") for point in points if point.get("volume") is not None]
+    if len(volume_values) >= 5:
+        avg_volume = sum(volume_values[-5:]) / 5
+        latest_volume = volume_values[-1]
+        volume_ratio = latest_volume / avg_volume if avg_volume else None
+    if volume_ratio is None:
+        for key in ["volume_ratio", "volume_ratio_10", "volume_ratio_20"]:
+            try:
+                raw_value = result.get(key) if result.get(key) is not None else data.get(key)
+                if raw_value is not None:
+                    volume_ratio = float(raw_value)
+                    break
+            except (TypeError, ValueError):
+                continue
+    if volume_ratio is not None and volume_ratio >= volume_threshold:
+        met.append("量能有效")
+    elif volume_ratio is not None:
+        missing.append("量能轉強")
+    else:
+        missing.append("量能資料補齊")
+
+    try:
+        rr_value = float(result.get("rr"))
+    except (TypeError, ValueError):
+        rr_value = None
+    if rr_value is not None and rr_value >= rr_threshold:
+        met.append("風險報酬達標")
+    elif rr_value is not None:
+        missing.append("風險報酬修復")
+    else:
+        missing.append("風險報酬資料補齊")
+
+    return {
+        "ready": not missing,
+        "met": met,
+        "missing": missing,
+        "support": support,
+        "ma5": ma5,
+        "volume_ratio": volume_ratio,
+        "rr": rr_value,
+        "latest_price": latest_close,
+    }
+
+
 def multi_day_rebound_needs_retest(data):
     data = data or {}
     result = data.get("result") or {}
@@ -6363,6 +6458,12 @@ def unheld_funnel_assessment(name, data, market_mode=None, report_context=None):
     if "弱反彈待確認" in blockers and multi_day_rebound_wait:
         return "等回測", None
 
+    if state == "等低位修復":
+        low_repair = daily_price_low_repair_status(data)
+        data["low_repair_status"] = low_repair
+        if low_repair.get("ready"):
+            return "可準備", "低位修復條件成立；盤後不追價，等明日開盤確認。"
+
     if any(item in blockers for item in ["弱反彈待確認", "漲停反彈待確認"]):
         return "隔日確認", None
 
@@ -6397,6 +6498,7 @@ def unheld_funnel_assessment(name, data, market_mode=None, report_context=None):
         return "等接近", None
 
     if state == "等低位修復":
+        data["low_repair_status"] = daily_price_low_repair_status(data)
         return "等低位修復", None
 
     if state == "等型態":
@@ -6533,7 +6635,14 @@ def unheld_funnel_state(name, data, market_mode=None, report_context=None):
             reason in blockers
             for reason in ["急彈待回測", "弱反彈待確認", "漲停不追", "漲停反彈待確認", "過熱觀察", "RR不足"]
         ):
-            state = "等低位修復" if has_daily_price_repair_basis(data) else "等接近"
+            if has_daily_price_repair_basis(data):
+                state = "等低位修復"
+                data["low_repair_status"] = daily_price_low_repair_status(data)
+                if data["low_repair_status"].get("ready"):
+                    state = "可準備"
+                    reason = "低位修復條件成立；盤後不追價，等明日開盤確認。"
+            else:
+                state = "等接近"
     if reason:
         data["evidence_adjustment_reason"] = reason
     else:
@@ -6809,7 +6918,7 @@ def unheld_tracking_only_count(funnel):
 
     return sum(
         len(funnel[label])
-        for label in ["等冷卻", "等市場", "等接近", "等低位修復", "等型態", "等回測", "等RR修復", "等量能", "等資料", "隔日確認"]
+        for label in ["等冷卻", "等市場", "等接近", "等低位修復", "等型態", "等回測", "等RR修復", "等量能", "等資料"]
     )
 
 
