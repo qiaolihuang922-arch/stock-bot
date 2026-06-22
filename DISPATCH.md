@@ -3,7 +3,7 @@
 ## Active
 
 - task_md_holds: `low_repair_ready_state_v21_1_20260622`
-- status: `implemented + QA conditional pass + pending commit/push`
+- status: `implemented + QA conditional pass + git completion passed`
 - current_version: `v21.1`
 - live Telegram delivery: `not run`
 - DB schema change: `none`
@@ -39,15 +39,14 @@
 
 ## Current Git State
 
-- Worktree has uncommitted implementation and documentation changes.
-- Git completion gate not yet run for this cycle.
+- Commit `f9c1f79` pushed to `origin/main`.
+- Git completion gate passed.
 
 ## Next Action
 
-- Commit and push this cycle, then run git completion gate.
 - Track the unrelated future-watch source test separately; do not mix it into this low-repair fix.
 
 ## Recently Done
 
 - `report_state_sync_v21_1_20260617`: report-state sync fixed, QA passed, Git completion gate passed.
-- `low_repair_ready_state_v21_1_20260622`: low-repair-ready state/display conflict fixed; QA conditional pass pending git closeout.
+- `low_repair_ready_state_v21_1_20260622`: low-repair-ready state/display conflict fixed; QA conditional pass; Git completion gate passed.

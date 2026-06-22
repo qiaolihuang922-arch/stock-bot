@@ -3,7 +3,7 @@
 ## Current Task
 
 - task_id: `low_repair_ready_state_v21_1_20260622`
-- status: `implemented + QA conditional pass + pending commit/push`
+- status: `implemented + QA conditional pass + git completion passed`
 - version: `v21.1`
 - live Telegram delivery: not run
 - DB schema change: none
@@ -45,6 +45,10 @@
   - `3231 緯創` renders `可準備｜低位修復成立`
   - `2324 仁寶` remains `等低位修復` because it has not stood back above 5-day MA
   - no live Telegram
+- Git completion gate passed:
+  - commit: `f9c1f79`
+  - branch: `main`
+  - pushed to `origin/main`
 
 ## Known Findings
 
@@ -53,5 +57,4 @@
 
 ## Next Action
 
-- Commit/push this cycle and run git completion gate.
 - Open a separate task for the unrelated future-watch source test if Owner wants repo-wide green tests.
