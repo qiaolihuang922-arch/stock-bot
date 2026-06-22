@@ -3898,8 +3898,10 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【緯創 3231】👀 可準備｜低位修復成立", unheld)
         self.assertIn("狀態：低位修復條件成立；盤後不追價", unheld)
         self.assertIn("條件：已滿足 支撐未破、站上5日均、量能有效、風險報酬達標", unheld)
+        self.assertIn("明日觸發：開盤不追高；守支撐/5日均 + 量能不失控，小倉確認", unheld)
         self.assertNotIn("【緯創 3231】⏳ 等低位修復", unheld)
         self.assertNotIn("路線：突破買點太遠，改看低位修復", unheld)
+        self.assertNotIn("明日觸發：守近期支撐並站回短均線，再評估", unheld)
 
     def test_low_repair_ready_promotes_to_intraday_small_buy(self):
         payload = {
@@ -3945,6 +3947,7 @@ class GeneratorReportTest(unittest.TestCase):
         card = card_block(unheld, "【緯創 3231】")
 
         self.assertIn("【緯創 3231】🟢 可買｜小倉｜低位修復成立", card)
+        self.assertIn("交易狀態：可買｜動作：小倉試單｜條件：守支撐/5日均，不追價", card)
         self.assertIn("買點：可買｜低位修復小倉｜守支撐/5日均，不追價", card)
         self.assertIn("盤中觸發：守支撐/5日均 + 量能不失控，小倉試單", card)
         self.assertIn("數據：風險報酬 2.2｜低位修復條件成立｜V 1.06x", card)
@@ -3953,6 +3956,8 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("新增買點未成立", summary)
         self.assertNotIn("盤後不追價", card)
         self.assertNotIn("資料來源未完整", card)
+        self.assertNotIn("交易狀態：等資料", card)
+        self.assertNotIn("還差：資料恢復", card)
 
         strategy_error_messages = generator.formatTelegramMessages(
             {"緯創": copy.deepcopy(payload)},

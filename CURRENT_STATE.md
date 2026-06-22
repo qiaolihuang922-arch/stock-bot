@@ -2,7 +2,7 @@
 
 ## Current Task
 
-- task_id: `low_repair_remove_meaningless_source_gate_v21_1_20260622`
+- task_id: `intraday_low_repair_buy_state_sync_v21_1_20260622`
 - status: `implemented + verification passed + git completion passed`
 - version: `v21.1`
 - live Telegram delivery: not run
@@ -11,40 +11,34 @@
 
 ## Stable Context
 
-- Owner reads Telegram on mobile; report text must answer what can be bought, what is only tracking, and what must wait.
+- Owner reads Telegram on mobile; the report must answer whether a stock can be bought now, can only prepare, or must wait.
 - Cross-day state must come from production DB or an approved persistent source, not agent memory.
 - DB structure changes require Owner approval.
 - No live Telegram delivery without separate Owner approval.
 
 ## Current Implementation State
 
-- `core/generator.py`
-  - complete low-repair can promote to intraday `可買`
-  - after-hours complete low-repair remains `可準備`
-  - missing strategy context no longer blocks low-repair
-  - missing or failed strategy evidence no longer blocks low-repair
-  - explicit core market-data source-error / unresolved-conflict still fails closed
-  - low-repair buys appear in execution bridge and new-entry suggestions
-- `presentation/report.py`
-  - intraday low-repair card title: `可買｜小倉｜低位修復成立`
-  - action wording: `守支撐/5日均，不追價`
-  - stale generic no-action wording is suppressed for true low-repair buy-ready cards
-- `tests/test_generator_report.py`
-  - coverage added for intraday low-repair buy-ready output
-  - existing after-hours prepare coverage preserved
+- Low-repair route now distinguishes:
+  - intraday executable: `可買｜小倉`
+  - after-hours executable next session only: `可準備`
+- Intraday low-repair executable card no longer shows stale generic `等資料` state.
+- After-hours low-repair trigger now explains the open-confirmation condition instead of generic re-evaluation.
 
 ## Verification State
 
 - Targeted low-repair tests: `4 passed, 213 deselected`
-- Broader related report tests: `17 passed, 200 deselected`
-- Evidence/source split case: strategy evidence source-error still allows DB-backed setup; core price source-error blocks
-- Official dry-run: `messages=4`, no live Telegram
+- Broader related report tests: `14 passed, 203 deselected, 2 subtests passed`
+- Official dry-run: `messages=4`, `live_telegram=False`
+- No production DB data was changed.
+- No live Telegram was sent.
 
 ## Known Findings
 
 - `.pytest_cache` warning may appear due local Windows permission; it does not block test execution.
-- No production DB data was changed in this task.
+- Full repository-wide test suite was not run in this focused cycle.
 
 ## Next Action
 
-- Monitor the next intraday low-repair candidate: missing/failed strategy evidence should not block `可買｜小倉`; core market-data source-error/conflict should still block.
+- Monitor the next intraday low-repair candidate for the executable state sync:
+  - intraday complete checklist -> `可買｜小倉`
+  - after-hours complete checklist -> `可準備`

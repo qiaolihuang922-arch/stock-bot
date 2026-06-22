@@ -2314,11 +2314,17 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         buy_line = f"買點：不買，{wait_text}"
         data_line = f"數據：{rr_data_text}｜{display_score_text}｜V {data.get('volume_ratio', '-')}x"
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
+    is_low_repair_prepare = (
+        funnel_state == "可準備"
+        and "低位修復" in str(data.get("evidence_adjustment_reason") or "")
+    )
     trigger_label = _today_trigger_label(report_phase) if _is_today_action_phase(report_phase) else "明日觸發"
     if valid_entry and funnel_state == "趨勢延續":
         tomorrow_line = f"{trigger_label}：回踩站回日，小倉執行；不追高加碼"
     elif low_repair_actionable:
         tomorrow_line = f"{trigger_label}：守支撐/5日均 + 量能不失控，小倉試單"
+    elif is_low_repair_prepare:
+        tomorrow_line = f"{trigger_label}：開盤不追高；守支撐/5日均 + 量能不失控，小倉確認"
     elif data_source_display_blocked:
         tomorrow_line = f"{trigger_label}：無有效進場，先補策略樣本證據"
     elif funnel_state == "等資料":
@@ -2371,10 +2377,6 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         source_status,
         strategy_source_blocked,
         title_label=title_label,
-    )
-    is_low_repair_prepare = (
-        funnel_state == "可準備"
-        and "低位修復" in str(data.get("evidence_adjustment_reason") or "")
     )
     if is_low_repair_prepare:
         reason_line = None
@@ -2442,6 +2444,8 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         data_source_blocked=data_source_display_blocked or (deps["is_valid_entry"](stock_result) and not source_eligible),
         funnel_state=funnel_state,
     )
+    if low_repair_actionable:
+        trade_state_line = "交易狀態：可買｜動作：小倉試單｜條件：守支撐/5日均，不追價"
     entry_check_lines = _entry_check_lines(buy_line, buy_gap_contract, funnel_state=funnel_state, data=data)
     lines = [
         f"【{deps['stock_title'](name, data)}】{title_icon} {title_action}｜{title_label}",

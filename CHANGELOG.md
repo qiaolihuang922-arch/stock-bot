@@ -1,32 +1,31 @@
-# CHANGELOG: low_repair_remove_meaningless_source_gate_v21_1_20260622
+# CHANGELOG: intraday_low_repair_buy_state_sync_v21_1_20260622
 
 ## Changes
 
-- Updated `core/generator.py`
-  - Removed the meaningless `strategy source must be available` requirement from the low-repair buy route.
-  - Added explicit core market-data source-error / unresolved-conflict blocking only.
-  - Missing source decision context or insufficient strategy sample no longer blocks DB-backed low-repair readiness.
-  - Removed the vague `資料來源未完整，暫不升格可買` low-repair fallback.
-  - `_unheld_decision_source_eligible` now checks stock decision data health, not strategy sample availability.
-
 - Updated `presentation/report.py`
-  - Low-repair intraday buy cards render as `🟢 可買｜小倉｜低位修復成立`.
-  - Buy line says `守支撐/5日均，不追價`.
-  - Data line says the low-repair condition is established, without stale generic `不適用` / source wording.
-  - Core data source-error intraday cases do not display a buy-ready title.
+  - Low-repair intraday executable cards now override stale generic state-machine text.
+  - When `low_repair_actionable` is true, the state line becomes:
+    `交易狀態：可買｜動作：小倉試單｜條件：守支撐/5日均，不追價`
+  - After-hours / close low-repair prepare cards now use a concrete next-session trigger:
+    `明日觸發：開盤不追高；守支撐/5日均 + 量能不失控，小倉確認`
 
 - Updated `tests/test_generator_report.py`
-  - Updated positive coverage so low-repair intraday buy does not require strategy evidence summary.
-  - Added evidence/source split coverage: strategy evidence source-error does not block, core price source-error blocks.
+  - Added regression assertions that intraday low-repair buy cards cannot still show `交易狀態：等資料` or `還差：資料恢復`.
+  - Added regression assertion for the after-hours low-repair open-confirmation trigger.
 
 ## Contract Impact
 
-- User-visible Telegram report state can now move from low-repair `可準備` to intraday `可買`.
-- `可買` is intentionally small-position only and non-chasing.
-- Low-repair uses its own DB-backed condition set; generic strategy sample availability is not a user-facing blocker.
-- Strategy evidence remains confidence / display evidence. It does not create standalone buys and does not veto DB-backed setups.
 - No DB contract change.
 - No version header bump; report remains `v21.1`.
+- Intraday low-repair now has an internally consistent executable display:
+  - title, state, buy line, and trigger all say small-position buy is allowed only under support / 5-day MA / no-chase conditions.
+- After-hours low-repair remains preparation only.
+
+## Direct Consumers Synced
+
+- `formatTelegramMessages` output.
+- Telegram unheld stock card.
+- Summary behavior from the previous low-repair executable route remains unchanged.
 
 ## Verification
 
@@ -34,23 +33,19 @@
   - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q -k "low_repair" --tb=short`
   - result: `4 passed, 213 deselected`
 - Broader related report tests:
-  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q -k "low_repair or unheld_funnel or postmarket_unheld_gate or next_day_confirmation or trend_continuation or confirmed_evidence_near_boundary" --tb=short`
-  - result: `17 passed, 200 deselected`
-- Evidence/source split case:
-  - strategy evidence `source-error` still allowed DB-backed low-repair `可買｜小倉`
-  - core price `source-error` did not produce `可買｜小倉`
+  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q -k "score_source or evidence_modifier or supporting_evidence or low_repair or unheld_funnel or postmarket_unheld_gate" --tb=short`
+  - result: `14 passed, 203 deselected, 2 subtests passed`
 - Official dry-run:
   - `generate_report(dry_run=True)`
-  - result: `messages=4`, no live Telegram
-  - because current run was after-hours, low-repair-ready candidates remain `可準備`, not `可買`
+  - result: `messages=4`, `live_telegram=False`
 
 ## Not Changed
 
-- No production DB schema or data.
+- No production DB write.
 - No live Telegram.
-- No unrelated future-watch source behavior.
+- No schema, RLS, grant, policy, role, index, or constraint change.
 
 ## Residual Risk
 
-- `.pytest_cache` may still warn with local Windows permission error; test results are unaffected.
-- Full repository-wide test suite was not rerun in this follow-up cycle.
+- Full repository-wide test suite was not rerun.
+- Local `.pytest_cache` still emits a Windows permission warning; tests pass despite the warning.

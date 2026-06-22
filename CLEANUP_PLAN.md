@@ -2,30 +2,31 @@
 
 ## Completed This Cycle
 
-- Removed the low-repair dead-end where a complete checklist could only remain `可準備`.
-- Added an intraday executable route:
-  - `盤中` + DB-backed low-repair ready + no core market-data source-error/conflict -> `可買｜小倉`
-  - `盤後` / `收盤` -> `可準備`
-- Removed generic source availability as a low-repair blocker.
-- Explicit core market-data source-error / unresolved-conflict still blocks.
-- Strategy evidence remains auxiliary and must not veto DB-backed setups.
-- Reduced misleading summary text when a real low-repair buy exists.
+- Removed a user-visible contradiction in intraday low-repair cards:
+  - before: `可買｜小倉` could coexist with `交易狀態：等資料`
+  - after: executable low-repair cards show `交易狀態：可買｜動作：小倉試單`
+- Clarified after-hours low-repair:
+  - after-hours is preparation only
+  - next action requires open confirmation, support / 5-day MA hold, and volume not losing control
+- Added regression coverage for both visible cases.
 
 ## Cleanup Notes
 
-- No DB schema or production data changes were made.
+- No obsolete files were deleted.
+- No DB data was pruned or rewritten.
 - No live Telegram was sent.
-- No obsolete files were deleted in this follow-up.
 
 ## Follow-Ups
 
-- Run a full repository-wide test pass in a separate cycle if Owner wants full green status.
-- Continue DB replay calibration for broader "why no buy for many days" strategy quality, separate from this low-repair executable transition.
+- Continue broader DB replay calibration separately for:
+  - breakout route
+  - retest route
+  - cooling route
+  - holding add/reduce route
+- Consider a full repository-wide test pass in a separate cycle.
 
 ## Persistent Rule Reminder
 
-- A visible checklist that says all required conditions are met must have a clear next state:
-  - executable now
-  - executable only next session
-  - blocked by named source / risk condition
-- Do not hide blockers behind generic wording such as `需解除後重新評估`.
+- If a card title says a stock is executable, state line, buy line, and trigger must also say executable.
+- If a card is only after-hours preparation, it must not read like an immediate buy.
+- Avoid generic blockers such as `等資料` unless the actual hard source failure is named.

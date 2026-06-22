@@ -1,8 +1,8 @@
-# TASK: low_repair_remove_meaningless_source_gate_v21_1_20260622
+# TASK: intraday_low_repair_buy_state_sync_v21_1_20260622
 
 ## Task Status
 
-- task_id: `low_repair_remove_meaningless_source_gate_v21_1_20260622`
+- task_id: `intraday_low_repair_buy_state_sync_v21_1_20260622`
 - task_type: `risk_patch`
 - status: `implemented`
 - version_contract: report header remains `v21.1`
@@ -10,69 +10,62 @@
 
 ## Owner Problem
 
-Owner pointed out that the phrase "source is trusted" is not a meaningful user-facing trading condition, and in many paths the source eligibility helper is effectively a no-op.
+Owner asked whether the intraday path was handled after the after-hours low-repair fix, and when the report will actually say a stock can be bought.
 
-The concrete failure pattern is:
+Concrete failure specimen:
 
-- Low-repair should not require a generic strategy-sample `available` flag when DB-backed low-repair conditions are already present.
-- The only source-related hard stop for this route should be core market-data failure or conflict.
-- Strategy / backtest evidence must remain supporting evidence, not a trade blocker.
-- The report must not explain low-repair blocking with vague "source trusted" wording.
+- A low-repair candidate can have a title and buy line that imply `can buy / small position`.
+- The same intraday card still showed stale state-machine text such as `trading state: waiting for data`.
+- That creates a direct user-visible contradiction: the reader cannot know whether it is executable now or still blocked.
 
 ## User-Visible Result
 
-- In `盤中`, a low-repair candidate whose DB-backed conditions are fully satisfied becomes:
-  - `🟢 可買｜小倉｜低位修復成立`
-  - buy text: `守支撐/5日均，不追價`
-  - execution suggestion: small position only, `小倉<=10%`.
-- In `盤後` / `收盤`, the same candidate remains:
-  - `可準備｜低位修復成立`
-  - next action is opening / next-session confirmation, not immediate buy.
-- Missing strategy context or insufficient strategy sample alone does not block low-repair `可買`.
-- Explicit core price / OHLCV / RR source-error or unresolved conflict still blocks.
-- Strategy evidence source-error is reported as evidence unavailable, but it does not block the DB-backed setup.
+- Intraday low-repair with all DB-backed conditions satisfied now renders a consistent executable card:
+  - title: `可買｜小倉｜低位修復成立`
+  - state: `交易狀態：可買｜動作：小倉試單｜條件：守支撐/5日均，不追價`
+  - buy line: `買點：可買｜低位修復小倉｜守支撐/5日均，不追價`
+  - intraday trigger: `守支撐/5日均 + 量能不失控，小倉試單`
+- After-hours / close low-repair with all conditions satisfied remains non-executable:
+  - title: `可準備｜低位修復成立`
+  - next trigger: `開盤不追高；守支撐/5日均 + 量能不失控，小倉確認`
 
 ## Non-Goals
 
-- No DB schema / RLS / grant / policy / role / index / constraint change.
+- No DB schema change.
 - No production DB write, backfill, prune, or dedupe.
 - No live Telegram delivery.
-- No broad strategy redesign outside the low-repair executable transition.
+- No broad redesign of breakout, retest, cooling, or holding risk logic.
 
 ## Impacted Modules And Consumers
 
-- `core/generator.py`
-  - low-repair intraday executable gate
-  - unheld funnel state promotion
-  - summary execution bridge
-  - new-entry suggestion line
 - `presentation/report.py`
-  - unheld card title/body/data lines for low-repair buy-ready state
+  - unheld low-repair card state line
+  - after-hours low-repair prepare trigger line
 - `tests/test_generator_report.py`
-  - positive and negative regression coverage
+  - user-visible regression for intraday low-repair executable card
+  - user-visible regression for after-hours low-repair prepare card
 - Direct consumer:
-  - official `generate_report(dry_run=True)` Telegram message list
+  - official Telegram message list produced by `formatTelegramMessages`
 
 ## Output Contract
 
-- `可買` is allowed when all of the following are true:
-  - report phase is `盤中`
-  - DB-backed low-repair status is ready
-  - hard blockers are absent
-  - heat is not `HOT` / `EXTREME`
-  - no explicit core market-data source-error / unresolved conflict is present
-- `可準備` is used when low-repair is ready but the report phase is not intraday.
-- Missing strategy context is not a blocker for this DB-backed route.
-- Explicit core market-data source-error / unresolved conflict must fail closed and not show a buy recommendation.
-- Strategy evidence source-error must not be upgraded into a hard trade gate.
-- Summary must not say `新增買點未成立` when a low-repair intraday buy exists.
+- Intraday low-repair is executable only when the low-repair gate has already promoted the funnel state to `可買` and `low_repair_intraday_buy_ready` is true.
+- In that route, stale state-machine text from generic helpers must not override the low-repair executable decision.
+- After-hours complete low-repair is `可準備`, not `可買`.
+- After-hours trigger must explain the next session condition, not repeat a generic `重新評估`.
 
-## Acceptance Criteria
+## Acceptance Conditions
 
-- Regression proves complete intraday low-repair promotes to `可買｜小倉`.
-- Regression proves after-hours low-repair remains `可準備`.
-- Regression proves missing strategy context still allows low-repair `可買`.
-- Regression proves strategy evidence source-error still allows DB-backed low-repair `可買`.
-- Regression proves core price source-error does not become `可買`.
-- Official dry-run sends no live Telegram and keeps after-hours output conservative.
-- No DB writes are performed.
+- Intraday low-repair card contains `可買｜小倉` and a matching `交易狀態：可買`.
+- Intraday low-repair card does not contain `交易狀態：等資料` or `還差：資料恢復`.
+- After-hours complete low-repair card contains the open-confirmation trigger.
+- Related unheld/report tests still pass.
+- No live Telegram is sent and no production DB data is changed.
+
+## Failure Specimen And Validation Route
+
+- Failure layer: official report formatter / Telegram card body.
+- Validation route:
+  - `tests/test_generator_report.py::GeneratorReportTest::test_low_repair_ready_promotes_to_intraday_small_buy`
+  - `tests/test_generator_report.py::GeneratorReportTest::test_low_repair_all_conditions_met_promotes_to_prepare_not_waiting`
+  - related report-state regression subset.
