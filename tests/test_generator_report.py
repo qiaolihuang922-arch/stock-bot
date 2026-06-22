@@ -3900,6 +3900,59 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("【緯創 3231】⏳ 等低位修復", unheld)
         self.assertNotIn("路線：突破買點太遠，改看低位修復", unheld)
 
+    def test_low_repair_ready_promotes_to_intraday_small_buy(self):
+        payload = {
+            "stock_code": "3231",
+            "price": 162.5,
+            "change": 0.62,
+            "price_source": "realtime",
+            "daily_source": "yahoo",
+            "result": {
+                "decision": "WAIT",
+                "action": 0,
+                "rr": 2.2,
+                "heat_state": "NORMAL",
+                "trade_state": "WAIT",
+                "structure_phase": "BREAKOUT",
+                "price_behavior": "NORMAL",
+                "market_grade": "D",
+                "volume_state": "NORMAL",
+                "volume_price_state": "NORMAL",
+                "structure_state": "NORMAL",
+                "entry_quality": "D",
+                "confidence_score": 55,
+                "breakout_distance": 19.98,
+                "breakout_trigger_price": 194,
+            },
+            "cross_day_context": db_price_context("3231", [158, 160, 161, 162, 162.5]),
+            "holding": None,
+            "structure_score": 2,
+            "volume_ratio": 1.06,
+        }
+
+        messages = generator.formatTelegramMessages(
+            {"緯創": payload},
+            "FULL DETAIL",
+            None,
+            None,
+            {"trade_date": "2026-06-22"},
+            datetime(2026, 6, 22),
+            strategy_evidence_summary=structured_strategy_evidence("available", row_count=30),
+            report_phase="盤中",
+        )
+        unheld = unheld_message(messages)
+        summary = summary_message(messages)
+        card = card_block(unheld, "【緯創 3231】")
+
+        self.assertIn("【緯創 3231】🟢 可買｜小倉｜低位修復成立", card)
+        self.assertIn("買點：可買｜低位修復小倉｜守支撐/5日均，不追價", card)
+        self.assertIn("盤中觸發：守支撐/5日均 + 量能不失控，小倉試單", card)
+        self.assertIn("數據：風險報酬 2.2｜低位修復條件成立｜V 1.06x", card)
+        self.assertIn("新倉建議", summary)
+        self.assertIn("緯創 低位修復可買（小倉<=10%）｜尚未買入｜守支撐/5日均｜盤中觸發", summary)
+        self.assertNotIn("新增買點未成立", summary)
+        self.assertNotIn("盤後不追價", card)
+
     def test_db_backed_rebound_pullback_waits_retest_not_trend_continuation(self):
         payload = {
             "stock_code": "2337",

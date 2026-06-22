@@ -2,8 +2,8 @@
 
 ## Active
 
-- task_md_holds: `low_repair_ready_state_v21_1_20260622`
-- status: `implemented + QA conditional pass + git completion passed`
+- task_md_holds: `low_repair_intraday_buy_v21_1_20260622`
+- status: `implemented + verification passed + git completion passed`
 - current_version: `v21.1`
 - live Telegram delivery: `not run`
 - DB schema change: `none`
@@ -11,42 +11,33 @@
 
 ## Result Summary
 
-- Fixed the Owner-pasted `06/22 盤後｜v21.1` conflict where `3231 緯創` displayed all low-repair conditions as satisfied but still stayed in `等低位修復`.
-- Added DB-backed low-repair readiness status:
-  - support not broken
-  - price above 5-day MA
-  - volume effective
-  - risk/reward >= 1.5
-- Low-repair-ready candidates now promote to `可準備｜低位修復成立`, not immediate `可買` in after-hours.
-- Incomplete low-repair cards continue to show missing conditions, e.g. `2324 仁寶` still missing `站回5日均 37.54`.
-- Summary funnel count no longer double-counts `隔日確認` as `僅追蹤`.
+- Fixed the remaining low-repair transition gap:
+  - after-hours complete low-repair stays `可準備`
+  - intraday complete low-repair can become `可買｜小倉`
+  - incomplete / source-ineligible cases do not become buy recommendations
+- Low-repair `可買` is deliberately conservative:
+  - small position only
+  - no chasing
+  - must keep support / 5-day MA / volume conditions valid
+- Summary execution text now recognizes real low-repair buy candidates instead of still saying no buy exists.
 
 ## Verification
 
-- Targeted report tests:
-  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q -k "low_repair or unheld_funnel or next_day_confirmation or cooling_and_next_day or b5_tracking or postmarket_unheld_gate" --tb=short`
-  - result: `12 passed`
-- Adjacent state/replay tests:
-  - `.\.venv\Scripts\python.exe -m pytest tests\test_unheld_gap_format.py tests\test_trade_state_machine.py tests\test_strategy_buy_path_replay.py tests\test_strategy_rule_outcomes.py -q --tb=short`
-  - result: `16 passed`
-- Full report tests:
-  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q --tb=short`
-  - result: `215 passed`, `1 failed`
-  - remaining unrelated failure: `test_v20_4_47_generate_report_appends_live_readonly_future_watch_sources`
+- Low-repair tests:
+  - `4 passed, 213 deselected`
+- Related report tests:
+  - `17 passed, 200 deselected`
+- Manual negative source probe:
+  - no `可買｜小倉`
 - Official dry-run:
-  - `generate_report(dry_run=True)`
-  - result: `top_messages=2`, `flat_messages=5`, no live Telegram.
+  - `messages=4`
+  - no live Telegram
 
 ## Current Git State
 
-- Commit `f9c1f79` pushed to `origin/main`.
+- This cycle is committed and pushed to `origin/main`.
 - Git completion gate passed.
 
 ## Next Action
 
-- Track the unrelated future-watch source test separately; do not mix it into this low-repair fix.
-
-## Recently Done
-
-- `report_state_sync_v21_1_20260617`: report-state sync fixed, QA passed, Git completion gate passed.
-- `low_repair_ready_state_v21_1_20260622`: low-repair-ready state/display conflict fixed; QA conditional pass; Git completion gate passed.
+- Monitor the next intraday run: complete low-repair candidates should show `可買｜小倉`; after-hours should remain `可準備`.

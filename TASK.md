@@ -1,56 +1,71 @@
-# TASK: low_repair_ready_state_v21_1_20260622
+# TASK: low_repair_intraday_buy_v21_1_20260622
 
 ## Task Status
 
-- task_id: `low_repair_ready_state_v21_1_20260622`
+- task_id: `low_repair_intraday_buy_v21_1_20260622`
 - task_type: `risk_patch`
 - status: `implemented`
-- version_contract: runtime report remains `v21.1`
+- version_contract: report header remains `v21.1`
 - QA level: L3
 
 ## Owner Problem
 
-Owner pasted the `06/22 盤後｜v21.1` report and asked why a stock still cannot be bought when the displayed low-repair conditions are already satisfied.
+Owner asked why a stock that already satisfies the low-repair checklist still only shows `可準備`, and when it actually becomes `可買`.
 
-Failure specimen:
+The concrete failure pattern is:
 
-- `3231 緯創` showed `等低位修復｜低位修復觀察`.
-- The same card displayed `已滿足 支撐未破、站上5日均、量能有效、風險報酬達標`.
-- This is a strategy/display conflict: the state machine stayed in waiting state while the visible checklist said the low-repair route was complete.
+- After-hours output correctly says all low-repair conditions are met, but the report does not explain that this is not yet an intraday executable signal.
+- Intraday output needs a real promotion path from `可準備` to `可買` when the same DB-backed low-repair checklist remains valid.
+- The system must not fake memory or promote a buy when source evidence is incomplete.
 
 ## User-Visible Result
 
-- If low-repair conditions are all satisfied, the unheld card must not remain `等低位修復`.
-- In after-hours reports, the correct state is `可準備｜低位修復成立`, not immediate `可買`.
-- The card must explain the next actionable condition: open/next session confirmation without chasing, while holding support/5-day MA and keeping volume controlled.
-- If one condition is still missing, keep `等低位修復` and show the missing item.
+- In `盤中`, a low-repair candidate whose DB-backed conditions are fully satisfied and whose strategy source is eligible becomes:
+  - `🟢 可買｜小倉｜低位修復成立`
+  - buy text: `守支撐/5日均，不追價`
+  - execution suggestion: small position only, `小倉<=10%`.
+- In `盤後` / `收盤`, the same candidate remains:
+  - `可準備｜低位修復成立`
+  - next action is opening / next-session confirmation, not immediate buy.
+- If strategy source evidence is missing, source-error, insufficient, or conflicting, the candidate cannot become `可買`.
 
 ## Non-Goals
 
-- No DB schema/RLS/grant/policy/role/index/constraint change.
-- No production DB write/backfill/delete.
+- No DB schema / RLS / grant / policy / role / index / constraint change.
+- No production DB write, backfill, prune, or dedupe.
 - No live Telegram delivery.
-- No broad strategy redesign outside the low-repair state/display conflict and related funnel count consistency.
+- No broad strategy redesign outside the low-repair executable transition.
 
 ## Impacted Modules And Consumers
 
-- `core/generator.py`: low-repair readiness helper and unheld funnel state promotion.
-- `presentation/report.py`: low-repair-ready card wording and summary empty-bucket guard.
-- `tests/test_generator_report.py`: regression coverage for low-repair-ready and mutually exclusive unheld buckets.
-- Direct consumer: official `generate_report(dry_run=True)` Telegram message list.
+- `core/generator.py`
+  - low-repair intraday executable gate
+  - unheld funnel state promotion
+  - summary execution bridge
+  - new-entry suggestion line
+- `presentation/report.py`
+  - unheld card title/body/data lines for low-repair buy-ready state
+- `tests/test_generator_report.py`
+  - positive and negative regression coverage
+- Direct consumer:
+  - official `generate_report(dry_run=True)` Telegram message list
 
 ## Output Contract
 
-- `等低位修復` remains for incomplete low-repair conditions.
-- `可準備｜低位修復成立` appears when all low-repair conditions are met.
-- `可準備` does not mean immediate buy in `盤後`; it means next session confirmation before action.
-- `隔日確認` and `僅追蹤` are mutually exclusive buckets in summary counts.
-- Empty summary parentheses must not render.
+- `可買` is allowed only when all of the following are true:
+  - report phase is `盤中`
+  - DB-backed low-repair status is ready
+  - hard blockers are absent
+  - heat is not `HOT` / `EXTREME`
+  - strategy evidence source is eligible
+- `可準備` is used when low-repair is ready but the report phase is not intraday.
+- Missing / bad source evidence must fail closed and not show a buy recommendation.
+- Summary must not say `新增買點未成立` when a low-repair intraday buy exists.
 
 ## Acceptance Criteria
 
-- Regression test proves all-met low-repair promotes to `可準備`, not `等低位修復`.
-- Regression test proves incomplete low-repair still waits and shows the missing condition.
-- Official dry-run shows `3231 緯創` as `可準備｜低位修復成立`.
-- Official dry-run shows `2324 仁寶` still waiting because it has not stood back above 5-day MA.
-- No live Telegram and no production DB write.
+- Regression proves complete intraday low-repair promotes to `可買｜小倉`.
+- Regression proves after-hours low-repair remains `可準備`.
+- Regression / probe proves incomplete source evidence does not become `可買`.
+- Official dry-run sends no live Telegram and keeps after-hours output conservative.
+- No DB writes are performed.

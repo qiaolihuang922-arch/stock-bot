@@ -1,60 +1,55 @@
-# CHANGELOG: low_repair_ready_state_v21_1_20260622
+# CHANGELOG: low_repair_intraday_buy_v21_1_20260622
 
 ## Changes
 
 - Updated `core/generator.py`
-  - Added `daily_price_low_repair_status`.
-  - Low-repair readiness now uses persistent DB-backed daily price context plus current report price.
-  - Checks support, 5-day MA, volume ratio, and risk/reward from one shared helper.
-  - `等低位修復` promotes to `可準備` when all low-repair conditions are satisfied.
-  - `僅追蹤` count no longer includes `隔日確認`.
+  - Added `low_repair_intraday_buy_ready(data, report_context=None)`.
+  - Promotes complete low-repair candidates to `可買` only during `盤中`.
+  - Keeps complete low-repair candidates as `可準備` outside intraday reports.
+  - Fails closed when strategy source evidence is missing, insufficient, source-error, or conflicting.
+  - Adds low-repair small-position entries to new-entry suggestions.
+  - Updates execution bridge so a real low-repair buy does not still say `新增買點未成立`.
 
 - Updated `presentation/report.py`
-  - Low-repair-ready cards render as `可準備｜低位修復成立`.
-  - Low-repair-ready cards use a compact dedicated card body:
-    - status
-    - support/5-day/volume observation
-    - satisfied checklist
-    - next-session buy condition
-  - Summary first line no longer renders empty parentheses.
-  - Low-repair-ready cards suppress duplicate generic source/data lines.
+  - Low-repair intraday buy cards render as `🟢 可買｜小倉｜低位修復成立`.
+  - Buy line says `守支撐/5日均，不追價`.
+  - Data line says the low-repair condition is established, without stale generic `不適用` / source wording.
+  - Source-ineligible intraday cases do not display a buy-ready title.
 
 - Updated `tests/test_generator_report.py`
-  - Added regression for `3231 緯創` style all-met low-repair conflict.
-  - Updated funnel count tests so `隔日確認` is not double-counted as `僅追蹤`.
+  - Added positive coverage for intraday low-repair buy-ready output.
+  - Kept existing after-hours coverage for `可準備`.
+  - Summary assertion confirms low-repair buy appears in new-entry suggestions and removes `新增買點未成立`.
 
 ## Contract Impact
 
-- User-visible Telegram report wording and state classification changed for low-repair-ready candidates.
-- Runtime report version remains `v21.1`.
-- No DB schema change.
-- No DB write/backfill/delete.
-- No live Telegram delivery.
+- User-visible Telegram report state can now move from low-repair `可準備` to intraday `可買`.
+- `可買` is intentionally small-position only and non-chasing.
+- No DB contract change.
+- No version header bump; report remains `v21.1`.
 
 ## Verification
 
-- Low-repair / summary targeted tests:
-  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q -k "low_repair or unheld_funnel or next_day_confirmation or cooling_and_next_day or b5_tracking or postmarket_unheld_gate" --tb=short`
-  - result: `12 passed`
-- Adjacent state/replay tests:
-  - `.\.venv\Scripts\python.exe -m pytest tests\test_unheld_gap_format.py tests\test_trade_state_machine.py tests\test_strategy_buy_path_replay.py tests\test_strategy_rule_outcomes.py -q --tb=short`
-  - result: `16 passed`
-- Full report tests:
-  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q --tb=short`
-  - result: `215 passed`, `1 failed`
-  - remaining failure: `test_v20_4_47_generate_report_appends_live_readonly_future_watch_sources`, global future-watch lines count is `0`; this is outside the low-repair state/display path.
+- Targeted low-repair tests:
+  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q -k "low_repair" --tb=short`
+  - result: `4 passed, 213 deselected`
+- Broader related report tests:
+  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q -k "low_repair or unheld_funnel or postmarket_unheld_gate or next_day_confirmation or trend_continuation or confirmed_evidence_near_boundary" --tb=short`
+  - result: `17 passed, 200 deselected`
+- Manual source-negative formatter probe:
+  - source evidence not eligible did not produce `可買｜小倉`
 - Official dry-run:
   - `generate_report(dry_run=True)`
-  - result: `top_messages=2`, `flat_messages=5`, no live Telegram.
+  - result: `messages=4`, no live Telegram
+  - because current run was after-hours, low-repair-ready candidates remain `可準備`, not `可買`
 
-## Official Dry-Run Rechecks
+## Not Changed
 
-- `3231 緯創` now renders `👀 可準備｜低位修復成立`.
-- `3231 緯創` shows all low-repair conditions satisfied and next-session confirmation wording.
-- `2324 仁寶` remains `等低位修復` and shows `還差 站回5日均 37.54`.
-- Summary now renders `未持倉 9｜可準備 1（不可買）｜隔日確認 1｜僅追蹤 7...`, avoiding double-counting `隔日確認` inside `僅追蹤`.
+- No production DB schema or data.
+- No live Telegram.
+- No unrelated future-watch source behavior.
 
 ## Residual Risk
 
-- The live readonly future-watch source test still fails and should be tracked separately.
-- `.pytest_cache` remains unwritable on this machine due local `WinError 5`; test execution itself succeeds.
+- `.pytest_cache` may still warn with local Windows permission error; test results are unaffected.
+- Full repository-wide test suite was not rerun in this follow-up cycle.

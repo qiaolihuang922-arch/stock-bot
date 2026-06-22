@@ -2,8 +2,8 @@
 
 ## Current Task
 
-- task_id: `low_repair_ready_state_v21_1_20260622`
-- status: `implemented + QA conditional pass + git completion passed`
+- task_id: `low_repair_intraday_buy_v21_1_20260622`
+- status: `implemented + verification passed + git completion passed`
 - version: `v21.1`
 - live Telegram delivery: not run
 - DB schema change: none
@@ -11,50 +11,38 @@
 
 ## Stable Context
 
-- Owner reads Telegram on mobile; report wording must answer actionable trading questions without repeated filler.
-- Production source-of-truth is Supabase / runner data, not local cache, worktree state, runtime dict, or agent memory.
-- Cross-day memory must be DB backed.
-- DB schema/RLS/grant/policy/role/index/constraint changes require Owner approval.
-- Non-schema DB writes/backfills must use approved repo scripts or service APIs; direct hand-written production DML is forbidden.
+- Owner reads Telegram on mobile; report text must answer what can be bought, what is only tracking, and what must wait.
+- Cross-day state must come from production DB or an approved persistent source, not agent memory.
+- DB structure changes require Owner approval.
+- No live Telegram delivery without separate Owner approval.
 
 ## Current Implementation State
 
 - `core/generator.py`
-  - Added `daily_price_low_repair_status`.
-  - `等低位修復` now promotes to `可準備` when the low-repair checklist is complete.
-  - `僅追蹤` count excludes `隔日確認`.
+  - complete low-repair can promote to intraday `可買`
+  - after-hours complete low-repair remains `可準備`
+  - bad / incomplete strategy source evidence fails closed
+  - low-repair buys appear in execution bridge and new-entry suggestions
 - `presentation/report.py`
-  - Low-repair-ready cards render as `可準備｜低位修復成立`.
-  - The card says after-hours confirmation is still required and suppresses duplicate generic data/source lines.
-  - Empty summary parentheses are suppressed.
+  - intraday low-repair card title: `可買｜小倉｜低位修復成立`
+  - action wording: `守支撐/5日均，不追價`
+  - stale generic no-action wording is suppressed for true low-repair buy-ready cards
 - `tests/test_generator_report.py`
-  - Regression coverage added for the `3231 緯創` all-met low-repair conflict.
-  - Funnel count tests updated so `隔日確認` and `僅追蹤` are mutually exclusive.
-- `TASK.md`, `CHANGELOG.md`, `QA_REPORT.md` updated for this cycle.
+  - coverage added for intraday low-repair buy-ready output
+  - existing after-hours prepare coverage preserved
 
 ## Verification State
 
-- Targeted report tests passed:
-  - `12 passed`
-- Adjacent state/replay tests passed:
-  - `16 passed`
-- Full generator report suite:
-  - `215 passed`, `1 failed`
-  - failure is `test_v20_4_47_generate_report_appends_live_readonly_future_watch_sources`, unrelated to low-repair state/display.
-- Official `generate_report(dry_run=True)`:
-  - `3231 緯創` renders `可準備｜低位修復成立`
-  - `2324 仁寶` remains `等低位修復` because it has not stood back above 5-day MA
-  - no live Telegram
-- Git completion gate passed:
-  - commit: `f9c1f79`
-  - branch: `main`
-  - pushed to `origin/main`
+- Targeted low-repair tests: `4 passed, 213 deselected`
+- Broader related report tests: `17 passed, 200 deselected`
+- Manual source-negative probe: no buy-ready title
+- Official dry-run: `messages=4`, no live Telegram
 
 ## Known Findings
 
-- `.pytest_cache` still cannot be written on this machine because of local `WinError 5`; tests execute despite the cache warning.
-- Future-watch source test currently fails with `global_lines=0`; track separately.
+- `.pytest_cache` warning may appear due local Windows permission; it does not block test execution.
+- No production DB data was changed in this task.
 
 ## Next Action
 
-- Open a separate task for the unrelated future-watch source test if Owner wants repo-wide green tests.
+- Monitor the next intraday run: complete low-repair candidates should show `可買｜小倉`; after-hours should remain `可準備`.

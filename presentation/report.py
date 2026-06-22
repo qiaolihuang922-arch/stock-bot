@@ -114,7 +114,13 @@ def formatTelegramSummary(
     lines.append(f"風險：{'；'.join(risk_parts)}")
 
     lines.extend([
-        *deps["market_execution_bridge_lines"](holding_items, watch_items, market_mode, market_summary),
+        *deps["market_execution_bridge_lines"](
+            holding_items,
+            watch_items,
+            market_mode,
+            market_summary,
+            report_context=report_context,
+        ),
         *deps["format_cross_day_tracking_summary"](watch_items, report_context=report_context, market_mode=market_mode),
         *deps["format_strong_prepare_summary"](watch_items, market_mode),
         *deps["format_market_theme_summary_lines"](
@@ -2092,6 +2098,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     title_label = "買點成立" if valid_entry else (blockers[0] if blockers else deps["final_label"](stock_result))
     state = deps["tomorrow_watch_state"](name, data)
     funnel_state = deps["unheld_funnel_state"](name, data, market_mode=market_mode, report_context=report_context)
+    low_repair_actionable = funnel_state == "可買" and bool(data.get("low_repair_intraday_buy_ready"))
     data_source_display_blocked = strategy_source_blocked and (state == "等資料" or funnel_state == "等資料")
     prepare_label, prepare_action = deps["strong_prepare_bucket"](data)
     post_market_prepare = (
@@ -2100,6 +2107,9 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     )
     data_with_context = dict(data)
     data_with_context["report_context"] = report_context
+    if low_repair_actionable:
+        valid_entry = True
+        title_label = "低位修復小倉"
     if valid_entry and funnel_state not in ["可買", "趨勢延續"]:
         valid_entry = False
         title_label = (
@@ -2159,6 +2169,9 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         if funnel_state == "趨勢延續":
             title_action = "趨勢延續買入"
             title_label = "小倉"
+        elif low_repair_actionable:
+            title_action = "可買｜小倉"
+            title_label = "低位修復成立"
         elif not _is_today_action_phase(report_phase):
             title_action = f"明日追蹤｜{deps['unheld_entry_size_detail_text'](stock_result)}"
         else:
@@ -2246,6 +2259,13 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         buy_line = "買點：趨勢延續買入｜小倉 <=15%｜回測 55% 勝 / +2.26%"
         data_line = f"數據：{rr_data_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
+    elif low_repair_actionable:
+        buy_line = "買點：可買｜低位修復小倉｜守支撐/5日均，不追價"
+        low_repair_status = data.get("low_repair_status") or {}
+        low_repair_rr = _gate_value_text(low_repair_status.get("rr"))
+        low_repair_volume = _gate_value_text(low_repair_status.get("volume_ratio") or data.get("volume_ratio"))
+        data_line = f"數據：風險報酬 {low_repair_rr}｜低位修復條件成立｜V {low_repair_volume}x"
+        price_line = deps["price_change_line"](data.get("price"), data.get("change"))
     elif valid_entry and not _is_today_action_phase(report_phase):
         buy_line = "買點：盤後追蹤｜開盤後確認｜不追價"
         data_line = f"數據：{rr_data_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
@@ -2297,6 +2317,8 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     trigger_label = _today_trigger_label(report_phase) if _is_today_action_phase(report_phase) else "明日觸發"
     if valid_entry and funnel_state == "趨勢延續":
         tomorrow_line = f"{trigger_label}：回踩站回日，小倉執行；不追高加碼"
+    elif low_repair_actionable:
+        tomorrow_line = f"{trigger_label}：守支撐/5日均 + 量能不失控，小倉試單"
     elif data_source_display_blocked:
         tomorrow_line = f"{trigger_label}：無有效進場，先補策略樣本證據"
     elif funnel_state == "等資料":
@@ -2330,7 +2352,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         or state in ["弱勢淘汰", "淘汰"]
         or (deps["is_valid_entry"](stock_result) and not source_eligible)
     )
-    if show_source_decision_reason:
+    if show_source_decision_reason and not low_repair_actionable:
         reason_line = _append_decision_reason(reason_line, report_context, name)
     trend_control_lines = []
     if valid_entry and funnel_state == "趨勢延續":

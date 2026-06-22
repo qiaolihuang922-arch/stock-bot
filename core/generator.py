@@ -6393,6 +6393,40 @@ def post_market_unheld_buy_requires_open_confirmation(data, report_context=None)
     )
 
 
+def low_repair_intraday_buy_ready(data, report_context=None):
+    report_phase = (report_context or {}).get("report_context", {}).get("report_phase")
+    if report_phase != "盤中":
+        return False
+
+    low_repair = daily_price_low_repair_status(data)
+    data["low_repair_status"] = low_repair
+    if not low_repair.get("ready"):
+        data.pop("low_repair_intraday_buy_ready", None)
+        return False
+
+    result = _result_with_data_overrides(data)
+    blockers = entry_blockers(result)
+    hard_blockers = {
+        "漲停不追",
+        "漲停反彈待確認",
+        "急彈待回測",
+        "弱反彈待確認",
+        "突破失敗",
+    }
+    if any(blocker in hard_blockers for blocker in blockers):
+        data.pop("low_repair_intraday_buy_ready", None)
+        return False
+    if result.get("heat_state") in {"HOT", "EXTREME"} or result.get("trade_state") == "AVOID":
+        data.pop("low_repair_intraday_buy_ready", None)
+        return False
+    if result.get("price_behavior") in {"LIMIT_LOCK", "LIMIT_REBOUND", "WEAK_REBOUND", "FAILED_BREAKOUT"}:
+        data.pop("low_repair_intraday_buy_ready", None)
+        return False
+
+    data["low_repair_intraday_buy_ready"] = True
+    return True
+
+
 def unheld_funnel_assessment(name, data, market_mode=None, report_context=None):
     result = _result_with_data_overrides(data)
     state = tomorrow_watch_state(name, data)
@@ -6462,6 +6496,13 @@ def unheld_funnel_assessment(name, data, market_mode=None, report_context=None):
         low_repair = daily_price_low_repair_status(data)
         data["low_repair_status"] = low_repair
         if low_repair.get("ready"):
+            if (
+                _unheld_decision_source_eligible(report_context, name)
+                and low_repair_intraday_buy_ready(data, report_context=report_context)
+            ):
+                return "可買", "低位修復盤中條件成立；小倉試單，不追價。"
+            if (report_context or {}).get("report_context", {}).get("report_phase") == "盤中":
+                return "可準備", "低位修復條件成立；資料來源未完整，暫不升格可買。"
             return "可準備", "低位修復條件成立；盤後不追價，等明日開盤確認。"
 
     if any(item in blockers for item in ["弱反彈待確認", "漲停反彈待確認"]):
@@ -6639,8 +6680,18 @@ def unheld_funnel_state(name, data, market_mode=None, report_context=None):
                 state = "等低位修復"
                 data["low_repair_status"] = daily_price_low_repair_status(data)
                 if data["low_repair_status"].get("ready"):
-                    state = "可準備"
-                    reason = "低位修復條件成立；盤後不追價，等明日開盤確認。"
+                    if (
+                        _unheld_decision_source_eligible(report_context, name)
+                        and low_repair_intraday_buy_ready(data, report_context=report_context)
+                    ):
+                        state = "可買"
+                        reason = "低位修復盤中條件成立；小倉試單，不追價。"
+                    elif (report_context or {}).get("report_context", {}).get("report_phase") == "盤中":
+                        state = "可準備"
+                        reason = "低位修復條件成立；資料來源未完整，暫不升格可買。"
+                    else:
+                        state = "可準備"
+                        reason = "低位修復條件成立；盤後不追價，等明日開盤確認。"
             else:
                 state = "等接近"
     if reason:
@@ -6723,6 +6774,8 @@ def unheld_execution_trigger(funnel_state, data):
     action = result.get("action", 0)
 
     if funnel_state == "可買":
+        if (data or {}).get("low_repair_intraday_buy_ready"):
+            return "小倉<=10%，守支撐/5日均，不追價"
         try:
             size_pct = round(float(action) * 100)
         except (TypeError, ValueError):
@@ -6811,6 +6864,7 @@ def unheld_execution_item(index, name, data, market_mode=None, report_context=No
         "name": name,
         "kind": "watch",
         "state": state,
+        "entry_profile": "low_repair" if data.get("low_repair_intraday_buy_ready") else None,
         "priority": unheld_execution_priority(index, name, data, market_mode=market_mode),
         "is_control": False,
         "line": (
@@ -7201,6 +7255,8 @@ def format_new_entry_suggestions(watch_items, limit=5, report_phase=None, market
     for item in items[:limit]:
         if item.get("state") == "趨勢延續":
             lines.append(f"{item['name']} 趨勢延續買入（小倉<=15%）｜尚未買入｜回踩低點下方停損｜{timing}")
+        elif item.get("entry_profile") == "low_repair":
+            lines.append(f"{item['name']} 低位修復可買（小倉<=10%）｜尚未買入｜守支撐/5日均｜{timing}")
         else:
             lines.append(f"{item['name']} 可買（分批，不追價）｜尚未買入｜建議分批｜{timing}")
     if len(items) > limit:
@@ -7215,6 +7271,10 @@ def compact_execution_checklist_line(item, intraday=True):
             if intraday:
                 return f"{item['name']} 趨勢延續買入（小倉<=15%）"
             return f"{item['name']} 明日追蹤（趨勢延續，小倉<=15%）"
+        if item.get("entry_profile") == "low_repair":
+            if intraday:
+                return f"{item['name']} 低位修復可買（小倉<=10%）"
+            return f"{item['name']} 明日追蹤（低位修復，開盤確認）"
         if intraday:
             return f"{item['name']} 可買（分批，不追價）"
         return f"{item['name']} 明日追蹤（開盤後確認，不追價）"
@@ -7672,10 +7732,10 @@ def build_may_data_strategy_report_full_integrity_check(
     }
 
 
-def market_execution_bridge_lines(holding_items, watch_items, market_mode, market_summary=None):
+def market_execution_bridge_lines(holding_items, watch_items, market_mode, market_summary=None, report_context=None):
 
-    funnel = build_unheld_funnel(watch_items, market_mode=market_mode)
-    pending_count = len(pending_trade_items(holding_items, watch_items, market_mode=market_mode))
+    funnel = build_unheld_funnel(watch_items, market_mode=market_mode, report_context=report_context)
+    pending_count = len(pending_trade_items(holding_items, watch_items, market_mode=market_mode, report_context=report_context))
     tracking_count = unheld_tracking_count(funnel)
 
     if pending_count:
@@ -7690,6 +7750,8 @@ def market_execution_bridge_lines(holding_items, watch_items, market_mode, marke
 
     if funnel.get("趨勢延續"):
         execution = "執行：趨勢延續同源證據達標，僅小倉並守回踩低點。"
+    elif funnel.get("可買"):
+        execution = "執行：有新倉買點，僅小倉/分批，不追價。"
     elif funnel["等回測"]:
         execution = "執行：新增買點未成立，先等回測，不追高。"
     elif tracking_count:
