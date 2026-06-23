@@ -1,63 +1,44 @@
-# CHANGELOG: intraday_user_view_state_readability_v21_1_20260623
+﻿# CHANGELOG: intraday_display_state_sync_v21_1_20260623
 
 ## Changes
 
+- Updated `core/generator.py`
+  - Treat 13:00-13:19 on weekdays as `盤中` instead of falling to `非交易`.
+  - Added `unheld_display_funnel_state` so summary uses the same user-visible state as cards for overheat pullbacks.
+  - Prevented `觀察` from becoming the visible rejection reason; falls back to `型態未過`.
+
 - Updated `presentation/report.py`
-  - Added `_overheat_contract_parts`.
-  - Overheated names now split by current move:
-    - still positive / locked: keep cooling / no-chase.
-    - pullback `<= -2%`: show `回測中，觀察是否守住`.
-    - sharp pullback `<= -8%`: show `急殺回測，先看支撐`.
-  - Synced overheat-pullback card titles to `等回測｜回測確認` or `等回測｜急殺回測`.
-  - Added `_low_repair_compact_lines` using DB-backed `low_repair_status` values.
-  - Suppressed positive repair history on `淘汰` cards.
+  - Low-repair missing MA/support conditions now include numeric gap from current price.
+  - Breakout failure market line converts positive volume terms to `放量回落` / `待確認`.
+  - Overheat pullback trigger now uses concrete retest conditions instead of generic cooling text.
 
 - Updated `tests/test_generator_report.py`
-  - Added regression tests for:
-    - normal overheat pullback display.
-    - sharp overheat pullback display.
-    - compact low-repair missing condition.
-    - rejected-card history suppression.
-  - Updated low-repair expected wording from verbose checklist to compact actionable lines.
+  - Added regressions for display-bucket sync, pullback triggers, rejection placeholder, failed-breakout volume wording, and 13:00 market phase.
+  - Updated expected low-repair wording to include numeric gap.
+  - Updated summary expectations for overheat pullback display buckets.
 
 ## Contract Impact
 
-- User-visible Telegram card text changes for unheld candidates.
+- User-visible Telegram wording changes for unheld cards and summary counts.
 - No payload shape change.
 - No DB schema or write contract change.
-- Report version remains `v21.1`.
-
-## Direct Consumers Synced
-
-- Official Telegram unheld card formatter.
-- Existing report tests that assert low-repair wording.
+- Version remains `v21.1`.
 
 ## Verification
 
-- Focused new tests:
-  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q -k "overheat_pullback or overheat_sharp or low_repair_compact or rejected_card_suppresses" --tb=short`
-  - result: `4 passed, 217 deselected`
-- Related report subset:
-  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q -k "overheat or low_repair or cooldown or retest or rejected or mobile" --tb=short`
-  - result: `25 passed, 196 deselected`
-- Official dry-run:
-  - `generate_report(dry_run=True)`
-  - result: `messages=4`, no live Telegram delivery.
-  - observed 06/23 unheld output:
-    - 南亞科: `等回測｜急殺回測`
-    - 華邦電: `等回測｜回測確認`
-    - 緯創 / 仁寶: compact low-repair missing `站回5日均`
+- Focused tests: `7 passed, 217 deselected`.
+- Related report subset: `26 passed, 198 deselected`.
+- Official dry-run: `messages=4`, no live Telegram delivery.
+- Full report test file: `215 passed, 12 failed`.
+  - failures are legacy / broader expectations outside this focused fix: stale v19/v20 wording, source-error wording, old limit-card wording, future-watch live-source count, and one old attack-volume expectation.
 
 ## Not Changed
 
 - No production DB write.
 - No live Telegram.
 - No schema, RLS, grant, policy, role, index, or constraint change.
-- No summary-section redesign in this cycle.
 
 ## Residual Risk
 
-- Full `tests/test_generator_report.py` currently has legacy expectation failures unrelated to this focused fix:
-  - stale old-copy assertions for source-error, industry, old retest wording, and live future-watch source counts.
-  - result observed in full run: `213 passed, 11 failed`.
-- Local `.pytest_cache` still emits a Windows permission warning; focused tests pass despite the warning.
+- Full legacy test file remains not green and should be handled by a separate test-contract cleanup task.
+- `.pytest_cache` emits a local Windows permission warning; it does not affect focused test results.

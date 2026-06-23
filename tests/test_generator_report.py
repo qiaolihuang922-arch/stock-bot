@@ -870,7 +870,7 @@ class GeneratorReportTest(unittest.TestCase):
                 "price_behavior": "NORMAL",
                 "market_grade": "A",
                 "volume_state": "STRONG",
-                "volume_price_state": "EXPANSION",
+                "volume_price_state": "ATTACK",
                 "structure_state": "STRONG",
                 "entry_quality": "A",
                 "confidence_score": 88,
@@ -2614,7 +2614,7 @@ class GeneratorReportTest(unittest.TestCase):
                 "price_behavior": "NORMAL",
                 "market_grade": "A",
                 "volume_state": "STRONG",
-                "volume_price_state": "EXPANSION",
+                "volume_price_state": "ATTACK",
                 "structure_state": "STRONG",
                 "entry_quality": "A",
                 "confidence_score": 86,
@@ -2928,7 +2928,7 @@ class GeneratorReportTest(unittest.TestCase):
         summary_msg = summary_message(messages)
         unheld_msg = unheld_message(messages)
         self.assertIn("未持倉狀態：", summary_msg)
-        self.assertIn("未持倉 4｜僅追蹤 3（等冷卻1/等風險報酬2）｜淘汰 1", summary_msg)
+        self.assertIn("未持倉 4｜僅追蹤 3（等冷卻1/等回測1/等風險報酬1）｜淘汰 1", summary_msg)
         self.assertIn("未持倉 3 檔僅追蹤，等觸發，不列入今日盤中風控建議", summary_msg)
         self.assertNotIn("強勢準備：\n- 漲停鎖價：聯電 不可追高，待開板回測", summary_msg)
         self.assertIn("淘汰：1 檔｜主因：結構弱", summary_msg)
@@ -3339,7 +3339,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("5. 智原｜-0.59%｜洗盤警戒｜跌破警戒升級風控", summary_message(messages))
         self.assertIn("未持倉 6 檔僅追蹤，等觸發，不列入今日盤中風控建議", summary_message(messages))
         self.assertIn("未持倉狀態：", summary_message(messages))
-        self.assertIn("未持倉 7｜僅追蹤 6（等冷卻3/等回測1/等風險報酬1/等量能1）｜淘汰 1", summary_message(messages))
+        self.assertIn("未持倉 7｜僅追蹤 6（等冷卻2/等回測2/等風險報酬1/等量能1）｜淘汰 1", summary_message(messages))
         self.assertNotIn("僅追蹤 6 檔，不列入交易執行", summary_message(messages))
         self.assertNotIn("📎 詳情索引：", summary_message(messages))
         self.assertIn("淘汰：1 檔｜主因：弱反彈待確認", summary_message(messages))
@@ -3799,7 +3799,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("路線：突破買點太遠，改看低位修復", unheld)
         self.assertIn("觀察：近期支撐 158", unheld)
         self.assertIn("5日均 159.4", unheld)
-        self.assertIn("還差：站回5日均 159.4、量能不失控", unheld)
+        self.assertIn("還差：站回5日均 159.4（差 1.4）、量能不失控", unheld)
         self.assertIn("有效買點：守近期支撐 158 + 站回5日均 159.4 + 量能不失控", unheld)
         self.assertNotIn("不適用（不可行動）", unheld)
         self.assertNotIn("尚未接近突破區", unheld)
@@ -4068,7 +4068,7 @@ class GeneratorReportTest(unittest.TestCase):
                 "price_behavior": "NORMAL",
                 "market_grade": "B",
                 "volume_state": "NORMAL",
-                "volume_price_state": "ATTACK",
+                "volume_price_state": "EXPANSION",
                 "structure_state": "NORMAL",
                 "entry_quality": "D",
                 "confidence_score": 45,
@@ -4155,7 +4155,7 @@ class GeneratorReportTest(unittest.TestCase):
                 "price_behavior": "NORMAL",
                 "market_grade": "A",
                 "volume_state": "ATTACK",
-                "volume_price_state": "ATTACK",
+                "volume_price_state": "EXPANSION",
                 "structure_state": "NORMAL",
                 "entry_quality": "B",
                 "confidence_score": 80,
@@ -10567,6 +10567,13 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("有效買點：回測不破 + 非追高 + 量能不失控", lines)
         self.assertFalse(any("等待：熱度" in line for line in lines))
 
+        self.assertEqual(generator.unheld_funnel_state("華邦電", data), "等冷卻")
+        funnel_text = generator.format_unheld_funnel([("華邦電", data)])
+        self.assertIn("僅追蹤 1（等回測）", funnel_text)
+        card = generator.formatTelegramUnheldCard("華邦電", data, report_phase="盤中")
+        self.assertIn("【華邦電 2344】⏳ 等回測｜回測確認", card)
+        self.assertIn("盤中觸發：回測不破 + 量能不失控，再評估", card)
+
     def test_overheat_sharp_pullback_display_focuses_on_support(self):
         data = {
             "price": 456.25,
@@ -10596,6 +10603,9 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("觀察：已降溫；重點改看回測支撐是否守住", lines)
         self.assertIn("有效買點：守住回測支撐 + 非追高 + 量能不失控", lines)
 
+        card = generator.formatTelegramUnheldCard("南亞科", data, report_phase="盤中")
+        self.assertIn("盤中觸發：守住回測支撐 + 非追高 + 量能不失控", card)
+
     def test_low_repair_compact_lines_show_real_missing_condition_only(self):
         data = {
             "price": 159.0,
@@ -10612,7 +10622,7 @@ class GeneratorReportTest(unittest.TestCase):
         lines = presentation_report._low_repair_compact_lines(data)
 
         self.assertEqual(lines[0], "觀察：近期支撐 158｜5日均 161.2｜量能 1.06x")
-        self.assertEqual(lines[1], "還差：站回5日均 161.2")
+        self.assertEqual(lines[1], "還差：站回5日均 161.2（差 2.2）")
         self.assertEqual(lines[2], "有效買點：守近期支撐 158 + 站回5日均 161.2 + 量能不失控")
 
     def test_rejected_card_suppresses_positive_repair_history(self):
@@ -10623,6 +10633,43 @@ class GeneratorReportTest(unittest.TestCase):
             presentation_report._compact_unheld_history_line("歷史：前次 failed｜連續觀察 3 天", funnel_state="淘汰"),
             "歷史：前次 failed｜連續觀察 3 天",
         )
+
+    def test_rejected_primary_reason_never_returns_observe_placeholder(self):
+        self.assertEqual(
+            generator.rejected_primary_reason({"blockers": ["觀察"], "entry_quality": "D", "rr": 2.0}),
+            "型態未過",
+        )
+
+    def test_failed_breakout_card_does_not_show_attack_volume_as_positive(self):
+        data = {
+            "price": 171.25,
+            "change": -7.68,
+            "volume_ratio": 2.2,
+            "result": {
+                "decision": "FAIL",
+                "structure_phase": "FAILED_BREAKOUT",
+                "price_behavior": "FAILED_BREAKOUT",
+                "volume_price_state": "EXPANSION",
+                "volume_state": "STRONG",
+                "blockers": ["突破失敗"],
+                "entry_quality": "D",
+            },
+        }
+
+        card = generator.formatTelegramUnheldCard("旺宏", data, report_phase="盤中")
+
+        self.assertIn("突破失敗", card)
+        self.assertIn("放量回落", card)
+        self.assertNotIn("攻擊量", card)
+
+    def test_get_market_phase_treats_1300_gap_as_trading_day(self):
+        class FixedDateTime(datetime):
+            @classmethod
+            def now(cls, _tz=None):
+                return cls(2026, 6, 23, 13, 10)
+
+        with patch.object(generator, "datetime", FixedDateTime):
+            self.assertEqual(generator.get_market_phase(), "盤中")
 
 
 if __name__ == "__main__":

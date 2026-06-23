@@ -714,11 +714,16 @@ def _low_repair_compact_lines(data):
     if volume_ratio is not None:
         observe_parts.append(f"量能 {_gate_value_text(volume_ratio)}x")
 
+    def gap_suffix(target):
+        if target is None or latest_price is None or latest_price >= target:
+            return ""
+        return f"（差 {_gate_value_text(target - latest_price)}）"
+
     missing = []
     if support is not None and latest_price is not None and latest_price < support:
-        missing.append(f"守住支撐 {_gate_value_text(support)}")
+        missing.append(f"守住支撐 {_gate_value_text(support)}{gap_suffix(support)}")
     if ma5 is not None and latest_price is not None and latest_price < ma5:
-        missing.append(f"站回5日均 {_gate_value_text(ma5)}")
+        missing.append(f"站回5日均 {_gate_value_text(ma5)}{gap_suffix(ma5)}")
     if volume_ratio is None:
         missing.append("量能確認")
     elif volume_ratio < 1:
@@ -1589,6 +1594,17 @@ def _score_gated_market_line(report_context, name, data, dist, deps):
         market_text = deps["plain_label"](deps["compact_market_line"](stock_result, dist))
         market_text = _strip_breakout_position_segment(market_text)
         market_text = _adjust_market_text_by_recent_price_transition(market_text, data)
+        blockers = set(stock_result.get("blockers") or [])
+        failed_breakout = (
+            stock_result.get("structure_phase") == "FAILED_BREAKOUT"
+            or stock_result.get("price_behavior") == "FAILED_BREAKOUT"
+            or "突破失敗" in blockers
+            or stock_result.get("decision") == "FAIL"
+        )
+        if failed_breakout:
+            market_text = market_text.replace("攻擊量", "放量回落")
+            market_text = market_text.replace("趨勢量", "放量回落")
+            market_text = market_text.replace("極強", "待確認")
         if ("弱勢" in market_text or "遠離突破" in market_text) and "極強" in market_text:
             market_text = market_text.replace("極強", "待確認")
         if _is_low_volume_consolidation(report_context, data, stock_result):
@@ -2482,6 +2498,11 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         tomorrow_line = f"{trigger_label}：開盤不追高；守支撐/5日均 + 量能不失控，小倉確認"
     elif limit_display_kind:
         tomorrow_line = f"{trigger_label}：開板/降溫後回測不破，且非追高"
+    elif overheat_pullback_display:
+        if overheat_change is not None and overheat_change <= -8:
+            tomorrow_line = f"{trigger_label}：守住回測支撐 + 非追高 + 量能不失控"
+        else:
+            tomorrow_line = f"{trigger_label}：回測不破 + 量能不失控，再評估"
     elif data_source_display_blocked:
         tomorrow_line = f"{trigger_label}：無有效進場，先補策略樣本證據"
     elif funnel_state == "等資料":

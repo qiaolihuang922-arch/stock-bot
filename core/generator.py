@@ -271,8 +271,8 @@ def get_market_phase():
     if 9 <= h < 13:
         return "盤中"
 
-    if h == 13 and m >= 20:
-        return "收盤"
+    if h == 13:
+        return "收盤" if m >= 20 else "盤中"
 
     if h > 13:
         return "盤後"
@@ -6913,9 +6913,27 @@ def build_unheld_funnel(watch_items, market_mode=None, report_context=None):
     }
 
     for name, data in watch_items:
-        groups[unheld_funnel_state(name, data, market_mode=market_mode, report_context=report_context)].append(name)
+        raw_state = unheld_funnel_state(name, data, market_mode=market_mode, report_context=report_context)
+        groups[unheld_display_funnel_state(raw_state, data)].append(name)
 
     return groups
+
+
+def unheld_display_funnel_state(strategy_funnel_state, data):
+    """Map raw strategy state to the user-visible bucket used by cards and summary."""
+    result = (data or {}).get("result") or {}
+    try:
+        change = float((data or {}).get("change"))
+    except (TypeError, ValueError):
+        change = None
+    if (
+        strategy_funnel_state == "等冷卻"
+        and result.get("heat_state") in {"HOT", "EXTREME"}
+        and change is not None
+        and change <= -2
+    ):
+        return "等回測"
+    return strategy_funnel_state
 
 
 def dominant_reject_reasons(watch_items, market_mode=None, report_context=None):
@@ -6972,10 +6990,11 @@ def rejected_primary_reason(result):
         return "個股弱勢"
 
     for reason in blockers:
-        if reason not in ["RR不足", "量能不足", "遠離觸發", "過熱觀察"] and not reason.startswith("過熱"):
+        if reason not in ["RR不足", "量能不足", "遠離觸發", "過熱觀察", "觀察"] and not reason.startswith("過熱"):
             return reason
 
-    return final_label(result)
+    label = final_label(result)
+    return "型態未過" if label in {"觀察", ""} else label
 
 
 def unheld_tracking_count(funnel):

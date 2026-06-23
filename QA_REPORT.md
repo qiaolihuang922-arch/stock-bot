@@ -1,66 +1,53 @@
-# QA_REPORT: intraday_user_view_state_readability_v21_1_20260623
+﻿# QA_REPORT: intraday_display_state_sync_v21_1_20260623
 
 ## Test Scope
 
-- Overheat card semantics when price is still strong vs already pulling back.
-- Low-repair card compactness and missing-condition clarity.
-- Rejected-card history contradiction.
+- Market phase handling around the 13:00 trading-day gap.
+- Summary/card state consistency for overheat pullback names.
+- Low-repair gap readability.
+- Rejected-card primary reason clarity.
+- Failed-breakout volume wording.
 - Official dry-run message-list rendering.
 
 ## Risk Scan
 
-- Strategy risk: medium. This changes user-visible state wording but not the underlying buy/sell engine.
-- DB risk: none. Read-only dry-run only.
-- Live delivery risk: none. Telegram send was not run.
-- User misunderstanding risk checked:
-  - no longer tells a sharply falling overheated stock to simply wait for cooling.
-  - low repair now says the actual missing level instead of repeating route text.
-  - rejected cards no longer show positive repair history.
+- Strategy risk: medium. This changes visible state classification and wording, but does not change DB writes, schema, or live execution.
+- DB risk: none.
+- Live delivery risk: none.
+- User misunderstanding risk reduced: summary now matches cards, failed breakout no longer sounds like positive attack volume, and low-repair cards say exactly how far from the needed MA.
 
 ## Cross-Block Semantic Consistency
 
-- Positive overheat:
-  - title/body remain cooling / no-chase.
-- Pullback overheat:
-  - title/body both say wait for retest confirmation.
-- Low repair:
-  - route, observation, missing condition, and effective buy point point to the same support / MA source.
-- Rejected:
-  - no positive `修復中 / 權重 +1` line under an eliminated card.
+- Overheat still rising: remains `等冷卻` / no chase.
+- Overheat already pulling back: card and summary both treat it as `等回測`.
+- Low repair: route, observation, missing condition, and effective buy point point to the same support / 5-day MA source.
+- Rejected: title reason is concrete, not `觀察`.
 
 ## Failure Specimen Rebuttal
 
-- Owner specimen: 06/23 intraday report.
-- Rebuttal from dry-run:
-  - 南亞科 changed to `等回測｜急殺回測`.
-  - 華邦電 changed to `等回測｜回測確認`.
-  - 緯創 / 仁寶 now show `近期支撐`, `5日均`, `量能`, and only the actual missing `站回5日均`.
-  - 光寶科 rejected card no longer displays repair history in the dry-run excerpt.
+- Owner specimen: 06/23 report showed `非交易`, overheat-pullback summary mismatch, vague triggers, and unclear rejection labels.
+- Dry-run rebuttal:
+  - header: `【06/23 盤中｜v21.1】`.
+  - summary: `未持倉 9｜僅追蹤 7（等冷卻3/等低位修復2/等回測2）｜淘汰 2`.
+  - 旺宏: `盤面：突破失敗｜待確認｜放量回落`.
+  - 緯創: `還差：站回5日均 161.2（差 2.45）`.
+  - 仁寶: `還差：站回5日均 37.54（差 0.67）`.
 
 ## Commands And Results
 
-- `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q -k "overheat_pullback or overheat_sharp or low_repair_compact or rejected_card_suppresses" --tb=short`
-  - result: `4 passed, 217 deselected`
-- `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q -k "overheat or low_repair or cooldown or retest or rejected or mobile" --tb=short`
-  - result: `25 passed, 196 deselected`
-- `.\.venv\Scripts\python.exe -c "from core.generator import generate_report; generate_report(dry_run=True)"`
-  - result: `messages=4`, no live send.
+- Focused tests: `7 passed, 217 deselected`.
+- Related report subset: `26 passed, 198 deselected`.
+- Official dry-run: `messages 4`, no live send.
+- Full report file: `215 passed, 12 failed`; not accepted as full pass, residual test-contract debt remains.
 
 ## Not Tested
 
 - Live Telegram delivery.
 - Production DB write/read-after-write.
-- Full repository green state.
-
-## Full-Test Note
-
-- Full `tests/test_generator_report.py` was run once.
-- Result: `213 passed, 11 failed`.
-- Failures are stale / broader contract expectations outside this focused fix, including old source-error wording, old retest wording, old industry/source lines, and future-watch live source count expectations.
-- These are recorded as residual debt, not as passing evidence.
+- DB backfill/prune/dedupe.
 
 ## QA Conclusion
 
 conditional pass.
 
-The 06/23 user-visible failure path is fixed in focused tests and official dry-run output. Conditional because the full legacy report test file is not green and needs a separate cleanup/calibration cycle.
+The 06/23 user-visible path is fixed by focused tests and official dry-run. Conditional because the full legacy report test file still has unrelated stale expectation failures that need a separate cleanup task.
