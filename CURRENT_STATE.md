@@ -37,5 +37,5 @@
 
 ## Next Action
 
-- Commit and push this readability fix, then report commit hash, push target, and upstream equality.
+- Report commit hash, push target, and upstream equality.
 - If Owner asks for next cleanup: target full-test legacy expectations and future-watch/source wording debt.

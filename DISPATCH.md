@@ -25,9 +25,9 @@
 
 ## Current Git State
 
-- Implementation will be committed and pushed in this cycle; final response reports the verified hash and upstream equality.
+- Committed and pushed to `origin/main`; final response reports the verified hash and upstream equality.
 
 ## Next Action
 
-- Commit and push this readability fix, then report hash, push target, and upstream equality.
+- Report hash, push target, and upstream equality.
 - Separate follow-up: clean stale v19/v20 report tests and decide which old source / future-watch assertions should be retired.
