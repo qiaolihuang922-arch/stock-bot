@@ -3799,9 +3799,8 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("路線：突破買點太遠，改看低位修復", unheld)
         self.assertIn("觀察：近期支撐 158", unheld)
         self.assertIn("5日均 159.4", unheld)
-        self.assertIn("條件：已滿足 支撐未破", unheld)
-        self.assertIn("還差 站回5日均 159.4、量能資料補齊", unheld)
-        self.assertIn("有效買點：近期支撐不破 + 站回5日均 + 量能轉強 + 風險報酬 >= 1.5", unheld)
+        self.assertIn("還差：站回5日均 159.4、量能不失控", unheld)
+        self.assertIn("有效買點：守近期支撐 158 + 站回5日均 159.4 + 量能不失控", unheld)
         self.assertNotIn("不適用（不可行動）", unheld)
         self.assertNotIn("尚未接近突破區", unheld)
 
@@ -10536,6 +10535,94 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【漲停反彈 9999】👀 隔日確認", unheld)
         self.assertIn("【等回測股 9999】👀 不可追高觀察", unheld)
         self.assertIn("【等冷卻股 9999】⏳ 等冷卻", unheld)
+
+
+    def test_overheat_pullback_display_switches_from_cooling_to_retest(self):
+        data = {
+            "price": 208.75,
+            "change": -5.97,
+            "result": {
+                "heat_state": "HOT",
+                "decision": "WAIT",
+                "rr": 2.0,
+                "entry_quality": "D",
+                "blockers": ["過熱觀察"],
+            },
+        }
+        state = generator.unheld_funnel_state("華邦電", data)
+        contract = presentation_report._unheld_entry_contract(
+            data,
+            0,
+            data["result"]["blockers"],
+            False,
+            state,
+            "ok",
+            False,
+            title_label="過熱觀察",
+        )
+        lines = presentation_report._entry_check_lines("買點：不買，等冷卻", contract, funnel_state=state, data=data)
+
+        self.assertIn("狀態：回測中，觀察是否守住", lines)
+        self.assertIn("觀察：已降溫；重點改看回測是否守住", lines)
+        self.assertIn("有效買點：回測不破 + 非追高 + 量能不失控", lines)
+        self.assertFalse(any("等待：熱度" in line for line in lines))
+
+    def test_overheat_sharp_pullback_display_focuses_on_support(self):
+        data = {
+            "price": 456.25,
+            "change": -9.65,
+            "result": {
+                "heat_state": "EXTREME",
+                "decision": "WAIT",
+                "rr": 2.0,
+                "entry_quality": "D",
+                "blockers": ["過熱觀察"],
+            },
+        }
+        state = generator.unheld_funnel_state("南亞科", data)
+        contract = presentation_report._unheld_entry_contract(
+            data,
+            0,
+            data["result"]["blockers"],
+            False,
+            state,
+            "ok",
+            False,
+            title_label="熱度 Lv.3",
+        )
+        lines = presentation_report._entry_check_lines("買點：不買，等冷卻", contract, funnel_state=state, data=data)
+
+        self.assertIn("狀態：急殺回測，先看支撐", lines)
+        self.assertIn("觀察：已降溫；重點改看回測支撐是否守住", lines)
+        self.assertIn("有效買點：守住回測支撐 + 非追高 + 量能不失控", lines)
+
+    def test_low_repair_compact_lines_show_real_missing_condition_only(self):
+        data = {
+            "price": 159.0,
+            "volume_ratio": 1.06,
+            "result": {"rr": 2.0},
+            "low_repair_status": {
+                "support": 158.0,
+                "ma5": 161.2,
+                "volume_ratio": 1.06,
+                "rr": 2.0,
+                "latest_price": 159.0,
+            },
+        }
+        lines = presentation_report._low_repair_compact_lines(data)
+
+        self.assertEqual(lines[0], "觀察：近期支撐 158｜5日均 161.2｜量能 1.06x")
+        self.assertEqual(lines[1], "還差：站回5日均 161.2")
+        self.assertEqual(lines[2], "有效買點：守近期支撐 158 + 站回5日均 161.2 + 量能不失控")
+
+    def test_rejected_card_suppresses_positive_repair_history(self):
+        line = "歷史：前次 observe｜修復中｜連續觀察 12 天｜權重 +1"
+
+        self.assertIsNone(presentation_report._compact_unheld_history_line(line, funnel_state="淘汰"))
+        self.assertEqual(
+            presentation_report._compact_unheld_history_line("歷史：前次 failed｜連續觀察 3 天", funnel_state="淘汰"),
+            "歷史：前次 failed｜連續觀察 3 天",
+        )
 
 
 if __name__ == "__main__":

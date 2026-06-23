@@ -1,51 +1,66 @@
-# QA_REPORT: limit_lock_primary_reason_v21_1_20260622
+# QA_REPORT: intraday_user_view_state_readability_v21_1_20260623
 
 ## Test Scope
 
-- Limit-lock / limit-rebound unheld funnel priority.
-- User-visible unheld card wording.
-- Mobile readability replay for structure-failure priority.
-- Related low-repair and evidence-source regressions.
+- Overheat card semantics when price is still strong vs already pulling back.
+- Low-repair card compactness and missing-condition clarity.
+- Rejected-card history contradiction.
+- Official dry-run message-list rendering.
 
 ## Risk Scan
 
-- Strategy risk: touches visible state priority for unheld candidates.
-- DB risk: none; no schema or data write.
-- Live delivery risk: none; Telegram delivery was not run.
-- User misunderstanding risk checked: lock-up cards must not show RR or score as the main blocker.
+- Strategy risk: medium. This changes user-visible state wording but not the underlying buy/sell engine.
+- DB risk: none. Read-only dry-run only.
+- Live delivery risk: none. Telegram send was not run.
+- User misunderstanding risk checked:
+  - no longer tells a sharply falling overheated stock to simply wait for cooling.
+  - low repair now says the actual missing level instead of repeating route text.
+  - rejected cards no longer show positive repair history.
 
 ## Cross-Block Semantic Consistency
 
-- Locked / overheated names:
-  - title says wait for retest / no chase.
-  - body says wait for unlock and retest hold.
-  - no RR / quality / score data line appears as the active blocker.
-- Failed breakout:
-  - remains structure-led and does not get softened into wait-retest only because it is limit-like.
+- Positive overheat:
+  - title/body remain cooling / no-chase.
+- Pullback overheat:
+  - title/body both say wait for retest confirmation.
+- Low repair:
+  - route, observation, missing condition, and effective buy point point to the same support / MA source.
+- Rejected:
+  - no positive `修復中 / 權重 +1` line under an eliminated card.
 
 ## Failure Specimen Rebuttal
 
-- Owner concern: 06/22 after-hours cards mixed lock-up, RR, quality, and data-score reasons.
-- Rebuttal result:
-  - lock-up now owns the visible primary reason.
-  - RR / quality are not shown while lock-up is the active reason.
-  - open / cooling / retest is the next actionable condition.
+- Owner specimen: 06/23 intraday report.
+- Rebuttal from dry-run:
+  - 南亞科 changed to `等回測｜急殺回測`.
+  - 華邦電 changed to `等回測｜回測確認`.
+  - 緯創 / 仁寶 now show `近期支撐`, `5日均`, `量能`, and only the actual missing `站回5日均`.
+  - 光寶科 rejected card no longer displays repair history in the dry-run excerpt.
 
 ## Commands And Results
 
-- `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q -k "limit_lock or limit_up or overheat or low_repair or unheld_funnel or mobile or confirmed_evidence_preserves_limit or score_source or supporting_evidence" --tb=short`
-  - result: `24 passed, 193 deselected, 2 subtests passed`
-- `generate_report(dry_run=True)`
-  - result: `messages=4`, `live_telegram=False`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q -k "overheat_pullback or overheat_sharp or low_repair_compact or rejected_card_suppresses" --tb=short`
+  - result: `4 passed, 217 deselected`
+- `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -q -k "overheat or low_repair or cooldown or retest or rejected or mobile" --tb=short`
+  - result: `25 passed, 196 deselected`
+- `.\.venv\Scripts\python.exe -c "from core.generator import generate_report; generate_report(dry_run=True)"`
+  - result: `messages=4`, no live send.
 
 ## Not Tested
 
 - Live Telegram delivery.
-- Production DB write/read-after-write, because this task did not write DB data.
-- Full repository-wide test suite.
+- Production DB write/read-after-write.
+- Full repository green state.
+
+## Full-Test Note
+
+- Full `tests/test_generator_report.py` was run once.
+- Result: `213 passed, 11 failed`.
+- Failures are stale / broader contract expectations outside this focused fix, including old source-error wording, old retest wording, old industry/source lines, and future-watch live source count expectations.
+- These are recorded as residual debt, not as passing evidence.
 
 ## QA Conclusion
 
 conditional pass.
 
-The visible lock-up primary reason is now consistent at the funnel and formatter layers. Conditional because this was a focused regression pass, not a full repository sweep.
+The 06/23 user-visible failure path is fixed in focused tests and official dry-run output. Conditional because the full legacy report test file is not green and needs a separate cleanup/calibration cycle.

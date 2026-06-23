@@ -2,28 +2,34 @@
 
 ## Completed This Cycle
 
-- Removed noisy RR / quality / score display from lock-up cards.
-- Promoted lock-up / no-chase as the visible primary reason for limit-like unheld candidates.
-- Preserved structure-failure priority over lock-up display.
-- Added regression coverage to prevent `等風險報酬` from reappearing on pure lock-up cards.
+- Split overheat display by current price behavior:
+  - still rising / locked -> cooling no-chase.
+  - already pulling back -> retest confirmation.
+  - sharp pullback -> support-focused retest.
+- Compacted low-repair cards to show support / 5-day MA / volume and only the missing condition.
+- Suppressed positive repair history on rejected cards.
+- Added focused regression tests for the above.
 
 ## Cleanup Notes
 
 - No obsolete files were deleted.
-- No DB data was pruned or rewritten.
+- No DB data was pruned, rewritten, or backfilled.
 - No live Telegram was sent.
 
 ## Follow-Ups
 
-- Continue broader DB replay calibration separately for:
-  - breakout route
-  - retest route
-  - cooling route
-  - holding add/reduce route
-- Consider a full repository-wide test pass in a separate cycle.
+- Full report test cleanup:
+  - several legacy tests still assert older long-form source / industry / retest text.
+  - separate task should decide whether to update or delete stale assertions.
+- Summary section still has some repeated operational lines; handle as a separate readability task.
+- Consider a replay artifact for 06/23 intraday report so future QA can compare official output without relying only on helper tests.
 
-## Persistent Rule Reminder
+## Post-Cycle Review
 
-- A card should show only the active primary blocker first.
-- Lock-up / overheated names should not expose RR or score as the active reason until the stock is tradable again.
-- If structure has failed, keep structure failure ahead of lock-up display.
+- Root cause: display logic treated `heat_state` as a single state and ignored whether price had already pulled back.
+- Risk category: repeated_pattern + mobile_readability.
+- QA gap prevented: added tests at formatter level plus official dry-run evidence.
+- Rule abstraction:
+  - primary card state must reflect current price behavior, not only the historical blocker family.
+  - when all routes are non-actionable, display the concrete missing condition rather than repeating route names.
+  - rejected cards must not show positive recovery history unless it is actual execution memory.

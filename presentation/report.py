@@ -694,6 +694,58 @@ def _low_repair_unlock_text(data):
     return "近期支撐不破 + 站回5日均 + 量能轉強 + 風險報酬>=1.5"
 
 
+def _low_repair_compact_lines(data):
+    status = (data or {}).get("low_repair_status")
+    if not isinstance(status, dict):
+        return None
+    support = _float_or_none(status.get("support"))
+    ma5 = _float_or_none(status.get("ma5"))
+    volume_ratio = _float_or_none(status.get("volume_ratio") or (data or {}).get("volume_ratio"))
+    rr_value = _float_or_none(status.get("rr") or ((data or {}).get("result") or {}).get("rr"))
+    latest_price = _float_or_none(status.get("latest_price") or (data or {}).get("price"))
+    if support is None and ma5 is None and volume_ratio is None:
+        return None
+
+    observe_parts = []
+    if support is not None:
+        observe_parts.append(f"近期支撐 {_gate_value_text(support)}")
+    if ma5 is not None:
+        observe_parts.append(f"5日均 {_gate_value_text(ma5)}")
+    if volume_ratio is not None:
+        observe_parts.append(f"量能 {_gate_value_text(volume_ratio)}x")
+
+    missing = []
+    if support is not None and latest_price is not None and latest_price < support:
+        missing.append(f"守住支撐 {_gate_value_text(support)}")
+    if ma5 is not None and latest_price is not None and latest_price < ma5:
+        missing.append(f"站回5日均 {_gate_value_text(ma5)}")
+    if volume_ratio is None:
+        missing.append("量能確認")
+    elif volume_ratio < 1:
+        missing.append(f"量能不失控（目前 {_gate_value_text(volume_ratio)}x）")
+    if rr_value is not None and rr_value < 1.5:
+        missing.append(f"風險報酬到 1.5（目前 {_gate_value_text(rr_value)}）")
+
+    lines = []
+    if observe_parts:
+        lines.append("觀察：" + "｜".join(observe_parts))
+    if missing:
+        lines.append("還差：" + "、".join(missing))
+    else:
+        lines.append("條件：已滿足，盤中確認不追高")
+
+    buy_parts = []
+    if support is not None:
+        buy_parts.append(f"守近期支撐 {_gate_value_text(support)}")
+    if ma5 is not None:
+        buy_parts.append(f"站回5日均 {_gate_value_text(ma5)}")
+    buy_parts.append("量能不失控")
+    if rr_value is None or rr_value < 1.5:
+        buy_parts.append("風險報酬 >= 1.5")
+    lines.append("有效買點：" + " + ".join(buy_parts))
+    return lines
+
+
 def _repair_retest_gap_text(data):
     return f"等待回測{_recent_rebound_close_text(data)}不破"
 
@@ -718,6 +770,23 @@ def _overheat_chase_reason(data, fallback="短線過熱，先等冷卻"):
     if behavior in {"LIMIT_LOCK", "LIMIT_REBOUND"} or (change is not None and change >= 9.0):
         return "漲停/過熱，不追價"
     return fallback
+
+
+def _overheat_contract_parts(data):
+    change = _float_or_none((data or {}).get("change"))
+    if change is not None and change <= -8:
+        return (
+            "急殺回測，先看支撐",
+            "已降溫；重點改看回測支撐是否守住",
+            "守住回測支撐 + 非追高 + 量能不失控",
+        )
+    if change is not None and change <= -2:
+        return (
+            "回測中，觀察是否守住",
+            "已降溫；重點改看回測是否守住",
+            "回測不破 + 非追高 + 量能不失控",
+        )
+    return _overheat_chase_reason(data)
 
 
 def _limit_chase_display_kind(data, blockers=None):
@@ -1050,6 +1119,8 @@ def _unheld_entry_contract(data, dist, blockers, valid_entry, funnel_state, sour
         return None
 
     def contract(reason, gap, unlock=None, basis=None):
+        if isinstance(reason, tuple) and len(reason) == 3:
+            reason, gap, unlock = reason
         basis = basis if basis is not None else _supporting_basis_text(data, reason)
         return _entry_contract(reason, gap, unlock, basis=basis)
 
@@ -1140,13 +1211,13 @@ def _unheld_entry_contract(data, dist, blockers, valid_entry, funnel_state, sour
     heat = stock_result.get("heat_state")
     if heat == "EXTREME":
         return contract(
-            _overheat_chase_reason(data),
+            _overheat_contract_parts(data),
             "熱度 Lv.3｜需降至 Lv.1/觀察以下",
             "降到 Lv.1/觀察以下 + 回測不破 + 非漲停追價",
         )
     if heat == "HOT" or "過熱" in blocker_text:
         return contract(
-            _overheat_chase_reason(data),
+            _overheat_contract_parts(data),
             "熱度 Lv.2｜需降至 Lv.1/觀察以下",
             "降到 Lv.1/觀察以下 + 回測不破",
         )
@@ -1551,6 +1622,13 @@ def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None, data=None):
         if reason and reason not in entry_text:
             entry_parts.append(f"原因：{reason}")
         lines = []
+        if reason and ("回測" in str(reason) or "急殺" in str(reason)) and str(gap or "").startswith("已降溫"):
+            lines = [f"狀態：{reason}"]
+            if gap:
+                lines.append(f"觀察：{gap}")
+            if unlock:
+                lines.append(f"有效買點：{unlock}")
+            return lines
         if str(gap or "").startswith("熱度"):
             lines = []
             if reason:
@@ -1637,6 +1715,13 @@ def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None, data=None):
             return lines
 
         if funnel_state == "等低位修復":
+            compact_lines = _low_repair_compact_lines(data)
+            if compact_lines:
+                lines = []
+                if reason:
+                    lines.append(f"路線：{reason}")
+                lines.extend(compact_lines)
+                return lines
             lines = []
             if reason:
                 lines.append(f"路線：{reason}")
@@ -1813,6 +1898,16 @@ def _compact_unheld_history_line(line, *, funnel_state=None):
     if not line:
         return None
     text = str(line)
+    if funnel_state == "淘汰":
+        if (
+            "前次 eliminated" in text
+            or "前次 failed" in text
+            or "已買" in text
+            or "已賣" in text
+            or "停損" in text
+        ):
+            return line
+        return None
     if "修復中" in text or "權重 +" in text:
         return line
     if funnel_state in {"淘汰", "等資料"} and (
@@ -2203,6 +2298,14 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         title_label = prepare_label
     if title_label == "RR不足":
         title_label = "風險報酬不足"
+    overheat_change = _float_or_none(data.get("change"))
+    overheat_pullback_display = (
+        not valid_entry
+        and funnel_state == "等冷卻"
+        and stock_result.get("heat_state") in {"HOT", "EXTREME"}
+        and overheat_change is not None
+        and overheat_change <= -2
+    )
 
     if valid_entry:
         title_icon = "🟢"
@@ -2233,6 +2336,10 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     elif data_source_display_blocked:
         title_icon = "⏳"
         title_action = "等資料"
+    elif overheat_pullback_display:
+        title_icon = "⏳"
+        title_action = "等回測"
+        title_label = "急殺回測" if overheat_change <= -8 else "回測確認"
     elif funnel_state == "可準備":
         title_icon = "👀"
         title_action = "可準備" if data.get("evidence_adjustment_reason") else deps["unheld_non_actionable_prepare_label"](data)
