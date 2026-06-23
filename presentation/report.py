@@ -517,6 +517,17 @@ def _breakout_trigger_zone_text(data):
     return "突破區/回測支撐"
 
 
+def _breakout_reclaim_gap_text(data):
+    zone = _breakout_trigger_zone_text(data)
+    low = _float_or_none((data or {}).get("retest_zone_low"))
+    price = _float_or_none((data or {}).get("price"))
+    if low is not None and price is not None and price < low:
+        return f"尚未站回{zone}（現價 {_gate_value_text(price)}，差 {_gate_value_text(low - price)}）"
+    if price is not None:
+        return f"尚未站穩{zone}（現價 {_gate_value_text(price)}）"
+    return f"尚未站回{zone}"
+
+
 def _retest_unlock_text(data):
     low = _gate_value_text((data or {}).get("retest_zone_low"))
     high = _gate_value_text((data or {}).get("retest_zone_high"))
@@ -781,9 +792,9 @@ def _overheat_contract_parts(data):
     change = _float_or_none((data or {}).get("change"))
     if change is not None and change <= -8:
         return (
-            "急殺回測，先看支撐",
-            "已降溫；重點改看回測支撐是否守住",
-            "守住回測支撐 + 非追高 + 量能不失控",
+            "急殺回測，先不接刀",
+            "已降溫；先看回測支撐是否守住",
+            "止跌守支撐 + 量能不失控",
         )
     if change is not None and change <= -2:
         return (
@@ -1123,7 +1134,7 @@ def _unheld_entry_contract(data, dist, blockers, valid_entry, funnel_state, sour
     if is_actionable:
         return None
 
-    def contract(reason, gap, unlock=None, basis=None):
+    def contract(reason, gap=None, unlock=None, basis=None):
         if isinstance(reason, tuple) and len(reason) == 3:
             reason, gap, unlock = reason
         basis = basis if basis is not None else _supporting_basis_text(data, reason)
@@ -1145,7 +1156,8 @@ def _unheld_entry_contract(data, dist, blockers, valid_entry, funnel_state, sour
     elif "量能不足" in blocker_text:
         gates.append(("量能不足", _volume_wait_gap_text(data)))
     if "突破失敗" in blocker_text or phase == "FAILED_BREAKOUT":
-        return contract("未站回突破區", "尚未站回突破區", "重新站回突破區後再評估", basis="")
+        reclaim_gap = _breakout_reclaim_gap_text(data)
+        return contract("未站回突破區", reclaim_gap, f"重新站回{_breakout_trigger_zone_text(data)}後再評估", basis="")
     if post_market_prepare:
         return contract(
             "開盤確認未完成",
@@ -1215,14 +1227,20 @@ def _unheld_entry_contract(data, dist, blockers, valid_entry, funnel_state, sour
 
     heat = stock_result.get("heat_state")
     if heat == "EXTREME":
+        heat_reason = _overheat_contract_parts(data)
+        if isinstance(heat_reason, tuple):
+            return contract(heat_reason)
         return contract(
-            _overheat_contract_parts(data),
+            heat_reason,
             "熱度 Lv.3｜需降至 Lv.1/觀察以下",
             "降到 Lv.1/觀察以下 + 回測不破 + 非漲停追價",
         )
     if heat == "HOT" or "過熱" in blocker_text:
+        heat_reason = _overheat_contract_parts(data)
+        if isinstance(heat_reason, tuple):
+            return contract(heat_reason)
         return contract(
-            _overheat_contract_parts(data),
+            heat_reason,
             "熱度 Lv.2｜需降至 Lv.1/觀察以下",
             "降到 Lv.1/觀察以下 + 回測不破",
         )
@@ -2097,7 +2115,7 @@ def _holding_action_contract(summary_action, decision_line, reason_line, conditi
             "unlock_label": "可續抱",
             "entry": decision_text or "續抱，不加碼",
             "reason": risk_text or "洗盤回測未跌破風控",
-            "gap": condition_text or "守警戒價，等量價修復",
+            "gap": next_text or condition_text or "守警戒價，等量價修復",
             "unlock": "守住警戒價 + 量價修復",
             "next": next_text or "守警戒價，等量價修復",
         }
@@ -2107,7 +2125,7 @@ def _holding_action_contract(summary_action, decision_line, reason_line, conditi
             "unlock_label": "可續抱",
             "entry": decision_text or "續抱觀察，暫不加碼",
             "reason": risk_text or "今日剛進場，先看風控",
-            "gap": condition_text or "守警戒價，跌破停損或轉弱優先風控",
+            "gap": next_text or condition_text or "守警戒價，跌破停損或轉弱優先風控",
             "unlock": "守住警戒且結構修復後再評估",
             "next": next_text or "明日觀察是否守住警戒，未修復再降級",
         }
@@ -2116,7 +2134,7 @@ def _holding_action_contract(summary_action, decision_line, reason_line, conditi
         "unlock_label": "可續抱",
         "entry": decision_text or "續抱，不加碼",
         "reason": risk_text or warning_breach or "未跌破風控，但尚未重新轉強",
-        "gap": "跌破警戒後先看能否收復，跌破停損則優先風控" if warning_breach else (condition_text or "守警戒價，等量價修復"),
+        "gap": "跌破警戒後先看能否收復，跌破停損則優先風控" if warning_breach else (next_text or condition_text or "守警戒價，等量價修復"),
         "unlock": "守住警戒價 + 量價修復",
         "next": "收復警戒才恢復觀察；跌破停損優先風控" if warning_breach else (next_text or "觀察是否守住警戒，未修復再降級"),
     }
@@ -2500,7 +2518,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         tomorrow_line = f"{trigger_label}：開板/降溫後回測不破，且非追高"
     elif overheat_pullback_display:
         if overheat_change is not None and overheat_change <= -8:
-            tomorrow_line = f"{trigger_label}：守住回測支撐 + 非追高 + 量能不失控"
+            tomorrow_line = f"{trigger_label}：止跌守支撐 + 量能不失控"
         else:
             tomorrow_line = f"{trigger_label}：回測不破 + 量能不失控，再評估"
     elif data_source_display_blocked:

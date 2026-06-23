@@ -1,8 +1,8 @@
-﻿# DISPATCH.md
+# DISPATCH.md
 
 ## Active
 
-- task_md_holds: `intraday_display_state_sync_v21_1_20260623`
+- task_md_holds: `actionable_report_contract_v21_1_20260623`
 - status: `implemented + focused verification passed`
 - current_version: `v21.1`
 - live Telegram delivery: `not run`
@@ -11,19 +11,18 @@
 
 ## Result Summary
 
-- Fixed trading-day phase fallback: 06/23 no longer renders as `非交易` during the weekday 13:00 gap.
-- Synced summary counts with visible card states for overheat pullbacks.
-- Made overheat pullback triggers concrete.
-- Removed meaningless `淘汰｜觀察` fallback.
-- Prevented failed breakout from displaying positive `攻擊量` / `趨勢量` wording.
-- Added low-repair MA/support gap values.
+- Holding cards now show concrete warning / stop price actions instead of generic breakout recovery wording.
+- Sharp overheat pullbacks now avoid catch-the-falling-knife ambiguity.
+- Failed breakout cards now display reclaim zone and current-price gap.
+- Official dry-run message list confirms the user-visible route.
 
 ## Verification
 
-- Focused tests: `7 passed, 217 deselected`.
-- Related report subset: `26 passed, 198 deselected`.
-- Official dry-run: `messages=4`, no live Telegram.
-- Full report test file: `215 passed, 12 failed`; residual legacy expectation debt remains outside this task.
+- Focused tests: `6 passed, 219 deselected`.
+- Holding/today-buy subset: `8 passed, 217 deselected`.
+- Related report subset: `14 passed, 211 deselected`.
+- Official dry-run: `messages=4`, no live Telegram, key checks true.
+- Full report test file: `206 passed, 22 failed`; residual legacy expectation debt remains outside this focused fix.
 
 ## Current Git State
 
@@ -32,4 +31,4 @@
 ## Next Action
 
 - Final response must report commit hash, push target, and upstream equality.
-- Separate follow-up: clean stale v19/v20 report tests and decide which old source/industry wording assertions should be retired.
+- Separate follow-up: clean stale v19/v20 report tests and decide which old source / summary / action wording assertions should be retired.

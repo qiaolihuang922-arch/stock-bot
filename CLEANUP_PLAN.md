@@ -1,14 +1,12 @@
-﻿# CLEANUP_PLAN.md
+# CLEANUP_PLAN.md
 
 ## Completed This Cycle
 
-- Synced overheat-pullback summary buckets with visible card state.
-- Fixed weekday 13:00 phase fallback that could render `非交易`.
-- Added concrete overheat pullback triggers.
-- Replaced rejected placeholder `觀察` with `型態未過` fallback.
-- Converted failed-breakout positive volume wording to safer failed-breakout wording.
-- Added numeric low-repair gap values.
-- Added focused regression tests and official dry-run evidence.
+- Replaced generic holding next-step wording with concrete warning / stop price actions.
+- Reworked sharp overheat pullback wording to wait for stop / support confirmation.
+- Added failed-breakout reclaim-zone gap display.
+- Added / updated focused regression tests for the above contracts.
+- Ran official dry-run without live Telegram delivery.
 
 ## Cleanup Notes
 
@@ -21,15 +19,15 @@
 - Full report test cleanup:
   - stale v19/v20 tests still assert old source-error, industry, retest, limit-card, and future-watch text.
   - separate task should decide whether to update or retire those assertions.
-- Summary section still contains some operational lines that may be too verbose; handle as a separate readability task.
-- Consider a durable replay artifact for 06/23 intraday reports so future QA can validate official output without relying only on helper tests.
+- Summary section still contains operational lines that may be too verbose; handle as a separate readability task.
+- Consider a durable replay artifact for 06/23 reports so future QA can validate official output without relying only on helper tests.
 
 ## Post-Cycle Review
 
-- Root cause: raw strategy state and user-visible card state diverged after recent readability changes, but summary still counted raw state.
+- Root cause: prior readability cleanup changed labels but did not consistently bind them to actionable prices / support conditions.
 - Risk category: repeated_pattern + mobile_readability + evidence_chain.
-- QA gap addressed: added tests that compare raw state, display bucket, card title, and official dry-run output.
+- QA gap addressed: tests now cover official card text for holding risk prices, overheat sharp pullback, and failed-breakout reclaim gaps.
 - Rule abstraction:
-  - summary must count what the user sees, not only internal raw state.
-  - card state must reflect current price behavior, not only historical blocker family.
-  - rejected cards must have concrete action-blocking reasons.
+  - holding next action should name warning / stop prices when available.
+  - sharp pullback after overheat is a support / stop problem, not merely a chase problem.
+  - failed breakout must say which zone must be reclaimed and how far price is from it.

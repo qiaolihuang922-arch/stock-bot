@@ -3418,7 +3418,7 @@ class GeneratorReportTest(unittest.TestCase):
 
         self.assertIn("【技嘉 2376】📌 新倉風控觀察｜-1.00%", card)
         self.assertIn("決策：新倉風控觀察，暫不加碼", card)
-        self.assertIn("明日處理：守警戒價，跌破停損或轉弱優先風控", card)
+        self.assertIn("明日處理：守警戒 115.00；跌破停損 108.00 優先停損；未轉強不加碼", card)
         self.assertNotIn("明日未修復", card)
         self.assertNotIn("隔日未修復", card)
 
@@ -4432,7 +4432,7 @@ class GeneratorReportTest(unittest.TestCase):
 
         self.assertIn("【技嘉 2376】📌 新倉風控觀察", card)
         self.assertIn("決策：新倉風控觀察，暫不加碼", card)
-        self.assertIn("明日處理：守警戒價，跌破停損或轉弱優先風控", card)
+        self.assertIn("明日處理：守警戒 115.00；跌破停損 108.00 優先停損；未轉強不加碼", card)
         self.assertIn("1. 技嘉｜+10.91%｜新倉風控觀察｜盤中觀察修復狀況", summary_message(messages))
         self.assertNotIn("隔日計畫", summary_message(messages))
         self.assertNotIn("盤中觀察修復：技嘉收盤未修復則列入隔日降級檢查", summary_message(messages))
@@ -5263,7 +5263,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("決策：減碼 25%，降低風險", reduce_card)
         self.assertNotIn("條件：結構轉弱或突破失敗，先降風險", reduce_card)
         self.assertIn("原因：突破失敗或結構轉弱，先降低風險", reduce_card)
-        self.assertIn("明日處理：若無法重新站回突破區，繼續降低優先級", reduce_card)
+        self.assertIn("明日處理：先降風險；跌破警戒 114.00 續減，跌破停損 110.00 停損", reduce_card)
 
         profit_payload = dict(base)
         profit_payload["price"] = 140
@@ -7261,7 +7261,9 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("即時進場", rendered)
         self.assertNotIn("盤中先觀察", rendered)
         self.assertNotIn("盤中觀察修復狀況", rendered)
-        self.assertIn("明日處理：守警戒價，跌破停損或轉弱優先風控", position)
+        self.assertIn("明日處理：守警戒 ", position)
+        self.assertIn("跌破停損", position)
+        self.assertIn("未轉強不加碼", position)
         self.assertIn("新倉風控觀察，暫不加碼", position)
         self.assertNotIn("交易狀態：今日進場｜動作：續抱", position)
         self.assertNotRegex(position, r"數據：風險報酬 2\.73")
@@ -10599,12 +10601,12 @@ class GeneratorReportTest(unittest.TestCase):
         )
         lines = presentation_report._entry_check_lines("買點：不買，等冷卻", contract, funnel_state=state, data=data)
 
-        self.assertIn("狀態：急殺回測，先看支撐", lines)
-        self.assertIn("觀察：已降溫；重點改看回測支撐是否守住", lines)
-        self.assertIn("有效買點：守住回測支撐 + 非追高 + 量能不失控", lines)
+        self.assertIn("狀態：急殺回測，先不接刀", lines)
+        self.assertIn("觀察：已降溫；先看回測支撐是否守住", lines)
+        self.assertIn("有效買點：止跌守支撐 + 量能不失控", lines)
 
         card = generator.formatTelegramUnheldCard("南亞科", data, report_phase="盤中")
-        self.assertIn("盤中觸發：守住回測支撐 + 非追高 + 量能不失控", card)
+        self.assertIn("盤中觸發：止跌守支撐 + 量能不失控", card)
 
     def test_low_repair_compact_lines_show_real_missing_condition_only(self):
         data = {
@@ -10644,6 +10646,8 @@ class GeneratorReportTest(unittest.TestCase):
         data = {
             "price": 171.25,
             "change": -7.68,
+            "retest_zone_low": 175.5,
+            "retest_zone_high": 176.38,
             "volume_ratio": 2.2,
             "result": {
                 "decision": "FAIL",
@@ -10660,7 +10664,22 @@ class GeneratorReportTest(unittest.TestCase):
 
         self.assertIn("突破失敗", card)
         self.assertIn("放量回落", card)
+        self.assertIn("尚未站回突破區 175.5~176.38（現價 171.25，差 4.25）", card)
+        self.assertIn("可買：重新站回突破區 175.5~176.38後再評估", card)
         self.assertNotIn("攻擊量", card)
+
+    def test_holding_next_step_uses_risk_prices_not_breakout_zone(self):
+        decision = {
+            "warning_price": 144.25,
+            "hard_stop_price": 139.69,
+        }
+
+        reduce_text = generator.holding_risk_next_step_text(decision, action="減碼")
+        watch_text = generator.holding_risk_next_step_text(decision, action="續抱觀察")
+
+        self.assertEqual(reduce_text, "先降風險；跌破警戒 144.25 續減，跌破停損 139.69 停損")
+        self.assertEqual(watch_text, "守警戒 144.25；跌破停損 139.69 優先停損；未轉強不加碼")
+        self.assertNotIn("突破區", reduce_text + watch_text)
 
     def test_get_market_phase_treats_1300_gap_as_trading_day(self):
         class FixedDateTime(datetime):

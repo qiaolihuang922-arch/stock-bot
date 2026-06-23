@@ -1,36 +1,43 @@
-﻿# CHANGELOG: intraday_display_state_sync_v21_1_20260623
+# CHANGELOG: actionable_report_contract_v21_1_20260623
 
 ## Changes
 
 - Updated `core/generator.py`
-  - Treat 13:00-13:19 on weekdays as `盤中` instead of falling to `非交易`.
-  - Added `unheld_display_funnel_state` so summary uses the same user-visible state as cards for overheat pullbacks.
-  - Prevented `觀察` from becoming the visible rejection reason; falls back to `型態未過`.
+  - Added `holding_risk_next_step_text`.
+  - Holding next-step lines now use warning / stop prices for reduce, watch, washout, and new-position risk states.
 
 - Updated `presentation/report.py`
-  - Low-repair missing MA/support conditions now include numeric gap from current price.
-  - Breakout failure market line converts positive volume terms to `放量回落` / `待確認`.
-  - Overheat pullback trigger now uses concrete retest conditions instead of generic cooling text.
+  - Added failed-breakout reclaim gap text using `retest_zone_low`, `retest_zone_high`, and current price.
+  - Changed sharp overheat pullback contract from generic support / chase wording to `先不接刀` and `止跌守支撐 + 量能不失控`.
+  - Let holding contract render the computed risk-price next step instead of generic `守警戒價`.
 
 - Updated `tests/test_generator_report.py`
-  - Added regressions for display-bucket sync, pullback triggers, rejection placeholder, failed-breakout volume wording, and 13:00 market phase.
-  - Updated expected low-repair wording to include numeric gap.
-  - Updated summary expectations for overheat pullback display buckets.
+  - Added regression for holding risk-price next-step wording.
+  - Updated holding card expectations from generic warning text to concrete warning / stop prices.
+  - Updated sharp overheat pullback expectations.
+  - Added failed-breakout reclaim-zone assertions.
 
 ## Contract Impact
 
-- User-visible Telegram wording changes for unheld cards and summary counts.
+- User-visible Telegram wording changes for holding cards and failed breakout / sharp pullback unheld cards.
 - No payload shape change.
 - No DB schema or write contract change.
 - Version remains `v21.1`.
 
 ## Verification
 
-- Focused tests: `7 passed, 217 deselected`.
-- Related report subset: `26 passed, 198 deselected`.
-- Official dry-run: `messages=4`, no live Telegram delivery.
-- Full report test file: `215 passed, 12 failed`.
-  - failures are legacy / broader expectations outside this focused fix: stale v19/v20 wording, source-error wording, old limit-card wording, future-watch live-source count, and one old attack-volume expectation.
+- Focused holding / overheat / failed-breakout tests: `6 passed, 219 deselected`.
+- Holding/today-buy subset: `8 passed, 217 deselected`.
+- Related report subset: `14 passed, 211 deselected`.
+- Official dry-run:
+  - `messages=4`.
+  - `live_telegram=False`.
+  - `POSITION_OK=True`.
+  - `UNHELD_OK=True`.
+  - `SUMMARY_OK=True`.
+- Full `tests/test_generator_report.py`: `206 passed, 22 failed`.
+  - Not accepted as full pass.
+  - Remaining failures are legacy / broader report expectation debt, including stale v19/v20 wording, source-error wording, future-watch event wording, and old action-line assumptions.
 
 ## Not Changed
 
@@ -40,5 +47,5 @@
 
 ## Residual Risk
 
-- Full legacy test file remains not green and should be handled by a separate test-contract cleanup task.
+- Full legacy report test file remains not green and needs a dedicated test-contract cleanup task.
 - `.pytest_cache` emits a local Windows permission warning; it does not affect focused test results.

@@ -1,8 +1,8 @@
-﻿# CURRENT_STATE.md
+# CURRENT_STATE.md
 
 ## Current Task
 
-- task_id: `intraday_display_state_sync_v21_1_20260623`
+- task_id: `actionable_report_contract_v21_1_20260623`
 - status: `implemented + focused verification passed`
 - version: `v21.1`
 - live Telegram delivery: not run
@@ -18,26 +18,26 @@
 
 ## Current Implementation State
 
-- Trading-day phase fallback now keeps 13:00-13:19 as `盤中` and uses `收盤` from 13:20.
-- Summary display buckets now map already-pulled-back overheat names from raw `等冷卻` to visible `等回測`.
-- Overheat pullback triggers are concrete and match the card body.
-- Rejected cards no longer show `觀察` as the primary reason.
-- Failed breakout market line no longer presents positive attack-volume wording.
-- Low-repair cards show numeric distance to missing MA/support levels.
+- Holding next-step lines now use warning / stop prices instead of generic breakout-zone recovery wording.
+- Sharp overheat pullback cards now say `急殺回測，先不接刀` and require `止跌守支撐 + 量能不失控`.
+- Failed-breakout cards now show the actual breakout zone and current-price gap when zone data exists.
+- Official dry-run confirms the actual message list includes the new holding, unheld, and summary behavior.
 
 ## Verification State
 
-- Focused tests: `7 passed, 217 deselected`.
-- Related report subset: `26 passed, 198 deselected`.
-- Official dry-run: `messages=4`, no live Telegram.
+- Focused tests: `6 passed, 219 deselected`.
+- Holding/today-buy subset: `8 passed, 217 deselected`.
+- Related report subset: `14 passed, 211 deselected`.
+- Official dry-run: `messages=4`, no live Telegram, key checks true.
+- Full `tests/test_generator_report.py`: `206 passed, 22 failed`.
 - No production DB data was changed.
 
 ## Known Findings
 
-- Full `tests/test_generator_report.py` still has legacy expectation failures: `215 passed, 12 failed`.
+- Full report tests still contain legacy / stale expectations. Separate cleanup should decide which v19/v20 assertions to update or retire.
 - `.pytest_cache` warning may appear due local Windows permission; focused tests pass despite the warning.
 
 ## Next Action
 
 - Final response must report commit hash, push target, and upstream equality.
-- If Owner asks for next cleanup: update stale full-test expectations and further simplify summary section.
+- If Owner asks for next cleanup: target full-test legacy expectations and summary readability debt.

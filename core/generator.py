@@ -8181,6 +8181,34 @@ def holding_reason_line(name, data):
     return None
 
 
+def holding_risk_next_step_text(decision, *, action=None, fallback=None):
+    if not decision:
+        return fallback
+
+    warning = decision.get("warning_price")
+    hard_stop = decision.get("hard_stop_price")
+    warning_text = price_text(warning)
+    stop_text = price_text(hard_stop)
+    has_warning = warning_text != "-"
+    has_stop = stop_text != "-"
+
+    if action in {"減碼", "減碼後觀察"}:
+        if has_warning and has_stop:
+            return f"先降風險；跌破警戒 {warning_text} 續減，跌破停損 {stop_text} 停損"
+        if has_stop:
+            return f"先降風險；跌破停損 {stop_text} 停損"
+        return fallback or "先降風險；修復前不加碼"
+
+    if action in {"新倉風控觀察", "續抱觀察", "洗盤續抱", "洗盤警戒", "風控觀察"}:
+        if has_warning and has_stop:
+            return f"守警戒 {warning_text}；跌破停損 {stop_text} 優先停損；未轉強不加碼"
+        if has_warning:
+            return f"守警戒 {warning_text}；未轉強不加碼"
+        if has_stop:
+            return f"守停損 {stop_text}；未轉強不加碼"
+    return fallback
+
+
 def holding_next_step_line(name, data):
 
     decision = ensure_holding_decision(name, data)
@@ -8205,14 +8233,14 @@ def holding_next_step_line(name, data):
 
     if level in ["REDUCE_25", "REDUCE_50"]:
         if cross_day_duplicate_action(data, decision) == "reduce":
-            return "修復才恢復優先級，未修復續降級"
-        return "若無法重新站回突破區，繼續降低優先級"
+            return holding_risk_next_step_text(decision, action="減碼後觀察", fallback="修復才恢復優先級，未修復續降級")
+        return holding_risk_next_step_text(decision, action="減碼", fallback="先降低風險；修復前不加碼")
 
     if level == "POST_REDUCE_WATCH":
-        return "修復才恢復優先級，未修復續降級"
+        return holding_risk_next_step_text(decision, action="減碼後觀察", fallback="修復才恢復優先級，未修復續降級")
 
     if level == "NEW_POSITION_RISK_WATCH":
-        return "盤中先觀察，未修復再降級"
+        return holding_risk_next_step_text(decision, action="新倉風控觀察", fallback="盤中先觀察，未修復再降級")
 
     if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]:
         if cross_day_duplicate_action(data, decision) == "take_profit":
@@ -8223,19 +8251,19 @@ def holding_next_step_line(name, data):
         return "等待新高、過熱升級或風控訊號"
 
     if action == "新倉風控觀察":
-        return "盤中先觀察，未修復再降級"
+        return holding_risk_next_step_text(decision, action=action, fallback="盤中先觀察，未修復再降級")
 
     if level in ["ADD_10", "ADD_20", "ADD_30"]:
         return "加碼後守警戒價，量價未延續則停止加碼"
 
     if action == "洗盤警戒":
-        return "守警戒價，跌破警戒升級風控"
+        return holding_risk_next_step_text(decision, action=action, fallback="守警戒價，跌破警戒升級風控")
 
     if action == "減碼後觀察":
-        return "修復才恢復優先級，未修復續降級"
+        return holding_risk_next_step_text(decision, action=action, fallback="修復才恢復優先級，未修復續降級")
 
     if action == "洗盤續抱":
-        return "守警戒價，等量價修復"
+        return holding_risk_next_step_text(decision, action=action, fallback="守警戒價，等量價修復")
 
     if action == "續抱觀察":
         if (
@@ -8243,11 +8271,11 @@ def holding_next_step_line(name, data):
             or result.get("volume_state") in {"EXPLOSIVE", "ATTACK"}
             or result.get("volume_price_state") in {"EXPLOSIVE", "ATTACK"}
         ):
-            return "觀察反彈是否延續；未站回關鍵區前不加碼"
-        return "盤中先觀察，未修復再降級"
+            return holding_risk_next_step_text(decision, action=action, fallback="觀察反彈是否延續；未站回關鍵區前不加碼")
+        return holding_risk_next_step_text(decision, action=action, fallback="盤中先觀察，未修復再降級")
 
     if action == "風控觀察":
-        return "跌破警戒升級風控"
+        return holding_risk_next_step_text(decision, action=action, fallback="跌破警戒升級風控")
 
     if action == "核心風控觀察":
         return "守警戒價，跌破警戒升級風控"
