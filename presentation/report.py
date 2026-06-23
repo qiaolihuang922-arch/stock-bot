@@ -705,7 +705,7 @@ def _low_repair_unlock_text(data):
     return "近期支撐不破 + 站回5日均 + 量能轉強 + 風險報酬>=1.5"
 
 
-def _low_repair_compact_lines(data):
+def _low_repair_compact_lines(data, *, trigger_label="觸發"):
     status = (data or {}).get("low_repair_status")
     if not isinstance(status, dict):
         return None
@@ -717,18 +717,26 @@ def _low_repair_compact_lines(data):
     if support is None and ma5 is None and volume_ratio is None:
         return None
 
-    observe_parts = []
-    if support is not None:
-        observe_parts.append(f"近期支撐 {_gate_value_text(support)}")
-    if ma5 is not None:
-        observe_parts.append(f"5日均 {_gate_value_text(ma5)}")
-    if volume_ratio is not None:
-        observe_parts.append(f"量能 {_gate_value_text(volume_ratio)}x")
-
     def gap_suffix(target):
         if target is None or latest_price is None or latest_price >= target:
             return ""
         return f"（差 {_gate_value_text(target - latest_price)}）"
+
+    observe_parts = []
+    if support is not None:
+        if latest_price is not None and latest_price >= support:
+            observe_parts.append(f"支撐 {_gate_value_text(support)} OK")
+        else:
+            observe_parts.append(f"支撐 {_gate_value_text(support)} 待守")
+    if ma5 is not None:
+        if latest_price is not None and latest_price >= ma5:
+            observe_parts.append(f"5日均 {_gate_value_text(ma5)} OK")
+        else:
+            observe_parts.append(f"5日均 {_gate_value_text(ma5)} 待站回{gap_suffix(ma5)}")
+    if volume_ratio is not None:
+        observe_parts.append(
+            f"量能 {_gate_value_text(volume_ratio)}x {'OK' if volume_ratio >= 1 else '待確認'}"
+        )
 
     missing = []
     if support is not None and latest_price is not None and latest_price < support:
@@ -744,11 +752,7 @@ def _low_repair_compact_lines(data):
 
     lines = []
     if observe_parts:
-        lines.append("觀察：" + "｜".join(observe_parts))
-    if missing:
-        lines.append("還差：" + "、".join(missing))
-    else:
-        lines.append("條件：已滿足，盤中確認不追高")
+        lines.append("低位修復：" + "｜".join(observe_parts))
 
     buy_parts = []
     if support is not None:
@@ -758,7 +762,10 @@ def _low_repair_compact_lines(data):
     buy_parts.append("量能不失控")
     if rr_value is None or rr_value < 1.5:
         buy_parts.append("風險報酬 >= 1.5")
-    lines.append("有效買點：" + " + ".join(buy_parts))
+    if missing:
+        lines.append(f"{trigger_label}：" + " + ".join(buy_parts))
+    else:
+        lines.append(f"{trigger_label}：開盤不追高 + " + " + ".join(buy_parts))
     return lines
 
 
@@ -1642,7 +1649,14 @@ def _strip_line_prefix(text, prefixes):
     return text
 
 
-def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None, data=None):
+def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None, data=None, trigger_label="觸發"):
+    def trigger_line(text):
+        text = str(text or "").strip()
+        return f"{trigger_label}：{text}" if text else None
+
+    def normalized_unlock(text):
+        return str(text or "").replace("降到 Lv.1/觀察以下", "降溫到 Lv.1").strip()
+
     buy_text = str(buy_line or "").strip()
     if isinstance(buy_gap_line, dict):
         reason = buy_gap_line.get("reason")
@@ -1658,31 +1672,33 @@ def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None, data=None):
         lines = []
         if reason and ("回測" in str(reason) or "急殺" in str(reason)) and str(gap or "").startswith("已降溫"):
             lines = [f"狀態：{reason}"]
-            if gap:
-                lines.append(f"觀察：{gap}")
             if unlock:
-                lines.append(f"有效買點：{unlock}")
+                lines.append(trigger_line(unlock))
             return lines
         if str(gap or "").startswith("熱度"):
             lines = []
             if reason:
                 lines.append(f"狀態：{reason}")
-            wait = str(gap or "").strip()
-            if "；" in wait:
-                wait = wait.split("；", 1)[0]
             if unlock:
-                unlock = unlock.replace("降到 Lv.1/觀察以下", "降溫到 Lv.1")
-                wait = f"{wait}；有效買點：{unlock}" if wait else f"有效買點：{unlock}"
-            if wait:
-                lines.append(f"等待：{wait}")
+                lines.append(trigger_line(normalized_unlock(unlock)))
             return lines
 
         if reason and ("漲停" in str(reason) or "鎖定" in str(reason)):
             lines = [f"狀態：{reason}"]
-            if gap:
-                lines.append(f"等待：{gap}")
             if unlock:
-                lines.append(f"有效買點：{unlock}")
+                lines.append(trigger_line(normalized_unlock(unlock)))
+            return lines
+
+        if reason == "未站回突破區" or (
+            funnel_state == "淘汰"
+            and ("站回突破區" in str(gap or "") or "站回突破區" in str(unlock or ""))
+        ):
+            text = f"不可買：突破失敗"
+            if gap:
+                text += f"，{gap}"
+            lines = [text]
+            if unlock:
+                lines.append(trigger_line(unlock))
             return lines
 
         if funnel_state == "等接近":
@@ -1690,30 +1706,17 @@ def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None, data=None):
             gap_text = str(gap or "")
             if "尚未接近" in gap_text:
                 zone = gap_text.split("尚未接近", 1)[1].strip()
-            entry_line = "進場：不買"
+            entry_line = "不買"
             if zone:
-                entry_line += f"｜尚未接近{zone}"
-            wait_text = gap_text
-            if zone:
-                wait_text = wait_text.replace(f"，尚未接近{zone}", "").replace(f"；尚未接近{zone}", "")
-            wait_text = wait_text.strip("；， ")
-            if wait_text:
-                wait_text += "；"
-            wait_text += "有效買點只看：接近突破區 / 回測承接型態"
-            return [entry_line, f"等待：{wait_text}"]
+                entry_line += f"：尚未接近{zone}"
+            return [entry_line, trigger_line("進入突破區附近，或形成回測承接型態再重評")]
 
         if funnel_state == "等冷卻":
             lines = []
             if reason:
                 lines.append(f"狀態：{reason}")
-            wait = str(gap or "").strip()
-            if "；" in wait:
-                wait = wait.split("；", 1)[0]
             if unlock:
-                unlock = unlock.replace("降到 Lv.1/觀察以下", "降溫到 Lv.1")
-                wait = f"{wait}；有效買點：{unlock}" if wait else f"有效買點：{unlock}"
-            if wait:
-                lines.append(f"等待：{wait}")
+                lines.append(trigger_line(normalized_unlock(unlock)))
             return lines
 
         if funnel_state == "等回測":
@@ -1736,20 +1739,24 @@ def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None, data=None):
                     unlock = unlock.replace(f"回測{retest}", "不破", 1)
                 elif retest and unlock.startswith(f"{retest}"):
                     unlock = unlock.replace(f"{retest}", "不破", 1)
-                lines.append(f"有效買點：{unlock}")
+                lines.append(trigger_line(unlock))
             return lines
 
         if funnel_state == "可準備" and reason and "低位修復" in str(reason):
+            compact_lines = _low_repair_compact_lines(data, trigger_label=trigger_label)
             lines = [f"狀態：{reason}"]
-            if gap:
-                lines.append(f"觀察：{gap}")
-            lines.extend(extras)
-            if unlock:
-                lines.append(f"可買：{unlock}")
+            if compact_lines:
+                lines.extend(compact_lines)
+            else:
+                if gap:
+                    lines.append(f"觀察：{gap}")
+                lines.extend(extras)
+                if unlock:
+                    lines.append(trigger_line(unlock))
             return lines
 
         if funnel_state == "等低位修復":
-            compact_lines = _low_repair_compact_lines(data)
+            compact_lines = _low_repair_compact_lines(data, trigger_label=trigger_label)
             if compact_lines:
                 lines = []
                 if reason:
@@ -1763,7 +1770,7 @@ def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None, data=None):
                 lines.append(f"觀察：{gap}")
             lines.extend(extras)
             if unlock:
-                lines.append(f"有效買點：{unlock}")
+                lines.append(trigger_line(unlock))
             return lines
 
         if funnel_state == "等型態":
@@ -1774,7 +1781,7 @@ def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None, data=None):
             if wait:
                 lines.append(f"等待：{wait}")
             if unlock:
-                lines.append(f"有效買點：{unlock}")
+                lines.append(trigger_line(unlock))
             return lines
 
         if entry_parts:
@@ -1782,7 +1789,7 @@ def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None, data=None):
         if gap:
             lines.append(f"缺口：{gap}")
         if unlock:
-            lines.append(f"可買：{unlock}")
+            lines.append(trigger_line(unlock))
         lines.extend(extras)
         return lines
 
@@ -1820,14 +1827,8 @@ def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None, data=None):
         lines = []
         if reason:
             lines.append(f"狀態：{reason}")
-        wait = str(gap or "").strip()
-        if "；" in wait:
-            wait = wait.split("；", 1)[0]
         if unlock:
-            unlock = unlock.replace("降到 Lv.1/觀察以下", "降溫到 Lv.1")
-            wait = f"{wait}；有效買點：{unlock}" if wait else f"有效買點：{unlock}"
-        if wait:
-            lines.append(f"等待：{wait}")
+            lines.append(trigger_line(normalized_unlock(unlock)))
         return lines
 
     if funnel_state == "等接近":
@@ -1835,30 +1836,28 @@ def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None, data=None):
         gap_text = str(gap or "")
         if "尚未接近" in gap_text:
             zone = gap_text.split("尚未接近", 1)[1].strip()
-        entry_line = "進場：不買"
+        entry_line = "不買"
         if zone:
-            entry_line += f"｜尚未接近{zone}"
-        wait_text = gap_text
-        if zone:
-            wait_text = wait_text.replace(f"，尚未接近{zone}", "").replace(f"；尚未接近{zone}", "")
-        wait_text = wait_text.strip("；， ")
-        if wait_text:
-            wait_text += "；"
-        wait_text += "有效買點只看：接近突破區 / 回測承接型態"
-        return [entry_line, f"等待：{wait_text}"]
+            entry_line += f"：尚未接近{zone}"
+        return [entry_line, trigger_line("進入突破區附近，或形成回測承接型態再重評")]
+
+    if funnel_state == "淘汰" and (
+        "站回突破區" in str(gap or "") or "站回突破區" in str(unlock or "")
+    ):
+        text = "不可買：突破失敗"
+        if gap:
+            text += f"，{gap}"
+        lines = [text]
+        if unlock:
+            lines.append(trigger_line(unlock))
+        return lines
 
     if funnel_state == "等冷卻":
         lines = []
         if reason:
             lines.append(f"狀態：{reason}")
-        wait = str(gap or "").strip()
-        if "；" in wait:
-            wait = wait.split("；", 1)[0]
         if unlock:
-            unlock = unlock.replace("降到 Lv.1/觀察以下", "降溫到 Lv.1")
-            wait = f"{wait}；有效買點：{unlock}" if wait else f"有效買點：{unlock}"
-        if wait:
-            lines.append(f"等待：{wait}")
+            lines.append(trigger_line(normalized_unlock(unlock)))
         return lines
 
     if funnel_state == "等回測":
@@ -1881,10 +1880,17 @@ def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None, data=None):
                 unlock = unlock.replace(f"回測{retest}", "不破", 1)
             elif retest and unlock.startswith(f"{retest}"):
                 unlock = unlock.replace(f"{retest}", "不破", 1)
-            lines.append(f"有效買點：{unlock}")
+            lines.append(trigger_line(unlock))
         return lines
 
     if funnel_state == "等低位修復":
+        compact_lines = _low_repair_compact_lines(data, trigger_label=trigger_label)
+        if compact_lines:
+            lines = []
+            if reason:
+                lines.append(f"路線：{reason}")
+            lines.extend(compact_lines)
+            return lines
         lines = []
         if reason:
             lines.append(f"路線：{reason}")
@@ -1892,7 +1898,7 @@ def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None, data=None):
             lines.append(f"觀察：{gap}")
         lines.extend(extras)
         if unlock:
-            lines.append(f"有效買點：{unlock}")
+            lines.append(trigger_line(unlock))
         return lines
 
     if funnel_state == "等型態":
@@ -1903,7 +1909,7 @@ def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None, data=None):
         if wait:
             lines.append(f"等待：{wait}")
         if unlock:
-            lines.append(f"有效買點：{unlock}")
+            lines.append(trigger_line(unlock))
         return lines
 
     if entry_parts:
@@ -1911,7 +1917,7 @@ def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None, data=None):
     if gap:
         lines.append(f"缺口：{gap}")
     if unlock:
-        lines.append(f"可買：{unlock}")
+        lines.append(trigger_line(unlock))
     lines.extend(extras)
     return lines
 
@@ -2376,7 +2382,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         title_label = "急殺回測" if overheat_change <= -8 else "回測確認"
     elif funnel_state == "可準備":
         title_icon = "👀"
-        title_action = "可準備" if data.get("evidence_adjustment_reason") else deps["unheld_non_actionable_prepare_label"](data)
+        title_action = "準備觀察" if data.get("evidence_adjustment_reason") else deps["unheld_non_actionable_prepare_label"](data)
     elif state in ["等冷卻", "等市場", "等接近", "等低位修復", "等型態", "等回測", "等資料"]:
         title_icon = "⏳"
         title_action = state
@@ -2645,7 +2651,14 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     )
     if low_repair_actionable:
         trade_state_line = "交易狀態：可買｜動作：小倉試單｜條件：守支撐/5日均，不追價"
-    entry_check_lines = _entry_check_lines(buy_line, buy_gap_contract, funnel_state=funnel_state, data=data)
+    entry_check_lines = _entry_check_lines(
+        buy_line,
+        buy_gap_contract,
+        funnel_state=funnel_state,
+        data=data,
+        trigger_label=trigger_label,
+    )
+    entry_has_trigger = any(str(line).startswith(f"{trigger_label}：") for line in entry_check_lines)
     lines = [
         f"【{deps['stock_title'](name, data)}】{title_icon} {title_action}｜{title_label}",
         trade_state_line,
@@ -2669,7 +2682,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     lines.extend(trend_control_lines)
 
     lines.extend([
-        tomorrow_line,
+        None if entry_has_trigger else tomorrow_line,
         None if is_afterhours else (
             deps["_source_status_line"](report_context, name, holding=False) if report_context else None
         ),
@@ -2711,7 +2724,7 @@ def _brief_new_position_line(watch_items, report_context, deps, market_mode=None
         return f"新倉：可行動候選 {actionable} 檔，以第二則卡片為準。"
     prepare_count = len(funnel.get("可準備") or []) if funnel else 0
     if prepare_count:
-        return f"新倉：無有效進場；可準備 {prepare_count} 檔需明日開盤後確認，未確認前不可下單。"
+        return f"新倉：無有效進場；準備觀察 {prepare_count} 檔，需開盤確認後才可小倉。"
     return "新倉：目前沒有可行動候選。"
 
 
@@ -2842,7 +2855,7 @@ def _compact_market_overview_line(holding_items, watch_items, report_context, de
     if trend_count:
         unheld_parts.append(f"趨勢延續{trend_count}")
     unheld_parts.extend(
-        f"{label}{count}"
+        f"{label.replace('可準備', '準備觀察')}{count}"
         for label, count in deps["_prepare_count_parts"](prepare_counts)
     )
     if rejected_count == unheld_count and unheld_count:

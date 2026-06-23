@@ -10,25 +10,25 @@
 
 ## Owner Problem
 
-The 06/23 report still made the reader ask "so when can I actually buy or act?":
+The 06/23 report was still too noisy on mobile:
 
-- Holding cards used breakout-zone language for tomorrow handling even when the actionable decision should be based on warning / stop prices.
-- Sharp overheat pullbacks used generic `非追高` wording, which made a -10% pullback sound like a chase problem instead of a "do not catch the falling knife" support problem.
-- Failed breakout cards did not say which breakout zone must be reclaimed or how far current price is from that zone.
-- Some cards were technically correct but not useful enough from a mobile reader perspective.
+- Unheld cards repeated the same idea across `狀態` / `等待` / `有效買點` / `明日觸發`.
+- `可準備（不可買）` looked contradictory to a reader.
+- Low-repair cards showed too many separate lines instead of one condition snapshot and one trigger.
+- Failed-breakout cards still split the same reclaim-zone idea into `進場` / `缺口` / `可買`.
+- Summary holding lines drifted back to generic breakout-zone wording instead of warning / stop prices.
 
 ## User-Visible Result
 
-- Holding next-step lines now show concrete risk prices:
+- Holding summary and card next-step lines now show concrete risk prices:
   - reduce: `跌破警戒 X 續減，跌破停損 Y 停損`.
   - watch / new position risk: `守警戒 X；跌破停損 Y 優先停損；未轉強不加碼`.
-- Sharp pullback after overheat now says:
-  - `急殺回測，先不接刀`.
-  - `止跌守支撐 + 量能不失控`.
-- Failed breakout now shows:
-  - `尚未站回突破區 A~B（現價 P，差 D）`.
-  - `重新站回突破區 A~B後再評估`.
-- Official dry-run confirms the actual Telegram message list uses the new language.
+- Unheld cards now use one trigger line per state, for example:
+  - overheat: `明日觸發：降溫到 Lv.1 + 回測不破 + 非漲停追價`.
+  - low repair: `低位修復：支撐 X OK｜5日均 Y 待站回（差 Z）｜量能 Vx OK`.
+  - failed breakout: `不可買：突破失敗，尚未站回突破區 A~B（現價 P，差 D）`.
+- `可準備` user-facing label is now `準備觀察（待確認）`.
+- Official dry-run confirms no `等待：熱度` / `有效買點：` duplicate pattern remains in the 06/23 visible route.
 
 ## Non-Goals
 
@@ -48,19 +48,20 @@ The 06/23 report still made the reader ask "so when can I actually buy or act?":
 ## Output Contract
 
 - Holding action text must not use generic breakthrough wording when warning / stop prices are available.
-- Sharp pullback overheat must not read like a chase entry; it must wait for stop / support confirmation.
+- Unheld cards should prefer `狀態 + 觸發` over repeating `等待 + 有效買點 + 明日觸發`.
+- Low-repair display should show the current support / MA / volume snapshot and exactly one trigger line.
 - Failed breakout cards must identify the actual reclaim zone and price gap when data is present.
-- Summary may remain compact, but must not contradict card actionability.
+- Summary labels must use `準備觀察（待確認）`, not `可準備（不可買）`.
 
 ## Acceptance Conditions
 
-- Focused holding / overheat / failed-breakout tests pass.
-- Related report subset passes.
+- Focused holding / overheat / low-repair / failed-breakout tests pass.
+- Related report readability subset passes.
 - Official `generate_report(dry_run=True)` produces 4 messages, no live Telegram, and contains:
   - holding risk-price next step.
-  - `急殺回測，先不接刀`.
-  - failed-breakout reclaim gap.
-  - `新倉：無有效進場`.
+  - single trigger lines for overheat / low-repair / failed breakout.
+  - `準備觀察 1（待確認）`.
+  - no duplicate `等待：熱度` or `有效買點：` in the official unheld message.
 
 ## Failure Specimen And Validation Route
 

@@ -3,41 +3,41 @@
 ## Changes
 
 - Updated `core/generator.py`
-  - Added `holding_risk_next_step_text`.
   - Holding next-step lines now use warning / stop prices for reduce, watch, washout, and new-position risk states.
+  - Summary funnel label now renders `準備觀察（待確認）` instead of contradictory `可準備（不可買）`.
 
 - Updated `presentation/report.py`
   - Added failed-breakout reclaim gap text using `retest_zone_low`, `retest_zone_high`, and current price.
   - Changed sharp overheat pullback contract from generic support / chase wording to `先不接刀` and `止跌守支撐 + 量能不失控`.
   - Let holding contract render the computed risk-price next step instead of generic `守警戒價`.
+  - Collapsed unheld card repeated lines into one state line and one phase-aware trigger line.
+  - Compacted low-repair cards to a support / MA / volume snapshot plus one trigger.
+  - Changed user-visible prepare title to `準備觀察`.
 
 - Updated `tests/test_generator_report.py`
   - Added regression for holding risk-price next-step wording.
   - Updated holding card expectations from generic warning text to concrete warning / stop prices.
   - Updated sharp overheat pullback expectations.
   - Added failed-breakout reclaim-zone assertions.
+  - Updated prepare / low-repair / overheat expectations to the single-trigger mobile contract.
 
 ## Contract Impact
 
-- User-visible Telegram wording changes for holding cards and failed breakout / sharp pullback unheld cards.
+- User-visible Telegram wording changes for holding summary, failed breakout, low repair, overheat, and prepare labels.
 - No payload shape change.
 - No DB schema or write contract change.
 - Version remains `v21.1`.
 
 ## Verification
 
-- Focused holding / overheat / failed-breakout tests: `6 passed, 219 deselected`.
-- Holding/today-buy subset: `8 passed, 217 deselected`.
-- Related report subset: `14 passed, 211 deselected`.
+- Focused holding / overheat / low-repair / failed-breakout tests: `5 passed, 220 deselected`.
+- Related readability subset: `27 passed, 198 deselected`.
 - Official dry-run:
   - `messages=4`.
-  - `live_telegram=False`.
-  - `POSITION_OK=True`.
-  - `UNHELD_OK=True`.
-  - `SUMMARY_OK=True`.
-- Full `tests/test_generator_report.py`: `206 passed, 22 failed`.
-  - Not accepted as full pass.
-  - Remaining failures are legacy / broader report expectation debt, including stale v19/v20 wording, source-error wording, future-watch event wording, and old action-line assumptions.
+  - `NO_WAIT_EFFECTIVE_DUP=True`.
+  - `LOW_REPAIR_ONE_TRIGGER=True`.
+  - `FAILED_BREAKOUT_COMPACT=True`.
+  - `SUMMARY_RISK_PRICE=True`.
 
 ## Not Changed
 

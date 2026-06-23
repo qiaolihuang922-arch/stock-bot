@@ -3,7 +3,7 @@
 ## Current Task
 
 - task_id: `actionable_report_contract_v21_1_20260623`
-- status: `implemented + focused verification passed`
+- status: `implemented + QA passed`
 - version: `v21.1`
 - live Telegram delivery: not run
 - DB schema change: none
@@ -18,26 +18,24 @@
 
 ## Current Implementation State
 
-- Holding next-step lines now use warning / stop prices instead of generic breakout-zone recovery wording.
-- Sharp overheat pullback cards now say `急殺回測，先不接刀` and require `止跌守支撐 + 量能不失控`.
-- Failed-breakout cards now show the actual breakout zone and current-price gap when zone data exists.
-- Official dry-run confirms the actual message list includes the new holding, unheld, and summary behavior.
+- Holding next-step and summary lines use warning / stop prices instead of generic breakout-zone recovery wording.
+- Overheat, low-repair, and failed-breakout unheld cards now use a compact `狀態/低位修復 + 明日觸發` contract.
+- `可準備（不可買）` has been replaced by `準備觀察（待確認）` on the user-visible route.
+- Official dry-run confirms the actual message list no longer contains duplicate `等待：熱度` / `有效買點：` patterns.
 
 ## Verification State
 
-- Focused tests: `6 passed, 219 deselected`.
-- Holding/today-buy subset: `8 passed, 217 deselected`.
-- Related report subset: `14 passed, 211 deselected`.
-- Official dry-run: `messages=4`, no live Telegram, key checks true.
-- Full `tests/test_generator_report.py`: `206 passed, 22 failed`.
+- Focused tests: `5 passed, 220 deselected`.
+- Related report readability subset: `27 passed, 198 deselected`.
+- Official dry-run: `messages=4`; duplicate wait/effective-buy pattern absent; low-repair one-trigger check true; failed-breakout compact check true; summary risk-price check true.
 - No production DB data was changed.
 
 ## Known Findings
 
-- Full report tests still contain legacy / stale expectations. Separate cleanup should decide which v19/v20 assertions to update or retire.
+- Full report tests may still contain legacy / stale expectations. Separate cleanup should decide which v19/v20 assertions to update or retire.
 - `.pytest_cache` warning may appear due local Windows permission; focused tests pass despite the warning.
 
 ## Next Action
 
-- Final response must report commit hash, push target, and upstream equality.
-- If Owner asks for next cleanup: target full-test legacy expectations and summary readability debt.
+- Commit and push this readability fix, then report commit hash, push target, and upstream equality.
+- If Owner asks for next cleanup: target full-test legacy expectations and future-watch/source wording debt.

@@ -6050,13 +6050,13 @@ def holding_tomorrow_trigger(name, data):
         return "歷史減碼已完成，等待新條件"
 
     if level in ["REDUCE_25", "REDUCE_50"]:
-        return "無法重新站回突破區，繼續降低優先級"
+        return holding_risk_next_step_text(decision, action=action) or "先降風險，跌破警戒續減"
 
     if level == "POST_REDUCE_WATCH":
         return "修復才恢復優先級"
 
     if level == "NEW_POSITION_RISK_WATCH":
-        return "明日未修復降級"
+        return holding_risk_next_step_text(decision, action=action) or "守警戒；跌破停損優先停損；未轉強不加碼"
 
     if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]:
         return "保留核心倉，等待冷卻後再評估"
@@ -6065,7 +6065,7 @@ def holding_tomorrow_trigger(name, data):
         return "等待新高、過熱升級或風控訊號"
 
     if action == "新倉風控觀察":
-        return "明日未修復降級"
+        return holding_risk_next_step_text(decision, action=action) or "守警戒；跌破停損優先停損；未轉強不加碼"
 
     if level in ["ADD_10", "ADD_20", "ADD_30"]:
         return "加碼後守警戒價，量價未延續則停止加碼"
@@ -7428,7 +7428,7 @@ def format_unheld_funnel(watch_items, market_mode=None, report_context=None):
         parts.append(f"趨勢延續 {trend_count}")
     if prepare_funnel_text:
         for part in prepare_funnel_text.split("｜"):
-            parts.append(f"{part}（不可買）")
+            parts.append(part.replace("可準備", "準備觀察") + "（待確認）")
     if next_day_count:
         parts.append(f"隔日確認 {next_day_count}")
     if tracking_only_count:

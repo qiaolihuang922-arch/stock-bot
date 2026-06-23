@@ -3,7 +3,7 @@
 ## Active
 
 - task_md_holds: `actionable_report_contract_v21_1_20260623`
-- status: `implemented + focused verification passed`
+- status: `implemented + QA passed`
 - current_version: `v21.1`
 - live Telegram delivery: `not run`
 - DB schema change: `none`
@@ -11,18 +11,17 @@
 
 ## Result Summary
 
-- Holding cards now show concrete warning / stop price actions instead of generic breakout recovery wording.
-- Sharp overheat pullbacks now avoid catch-the-falling-knife ambiguity.
-- Failed breakout cards now display reclaim zone and current-price gap.
-- Official dry-run message list confirms the user-visible route.
+- Unheld cards now avoid repeating the same idea across `等待` / `有效買點` / `明日觸發`.
+- Low-repair cards show one support / MA / volume snapshot and one trigger.
+- Failed breakout cards show reclaim zone and current-price gap in one compact reason line.
+- Summary and card labels now use `準備觀察（待確認）` instead of `可準備（不可買）`.
+- Holding summary lines now use warning / stop prices.
 
 ## Verification
 
-- Focused tests: `6 passed, 219 deselected`.
-- Holding/today-buy subset: `8 passed, 217 deselected`.
-- Related report subset: `14 passed, 211 deselected`.
-- Official dry-run: `messages=4`, no live Telegram, key checks true.
-- Full report test file: `206 passed, 22 failed`; residual legacy expectation debt remains outside this focused fix.
+- Focused tests: `5 passed, 220 deselected`.
+- Related report readability subset: `27 passed, 198 deselected`.
+- Official dry-run: `messages=4`; duplicate wait/effective-buy pattern absent; low-repair one-trigger check true; failed-breakout compact check true; summary risk-price check true.
 
 ## Current Git State
 
@@ -30,5 +29,5 @@
 
 ## Next Action
 
-- Final response must report commit hash, push target, and upstream equality.
-- Separate follow-up: clean stale v19/v20 report tests and decide which old source / summary / action wording assertions should be retired.
+- Commit and push this readability fix, then report hash, push target, and upstream equality.
+- Separate follow-up: clean stale v19/v20 report tests and decide which old source / future-watch assertions should be retired.
