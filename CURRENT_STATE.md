@@ -3,7 +3,7 @@
 ## Current Task
 
 - task_id: `report_actionability_consistency_v21_1_20260624`
-- status: `follow-up implemented + QA passed`
+- status: `follow-up implemented + QA passed + pushed`
 - version: `v21.1`
 - live Telegram delivery: not run
 - DB schema change: none
@@ -52,4 +52,4 @@
 
 ## Next Action
 
-- Commit and push follow-up report consistency patch, then run git completion checks.
+- Commit/push this closeout doc update, then run git completion checks.

@@ -4,7 +4,7 @@
 
 - task_id: `report_actionability_consistency_v21_1_20260624`
 - 任務類型: `normal_patch`
-- 狀態: `ready_for_qa_after_followup`
+- 狀態: `QA_passed_followup_pushed`
 - 版本建議: `v21.1`
 - QA 分級: `L2`
 

@@ -3,7 +3,7 @@
 ## Active
 
 - task_md_holds: `report_actionability_consistency_v21_1_20260624`
-- status: `follow-up implemented + QA passed`
+- status: `follow-up implemented + QA passed + pushed`
 - current_version: `v21.1`
 - live Telegram delivery: `not run`
 - DB schema change: `none`
@@ -36,8 +36,9 @@
 
 - Implementation commit: `c98ebef`.
 - Previous closeout commits: `7acc6aa`, `fcbd2c6`, `9791735`.
-- Follow-up changes are ready for commit / push.
+- Follow-up implementation commit: `cecbaff`.
+- Pushed to `origin/main`; git completion gate pending final closeout commit.
 
 ## Next Action
 
-- Commit and push follow-up report consistency patch, then run git completion checks.
+- Commit/push this closeout doc update, then run git completion checks.
