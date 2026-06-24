@@ -43,4 +43,4 @@
 
 ## Next Action
 
-- Run git completion gate.
+- None for this task.
