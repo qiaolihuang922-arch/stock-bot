@@ -3,7 +3,7 @@
 ## Active
 
 - task_md_holds: `report_actionability_consistency_v21_1_20260624`
-- status: `implemented + QA passed + committed`
+- status: `implemented + QA passed + pushed`
 - current_version: `v21.1`
 - live Telegram delivery: `not run`
 - DB schema change: `none`
@@ -32,8 +32,9 @@
 ## Current Git State
 
 - Implementation commit: `c98ebef`.
-- Pending push.
+- Dispatch closeout commit: `7acc6aa`.
+- Pushed to `origin/main`; git completion gate pending final check.
 
 ## Next Action
 
-- Push and run git completion gate.
+- Run git completion gate.
