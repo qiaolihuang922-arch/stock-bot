@@ -3,7 +3,7 @@
 ## Current Task
 
 - task_id: `report_actionability_consistency_v21_1_20260624`
-- status: `implemented + QA passed`
+- status: `implemented + QA passed + committed`
 - version: `v21.1`
 - live Telegram delivery: not run
 - DB schema change: none
@@ -43,4 +43,4 @@
 
 ## Next Action
 
-- Commit and push current patch, then run git completion gate.
+- Push current patch, then run git completion gate.
