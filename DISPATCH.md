@@ -28,8 +28,8 @@
 
 ## Current Git State
 
-- Pending commit / push for this task.
+- Implementation committed locally; push pending.
 
 ## Next Action
 
-- Commit and push the compact actionable buy-card patch.
+- Push commits to `origin/main` and verify HEAD equals upstream.
