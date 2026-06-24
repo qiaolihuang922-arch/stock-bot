@@ -1,43 +1,41 @@
-# CHANGELOG: actionable_report_contract_v21_1_20260623
+# CHANGELOG: compact_actionable_buy_card_v21_1_20260624
 
 ## Changes
 
-- Updated `core/generator.py`
-  - Holding next-step lines now use warning / stop prices for reduce, watch, washout, and new-position risk states.
-  - Summary funnel label now renders `準備觀察（待確認）` instead of contradictory `可準備（不可買）`.
-
 - Updated `presentation/report.py`
-  - Added failed-breakout reclaim gap text using `retest_zone_low`, `retest_zone_high`, and current price.
-  - Changed sharp overheat pullback contract from generic support / chase wording to `先不接刀` and `止跌守支撐 + 量能不失控`.
-  - Let holding contract render the computed risk-price next step instead of generic `守警戒價`.
-  - Collapsed unheld card repeated lines into one state line and one phase-aware trigger line.
-  - Compacted low-repair cards to a support / MA / volume snapshot plus one trigger.
-  - Changed user-visible prepare title to `準備觀察`.
+  - Added `_low_repair_actionable_lines`.
+  - Low-repair actionable cards now use a compact small-position instruction, the existing low-repair support / MA / volume snapshot, and one trigger line.
+  - Suppressed duplicate trade-state, buy-point, reason, and risk/reward data lines for low-repair actionable buy cards.
+
+- Updated `core/generator.py`
+  - `format_backtest_groups` no longer emits summary backtest lines with `無明顯優勢`.
+  - Directional or risk-relevant backtest lines such as `略優` / `偏弱` can still surface.
 
 - Updated `tests/test_generator_report.py`
-  - Added regression for holding risk-price next-step wording.
-  - Updated holding card expectations from generic warning text to concrete warning / stop prices.
-  - Updated sharp overheat pullback expectations.
-  - Added failed-breakout reclaim-zone assertions.
-  - Updated prepare / low-repair / overheat expectations to the single-trigger mobile contract.
+  - The low-repair actionable regression now asserts the compact buy-card contract.
+  - The test guards against old noisy lines returning.
 
 ## Contract Impact
 
-- User-visible Telegram wording changes for holding summary, failed breakout, low repair, overheat, and prepare labels.
+- User-visible Telegram wording changes for low-repair actionable buy cards.
+- Summary backtest display is less noisy when the backtest has no clear edge.
 - No payload shape change.
 - No DB schema or write contract change.
 - Version remains `v21.1`.
 
 ## Verification
 
-- Focused holding / overheat / low-repair / failed-breakout tests: `5 passed, 220 deselected`.
-- Related readability subset: `27 passed, 198 deselected`.
-- Official dry-run:
+- `.\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py -k "low_repair"`
+  - `5 passed, 220 deselected`.
+- `.\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py -k "low_repair or backtest_groups or direct_actions or prepare"`
+  - `21 passed, 204 deselected`.
+- `.\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py -k "overheat or low_repair or failed_breakout or holding_next_step or risk_precedes or direct_actions or prepare"`
+  - `27 passed, 198 deselected`.
+- Official dry-run via `generate_report(dry_run=True)`
   - `messages=4`.
-  - `NO_WAIT_EFFECTIVE_DUP=True`.
-  - `LOW_REPAIR_ONE_TRIGGER=True`.
-  - `FAILED_BREAKOUT_COMPACT=True`.
-  - `SUMMARY_RISK_PRICE=True`.
+  - `LOW_BUY_OLD_NOISE_ABSENT=True`.
+  - `LOW_BUY_COMPACT_PRESENT=True`.
+  - `NO_NO_EDGE_BACKTEST_SUMMARY=True`.
 
 ## Not Changed
 
@@ -47,5 +45,5 @@
 
 ## Residual Risk
 
-- Full legacy report test file remains not green and needs a dedicated test-contract cleanup task.
-- `.pytest_cache` emits a local Windows permission warning; it does not affect focused test results.
+- Full legacy report test cleanup remains a separate task.
+- `.pytest_cache` emits a local Windows permission warning; focused tests pass despite it.

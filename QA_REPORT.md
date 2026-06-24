@@ -1,51 +1,49 @@
-# QA_REPORT: actionable_report_contract_v21_1_20260623
+# QA_REPORT: compact_actionable_buy_card_v21_1_20260624
 
 ## Test Scope
 
-- Holding card next-step wording.
-- Sharp overheat pullback card contract.
-- Low-repair mobile display contract.
-- Failed-breakout reclaim-zone card contract.
-- Prepare / not-yet-buyable summary label.
+- Low-repair actionable buy-card rendering.
+- Summary backtest noise filtering.
+- Adjacent report readability paths: overheat, low repair, failed breakout, holding next step, direct actions, prepare.
 - Official dry-run message-list rendering.
 
 ## Risk Scan
 
-- Strategy risk: medium. This changes action wording, not buy / sell thresholds or DB state.
+- Strategy risk: low. The patch changes display only; it does not change `low_repair_intraday_buy_ready` or buy/sell thresholds.
 - DB risk: none.
 - Live delivery risk: none.
-- User misunderstanding risk reduced:
-  - holdings now show actionable risk prices.
-  - overheat / low-repair cards now have one trigger line instead of repeated wait / buy-point / next-day lines.
-  - failed breakout says exactly what zone must be reclaimed.
-  - `可準備（不可買）` no longer appears on the official route; it is `準備觀察（待確認）`.
+- User misunderstanding risk reduced: a buyable card now starts with the trade instruction and shows one condition snapshot.
 
 ## Cross-Block Semantic Consistency
 
-- Holdings: `風控` line and `明日處理` now use the same warning / stop prices.
-- Overheat sharp pullback: title, body, and trigger all wait for stop / support confirmation.
-- Low repair: card shows support / MA / volume snapshot, then one trigger.
-- Failed breakout: title, gap, and trigger all require reclaiming the same breakout zone.
-- Summary still says `新倉：無有效進場`; this matches card actionability.
+- Card title says `可買｜小倉｜低位修復成立`.
+- Body says `小倉：可試單｜守支撐/5日均｜不追價`.
+- Snapshot shows the same support / 5-day MA / volume status used by the low-repair logic.
+- Trigger line no longer repeats separate buy-point or reason wording.
+- Summary still lists the candidate under `新倉建議`.
 
 ## Failure Specimen Rebuttal
 
-- Owner specimen: 06/23 report asked the reader to infer too much from generic wording.
+- Owner specimen: 06/24 光寶科 card was actionable but cluttered.
 - Dry-run rebuttal:
-  - holding summary includes `跌破警戒 ... 續減，跌破停損 ... 停損`.
-  - overheat cards no longer contain `等待：熱度`.
-  - low-repair cards have a single `明日觸發`.
-  - failed breakout contains `不可買：突破失敗，尚未站回突破區 ...`.
-  - summary uses `準備觀察 1（待確認）`.
+  - contains `小倉：可試單｜守支撐/5日均｜不追價`.
+  - contains one `低位修復：...` snapshot.
+  - does not contain the old duplicate trade-state / buy-point / reason / data lines.
+  - summary no longer shows the no-edge 光寶科 backtest line.
 
 ## Commands And Results
 
-- `.\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py -k "overheat_pullback_display_switches_from_cooling_to_retest or overheat_sharp_pullback_display_focuses_on_support or low_repair_compact_lines_show_real_missing_condition_only or failed_breakout_card_does_not_show_attack_volume_as_positive or holding_next_step_uses_risk_prices_not_breakout_zone"`
+- `.\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py -k "low_repair"`
   - `5 passed, 220 deselected`.
+- `.\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py -k "low_repair or backtest_groups or direct_actions or prepare"`
+  - `21 passed, 204 deselected`.
 - `.\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py -k "overheat or low_repair or failed_breakout or holding_next_step or risk_precedes or direct_actions or prepare"`
   - `27 passed, 198 deselected`.
 - Official dry-run via `generator.generate_report(dry_run=True)`
-  - `messages=4`, `NO_WAIT_EFFECTIVE_DUP=True`, `LOW_REPAIR_ONE_TRIGGER=True`, `FAILED_BREAKOUT_COMPACT=True`, `SUMMARY_RISK_PRICE=True`.
+  - `messages=4`.
+  - `LOW_BUY_OLD_NOISE_ABSENT=True`.
+  - `LOW_BUY_COMPACT_PRESENT=True`.
+  - `NO_NO_EDGE_BACKTEST_SUMMARY=True`.
 
 ## Not Tested
 
@@ -55,6 +53,6 @@
 
 ## QA Conclusion
 
-通過.
+通過。
 
-The requested 06/23 user-visible readability path is fixed by focused tests, the broader related report subset, and official dry-run. This conclusion does not cover live Telegram or DB writes, which were not part of this task.
+The 06/24 user-visible buy-card readability issue is fixed on the formatter path and official dry-run path. This conclusion does not cover live Telegram delivery or DB writes, which were not part of this task.

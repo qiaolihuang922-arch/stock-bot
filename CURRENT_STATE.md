@@ -2,7 +2,7 @@
 
 ## Current Task
 
-- task_id: `actionable_report_contract_v21_1_20260623`
+- task_id: `compact_actionable_buy_card_v21_1_20260624`
 - status: `implemented + QA passed`
 - version: `v21.1`
 - live Telegram delivery: not run
@@ -18,24 +18,30 @@
 
 ## Current Implementation State
 
-- Holding next-step and summary lines use warning / stop prices instead of generic breakout-zone recovery wording.
-- Overheat, low-repair, and failed-breakout unheld cards now use a compact `狀態/低位修復 + 明日觸發` contract.
-- `可準備（不可買）` has been replaced by `準備觀察（待確認）` on the user-visible route.
-- Official dry-run confirms the actual message list no longer contains duplicate `等待：熱度` / `有效買點：` patterns.
+- Low-repair actionable buy cards now render as a compact decision block:
+  - `小倉：可試單｜守支撐/5日均｜不追價`
+  - `低位修復：支撐 ... OK｜5日均 ... OK｜量能 ... OK`
+  - one phase trigger line.
+- Old duplicate lines are suppressed for this state:
+  - trade-state line.
+  - buy-point line.
+  - reason line.
+  - risk/reward data line.
+- Summary backtest grouping hides `無明顯優勢` lines.
 
 ## Verification State
 
-- Focused tests: `5 passed, 220 deselected`.
+- Low-repair tests: `5 passed, 220 deselected`.
+- Backtest/direct-action/prepare subset: `21 passed, 204 deselected`.
 - Related report readability subset: `27 passed, 198 deselected`.
-- Official dry-run: `messages=4`; duplicate wait/effective-buy pattern absent; low-repair one-trigger check true; failed-breakout compact check true; summary risk-price check true.
+- Official dry-run: `messages=4`; compact low-repair buy line present; old noisy lines absent; no-edge backtest summary hidden.
 - No production DB data was changed.
 
 ## Known Findings
 
-- Full report tests may still contain legacy / stale expectations. Separate cleanup should decide which v19/v20 assertions to update or retire.
+- Full report tests may still contain legacy / stale expectations. Separate cleanup should decide which old v19/v20 assertions to update or retire.
 - `.pytest_cache` warning may appear due local Windows permission; focused tests pass despite the warning.
 
 ## Next Action
 
-- Report commit hash, push target, and upstream equality.
-- If Owner asks for next cleanup: target full-test legacy expectations and future-watch/source wording debt.
+- Commit and push the compact actionable buy-card patch.

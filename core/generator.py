@@ -8540,7 +8540,13 @@ def format_backtest_groups(watch_items, report_context=None):
         if state not in {"可買", "趨勢延續", "可準備"}:
             continue
         line = compact_backtest_line((data or {}).get("backtest_context"))
-        if not line or line == "回測：-" or "不可用" in line or "樣本不足" in line:
+        if (
+            not line
+            or line == "回測：-"
+            or "不可用" in line
+            or "樣本不足" in line
+            or "無明顯優勢" in line
+        ):
             continue
         body = line.replace("回測：", "", 1)
         lines.append(f"回測（{name}）：{body}")

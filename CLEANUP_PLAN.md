@@ -2,6 +2,8 @@
 
 ## Completed This Cycle
 
+- Compacted actionable low-repair buy cards so the first readable action is small-position test / support / 5-day MA / no chase.
+- Hid no-edge summary backtest lines (`無明顯優勢`) because they do not change the action.
 - Replaced generic holding next-step wording with concrete warning / stop price actions.
 - Reworked sharp overheat pullback wording to wait for stop / support confirmation.
 - Added failed-breakout reclaim-zone gap display.
@@ -25,6 +27,10 @@
 
 ## Post-Cycle Review
 
+- 2026-06-24 addendum:
+  - Root cause: actionable buy cards were not routed through the same compact mobile contract as wait cards, so the first real buy signal carried legacy duplicate lines.
+  - Risk category: repeated_pattern + mobile_readability.
+  - Guard added: low-repair actionable regression now rejects duplicate trade-state / buy-point / reason / data lines and requires the compact small-position line.
 - Root cause: prior readability cleanup changed labels but did not consistently bind them to actionable prices / support conditions, and did not enforce a single-trigger card contract.
 - Risk category: repeated_pattern + mobile_readability + evidence_chain.
 - QA gap addressed: tests now cover official card text for holding risk prices, overheat / low-repair one-trigger output, failed-breakout reclaim gaps, and prepare-label consistency.

@@ -769,6 +769,16 @@ def _low_repair_compact_lines(data, *, trigger_label="觸發"):
     return lines
 
 
+def _low_repair_actionable_lines(data, *, trigger_label="觸發"):
+    compact_lines = _low_repair_compact_lines(data, trigger_label=trigger_label) or []
+    snapshot = next((line for line in compact_lines if str(line).startswith("低位修復：")), None)
+    return [
+        "小倉：可試單｜守支撐/5日均｜不追價",
+        snapshot,
+        f"{trigger_label}：守支撐/5日均 + 量能不失控，小倉試單",
+    ]
+
+
 def _repair_retest_gap_text(data):
     return f"等待回測{_recent_rebound_close_text(data)}不破"
 
@@ -2455,7 +2465,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         data_line = f"數據：{rr_data_text}｜{score_text}｜V {data.get('volume_ratio', '-')}x"
         price_line = deps["price_change_line"](data.get("price"), data.get("change"))
     elif low_repair_actionable:
-        buy_line = "買點：可買｜低位修復小倉｜守支撐/5日均，不追價"
+        buy_line = "小倉：可試單｜守支撐/5日均｜不追價"
         low_repair_status = data.get("low_repair_status") or {}
         low_repair_rr = _gate_value_text(low_repair_status.get("rr"))
         low_repair_volume = _gate_value_text(low_repair_status.get("volume_ratio") or data.get("volume_ratio"))
@@ -2583,6 +2593,9 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     if is_low_repair_prepare:
         reason_line = None
         data_line = None
+    if low_repair_actionable:
+        reason_line = None
+        data_line = None
     if limit_display_kind:
         reason_line = None
         data_line = None
@@ -2650,13 +2663,17 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         funnel_state=funnel_state,
     )
     if low_repair_actionable:
-        trade_state_line = "交易狀態：可買｜動作：小倉試單｜條件：守支撐/5日均，不追價"
-    entry_check_lines = _entry_check_lines(
-        buy_line,
-        buy_gap_contract,
-        funnel_state=funnel_state,
-        data=data,
-        trigger_label=trigger_label,
+        trade_state_line = None
+    entry_check_lines = (
+        _low_repair_actionable_lines(data, trigger_label=trigger_label)
+        if low_repair_actionable
+        else _entry_check_lines(
+            buy_line,
+            buy_gap_contract,
+            funnel_state=funnel_state,
+            data=data,
+            trigger_label=trigger_label,
+        )
     )
     entry_has_trigger = any(str(line).startswith(f"{trigger_label}：") for line in entry_check_lines)
     lines = [
@@ -2667,7 +2684,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         *entry_check_lines,
     ]
 
-    weak_buy_backtest_line = _weak_buy_backtest_line(
+    weak_buy_backtest_line = None if low_repair_actionable else _weak_buy_backtest_line(
         name,
         data,
         deps,
@@ -2686,7 +2703,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         None if is_afterhours else (
             deps["_source_status_line"](report_context, name, holding=False) if report_context else None
         ),
-        None if (is_afterhours_rejected or compact_wait_card) else data_line,
+        None if (is_afterhours_rejected or compact_wait_card or low_repair_actionable) else data_line,
         low_volume_limit_up_risk,
         price_line,
     ])
