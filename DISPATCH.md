@@ -37,8 +37,8 @@
 - Implementation commit: `c98ebef`.
 - Previous closeout commits: `7acc6aa`, `fcbd2c6`, `9791735`.
 - Follow-up implementation commit: `cecbaff`.
-- Pushed to `origin/main`; git completion gate pending final closeout commit.
+- Pushed to `origin/main`; git completion gate passed after closeout.
 
 ## Next Action
 
-- Commit/push this closeout doc update, then run git completion checks.
+- None for this task.

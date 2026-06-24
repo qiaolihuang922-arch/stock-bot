@@ -52,4 +52,4 @@
 
 ## Next Action
 
-- Commit/push this closeout doc update, then run git completion checks.
+- None for this task.
