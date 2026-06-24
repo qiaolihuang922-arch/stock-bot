@@ -2,7 +2,7 @@
 
 ## Current Task
 
-- task_id: `compact_actionable_buy_card_v21_1_20260624`
+- task_id: `intraday_report_state_readability_v21_1_20260624`
 - status: `implemented + QA passed`
 - version: `v21.1`
 - live Telegram delivery: not run
@@ -15,33 +15,35 @@
 - Cross-day state must come from production DB or an approved persistent source, not agent memory.
 - DB structure changes require Owner approval.
 - No live Telegram delivery without separate Owner approval.
+- `貼近可買` is not a buy signal; it means only one small condition remains.
 
 ## Current Implementation State
 
-- Low-repair actionable buy cards now render as a compact decision block:
-  - `小倉：可試單｜守支撐/5日均｜不追價`
-  - `低位修復：支撐 ... OK｜5日均 ... OK｜量能 ... OK`
-  - one phase trigger line.
-- Old duplicate lines are suppressed for this state:
-  - trade-state line.
-  - buy-point line.
-  - reason line.
-  - risk/reward data line.
-- Summary backtest grouping hides `無明顯優勢` lines.
+- Holding cards:
+  - `盤中` -> `盤中處理`
+  - `盤前` -> `盤前處理`
+  - after-hours / close -> `明日處理`
+- Low-repair near-ready:
+  - computed from DB-backed daily price context.
+  - requires all low-repair conditions except reclaiming 5-day MA.
+  - only displays near-ready when 5-day MA gap is within 0.8%.
+- Failed breakout reclaim:
+  - requires a real reclaim anchor from `retest_zone_low`, `breakout_trigger_price`, or `breakout_price`.
+  - within 5% becomes `等站回`, not `淘汰`.
+  - no anchor means it stays blocked; no fake zone is invented.
 
 ## Verification State
 
-- Low-repair tests: `5 passed, 220 deselected`.
-- Backtest/direct-action/prepare subset: `21 passed, 204 deselected`.
-- Related report readability subset: `27 passed, 198 deselected`.
-- Official dry-run: `messages=4`; compact low-repair buy line present; old noisy lines absent; no-edge backtest summary hidden.
+- Focused current-contract tests: `3 passed, 223 deselected`.
+- Broader related subset: `11 passed, 215 deselected`.
+- Official dry-run: `messages=4`; `HAS_NEAR_BUY=True`; `HAS_WAIT_RECLAIM=True`; `INTRADAY_TOMORROW_LABEL=False`.
 - No production DB data was changed.
 
 ## Known Findings
 
-- Full report tests may still contain legacy / stale expectations. Separate cleanup should decide which old v19/v20 assertions to update or retire.
-- `.pytest_cache` warning may appear due local Windows permission; focused tests pass despite the warning.
+- Full `tests/test_generator_report.py` still has legacy expectation failures from older report wording.
+- `.pytest_cache` warning may appear due local Windows permission; focused tests pass despite it.
 
 ## Next Action
 
-- Report commit hash, push target, and upstream equality.
+- Commit and push this patch, then run git completion checks.

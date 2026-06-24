@@ -776,6 +776,56 @@ def has_daily_price_repair_basis(data, min_points=4):
     return len(points) >= min_points
 
 
+LOW_REPAIR_MA5_NEAR_TOLERANCE_PCT = 0.8
+FAILED_BREAKOUT_RECLAIM_WAIT_DISTANCE_PCT = 5.0
+
+
+def _numeric_breakout_distance(data, result=None):
+    result = result or ((data or {}).get("result") or {})
+    for raw_distance in [
+        result.get("breakout_distance"),
+        result.get("distance_to_breakout"),
+        (data or {}).get("breakout_distance"),
+        (data or {}).get("distance_to_breakout"),
+        card_breakout_distance(data or {}),
+    ]:
+        try:
+            return float(str(raw_distance).replace("%", "").strip())
+        except (TypeError, ValueError):
+            continue
+    try:
+        price = _data_float(data or {}, "price", "current_price", "last_price")
+        trigger = _data_float(data or {}, "retest_zone_low", "breakout_trigger_price", "breakout_price")
+        if trigger is None:
+            trigger = _data_float(result, "breakout_trigger_price", "breakout_price")
+        if price is not None and trigger:
+            return (trigger - price) / price * 100
+    except (TypeError, ValueError, ZeroDivisionError):
+        pass
+    return None
+
+
+def _failed_breakout_wait_reclaim(result, data):
+    result = result or {}
+    blockers = entry_blockers(result)
+    failed = (
+        result.get("decision") == "FAIL"
+        or result.get("structure_phase") == "FAILED_BREAKOUT"
+        or result.get("price_behavior") == "FAILED_BREAKOUT"
+        or "突破失敗" in blockers
+        or result.get("reject_family") == "突破失敗"
+    )
+    if not failed:
+        return False
+    reclaim_anchor = _data_float(data or {}, "retest_zone_low", "breakout_trigger_price", "breakout_price")
+    if reclaim_anchor is None:
+        reclaim_anchor = _data_float(result, "breakout_trigger_price", "breakout_price")
+    if reclaim_anchor is None:
+        return False
+    distance = _numeric_breakout_distance(data, result)
+    return distance is not None and 0 <= distance <= FAILED_BREAKOUT_RECLAIM_WAIT_DISTANCE_PCT
+
+
 def daily_price_low_repair_status(data, *, min_points=4, volume_threshold=1.0, rr_threshold=1.5):
     data = data or {}
     context = cross_day_context(data)
@@ -817,11 +867,15 @@ def daily_price_low_repair_status(data, *, min_points=4, volume_threshold=1.0, r
         missing.append("守回支撐")
 
     ma5 = None
+    ma5_gap = None
+    ma5_gap_pct = None
     if len(closes) >= 5:
         ma5 = sum(closes[-5:]) / 5
         if latest_close >= ma5:
             met.append("站上5日均")
         else:
+            ma5_gap = ma5 - latest_close
+            ma5_gap_pct = (ma5_gap / ma5 * 100) if ma5 else None
             missing.append("站回5日均")
     else:
         missing.append("5日均資料補齊")
@@ -859,8 +913,20 @@ def daily_price_low_repair_status(data, *, min_points=4, volume_threshold=1.0, r
     else:
         missing.append("風險報酬資料補齊")
 
+    ready = not missing
+    blocking_missing = [item for item in missing if item != "站回5日均"]
+    near_ready = (
+        not ready
+        and not blocking_missing
+        and ma5_gap_pct is not None
+        and ma5_gap_pct <= LOW_REPAIR_MA5_NEAR_TOLERANCE_PCT
+    )
+
     return {
-        "ready": not missing,
+        "ready": ready,
+        "near_ready": near_ready,
+        "ma5_gap": ma5_gap,
+        "ma5_gap_pct": ma5_gap_pct,
         "met": met,
         "missing": missing,
         "support": support,
@@ -3718,6 +3784,7 @@ def tracking_sort_key(index, name, data):
         "等低位修復": 2,
         "等型態": 3,
         "等回測": 2,
+        "等站回": 3,
         "等RR修復": 3,
         "等量能": 4,
         "隔日確認": 5,
@@ -3779,6 +3846,7 @@ def format_pending_candidates_grouped(watch_items):
         "等低位修復": [],
         "等型態": [],
         "等回測": [],
+        "等站回": [],
         "等RR修復": [],
         "等量能": [],
         "等資料": [],
@@ -3791,7 +3859,7 @@ def format_pending_candidates_grouped(watch_items):
         groups.setdefault(state, []).append((index, name, data))
 
     lines = []
-    for label in ["可買", "等冷卻", "等市場", "等接近", "等低位修復", "等型態", "等回測", "等RR修復", "等量能", "等資料", "隔日確認", "弱勢淘汰"]:
+    for label in ["可買", "等冷卻", "等市場", "等接近", "等低位修復", "等型態", "等回測", "等站回", "等RR修復", "等量能", "等資料", "隔日確認", "弱勢淘汰"]:
         values = sorted(
             groups.get(label, []),
             key=lambda item: tracking_sort_key(item[0], item[1], item[2])
@@ -6459,6 +6527,14 @@ def unheld_funnel_assessment(name, data, market_mode=None, report_context=None):
             return "可準備", None
         return "可買", None
 
+    structure_failed = (
+        result.get("decision") == "FAIL"
+        or result.get("structure_phase") == "FAILED_BREAKOUT"
+        or "突破失敗" in blockers
+    )
+    if structure_failed and _failed_breakout_wait_reclaim(result, data):
+        return "等站回", None
+
     if state == "弱勢淘汰" and multi_day_rebound_wait:
         return "等回測", None
 
@@ -6466,11 +6542,6 @@ def unheld_funnel_assessment(name, data, market_mode=None, report_context=None):
         return "淘汰", None
 
     soft_prepare_candidate = _soft_blocker_prepare_candidate(data, state=state, prepare_label=prepare_label)
-    structure_failed = (
-        result.get("decision") == "FAIL"
-        or result.get("structure_phase") == "FAILED_BREAKOUT"
-        or "突破失敗" in blockers
-    )
     if not structure_failed and (result.get("price_behavior") == "LIMIT_LOCK" or "漲停不追" in blockers):
         return "等回測", None
     if not structure_failed and (result.get("price_behavior") == "LIMIT_REBOUND" or "漲停反彈待確認" in blockers):
@@ -6520,6 +6591,8 @@ def unheld_funnel_assessment(name, data, market_mode=None, report_context=None):
             if (report_context or {}).get("report_context", {}).get("report_phase") == "盤中":
                 return "可準備", "低位修復條件成立；盤中未觸發可買條件。"
             return "可準備", "低位修復條件成立；盤後不追價，等明日開盤確認。"
+        if low_repair.get("near_ready"):
+            return "等低位修復", "低位修復貼近成立；只差站回5日均。"
 
     if any(item in blockers for item in ["弱反彈待確認", "漲停反彈待確認"]):
         return "隔日確認", None
@@ -6556,6 +6629,8 @@ def unheld_funnel_assessment(name, data, market_mode=None, report_context=None):
 
     if state == "等低位修復":
         data["low_repair_status"] = daily_price_low_repair_status(data)
+        if data["low_repair_status"].get("near_ready"):
+            return "等低位修復", "低位修復貼近成立；只差站回5日均。"
         return "等低位修復", None
 
     if state == "等型態":
@@ -6591,6 +6666,9 @@ def unheld_funnel_assessment(name, data, market_mode=None, report_context=None):
             break
         except (TypeError, ValueError):
             continue
+    if _failed_breakout_wait_reclaim(result, data):
+        return "等站回", None
+
     if (
         near_distance is not None
         and near_distance <= 5
@@ -6659,6 +6737,7 @@ def unheld_funnel_state(name, data, market_mode=None, report_context=None):
             "等低位修復",
             "等型態",
             "等回測",
+            "等站回",
             "等RR修復",
             "等量能",
             "等資料",
@@ -6710,6 +6789,8 @@ def unheld_funnel_state(name, data, market_mode=None, report_context=None):
                     else:
                         state = "可準備"
                         reason = "低位修復條件成立；盤後不追價，等明日開盤確認。"
+                elif data["low_repair_status"].get("near_ready"):
+                    reason = "低位修復貼近成立；只差站回5日均。"
             else:
                 state = "等接近"
     if reason:
@@ -6825,6 +6906,9 @@ def unheld_execution_trigger(funnel_state, data):
     if funnel_state == "等回測":
         return "不追價，回測不破且降溫再評估"
 
+    if funnel_state == "等站回":
+        return "不買，等重新站回突破區"
+
     if funnel_state == "等RR修復":
         return "不追價，等風險報酬達標"
 
@@ -6850,6 +6934,7 @@ def unheld_execution_priority(index, name, data, market_mode=None, report_contex
         "等低位修復": 5,
         "等型態": 6,
         "等回測": 5,
+        "等站回": 6,
         "等RR修復": 6,
         "等量能": 7,
         "隔日確認": 8,
@@ -6905,6 +6990,7 @@ def build_unheld_funnel(watch_items, market_mode=None, report_context=None):
         "等低位修復": [],
         "等型態": [],
         "等回測": [],
+        "等站回": [],
         "等RR修復": [],
         "等量能": [],
         "等資料": [],
@@ -7001,7 +7087,7 @@ def unheld_tracking_count(funnel):
 
     return sum(
         len(funnel[label])
-        for label in ["可準備", "等冷卻", "等市場", "等接近", "等低位修復", "等型態", "等回測", "等RR修復", "等量能", "等資料", "隔日確認"]
+        for label in ["可準備", "等冷卻", "等市場", "等接近", "等低位修復", "等型態", "等回測", "等站回", "等RR修復", "等量能", "等資料", "隔日確認"]
     )
 
 
@@ -7009,7 +7095,7 @@ def unheld_tracking_only_count(funnel):
 
     return sum(
         len(funnel[label])
-        for label in ["等冷卻", "等市場", "等接近", "等低位修復", "等型態", "等回測", "等RR修復", "等量能", "等資料"]
+        for label in ["等冷卻", "等市場", "等接近", "等低位修復", "等型態", "等回測", "等站回", "等RR修復", "等量能", "等資料"]
     )
 
 
@@ -7409,7 +7495,7 @@ def format_unheld_funnel(watch_items, market_mode=None, report_context=None):
     display_label = {"等RR修復": "等風險報酬"}
     track_buckets = [
         (display_label.get(label, label), len(funnel[label]))
-        for label in ["等冷卻", "等市場", "等接近", "等低位修復", "等型態", "等回測", "等RR修復", "等量能", "等資料"]
+        for label in ["等冷卻", "等市場", "等接近", "等低位修復", "等型態", "等回測", "等站回", "等RR修復", "等量能", "等資料"]
         if funnel[label]
     ]
     if len(track_buckets) == 1:
@@ -7640,7 +7726,7 @@ def _report_conflicts(messages):
     summary = messages[-1]
     conflicts = []
     buy_markers = re.findall(r"新倉[:：][^\n]*?([\u4e00-\u9fffA-Za-z0-9]{2,12})\s*可買", summary)
-    blocking_terms = ("不可買", "等冷卻", "等市場", "等接近", "等低位修復", "等型態", "等回測", "等RR修復", "等量能", "等資料", "淘汰")
+    blocking_terms = ("不可買", "等冷卻", "等市場", "等接近", "等低位修復", "等型態", "等回測", "等站回", "等RR修復", "等量能", "等資料", "淘汰")
     for marker in buy_markers:
         if marker in {"無有效進場", "無", "今日"}:
             continue

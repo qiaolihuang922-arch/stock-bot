@@ -1,49 +1,62 @@
-# QA_REPORT: compact_actionable_buy_card_v21_1_20260624
+# QA_REPORT: intraday_report_state_readability_v21_1_20260624
 
 ## Test Scope
 
-- Low-repair actionable buy-card rendering.
-- Summary backtest noise filtering.
-- Adjacent report readability paths: overheat, low repair, failed breakout, holding next step, direct actions, prepare.
-- Official dry-run message-list rendering.
+- Intraday holding card phase wording.
+- Low-repair near-ready display.
+- Failed-breakout reclaim-zone display.
+- Funnel grouping and current Telegram dry-run output.
 
 ## Risk Scan
 
-- Strategy risk: low. The patch changes display only; it does not change `low_repair_intraday_buy_ready` or buy/sell thresholds.
+- Strategy risk: medium-low. The patch adds one non-actionable display state and one near-ready display flag; it does not turn near-ready into `可買`.
 - DB risk: none.
 - Live delivery risk: none.
-- User misunderstanding risk reduced: a buyable card now starts with the trade instruction and shows one condition snapshot.
+- User misunderstanding risk reduced:
+  - `貼近可買` says exactly that the 5-day MA is still missing.
+  - `等站回` says exactly which breakout zone must be reclaimed.
+  - Intraday cards no longer say `明日處理`.
 
 ## Cross-Block Semantic Consistency
 
-- Card title says `可買｜小倉｜低位修復成立`.
-- Body says `小倉：可試單｜守支撐/5日均｜不追價`.
-- Snapshot shows the same support / 5-day MA / volume status used by the low-repair logic.
-- Trigger line no longer repeats separate buy-point or reason wording.
-- Summary still lists the candidate under `新倉建議`.
+- 光寶科 near-ready card:
+  - title: `貼近可買｜低位修復接近成立`
+  - condition line: support OK, volume OK, 5-day MA close but not reclaimed.
+  - trigger: reclaim 5-day MA before small-position trial.
+- 旺宏 reclaim card:
+  - title: `等站回｜突破失敗`
+  - condition line: exact reclaim zone and price gap.
+  - no duplicate trade-state or data line.
+- Summary dry-run now includes `等站回1` under tracking, not under actionable buy.
 
 ## Failure Specimen Rebuttal
 
-- Owner specimen: 06/24 光寶科 card was actionable but cluttered.
+- Owner specimen: 06/24 intraday report showed confusing status changes and noisy non-actionable cards.
 - Dry-run rebuttal:
-  - contains `小倉：可試單｜守支撐/5日均｜不追價`.
-  - contains one `低位修復：...` snapshot.
-  - does not contain the old duplicate trade-state / buy-point / reason / data lines.
-  - summary no longer shows the no-edge 光寶科 backtest line.
+  - `HAS_NEAR_BUY=True`.
+  - `HAS_WAIT_RECLAIM=True`.
+  - `INTRADAY_TOMORROW_LABEL=False`.
+  - Holding cards show `盤中處理`.
+  - 光寶科 shows `貼近可買`, not ordinary `等低位修復`.
+  - 旺宏 shows `等站回`, not terminal淘汰.
 
 ## Commands And Results
 
-- `.\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py -k "low_repair"`
-  - `5 passed, 220 deselected`.
-- `.\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py -k "low_repair or backtest_groups or direct_actions or prepare"`
-  - `21 passed, 204 deselected`.
-- `.\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py -k "overheat or low_repair or failed_breakout or holding_next_step or risk_precedes or direct_actions or prepare"`
-  - `27 passed, 198 deselected`.
+- `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -k "low_repair_near_ma5 or failed_breakout_card or warning_breached_holding"`
+  - `3 passed, 223 deselected`.
+- `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -k "low_repair or failed_breakout or warning_breached_holding or holding_next_step or compact"`
+  - `11 passed, 215 deselected`.
 - Official dry-run via `generator.generate_report(dry_run=True)`
   - `messages=4`.
-  - `LOW_BUY_OLD_NOISE_ABSENT=True`.
-  - `LOW_BUY_COMPACT_PRESENT=True`.
-  - `NO_NO_EDGE_BACKTEST_SUMMARY=True`.
+  - `HAS_NEAR_BUY=True`.
+  - `HAS_WAIT_RECLAIM=True`.
+  - `INTRADAY_TOMORROW_LABEL=False`.
+
+## Full-Test Finding
+
+- Full `tests/test_generator_report.py` currently reports legacy expectation failures.
+- The failures are not new runtime errors; they are stale text expectations around old `淘汰`, `有效買點`, and `明日處理` wording.
+- QA does not use the full file as pass/fail for this task until those old specimens are separately updated or retired.
 
 ## Not Tested
 
@@ -55,4 +68,4 @@
 
 通過。
 
-The 06/24 user-visible buy-card readability issue is fixed on the formatter path and official dry-run path. This conclusion does not cover live Telegram delivery or DB writes, which were not part of this task.
+The current Owner-visible 06/24 report issues are fixed on formatter, funnel state, and official dry-run paths. This conclusion does not cover live Telegram delivery or the known legacy full-test cleanup.

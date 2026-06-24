@@ -3995,6 +3995,46 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("可買｜小倉", direct_card)
         self.assertIn("資料來源異常", direct_card)
 
+    def test_low_repair_near_ma5_shows_near_buy_not_generic_wait(self):
+        payload = {
+            "stock_code": "2301",
+            "price": 216.25,
+            "change": -3.24,
+            "price_source": "realtime",
+            "daily_source": "yahoo",
+            "result": {
+                "decision": "WAIT",
+                "action": 0,
+                "rr": 2.2,
+                "heat_state": "NORMAL",
+                "trade_state": "WAIT",
+                "structure_phase": "NORMAL",
+                "price_behavior": "NORMAL",
+                "market_grade": "D",
+                "volume_state": "NORMAL",
+                "volume_price_state": "NORMAL",
+                "structure_state": "NORMAL",
+                "entry_quality": "D",
+                "confidence_score": 55,
+                "breakout_distance": 16.18,
+                "breakout_trigger_price": 258,
+            },
+            "cross_day_context": db_price_context("2301", [205, 218, 219, 222, 222]),
+            "holding": None,
+            "structure_score": 2,
+            "volume_ratio": 1.82,
+        }
+
+        status = generator.daily_price_low_repair_status(payload)
+        self.assertFalse(status["ready"])
+        self.assertTrue(status["near_ready"])
+        card = generator.formatTelegramUnheldCard("光寶科", payload, report_phase="盤中")
+
+        self.assertIn("【光寶科 2301】👀 貼近可買｜低位修復接近成立", card)
+        self.assertIn("5日均 217.2 貼近（差 0.95 / 0.44%）", card)
+        self.assertIn("盤中觸發：站回5日均 217.2 可小倉；未站回先觀察", card)
+        self.assertNotIn("【光寶科 2301】⏳ 等低位修復｜低位修復觀察", card)
+
     def test_db_backed_rebound_pullback_waits_retest_not_trend_continuation(self):
         payload = {
             "stock_code": "2337",
@@ -4141,6 +4181,15 @@ class GeneratorReportTest(unittest.TestCase):
 
         self.assertIn("原因：已跌破警戒，未到停損", card)
         self.assertNotIn("未跌破風控", card)
+
+        intraday_card = presentation_report.formatTelegramPositionCard(
+            "建準",
+            payload,
+            deps=generator._telegram_presentation_deps(),
+            report_context=self.score_source_report_context("建準", "available", report_phase="盤中"),
+        )
+        self.assertIn("盤中處理：", intraday_card)
+        self.assertNotIn("明日處理：", intraday_card)
 
     def test_non_limit_overheat_breakout_does_not_say_limit_up(self):
         payload = {
@@ -10665,11 +10714,14 @@ class GeneratorReportTest(unittest.TestCase):
 
         card = generator.formatTelegramUnheldCard("旺宏", data, report_phase="盤中")
 
-        self.assertIn("突破失敗", card)
+        self.assertIn("【旺宏 2337】⏳ 等站回｜突破失敗", card)
         self.assertIn("放量回落", card)
-        self.assertIn("尚未站回突破區 175.5~176.38（現價 171.25，差 4.25）", card)
+        self.assertIn("等待：突破失敗，尚未站回突破區 175.5~176.38（現價 171.25，差 4.25）", card)
         self.assertIn("盤中觸發：重新站回突破區 175.5~176.38後再評估", card)
         self.assertNotIn("可買：重新站回突破區", card)
+        self.assertNotIn("不可買：突破失敗", card)
+        self.assertNotIn("交易狀態：", card)
+        self.assertNotIn("數據：", card)
         self.assertNotIn("攻擊量", card)
 
     def test_holding_next_step_uses_risk_prices_not_breakout_zone(self):
