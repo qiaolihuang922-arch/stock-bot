@@ -46,4 +46,4 @@
 
 ## Next Action
 
-- Commit and push this patch, then run git completion checks.
+- Report verification, hash, push target, and upstream equality.
