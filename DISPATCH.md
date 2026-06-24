@@ -3,7 +3,7 @@
 ## Active
 
 - task_md_holds: `report_actionability_readability_v21_1_20260624`
-- status: `implemented + QA passed, pending commit/push`
+- status: `implemented + QA passed + committed, pending push`
 - current_version: `v21.1`
 - live Telegram delivery: `not run`
 - DB schema change: `none`
@@ -26,8 +26,9 @@
 
 ## Current Git State
 
-- Pending commit / push.
+- Implementation commit created: `f3c4377`.
+- Pending push / git completion gate.
 
 ## Next Action
 
-- Commit, push, run git completion gate, then close out `DISPATCH.md` / `CURRENT_STATE.md`.
+- Push, run git completion gate, then close out `DISPATCH.md` / `CURRENT_STATE.md`.
