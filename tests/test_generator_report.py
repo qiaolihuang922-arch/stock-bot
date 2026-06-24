@@ -3800,8 +3800,8 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("低位修復：支撐 158", unheld)
         self.assertIn("5日均 159.4", unheld)
         self.assertIn("5日均 159.4 待站回（差 1.4）", unheld)
-        self.assertIn("量能 0.48x 待確認", unheld)
-        self.assertIn("明日觸發：守近期支撐 158 + 站回5日均 159.4 + 量能不失控", unheld)
+        self.assertIn("量能 0.48x 不足", unheld)
+        self.assertIn("明日觸發：站回5日均 159.4（差 1.4） + 量能不失控（目前 0.48x）", unheld)
         self.assertNotIn("不適用（不可行動）", unheld)
         self.assertNotIn("尚未接近突破區", unheld)
 
@@ -3897,7 +3897,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertEqual(generator.unheld_funnel_state("緯創", payload), "可準備")
         self.assertIn("【緯創 3231】👀 準備觀察｜低位修復成立", unheld)
         self.assertIn("狀態：低位修復條件成立；盤後不追價", unheld)
-        self.assertIn("低位修復：支撐 158 OK｜5日均 160.7 OK｜量能 1.06x OK", unheld)
+        self.assertIn("低位修復：支撐 158 OK｜5日均 160.7 OK｜量能 1.06x 剛好", unheld)
         self.assertIn("明日觸發：開盤不追高 + 守近期支撐 158 + 站回5日均 160.7 + 量能不失控", unheld)
         self.assertNotIn("【緯創 3231】⏳ 等低位修復", unheld)
         self.assertNotIn("路線：突破買點太遠，改看低位修復", unheld)
@@ -4030,7 +4030,8 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertTrue(status["near_ready"])
         card = generator.formatTelegramUnheldCard("光寶科", payload, report_phase="盤中")
 
-        self.assertIn("【光寶科 2301】👀 貼近可買｜低位修復接近成立", card)
+        self.assertIn("【光寶科 2301】👀 貼近條件｜等站回5日均", card)
+        self.assertNotIn("貼近可買", card)
         self.assertIn("5日均 217.2 貼近（差 0.95 / 0.44%）", card)
         self.assertIn("盤中觸發：站回5日均 217.2 可小倉；未站回先觀察", card)
         self.assertNotIn("【光寶科 2301】⏳ 等低位修復｜低位修復觀察", card)
@@ -10676,8 +10677,8 @@ class GeneratorReportTest(unittest.TestCase):
         }
         lines = presentation_report._low_repair_compact_lines(data)
 
-        self.assertEqual(lines[0], "低位修復：支撐 158 OK｜5日均 161.2 待站回（差 2.2）｜量能 1.06x OK")
-        self.assertEqual(lines[1], "觸發：守近期支撐 158 + 站回5日均 161.2 + 量能不失控")
+        self.assertEqual(lines[0], "低位修復：支撐 158 OK｜5日均 161.2 待站回（差 2.2）｜量能 1.06x 剛好")
+        self.assertEqual(lines[1], "觸發：站回5日均 161.2（差 2.2）")
 
     def test_rejected_card_suppresses_positive_repair_history(self):
         line = "歷史：前次 observe｜修復中｜連續觀察 12 天｜權重 +1"
@@ -10686,6 +10687,10 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertEqual(
             presentation_report._compact_unheld_history_line("歷史：前次 failed｜連續觀察 3 天", funnel_state="淘汰"),
             "歷史：前次 failed｜連續觀察 3 天",
+        )
+        self.assertEqual(
+            presentation_report._compact_unheld_history_line("歷史：前次 eliminated｜修復中｜連續觀察 20 天｜權重 +1", funnel_state="等站回"),
+            "歷史：前次淘汰後修復中",
         )
 
     def test_rejected_primary_reason_never_returns_observe_placeholder(self):
@@ -10723,6 +10728,30 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("交易狀態：", card)
         self.assertNotIn("數據：", card)
         self.assertNotIn("攻擊量", card)
+
+    def test_failed_breakout_within_reclaim_buffer_waits_reclaim_not_terminal_reject(self):
+        data = {
+            "price": 166.0,
+            "change": -7.0,
+            "retest_zone_low": 175.5,
+            "retest_zone_high": 176.38,
+            "volume_ratio": 1.2,
+            "result": {
+                "decision": "FAIL",
+                "structure_phase": "FAILED_BREAKOUT",
+                "price_behavior": "FAILED_BREAKOUT",
+                "blockers": ["突破失敗"],
+                "breakout_distance": 5.72,
+                "entry_quality": "D",
+            },
+        }
+
+        self.assertEqual(generator.unheld_funnel_state("旺宏", data), "等站回")
+        card = generator.formatTelegramUnheldCard("旺宏", data, report_phase="盤中")
+
+        self.assertIn("【旺宏 2337】⏳ 等站回｜突破失敗", card)
+        self.assertIn("等待：突破失敗，尚未站回突破區 175.5~176.38", card)
+        self.assertNotIn("⛔ 淘汰", card)
 
     def test_holding_next_step_uses_risk_prices_not_breakout_zone(self):
         decision = {

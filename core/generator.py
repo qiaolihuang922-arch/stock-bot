@@ -777,7 +777,7 @@ def has_daily_price_repair_basis(data, min_points=4):
 
 
 LOW_REPAIR_MA5_NEAR_TOLERANCE_PCT = 0.8
-FAILED_BREAKOUT_RECLAIM_WAIT_DISTANCE_PCT = 5.0
+FAILED_BREAKOUT_RECLAIM_WAIT_DISTANCE_PCT = 7.0
 
 
 def _numeric_breakout_distance(data, result=None):
@@ -8623,7 +8623,7 @@ def format_backtest_groups(watch_items, report_context=None):
     lines = []
     for name, data in (watch_items or []):
         state = unheld_funnel_state(name, data, report_context=report_context)
-        if state not in {"可買", "趨勢延續", "可準備"}:
+        if state not in {"可買", "趨勢延續"}:
             continue
         line = compact_backtest_line((data or {}).get("backtest_context"))
         if (

@@ -2,8 +2,8 @@
 
 ## Current Task
 
-- task_id: `intraday_report_state_readability_v21_1_20260624`
-- status: `implemented + QA passed`
+- task_id: `report_actionability_readability_v21_1_20260624`
+- status: `implemented + QA passed, pending commit/push`
 - version: `v21.1`
 - live Telegram delivery: not run
 - DB schema change: none
@@ -15,28 +15,38 @@
 - Cross-day state must come from production DB or an approved persistent source, not agent memory.
 - DB structure changes require Owner approval.
 - No live Telegram delivery without separate Owner approval.
-- `貼近可買` is not a buy signal; it means only one small condition remains.
+- `貼近條件` is not a buy signal; only `可買` is actionable.
 
 ## Current Implementation State
 
-- Holding cards:
-  - `盤中` -> `盤中處理`
-  - `盤前` -> `盤前處理`
-  - after-hours / close -> `明日處理`
 - Low-repair near-ready:
-  - computed from DB-backed daily price context.
-  - requires all low-repair conditions except reclaiming 5-day MA.
-  - only displays near-ready when 5-day MA gap is within 0.8%.
+  - title uses `貼近條件｜等站回5日均`.
+  - trigger names only the missing gate.
+  - volume label uses qualitative wording.
 - Failed breakout reclaim:
-  - requires a real reclaim anchor from `retest_zone_low`, `breakout_trigger_price`, or `breakout_price`.
-  - within 5% becomes `等站回`, not `淘汰`.
-  - no anchor means it stays blocked; no fake zone is invented.
+  - requires a real reclaim anchor.
+  - within 7% becomes `等站回`.
+  - 5%~7% distance line displays `站回觀察`.
+- Summary:
+  - no `執行動作 0`.
+  - no `今日新建倉 0`.
+  - no standalone backtest line for non-actionable prepare-only cards.
+- History:
+  - no raw `前次 eliminated` or `權重 +1` wording in official dry-run.
 
 ## Verification State
 
-- Focused current-contract tests: `3 passed, 223 deselected`.
-- Broader related subset: `11 passed, 215 deselected`.
-- Official dry-run: `messages=4`; `HAS_NEAR_BUY=True`; `HAS_WAIT_RECLAIM=True`; `INTRADAY_TOMORROW_LABEL=False`.
+- Focused current-contract tests: `5 passed, 222 deselected`.
+- Broader related subset: `10 passed, 217 deselected`.
+- Official dry-run:
+  - `messages=4`.
+  - `HAS_NEAR_BUY=False`.
+  - `HAS_NEAR_CONDITION=True`.
+  - `HAS_WAIT_RECLAIM=True`.
+  - `HAS_ELIMINATED=False`.
+  - `HAS_BACKTEST_STANDALONE=False`.
+  - `HAS_ZERO_ACTION=False`.
+  - `INTRADAY_TOMORROW_LABEL=False`.
 - No production DB data was changed.
 
 ## Known Findings
@@ -46,4 +56,4 @@
 
 ## Next Action
 
-- Report verification, hash, push target, and upstream equality.
+- Commit, push, run git completion gate, then close out `DISPATCH.md` / `CURRENT_STATE.md`.

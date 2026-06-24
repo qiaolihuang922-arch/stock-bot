@@ -418,6 +418,20 @@ def _gate_gap_text(value, threshold):
     return _gate_value_text(gap)
 
 
+def _volume_quality_text(value):
+    try:
+        ratio = float(value)
+    except (TypeError, ValueError):
+        return "待確認"
+    if ratio < 1:
+        return "不足"
+    if ratio < 1.1:
+        return "剛好"
+    if ratio < 1.5:
+        return "有效"
+    return "攻擊量"
+
+
 def _volume_window_text(data):
     v10 = _gate_value_text((data or {}).get("volume_ratio_10") or (data or {}).get("volume_ratio"))
     v20 = _gate_value_text((data or {}).get("volume_ratio_20"))
@@ -740,7 +754,7 @@ def _low_repair_compact_lines(data, *, trigger_label="觸發"):
             observe_parts.append(f"5日均 {_gate_value_text(ma5)} 待站回{gap_suffix(ma5)}")
     if volume_ratio is not None:
         observe_parts.append(
-            f"量能 {_gate_value_text(volume_ratio)}x {'OK' if volume_ratio >= 1 else '待確認'}"
+            f"量能 {_gate_value_text(volume_ratio)}x {_volume_quality_text(volume_ratio)}"
         )
 
     missing = []
@@ -759,20 +773,18 @@ def _low_repair_compact_lines(data, *, trigger_label="觸發"):
     if observe_parts:
         lines.append("低位修復：" + "｜".join(observe_parts))
 
-    buy_parts = []
-    if support is not None:
-        buy_parts.append(f"守近期支撐 {_gate_value_text(support)}")
-    if ma5 is not None:
-        buy_parts.append(f"站回5日均 {_gate_value_text(ma5)}")
-    buy_parts.append("量能不失控")
-    if rr_value is None or rr_value < 1.5:
-        buy_parts.append("風險報酬 >= 1.5")
     if near_ready and ma5 is not None:
         lines.append(f"{trigger_label}：站回5日均 {_gate_value_text(ma5)} 可小倉；未站回先觀察")
     elif missing:
-        lines.append(f"{trigger_label}：" + " + ".join(buy_parts))
+        lines.append(f"{trigger_label}：" + " + ".join(missing))
     else:
-        lines.append(f"{trigger_label}：開盤不追高 + " + " + ".join(buy_parts))
+        ready_parts = ["開盤不追高"]
+        if support is not None:
+            ready_parts.append(f"守近期支撐 {_gate_value_text(support)}")
+        if ma5 is not None:
+            ready_parts.append(f"站回5日均 {_gate_value_text(ma5)}")
+        ready_parts.append("量能不失控")
+        lines.append(f"{trigger_label}：" + " + ".join(ready_parts))
     return lines
 
 
@@ -1964,10 +1976,19 @@ def _compact_unheld_history_line(line, *, funnel_state=None):
     if not line:
         return None
     text = str(line)
+    if "前次 eliminated" in text:
+        if "修復中" in text:
+            return "歷史：前次淘汰後修復中"
+        return "歷史：前次淘汰後觀察"
+    if "前次 observe" in text:
+        if funnel_state in {"淘汰", "等站回"}:
+            return None
+        if "修復中" in text:
+            return "歷史：觀察後修復中"
+        return None
     if funnel_state == "淘汰":
         if (
-            "前次 eliminated" in text
-            or "前次 failed" in text
+            "前次 failed" in text
             or "已買" in text
             or "已賣" in text
             or "停損" in text
@@ -2021,6 +2042,12 @@ def _breakout_distance_line(dist, data=None, funnel_state=None, title_label=None
     label = _breakout_distance_label(dist)
     if not label:
         return None
+    if funnel_state == "等站回":
+        try:
+            if 5 < float(dist) <= 7:
+                label = "站回觀察"
+        except (TypeError, ValueError):
+            pass
     stock_result = (data or {}).get("result") or {}
     blocker_text = " ".join(str(item) for item in (stock_result.get("blockers") or []))
     context_text = " ".join([
@@ -2351,7 +2378,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         title_label = "反彈修復待回測"
     elif funnel_state == "等低位修復":
         low_repair_status = data.get("low_repair_status") or {}
-        title_label = "低位修復接近成立" if low_repair_status.get("near_ready") else "低位修復觀察"
+        title_label = "等站回5日均" if low_repair_status.get("near_ready") else "低位修復觀察"
     elif funnel_state == "等站回":
         title_label = "突破失敗"
     elif deps["is_valid_entry"](stock_result) and strategy_source_blocked:
@@ -2368,6 +2395,13 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         title_label = prepare_label
     if title_label == "RR不足":
         title_label = "風險報酬不足"
+    if (
+        title_label == "風險報酬不足"
+        and not valid_entry
+        and distance_value is not None
+        and distance_value <= 0
+    ):
+        title_label = "追價不划算"
     overheat_change = _float_or_none(data.get("change"))
     overheat_pullback_display = (
         not valid_entry
@@ -2415,7 +2449,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         title_action = "準備觀察" if data.get("evidence_adjustment_reason") else deps["unheld_non_actionable_prepare_label"](data)
     elif funnel_state == "等低位修復" and (data.get("low_repair_status") or {}).get("near_ready"):
         title_icon = "👀"
-        title_action = "貼近可買"
+        title_action = "貼近條件"
     elif state in ["等冷卻", "等市場", "等接近", "等低位修復", "等型態", "等回測", "等站回", "等資料"]:
         title_icon = "⏳"
         title_action = state
@@ -2917,13 +2951,14 @@ def _compact_market_overview_line(holding_items, watch_items, report_context, de
             today_entry_text += f"（{'/'.join(today_parts)}）"
     else:
         today_entry_text = f"今日新建倉 {today_new_entry_count}"
-    parts = [
-        f"市場：{market_mode} {risk_level}",
-        f"執行動作 {pending_count}{action_suffix}",
-        today_entry_text,
-        f"持倉風控 {len(holding_items)}",
-        f"未持倉 {unheld_count}" + (f"（{'/'.join(unheld_parts)}）" if unheld_parts else ""),
-    ]
+    parts = [f"市場：{market_mode} {risk_level}"]
+    if pending_count:
+        parts.append(f"執行動作 {pending_count}{action_suffix}")
+    if today_new_entry_count:
+        parts.append(today_entry_text)
+    if holding_items:
+        parts.append(f"持倉風控 {len(holding_items)}")
+    parts.append(f"未持倉 {unheld_count}" + (f"（{'/'.join(unheld_parts)}）" if unheld_parts else ""))
     if new_entry_count:
         parts.insert(2, f"新倉建議 {new_entry_count}")
     if trend_count:

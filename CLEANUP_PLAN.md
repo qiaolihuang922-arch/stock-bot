@@ -2,6 +2,12 @@
 
 ## Completed This Cycle
 
+- Replaced misleading `貼近可買` with non-actionable `貼近條件｜等站回5日均`.
+- Changed low-repair trigger lines to list only missing gates.
+- Replaced vague volume `OK / 待確認` labels with `不足 / 剛好 / 有效 / 攻擊量`.
+- Expanded real-zone failed-breakout reclaim watch from 5% to 7% and aligned the distance label to `站回觀察` in the buffer.
+- Hid / translated engineering history terms such as `前次 eliminated`.
+- Removed zero-count summary noise and non-actionable standalone backtest snippets.
 - Added phase-aware holding handling labels so intraday reports do not say `明日處理`.
 - Added low-repair near-ready display for cases that only miss the 5-day MA by a small gap.
 - Added `等站回` for failed-breakout cards that have a real reclaim zone and are close enough to watch.
@@ -31,6 +37,10 @@
 
 ## Post-Cycle Review
 
+- 2026-06-24 addendum:
+  - Root cause: prior readability fixes kept strategy labels but did not separate actionability levels strongly enough for mobile reading.
+  - Risk category: repeated_pattern + mobile_readability + state_contract.
+  - Guard added: official dry-run now checks absence of `貼近可買`, raw `前次 eliminated`, zero-count summary lines, and non-actionable standalone backtest lines.
 - 2026-06-24 addendum:
   - Root cause: actionable buy cards were not routed through the same compact mobile contract as wait cards, so the first real buy signal carried legacy duplicate lines.
   - Risk category: repeated_pattern + mobile_readability.

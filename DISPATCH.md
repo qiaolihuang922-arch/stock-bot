@@ -2,8 +2,8 @@
 
 ## Active
 
-- task_md_holds: `intraday_report_state_readability_v21_1_20260624`
-- status: `implemented + QA passed`
+- task_md_holds: `report_actionability_readability_v21_1_20260624`
+- status: `implemented + QA passed, pending commit/push`
 - current_version: `v21.1`
 - live Telegram delivery: `not run`
 - DB schema change: `none`
@@ -11,22 +11,23 @@
 
 ## Result Summary
 
-- Intraday holding cards now use `盤中處理` instead of `明日處理`.
-- Low-repair near-ready cards now show `貼近可買｜低位修復接近成立` when the only missing condition is reclaiming the 5-day MA within the configured tolerance.
-- Failed-breakout cards with a real reclaim zone and distance within 5% now show `等站回｜突破失敗`, not terminal `淘汰`.
-- `等站回` cards are compact and do not show duplicate trade-state / data lines.
+- Low-repair near-ready no longer says `貼近可買`; it now says `貼近條件｜等站回5日均`.
+- Low-repair trigger lines now list only the missing gates.
+- Volume display now uses `不足 / 剛好 / 有效 / 攻擊量`.
+- Failed-breakout reclaim watch band is now 7% when a real reclaim zone exists.
+- Engineering history terms such as `前次 eliminated` no longer appear in the user-facing report.
+- Summary no longer shows zero-count action lines or standalone backtest snippets for non-actionable prepare-only cards.
 
 ## Verification
 
-- Focused current-contract tests: `3 passed, 223 deselected`.
-- Broader related subset: `11 passed, 215 deselected`.
-- Official dry-run: `messages=4`; `HAS_NEAR_BUY=True`; `HAS_WAIT_RECLAIM=True`; `INTRADAY_TOMORROW_LABEL=False`.
+- Focused current-contract tests: `5 passed, 222 deselected`.
+- Broader related subset: `10 passed, 217 deselected`.
+- Official dry-run: `messages=4`; `HAS_NEAR_BUY=False`; `HAS_NEAR_CONDITION=True`; `HAS_WAIT_RECLAIM=True`; `HAS_ELIMINATED=False`; `HAS_ZERO_ACTION=False`; `INTRADAY_TOMORROW_LABEL=False`.
 
 ## Current Git State
 
-- Committed and pushed to `origin/main`.
-- Latest implementation commit: `b67757e`.
+- Pending commit / push.
 
 ## Next Action
 
-- Report verification, hash, push target, and upstream equality.
+- Commit, push, run git completion gate, then close out `DISPATCH.md` / `CURRENT_STATE.md`.
