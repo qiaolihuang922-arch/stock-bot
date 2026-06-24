@@ -3,7 +3,7 @@
 ## Current Task
 
 - task_id: `report_actionability_consistency_v21_1_20260624`
-- status: `implemented + QA passed + pushed`
+- status: `follow-up implemented + QA passed`
 - version: `v21.1`
 - live Telegram delivery: not run
 - DB schema change: none
@@ -28,12 +28,21 @@
   - shows chase-risk wording instead of raw tiny RR gap.
 - Failed breakout:
   - reclaim label considers absolute price gap for user readability.
+- Warning-breached holdings:
+  - card decision says `警戒觀察，不加碼`.
+  - `輕虧不加碼` is suppressed once warning is breached.
+- Low-repair actionable cards:
+  - market line says `低位修復成立｜小倉觀察｜量能分級`.
 
 ## Verification State
 
 - `12 passed, 219 deselected` for focused report tests.
 - `2 passed, 229 deselected` for adjacent message grouping tests.
 - Official dry-run smoke passed old-string checks.
+- Follow-up official dry-run smoke passed:
+  - no warning-breached light-loss conflict.
+  - no low-repair buy card with weak market headline.
+  - no raw tiny RR chase-risk gap.
 - No production DB data was changed.
 
 ## Known Findings
@@ -43,4 +52,4 @@
 
 ## Next Action
 
-- None for this task.
+- Commit and push follow-up report consistency patch, then run git completion checks.

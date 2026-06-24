@@ -13,6 +13,9 @@
   - 已突破但 RR 不足時改成 `已突破但追價風險過高`，等待回測後修復。
   - `等站回` 在絕對價差大於 10 時顯示 `站回距離偏大`。
   - 低位修復可買卡改為 `可買：小倉試單｜不追價`，並列失效線。
+  - 跌破警戒但未到停損的持倉改顯示 `警戒觀察，不加碼`，不再混用 `輕虧不加碼`。
+  - 低位修復可買卡的盤面改顯示 `低位修復成立｜小倉觀察｜量能分級`。
+  - 突破失敗站回距離改為全域檢查絕對價差；即使百分比接近，只要價差仍大就顯示 `站回距離偏大`。
 - `tests/test_generator_report.py`
   - 更新低位修復、RR 追價、突破站回距離與可買卡測試。
   - 新增支撐跌破與 0.9x 量能反證。
@@ -22,6 +25,8 @@
 - 低位修復的量能判斷不再要求必須大於 1.0x；`0.8x~1.0x` 為偏低但未失控。
 - `support_broken` 成為 presentation 可用狀態欄位。
 - 使用者可見 RR 極低情境改為語意說明，不再主顯示 raw RR gap。
+- 持倉警戒狀態優先於一般續抱文案。
+- 低位修復可買卡的盤面文字跟隨可買 route，而不是只沿用弱勢背景。
 - 報文排序與分組沒有新增 bucket。
 - DB 寫入契約無變更。
 
@@ -49,15 +54,16 @@
 - `.\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py -k "telegram_messages_use_summary_cards_and_detail or unheld_cards_follow_summary_group_order" -q`
   - Result: `2 passed, 229 deselected`
 - `generate_report(dry_run=True)` smoke:
-  - `HAS_NEAR_BUY=False`
-  - `HAS_RAW_ELIMINATED=False`
-  - `HAS_OLD_LOW_BUY=False`
-  - `HAS_SUPPORT_WAIT_WHEN_BROKEN_SAMPLE=False`
-  - `MESSAGE_COUNT=4`
+  - `HAS_LIGHT_LOSS_WITH_WARNING=False`
+  - `HAS_LOW_REPAIR_WEAK_MARKET_BUY=False`
+  - `HAS_RAW_TINY_RR_CHASE=False`
+  - `MESSAGE_COUNT=1`
+- Follow-up focused report tests:
+  - `13 passed, 218 deselected`
 
 ## 覆蓋層級
 
-- helper: `_low_repair_compact_lines`, `_breakout_distance_line`, `_entry_check_lines`。
+- helper: `_low_repair_compact_lines`, `_breakout_distance_line`, `_entry_check_lines`, `_holding_action_contract`。
 - formatter: `formatTelegramUnheldCard`。
 - official generator path: `formatTelegramMessages` related tests and `generate_report(dry_run=True)` smoke。
 - production source: read-only dry-run only; no DB writes.

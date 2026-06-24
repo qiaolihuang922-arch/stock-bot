@@ -3947,7 +3947,9 @@ class GeneratorReportTest(unittest.TestCase):
         card = card_block(unheld, "【緯創 3231】")
 
         self.assertIn("【緯創 3231】🟢 可買｜小倉｜低位修復成立", card)
+        self.assertIn("盤面：低位修復成立｜小倉觀察｜剛好", card)
         self.assertNotIn("交易狀態：可買｜動作：小倉試單", card)
+        self.assertNotIn("盤面：弱勢｜弱勢", card)
         self.assertNotIn("買點：可買｜低位修復小倉", card)
         self.assertIn("可買：小倉試單｜不追價", card)
         self.assertIn("低位修復：支撐", card)
@@ -4183,7 +4185,9 @@ class GeneratorReportTest(unittest.TestCase):
         )
 
         self.assertIn("原因：已跌破警戒，未到停損", card)
+        self.assertIn("決策：警戒觀察，不加碼", card)
         self.assertNotIn("未跌破風控", card)
+        self.assertNotIn("輕虧不加碼", card)
 
         intraday_card = presentation_report.formatTelegramPositionCard(
             "建準",
@@ -10835,6 +10839,14 @@ class GeneratorReportTest(unittest.TestCase):
         )
 
         self.assertEqual(line, "距突破：6.99%｜站回距離偏大")
+
+        large_absolute_gap_line = presentation_report._breakout_distance_line(
+            4.78,
+            data={"price": 440.75, "retest_zone_low": 459.5, "retest_zone_high": 461.8},
+            funnel_state="等站回",
+        )
+
+        self.assertEqual(large_absolute_gap_line, "距突破：4.78%｜站回距離偏大")
 
     def test_holding_next_step_uses_risk_prices_not_breakout_zone(self):
         decision = {

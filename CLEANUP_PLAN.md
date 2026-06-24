@@ -13,6 +13,7 @@
 - Removed raw tiny RR gap from chase-risk cards.
 - Added report-layer tests for the recurring mobile-reading failures.
 - Rewrote active handoff docs to UTF-8 readable Chinese.
+- Added follow-up checks for warning-breached holdings, low-repair actionable market text, and large absolute reclaim gaps.
 
 ## Deferred / Not In Scope
 

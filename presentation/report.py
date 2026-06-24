@@ -1694,6 +1694,12 @@ def _score_gated_market_line(report_context, name, data, dist, deps):
         market_text = deps["plain_label"](deps["compact_market_line"](stock_result, dist))
         market_text = _strip_breakout_position_segment(market_text)
         market_text = _adjust_market_text_by_recent_price_transition(market_text, data)
+        low_repair_status = (data or {}).get("low_repair_status") or {}
+        if (data or {}).get("low_repair_intraday_buy_ready") or low_repair_status.get("ready"):
+            volume_label = _volume_quality_text(
+                low_repair_status.get("volume_ratio") or (data or {}).get("volume_ratio")
+            )
+            return f"盤面：低位修復成立｜小倉觀察｜{volume_label}"
         blockers = set(stock_result.get("blockers") or [])
         failed_breakout = (
             stock_result.get("structure_phase") == "FAILED_BREAKOUT"
@@ -2089,9 +2095,11 @@ def _breakout_distance_line(dist, data=None, funnel_state=None, title_label=None
         return None
     if funnel_state == "等站回":
         try:
-            if 5 < float(dist) <= 7:
-                abs_gap = _breakout_reclaim_abs_gap(data)
-                label = "站回距離偏大" if abs_gap is not None and abs_gap > 10 else "站回觀察"
+            abs_gap = _breakout_reclaim_abs_gap(data)
+            if abs_gap is not None and abs_gap > 10:
+                label = "站回距離偏大"
+            elif 5 < float(dist) <= 7:
+                label = "站回觀察"
         except (TypeError, ValueError):
             pass
     stock_result = (data or {}).get("result") or {}
@@ -2171,6 +2179,10 @@ def _holding_action_contract(summary_action, decision_line, reason_line, conditi
     warning_breach = _holding_warning_breach_text(data, decision)
     if warning_breach and "未跌破風控" in risk_text:
         risk_text = warning_breach
+    if warning_breach and action in {"續抱觀察", "風控觀察"}:
+        decision_text = "警戒觀察，不加碼"
+        risk_text = warning_breach
+        next_text = "收復警戒才恢復觀察；跌破停損優先風控"
     combined_text = " ".join([action, decision_text, risk_text, condition_text, next_text])
 
     if "停利記憶不足" in combined_text or "execution memory 不足" in combined_text:
