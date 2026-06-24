@@ -1616,11 +1616,11 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【持倉標的】", position_message(messages))
         self.assertIn("倉位：50股", position_message(messages))
         self.assertIn("【未持倉標的】", unheld_message(messages))
-        self.assertIn("【建準 2421】👀 等風險報酬｜風險報酬不足", unheld_message(messages))
-        self.assertIn("進場：不買，等風險報酬達標｜原因：風險報酬還不夠", unheld_message(messages))
-        self.assertIn("盤中觸發：風險報酬修復至達標，不追高", unheld_message(messages))
+        self.assertIn("【建準 2421】👀 等風險報酬｜追價不划算", unheld_message(messages))
+        self.assertIn("狀態：已突破但追價風險過高", unheld_message(messages))
+        self.assertIn("盤中觸發：回測後風險報酬 >= 1.5", unheld_message(messages))
         self.assertNotIn("策略樣本：不可用，本次不納入判斷", unheld_message(messages))
-        self.assertIn("市場：進攻偏熱 R3｜執行動作 1（加碼10）｜今日新建倉 0｜持倉風控 1｜未持倉 1（僅追蹤1）", summary_message(messages))
+        self.assertIn("市場：進攻偏熱 R3｜執行動作 1（加碼10）｜持倉風控 1｜未持倉 1（僅追蹤1）", summary_message(messages))
         self.assertNotIn("📌 持倉：智原", summary_message(messages))
         self.assertNotIn("原因：持倉多數依風控處理，新倉無有效進場。", summary_message(messages))
         self.assertNotIn("風險：持倉：hard_stop 永不豁免", summary_message(messages))
@@ -2935,7 +2935,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertLess(unheld_msg.index("【聯電 2303】"), unheld_msg.index("【光寶科 2301】"))
         self.assertLess(unheld_msg.index("【光寶科 2301】"), unheld_msg.index("【建準 2421】"))
         self.assertLess(unheld_msg.index("【建準 2421】"), unheld_msg.index("【旺宏 2337】"))
-        self.assertIn("【聯電 2303】👀 等風險報酬｜漲停不追", unheld_msg)
+        self.assertIn("【聯電 2303】⏳ 等回測｜漲停不追", unheld_msg)
         self.assertIn("【光寶科 2301】⏳ 等冷卻｜過熱觀察", unheld_msg)
         self.assertIn("【建準 2421】👀 等風險報酬", unheld_msg)
         self.assertIn("【旺宏 2337】⛔ 淘汰", unheld_msg)
@@ -3801,7 +3801,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("5日均 159.4", unheld)
         self.assertIn("5日均 159.4 待站回（差 1.4）", unheld)
         self.assertIn("量能 0.48x 不足", unheld)
-        self.assertIn("明日觸發：站回5日均 159.4（差 1.4） + 量能不失控（目前 0.48x）", unheld)
+        self.assertIn("明日觸發：站回5日均 159.4（差 1.4） + 量能回穩到 0.8x（目前 0.48x）", unheld)
         self.assertNotIn("不適用（不可行動）", unheld)
         self.assertNotIn("尚未接近突破區", unheld)
 
@@ -3949,9 +3949,11 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【緯創 3231】🟢 可買｜小倉｜低位修復成立", card)
         self.assertNotIn("交易狀態：可買｜動作：小倉試單", card)
         self.assertNotIn("買點：可買｜低位修復小倉", card)
-        self.assertIn("小倉：可試單｜守支撐/5日均｜不追價", card)
+        self.assertIn("可買：小倉試單｜不追價", card)
         self.assertIn("低位修復：支撐", card)
-        self.assertIn("盤中觸發：守支撐/5日均 + 量能不失控，小倉試單", card)
+        self.assertIn("失效：跌破支撐", card)
+        self.assertIn("盤中觸發：守支撐", card)
+        self.assertIn("量能不失控，小倉試單", card)
         self.assertNotIn("數據：風險報酬 2.2｜低位修復條件成立｜V 1.06x", card)
         self.assertNotIn("理由：低位修復盤中條件成立；小倉試單，不追價。", card)
         self.assertIn("新倉建議", summary)
@@ -10680,6 +10682,78 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertEqual(lines[0], "低位修復：支撐 158 OK｜5日均 161.2 待站回（差 2.2）｜量能 1.06x 剛好")
         self.assertEqual(lines[1], "觸發：站回5日均 161.2（差 2.2）")
 
+    def test_low_repair_broken_support_requires_reclaim_not_hold(self):
+        data = {
+            "price": 156.25,
+            "volume_ratio": 1.0,
+            "result": {"rr": 2.0},
+            "low_repair_status": {
+                "support": 158.0,
+                "ma5": 161.3,
+                "volume_ratio": 1.0,
+                "rr": 2.0,
+                "latest_price": 156.25,
+                "support_broken": True,
+            },
+        }
+        lines = presentation_report._low_repair_compact_lines(data, trigger_label="盤中觸發")
+
+        self.assertIn("支撐 158 已跌破（差 1.75）", lines[0])
+        self.assertIn("盤中觸發：重新站回支撐 158（差 1.75） + 站回5日均 161.3（差 5.05）", lines[1])
+        self.assertNotIn("守住支撐", "\n".join(lines))
+
+    def test_low_repair_volume_09_is_low_but_not_blocking(self):
+        data = {
+            "price": 162.0,
+            "volume_ratio": 0.9,
+            "result": {"rr": 2.0},
+            "low_repair_status": {
+                "support": 158.0,
+                "ma5": 161.3,
+                "volume_ratio": 0.9,
+                "rr": 2.0,
+                "latest_price": 162.0,
+            },
+        }
+        lines = presentation_report._low_repair_compact_lines(data, trigger_label="盤中觸發")
+
+        self.assertIn("量能 0.9x 偏低未失控", lines[0])
+        self.assertNotIn("量能不失控（目前 0.9x）", "\n".join(lines))
+
+    def test_breakout_with_low_rr_explains_chase_risk_not_raw_rr_gap(self):
+        data = {
+            "price": 227.75,
+            "retest_zone_low": 214.0,
+            "retest_zone_high": 215.0,
+            "result": {
+                "rr": 0.02,
+                "blockers": ["RR不足"],
+                "entry_quality": "D",
+            },
+        }
+        contract = presentation_report._unheld_entry_contract(
+            data,
+            -6.89,
+            data["result"]["blockers"],
+            False,
+            "等RR修復",
+            "available",
+            False,
+            title_label="追價不划算",
+        )
+        lines = presentation_report._entry_check_lines(
+            "買點：不買，等風險報酬達標",
+            contract,
+            funnel_state="等RR修復",
+            data=data,
+            trigger_label="盤中觸發",
+        )
+
+        text = "\n".join(lines)
+        self.assertIn("狀態：已突破但追價風險過高", text)
+        self.assertIn("盤中觸發：回測後風險報酬 >= 1.5", text)
+        self.assertNotIn("風險報酬 0.02→1.5", text)
+
     def test_rejected_card_suppresses_positive_repair_history(self):
         line = "歷史：前次 observe｜修復中｜連續觀察 12 天｜權重 +1"
 
@@ -10752,6 +10826,15 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【旺宏 2337】⏳ 等站回｜突破失敗", card)
         self.assertIn("等待：突破失敗，尚未站回突破區 175.5~176.38", card)
         self.assertNotIn("⛔ 淘汰", card)
+
+    def test_failed_breakout_reclaim_label_respects_absolute_gap(self):
+        line = presentation_report._breakout_distance_line(
+            6.99,
+            data={"price": 205.25, "retest_zone_low": 218.5, "retest_zone_high": 219.59},
+            funnel_state="等站回",
+        )
+
+        self.assertEqual(line, "距突破：6.99%｜站回距離偏大")
 
     def test_holding_next_step_uses_risk_prices_not_breakout_zone(self):
         decision = {

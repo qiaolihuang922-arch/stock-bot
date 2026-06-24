@@ -423,8 +423,10 @@ def _volume_quality_text(value):
         ratio = float(value)
     except (TypeError, ValueError):
         return "待確認"
-    if ratio < 1:
+    if ratio < 0.8:
         return "不足"
+    if ratio < 1:
+        return "偏低未失控"
     if ratio < 1.1:
         return "剛好"
     if ratio < 1.5:
@@ -540,6 +542,14 @@ def _breakout_reclaim_gap_text(data):
     if price is not None:
         return f"尚未站穩{zone}（現價 {_gate_value_text(price)}）"
     return f"尚未站回{zone}"
+
+
+def _breakout_reclaim_abs_gap(data):
+    low = _float_or_none((data or {}).get("retest_zone_low"))
+    price = _float_or_none((data or {}).get("price"))
+    if low is None or price is None or price >= low:
+        return None
+    return low - price
 
 
 def _retest_unlock_text(data):
@@ -742,6 +752,8 @@ def _low_repair_compact_lines(data, *, trigger_label="觸發"):
     if support is not None:
         if latest_price is not None and latest_price >= support:
             observe_parts.append(f"支撐 {_gate_value_text(support)} OK")
+        elif latest_price is not None:
+            observe_parts.append(f"支撐 {_gate_value_text(support)} 已跌破{gap_suffix(support)}")
         else:
             observe_parts.append(f"支撐 {_gate_value_text(support)} 待守")
     if ma5 is not None:
@@ -759,13 +771,13 @@ def _low_repair_compact_lines(data, *, trigger_label="觸發"):
 
     missing = []
     if support is not None and latest_price is not None and latest_price < support:
-        missing.append(f"守住支撐 {_gate_value_text(support)}{gap_suffix(support)}")
+        missing.append(f"重新站回支撐 {_gate_value_text(support)}{gap_suffix(support)}")
     if ma5 is not None and latest_price is not None and latest_price < ma5:
         missing.append(f"站回5日均 {_gate_value_text(ma5)}{gap_suffix(ma5)}")
     if volume_ratio is None:
         missing.append("量能確認")
-    elif volume_ratio < 1:
-        missing.append(f"量能不失控（目前 {_gate_value_text(volume_ratio)}x）")
+    elif volume_ratio < 0.8:
+        missing.append(f"量能回穩到 0.8x（目前 {_gate_value_text(volume_ratio)}x）")
     if rr_value is not None and rr_value < 1.5:
         missing.append(f"風險報酬到 1.5（目前 {_gate_value_text(rr_value)}）")
 
@@ -800,10 +812,24 @@ def _holding_handling_label(report_context):
 def _low_repair_actionable_lines(data, *, trigger_label="觸發"):
     compact_lines = _low_repair_compact_lines(data, trigger_label=trigger_label) or []
     snapshot = next((line for line in compact_lines if str(line).startswith("低位修復：")), None)
+    status = (data or {}).get("low_repair_status") or {}
+    support = _gate_value_text(status.get("support"))
+    ma5 = _gate_value_text(status.get("ma5"))
+    control_parts = []
+    invalid_parts = []
+    if support:
+        control_parts.append(f"守支撐 {support}")
+        invalid_parts.append(f"支撐 {support}")
+    if ma5:
+        control_parts.append(f"守5日均 {ma5}")
+        invalid_parts.append(f"5日均 {ma5}")
+    control_text = " / ".join(control_parts) if control_parts else "守支撐/5日均"
+    invalid_text = " / ".join(invalid_parts) if invalid_parts else "支撐/5日均"
     return [
-        "小倉：可試單｜守支撐/5日均｜不追價",
+        "可買：小倉試單｜不追價",
         snapshot,
-        f"{trigger_label}：守支撐/5日均 + 量能不失控，小倉試單",
+        f"失效：跌破{invalid_text}轉觀察",
+        f"{trigger_label}：{control_text} + 量能不失控，小倉試單",
     ]
 
 
@@ -1292,6 +1318,17 @@ def _unheld_entry_contract(data, dist, blockers, valid_entry, funnel_state, sour
 
     rr_text = _gate_value_text(stock_result.get("rr"))
     if not is_actionable and rr_text and ("RR不足" in blocker_text or float(rr_text) < 1.5):
+        try:
+            distance_value_for_rr = float(str(dist).replace("%", "").strip())
+        except (TypeError, ValueError):
+            distance_value_for_rr = None
+        if distance_value_for_rr is not None and distance_value_for_rr <= 0:
+            return contract(
+                "已突破但追價風險過高",
+                "等回測後風險報酬修復",
+                "回測後風險報酬 >= 1.5",
+                basis="",
+            )
         rr_gap = f"RR {rr_text}｜需>=1.5｜差{_gate_gap_text(rr_text, 1.5)}"
         gates.append(("RR不足", rr_gap))
 
@@ -1727,6 +1764,14 @@ def _entry_check_lines(buy_line, buy_gap_line, *, funnel_state=None, data=None, 
                 lines.append(trigger_line(normalized_unlock(unlock)))
             return lines
 
+        if reason == "已突破但追價風險過高":
+            lines = [f"狀態：{reason}"]
+            if gap:
+                lines.append(f"等待：{gap}")
+            if unlock:
+                lines.append(trigger_line(unlock))
+            return lines
+
         if reason == "未站回突破區" or "站回突破區" in str(reason or "") or (
             funnel_state == "淘汰"
             and ("站回突破區" in str(gap or "") or "站回突破區" in str(unlock or ""))
@@ -2045,7 +2090,8 @@ def _breakout_distance_line(dist, data=None, funnel_state=None, title_label=None
     if funnel_state == "等站回":
         try:
             if 5 < float(dist) <= 7:
-                label = "站回觀察"
+                abs_gap = _breakout_reclaim_abs_gap(data)
+                label = "站回距離偏大" if abs_gap is not None and abs_gap > 10 else "站回觀察"
         except (TypeError, ValueError):
             pass
     stock_result = (data or {}).get("result") or {}
@@ -2378,7 +2424,10 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         title_label = "反彈修復待回測"
     elif funnel_state == "等低位修復":
         low_repair_status = data.get("low_repair_status") or {}
-        title_label = "等站回5日均" if low_repair_status.get("near_ready") else "低位修復觀察"
+        if low_repair_status.get("support_broken"):
+            title_label = "低位修復失效"
+        else:
+            title_label = "等站回5日均" if low_repair_status.get("near_ready") else "低位修復觀察"
     elif funnel_state == "等站回":
         title_label = "突破失敗"
     elif deps["is_valid_entry"](stock_result) and strategy_source_blocked:
@@ -2447,6 +2496,9 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
     elif funnel_state == "可準備":
         title_icon = "👀"
         title_action = "準備觀察" if data.get("evidence_adjustment_reason") else deps["unheld_non_actionable_prepare_label"](data)
+    elif funnel_state == "等低位修復" and (data.get("low_repair_status") or {}).get("support_broken"):
+        title_icon = "⏳"
+        title_action = "等重新築底"
     elif funnel_state == "等低位修復" and (data.get("low_repair_status") or {}).get("near_ready"):
         title_icon = "👀"
         title_action = "貼近條件"

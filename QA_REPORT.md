@@ -1,65 +1,64 @@
-# QA_REPORT: report_actionability_readability_v21_1_20260624
+# QA_REPORT: report_actionability_consistency_v21_1_20260624
 
-## Test Scope
+## 測試範圍
 
-- Low-repair near-ready wording and non-actionable status.
-- Low-repair missing-only trigger lines.
-- Failed-breakout reclaim-zone routing and display.
-- History-line engineering-term suppression.
-- Summary zero-count / standalone-backtest noise removal.
-- Official dry-run Telegram message list.
+- Low-repair support/MA/volume state.
+- Low-repair actionable card.
+- RR too-low after breakout.
+- Failed breakout reclaim distance wording.
+- Adjacent summary/unheld grouping tests.
+- Official dry-run smoke.
 
-## Risk Scan
+## 關聯風險掃描
 
-- Strategy risk: medium. Failed-breakout reclaim watch band widened from 5% to 7%, but only when a real reclaim zone exists and it remains non-actionable `等站回`.
-- Buy-action risk: low. `貼近條件` and `準備觀察` are explicitly not `可買`.
-- DB risk: none.
-- Live delivery risk: none.
+- 檢查 `可買` 卡是否仍有舊 `小倉：可試單｜守支撐/5日均`。
+- 檢查支撐跌破是否仍說 `待守` 或 `守住支撐`。
+- 檢查 RR 低值是否裸露為 `風險報酬 0.02→1.5`。
+- 檢查 `前次 eliminated` 是否回到報文。
 
-## Cross-Block Semantic Consistency
+## 跨區塊語意一致性
 
-- 光寶科 near-ready now reads `貼近條件｜等站回5日均`; it does not read like a buy signal.
-- Low-repair cards now show missing conditions only in the trigger line.
-- Failed-breakout cards in the reclaim watch band show `等站回` with the actual zone and gap.
-- Summary no longer prints zero-count lines or standalone backtest snippets for non-actionable prepare-only cards.
+- 低位修復:
+  - 支撐跌破 -> `等重新築底 / 重新站回支撐`。
+  - 量能 0.9x -> `偏低未失控`，不再當作硬阻擋。
+- RR:
+  - 已突破但 RR 低 -> `追價風險過高`。
+- 突破失敗:
+  - 百分比接近但價差大 -> `站回距離偏大`。
 
-## Failure Specimen Rebuttal
+## 使用者誤讀風險
 
-- Owner specimen: 06/24 intraday report where 光寶科 appeared to oscillate between buy and wait, and reports remained noisy on mobile.
-- Official dry-run rebuttal:
-  - `HAS_NEAR_BUY=False`.
-  - `HAS_NEAR_CONDITION=True`.
-  - `HAS_WAIT_RECLAIM=True`.
-  - `HAS_ELIMINATED=False`.
-  - `HAS_ZERO_ACTION=False`.
-  - `INTRADAY_TOMORROW_LABEL=False`.
+- 已降低:
+  - 可買卡現在先給行動與失效線。
+  - 不再把極低 RR 數字當主訊息。
+  - 支撐跌破不再像可等待守住。
+- 剩餘:
+  - Full legacy tests 還有舊摘要期待，需獨立整理，不阻塞本輪。
 
-## Commands And Results
+## 失敗標本反證
 
-- `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -k "low_repair_near_ma5 or low_repair_compact_lines or failed_breakout_card or failed_breakout_within_reclaim_buffer or rejected_card_suppresses_positive_repair_history"`
-  - `5 passed, 222 deselected`.
-- `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -k "low_repair or failed_breakout or rejected_card_suppresses_positive_repair_history or holding_next_step or compact_market"`
-  - `10 passed, 217 deselected`.
-- Official dry-run via `generator.generate_report(dry_run=True)`
-  - `messages=4`.
-  - all readability booleans matched the task acceptance criteria.
+- Owner 06/24 盤中報文中的問題類型已用等價 replay / formatter tests 覆蓋。
+- Official dry-run smoke 未出現舊誤導字串：
+  - `貼近可買`
+  - `前次 eliminated`
+  - 舊小倉行
+  - `支撐 158 待守`
 
-## User Misread Check
+## 質疑與反證
 
-- `貼近條件` is safer than `貼近可買`; it says the setup is close, not actionable.
-- `追價不划算` explains low RR after breakout in reader language.
-- `站回觀察` avoids the contradiction of `等站回` plus `遠離突破` near the 7% reclaim band.
-- `量能 1x 剛好` is more informative than `OK`.
+- 質疑: 是否只是硬改文字？
+  - 反證: `core/generator.py` 同步調整 low-repair volume gate，並新增 `support_broken` 狀態。
+- 質疑: 是否只測 helper？
+  - 反證: 測到 `formatTelegramUnheldCard`、`formatTelegramMessages` 與 dry-run smoke。
+- 質疑: 會不會把 0.9x 誤判成可買？
+  - 反證: 0.9x 僅解除量能硬阻擋，仍需支撐 / 5日均 / RR 等條件成立。
 
-## Not Tested
+## 未測項目
 
-- Live Telegram delivery.
-- Production DB write/read-after-write.
-- DB backfill/prune/dedupe.
-- Full legacy test file as a pass gate; stale wording expectations remain known cleanup debt.
+- 未發 live Telegram。
+- 未寫 production DB。
+- 未跑 full suite；已知存在 unrelated legacy expectations。
 
-## QA Conclusion
+## QA 結論
 
 通過。
-
-The current Owner-visible readability and actionability conflicts are fixed on formatter, funnel state, and official dry-run paths. This conclusion does not cover live Telegram delivery or production DB mutation.

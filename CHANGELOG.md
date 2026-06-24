@@ -1,63 +1,68 @@
-# CHANGELOG: report_actionability_readability_v21_1_20260624
+# CHANGELOG: report_actionability_consistency_v21_1_20260624
 
-## Changes
+## 修改內容與修改檔案
 
-- Updated `presentation/report.py`
-  - Renamed low-repair near-ready title from `貼近可買` to `貼近條件｜等站回5日均`.
-  - Changed low-repair trigger text to list only missing gates.
-  - Added volume quality wording: `不足`, `剛好`, `有效`, `攻擊量`.
-  - Translated / suppressed engineering history terms such as `前次 eliminated`.
-  - Changed already-broken but near-reclaim breakout distance label to `站回觀察`.
-  - Removed zero-count summary noise such as `執行動作 0` and `今日新建倉 0`.
-  - Changed already-breakout low-RR title to `追價不划算` where applicable.
+- `core/generator.py`
+  - 新增 `LOW_REPAIR_VOLUME_NOT_LOST_THRESHOLD = 0.8`。
+  - 低位修復狀態新增 `support_broken`。
+  - 低位修復量能門檻從硬性 `1.0x` 改為 `0.8x` 未失控門檻。
+- `presentation/report.py`
+  - 量能文字改為 `不足 / 偏低未失控 / 剛好 / 有效 / 攻擊量`。
+  - 支撐跌破時顯示 `已跌破`，觸發改為 `重新站回支撐`。
+  - 低位修復支撐跌破時標題改為 `等重新築底｜低位修復失效`。
+  - 已突破但 RR 不足時改成 `已突破但追價風險過高`，等待回測後修復。
+  - `等站回` 在絕對價差大於 10 時顯示 `站回距離偏大`。
+  - 低位修復可買卡改為 `可買：小倉試單｜不追價`，並列失效線。
+- `tests/test_generator_report.py`
+  - 更新低位修復、RR 追價、突破站回距離與可買卡測試。
+  - 新增支撐跌破與 0.9x 量能反證。
 
-- Updated `core/generator.py`
-  - Expanded failed-breakout reclaim watch distance from 5% to 7% when a real reclaim zone exists.
-  - Stopped summary backtest lines from showing for non-actionable `可準備` / prepare-only cards.
+## 契約影響
 
-- Updated `tests/test_generator_report.py`
-  - Updated low-repair regressions for missing-only triggers and volume quality labels.
-  - Added failed-breakout reclaim buffer regression.
-  - Added history-line translation regression.
+- 低位修復的量能判斷不再要求必須大於 1.0x；`0.8x~1.0x` 為偏低但未失控。
+- `support_broken` 成為 presentation 可用狀態欄位。
+- 使用者可見 RR 極低情境改為語意說明，不再主顯示 raw RR gap。
+- 報文排序與分組沒有新增 bucket。
+- DB 寫入契約無變更。
 
-## Contract Impact
+## 版本同步
 
-- User-visible Telegram wording changes only.
-- No DB schema, DB write, backfill, prune, dedupe, or live Telegram delivery.
-- Version remains `v21.1`.
-- `貼近條件` and `準備觀察` remain non-actionable; only `可買` is actionable.
+- 使用者可見版本仍為 `v21.1`。
 
-## Verification
+## 直接消費者同步
 
-- Focused current-contract tests:
-  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -k "low_repair_near_ma5 or low_repair_compact_lines or failed_breakout_card or failed_breakout_within_reclaim_buffer or rejected_card_suppresses_positive_repair_history"`
-  - Result: `5 passed, 222 deselected`.
-- Broader related subset:
-  - `.\.venv\Scripts\python.exe -m pytest tests\test_generator_report.py -k "low_repair or failed_breakout or rejected_card_suppresses_positive_repair_history or holding_next_step or compact_market"`
-  - Result: `10 passed, 217 deselected`.
-- Official dry-run via `generate_report(dry_run=True)`:
-  - `messages=4`.
-  - `HAS_NEAR_BUY=False`.
-  - `HAS_NEAR_CONDITION=True`.
-  - `HAS_WAIT_RECLAIM=True`.
-  - `HAS_ELIMINATED=False`.
-  - `INTRADAY_TOMORROW_LABEL=False`.
-  - `HAS_BACKTEST_STANDALONE=False`.
-  - `HAS_ZERO_ACTION=False`.
+- Telegram 未持倉卡片。
+- Telegram 簡報摘要。
+- dry-run report。
 
-## Coverage Layer
+## 未影響模組
 
-- Helper / formatter: covered.
-- Official generator message list: covered by dry-run artifact.
-- Production source / live Telegram: not run by design.
+- DB schema / RLS / grant / policy。
+- live Telegram delivery。
+- position ledger / trade write path。
+- market theme evidence backfill。
 
-## Not Changed
+## 自檢命令與結果
 
-- No production DB writes or reads beyond normal dry-run reads.
-- No schema, RLS, grant, policy, role, index, or constraint change.
-- No live Telegram delivery.
+- `.\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py -k "low_repair or failed_breakout or rr_blocker or actionability or reclaim or chase_risk or breakout_with_low_rr" -q`
+  - Result: `12 passed, 219 deselected`
+- `.\.venv\Scripts\python.exe -m pytest tests/test_generator_report.py -k "telegram_messages_use_summary_cards_and_detail or unheld_cards_follow_summary_group_order" -q`
+  - Result: `2 passed, 229 deselected`
+- `generate_report(dry_run=True)` smoke:
+  - `HAS_NEAR_BUY=False`
+  - `HAS_RAW_ELIMINATED=False`
+  - `HAS_OLD_LOW_BUY=False`
+  - `HAS_SUPPORT_WAIT_WHEN_BROKEN_SAMPLE=False`
+  - `MESSAGE_COUNT=4`
 
-## Residual Risk
+## 覆蓋層級
 
-- Full `tests/test_generator_report.py` still contains older legacy wording expectations and remains a separate cleanup task.
-- `.pytest_cache` may still emit a local Windows permission warning; it did not block focused tests.
+- helper: `_low_repair_compact_lines`, `_breakout_distance_line`, `_entry_check_lines`。
+- formatter: `formatTelegramUnheldCard`。
+- official generator path: `formatTelegramMessages` related tests and `generate_report(dry_run=True)` smoke。
+- production source: read-only dry-run only; no DB writes.
+
+## 殘留風險
+
+- Full `tests/test_generator_report.py` still contains older summary expectation failures unrelated to this patch.
+- `.pytest_cache` permission warning persists on Windows and is non-blocking.

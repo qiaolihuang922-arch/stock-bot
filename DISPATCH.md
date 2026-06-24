@@ -2,8 +2,8 @@
 
 ## Active
 
-- task_md_holds: `report_actionability_readability_v21_1_20260624`
-- status: `implemented + QA passed + pushed`
+- task_md_holds: `report_actionability_consistency_v21_1_20260624`
+- status: `implemented + QA passed`
 - current_version: `v21.1`
 - live Telegram delivery: `not run`
 - DB schema change: `none`
@@ -11,25 +11,28 @@
 
 ## Result Summary
 
-- Low-repair near-ready no longer says `貼近可買`; it now says `貼近條件｜等站回5日均`.
-- Low-repair trigger lines now list only the missing gates.
-- Volume display now uses `不足 / 剛好 / 有效 / 攻擊量`.
-- Failed-breakout reclaim watch band is now 7% when a real reclaim zone exists.
-- Engineering history terms such as `前次 eliminated` no longer appear in the user-facing report.
-- Summary no longer shows zero-count action lines or standalone backtest snippets for non-actionable prepare-only cards.
+- Low-repair volume gate now matches the wording `量能不失控`: `0.8x~1.0x` is `偏低未失控`, not a hard blocker.
+- Low-repair support break now says `已跌破` and requires `重新站回支撐`.
+- Low-repair support-broken cards show `等重新築底｜低位修復失效`.
+- Breakout-with-low-RR cards now explain `追價風險過高` instead of showing raw tiny RR gaps.
+- Failed-breakout reclaim cards show `站回距離偏大` when percent looks close but absolute price gap is still large.
+- Low-repair buy cards now read as an action: `可買：小倉試單｜不追價`, with invalidation line.
 
 ## Verification
 
-- Focused current-contract tests: `5 passed, 222 deselected`.
-- Broader related subset: `10 passed, 217 deselected`.
-- Official dry-run: `messages=4`; `HAS_NEAR_BUY=False`; `HAS_NEAR_CONDITION=True`; `HAS_WAIT_RECLAIM=True`; `HAS_ELIMINATED=False`; `HAS_ZERO_ACTION=False`; `INTRADAY_TOMORROW_LABEL=False`.
+- Focused current-contract tests: `12 passed, 219 deselected`.
+- Adjacent message grouping tests: `2 passed, 229 deselected`.
+- Official dry-run smoke:
+  - `HAS_NEAR_BUY=False`
+  - `HAS_RAW_ELIMINATED=False`
+  - `HAS_OLD_LOW_BUY=False`
+  - `HAS_SUPPORT_WAIT_WHEN_BROKEN_SAMPLE=False`
+  - `MESSAGE_COUNT=4`
 
 ## Current Git State
 
-- Implementation commit: `f3c4377`.
-- Dispatch state commit: `ebe0f37`.
-- Pushed to `origin/main`; git completion gate passed by equivalent PowerShell checks.
+- Pending commit/push.
 
 ## Next Action
 
-- None for this task.
+- Commit, push, and run git completion gate.

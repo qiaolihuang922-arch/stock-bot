@@ -777,6 +777,7 @@ def has_daily_price_repair_basis(data, min_points=4):
 
 
 LOW_REPAIR_MA5_NEAR_TOLERANCE_PCT = 0.8
+LOW_REPAIR_VOLUME_NOT_LOST_THRESHOLD = 0.8
 FAILED_BREAKOUT_RECLAIM_WAIT_DISTANCE_PCT = 7.0
 
 
@@ -826,7 +827,7 @@ def _failed_breakout_wait_reclaim(result, data):
     return distance is not None and 0 <= distance <= FAILED_BREAKOUT_RECLAIM_WAIT_DISTANCE_PCT
 
 
-def daily_price_low_repair_status(data, *, min_points=4, volume_threshold=1.0, rr_threshold=1.5):
+def daily_price_low_repair_status(data, *, min_points=4, volume_threshold=LOW_REPAIR_VOLUME_NOT_LOST_THRESHOLD, rr_threshold=1.5):
     data = data or {}
     context = cross_day_context(data)
     sources = context.get("source_of_truth") or []
@@ -861,6 +862,7 @@ def daily_price_low_repair_status(data, *, min_points=4, volume_threshold=1.0, r
     met = []
     missing = []
 
+    support_broken = latest_close < support
     if latest_close >= support:
         met.append("支撐未破")
     else:
@@ -934,6 +936,7 @@ def daily_price_low_repair_status(data, *, min_points=4, volume_threshold=1.0, r
         "volume_ratio": volume_ratio,
         "rr": rr_value,
         "latest_price": latest_close,
+        "support_broken": support_broken,
     }
 
 

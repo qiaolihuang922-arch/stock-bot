@@ -2,8 +2,8 @@
 
 ## Current Task
 
-- task_id: `report_actionability_readability_v21_1_20260624`
-- status: `implemented + QA passed + pushed`
+- task_id: `report_actionability_consistency_v21_1_20260624`
+- status: `implemented + QA passed`
 - version: `v21.1`
 - live Telegram delivery: not run
 - DB schema change: none
@@ -11,49 +11,36 @@
 
 ## Stable Context
 
-- Owner reads Telegram on mobile; every card must answer what is happening now, what exact condition is missing, and when it becomes actionable.
-- Cross-day state must come from production DB or an approved persistent source, not agent memory.
+- Owner reads Telegram on mobile; every card must answer: can act now, what is missing, and what invalidates the setup.
+- Cross-day state must come from production DB or approved persistent source.
 - DB structure changes require Owner approval.
 - No live Telegram delivery without separate Owner approval.
-- `貼近條件` is not a buy signal; only `可買` is actionable.
+- `準備觀察` is not buy. Only explicit `可買` is actionable.
 
 ## Current Implementation State
 
-- Low-repair near-ready:
-  - title uses `貼近條件｜等站回5日均`.
-  - trigger names only the missing gate.
-  - volume label uses qualitative wording.
-- Failed breakout reclaim:
-  - requires a real reclaim anchor.
-  - within 7% becomes `等站回`.
-  - 5%~7% distance line displays `站回觀察`.
-- Summary:
-  - no `執行動作 0`.
-  - no `今日新建倉 0`.
-  - no standalone backtest line for non-actionable prepare-only cards.
-- History:
-  - no raw `前次 eliminated` or `權重 +1` wording in official dry-run.
+- Low-repair:
+  - volume gate uses 0.8x not-lost threshold.
+  - `support_broken` is persisted in the in-run payload state.
+  - support broken cards require reclaim, not waiting to hold.
+  - actionable card shows buy action plus invalidation.
+- RR after breakout:
+  - shows chase-risk wording instead of raw tiny RR gap.
+- Failed breakout:
+  - reclaim label considers absolute price gap for user readability.
 
 ## Verification State
 
-- Focused current-contract tests: `5 passed, 222 deselected`.
-- Broader related subset: `10 passed, 217 deselected`.
-- Official dry-run:
-  - `messages=4`.
-  - `HAS_NEAR_BUY=False`.
-  - `HAS_NEAR_CONDITION=True`.
-  - `HAS_WAIT_RECLAIM=True`.
-  - `HAS_ELIMINATED=False`.
-  - `HAS_BACKTEST_STANDALONE=False`.
-  - `HAS_ZERO_ACTION=False`.
-  - `INTRADAY_TOMORROW_LABEL=False`.
+- `12 passed, 219 deselected` for focused report tests.
+- `2 passed, 229 deselected` for adjacent message grouping tests.
+- Official dry-run smoke passed old-string checks.
 - No production DB data was changed.
 
 ## Known Findings
 
-- Full `tests/test_generator_report.py` still has legacy expectation failures from older report wording.
-- `.pytest_cache` warning may appear due local Windows permission; focused tests pass despite it.
+- Full `tests/test_generator_report.py` still has older unrelated summary expectations.
+- `.pytest_cache` may warn `Permission denied`; tracked git status remains usable with `git -c status.showUntrackedFiles=no`.
 
 ## Next Action
 
-- None for this task.
+- Commit and push current patch, then run git completion gate.
