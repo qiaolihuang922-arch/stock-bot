@@ -44,4 +44,4 @@
 
 ## Next Action
 
-- Push commits to `origin/main` and verify HEAD equals upstream.
+- Report commit hash, push target, and upstream equality.

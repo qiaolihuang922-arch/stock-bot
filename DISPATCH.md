@@ -28,8 +28,8 @@
 
 ## Current Git State
 
-- Implementation committed locally; push pending.
+- Committed and pushed to `origin/main`; final response reports the verified hash and upstream equality.
 
 ## Next Action
 
-- Push commits to `origin/main` and verify HEAD equals upstream.
+- Report hash, push target, and upstream equality.
