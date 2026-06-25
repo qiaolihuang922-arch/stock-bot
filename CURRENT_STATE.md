@@ -36,7 +36,7 @@
 - Local dry-run smoke: Flask import OK; `generate_report(dry_run=True)` produced `4` messages.
 - UTF-8 readback passed for fixed Markdown and deployment docs.
 - Architect scope gate passed.
-- Git completion and closeout gates passed after commit/push.
+- Git completion gate passed after commit/push; closeout gate passed.
 
 ## Known Findings
 
