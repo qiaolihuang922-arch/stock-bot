@@ -208,6 +208,9 @@ QA 不只重跑 Tech 命令；至少補一個 Tech 未覆蓋的直接消費者�
 - Architect runner 啟動 Tech / QA 前必須準備可用測試環境。
 - Worktree 缺 `.venv`、`pytest` 或依賴時，runner 優先使用主 repo `.venv`，否則建立 worktree `.venv` 並安裝必要依賴。
 - 環境缺失不是測試豁免理由；補環境後仍不能測試，Tech / QA 必須 blocked 並列出實際錯誤。
+- Windows 本機環境預設保護 C 槽：非 Windows 系統功能必要項目，工具鏈、cache、venv、worktree、runner context、artifact 與 logs 都優先安裝或寫入 D 槽。
+- Git / Python / Node / uv 等開發工具在 Windows 上優先使用 D 槽 portable/zip 安裝；不得假設 C 槽全域安裝或 PATH 存在。
+- WSL 屬 Windows 系統功能，若任務必須使用 WSL，可用 Windows 需求啟用；Linux distro / repo / agent workspace 仍應優先放 D 槽，並在文件中標明不可避免的 C 槽依賴。
 
 ## 同步與拒收
 

@@ -2,8 +2,8 @@
 
 ## Active
 
-- task_md_holds: `report_actionability_consistency_v21_1_20260624`
-- status: `follow-up implemented + QA passed + pushed`
+- task_md_holds: `local_d_drive_env_bootstrap_20260626`
+- status: `D-drive local environment implemented + verified + pushed`
 - current_version: `v21.1`
 - live Telegram delivery: `not run`
 - DB schema change: `none`
@@ -11,33 +11,27 @@
 
 ## Result Summary
 
-- Low-repair volume gate now matches the wording `量能不失控`: `0.8x~1.0x` is `偏低未失控`, not a hard blocker.
-- Low-repair support break now says `已跌破` and requires `重新站回支撐`.
-- Low-repair support-broken cards show `等重新築底｜低位修復失效`.
-- Breakout-with-low-RR cards now explain `追價風險過高` instead of showing raw tiny RR gaps.
-- Failed-breakout reclaim cards show `站回距離偏大` when percent looks close but absolute price gap is still large.
-- Low-repair buy cards now read as an action: `可買：小倉試單｜不追價`, with invalidation line.
-- Warning-breached holdings now show `警戒觀察，不加碼`, not `輕虧不加碼`.
-- Low-repair buy cards now show `盤面：低位修復成立｜小倉觀察｜量能分級`.
-- Failed-breakout reclaim labels now use absolute gap globally, so large gaps show `站回距離偏大`.
+- Windows C drive was reinstalled/unreliable, so local development now uses D-drive-first tooling.
+- Portable Git for Windows 2.54.0 installed under `D:\tools\git`; Git Bash is available from the same tree.
+- Local shell bootstrap scripts added under `tools/cao_agent/`: `local_env.ps1` and `local_env.cmd`.
+- Bootstrap scripts set D-drive paths for Git config, HOME, pip/pytest/npm/uv caches, CAO context, repo `.venv`, Git, and Bash.
+- Git dubious ownership from the C-drive SID change is handled via D-drive `GIT_CONFIG_GLOBAL`.
+- Legacy `.pytest_cache` remains locked by old Windows ownership; pytest cache is redirected to `D:\tools\cache\pytest`.
 
 ## Verification
 
-- Focused current-contract tests: `12 passed, 219 deselected`.
-- Adjacent message grouping tests: `2 passed, 229 deselected`.
-- Official dry-run smoke:
-  - `HAS_LIGHT_LOSS_WITH_WARNING=False`
-  - `HAS_LOW_REPAIR_WEAK_MARKET_BUY=False`
-  - `HAS_RAW_TINY_RR_CHASE=False`
-  - `MESSAGE_COUNT=1`
-- Follow-up focused report tests: `13 passed, 218 deselected`.
+- `git version 2.54.0.windows.1`
+- `GNU bash, version 5.3.9(1)-release`
+- `Python 3.12.13`
+- Architect scope gate passed with D-drive Git/Bash.
+- Focused report regression: `12 passed, 219 deselected`.
+- Single pytest cache reroute probe: `1 passed, 230 deselected`.
+- Local import/dry-run smoke: Flask app import OK; `generate_report(dry_run=True)` produced `dry_run message_count 4`.
 
 ## Current Git State
 
-- Implementation commit: `c98ebef`.
-- Previous closeout commits: `7acc6aa`, `fcbd2c6`, `9791735`.
-- Follow-up implementation commit: `cecbaff`.
-- Pushed to `origin/main`; git completion gate passed after closeout.
+- Environment bootstrap commit pushed to `origin/main`.
+- Git completion gate passed after closeout.
 
 ## Next Action
 

@@ -13,6 +13,35 @@ This document records the current working local deployment path for the stock-bo
 
 ## Required Runtime
 
+## Windows D-Drive First Rule
+
+The Owner's C drive may be unreliable or freshly reinstalled. On Windows, put every non-system development dependency on D drive by default:
+
+- portable Git: `D:\tools\git`
+- Python / venv: `D:\tools\python*` and repo `.venv`
+- Node / npm: `D:\tools\node`
+- uv, npm, pip, and pytest caches: D-drive cache directories
+- CAO context, worktrees, artifacts, and logs: D drive
+
+Do not assume Git, Bash, Python launcher, Node, or CAO tools exist in C-drive global installs or PATH. Use a shell-local PATH/bootstrap script when possible. WSL itself is a Windows system feature and cannot be fully moved off C drive, but imported distros, repo files, worktrees, and runner output should still live on D drive when feasible.
+
+Current local Windows bootstrap:
+
+```powershell
+cd D:\reserch\stock-bot
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+. .\tools\cao_agent\local_env.ps1
+```
+
+Alternative from cmd:
+
+```cmd
+cd /d D:\reserch\stock-bot
+call tools\cao_agent\local_env.cmd
+```
+
+The bootstrap expects portable Git at `D:\tools\git` and the repo virtualenv at `.venv`. It sets `GIT_CONFIG_GLOBAL`, `HOME`, `PIP_CACHE_DIR`, `PYTEST_ADDOPTS`, `NPM_CONFIG_CACHE`, `UV_CACHE_DIR`, and `STOCK_BOT_AGENT_CONTEXT` to D-drive paths. It also adds the repo as Git `safe.directory` in `D:\tools\gitconfig\.gitconfig` to handle Windows SID changes after C-drive reinstall.
+
 Install or verify these inside WSL Ubuntu:
 
 ```bash
