@@ -33,6 +33,10 @@
 - Environment bootstrap commit pushed to `origin/main`.
 - Git completion gate passed after closeout.
 
+## Recently Done
+
+- `local_d_drive_env_bootstrap_20260626`: D-drive local Git/Bash/bootstrap environment implemented, local pytest/dry-run verified, and git completion gate passed after commit/push.
+
 ## Next Action
 
 - None for this task.
