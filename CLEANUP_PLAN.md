@@ -2,32 +2,25 @@
 
 ## Current Cleanup Status
 
-- No runtime output or SQL draft was created in this task.
-- No production DB cleanup was performed.
-- No table or row deletion was performed.
+- Active cleanup: compress root handoff Markdown and centralize D-drive deployment instructions.
+- No product code, DB schema, production DB data, or live Telegram action is in scope.
 
-## Completed This Round
+## Completed
 
-- Replaced misleading low-repair support wording.
-- Replaced inconsistent volume wording.
-- Removed raw tiny RR gap from chase-risk cards.
-- Added report-layer tests for the recurring mobile-reading failures.
-- Rewrote active handoff docs to UTF-8 readable Chinese.
-- Added follow-up checks for warning-breached holdings, low-repair actionable market text, and large absolute reclaim gaps.
-- Installed D-drive portable Git/Bash under `D:\tools\git`.
-- Added local D-drive bootstrap scripts under `tools/cao_agent/`.
-- Redirected local Git config, HOME, pip/pytest/npm/uv caches, and CAO context away from C drive.
-- Verified local pytest and generator dry-run after the C-drive reinstall.
+- D-drive portable Git/Bash installed under `D:\tools\git`.
+- Local bootstrap scripts added under `tools/cao_agent/`.
+- Local Git config, HOME, pip/pytest/npm/uv caches, and CAO context redirected away from C drive.
+- Local pytest and generator dry-run verified after C-drive reinstall.
+- v21.1 Telegram readability fixes remain completed and pushed.
 
-## Deferred / Not In Scope
+## Deferred
 
-- Full legacy summary expectation cleanup in `tests/test_generator_report.py`.
-- Broader strategy calibration beyond current report-consistency fixes.
-- Any DB backfill / prune / dedupe.
-- Optional future cleanup: unlock or remove legacy `.pytest_cache` with elevated Windows permissions.
-- Optional future environment work: D-drive-first Node/WSL/CAO service restoration.
+- Unlock or remove legacy `.pytest_cache` with elevated Windows permissions.
+- Restore Node/WSL/CAO UI services with D-drive-first placement.
+- Clean unrelated legacy expectations in full `tests/test_generator_report.py`.
 
-## Cleanup Rules Reinforced
+## Rule Of Thumb
 
-- Do not add single-stock permanent rules.
-- Future report readability fixes must include a formatter or official report test, not only helper tests.
+- Keep root Markdown short and current.
+- Put operational commands in `tools/cao_agent/DEPLOYMENT.md`.
+- Put uncertain cleanup candidates here instead of deleting evidence.

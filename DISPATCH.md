@@ -2,40 +2,24 @@
 
 ## Active
 
-- task_md_holds: `local_d_drive_env_bootstrap_20260626`
-- status: `D-drive local environment implemented + verified + pushed`
+- task_md_holds: `docs_local_env_cleanup_20260626`
+- status: `docs cleanup verified + pushed`
 - current_version: `v21.1`
 - live Telegram delivery: `not run`
-- DB schema change: `none`
-- DB write/backfill/delete: `none`
+- DB schema/write/backfill/delete: `none`
 
-## Result Summary
+## Current Board
 
-- Windows C drive was reinstalled/unreliable, so local development now uses D-drive-first tooling.
-- Portable Git for Windows 2.54.0 installed under `D:\tools\git`; Git Bash is available from the same tree.
-- Local shell bootstrap scripts added under `tools/cao_agent/`: `local_env.ps1` and `local_env.cmd`.
-- Bootstrap scripts set D-drive paths for Git config, HOME, pip/pytest/npm/uv caches, CAO context, repo `.venv`, Git, and Bash.
-- Git dubious ownership from the C-drive SID change is handled via D-drive `GIT_CONFIG_GLOBAL`.
-- Legacy `.pytest_cache` remains locked by old Windows ownership; pytest cache is redirected to `D:\tools\cache\pytest`.
-
-## Verification
-
-- `git version 2.54.0.windows.1`
-- `GNU bash, version 5.3.9(1)-release`
-- `Python 3.12.13`
-- Architect scope gate passed with D-drive Git/Bash.
-- Focused report regression: `12 passed, 219 deselected`.
-- Single pytest cache reroute probe: `1 passed, 230 deselected`.
-- Local import/dry-run smoke: Flask app import OK; `generate_report(dry_run=True)` produced `dry_run message_count 4`.
-
-## Current Git State
-
-- Environment bootstrap commit pushed to `origin/main`.
-- Git completion gate passed after closeout.
+- Local Windows execution is restored with D-drive-first tooling.
+- Main bootstrap commands live in `tools/cao_agent/DEPLOYMENT.md`.
+- Root Markdown has been compressed to current state and handoff summaries.
+- Product/report logic is unchanged in this docs cleanup.
 
 ## Recently Done
 
-- `local_d_drive_env_bootstrap_20260626`: D-drive local Git/Bash/bootstrap environment implemented, local pytest/dry-run verified, and git completion gate passed after commit/push.
+- `docs_local_env_cleanup_20260626`: root Markdown compressed, D-drive deployment runbook optimized, local bootstrap verified, and git completion gate passed after commit/push.
+- `local_d_drive_env_bootstrap_20260626`: installed D-drive portable Git/Bash, added local bootstrap scripts, verified pytest and `generate_report(dry_run=True)`, pushed to `origin/main`, and passed git/closeout gates.
+- `report_actionability_consistency_v21_1_20260624`: v21.1 Telegram readability fixes were implemented, QA passed, and pushed. No live Telegram or DB writes.
 
 ## Next Action
 

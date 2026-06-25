@@ -40,10 +40,15 @@ set "UV_CACHE_DIR=%CACHE_ROOT%\uv"
 set "STOCK_BOT_AGENT_CONTEXT=%REPO_ROOT%\.cao_agent_context"
 set "PATH=%GIT_ROOT%\cmd;%GIT_ROOT%\bin;%GIT_ROOT%\usr\bin;%REPO_ROOT%\.venv\Scripts;%PATH%"
 
-set "SAFE_DIR=%REPO_ROOT:\=/%"
-git config --global --add safe.directory "%SAFE_DIR%"
-git config --global core.autocrlf false
-git -C "%REPO_ROOT%" config --local --replace-all core.autocrlf false
+if "%STOCK_BOT_WRITE_GIT_CONFIG%"=="1" (
+  set "SAFE_DIR=%REPO_ROOT:\=/%"
+  git config --global --get-all safe.directory | findstr /x /c:"%SAFE_DIR%" >nul
+  if errorlevel 1 git config --global --add safe.directory "%SAFE_DIR%"
+  for /f "delims=" %%V in ('git config --global --get core.autocrlf 2^>nul') do set "GLOBAL_AUTOCRLF=%%V"
+  if not "%GLOBAL_AUTOCRLF%"=="false" git config --global core.autocrlf false
+  for /f "delims=" %%V in ('git -C "%REPO_ROOT%" config --local --get core.autocrlf 2^>nul') do set "LOCAL_AUTOCRLF=%%V"
+  if not "%LOCAL_AUTOCRLF%"=="false" git -C "%REPO_ROOT%" config --local --replace-all core.autocrlf false
+)
 
 echo stock-bot local environment ready
 echo Repo: %REPO_ROOT%

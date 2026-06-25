@@ -48,9 +48,19 @@ $prepend = @(
 
 $env:PATH = "$prepend;$env:PATH"
 
-git config --global --add safe.directory ($RepoRoot -replace "\\", "/")
-git config --global core.autocrlf false
-git -C $RepoRoot config --local --replace-all core.autocrlf false
+if ($env:STOCK_BOT_WRITE_GIT_CONFIG -eq "1") {
+    $safeDir = $RepoRoot -replace "\\", "/"
+    $safeDirs = @(git config --global --get-all safe.directory 2>$null)
+    if ($safeDirs -notcontains $safeDir) {
+        git config --global --add safe.directory $safeDir
+    }
+    if ((git config --global --get core.autocrlf 2>$null) -ne "false") {
+        git config --global core.autocrlf false
+    }
+    if ((git -C $RepoRoot config --local --get core.autocrlf 2>$null) -ne "false") {
+        git -C $RepoRoot config --local --replace-all core.autocrlf false
+    }
+}
 
 Write-Host "stock-bot local environment ready"
 Write-Host "Repo: $RepoRoot"

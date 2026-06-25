@@ -20,7 +20,7 @@ Before running CAO locally, read:
 tools/cao_agent/DEPLOYMENT.md
 ```
 
-That file is the source of truth for the current Windows + WSL deployment path and the known runner issues.
+That file is the source of truth for the current D-drive-first Windows bootstrap, optional WSL/CAO path, and known runner issues.
 
 ## Standard WSL Environment
 
@@ -32,6 +32,16 @@ cd /mnt/d/reserch/stock-bot
 ```
 
 ## Setup
+
+For normal local Python/Git work on Windows, start with:
+
+```powershell
+cd D:\reserch\stock-bot
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+. .\tools\cao_agent\local_env.ps1
+```
+
+Only use the WSL setup below when CAO orchestration is needed:
 
 ```bash
 bash tools/cao_agent/bootstrap_local.sh
