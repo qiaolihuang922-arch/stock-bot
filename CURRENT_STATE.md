@@ -3,7 +3,7 @@
 ## Current Task
 
 - task_id: `future_watch_institutional_trading_20260626`
-- status: `implemented + QA conditional pass + pending commit/push`
+- status: `implemented + QA conditional pass + pushed`
 - version: `v21.1`
 - live Telegram delivery: not run
 - DB schema/write/backfill/delete: none
@@ -48,7 +48,7 @@
   - `institutional_count=2281`
   - Owner 12-stock sample and TPEx 6488 all have institutional trading values.
 - Full `tests/test_generator_report.py` not rerun this turn; known legacy full-file wording failures remain a cleanup risk.
-- Git completion gate pending commit/push.
+- Git completion gate passed after push to `origin/main`.
 
 ## Known Findings
 
@@ -60,4 +60,4 @@
 
 ## Next Action
 
-- Commit and push source fix, then run git completion and closeout gates.
+- None for this task after git completion and closeout gates pass.

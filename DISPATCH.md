@@ -3,7 +3,7 @@
 ## Active
 
 - task_md_holds: `future_watch_institutional_trading_20260626`
-- status: `implemented + QA conditional pass + pending commit/push`
+- status: `implemented + QA conditional pass + pushed`
 - current_version: `v21.1`
 - live Telegram delivery: `not run`
 - DB schema/write/backfill/delete: `none`
@@ -27,7 +27,7 @@
 
 ## Recently Done
 
-- `future_watch_institutional_trading_20260626`: fixed institutional source parsing and date fallback; QA conditional pass pending git completion.
+- `future_watch_institutional_trading_20260626`: fixed institutional source parsing and date fallback; QA conditional pass; pushed.
 - `telegram_all_cards_institutional_trading_20260626`: superseded by Owner correction; cards should not carry this line now.
 - `telegram_readability_risk_wording_20260626`: implemented focused Telegram readability fixes; QA conditional pass.
 - `future_watch_remove_history_events_20260626`: removed future-watch history analogy and 30-day Taiwan market event sections; QA passed; pushed.
@@ -39,8 +39,8 @@
 - Focused future-watch regression: `8 passed, 229 deselected`.
 - Read-only live probe: `status=available`, `institutional_count=2281`, 12 Owner sample stocks and TPEx 6488 have values.
 - Full `tests/test_generator_report.py` not rerun this turn; known legacy full-file wording failures remain a cleanup item.
-- Git completion gate: pending commit/push.
+- Git completion gate passed after push to `origin/main`.
 
 ## Next Action
 
-- Commit and push source fix, then run git completion and closeout gates.
+- None for this task after git completion and closeout gates pass.
