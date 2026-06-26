@@ -1,21 +1,26 @@
-# CHANGELOG: telegram_all_cards_institutional_trading_20260626
+# CHANGELOG: future_watch_institutional_trading_20260626
 
 ## 修改內容與修改檔案
 
+- `core/future_watch.py`
+  - 新增 TWSE T86 與 TPEx 三大法人來源常數。
+  - `build_live_stock_fundamentals_source()` 併入 institutional endpoints。
+  - TWSE T86 `fields + data` 陣列轉 dict 後解析。
+  - 官方股數轉為 `張`。
+  - 查詢日期使用 `now - 1 day`。
+  - `format_future_watch_message()` 在 `關注標的財報` 每檔加入 `昨日三大法人買賣超`。
 - `presentation/report.py`
-  - 新增三大法人買賣超 formatter helper。
-  - 持倉卡固定插入 `昨日三大法人買賣超：...`。
-  - 未持倉卡固定插入 `昨日三大法人買賣超：...`。
-  - 支援 top-level / `result` 內多種三大法人 payload key 與中英文欄位別名。
+  - 移除股票卡片層三大法人輸出，避免每張卡顯示 `資料不足`。
 - `tests/test_generator_report.py`
-  - 新增持倉/未持倉無資料仍硬輸出 `資料不足` 的 final card 測試。
-  - 新增有三大法人資料時格式化外資/投信/自營/合計的 final card 測試。
+  - 更新卡片 regression：卡片不再顯示三大法人行。
+  - 新增 future-watch 財報區三大法人顯示 regression。
+  - 新增 TWSE T86 live-source shape merge regression。
 
 ## 契約影響
 
-- 所有股票卡片增加一行 `昨日三大法人買賣超：...`。
-- 缺資料時 fail closed 為 `資料不足`。
-- 不改策略 signal、payload shape、DB 寫入或 live delivery。
+- 三大法人買賣超從股票卡移到 future-watch `關注標的財報`。
+- live source 能讀官方 TWSE/TPEX 來源；無資料時只在 future-watch 財報區 fail closed。
+- DB 寫入、策略判斷、持倉/未持倉分組不變。
 
 ## 版本同步
 
@@ -24,29 +29,35 @@
 
 ## 直接消費者同步
 
-- Telegram 持倉卡與未持倉卡同步。
-- Summary / future-watch 不新增此欄位。
+- Telegram future-watch message 同步。
+- 股票卡 formatter 同步移除前一輪硬輸出。
 
 ## 未影響模組
 
 - 無 production DB schema/write/backfill/delete。
 - 無 live Telegram。
-- 無三大法人資料抓取器新增。
+- 無 summary decision contract 變更。
 
 ## 自檢命令與結果
 
-- `python -m pytest tests/test_generator_report.py::GeneratorReportTest::test_all_stock_cards_hard_output_yesterday_institutional_trading tests/test_generator_report.py::GeneratorReportTest::test_institutional_trading_line_formats_three_major_values tests/test_generator_report.py::GeneratorReportTest::test_reduce_card_shows_share_basis_and_current_warning_breach tests/test_generator_report.py::GeneratorReportTest::test_failed_breakout_card_does_not_show_attack_volume_as_positive`
-  - Result: `4 passed`
-- `python -m pytest tests/test_generator_report.py -k "institutional_trading or reduce_card_shows_share_basis or failed_breakout_card_does_not_show_attack_volume_as_positive or today_buy_holding_overrides_add_level_in_all_summary_surfaces or overheat_pullback_display_switches_from_cooling_to_retest"`
-  - Result: `6 passed, 229 deselected`
+- `python -m pytest tests/test_generator_report.py -k "institutional_trading or future_watch_revenue or stock_fundamentals_loads_twse_revenue_openapi or future_watch_default_sources"`
+  - Result: `8 passed, 228 deselected`
+- Read-only live probe:
+  - `STATUS=available`
+  - `ITEMS=2581`
+  - `INSTITUTIONAL_ITEMS=1326`
+  - `HAS_2421={'foreign': -632.8, 'investment_trust': -3.0, 'dealer': -41.449, 'total': -677.249, 'unit': '張', 'market': '上市', 'trade_date': '20260625'}`
+  - `ERRORS=[]`
 
 ## 覆蓋層級
 
-- formatter helper: 三大法人買賣超 line parser/formatter。
-- final card: `formatTelegramPositionCard`, `formatTelegramUnheldCard`。
-- production source: 未讀寫 production DB，未 live delivery。
+- source: `build_live_stock_fundamentals_source`
+- payload: `collect_target_fundamentals`
+- formatter: `format_future_watch_message`
+- final cards: `formatTelegramPositionCard`, `formatTelegramUnheldCard` negative check
+- production source: read-only official endpoint probe only; no DB write/live delivery
 
 ## 殘留風險
 
-- 專案目前沒有正式三大法人資料抓取源；有資料時可顯示，無資料時只會顯示 `資料不足`。
-- CAO runner 仍因缺 `tmux` 無法啟動正式 agent flow，本輪沿用本地等價流程。
+- TPEx endpoint shape may vary; parser is flexible but only TWSE live probe was confirmed in this turn.
+- CAO runner still lacks `tmux`; local equivalent flow used.

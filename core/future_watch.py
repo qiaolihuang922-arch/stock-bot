@@ -37,6 +37,8 @@ TPEX_MONTHLY_REVENUE_ENDPOINT = "https://www.tpex.org.tw/openapi/v1/t187ap05_R"
 MOPS_MONTHLY_REVENUE_ENDPOINT = "https://mopsov.twse.com.tw/mops/web/ajax_t05st10_ifrs"
 TWSE_EPS_ENDPOINT = "https://openapi.twse.com.tw/v1/opendata/t187ap14_L"
 TPEX_EPS_ENDPOINT = "https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap14_O"
+TWSE_INSTITUTIONAL_ENDPOINT = "https://www.twse.com.tw/rwd/zh/fund/T86?response=json&date={date}&selectType=ALLBUT0999"
+TPEX_INSTITUTIONAL_ENDPOINT = "https://www.tpex.org.tw/openapi/v1/tpex_3insti_daily_trading"
 HTTP_HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 _EVENT_PRIORITY = {
@@ -1331,20 +1333,131 @@ def _merge_eps_rows(target, rows):
         })
 
 
+def _numeric_or_none(value):
+    try:
+        if value in (None, "") or isinstance(value, bool):
+            return None
+        return float(str(value).replace(",", "").strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _field_value(row, keys):
+    for key in keys:
+        if key in row and row.get(key) not in (None, ""):
+            return row.get(key)
+    return None
+
+
+def _institutional_code(row):
+    return str(
+        row.get("證券代號")
+        or row.get("代號")
+        or row.get("股票代號")
+        or row.get("stock_code")
+        or row.get("code")
+        or ""
+    ).strip()
+
+
+def _to_lots(value, *, source_unit="shares"):
+    number = _numeric_or_none(value)
+    if number is None:
+        return None
+    if source_unit == "shares":
+        return number / 1000
+    return number
+
+
+def _parse_institutional_row(row, *, market, source_unit="shares", trade_date=None):
+    if not isinstance(row, dict):
+        return None
+    code = _institutional_code(row)
+    if not code:
+        return None
+    foreign = _field_value(row, [
+        "外陸資買賣超股數(不含外資自營商)",
+        "外資及陸資(不含外資自營商)",
+        "外資及陸資",
+        "foreign",
+        "foreign_net",
+    ])
+    trust = _field_value(row, ["投信買賣超股數", "投信", "investment_trust", "trust_net"])
+    dealer = _field_value(row, ["自營商買賣超股數", "自營商", "dealer", "dealer_net"])
+    total = _field_value(row, ["三大法人買賣超股數", "三大法人買賣超股數合計", "合計", "total", "total_net"])
+    parsed = {
+        "foreign": _to_lots(foreign, source_unit=source_unit),
+        "investment_trust": _to_lots(trust, source_unit=source_unit),
+        "dealer": _to_lots(dealer, source_unit=source_unit),
+        "total": _to_lots(total, source_unit=source_unit),
+        "unit": "張",
+        "market": market,
+        "trade_date": trade_date,
+    }
+    if parsed["total"] is None and all(parsed.get(key) is not None for key in ["foreign", "investment_trust", "dealer"]):
+        parsed["total"] = parsed["foreign"] + parsed["investment_trust"] + parsed["dealer"]
+    if not any(parsed.get(key) is not None for key in ["foreign", "investment_trust", "dealer", "total"]):
+        return None
+    return code, parsed
+
+
+def _merge_institutional_rows(target, rows, *, market, source_unit="shares", trade_date=None):
+    for row in rows or []:
+        parsed = _parse_institutional_row(row, market=market, source_unit=source_unit, trade_date=trade_date)
+        if not parsed:
+            continue
+        code, institutional = parsed
+        target.setdefault(code, {})
+        target[code]["institutional_trading"] = institutional
+
+
+def _twse_institutional_rows(payload):
+    if isinstance(payload, dict):
+        rows = payload.get("data") or payload.get("items") or []
+        fields = payload.get("fields") or []
+        if fields and rows and isinstance(rows[0], (list, tuple)):
+            return [
+                {str(field): row[index] if index < len(row) else None for index, field in enumerate(fields)}
+                for row in rows
+            ]
+        return rows
+    return payload if isinstance(payload, list) else []
+
+
+def _yyyymmdd(value):
+    if isinstance(value, datetime):
+        return value.strftime("%Y%m%d")
+    if isinstance(value, date):
+        return value.strftime("%Y%m%d")
+    return datetime.now().strftime("%Y%m%d")
+
+
+def _yesterday_yyyymmdd(value):
+    if isinstance(value, datetime):
+        return (value - timedelta(days=1)).strftime("%Y%m%d")
+    if isinstance(value, date):
+        return (value - timedelta(days=1)).strftime("%Y%m%d")
+    return (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
+
+
 def build_live_stock_fundamentals_source(now=None, get_json=None):
+    institutional_trade_date = _yesterday_yyyymmdd(now)
+    twse_institutional_url = TWSE_INSTITUTIONAL_ENDPOINT.format(date=institutional_trade_date)
     endpoints = (
-        ("twse_revenue", TWSE_MONTHLY_REVENUE_ENDPOINT, _merge_monthly_revenue_rows),
-        ("tpex_revenue", TPEX_MONTHLY_REVENUE_ENDPOINT, _merge_monthly_revenue_rows),
-        ("twse_eps", TWSE_EPS_ENDPOINT, _merge_eps_rows),
-        ("tpex_eps", TPEX_EPS_ENDPOINT, _merge_eps_rows),
+        ("twse_revenue", TWSE_MONTHLY_REVENUE_ENDPOINT, _merge_monthly_revenue_rows, 6, 1),
+        ("tpex_revenue", TPEX_MONTHLY_REVENUE_ENDPOINT, _merge_monthly_revenue_rows, 6, 1),
+        ("twse_eps", TWSE_EPS_ENDPOINT, _merge_eps_rows, 6, 1),
+        ("tpex_eps", TPEX_EPS_ENDPOINT, _merge_eps_rows, 6, 1),
+        ("twse_institutional", twse_institutional_url, lambda target, rows: _merge_institutional_rows(target, _twse_institutional_rows(rows), market="上市", source_unit="shares", trade_date=institutional_trade_date), 12, 2),
+        ("tpex_institutional", TPEX_INSTITUTIONAL_ENDPOINT, lambda target, rows: _merge_institutional_rows(target, rows, market="上櫃", source_unit="shares", trade_date=institutional_trade_date), 12, 2),
     )
     rows_by_code = {}
     errors = []
     fetched = {}
     with ThreadPoolExecutor(max_workers=len(endpoints)) as executor:
         futures = {
-            executor.submit(_request_get_json, url, requester=get_json): label
-            for label, url, _merger in endpoints
+            executor.submit(_request_get_json, url, requester=get_json, timeout=timeout, attempts=attempts): label
+            for label, url, _merger, timeout, attempts in endpoints
         }
         for future in as_completed(futures):
             label = futures[future]
@@ -1352,7 +1465,7 @@ def build_live_stock_fundamentals_source(now=None, get_json=None):
                 fetched[label] = future.result()
             except Exception as exc:
                 errors.append(f"{label}:{str(exc)[:60]}")
-    for label, _url, merger in endpoints:
+    for label, _url, merger, _timeout, _attempts in endpoints:
         try:
             merger(rows_by_code, fetched.get(label) or [])
         except Exception as exc:
@@ -1392,6 +1505,40 @@ def _fundamentals_label(fundamentals):
         )
         parts.append(revenue_label)
     return "｜".join(parts)
+
+
+def _signed_lot_text(value):
+    number = _numeric_or_none(value)
+    if number is None:
+        return None
+    if number.is_integer():
+        text = f"{int(number):,}"
+    else:
+        text = f"{number:,.2f}".rstrip("0").rstrip(".")
+    sign = "+" if number > 0 else ""
+    return f"{sign}{text}張"
+
+
+def _institutional_trading_label(fundamentals):
+    institutional = (fundamentals or {}).get("institutional_trading") or {}
+    if not institutional:
+        return "昨日三大法人買賣超：資料不足"
+    parts = []
+    mapping = [
+        ("foreign", "外資"),
+        ("investment_trust", "投信"),
+        ("dealer", "自營"),
+        ("total", "合計"),
+    ]
+    for key, label in mapping:
+        text = _signed_lot_text(institutional.get(key))
+        if text is not None:
+            parts.append(f"{label} {text}")
+    if not parts:
+        return "昨日三大法人買賣超：資料不足"
+    date_label = str(institutional.get("trade_date") or "")
+    prefix = f"昨日三大法人買賣超 {date_label}：" if date_label else "昨日三大法人買賣超："
+    return f"{prefix}{'｜'.join(parts)}"
 
 
 def _fundamentals_detail_line(fundamentals):
@@ -1810,6 +1957,7 @@ def format_future_watch_message(payload, now, version):
             detail_lines = [part for part in str(label).split("｜") if part]
             lines.append(f"{item.get('code')} {item.get('name')}")
             lines.extend(detail_lines)
+            lines.append(_institutional_trading_label(item.get("fundamentals") or {}))
 
     has_visible = (
         bool(mops_items)

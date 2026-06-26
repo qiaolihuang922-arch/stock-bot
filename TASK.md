@@ -1,73 +1,78 @@
-# TASK: telegram_all_cards_institutional_trading_20260626
+# TASK: future_watch_institutional_trading_20260626
 
 ## 任務狀態
 
-- task_id: `telegram_all_cards_institutional_trading_20260626`
+- task_id: `future_watch_institutional_trading_20260626`
 - 任務類型: `normal_patch`
-- 狀態: `implemented_QA_conditional_pass_pushed`
+- 狀態: `implemented_QA_pending_git`
 - 版本建議: `v21.1`
 - QA 分級: `L2`
 
 ## Owner 問題
 
-Owner 要求報文中每一檔股票都硬輸出昨日三大法人買賣超；修正範圍不是只有買檔，而是持倉與未持倉所有股票卡片。
+Owner 要求把「昨日三大法人買賣超」從每張股票卡移到未來30日關注的 `關注標的財報` 區塊；同時指出目前顯示抓不到資料，需接上可用資料來源而不是只顯示 `資料不足`。
 
 ## 使用者可見結果
 
-- 每張持倉卡與未持倉卡都顯示 `昨日三大法人買賣超：...`。
-- 若 payload 有三大法人資料，顯示外資、投信、自營與合計。
-- 若 payload 沒有資料，仍硬輸出 `昨日三大法人買賣超：資料不足`，不得默默省略或偽裝為 0。
+- 持倉卡與未持倉卡不再顯示 `昨日三大法人買賣超：資料不足`。
+- `關注標的財報` 每檔股票在 EPS / 營收後顯示 `昨日三大法人買賣超`。
+- TWSE 上市個股從官方 T86 三大法人日報抓昨日資料。
+- TPEx 上櫃個股從 TPEx 三大法人 OpenAPI 嘗試抓取。
+- 若官方來源仍不可用，僅在財報區 fail closed，不污染每張股票卡。
 
 ## 非目標
 
-- 不新增 production DB schema。
-- 不寫 production DB。
 - 不發 live Telegram。
-- 不在本輪新增三大法人抓取/backfill；只定義與呈現報文欄位。
+- 不寫 production DB。
+- 不新增 DB schema / RLS / grant / policy。
+- 不做跨日 backfill；本輪只做 read-only live source 與報文呈現。
 
 ## 影響模組與直接消費者
 
-- `presentation/report.py`: 持倉與未持倉 Telegram card formatter。
-- `tests/test_generator_report.py`: final card regression。
-- 直接消費者: Owner 手機 Telegram 報文。
+- `core/future_watch.py`: future-watch fundamentals source、institutional merge、format。
+- `presentation/report.py`: 移除卡片層三大法人輸出。
+- `tests/test_generator_report.py`: final card / future-watch regression。
+- 直接消費者: Telegram `【未來30日關注】` 的 `關注標的財報` 區塊。
 
 ## 輸出契約
 
-- 每張股票卡必須有一行以 `昨日三大法人買賣超：` 開頭。
-- 支援 payload keys: `institutional_trading`, `three_major`, `three_major_institutional`, `institutional_investors`, `legal_person_trading`。
-- 同名 key 可在 top-level 或 `result` 內。
-- 支援欄位別名：
-  - 外資: `foreign`, `foreign_investor`, `foreign_net`, `外資`, `外資買賣超`
-  - 投信: `investment_trust`, `trust`, `trust_net`, `投信`, `投信買賣超`
-  - 自營: `dealer`, `dealer_net`, `proprietary`, `自營`, `自營商`, `自營商買賣超`
-  - 合計: `total`, `total_net`, `net_total`, `合計`, `三大法人合計`
-- 若沒有合計且三項皆為 numeric，formatter 可自動加總。
-- 預設單位為 `張`；payload 可用 `unit` 覆蓋。
+- 股票卡不得出現 `昨日三大法人買賣超`。
+- `關注標的財報` 每檔可顯示：
+  - 股票代號與名稱。
+  - EPS。
+  - 營收 YoY。
+  - `昨日三大法人買賣超 YYYYMMDD：外資 ...｜投信 ...｜自營 ...｜合計 ...`
+- TWSE T86 row 若為 `fields + data` 陣列，必須轉成 dict 後解析。
+- 官方股數單位轉為 `張` 顯示。
+- TWSE institutional 查詢日期使用 `now - 1 day`，避免盤中查今日自然空資料。
 
 ## 版本契約
 
 - 使用者可見版本維持 `v21.1`。
-- 本輪只改報文顯示契約，不改策略版本。
+- 本輪為報文區塊與 read-only source 修正，不改策略版本。
 
 ## 驗收條件
 
-- 持倉 final card 無資料時仍顯示 `昨日三大法人買賣超：資料不足`。
-- 未持倉 final card 無資料時仍顯示 `昨日三大法人買賣超：資料不足`。
-- 未持倉 final card 有資料時顯示外資/投信/自營/合計。
-- 既有報文 readability focused regression 不被破壞。
+- final position/unheld cards 不含三大法人行。
+- future-watch `關注標的財報` 顯示三大法人買賣超。
+- live read-only probe 能從官方來源合併 institutional rows。
+- focused future-watch regression 通過。
 
 ## 範例或 fixture
 
-- 無資料 fixture: 持倉技嘉、未持倉建準，兩者都顯示資料不足。
-- 有資料 fixture: 建準 `foreign=1200`, `investment_trust=-300`, `dealer=50`，輸出合計 `+950張`。
+- 2421 建準，institutional payload:
+  - 外資 `+1,200張`
+  - 投信 `-300張`
+  - 自營 `+50張`
+  - 合計 `+950張`
 
 ## 失敗標本與驗收路由
 
-- Owner correction: `是每一檔股票`。
-- 驗收路由: final `formatTelegramPositionCard` / `formatTelegramUnheldCard` output。
+- Owner correction: `買賣超移動到關注標的財報，而且現在顯示抓不到資料`。
+- 驗收路由: `build_live_stock_fundamentals_source` -> `collect_target_fundamentals` -> `format_future_watch_message`。
 
 ## 禁止事項與阻塞條件
 
-- 缺資料時不得輸出 0 或空白。
-- 不得只在買檔/可買檔輸出。
+- 不得繼續在每張股票卡硬塞 `資料不足`。
+- 不得把缺資料顯示成 0。
 - 不得 live Telegram。

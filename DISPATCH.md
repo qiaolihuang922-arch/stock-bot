@@ -2,8 +2,8 @@
 
 ## Active
 
-- task_md_holds: `telegram_all_cards_institutional_trading_20260626`
-- status: `implemented + QA conditional pass + pushed`
+- task_md_holds: `future_watch_institutional_trading_20260626`
+- status: `implemented + QA conditional pass + pending commit/push`
 - current_version: `v21.1`
 - live Telegram delivery: `not run`
 - DB schema/write/backfill/delete: `none`
@@ -11,32 +11,33 @@
 
 ## Current Board
 
-- Owner clarified that yesterday three-major institutional trading must be hard-output for every stock, not only buy candidates.
-- Code now adds `昨日三大法人買賣超：...` to every holding and unheld card.
-- Missing institutional data is shown as `資料不足`, not omitted or converted to 0.
-- CAO runner could not start PM stage because local machine lacks `tmux`; local equivalent flow was used and the gap is tracked.
+- Owner corrected the display contract: yesterday three-major institutional trading should move out of per-stock cards and appear under future-watch `關注標的財報`.
+- Holding and unheld Telegram cards no longer hard-output `昨日三大法人買賣超`, so missing source data does not create repeated card noise.
+- Future-watch `關注標的財報` now appends `昨日三大法人買賣超` for each watched stock fundamentals block.
+- Read-only live probe confirmed TWSE T86 source returns data for 20260625 and merges 1326 institutional rows; 2421 has real values instead of `資料不足`.
+- CAO runner could not start PM stage because local machine lacks `tmux`; local equivalent PM -> Tech -> QA documents were used and the gap is tracked.
 
 ## Queued
 
 - Restore CAO runner dependency after C-drive reinstall (`tmux` or Windows-compatible launcher).
 - Clean full `tests/test_generator_report.py` legacy wording expectations.
-- Add official three-major institutional trading data source/backfill path.
+- Separately live-verify TPEx institutional open-data row shape; parser support is added but this turn's manual live proof focused on TWSE.
 
 ## Recently Done
 
-- `telegram_all_cards_institutional_trading_20260626`: implemented every-card yesterday three-major institutional trading line; QA conditional pass.
+- `future_watch_institutional_trading_20260626`: moved institutional trading from stock cards to future-watch fundamentals; QA conditional pass pending git completion.
+- `telegram_all_cards_institutional_trading_20260626`: superseded by Owner correction; cards should not carry this line now.
 - `telegram_readability_risk_wording_20260626`: implemented focused Telegram readability fixes; QA conditional pass.
-- `future_watch_remove_history_events_20260626`: removed future-watch `歷史類比` and `未來30日台股影響事件`; QA passed; pushed.
+- `future_watch_remove_history_events_20260626`: removed future-watch history analogy and 30-day Taiwan market event sections; QA passed; pushed.
 - `docs_local_env_cleanup_20260626`: root Markdown compressed, D-drive deployment runbook optimized, local bootstrap verified, pushed.
-- `local_d_drive_env_bootstrap_20260626`: installed D-drive portable Git/Bash and local bootstrap.
 
 ## Verification
 
-- Exact final-card regression: `4 passed`.
-- Combined focused regression: `6 passed, 229 deselected`.
+- Focused regression: `8 passed, 228 deselected`.
+- Read-only live probe: `STATUS=available`, `INSTITUTIONAL_ITEMS=1326`, 2421 values merged from TWSE T86 for `20260625`.
 - Full `tests/test_generator_report.py` not rerun this turn; known legacy full-file wording failures remain a cleanup item.
-- Git completion gate passed after push to `origin/main`.
+- Git completion gate: pending commit/push.
 
 ## Next Action
 
-- None for this task after git completion and closeout gates pass.
+- Commit and push current task, then run git completion and closeout gates.

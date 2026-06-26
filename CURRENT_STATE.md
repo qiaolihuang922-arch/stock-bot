@@ -2,8 +2,8 @@
 
 ## Current Task
 
-- task_id: `telegram_all_cards_institutional_trading_20260626`
-- status: `implemented + QA conditional pass + pushed`
+- task_id: `future_watch_institutional_trading_20260626`
+- status: `implemented + QA conditional pass + pending commit/push`
 - version: `v21.1`
 - live Telegram delivery: not run
 - DB schema/write/backfill/delete: none
@@ -11,19 +11,19 @@
 
 ## Stable Context
 
-- Owner reads Telegram on mobile; cards must say whether action is possible, what is missing, and what invalidates the setup.
+- Owner reads Telegram on mobile; summary and cards must avoid repeated noise and recommendation-like wording.
 - Cross-day state must come from production DB or an approved persistent source.
 - DB structure changes require Owner approval.
 - No live Telegram delivery without separate Owner approval.
-- `準備觀察` is not buy; only explicit `可買` is actionable.
-- On Windows, non-system development tools and caches should live on D drive by default.
+- On Windows, non-system development tools, caches, venvs, worktrees, runner context, artifacts, and logs should live on D drive by default.
 
 ## Current Implementation Notes
 
-- Every holding/unheld card now hard-outputs `昨日三大法人買賣超：...`.
-- Supported payload keys: `institutional_trading`, `three_major`, `three_major_institutional`, `institutional_investors`, `legal_person_trading`.
-- Missing data displays `昨日三大法人買賣超：資料不足`.
-- No official three-major data fetch/backfill source was added in this turn.
+- Per-stock holding/unheld cards no longer display `昨日三大法人買賣超`.
+- Future-watch `關注標的財報` now prints `昨日三大法人買賣超 {trade_date}：外資 ...｜投信 ...｜自營 ...｜合計 ...` under each watched stock fundamentals block.
+- Missing institutional data is scoped to that fundamentals block as `昨日三大法人買賣超：資料不足`.
+- Live source support added for TWSE T86 and TPEx three-institution daily trading.
+- Read-only TWSE live probe for 20260625 confirmed 1326 merged rows and real 2421 data.
 
 ## Local Environment
 
@@ -38,12 +38,14 @@
 
 ## Verification Snapshot
 
-- Exact final-card regression:
-  - `4 passed`
-- Combined focused regression:
-  - `6 passed, 229 deselected`
+- Focused regression:
+  - `8 passed, 228 deselected`
+- Read-only live probe:
+  - `STATUS=available`
+  - `INSTITUTIONAL_ITEMS=1326`
+  - 2421 TWSE T86 institutional trading merged for `20260625`
 - Full `tests/test_generator_report.py` not rerun this turn; known legacy full-file wording failures remain a cleanup risk.
-- Git completion gate passed after push to `origin/main`.
+- Git completion gate pending commit/push.
 
 ## Known Findings
 
@@ -52,8 +54,8 @@
 - Windows `py` launcher is unavailable; use repo `.venv` through bootstrap environment.
 - Node/WSL/CAO UI service runtime is not restored yet.
 - `tmux` missing blocks CAO agent runner.
-- Official three-major institutional trading source is not implemented yet; cards show `資料不足` until payload supplies data.
+- TPEx institutional parser is implemented, but this turn's manual live evidence only confirmed TWSE.
 
 ## Next Action
 
-- None for this task after git completion and closeout gates pass.
+- Commit and push current task, then run git completion and closeout gates.

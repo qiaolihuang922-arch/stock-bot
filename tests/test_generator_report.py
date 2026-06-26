@@ -10880,7 +10880,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("已低於警戒", card)
         self.assertNotIn("跌破警戒 143.23 續減", card)
 
-    def test_all_stock_cards_hard_output_yesterday_institutional_trading(self):
+    def test_stock_cards_do_not_show_institutional_trading_after_move_to_future_watch(self):
         holding_payload = render_payload(
             [100, 101, 102, 103, 104, 105, 106, 107, 108, 109],
             {"shares": 100, "avg_price": 100},
@@ -10906,10 +10906,10 @@ class GeneratorReportTest(unittest.TestCase):
         holding_card = generator.formatTelegramPositionCard("技嘉", holding_payload)
         unheld_card = generator.formatTelegramUnheldCard("建準", unheld_payload, report_phase="盤中")
 
-        self.assertIn("昨日三大法人買賣超：資料不足", holding_card)
-        self.assertIn("昨日三大法人買賣超：資料不足", unheld_card)
+        self.assertNotIn("昨日三大法人買賣超", holding_card)
+        self.assertNotIn("昨日三大法人買賣超", unheld_card)
 
-    def test_institutional_trading_line_formats_three_major_values(self):
+    def test_future_watch_fundamentals_show_yesterday_institutional_trading(self):
         payload = render_payload(
             [90, 91, 92, 93, 94, 95, 96, 97, 98, 99],
             None,
@@ -10917,15 +10917,65 @@ class GeneratorReportTest(unittest.TestCase):
             change=0.8,
         )
         payload["stock_code"] = "2421"
-        payload["three_major"] = {
-            "foreign": 1200,
-            "investment_trust": -300,
-            "dealer": 50,
+        fundamentals_source = {
+            "status": "available",
+            "items_by_code": {
+                "2421": {
+                    "eps": "2.34",
+                    "eps_year": "115",
+                    "eps_quarter": "1",
+                    "revenue_month": "11505",
+                    "revenue_yoy": "5.67",
+                    "institutional_trading": {
+                        "foreign": 1200,
+                        "investment_trust": -300,
+                        "dealer": 50,
+                        "total": 950,
+                        "trade_date": "20260625",
+                    },
+                }
+            },
         }
 
-        card = generator.formatTelegramUnheldCard("建準", payload, report_phase="盤中")
+        future_payload = build_future_watch_payload(
+            {"建準": payload},
+            datetime(2026, 6, 26),
+            mops_adapter=lambda **kwargs: {"status": "available", "rows": []},
+            fundamentals_source=fundamentals_source,
+        )
+        message = format_future_watch_message(future_payload, datetime(2026, 6, 26), generator.VERSION)
 
-        self.assertIn("昨日三大法人買賣超：外資 +1,200張｜投信 -300張｜自營 +50張｜合計 +950張", card)
+        self.assertIn("關注標的財報", message)
+        self.assertIn("2421 建準\nEPS 2026Q1 2.34\n營收 2026/05 +5.7%\n昨日三大法人買賣超 20260625：外資 +1,200張｜投信 -300張｜自營 +50張｜合計 +950張", message)
+
+    def test_live_stock_fundamentals_merges_twse_institutional_rows(self):
+        def fake_get_json(url, **_kwargs):
+            if "fund/T86" in url:
+                self.assertIn("date=20260625", url)
+                return SimpleNamespace(
+                    json=lambda: {
+                        "data": [{
+                            "證券代號": "2421",
+                            "外陸資買賣超股數(不含外資自營商)": "1200000",
+                            "投信買賣超股數": "-300000",
+                            "自營商買賣超股數": "50000",
+                            "三大法人買賣超股數": "950000",
+                        }]
+                    },
+                    raise_for_status=lambda: None,
+                )
+            if "t187ap05" in url or "t187ap14" in url:
+                return SimpleNamespace(json=lambda: [], raise_for_status=lambda: None)
+            return SimpleNamespace(json=lambda: [], raise_for_status=lambda: None)
+
+        source = build_live_stock_fundamentals_source(datetime(2026, 6, 26), get_json=fake_get_json)
+        institutional = source["items_by_code"]["2421"]["institutional_trading"]
+
+        self.assertEqual(source["status"], "available")
+        self.assertEqual(institutional["foreign"], 1200)
+        self.assertEqual(institutional["investment_trust"], -300)
+        self.assertEqual(institutional["dealer"], 50)
+        self.assertEqual(institutional["total"], 950)
 
     def test_get_market_phase_treats_1300_gap_as_trading_day(self):
         class FixedDateTime(datetime):
