@@ -1,56 +1,43 @@
-# QA_REPORT: telegram_mobile_readability_consolidation_20260626
+# QA_REPORT: future_watch_fundamentals_spaced_layout_20260626
 
 ## 測試範圍
 
-- Future-watch final message。
-- Institutional trading display。
-- Afterhours summary。
-- 今日買入說明。
-- 盤後持倉風控 checklist。
+- Future-watch fundamentals final layout。
+- Institutional line display regression。
+- Read-only sample render。
 
 ## 關聯風險掃描
 
-- 風險: 隱藏 MOPS source-error 會漏掉資料來源問題。
-  - 反證: source-error 對手機決策沒有幫助；文件保留 runner/source 風險，報文不顯示未確認事件。
-- 風險: 財報壓成兩行會少資訊。
-  - 反證: EPS、營收、法人判讀都保留，只移除多餘換行。
-- 風險: 持倉 summary 股數計算錯。
-  - 反證: STOP_100 用持股數；REDUCE_50/25 有 fallback regression。
+- 風險: 回到分行會變長。
+  - 反證: Owner 明確指出兩行版太擠，分行較適合手機掃讀。
+- 風險: 回退時移除法人判讀。
+  - 反證: regression 保留 `昨日法人偏買/偏賣`。
 
 ## 跨區塊語意一致性
 
-- Summary 的 `明日優先` 與持倉風控檢查同口徑。
-- Future-watch 不再顯示已移除的 history/global sections。
-- 未持倉沒有可買時仍是等觸發，不升格成推薦。
+- Future-watch 財報區恢復卡片感。
+- Summary、持倉卡、資料源修正不變。
 
 ## 使用者誤讀風險
 
-- 已降低：MOPS 錯誤不再佔第一眼。
-- 已降低：財報區滑動量減少。
-- 已降低：法人數字有偏買/偏賣判讀。
-- 已降低：盤後 summary 直接列明日賣多少股。
+- 已降低：每檔資料不再擠在同一行。
+- 已降低：檔與檔中間有空行，手機掃讀較清楚。
 
 ## 失敗標本反證
 
-- Owner afterhours specimen 的可見問題已反證：
-  - MOPS source-error hidden。
-  - 財報每檔兩行。
-  - 法人行有偏買/偏賣。
-  - Summary 新增明日優先。
-  - 今日買入長句縮短。
+- Owner specimen 的擠壓格式已改回：
+  - 代號名稱 / EPS / 營收 / 法人 各自一行。
 
 ## 質疑與反證
 
-- 質疑: 是否只改 helper？
-  - 反證: focused tests hit `formatTelegramMessages`、`formatTelegramPositionCard`、`format_future_watch_message`。
-- 質疑: 是否改策略？
-  - 反證: 本輪只改 formatter / fallback display shares；無 DB/write/source/strategy changes。
+- 質疑: 是否回退其他修正？
+  - 反證: MOPS source-error 隱藏與法人判讀保留；source 未改。
 
 ## 未測項目
 
 - 未發 live Telegram。
 - 未寫 production DB。
-- 未跑 full suite；已知 full `tests/test_generator_report.py` 仍有舊文案預期清理項。
+- 未跑 full suite。
 
 ## QA 結論
 

@@ -2,8 +2,8 @@
 
 ## Active
 
-- task_md_holds: `telegram_mobile_readability_consolidation_20260626`
-- status: `implemented + QA passed + pushed`
+- task_md_holds: `future_watch_fundamentals_spaced_layout_20260626`
+- status: `implemented + QA passed + pending commit/push`
 - current_version: `v21.1`
 - live Telegram delivery: `not run`
 - DB schema/write/backfill/delete: `none`
@@ -11,15 +11,15 @@
 
 ## Current Board
 
-- Owner asked to fix all remaining user-view issues in the afterhours specimen.
-- Implemented mobile readability consolidation:
-  - hide MOPS source-error from Telegram output;
-  - compact future-watch fundamentals to two lines per stock;
-  - add institutional bias labels;
-  - add afterhours `明日優先` with sell/reduce shares;
-  - shorten today-buy context line.
+- Owner rejected the compact two-line fundamentals layout as too cramped.
+- Future-watch fundamentals now use spaced layout again:
+  - stock line;
+  - EPS line;
+  - revenue line;
+  - institutional line;
+  - blank line between stocks.
+- MOPS source-error hiding, institutional bias labels, summary priority line, and source fixes remain.
 - No strategy, DB, source, or live Telegram changes.
-- CAO runner still lacks `tmux`; local equivalent PM -> Tech -> QA documents were used.
 
 ## Queued
 
@@ -28,20 +28,18 @@
 
 ## Recently Done
 
-- `telegram_mobile_readability_consolidation_20260626`: implemented mobile readability consolidation; QA passed; pushed.
+- `future_watch_fundamentals_spaced_layout_20260626`: restored spaced fundamentals layout; QA passed pending git completion.
+- `telegram_mobile_readability_consolidation_20260626`: implemented mobile readability consolidation; pushed.
 - `future_watch_institutional_mobile_compact_20260626`: implemented compact future-watch institutional display; pushed.
 - `future_watch_institutional_trading_20260626`: fixed institutional source parsing and date fallback; pushed.
-- `future_watch_remove_history_events_20260626`: removed future-watch history analogy and 30-day Taiwan market event sections; pushed.
-- `docs_local_env_cleanup_20260626`: root Markdown compressed, D-drive deployment runbook optimized, local bootstrap verified, pushed.
 
 ## Verification
 
-- Syntax: `py_compile` passed.
-- Focused regression: `15 passed, 223 deselected`.
-- Read-only sample render: 12 future-watch fundamentals use two-line compact format.
-- Full `tests/test_generator_report.py` not rerun this turn; known legacy full-file wording failures remain a cleanup item.
-- Git completion gate passed after push to `origin/main`.
+- Focused regression: `11 passed, 227 deselected`.
+- Read-only sample render: 2356/2376/2421 use spaced layout with blank lines.
+- Full `tests/test_generator_report.py` not rerun this turn.
+- Git completion gate: pending commit/push.
 
 ## Next Action
 
-- None for this task after git completion and closeout gates pass.
+- Commit and push spaced layout fix, then run git completion and closeout gates.

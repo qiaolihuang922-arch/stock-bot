@@ -1627,11 +1627,6 @@ def _fundamentals_detail_line(fundamentals):
     return f"  財報：{label}" if label else ""
 
 
-def _compact_fundamentals_line(item):
-    label = item.get("fundamentals_label") or "財報資料不足"
-    return f"{item.get('code')} {item.get('name')}｜{label}"
-
-
 def collect_target_fundamentals(
     results_map,
     fundamentals_source=None,
@@ -2032,8 +2027,13 @@ def format_future_watch_message(payload, now, version):
         lines.extend(["", "關注標的財報", "關注標的財報：官方來源暫時不可用，本次不列未確認數據"])
     elif fundamental_items:
         lines.extend(["", "關注標的財報"])
-        for item in fundamental_items:
-            lines.append(_compact_fundamentals_line(item))
+        for index, item in enumerate(fundamental_items):
+            if index:
+                lines.append("")
+            label = item.get("fundamentals_label") or "財報資料不足"
+            detail_lines = [part for part in str(label).split("｜") if part]
+            lines.append(f"{item.get('code')} {item.get('name')}")
+            lines.extend(detail_lines)
             lines.append(_institutional_trading_label(item.get("fundamentals") or {}))
 
     has_visible = (

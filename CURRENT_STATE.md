@@ -2,8 +2,8 @@
 
 ## Current Task
 
-- task_id: `telegram_mobile_readability_consolidation_20260626`
-- status: `implemented + QA passed + pushed`
+- task_id: `future_watch_fundamentals_spaced_layout_20260626`
+- status: `implemented + QA passed + pending commit/push`
 - version: `v21.1`
 - live Telegram delivery: not run
 - DB schema/write/backfill/delete: none
@@ -11,20 +11,18 @@
 
 ## Stable Context
 
-- Owner reads Telegram on mobile; summary and cards must avoid repeated noise and recommendation-like wording.
-- Future-watch `關注標的財報` can carry EPS、營收、三大法人，但每檔要短。
+- Owner reads Telegram on mobile; dense single-line fundamentals are harder to scan than spaced blocks.
+- Future-watch `關注標的財報` should keep a spaced card-like layout.
+- MOPS source-error should stay hidden from Telegram output.
 - Cross-day state must come from production DB or an approved persistent source.
-- DB structure changes require Owner approval.
 - No live Telegram delivery without separate Owner approval.
-- On Windows, non-system development tools, caches, venvs, worktrees, runner context, artifacts, and logs should live on D drive by default.
+- Windows development tools and caches should live on D drive by default.
 
 ## Current Implementation Notes
 
-- MOPS source-error is hidden from future-watch output.
-- Future-watch fundamentals are two lines per stock.
-- Institutional line includes bias: `昨日法人偏買/偏賣/分歧：...`。
-- Afterhours summary includes `明日優先` with action shares.
-- Today-buy holding context is shortened.
+- `關注標的財報` uses spaced layout again.
+- Institutional line remains compact with bias label.
+- Summary `明日優先` and source parsing fixes remain.
 
 ## Local Environment
 
@@ -39,14 +37,12 @@
 
 ## Verification Snapshot
 
-- Syntax:
-  - `py_compile` passed
 - Focused regression:
-  - `15 passed, 223 deselected`
+  - `11 passed, 227 deselected`
 - Read-only sample render:
-  - 12 future-watch fundamentals use two-line compact format.
-- Full `tests/test_generator_report.py` not rerun this turn; known legacy full-file wording failures remain a cleanup risk.
-- Git completion gate passed after push to `origin/main`.
+  - 2356、2376、2421 財報區恢復分行與空行。
+- Full `tests/test_generator_report.py` not rerun this turn.
+- Git completion gate pending commit/push.
 
 ## Known Findings
 
@@ -58,4 +54,4 @@
 
 ## Next Action
 
-- None for this task after git completion and closeout gates pass.
+- Commit and push spaced layout fix, then run git completion and closeout gates.
