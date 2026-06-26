@@ -3,7 +3,7 @@
 ## Current Task
 
 - task_id: `telegram_mobile_readability_consolidation_20260626`
-- status: `implemented + QA passed + pending commit/push`
+- status: `implemented + QA passed + pushed`
 - version: `v21.1`
 - live Telegram delivery: not run
 - DB schema/write/backfill/delete: none
@@ -46,7 +46,7 @@
 - Read-only sample render:
   - 12 future-watch fundamentals use two-line compact format.
 - Full `tests/test_generator_report.py` not rerun this turn; known legacy full-file wording failures remain a cleanup risk.
-- Git completion gate pending commit/push.
+- Git completion gate passed after push to `origin/main`.
 
 ## Known Findings
 
@@ -58,4 +58,4 @@
 
 ## Next Action
 
-- Commit and push readability consolidation, then run git completion and closeout gates.
+- None for this task after git completion and closeout gates pass.

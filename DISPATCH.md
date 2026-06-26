@@ -3,7 +3,7 @@
 ## Active
 
 - task_md_holds: `telegram_mobile_readability_consolidation_20260626`
-- status: `implemented + QA passed + pending commit/push`
+- status: `implemented + QA passed + pushed`
 - current_version: `v21.1`
 - live Telegram delivery: `not run`
 - DB schema/write/backfill/delete: `none`
@@ -28,7 +28,7 @@
 
 ## Recently Done
 
-- `telegram_mobile_readability_consolidation_20260626`: implemented mobile readability consolidation; QA passed pending git completion.
+- `telegram_mobile_readability_consolidation_20260626`: implemented mobile readability consolidation; QA passed; pushed.
 - `future_watch_institutional_mobile_compact_20260626`: implemented compact future-watch institutional display; pushed.
 - `future_watch_institutional_trading_20260626`: fixed institutional source parsing and date fallback; pushed.
 - `future_watch_remove_history_events_20260626`: removed future-watch history analogy and 30-day Taiwan market event sections; pushed.
@@ -40,8 +40,8 @@
 - Focused regression: `15 passed, 223 deselected`.
 - Read-only sample render: 12 future-watch fundamentals use two-line compact format.
 - Full `tests/test_generator_report.py` not rerun this turn; known legacy full-file wording failures remain a cleanup item.
-- Git completion gate: pending commit/push.
+- Git completion gate passed after push to `origin/main`.
 
 ## Next Action
 
-- Commit and push readability consolidation, then run git completion and closeout gates.
+- None for this task after git completion and closeout gates pass.
