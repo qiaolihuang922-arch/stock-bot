@@ -4,75 +4,69 @@
 
 - task_id: `future_watch_institutional_trading_20260626`
 - 任務類型: `normal_patch`
-- 狀態: `implemented_QA_conditional_pass_pushed`
+- 狀態: `implemented_QA_pending_git`
 - 版本建議: `v21.1`
 - QA 分級: `L2`
 
 ## Owner 問題
 
-Owner 要求把「昨日三大法人買賣超」從每張股票卡移到未來30日關注的 `關注標的財報` 區塊；同時指出目前顯示抓不到資料，需接上可用資料來源而不是只顯示 `資料不足`。
+Owner 指出三大法人買賣超不可能整批抓不到；前一版雖已移到 `關注標的財報`，但資料來源解析仍有錯誤，會讓部分市場或日期誤顯示 `資料不足`。
 
 ## 使用者可見結果
 
-- 持倉卡與未持倉卡不再顯示 `昨日三大法人買賣超：資料不足`。
-- `關注標的財報` 每檔股票在 EPS / 營收後顯示 `昨日三大法人買賣超`。
-- TWSE 上市個股從官方 T86 三大法人日報抓昨日資料。
-- TPEx 上櫃個股從 TPEx 三大法人 OpenAPI 嘗試抓取。
-- 若官方來源仍不可用，僅在財報區 fail closed，不污染每張股票卡。
+- 股票卡片仍不顯示三大法人行。
+- `關注標的財報` 顯示昨日或最近可用交易日的三大法人買賣超。
+- TWSE 日期若遇到假日、未發布或空資料，會回退查最近可用日期。
+- TPEx 上櫃資料使用官方英文欄位解析，不再因欄位名不同而整批漏掉。
 
 ## 非目標
 
 - 不發 live Telegram。
 - 不寫 production DB。
-- 不新增 DB schema / RLS / grant / policy。
-- 不做跨日 backfill；本輪只做 read-only live source 與報文呈現。
+- 不新增或變更 DB schema / RLS / grant / policy。
+- 不改交易策略、持倉判斷或買賣決策。
 
 ## 影響模組與直接消費者
 
-- `core/future_watch.py`: future-watch fundamentals source、institutional merge、format。
-- `presentation/report.py`: 移除卡片層三大法人輸出。
-- `tests/test_generator_report.py`: final card / future-watch regression。
+- `core/future_watch.py`: 三大法人 source 日期候選、TWSE/TPEx row parser、merge 規則。
+- `tests/test_generator_report.py`: source regression 與 future-watch regression。
 - 直接消費者: Telegram `【未來30日關注】` 的 `關注標的財報` 區塊。
 
 ## 輸出契約
 
-- 股票卡不得出現 `昨日三大法人買賣超`。
 - `關注標的財報` 每檔可顯示：
   - 股票代號與名稱。
   - EPS。
   - 營收 YoY。
   - `昨日三大法人買賣超 YYYYMMDD：外資 ...｜投信 ...｜自營 ...｜合計 ...`
-- TWSE T86 row 若為 `fields + data` 陣列，必須轉成 dict 後解析。
-- 官方股數單位轉為 `張` 顯示。
-- TWSE institutional 查詢日期使用 `now - 1 day`，避免盤中查今日自然空資料。
+- 缺資料只能在該財報區塊 fail closed 為 `昨日三大法人買賣超：資料不足`。
+- 不得把缺資料輸出成 0。
 
 ## 版本契約
 
 - 使用者可見版本維持 `v21.1`。
-- 本輪為報文區塊與 read-only source 修正，不改策略版本。
+- 本輪修 source 與顯示資料完整性，不改策略版本。
 
 ## 驗收條件
 
-- final position/unheld cards 不含三大法人行。
-- future-watch `關注標的財報` 顯示三大法人買賣超。
-- live read-only probe 能從官方來源合併 institutional rows。
+- TWSE T86 今日空資料時會回退到最近可用交易日。
+- TPEx OpenAPI 英文欄位可解析外資、投信、自營、合計與民國日期。
+- live read-only probe 能同時合併 TWSE 與 TPEx institutional rows。
 - focused future-watch regression 通過。
 
 ## 範例或 fixture
 
-- 2421 建準，institutional payload:
-  - 外資 `+1,200張`
-  - 投信 `-300張`
-  - 自營 `+50張`
-  - 合計 `+950張`
+- TWSE fixture: `20260626` 空資料，`20260625` 有 2421 三大法人資料，最後顯示 `trade_date=20260625`。
+- TPEx fixture: 6488 使用 `SecuritiesCompanyCode`、`TotalDifference`、`Date=1150625`。
 
 ## 失敗標本與驗收路由
 
-- Owner correction: `買賣超移動到關注標的財報，而且現在顯示抓不到資料`。
+- Owner correction: `不可能抓不到的 你一定是哪邊錯了`。
 - 驗收路由: `build_live_stock_fundamentals_source` -> `collect_target_fundamentals` -> `format_future_watch_message`。
 
 ## 禁止事項與阻塞條件
 
-- 不得繼續在每張股票卡硬塞 `資料不足`。
-- 不得把缺資料顯示成 0。
+- 不得只測 formatter 而不測 source row shape。
+- 不得只查單一日 TWSE 後把空資料視為抓不到。
+- 不得忽略 TPEx 官方英文欄位。
 - 不得 live Telegram。

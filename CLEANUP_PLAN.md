@@ -2,7 +2,7 @@
 
 ## Current Cleanup Status
 
-- Active product cleanup: move yesterday three-major institutional trading out of noisy per-stock cards and into future-watch `關注標的財報`.
+- Active product cleanup: institutional trading data must appear in future-watch `關注標的財報` without false `資料不足`.
 - No DB schema, production DB data, or live Telegram action is in scope.
 
 ## Completed
@@ -11,12 +11,13 @@
 - Local bootstrap scripts added under `tools/cao_agent/`.
 - Local Git config, HOME, pip/pytest/npm/uv caches, and CAO context redirected away from C drive.
 - Local pytest and generator dry-run verified after C-drive reinstall.
-- v21.1 Telegram readability fixes remain completed and pushed.
 - Future-watch output removes history analogy and 30-day Taiwan market event sections.
 - Telegram holding reduce cards now show share basis and current warning-breach wording.
 - Telegram unheld overheat/failed-breakout wording now avoids chase-like ambiguity.
 - Institutional trading line removed from holding/unheld cards after Owner correction.
-- Future-watch fundamentals now include yesterday three-major institutional trading and a TWSE T86 read-only source path.
+- Future-watch fundamentals include institutional trading.
+- TWSE institutional source now handles recent-date fallback.
+- TPEx institutional source now parses official English fields.
 
 ## Deferred
 
@@ -25,7 +26,6 @@
 - Restore Node/WSL/CAO UI services with D-drive-first placement.
 - Clean unrelated legacy expectations in full `tests/test_generator_report.py`.
 - Later remove unused historical/global future-watch helpers only after confirming no other scripts/tests consume them.
-- Live-verify TPEx institutional open-data row shape separately; parser support exists but manual live proof focused on TWSE in this task.
 
 ## Rule Of Thumb
 

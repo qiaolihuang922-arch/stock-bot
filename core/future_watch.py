@@ -1354,6 +1354,7 @@ def _institutional_code(row):
         row.get("證券代號")
         or row.get("代號")
         or row.get("股票代號")
+        or row.get("SecuritiesCompanyCode")
         or row.get("stock_code")
         or row.get("code")
         or ""
@@ -1375,16 +1376,40 @@ def _parse_institutional_row(row, *, market, source_unit="shares", trade_date=No
     code = _institutional_code(row)
     if not code:
         return None
+    row_trade_date = _institutional_trade_date(row)
     foreign = _field_value(row, [
         "外陸資買賣超股數(不含外資自營商)",
+        "外資及陸資買賣超股數(不含外資自營商)",
         "外資及陸資(不含外資自營商)",
         "外資及陸資",
+        "Foreign Investors include Mainland Area Investors (Foreign Dealers excluded)-Difference",
+        "ForeignInvestorsInclude MainlandAreaInvestors-Difference",
+        "ForeignInvestorsIncludeMainlandAreaInvestors-Difference",
         "foreign",
         "foreign_net",
     ])
-    trust = _field_value(row, ["投信買賣超股數", "投信", "investment_trust", "trust_net"])
-    dealer = _field_value(row, ["自營商買賣超股數", "自營商", "dealer", "dealer_net"])
-    total = _field_value(row, ["三大法人買賣超股數", "三大法人買賣超股數合計", "合計", "total", "total_net"])
+    trust = _field_value(row, [
+        "投信買賣超股數",
+        "投信",
+        "SecuritiesInvestmentTrustCompanies-Difference",
+        "investment_trust",
+        "trust_net",
+    ])
+    dealer = _field_value(row, [
+        "自營商買賣超股數",
+        "自營商",
+        "Dealers-Difference",
+        "dealer",
+        "dealer_net",
+    ])
+    total = _field_value(row, [
+        "三大法人買賣超股數",
+        "三大法人買賣超股數合計",
+        "合計",
+        "TotalDifference",
+        "total",
+        "total_net",
+    ])
     parsed = {
         "foreign": _to_lots(foreign, source_unit=source_unit),
         "investment_trust": _to_lots(trust, source_unit=source_unit),
@@ -1392,7 +1417,7 @@ def _parse_institutional_row(row, *, market, source_unit="shares", trade_date=No
         "total": _to_lots(total, source_unit=source_unit),
         "unit": "張",
         "market": market,
-        "trade_date": trade_date,
+        "trade_date": row_trade_date or trade_date,
     }
     if parsed["total"] is None and all(parsed.get(key) is not None for key in ["foreign", "investment_trust", "dealer"]):
         parsed["total"] = parsed["foreign"] + parsed["investment_trust"] + parsed["dealer"]
@@ -1408,6 +1433,8 @@ def _merge_institutional_rows(target, rows, *, market, source_unit="shares", tra
             continue
         code, institutional = parsed
         target.setdefault(code, {})
+        if target[code].get("institutional_trading"):
+            continue
         target[code]["institutional_trading"] = institutional
 
 
@@ -1440,16 +1467,65 @@ def _yesterday_yyyymmdd(value):
     return (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
 
 
+def _institutional_trade_date_candidates(value, lookback=7):
+    if isinstance(value, datetime):
+        start = value.date()
+    elif isinstance(value, date):
+        start = value
+    else:
+        start = datetime.now().date()
+    return [(start - timedelta(days=offset)).strftime("%Y%m%d") for offset in range(1, lookback + 1)]
+
+
+def _institutional_trade_date(row):
+    raw = _field_value(row, ["date", "trade_date", "Date", "日期"])
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    digits = re.sub(r"\D", "", text)
+    if len(digits) == 8:
+        return digits
+    if len(digits) == 7:
+        return f"{int(digits[:3]) + 1911}{digits[3:]}"
+    return None
+
+
 def build_live_stock_fundamentals_source(now=None, get_json=None):
-    institutional_trade_date = _yesterday_yyyymmdd(now)
-    twse_institutional_url = TWSE_INSTITUTIONAL_ENDPOINT.format(date=institutional_trade_date)
+    institutional_trade_dates = _institutional_trade_date_candidates(now)
     endpoints = (
         ("twse_revenue", TWSE_MONTHLY_REVENUE_ENDPOINT, _merge_monthly_revenue_rows, 6, 1),
         ("tpex_revenue", TPEX_MONTHLY_REVENUE_ENDPOINT, _merge_monthly_revenue_rows, 6, 1),
         ("twse_eps", TWSE_EPS_ENDPOINT, _merge_eps_rows, 6, 1),
         ("tpex_eps", TPEX_EPS_ENDPOINT, _merge_eps_rows, 6, 1),
-        ("twse_institutional", twse_institutional_url, lambda target, rows: _merge_institutional_rows(target, _twse_institutional_rows(rows), market="上市", source_unit="shares", trade_date=institutional_trade_date), 12, 2),
-        ("tpex_institutional", TPEX_INSTITUTIONAL_ENDPOINT, lambda target, rows: _merge_institutional_rows(target, rows, market="上櫃", source_unit="shares", trade_date=institutional_trade_date), 12, 2),
+        *tuple(
+            (
+                f"twse_institutional_{trade_date}",
+                TWSE_INSTITUTIONAL_ENDPOINT.format(date=trade_date),
+                lambda target, rows, trade_date=trade_date: _merge_institutional_rows(
+                    target,
+                    _twse_institutional_rows(rows),
+                    market="上市",
+                    source_unit="shares",
+                    trade_date=trade_date,
+                ),
+                12,
+                2,
+            )
+            for trade_date in institutional_trade_dates
+        ),
+        (
+            "tpex_institutional",
+            TPEX_INSTITUTIONAL_ENDPOINT,
+            lambda target, rows: _merge_institutional_rows(
+                target,
+                rows,
+                market="上櫃",
+                source_unit="shares",
+                trade_date=None,
+            ),
+            12,
+            2,
+        ),
     )
     rows_by_code = {}
     errors = []

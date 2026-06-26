@@ -1,6 +1,7 @@
 import unittest
 import ast
 import copy
+import re
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -10949,14 +10950,22 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("2421 建準\nEPS 2026Q1 2.34\n營收 2026/05 +5.7%\n昨日三大法人買賣超 20260625：外資 +1,200張｜投信 -300張｜自營 +50張｜合計 +950張", message)
 
     def test_live_stock_fundamentals_merges_twse_institutional_rows(self):
+        requested_t86_dates = []
+
         def fake_get_json(url, **_kwargs):
             if "fund/T86" in url:
-                self.assertIn("date=20260625", url)
+                date_match = re.search(r"date=(\d{8})", url)
+                requested_t86_dates.append(date_match.group(1) if date_match else "")
+                if "date=20260626" in url:
+                    return SimpleNamespace(
+                        json=lambda: {"data": []},
+                        raise_for_status=lambda: None,
+                    )
                 return SimpleNamespace(
                     json=lambda: {
                         "data": [{
                             "證券代號": "2421",
-                            "外陸資買賣超股數(不含外資自營商)": "1200000",
+                            "外資及陸資買賣超股數(不含外資自營商)": "1200000",
                             "投信買賣超股數": "-300000",
                             "自營商買賣超股數": "50000",
                             "三大法人買賣超股數": "950000",
@@ -10968,14 +10977,44 @@ class GeneratorReportTest(unittest.TestCase):
                 return SimpleNamespace(json=lambda: [], raise_for_status=lambda: None)
             return SimpleNamespace(json=lambda: [], raise_for_status=lambda: None)
 
-        source = build_live_stock_fundamentals_source(datetime(2026, 6, 26), get_json=fake_get_json)
+        source = build_live_stock_fundamentals_source(datetime(2026, 6, 27), get_json=fake_get_json)
         institutional = source["items_by_code"]["2421"]["institutional_trading"]
 
         self.assertEqual(source["status"], "available")
+        self.assertIn("20260626", requested_t86_dates)
+        self.assertIn("20260625", requested_t86_dates)
         self.assertEqual(institutional["foreign"], 1200)
         self.assertEqual(institutional["investment_trust"], -300)
         self.assertEqual(institutional["dealer"], 50)
         self.assertEqual(institutional["total"], 950)
+        self.assertEqual(institutional["trade_date"], "20260625")
+
+    def test_live_stock_fundamentals_merges_tpex_institutional_english_rows(self):
+        def fake_get_json(url, **_kwargs):
+            if "tpex_3insti_daily_trading" in url:
+                return SimpleNamespace(
+                    json=lambda: [{
+                        "Date": "1150625",
+                        "SecuritiesCompanyCode": "6488",
+                        "Foreign Investors include Mainland Area Investors (Foreign Dealers excluded)-Difference": "-2216052",
+                        "SecuritiesInvestmentTrustCompanies-Difference": "300000",
+                        "Dealers-Difference": "29215097",
+                        "TotalDifference": "27299045",
+                    }],
+                    raise_for_status=lambda: None,
+                )
+            if "fund/T86" in url or "t187ap05" in url or "t187ap14" in url:
+                return SimpleNamespace(json=lambda: [], raise_for_status=lambda: None)
+            return SimpleNamespace(json=lambda: [], raise_for_status=lambda: None)
+
+        source = build_live_stock_fundamentals_source(datetime(2026, 6, 26), get_json=fake_get_json)
+        institutional = source["items_by_code"]["6488"]["institutional_trading"]
+
+        self.assertEqual(institutional["foreign"], -2216.052)
+        self.assertEqual(institutional["investment_trust"], 300)
+        self.assertEqual(institutional["dealer"], 29215.097)
+        self.assertEqual(institutional["total"], 27299.045)
+        self.assertEqual(institutional["trade_date"], "20260625")
 
     def test_get_market_phase_treats_1300_gap_as_trading_day(self):
         class FixedDateTime(datetime):

@@ -3,7 +3,7 @@
 ## Current Task
 
 - task_id: `future_watch_institutional_trading_20260626`
-- status: `implemented + QA conditional pass + pushed`
+- status: `implemented + QA conditional pass + pending commit/push`
 - version: `v21.1`
 - live Telegram delivery: not run
 - DB schema/write/backfill/delete: none
@@ -19,11 +19,11 @@
 
 ## Current Implementation Notes
 
-- Per-stock holding/unheld cards no longer display `昨日三大法人買賣超`.
-- Future-watch `關注標的財報` now prints `昨日三大法人買賣超 {trade_date}：外資 ...｜投信 ...｜自營 ...｜合計 ...` under each watched stock fundamentals block.
-- Missing institutional data is scoped to that fundamentals block as `昨日三大法人買賣超：資料不足`.
-- Live source support added for TWSE T86 and TPEx three-institution daily trading.
-- Read-only TWSE live probe for 20260625 confirmed 1326 merged rows and real 2421 data.
+- Per-stock holding/unheld cards do not display `昨日三大法人買賣超`.
+- Future-watch `關注標的財報` prints `昨日三大法人買賣超 {trade_date}：外資 ...｜投信 ...｜自營 ...｜合計 ...`.
+- TWSE T86 now tries recent candidate dates and keeps the first available data.
+- TPEx OpenAPI English institutional fields and ROC `Date` are parsed.
+- Missing institutional data is scoped to the fundamentals block as `昨日三大法人買賣超：資料不足`.
 
 ## Local Environment
 
@@ -38,14 +38,17 @@
 
 ## Verification Snapshot
 
-- Focused regression:
-  - `8 passed, 228 deselected`
+- Focused source regression:
+  - `2 passed`
+- Focused future-watch regression:
+  - `8 passed, 229 deselected`
 - Read-only live probe:
-  - `STATUS=available`
-  - `INSTITUTIONAL_ITEMS=1326`
-  - 2421 TWSE T86 institutional trading merged for `20260625`
+  - `status=available`
+  - `errors=[]`
+  - `institutional_count=2281`
+  - Owner 12-stock sample and TPEx 6488 all have institutional trading values.
 - Full `tests/test_generator_report.py` not rerun this turn; known legacy full-file wording failures remain a cleanup risk.
-- Git completion gate passed after push to `origin/main`.
+- Git completion gate pending commit/push.
 
 ## Known Findings
 
@@ -54,8 +57,7 @@
 - Windows `py` launcher is unavailable; use repo `.venv` through bootstrap environment.
 - Node/WSL/CAO UI service runtime is not restored yet.
 - `tmux` missing blocks CAO agent runner.
-- TPEx institutional parser is implemented, but this turn's manual live evidence only confirmed TWSE.
 
 ## Next Action
 
-- None for this task after git completion and closeout gates pass.
+- Commit and push source fix, then run git completion and closeout gates.
