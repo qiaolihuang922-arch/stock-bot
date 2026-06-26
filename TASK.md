@@ -4,7 +4,7 @@
 
 - task_id: `telegram_all_cards_institutional_trading_20260626`
 - 任務類型: `normal_patch`
-- 狀態: `implemented_QA_pending_git`
+- 狀態: `implemented_QA_conditional_pass_pushed`
 - 版本建議: `v21.1`
 - QA 分級: `L2`
 

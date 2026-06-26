@@ -3,7 +3,7 @@
 ## Active
 
 - task_md_holds: `telegram_all_cards_institutional_trading_20260626`
-- status: `implemented + QA conditional pass + pending commit/push`
+- status: `implemented + QA conditional pass + pushed`
 - current_version: `v21.1`
 - live Telegram delivery: `not run`
 - DB schema/write/backfill/delete: `none`
@@ -35,7 +35,8 @@
 - Exact final-card regression: `4 passed`.
 - Combined focused regression: `6 passed, 229 deselected`.
 - Full `tests/test_generator_report.py` not rerun this turn; known legacy full-file wording failures remain a cleanup item.
+- Git completion gate passed after push to `origin/main`.
 
 ## Next Action
 
-- Commit and push `telegram_all_cards_institutional_trading_20260626`, then run git completion and closeout gates.
+- None for this task after git completion and closeout gates pass.
