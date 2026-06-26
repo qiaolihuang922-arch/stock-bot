@@ -3,7 +3,7 @@
 ## Active
 
 - task_md_holds: `future_watch_institutional_mobile_compact_20260626`
-- status: `implemented + QA passed + pending commit/push`
+- status: `implemented + QA passed + pushed`
 - current_version: `v21.1`
 - live Telegram delivery: `not run`
 - DB schema/write/backfill/delete: `none`
@@ -25,7 +25,7 @@
 
 ## Recently Done
 
-- `future_watch_institutional_mobile_compact_20260626`: implemented compact future-watch institutional display; QA passed pending git completion.
+- `future_watch_institutional_mobile_compact_20260626`: implemented compact future-watch institutional display; QA passed; pushed.
 - `future_watch_institutional_trading_20260626`: fixed institutional source parsing and date fallback; QA conditional pass; pushed.
 - `telegram_all_cards_institutional_trading_20260626`: superseded by Owner correction; cards should not carry this line now.
 - `future_watch_remove_history_events_20260626`: removed future-watch history analogy and 30-day Taiwan market event sections; QA passed; pushed.
@@ -36,8 +36,8 @@
 - Focused future-watch regression: `9 passed, 229 deselected`.
 - Read-only sample render: 12 institutional lines use compact format.
 - Full `tests/test_generator_report.py` not rerun this turn; known legacy full-file wording failures remain a cleanup item.
-- Git completion gate: pending commit/push.
+- Git completion gate passed after push to `origin/main`.
 
 ## Next Action
 
-- Commit and push compact display fix, then run git completion and closeout gates.
+- None for this task after git completion and closeout gates pass.
