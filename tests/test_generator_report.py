@@ -16,6 +16,7 @@ from core.future_watch import (
     build_future_watch_payload,
     collect_mops_events,
     collect_global_events,
+    default_future_watch_sources,
     format_future_watch_message,
     live_mops_adapter,
 )
@@ -1730,11 +1731,11 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【未來30日關注】", messages[3])
         self.assertNotIn("未來30日台股影響事件", summary_message(messages))
         self.assertNotIn("未來30日法說會", summary_message(messages))
-        self.assertLess(messages[3].index("歷史類比"), messages[3].index("未來30日法說會"))
-        self.assertLess(messages[3].index("未來30日法說會"), messages[3].index("未來30日台股影響事件"))
+        self.assertNotIn("歷史類比", messages[3])
+        self.assertNotIn("未來30日台股影響事件", messages[3])
         self.assertNotIn("\n全球事件\n", messages[3])
         self.assertNotIn("\n法說會提醒\n", messages[3])
-        self.assertIn("歷史類比：03/12 疫情急跌時間線｜相似度 84%｜相似：跌幅擴大、量能放大、市場廣度轉弱｜類比不是預測", messages[3])
+        self.assertNotIn("疫情急跌時間線", messages[3])
         self.assertNotIn("即將崩盤", messages[3])
         self.assertNotIn("重演", messages[3])
         self.assertIn(
@@ -1745,21 +1746,17 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("2301 光寶科\nEPS 2026Q1 1.23\n營收 2026/04 +12.3%", messages[3])
         self.assertIn("2301 光寶科\nEPS 2026Q1 1.23\n營收 2026/04 +12.3%\n\n2421 建準", messages[3])
         self.assertIn("2421 建準\nEPS 2026Q1 2.34\n營收 2026/04 +5.7%", messages[3])
-        fundamental_block = messages[3].split("關注標的財報", 1)[1].split("未來30日台股影響事件", 1)[0]
+        fundamental_block = messages[3].split("關注標的財報", 1)[1]
         self.assertNotIn("關注原因：", fundamental_block)
         self.assertNotIn("營收YoY", messages[3])
         self.assertNotIn("source=MOPS", messages[3])
         self.assertNotIn("0-count", messages[3])
-        self.assertNotIn("查無資料", messages[3].split("未來30日台股影響事件", 1)[0])
+        self.assertNotIn("查無資料", messages[3])
         global_lines = [
             line for line in messages[3].splitlines()
             if "｜影響面：" in line and "說明：" in line
         ]
-        self.assertEqual(len(global_lines), 5)
-        self.assertEqual(global_lines[0], "06/10-11 ECB 利率會議/記者會｜影響面：利率/匯率｜說明：影響外資風險偏好與台股估值；牽動美元/台幣與外資流向")
-        self.assertIn("06/10 美國 CPI（May 2026）｜影響面：通膨/利率｜說明：牽動Fed路徑與科技股估值；影響外資風險偏好與台股估值", global_lines[1])
-        self.assertIn("06/15-16 日本央行 BOJ 利率會議｜影響面：利率/匯率｜說明：影響外資風險偏好與台股估值；牽動美元/台幣與外資流向", global_lines)
-        self.assertIn("06/16-17 Fed FOMC 利率決策/SEP｜影響面：利率/匯率｜說明：影響外資風險偏好與台股估值；牽動美元/台幣與外資流向", global_lines)
+        self.assertEqual(global_lines, [])
         self.assertNotIn("來源：", messages[3])
         self.assertNotIn("Invalid official row", messages[3])
         self.assertTrue(any(call["year"] == 115 and call["month"] == "06" and call["co_id"] == "2301" for call in mops_calls))
@@ -2002,37 +1999,38 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertNotIn("2026/03 +91.5%", message)
 
     def test_v20_4_47_future_watch_global_event_ranges_sort_and_fail_closed(self):
-        payload = {
-            "historical_analogy": {"line": "歷史類比：無高相似台股急跌樣本｜依據不足/相似度低"},
-            "mops_events": {"status": "available", "items": []},
-            "global_events": collect_global_events(
-                datetime(2026, 6, 4),
-                global_event_source=[
-                    {"date": "2026/06/15-16", "event": "日本央行 BOJ 利率會議", "impact": "利率/匯率", "source": "BOJ"},
-                    {"date": "2026-06-16-17", "event": "Fed FOMC 利率決策/SEP", "impact": "利率/匯率", "source": "Fed"},
-                    {"date": "2026/06/10-11", "event": "ECB 利率會議/記者會", "impact": "利率/匯率", "source": "ECB"},
-                    {"date": "2026/06/10", "event": "美國 CPI（May 2026）", "impact": "通膨/利率", "source": "BLS"},
-                    {"date": "2026/06/15-2026/06/17", "event": "G7 領袖峰會", "impact": "政治風險", "source": "G7"},
-                    {"date": "2026/06/99-100", "event": "Invalid official row", "impact": "政治風險", "source": "Official"},
-                    {"date": "bad-date", "event": "Bad date", "impact": "利率", "source": "Official"},
-                ],
-            ),
-        }
+        events = collect_global_events(
+            datetime(2026, 6, 4),
+            global_event_source=[
+                {"date": "2026/06/15-16", "event": "日本央行 BOJ 利率會議", "impact": "利率/匯率", "source": "BOJ"},
+                {"date": "2026-06-16-17", "event": "Fed FOMC 利率決策/SEP", "impact": "利率/匯率", "source": "Fed"},
+                {"date": "2026/06/10-11", "event": "ECB 利率會議/記者會", "impact": "利率/匯率", "source": "ECB"},
+                {"date": "2026/06/10", "event": "美國 CPI（May 2026）", "impact": "通膨/利率", "source": "BLS"},
+                {"date": "2026/06/15-2026/06/17", "event": "G7 領袖峰會", "impact": "政治風險", "source": "G7"},
+                {"date": "2026/06/99-100", "event": "Invalid official row", "impact": "政治風險", "source": "Official"},
+                {"date": "bad-date", "event": "Bad date", "impact": "利率", "source": "Official"},
+            ],
+        )
 
-        message = format_future_watch_message(payload, datetime(2026, 6, 4), generator.VERSION)
-        global_lines = [
-            line for line in message.splitlines()
-            if "｜影響面：" in line and "說明：" in line
-        ]
+        event_labels = [item["date_label"] + " " + item["event"] for item in events["items"]]
 
-        self.assertEqual(global_lines[0], "06/10-11 ECB 利率會議/記者會｜影響面：利率/匯率｜說明：影響外資風險偏好與台股估值；牽動美元/台幣與外資流向")
-        self.assertEqual(global_lines[1], "06/10 美國 CPI（May 2026）｜影響面：通膨/利率｜說明：牽動Fed路徑與科技股估值；影響外資風險偏好與台股估值")
-        self.assertEqual(global_lines[2], "06/15-16 日本央行 BOJ 利率會議｜影響面：利率/匯率｜說明：影響外資風險偏好與台股估值；牽動美元/台幣與外資流向")
-        self.assertIn("06/15-17 G7 領袖峰會｜影響面：政治風險｜說明：提高避險情緒與供應鏈不確定性", global_lines)
-        self.assertIn("06/16-17 Fed FOMC 利率決策/SEP｜影響面：利率/匯率｜說明：影響外資風險偏好與台股估值；牽動美元/台幣與外資流向", global_lines)
-        self.assertNotIn("來源：", message)
-        self.assertNotIn("Invalid official row", message)
-        self.assertNotIn("Bad date", message)
+        self.assertEqual(event_labels[0], "06/10-11 ECB 利率會議/記者會")
+        self.assertEqual(event_labels[1], "06/10 美國 CPI（May 2026）")
+        self.assertEqual(event_labels[2], "06/15-16 日本央行 BOJ 利率會議")
+        self.assertIn("06/15-17 G7 領袖峰會", event_labels)
+        self.assertIn("06/16-17 Fed FOMC 利率決策/SEP", event_labels)
+        self.assertNotIn("Invalid official row", "\n".join(event_labels))
+        self.assertNotIn("Bad date", "\n".join(event_labels))
+
+    def test_future_watch_default_sources_do_not_query_removed_history_or_global_events(self):
+        with patch("core.future_watch.build_live_twse_historical_source", side_effect=AssertionError("historical queried")), \
+             patch("core.future_watch.build_live_global_event_source", side_effect=AssertionError("global events queried")):
+            sources = default_future_watch_sources(datetime(2026, 6, 26))
+
+        self.assertNotIn("historical_source", sources)
+        self.assertNotIn("global_event_source", sources)
+        self.assertIn("mops_adapter", sources)
+        self.assertIn("fundamentals_source", sources)
 
     def test_v20_4_47_live_twse_source_builds_pressure_timeline(self):
         responses = {
@@ -2405,9 +2403,9 @@ class GeneratorReportTest(unittest.TestCase):
         watch = future_watch_message(messages)
 
         self.assertEqual(len(messages), 4)
-        self.assertIn("歷史類比：無高相似台股急跌樣本｜依據不足/相似度低", watch)
+        self.assertNotIn("歷史類比", watch)
         self.assertIn("未來30日法說會：MOPS 官方來源暫時不可解析，本次不列未確認事件", watch)
-        self.assertIn("未來30日台股影響事件：官方來源暫時不可用，本次不列未確認事件", watch)
+        self.assertNotIn("未來30日台股影響事件", watch)
         self.assertNotIn("金融海嘯急跌", watch)
         self.assertNotIn("即將崩盤", watch)
         self.assertNotIn("重演", watch)
@@ -2478,22 +2476,18 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIs(messages[2], summary_message(messages))
         watch = messages[3]
         self.assertIn(f"未來30日關注｜{generator.VERSION}】", watch)
-        self.assertIn("歷史類比：2015 台股急跌/中國股災外溢", watch)
-        self.assertIn("模組分數：價格", watch)
-        self.assertIn("資料：TWSE近4日｜樣本庫台股急跌 19件", watch)
+        self.assertNotIn("歷史類比", watch)
+        self.assertNotIn("模組分數：價格", watch)
+        self.assertNotIn("資料：TWSE近4日｜樣本庫台股急跌 19件", watch)
         self.assertNotIn("全球股災", watch)
         self.assertIn("未來30日法說會：MOPS 官方來源暫時不可解析，本次不列未確認事件", watch)
         global_lines = [
             line for line in watch.splitlines()
             if "｜影響面：" in line and "說明：" in line
         ]
-        self.assertGreaterEqual(len(global_lines), 3)
-        self.assertNotIn("06/10 美國 CPI（May 2026）", "\n".join(global_lines))
-        self.assertIn("06/15-17 G7 領袖峰會｜影響面：政治風險｜說明：提高避險情緒與供應鏈不確定性", global_lines)
-        self.assertIn("06/16-17 Fed FOMC 利率決策/SEP｜影響面：利率/匯率｜說明：影響外資風險偏好與台股估值；牽動美元/台幣與外資流向", global_lines)
-        self.assertIn("06/18 英國央行 BoE 利率決策｜影響面：利率/匯率｜說明：影響外資風險偏好與台股估值；牽動美元/台幣與外資流向", global_lines)
+        self.assertEqual(global_lines, [])
         self.assertNotIn("來源：", watch)
-        self.assertNotIn("未來30日台股影響事件：官方來源暫時不可用", watch)
+        self.assertNotIn("未來30日台股影響事件", watch)
         self.assertNotIn("06/18 BoE MPC", watch)
         self.assertNotIn("06/25 BEA GDP", watch)
         first_three = "\n\n".join(messages[:3])

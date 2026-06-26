@@ -1740,11 +1740,8 @@ def fail_closed_mops_adapter(_params):
 
 def default_future_watch_sources(now=None):
     return {
-        "today_features": None,
-        "historical_source": build_live_twse_historical_source(now),
         "mops_adapter": live_mops_adapter,
         "fundamentals_source": build_live_stock_fundamentals_source(now),
-        "global_event_source": build_live_global_event_source(now),
     }
 
 
@@ -1760,7 +1757,6 @@ def build_future_watch_payload(
     mops_revenue_fetcher=None,
 ):
     return {
-        "historical_analogy": build_historical_analogy(today_features, historical_source),
         "mops_events": collect_mops_events(
             results_map,
             now,
@@ -1773,7 +1769,6 @@ def build_future_watch_payload(
             now=now,
             mops_revenue_fetcher=mops_revenue_fetcher,
         ),
-        "global_events": collect_global_events(now, global_event_source=global_event_source),
     }
 
 
@@ -1785,9 +1780,6 @@ def format_future_watch_message(payload, now, version):
         f"【{now.strftime('%m/%d')} 未來30日關注｜{version}】",
         "【未來30日關注】",
     ]
-
-    analogy = payload.get("historical_analogy") or {}
-    lines.extend(["", "歷史類比", analogy.get("line") or CRASH_ANALOGY_FALLBACK])
 
     mops = payload.get("mops_events") or {}
     mops_items = mops.get("items") or []
@@ -1819,27 +1811,10 @@ def format_future_watch_message(payload, now, version):
             lines.append(f"{item.get('code')} {item.get('name')}")
             lines.extend(detail_lines)
 
-    global_events = payload.get("global_events") or {}
-    global_items = global_events.get("items") or []
-    lines.extend(["", "未來30日台股影響事件"])
-    if global_events.get("status") == "source-error":
-        lines.append(TAIWAN_MARKET_EVENT_SOURCE_ERROR)
-    elif global_items:
-        for item in global_items[:5]:
-            lines.append(
-                f"{item.get('date_label') or _date_label(item.get('date'))} {item.get('event')}｜"
-                f"影響面：{item.get('impact')}｜說明：{item.get('impact_note')}"
-            )
-    else:
-        lines.append(TAIWAN_MARKET_EVENT_EMPTY)
-
     has_visible = (
-        bool(analogy)
-        or bool(mops_items)
+        bool(mops_items)
         or mops.get("status") == "source-error"
         or bool(fundamental_items)
         or target_fundamentals.get("status") == "source-error"
-        or bool(global_items)
-        or global_events.get("status") in {"source-error", "available"}
     )
     return "\n".join(lines) if has_visible else None

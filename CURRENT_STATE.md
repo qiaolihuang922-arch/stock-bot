@@ -2,8 +2,8 @@
 
 ## Current Task
 
-- task_id: `docs_local_env_cleanup_20260626`
-- status: `docs cleanup verified + pushed`
+- task_id: `future_watch_remove_history_events_20260626`
+- status: `implemented + QA passed + pushed`
 - version: `v21.1`
 - live Telegram delivery: not run
 - DB schema/write/backfill/delete: none
@@ -31,11 +31,15 @@
 
 ## Verification Snapshot
 
-- Git/Bash/Python bootstrap works locally.
-- Focused report regression: `12 passed, 219 deselected`.
-- Local dry-run smoke: Flask import OK; `generate_report(dry_run=True)` produced `4` messages.
-- UTF-8 readback passed for fixed Markdown and deployment docs.
-- Architect scope gate passed.
+- Future-watch focused tests: `8 passed, 224 deselected`.
+- Combined focused regression: `20 passed, 212 deselected`.
+- Official dry-run smoke:
+  - `MESSAGE_COUNT=4`
+  - `HAS_HISTORY=False`
+  - `HAS_TW_EVENTS=False`
+  - `HAS_FUTURE_WATCH=True`
+  - `HAS_MOPS=True`
+  - `HAS_FUND=True`
 - Git completion gate passed after commit/push; closeout gate passed.
 
 ## Known Findings
@@ -47,4 +51,4 @@
 
 ## Next Action
 
-- None for this task. Future CAO/WSL restoration should follow the D-drive-first deployment runbook.
+- None for this task.
