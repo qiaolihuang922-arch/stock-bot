@@ -2,8 +2,8 @@
 
 ## Current Task
 
-- task_id: `telegram_readability_risk_wording_20260626`
-- status: `implemented + QA conditional pass + pushed`
+- task_id: `telegram_all_cards_institutional_trading_20260626`
+- status: `implemented + QA conditional pass + pending commit/push`
 - version: `v21.1`
 - live Telegram delivery: not run
 - DB schema/write/backfill/delete: none
@@ -20,13 +20,10 @@
 
 ## Current Implementation Notes
 
-- `REDUCE_25/REDUCE_50` cards now show share basis: total shares, suggested sell shares, ratio, and target remaining shares.
-- Holding risk next-step now uses current price when available:
-  - below warning -> `已跌破警戒 ...`
-  - below stop -> `已跌破停損 ...`
-- Overheat unheld cards no longer let `等量能` override `過熱觀察`; visible state becomes `等冷卻` when appropriate.
-- Failed breakout triggers now require reclaim plus volume confirmation.
-- Brief summary keeps `新倉：無有效進場` and adds reason.
+- Every holding/unheld card now hard-outputs `昨日三大法人買賣超：...`.
+- Supported payload keys: `institutional_trading`, `three_major`, `three_major_institutional`, `institutional_investors`, `legal_person_trading`.
+- Missing data displays `昨日三大法人買賣超：資料不足`.
+- No official three-major data fetch/backfill source was added in this turn.
 
 ## Local Environment
 
@@ -41,14 +38,11 @@
 
 ## Verification Snapshot
 
-- `python -m pytest tests/test_generator_report.py -k "holding_next_step_uses_risk_prices_not_breakout_zone or reduce_card_shows_share_basis or failed_breakout_card_does_not_show_attack_volume_as_positive or failed_breakout_within_reclaim_buffer_waits_reclaim_not_terminal_reject or overheat or today_buy"`
-  - `14 passed, 219 deselected`
-- Exact QA regression:
+- Exact final-card regression:
   - `4 passed`
-- Full `tests/test_generator_report.py`:
-  - `46 failed, 190 passed`
-  - Not a completion blocker for this focused patch, but remains a cleanup risk.
-- Git completion gate passed after push to `origin/main`.
+- Combined focused regression:
+  - `6 passed, 229 deselected`
+- Full `tests/test_generator_report.py` not rerun this turn; known legacy full-file wording failures remain a cleanup risk.
 
 ## Known Findings
 
@@ -57,7 +51,8 @@
 - Windows `py` launcher is unavailable; use repo `.venv` through bootstrap environment.
 - Node/WSL/CAO UI service runtime is not restored yet.
 - `tmux` missing blocks CAO agent runner.
+- Official three-major institutional trading source is not implemented yet; cards show `資料不足` until payload supplies data.
 
 ## Next Action
 
-- None for this task after git completion and closeout gates pass.
+- Commit/push this patch and run git completion + closeout gates.

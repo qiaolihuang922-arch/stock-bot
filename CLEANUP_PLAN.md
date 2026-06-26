@@ -2,7 +2,7 @@
 
 ## Current Cleanup Status
 
-- Active product cleanup: Telegram report readability fixes for 06/26 v21.1 intraday mobile reading.
+- Active product cleanup: every Telegram stock card hard-outputs yesterday three-major institutional trading.
 - No DB schema, production DB data, or live Telegram action is in scope.
 
 ## Completed
@@ -15,6 +15,7 @@
 - Future-watch output removes `歷史類比` and `未來30日台股影響事件`.
 - Telegram holding reduce cards now show share basis and current warning-breach wording.
 - Telegram unheld overheat/failed-breakout wording now avoids chase-like ambiguity.
+- Telegram stock cards now hard-output `昨日三大法人買賣超` with fail-closed `資料不足`.
 
 ## Deferred
 
@@ -23,6 +24,7 @@
 - Restore Node/WSL/CAO UI services with D-drive-first placement.
 - Clean unrelated legacy expectations in full `tests/test_generator_report.py`.
 - Later remove unused historical/global future-watch helpers only after confirming no other scripts/tests consume them.
+- Add an official read-only source for yesterday three-major institutional trading and feed it into card payloads.
 
 ## Rule Of Thumb
 

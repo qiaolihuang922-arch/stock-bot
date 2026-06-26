@@ -2297,6 +2297,76 @@ def _rr_data_prefix(stock_result, rr_text):
     return "風險報酬"
 
 
+def _institutional_trade_source(data):
+    sources = [data or {}, ((data or {}).get("result") or {})]
+    source_keys = [
+        "institutional_trading",
+        "three_major",
+        "three_major_institutional",
+        "institutional_investors",
+        "legal_person_trading",
+    ]
+    for source in sources:
+        for key in source_keys:
+            value = source.get(key) if isinstance(source, dict) else None
+            if isinstance(value, dict):
+                nested = value.get("yesterday")
+                return nested if isinstance(nested, dict) else value
+    return None
+
+
+def _institutional_trade_value(source, keys):
+    if not isinstance(source, dict):
+        return None
+    for key in keys:
+        if key in source and source.get(key) not in [None, ""]:
+            return source.get(key)
+    return None
+
+
+def _signed_lot_text(value, unit="張"):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        text = str(value or "").strip()
+        return text or "-"
+    if number.is_integer():
+        number_text = f"{int(number):,}"
+    else:
+        number_text = f"{number:,.2f}".rstrip("0").rstrip(".")
+    sign = "+" if number > 0 else ""
+    return f"{sign}{number_text}{unit}"
+
+
+def _institutional_trade_line(data):
+    source = _institutional_trade_source(data)
+    if not source:
+        return "昨日三大法人買賣超：資料不足"
+    unit = str(source.get("unit") or "張")
+    foreign = _institutional_trade_value(source, ["foreign", "foreign_investor", "foreign_net", "外資", "外資買賣超"])
+    trust = _institutional_trade_value(source, ["investment_trust", "trust", "trust_net", "投信", "投信買賣超"])
+    dealer = _institutional_trade_value(source, ["dealer", "dealer_net", "proprietary", "自營", "自營商", "自營商買賣超"])
+    total = _institutional_trade_value(source, ["total", "total_net", "net_total", "合計", "三大法人合計"])
+    if total is None:
+        try:
+            if foreign is not None and trust is not None and dealer is not None:
+                total = float(foreign) + float(trust) + float(dealer)
+        except (TypeError, ValueError):
+            total = None
+    parts = []
+    if foreign is not None:
+        parts.append(f"外資 {_signed_lot_text(foreign, unit)}")
+    if trust is not None:
+        parts.append(f"投信 {_signed_lot_text(trust, unit)}")
+    if dealer is not None:
+        parts.append(f"自營 {_signed_lot_text(dealer, unit)}")
+    if total is not None:
+        parts.append(f"合計 {_signed_lot_text(total, unit)}")
+    if not parts:
+        return "昨日三大法人買賣超：資料不足"
+    return f"昨日三大法人買賣超：{'｜'.join(parts)}"
+
+
 def formatTelegramPositionCard(name, data, *, deps, report_context=None):
     holding = data["holding"]
     decision = deps["ensure_holding_decision"](name, data)
@@ -2339,6 +2409,7 @@ def formatTelegramPositionCard(name, data, *, deps, report_context=None):
         execution_line,
         _holding_reduce_share_basis_line(data, decision),
         f"風控：{deps['holding_risk_text'](decision)}",
+        _institutional_trade_line(data),
         _score_gated_market_line(report_context, name, data, dist, deps),
         _breakout_distance_line(dist, data=data),
         deps["today_buy_holding_context_line"](data) if _report_phase(report_context) == "盤後" else None,
@@ -2856,6 +2927,7 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         ),
         None if (is_afterhours_rejected or compact_wait_card or low_repair_actionable) else data_line,
         low_volume_limit_up_risk,
+        _institutional_trade_line(data),
         price_line,
     ])
     lines = [line for line in lines if line is not None]

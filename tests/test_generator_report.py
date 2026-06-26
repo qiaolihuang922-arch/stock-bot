@@ -10880,6 +10880,53 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("已低於警戒", card)
         self.assertNotIn("跌破警戒 143.23 續減", card)
 
+    def test_all_stock_cards_hard_output_yesterday_institutional_trading(self):
+        holding_payload = render_payload(
+            [100, 101, 102, 103, 104, 105, 106, 107, 108, 109],
+            {"shares": 100, "avg_price": 100},
+            price=109,
+            change=1.2,
+        )
+        holding_payload["stock_code"] = "2376"
+        holding_payload["holding_decision"] = {
+            "action": "續抱",
+            "level": "HOLD_WATCH",
+            "note": "觀察",
+            "warning_price": 103,
+            "hard_stop_price": 98,
+        }
+        unheld_payload = render_payload(
+            [90, 91, 92, 93, 94, 95, 96, 97, 98, 99],
+            None,
+            price=99,
+            change=0.8,
+        )
+        unheld_payload["stock_code"] = "2421"
+
+        holding_card = generator.formatTelegramPositionCard("技嘉", holding_payload)
+        unheld_card = generator.formatTelegramUnheldCard("建準", unheld_payload, report_phase="盤中")
+
+        self.assertIn("昨日三大法人買賣超：資料不足", holding_card)
+        self.assertIn("昨日三大法人買賣超：資料不足", unheld_card)
+
+    def test_institutional_trading_line_formats_three_major_values(self):
+        payload = render_payload(
+            [90, 91, 92, 93, 94, 95, 96, 97, 98, 99],
+            None,
+            price=99,
+            change=0.8,
+        )
+        payload["stock_code"] = "2421"
+        payload["three_major"] = {
+            "foreign": 1200,
+            "investment_trust": -300,
+            "dealer": 50,
+        }
+
+        card = generator.formatTelegramUnheldCard("建準", payload, report_phase="盤中")
+
+        self.assertIn("昨日三大法人買賣超：外資 +1,200張｜投信 -300張｜自營 +50張｜合計 +950張", card)
+
     def test_get_market_phase_treats_1300_gap_as_trading_day(self):
         class FixedDateTime(datetime):
             @classmethod
