@@ -135,7 +135,7 @@ def formatTelegramSummary(
         )
         execution_lines = [line for line in execution_lines if line != "無新增下單"]
         if execution_lines:
-            heading = "今日盤中風控建議" if report_phase == "盤中" else "今日盤前風控計畫"
+            heading = "今日盤中風控優先順序" if report_phase == "盤中" else "今日盤前風控計畫"
             lines.extend(["", heading])
             lines.extend(execution_lines)
         new_entry_lines = deps["format_new_entry_suggestions"](
@@ -1228,7 +1228,7 @@ def _unheld_entry_contract(data, dist, blockers, valid_entry, funnel_state, sour
         gates.append(("量能不足", _volume_wait_gap_text(data)))
     if "突破失敗" in blocker_text or phase == "FAILED_BREAKOUT":
         reclaim_gap = _breakout_reclaim_gap_text(data)
-        return contract("未站回突破區", reclaim_gap, f"重新站回{_breakout_trigger_zone_text(data)}後再評估", basis="")
+        return contract("未站回突破區，不追", reclaim_gap, f"重新站回{_breakout_trigger_zone_text(data)} + 量能確認後再評估", basis="")
     if post_market_prepare:
         return contract(
             "開盤確認未完成",
@@ -1556,12 +1556,38 @@ def _holding_visible_risk_reason(data, decision):
         warning_distance = _percent_distance(price, warning)
         distances = []
         if warning_distance:
-            distances.append(f"距警戒線 {warning_distance}%")
+            try:
+                warning_breached = float(price) < float(warning)
+            except (TypeError, ValueError):
+                warning_breached = False
+            label = "已低於警戒" if warning_breached else "距警戒線"
+            distances.append(f"{label} {warning_distance}%")
         if stop_distance:
-            distances.append(f"距停損線 {stop_distance}%")
+            try:
+                stop_breached = float(price) <= float(hard_stop)
+            except (TypeError, ValueError):
+                stop_breached = False
+            label = "已低於停損" if stop_breached else "距停損線"
+            distances.append(f"{label} {stop_distance}%")
         prefix = "，".join(distances)
         return f"{prefix}，結構轉弱" if prefix else "跌破警戒或結構轉弱"
     return None
+
+
+def _holding_reduce_share_basis_line(data, decision):
+    if not decision or decision.get("level") not in {"REDUCE_25", "REDUCE_50"}:
+        return None
+    holding = (data or {}).get("holding") or {}
+    try:
+        current_shares = int(holding.get("shares") or 0)
+        sell_shares = int(decision.get("shares") or 0)
+    except (TypeError, ValueError):
+        return None
+    if current_shares <= 0 or sell_shares <= 0:
+        return None
+    remaining = max(current_shares - sell_shares, 0)
+    pct = "50%" if decision.get("level") == "REDUCE_50" else "25%"
+    return f"減碼基準：總倉 {current_shares}股｜建議賣 {sell_shares}股（{pct}）｜目標剩 {remaining}股"
 
 
 def _weak_buy_backtest_line(name, data, deps, include_all=False):
@@ -2311,6 +2337,7 @@ def formatTelegramPositionCard(name, data, *, deps, report_context=None):
     lines = [
         f"【{deps['stock_title'](name, data)}】📌 {summary_action}｜{deps['signed_pct'](deps['stock_pnl'](data))}",
         execution_line,
+        _holding_reduce_share_basis_line(data, decision),
         f"風控：{deps['holding_risk_text'](decision)}",
         _score_gated_market_line(report_context, name, data, dist, deps),
         _breakout_distance_line(dist, data=data),
@@ -2463,6 +2490,9 @@ def formatTelegramUnheldCard(name, data, *, deps, report_phase=None, market_mode
         and distance_value <= 0
     ):
         title_label = "追價不划算"
+    if not valid_entry and title_label == "過熱觀察" and state == "等量能":
+        state = "等冷卻"
+        funnel_state = "等冷卻"
     overheat_change = _float_or_none(data.get("change"))
     overheat_pullback_display = (
         not valid_entry
@@ -3418,7 +3448,8 @@ def format_brief_data_evidence_message(
             market_mode=market_mode,
             report_context=report_context,
         ):
-            brief_lines.append("新倉：無有效進場")
+            reason = "持倉風控優先；未持倉僅追蹤/淘汰" if holding_items else "未持倉僅追蹤/淘汰"
+            brief_lines.append(f"新倉：無有效進場｜原因：{reason}")
         decision_lines = brief_lines + decision_lines
 
     data_basis_lines = []

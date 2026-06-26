@@ -6121,13 +6121,13 @@ def holding_tomorrow_trigger(name, data):
         return "歷史減碼已完成，等待新條件"
 
     if level in ["REDUCE_25", "REDUCE_50"]:
-        return holding_risk_next_step_text(decision, action=action) or "先降風險，跌破警戒續減"
+        return holding_risk_next_step_text(decision, action=action, data=data) or "先降風險，跌破警戒續減"
 
     if level == "POST_REDUCE_WATCH":
         return "修復才恢復優先級"
 
     if level == "NEW_POSITION_RISK_WATCH":
-        return holding_risk_next_step_text(decision, action=action) or "守警戒；跌破停損優先停損；未轉強不加碼"
+        return holding_risk_next_step_text(decision, action=action, data=data) or "守警戒；跌破停損優先停損；未轉強不加碼"
 
     if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]:
         return "保留核心倉，等待冷卻後再評估"
@@ -6136,7 +6136,7 @@ def holding_tomorrow_trigger(name, data):
         return "等待新高、過熱升級或風控訊號"
 
     if action == "新倉風控觀察":
-        return holding_risk_next_step_text(decision, action=action) or "守警戒；跌破停損優先停損；未轉強不加碼"
+        return holding_risk_next_step_text(decision, action=action, data=data) or "守警戒；跌破停損優先停損；未轉強不加碼"
 
     if level in ["ADD_10", "ADD_20", "ADD_30"]:
         return "加碼後守警戒價，量價未延續則停止加碼"
@@ -8270,7 +8270,7 @@ def holding_reason_line(name, data):
     return None
 
 
-def holding_risk_next_step_text(decision, *, action=None, fallback=None):
+def holding_risk_next_step_text(decision, *, action=None, fallback=None, data=None):
     if not decision:
         return fallback
 
@@ -8280,8 +8280,19 @@ def holding_risk_next_step_text(decision, *, action=None, fallback=None):
     stop_text = price_text(hard_stop)
     has_warning = warning_text != "-"
     has_stop = stop_text != "-"
+    price = _float_or_none((data or {}).get("price"))
+    warning_value = _float_or_none(warning)
+    stop_value = _float_or_none(hard_stop)
+    below_stop = price is not None and stop_value is not None and price <= stop_value
+    below_warning = price is not None and warning_value is not None and price < warning_value
 
     if action in {"減碼", "減碼後觀察"}:
+        if below_stop and has_stop:
+            return f"已跌破停損 {stop_text}，優先停損"
+        if below_warning and has_warning and has_stop:
+            return f"已跌破警戒 {warning_text}，先減碼；跌破停損 {stop_text} 停損"
+        if below_warning and has_warning:
+            return f"已跌破警戒 {warning_text}，先減碼"
         if has_warning and has_stop:
             return f"先降風險；跌破警戒 {warning_text} 續減，跌破停損 {stop_text} 停損"
         if has_stop:
@@ -8289,6 +8300,10 @@ def holding_risk_next_step_text(decision, *, action=None, fallback=None):
         return fallback or "先降風險；修復前不加碼"
 
     if action in {"新倉風控觀察", "續抱觀察", "洗盤續抱", "洗盤警戒", "風控觀察"}:
+        if below_stop and has_stop:
+            return f"已跌破停損 {stop_text}，優先停損；未轉強不加碼"
+        if below_warning and has_warning and has_stop:
+            return f"已跌破警戒 {warning_text}；跌破停損 {stop_text} 優先停損；未轉強不加碼"
         if has_warning and has_stop:
             return f"守警戒 {warning_text}；跌破停損 {stop_text} 優先停損；未轉強不加碼"
         if has_warning:
@@ -8322,14 +8337,14 @@ def holding_next_step_line(name, data):
 
     if level in ["REDUCE_25", "REDUCE_50"]:
         if cross_day_duplicate_action(data, decision) == "reduce":
-            return holding_risk_next_step_text(decision, action="減碼後觀察", fallback="修復才恢復優先級，未修復續降級")
-        return holding_risk_next_step_text(decision, action="減碼", fallback="先降低風險；修復前不加碼")
+            return holding_risk_next_step_text(decision, action="減碼後觀察", fallback="修復才恢復優先級，未修復續降級", data=data)
+        return holding_risk_next_step_text(decision, action="減碼", fallback="先降低風險；修復前不加碼", data=data)
 
     if level == "POST_REDUCE_WATCH":
-        return holding_risk_next_step_text(decision, action="減碼後觀察", fallback="修復才恢復優先級，未修復續降級")
+        return holding_risk_next_step_text(decision, action="減碼後觀察", fallback="修復才恢復優先級，未修復續降級", data=data)
 
     if level == "NEW_POSITION_RISK_WATCH":
-        return holding_risk_next_step_text(decision, action="新倉風控觀察", fallback="盤中先觀察，未修復再降級")
+        return holding_risk_next_step_text(decision, action="新倉風控觀察", fallback="盤中先觀察，未修復再降級", data=data)
 
     if level in ["TAKE_PROFIT_25", "TAKE_PROFIT_50"]:
         if cross_day_duplicate_action(data, decision) == "take_profit":
@@ -8340,19 +8355,19 @@ def holding_next_step_line(name, data):
         return "等待新高、過熱升級或風控訊號"
 
     if action == "新倉風控觀察":
-        return holding_risk_next_step_text(decision, action=action, fallback="盤中先觀察，未修復再降級")
+        return holding_risk_next_step_text(decision, action=action, fallback="盤中先觀察，未修復再降級", data=data)
 
     if level in ["ADD_10", "ADD_20", "ADD_30"]:
         return "加碼後守警戒價，量價未延續則停止加碼"
 
     if action == "洗盤警戒":
-        return holding_risk_next_step_text(decision, action=action, fallback="守警戒價，跌破警戒升級風控")
+        return holding_risk_next_step_text(decision, action=action, fallback="守警戒價，跌破警戒升級風控", data=data)
 
     if action == "減碼後觀察":
-        return holding_risk_next_step_text(decision, action=action, fallback="修復才恢復優先級，未修復續降級")
+        return holding_risk_next_step_text(decision, action=action, fallback="修復才恢復優先級，未修復續降級", data=data)
 
     if action == "洗盤續抱":
-        return holding_risk_next_step_text(decision, action=action, fallback="守警戒價，等量價修復")
+        return holding_risk_next_step_text(decision, action=action, fallback="守警戒價，等量價修復", data=data)
 
     if action == "續抱觀察":
         if (
@@ -8360,11 +8375,11 @@ def holding_next_step_line(name, data):
             or result.get("volume_state") in {"EXPLOSIVE", "ATTACK"}
             or result.get("volume_price_state") in {"EXPLOSIVE", "ATTACK"}
         ):
-            return holding_risk_next_step_text(decision, action=action, fallback="觀察反彈是否延續；未站回關鍵區前不加碼")
-        return holding_risk_next_step_text(decision, action=action, fallback="盤中先觀察，未修復再降級")
+            return holding_risk_next_step_text(decision, action=action, fallback="觀察反彈是否延續；未站回關鍵區前不加碼", data=data)
+        return holding_risk_next_step_text(decision, action=action, fallback="盤中先觀察，未修復再降級", data=data)
 
     if action == "風控觀察":
-        return holding_risk_next_step_text(decision, action=action, fallback="跌破警戒升級風控")
+        return holding_risk_next_step_text(decision, action=action, fallback="跌破警戒升級風控", data=data)
 
     if action == "核心風控觀察":
         return "守警戒價，跌破警戒升級風控"

@@ -4487,7 +4487,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【技嘉 2376】📌 新倉風控觀察", card)
         self.assertIn("決策：新倉風控觀察，暫不加碼", card)
         self.assertIn("明日處理：守警戒 115.00；跌破停損 108.00 優先停損；未轉強不加碼", card)
-        self.assertIn("1. 技嘉｜+10.91%｜新倉風控觀察｜盤中觀察修復狀況", summary_message(messages))
+        self.assertIn("1. 技嘉｜+10.91%｜新倉風控觀察｜守警戒 115.00；跌破停損 108.00 優先停損；未轉強不加碼", summary_message(messages))
         self.assertNotIn("隔日計畫", summary_message(messages))
         self.assertNotIn("盤中觀察修復：技嘉收盤未修復則列入隔日降級檢查", summary_message(messages))
         self.assertNotIn("加碼20", card)
@@ -10794,7 +10794,7 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertIn("【旺宏 2337】⏳ 等站回｜突破失敗", card)
         self.assertIn("放量回落", card)
         self.assertIn("等待：突破失敗，尚未站回突破區 175.5~176.38（現價 171.25，差 4.25）", card)
-        self.assertIn("盤中觸發：重新站回突破區 175.5~176.38後再評估", card)
+        self.assertIn("盤中觸發：重新站回突破區 175.5~176.38 + 量能確認後再評估", card)
         self.assertNotIn("可買：重新站回突破區", card)
         self.assertNotIn("不可買：突破失敗", card)
         self.assertNotIn("交易狀態：", card)
@@ -10854,6 +10854,31 @@ class GeneratorReportTest(unittest.TestCase):
         self.assertEqual(reduce_text, "先降風險；跌破警戒 144.25 續減，跌破停損 139.69 停損")
         self.assertEqual(watch_text, "守警戒 144.25；跌破停損 139.69 優先停損；未轉強不加碼")
         self.assertNotIn("突破區", reduce_text + watch_text)
+
+    def test_reduce_card_shows_share_basis_and_current_warning_breach(self):
+        payload = render_payload(
+            [155, 154, 153, 152, 151, 150, 149, 148, 147, 146, 145, 144, 143, 142.25],
+            {"shares": 550, "avg_price": 150.77},
+            price=142.25,
+            change=-2.23,
+        )
+        payload["stock_code"] = "2421"
+        payload["position_events"] = {"event_count": 1, "bought_shares": 30, "buy_price": 150.77}
+        payload["holding_decision"] = {
+            "action": "硬風控減碼 50%",
+            "level": "REDUCE_50",
+            "shares": 275,
+            "note": "今日新倉入場即錯，先降低風險",
+            "warning_price": 143.23,
+            "hard_stop_price": 138.71,
+        }
+
+        card = generator.formatTelegramPositionCard("建準", payload, report_context={"report_phase": "盤中"})
+
+        self.assertIn("減碼基準：總倉 550股｜建議賣 275股（50%）｜目標剩 275股", card)
+        self.assertIn("已跌破警戒 143.23，先減碼；跌破停損 138.71 停損", card)
+        self.assertIn("已低於警戒", card)
+        self.assertNotIn("跌破警戒 143.23 續減", card)
 
     def test_get_market_phase_treats_1300_gap_as_trading_day(self):
         class FixedDateTime(datetime):
