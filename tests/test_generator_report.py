@@ -10947,7 +10947,48 @@ class GeneratorReportTest(unittest.TestCase):
         message = format_future_watch_message(future_payload, datetime(2026, 6, 26), generator.VERSION)
 
         self.assertIn("關注標的財報", message)
-        self.assertIn("2421 建準\nEPS 2026Q1 2.34\n營收 2026/05 +5.7%\n昨日三大法人買賣超 20260625：外資 +1,200張｜投信 -300張｜自營 +50張｜合計 +950張", message)
+        self.assertIn("2421 建準\nEPS 2026Q1 2.34\n營收 2026/05 +5.7%\n昨日三大法人：外+1,200｜投-300｜自+50｜合+950張", message)
+        self.assertNotIn("昨日三大法人買賣超 20260625", message)
+
+    def test_future_watch_institutional_trading_line_is_mobile_compact(self):
+        payload = render_payload(
+            [90, 91, 92, 93, 94, 95, 96, 97, 98, 99],
+            None,
+            price=99,
+            change=0.8,
+        )
+        payload["stock_code"] = "2356"
+        fundamentals_source = {
+            "status": "available",
+            "items_by_code": {
+                "2356": {
+                    "eps": "0.68",
+                    "eps_year": "115",
+                    "eps_quarter": "1",
+                    "revenue_month": "11505",
+                    "revenue_yoy": "35.3",
+                    "institutional_trading": {
+                        "foreign": 2735.611,
+                        "investment_trust": -102.0,
+                        "dealer": -480.405,
+                        "total": 2153.206,
+                        "trade_date": "20260625",
+                    },
+                }
+            },
+        }
+
+        future_payload = build_future_watch_payload(
+            {"英業達": payload},
+            datetime(2026, 6, 26),
+            mops_adapter=lambda **kwargs: {"status": "available", "rows": []},
+            fundamentals_source=fundamentals_source,
+        )
+        message = format_future_watch_message(future_payload, datetime(2026, 6, 26), generator.VERSION)
+
+        self.assertIn("昨日三大法人：外+2,736｜投-102｜自-480｜合+2,153張", message)
+        self.assertNotIn("20260625：外資", message)
+        self.assertNotIn("2,735.61張", message)
 
     def test_live_stock_fundamentals_merges_twse_institutional_rows(self):
         requested_t86_dates = []

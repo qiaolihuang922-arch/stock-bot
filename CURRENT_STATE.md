@@ -2,8 +2,8 @@
 
 ## Current Task
 
-- task_id: `future_watch_institutional_trading_20260626`
-- status: `implemented + QA conditional pass + pushed`
+- task_id: `future_watch_institutional_mobile_compact_20260626`
+- status: `implemented + QA passed + pending commit/push`
 - version: `v21.1`
 - live Telegram delivery: not run
 - DB schema/write/backfill/delete: none
@@ -12,6 +12,7 @@
 ## Stable Context
 
 - Owner reads Telegram on mobile; summary and cards must avoid repeated noise and recommendation-like wording.
+- Future-watch `關注標的財報` can carry EPS、營收、三大法人，但每行要短。
 - Cross-day state must come from production DB or an approved persistent source.
 - DB structure changes require Owner approval.
 - No live Telegram delivery without separate Owner approval.
@@ -19,11 +20,12 @@
 
 ## Current Implementation Notes
 
-- Per-stock holding/unheld cards do not display `昨日三大法人買賣超`.
-- Future-watch `關注標的財報` prints `昨日三大法人買賣超 {trade_date}：外資 ...｜投信 ...｜自營 ...｜合計 ...`.
-- TWSE T86 now tries recent candidate dates and keeps the first available data.
-- TPEx OpenAPI English institutional fields and ROC `Date` are parsed.
-- Missing institutional data is scoped to the fundamentals block as `昨日三大法人買賣超：資料不足`.
+- Per-stock holding/unheld cards do not display `昨日三大法人`.
+- Future-watch institutional line now uses compact format:
+  - `昨日三大法人：外+2,736｜投-102｜自-480｜合+2,153張`
+- Date is not shown.
+- Lots are rounded to whole numbers.
+- Source parsing fixes from previous task remain in place.
 
 ## Local Environment
 
@@ -38,17 +40,12 @@
 
 ## Verification Snapshot
 
-- Focused source regression:
-  - `2 passed`
 - Focused future-watch regression:
-  - `8 passed, 229 deselected`
-- Read-only live probe:
-  - `status=available`
-  - `errors=[]`
-  - `institutional_count=2281`
-  - Owner 12-stock sample and TPEx 6488 all have institutional trading values.
+  - `9 passed, 229 deselected`
+- Read-only sample render:
+  - 12 institutional lines use compact format.
 - Full `tests/test_generator_report.py` not rerun this turn; known legacy full-file wording failures remain a cleanup risk.
-- Git completion gate passed after push to `origin/main`.
+- Git completion gate pending commit/push.
 
 ## Known Findings
 
@@ -60,4 +57,4 @@
 
 ## Next Action
 
-- None for this task after git completion and closeout gates pass.
+- Commit and push compact display fix, then run git completion and closeout gates.

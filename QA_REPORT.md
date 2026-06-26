@@ -1,47 +1,46 @@
-# QA_REPORT: future_watch_institutional_trading_20260626
+# QA_REPORT: future_watch_institutional_mobile_compact_20260626
 
 ## 測試範圍
 
-- TWSE T86 空日回退。
-- TPEx OpenAPI 英文 row shape。
-- Future-watch `關注標的財報` 三大法人顯示。
-- 股票卡片不顯示三大法人行。
-- Read-only live source probe。
+- Future-watch institutional trading display line。
+- 手機短格式 regression。
+- 既有 institutional source / future-watch focused regression。
 
 ## 關聯風險掃描
 
-- 原風險 1: TWSE 只查單一日期，假日或資料未發布時會誤判抓不到。
-- 原風險 2: TPEx 官方 row 是英文欄位，舊 parser 沒吃到代號與買賣超欄位。
-- 原風險 3: 後續日期 fallback 若覆蓋較新資料，會顯示舊交易日。
-- 修正後: merge 先寫入者保留，候選日期依新到舊排列。
+- 風險: 移除日期後可能看不出時間口徑。
+  - 反證: 前綴保留 `昨日`，符合 Owner 要求。
+- 風險: 四捨五入造成資訊略少。
+  - 反證: 單位是張，手機決策只需方向與量級；完整 source 不變。
+- 風險: 短標籤不清楚。
+  - 反證: 同一行固定順序 `外/投/自/合`，並位於 `三大法人` 欄位下。
 
 ## 跨區塊語意一致性
 
-- 三大法人買賣超只出現在 `關注標的財報`。
-- 持倉/未持倉操作卡不混入財報/籌碼資料不足噪音。
-- 缺資料只在財報區 fail closed，不輸出 0。
+- 股票卡片仍不顯示三大法人行。
+- Future-watch 財報區保留法人資訊，但更短。
+- 缺資料仍 fail closed，不輸出 0。
 
 ## 使用者誤讀風險
 
-- 已降低：不再把官方空日或假日當成抓不到。
-- 已降低：上櫃股票不再因英文欄位漏解析。
-- 已降低：live probe 覆蓋 Owner 12 檔與 TPEx 樣本。
+- 已降低：日期不再每檔重複。
+- 已降低：每個分項不再重複 `張`。
+- 已降低：小數不再干擾掃讀。
 
 ## 失敗標本反證
 
-- Owner 指出 `不可能抓不到的`：
-  - TWSE regression 反證 `20260626` 空資料會回退 `20260625`。
-  - TPEx regression 反證英文欄位可解析。
-  - live probe 反證 institutional rows 從 1326 擴到 2281，12 檔樣本皆有資料。
+- Owner specimen 的長句已改為：
+  - `昨日三大法人：外+2,736｜投-102｜自-480｜合+2,153張`
+- Regression 反證不含：
+  - `昨日三大法人買賣超 20260625`
+  - `2,735.61張`
 
 ## 質疑與反證
 
-- 質疑: 是否只是 fixture 可過？
-  - 反證: read-only live probe 同時打官方 TWSE/TPEx endpoint。
-- 質疑: 是否會用舊日期覆蓋新日期？
-  - 反證: `_merge_institutional_rows` 已保留先寫入資料，候選日期從新到舊。
-- 質疑: 是否發送或寫庫？
-  - 反證: 本輪只跑 read-only source probe，未 live Telegram、未 DB write。
+- 質疑: 是否改到 source 數值？
+  - 反證: 本輪只改 formatter；source regression 仍通過。
+- 質疑: 是否破壞資料源修復？
+  - 反證: focused suite `9 passed, 229 deselected`。
 
 ## 未測項目
 
@@ -51,6 +50,4 @@
 
 ## QA 結論
 
-conditional pass。
-
-條件：source row shape 與 live read-only probe 已覆蓋本輪錯誤；full legacy suite 未清。
+通過。

@@ -1587,34 +1587,29 @@ def _signed_lot_text(value):
     number = _numeric_or_none(value)
     if number is None:
         return None
-    if number.is_integer():
-        text = f"{int(number):,}"
-    else:
-        text = f"{number:,.2f}".rstrip("0").rstrip(".")
-    sign = "+" if number > 0 else ""
-    return f"{sign}{text}張"
+    rounded = int(round(number))
+    sign = "+" if rounded > 0 else ""
+    return f"{sign}{rounded:,}"
 
 
 def _institutional_trading_label(fundamentals):
     institutional = (fundamentals or {}).get("institutional_trading") or {}
     if not institutional:
-        return "昨日三大法人買賣超：資料不足"
+        return "昨日三大法人：資料不足"
     parts = []
     mapping = [
-        ("foreign", "外資"),
-        ("investment_trust", "投信"),
-        ("dealer", "自營"),
-        ("total", "合計"),
+        ("foreign", "外"),
+        ("investment_trust", "投"),
+        ("dealer", "自"),
+        ("total", "合"),
     ]
     for key, label in mapping:
         text = _signed_lot_text(institutional.get(key))
         if text is not None:
-            parts.append(f"{label} {text}")
+            parts.append(f"{label}{text}")
     if not parts:
-        return "昨日三大法人買賣超：資料不足"
-    date_label = str(institutional.get("trade_date") or "")
-    prefix = f"昨日三大法人買賣超 {date_label}：" if date_label else "昨日三大法人買賣超："
-    return f"{prefix}{'｜'.join(parts)}"
+        return "昨日三大法人：資料不足"
+    return f"昨日三大法人：{'｜'.join(parts)}張"
 
 
 def _fundamentals_detail_line(fundamentals):
