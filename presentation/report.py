@@ -3125,8 +3125,17 @@ def _afterhours_brief_lines(holding_items, watch_items, report_context, deps, ma
     lines = [
         "📌 盤後簡報",
         conclusion,
-        f"明日計畫：{'；'.join(plan_lines[:4])}。",
     ]
+    if holding_items:
+        priority_lines = deps["format_holding_control_checklist"](holding_items, limit=3, report_phase="盤後")
+        priority_text = "；".join(
+            line.split(". ", 1)[1] if ". " in line else line
+            for line in priority_lines
+            if not line.startswith("另有 ")
+        )
+        if priority_text:
+            lines.append(f"明日優先：{priority_text}。")
+    lines.append(f"明日計畫：{'；'.join(plan_lines[:4])}。")
     if holding_items:
         lines.extend([
             "",

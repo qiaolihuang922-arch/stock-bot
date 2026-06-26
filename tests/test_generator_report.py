@@ -1744,9 +1744,9 @@ class GeneratorReportTest(unittest.TestCase):
             messages[3],
         )
         self.assertIn("關注標的財報", messages[3])
-        self.assertIn("2301 光寶科\nEPS 2026Q1 1.23\n營收 2026/04 +12.3%", messages[3])
-        self.assertIn("2301 光寶科\nEPS 2026Q1 1.23\n營收 2026/04 +12.3%\n\n2421 建準", messages[3])
-        self.assertIn("2421 建準\nEPS 2026Q1 2.34\n營收 2026/04 +5.7%", messages[3])
+        self.assertIn("2301 光寶科｜EPS 2026Q1 1.23｜營收 2026/04 +12.3%", messages[3])
+        self.assertIn("2421 建準｜EPS 2026Q1 2.34｜營收 2026/04 +5.7%", messages[3])
+        self.assertNotIn("2301 光寶科\nEPS", messages[3])
         fundamental_block = messages[3].split("關注標的財報", 1)[1]
         self.assertNotIn("關注原因：", fundamental_block)
         self.assertNotIn("營收YoY", messages[3])
@@ -1806,7 +1806,7 @@ class GeneratorReportTest(unittest.TestCase):
         )
         message = format_future_watch_message(future_payload, datetime(2026, 6, 10), generator.VERSION)
 
-        self.assertIn("3231 緯創\nEPS 2026Q1 3.06\n營收 2026/05 +39.2%", message)
+        self.assertIn("3231 緯創｜EPS 2026Q1 3.06｜營收 2026/05 +39.2%", message)
         self.assertNotIn("關注原因：", message)
         self.assertNotIn("營收 2026/04", message)
 
@@ -1995,7 +1995,7 @@ class GeneratorReportTest(unittest.TestCase):
         )
         message = format_future_watch_message(future_payload, datetime(2026, 6, 10), generator.VERSION)
 
-        self.assertIn("2344 華邦電\nEPS 2026Q1 2.25", message)
+        self.assertIn("2344 華邦電｜EPS 2026Q1 2.25", message)
         self.assertNotIn("關注原因：", message)
         self.assertNotIn("2026/03 +91.5%", message)
 
@@ -2223,7 +2223,7 @@ class GeneratorReportTest(unittest.TestCase):
         )
 
         self.assertIn("未來30日法說會", message)
-        self.assertIn("MOPS 官方來源暫時不可解析", message)
+        self.assertNotIn("MOPS 官方來源暫時不可解析", message)
 
     def test_v20_4_47_live_mops_adapter_parses_future_official_table_rows(self):
         html = """
@@ -2405,7 +2405,7 @@ class GeneratorReportTest(unittest.TestCase):
 
         self.assertEqual(len(messages), 4)
         self.assertNotIn("歷史類比", watch)
-        self.assertIn("未來30日法說會：MOPS 官方來源暫時不可解析，本次不列未確認事件", watch)
+        self.assertNotIn("未來30日法說會：MOPS 官方來源暫時不可解析，本次不列未確認事件", watch)
         self.assertNotIn("未來30日台股影響事件", watch)
         self.assertNotIn("金融海嘯急跌", watch)
         self.assertNotIn("即將崩盤", watch)
@@ -2471,33 +2471,23 @@ class GeneratorReportTest(unittest.TestCase):
              patch.object(generator, "default_future_watch_sources", side_effect=future_sources):
             messages, _reply_markup = generator.generate_report(dry_run=True)
 
-        self.assertEqual(len(messages), 4)
+        self.assertEqual(len(messages), 3)
         self.assertIn("【持倉標的】", messages[0])
         self.assertIn("【未持倉標的】", messages[1])
         self.assertIs(messages[2], summary_message(messages))
-        watch = messages[3]
-        self.assertIn(f"未來30日關注｜{generator.VERSION}】", watch)
-        self.assertNotIn("歷史類比", watch)
-        self.assertNotIn("模組分數：價格", watch)
-        self.assertNotIn("資料：TWSE近4日｜樣本庫台股急跌 19件", watch)
-        self.assertNotIn("全球股災", watch)
-        self.assertIn("未來30日法說會：MOPS 官方來源暫時不可解析，本次不列未確認事件", watch)
-        global_lines = [
-            line for line in watch.splitlines()
-            if "｜影響面：" in line and "說明：" in line
-        ]
-        self.assertEqual(global_lines, [])
-        self.assertNotIn("來源：", watch)
-        self.assertNotIn("未來30日台股影響事件", watch)
-        self.assertNotIn("06/18 BoE MPC", watch)
-        self.assertNotIn("06/25 BEA GDP", watch)
+        joined = "\n".join(messages)
+        self.assertNotIn("【未來30日關注】", joined)
+        self.assertNotIn("未來30日法說會：MOPS 官方來源暫時不可解析", joined)
+        self.assertNotIn("歷史類比", joined)
+        self.assertNotIn("未來30日台股影響事件", joined)
+        self.assertNotIn("06/25 BEA GDP", joined)
         first_three = "\n\n".join(messages[:3])
         self.assertIn("建準", first_three)
         self.assertNotIn("【未來30日關注】", first_three)
         self.assertNotIn("未來30日法說會", first_three)
         self.assertNotIn("未來30日台股影響事件", first_three)
-        self.assertNotIn("即將崩盤", watch)
-        self.assertNotIn("重演", watch)
+        self.assertNotIn("即將崩盤", joined)
+        self.assertNotIn("重演", joined)
 
     def test_position_cards_follow_summary_order_and_decision_wording(self):
         core_payload = render_payload(
@@ -5014,6 +5004,7 @@ class GeneratorReportTest(unittest.TestCase):
         summary = summary_message(messages)
 
         self.assertIn("結論：新倉無有效進場；今日買入紀錄已轉風控。", summary)
+        self.assertIn("明日優先：智原｜停損100股｜清出後等重新買點；聯電｜減碼50股", summary)
         self.assertIn("明日計畫：智原、聯電減碼/停損優先。", summary)
         self.assertIn("聯電", summary)
         self.assertIn("智原", summary)
@@ -5058,9 +5049,9 @@ class GeneratorReportTest(unittest.TestCase):
             return payload
 
         cases = [
-            ("strategy_intraday", ["今日已執行", "盤後已不在買點", "不代表可繼續買"]),
-            ("manual_or_ledger", ["手動/ledger", "非當前策略買點", "不代表可繼續買"]),
-            ("unknown", ["來源未確認", "不得視為當前可買"]),
+            ("strategy_intraday", ["已執行", "盤後不追買"]),
+            ("manual_or_ledger", ["手動/ledger", "非策略買點"]),
+            ("unknown", ["來源未確認", "不視為可買"]),
         ]
 
         for source, expected_terms in cases:
@@ -7018,7 +7009,7 @@ class GeneratorReportTest(unittest.TestCase):
         unheld_card = card_block(unheld_message(messages), "【建準 2421】")
         self.assertIs(messages[0], first)
         self.assertNotIn("【先看結論】", first)
-        self.assertRegex(holding_card, r"今日買入：(今日已執行，盤後已不在買點，不代表可繼續買|手動/ledger，非當前策略買點，不代表可繼續買)")
+        self.assertRegex(holding_card, r"今日買入：(已執行，盤後不追買|手動/ledger，非策略買點)")
         self.assertNotIn("現在不代表可繼續買", holding_card)
         self.assertIn("決策：", holding_card)
         self.assertIn("原因：", holding_card)
@@ -10947,7 +10938,7 @@ class GeneratorReportTest(unittest.TestCase):
         message = format_future_watch_message(future_payload, datetime(2026, 6, 26), generator.VERSION)
 
         self.assertIn("關注標的財報", message)
-        self.assertIn("2421 建準\nEPS 2026Q1 2.34\n營收 2026/05 +5.7%\n昨日三大法人：外+1,200｜投-300｜自+50｜合+950張", message)
+        self.assertIn("2421 建準｜EPS 2026Q1 2.34｜營收 2026/05 +5.7%\n昨日法人偏買：外+1,200｜投-300｜自+50｜合+950張", message)
         self.assertNotIn("昨日三大法人買賣超 20260625", message)
 
     def test_future_watch_institutional_trading_line_is_mobile_compact(self):
@@ -10986,7 +10977,7 @@ class GeneratorReportTest(unittest.TestCase):
         )
         message = format_future_watch_message(future_payload, datetime(2026, 6, 26), generator.VERSION)
 
-        self.assertIn("昨日三大法人：外+2,736｜投-102｜自-480｜合+2,153張", message)
+        self.assertIn("昨日法人偏買：外+2,736｜投-102｜自-480｜合+2,153張", message)
         self.assertNotIn("20260625：外資", message)
         self.assertNotIn("2,735.61張", message)
 

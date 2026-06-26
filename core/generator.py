@@ -4422,10 +4422,10 @@ def today_buy_holding_context_line(data):
 
     source = today_buy_holding_source(data)
     if source == "strategy_intraday":
-        return "今日買入：今日已執行，盤後已不在買點，不代表可繼續買"
+        return "今日買入：已執行，盤後不追買"
     if source == "manual_or_ledger":
-        return "今日買入：手動/ledger，非當前策略買點，不代表可繼續買"
-    return "今日買入：來源未確認，盤後不得視為當前可買"
+        return "今日買入：手動/ledger，非策略買點"
+    return "今日買入：來源未確認，不視為可買"
 
 
 def is_reduce_after_observation(data):
@@ -6262,6 +6262,21 @@ def holding_execution_item(name, data):
     trigger = holding_tomorrow_trigger(name, data)
     events = position_events_dict(data)
     decision = ensure_holding_decision(name, data) or {}
+    holding_shares = int(((data or {}).get("holding") or {}).get("shares") or 0)
+    action_shares = None
+    if label == "停損" and holding_shares:
+        action_shares = holding_shares
+    elif label in {"硬風控減碼", "增量減碼", "減碼"}:
+        try:
+            action_shares = int(round(float(decision.get("shares") or 0))) or None
+        except (TypeError, ValueError):
+            action_shares = None
+        if action_shares is None and holding_shares:
+            level = decision.get("level")
+            if level == "REDUCE_50":
+                action_shares = max(int(round(holding_shares * 0.5)), 1)
+            elif level == "REDUCE_25":
+                action_shares = max(int(round(holding_shares * 0.25)), 1)
     second_profit_state = second_take_profit_execution_state(data, decision)
 
     if label == "續抱觀察" and trigger == "暫不加碼":
@@ -6321,6 +6336,7 @@ def holding_execution_item(name, data):
         "kind": "holding",
         "state": label,
         "priority": holding_execution_priority(name, data),
+        "action_shares": action_shares,
         "is_control": label in [
             "停損",
             "硬風控減碼",
@@ -7460,6 +7476,21 @@ def intraday_holding_control_line(item, report_phase):
     return line
 
 
+def afterhours_holding_control_line(item):
+
+    state = item.get("state") or ""
+    shares = item.get("action_shares")
+    parts = str(item.get("line") or "").split("｜")
+    trigger = parts[-1] if len(parts) >= 4 else ""
+
+    if state == "停損" and shares:
+        return f"{item['name']}｜停損{shares}股｜清出後等重新買點"
+    if state in {"硬風控減碼", "增量減碼", "減碼"} and shares:
+        short_trigger = trigger.replace("跌破停損", "破停損")
+        return f"{item['name']}｜減碼{shares}股｜{short_trigger}"
+    return intraday_holding_control_line(item, "盤後")
+
+
 def format_holding_control_checklist(holding_items, limit=None, report_phase=None):
 
     items = holding_control_items(holding_items)
@@ -7467,10 +7498,17 @@ def format_holding_control_checklist(holding_items, limit=None, report_phase=Non
     if not items:
         return ["無持倉"]
 
-    lines = [
-        f"{index}. {intraday_holding_control_line(item, report_phase)}"
-        for index, item in enumerate(items if limit is None else items[:limit], start=1)
-    ]
+    displayed_items = items if limit is None else items[:limit]
+    if report_phase in {"盤後", "收盤"}:
+        lines = [
+            f"{index}. {afterhours_holding_control_line(item)}"
+            for index, item in enumerate(displayed_items, start=1)
+        ]
+    else:
+        lines = [
+            f"{index}. {intraday_holding_control_line(item, report_phase)}"
+            for index, item in enumerate(displayed_items, start=1)
+        ]
 
     if limit is not None and len(items) > limit:
         lines.append(f"另有 {len(items) - limit} 項持倉風控見詳情")
@@ -10377,6 +10415,4 @@ def generate():
     if isinstance(result, list):
         return "\n\n====================\n\n".join(result)
     return result
-
-
 

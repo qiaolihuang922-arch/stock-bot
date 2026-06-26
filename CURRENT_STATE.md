@@ -2,8 +2,8 @@
 
 ## Current Task
 
-- task_id: `future_watch_institutional_mobile_compact_20260626`
-- status: `implemented + QA passed + pushed`
+- task_id: `telegram_mobile_readability_consolidation_20260626`
+- status: `implemented + QA passed + pending commit/push`
 - version: `v21.1`
 - live Telegram delivery: not run
 - DB schema/write/backfill/delete: none
@@ -12,7 +12,7 @@
 ## Stable Context
 
 - Owner reads Telegram on mobile; summary and cards must avoid repeated noise and recommendation-like wording.
-- Future-watch `關注標的財報` can carry EPS、營收、三大法人，但每行要短。
+- Future-watch `關注標的財報` can carry EPS、營收、三大法人，但每檔要短。
 - Cross-day state must come from production DB or an approved persistent source.
 - DB structure changes require Owner approval.
 - No live Telegram delivery without separate Owner approval.
@@ -20,12 +20,11 @@
 
 ## Current Implementation Notes
 
-- Per-stock holding/unheld cards do not display `昨日三大法人`.
-- Future-watch institutional line now uses compact format:
-  - `昨日三大法人：外+2,736｜投-102｜自-480｜合+2,153張`
-- Date is not shown.
-- Lots are rounded to whole numbers.
-- Source parsing fixes from previous task remain in place.
+- MOPS source-error is hidden from future-watch output.
+- Future-watch fundamentals are two lines per stock.
+- Institutional line includes bias: `昨日法人偏買/偏賣/分歧：...`。
+- Afterhours summary includes `明日優先` with action shares.
+- Today-buy holding context is shortened.
 
 ## Local Environment
 
@@ -40,12 +39,14 @@
 
 ## Verification Snapshot
 
-- Focused future-watch regression:
-  - `9 passed, 229 deselected`
+- Syntax:
+  - `py_compile` passed
+- Focused regression:
+  - `15 passed, 223 deselected`
 - Read-only sample render:
-  - 12 institutional lines use compact format.
+  - 12 future-watch fundamentals use two-line compact format.
 - Full `tests/test_generator_report.py` not rerun this turn; known legacy full-file wording failures remain a cleanup risk.
-- Git completion gate passed after push to `origin/main`.
+- Git completion gate pending commit/push.
 
 ## Known Findings
 
@@ -57,4 +58,4 @@
 
 ## Next Action
 
-- None for this task after git completion and closeout gates pass.
+- Commit and push readability consolidation, then run git completion and closeout gates.

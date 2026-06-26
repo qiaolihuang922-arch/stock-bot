@@ -2,7 +2,7 @@
 
 ## Current Cleanup Status
 
-- Active product cleanup: keep future-watch institutional trading readable on mobile.
+- Active product cleanup: afterhours Telegram report readability on mobile.
 - No DB schema, production DB data, or live Telegram action is in scope.
 
 ## Completed
@@ -16,7 +16,9 @@
 - Future-watch fundamentals include institutional trading.
 - TWSE institutional source handles recent-date fallback.
 - TPEx institutional source parses official English fields.
-- Future-watch institutional line now uses compact mobile wording.
+- Future-watch institutional line uses compact mobile wording.
+- Future-watch source-error noise hidden.
+- Afterhours summary now includes action-share priority line.
 
 ## Deferred
 

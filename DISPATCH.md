@@ -2,8 +2,8 @@
 
 ## Active
 
-- task_md_holds: `future_watch_institutional_mobile_compact_20260626`
-- status: `implemented + QA passed + pushed`
+- task_md_holds: `telegram_mobile_readability_consolidation_20260626`
+- status: `implemented + QA passed + pending commit/push`
 - current_version: `v21.1`
 - live Telegram delivery: `not run`
 - DB schema/write/backfill/delete: `none`
@@ -11,12 +11,15 @@
 
 ## Current Board
 
-- Owner provided the盘後 future-watch specimen and asked to optimize the three-major institutional trading line.
-- Display changed from long dated wording to compact mobile wording:
-  - `昨日三大法人：外+2,736｜投-102｜自-480｜合+2,153張`
-- Date is no longer displayed; `昨日` is the time label.
-- Numbers are rounded to whole lots; unit appears once at line end.
-- No source, DB, strategy, or live Telegram changes.
+- Owner asked to fix all remaining user-view issues in the afterhours specimen.
+- Implemented mobile readability consolidation:
+  - hide MOPS source-error from Telegram output;
+  - compact future-watch fundamentals to two lines per stock;
+  - add institutional bias labels;
+  - add afterhours `明日優先` with sell/reduce shares;
+  - shorten today-buy context line.
+- No strategy, DB, source, or live Telegram changes.
+- CAO runner still lacks `tmux`; local equivalent PM -> Tech -> QA documents were used.
 
 ## Queued
 
@@ -25,19 +28,20 @@
 
 ## Recently Done
 
-- `future_watch_institutional_mobile_compact_20260626`: implemented compact future-watch institutional display; QA passed; pushed.
-- `future_watch_institutional_trading_20260626`: fixed institutional source parsing and date fallback; QA conditional pass; pushed.
-- `telegram_all_cards_institutional_trading_20260626`: superseded by Owner correction; cards should not carry this line now.
-- `future_watch_remove_history_events_20260626`: removed future-watch history analogy and 30-day Taiwan market event sections; QA passed; pushed.
+- `telegram_mobile_readability_consolidation_20260626`: implemented mobile readability consolidation; QA passed pending git completion.
+- `future_watch_institutional_mobile_compact_20260626`: implemented compact future-watch institutional display; pushed.
+- `future_watch_institutional_trading_20260626`: fixed institutional source parsing and date fallback; pushed.
+- `future_watch_remove_history_events_20260626`: removed future-watch history analogy and 30-day Taiwan market event sections; pushed.
 - `docs_local_env_cleanup_20260626`: root Markdown compressed, D-drive deployment runbook optimized, local bootstrap verified, pushed.
 
 ## Verification
 
-- Focused future-watch regression: `9 passed, 229 deselected`.
-- Read-only sample render: 12 institutional lines use compact format.
+- Syntax: `py_compile` passed.
+- Focused regression: `15 passed, 223 deselected`.
+- Read-only sample render: 12 future-watch fundamentals use two-line compact format.
 - Full `tests/test_generator_report.py` not rerun this turn; known legacy full-file wording failures remain a cleanup item.
-- Git completion gate passed after push to `origin/main`.
+- Git completion gate: pending commit/push.
 
 ## Next Action
 
-- None for this task after git completion and closeout gates pass.
+- Commit and push readability consolidation, then run git completion and closeout gates.

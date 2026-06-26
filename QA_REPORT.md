@@ -1,46 +1,50 @@
-# QA_REPORT: future_watch_institutional_mobile_compact_20260626
+# QA_REPORT: telegram_mobile_readability_consolidation_20260626
 
 ## 測試範圍
 
-- Future-watch institutional trading display line。
-- 手機短格式 regression。
-- 既有 institutional source / future-watch focused regression。
+- Future-watch final message。
+- Institutional trading display。
+- Afterhours summary。
+- 今日買入說明。
+- 盤後持倉風控 checklist。
 
 ## 關聯風險掃描
 
-- 風險: 移除日期後可能看不出時間口徑。
-  - 反證: 前綴保留 `昨日`，符合 Owner 要求。
-- 風險: 四捨五入造成資訊略少。
-  - 反證: 單位是張，手機決策只需方向與量級；完整 source 不變。
-- 風險: 短標籤不清楚。
-  - 反證: 同一行固定順序 `外/投/自/合`，並位於 `三大法人` 欄位下。
+- 風險: 隱藏 MOPS source-error 會漏掉資料來源問題。
+  - 反證: source-error 對手機決策沒有幫助；文件保留 runner/source 風險，報文不顯示未確認事件。
+- 風險: 財報壓成兩行會少資訊。
+  - 反證: EPS、營收、法人判讀都保留，只移除多餘換行。
+- 風險: 持倉 summary 股數計算錯。
+  - 反證: STOP_100 用持股數；REDUCE_50/25 有 fallback regression。
 
 ## 跨區塊語意一致性
 
-- 股票卡片仍不顯示三大法人行。
-- Future-watch 財報區保留法人資訊，但更短。
-- 缺資料仍 fail closed，不輸出 0。
+- Summary 的 `明日優先` 與持倉風控檢查同口徑。
+- Future-watch 不再顯示已移除的 history/global sections。
+- 未持倉沒有可買時仍是等觸發，不升格成推薦。
 
 ## 使用者誤讀風險
 
-- 已降低：日期不再每檔重複。
-- 已降低：每個分項不再重複 `張`。
-- 已降低：小數不再干擾掃讀。
+- 已降低：MOPS 錯誤不再佔第一眼。
+- 已降低：財報區滑動量減少。
+- 已降低：法人數字有偏買/偏賣判讀。
+- 已降低：盤後 summary 直接列明日賣多少股。
 
 ## 失敗標本反證
 
-- Owner specimen 的長句已改為：
-  - `昨日三大法人：外+2,736｜投-102｜自-480｜合+2,153張`
-- Regression 反證不含：
-  - `昨日三大法人買賣超 20260625`
-  - `2,735.61張`
+- Owner afterhours specimen 的可見問題已反證：
+  - MOPS source-error hidden。
+  - 財報每檔兩行。
+  - 法人行有偏買/偏賣。
+  - Summary 新增明日優先。
+  - 今日買入長句縮短。
 
 ## 質疑與反證
 
-- 質疑: 是否改到 source 數值？
-  - 反證: 本輪只改 formatter；source regression 仍通過。
-- 質疑: 是否破壞資料源修復？
-  - 反證: focused suite `9 passed, 229 deselected`。
+- 質疑: 是否只改 helper？
+  - 反證: focused tests hit `formatTelegramMessages`、`formatTelegramPositionCard`、`format_future_watch_message`。
+- 質疑: 是否改策略？
+  - 反證: 本輪只改 formatter / fallback display shares；無 DB/write/source/strategy changes。
 
 ## 未測項目
 

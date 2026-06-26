@@ -1,49 +1,50 @@
-# TASK: future_watch_institutional_mobile_compact_20260626
+# TASK: telegram_mobile_readability_consolidation_20260626
 
 ## 任務狀態
 
-- task_id: `future_watch_institutional_mobile_compact_20260626`
-- 任務類型: `tiny_patch`
-- 狀態: `implemented_QA_passed_pushed`
+- task_id: `telegram_mobile_readability_consolidation_20260626`
+- 任務類型: `normal_patch`
+- 狀態: `implemented_QA_pending_git`
 - 版本建議: `v21.1`
-- QA 分級: `L1`
+- QA 分級: `L2`
 
 ## Owner 問題
 
-Owner 貼出盤後報文後指出 `關注標的財報` 的三大法人買賣超行太長；日期不需要顯示，只要表達「昨日」，並優化手機閱讀。
+Owner 貼出盤後完整報文並要求從使用者角度全部修復。主要痛點是手機閱讀仍太長、MOPS source-error 擋住第一眼、future-watch 財報區滑動太多、三大法人只有數字沒有判讀、盤後 summary 沒直接列出明日要賣多少股。
 
 ## 使用者可見結果
 
-- 原格式：
-  - `昨日三大法人買賣超 20260625：外資 +2,735.61張｜投信 -102張｜自營 -480.4張｜合計 +2,153.21張`
-- 新格式：
-  - `昨日三大法人：外+2,736｜投-102｜自-480｜合+2,153張`
-- 不顯示日期。
-- 小數張數取整。
-- 單位 `張` 只在行尾顯示一次。
-- 標籤縮短為 `外`、`投`、`自`、`合`。
+- MOPS source-error 不再顯示在未來30日關注訊息中；沒有可見資料時不產生空 future-watch message。
+- `關注標的財報` 每檔壓成兩行：
+  - `2356 英業達｜EPS 2026Q1 0.68｜營收 2026/05 +35.3%`
+  - `昨日法人偏買：外+2,736｜投-102｜自-480｜合+2,153張`
+- 三大法人加入 `偏買 / 偏賣 / 分歧` 判讀。
+- 盤後 summary 新增 `明日優先`，直接列停損/減碼股數。
+- 持倉風控檢查在盤後改成短股數口徑。
+- 今日買入說明縮短，例如 `今日買入：手動/ledger，非策略買點`。
 
 ## 非目標
 
-- 不改資料來源。
 - 不改策略判斷。
-- 不改持倉 / 未持倉卡片。
+- 不改資料來源與 DB。
 - 不發 live Telegram。
-- 不寫 DB。
+- 不改持倉狀態機。
 
 ## 影響模組與直接消費者
 
-- `core/future_watch.py`: institutional trading display formatter。
-- `tests/test_generator_report.py`: future-watch display regression。
-- 直接消費者: Telegram `【未來30日關注】` 的 `關注標的財報` 區塊。
+- `core/future_watch.py`: future-watch formatter、法人判讀。
+- `core/generator.py`: 今日買入短句、盤後持倉風控 checklist 股數口徑。
+- `presentation/report.py`: 盤後 summary `明日優先`。
+- `tests/test_generator_report.py`: owner specimen 對應 regression。
+- 直接消費者: Telegram 持倉卡、盤後簡報、未來30日關注。
 
 ## 輸出契約
 
-- `關注標的財報` 的法人行使用：
-  - `昨日三大法人：外{n}｜投{n}｜自{n}｜合{n}張`
-- 正數保留 `+`。
-- 0 顯示為 `0`。
-- 缺資料顯示 `昨日三大法人：資料不足`。
+- Future-watch 不顯示 source-error 佔位。
+- Future-watch 財報每檔最多兩行。
+- 法人行格式：`昨日法人偏買/偏賣/分歧：外...｜投...｜自...｜合...張`。
+- 盤後 summary 若有持倉風控，顯示 `明日優先：...`。
+- 盤後持倉風控檢查顯示停損/減碼股數。
 
 ## 版本契約
 
@@ -51,24 +52,33 @@ Owner 貼出盤後報文後指出 `關注標的財報` 的三大法人買賣超�
 
 ## 驗收條件
 
-- future-watch fixture 顯示短格式。
-- 不再包含 `昨日三大法人買賣超 20260625`。
-- 不再顯示小數張數如 `2,735.61張`。
-- focused future-watch regression 通過。
+- Future-watch / institutional / afterhours focused regression 通過。
+- MOPS source-error 不出現在 output。
+- 三大法人行有偏買/偏賣判讀。
+- Summary 包含明日優先股數。
+- 今日買入說明為短句。
 
 ## 範例或 fixture
 
-- 2356 英業達:
-  - raw: 外資 `2735.611`、投信 `-102`、自營 `-480.405`、合計 `2153.206`
-  - output: `昨日三大法人：外+2,736｜投-102｜自-480｜合+2,153張`
+- Owner specimen:
+  - 建準、英業達停損；技嘉減碼。
+  - Future-watch 12 檔財報與三大法人。
+- Regression fixtures:
+  - `test_afterhours_brief_does_not_call_all_risk_today_buys_established_new_positions`
+  - `test_future_watch_institutional_trading_line_is_mobile_compact`
+  - live-source related future-watch focused tests。
 
 ## 失敗標本與驗收路由
 
-- Owner specimen: 盤後 future-watch 報文中每檔法人行太長。
-- 驗收路由: `format_future_watch_message` output。
+- Owner full afterhours report is the failure specimen.
+- 驗收路由:
+  - `formatTelegramMessages` -> summary/evidence message。
+  - `formatTelegramPositionCard` -> 今日買入短句。
+  - `format_future_watch_message` -> future-watch final message。
 
 ## 禁止事項與阻塞條件
 
-- 不得重新把日期塞回顯示行。
-- 不得每個分項都重複 `張`。
-- 不得保留小數張數。
+- 不得用 source-error 佔位污染手機報文。
+- 不得讓 future-watch 財報回到每檔 4 行以上。
+- 不得把缺資料輸出成 0。
+- 不得 live Telegram。

@@ -1595,7 +1595,7 @@ def _signed_lot_text(value):
 def _institutional_trading_label(fundamentals):
     institutional = (fundamentals or {}).get("institutional_trading") or {}
     if not institutional:
-        return "昨日三大法人：資料不足"
+        return "昨日法人：資料不足"
     parts = []
     mapping = [
         ("foreign", "外"),
@@ -1608,13 +1608,28 @@ def _institutional_trading_label(fundamentals):
         if text is not None:
             parts.append(f"{label}{text}")
     if not parts:
-        return "昨日三大法人：資料不足"
-    return f"昨日三大法人：{'｜'.join(parts)}張"
+        return "昨日法人：資料不足"
+    total = _numeric_or_none(institutional.get("total"))
+    if total is None:
+        direction = ""
+    elif total > 0:
+        direction = "偏買"
+    elif total < 0:
+        direction = "偏賣"
+    else:
+        direction = "分歧"
+    prefix = f"昨日法人{direction}：" if direction else "昨日法人："
+    return f"{prefix}{'｜'.join(parts)}張"
 
 
 def _fundamentals_detail_line(fundamentals):
     label = _fundamentals_label(fundamentals)
     return f"  財報：{label}" if label else ""
+
+
+def _compact_fundamentals_line(item):
+    label = item.get("fundamentals_label") or "財報資料不足"
+    return f"{item.get('code')} {item.get('name')}｜{label}"
 
 
 def collect_target_fundamentals(
@@ -2001,9 +2016,7 @@ def format_future_watch_message(payload, now, version):
 
     mops = payload.get("mops_events") or {}
     mops_items = mops.get("items") or []
-    if mops.get("status") == "source-error":
-        lines.extend(["", "未來30日法說會", MOPS_SOURCE_ERROR])
-    elif mops_items:
+    if mops_items:
         lines.extend(["", "未來30日法說會"])
         for item in mops_items[:MOPS_DEFAULT_MAX_ITEMS]:
             parts = [
@@ -2019,20 +2032,12 @@ def format_future_watch_message(payload, now, version):
         lines.extend(["", "關注標的財報", "關注標的財報：官方來源暫時不可用，本次不列未確認數據"])
     elif fundamental_items:
         lines.extend(["", "關注標的財報"])
-        for index, item in enumerate(fundamental_items):
-            if index:
-                lines.append("")
-            label = item.get("fundamentals_label")
-            if not label:
-                label = "財報資料不足"
-            detail_lines = [part for part in str(label).split("｜") if part]
-            lines.append(f"{item.get('code')} {item.get('name')}")
-            lines.extend(detail_lines)
+        for item in fundamental_items:
+            lines.append(_compact_fundamentals_line(item))
             lines.append(_institutional_trading_label(item.get("fundamentals") or {}))
 
     has_visible = (
         bool(mops_items)
-        or mops.get("status") == "source-error"
         or bool(fundamental_items)
         or target_fundamentals.get("status") == "source-error"
     )
