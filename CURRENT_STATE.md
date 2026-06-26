@@ -3,7 +3,7 @@
 ## Current Task
 
 - task_id: `future_watch_fundamentals_spaced_layout_20260626`
-- status: `implemented + QA passed + pending commit/push`
+- status: `implemented + QA passed + pushed`
 - version: `v21.1`
 - live Telegram delivery: not run
 - DB schema/write/backfill/delete: none
@@ -42,7 +42,7 @@
 - Read-only sample render:
   - 2356、2376、2421 財報區恢復分行與空行。
 - Full `tests/test_generator_report.py` not rerun this turn.
-- Git completion gate pending commit/push.
+- Git completion gate passed after push to `origin/main`.
 
 ## Known Findings
 
@@ -54,4 +54,4 @@
 
 ## Next Action
 
-- Commit and push spaced layout fix, then run git completion and closeout gates.
+- None for this task after git completion and closeout gates pass.

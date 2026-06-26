@@ -3,7 +3,7 @@
 ## Active
 
 - task_md_holds: `future_watch_fundamentals_spaced_layout_20260626`
-- status: `implemented + QA passed + pending commit/push`
+- status: `implemented + QA passed + pushed`
 - current_version: `v21.1`
 - live Telegram delivery: `not run`
 - DB schema/write/backfill/delete: `none`
@@ -28,7 +28,7 @@
 
 ## Recently Done
 
-- `future_watch_fundamentals_spaced_layout_20260626`: restored spaced fundamentals layout; QA passed pending git completion.
+- `future_watch_fundamentals_spaced_layout_20260626`: restored spaced fundamentals layout; QA passed; pushed.
 - `telegram_mobile_readability_consolidation_20260626`: implemented mobile readability consolidation; pushed.
 - `future_watch_institutional_mobile_compact_20260626`: implemented compact future-watch institutional display; pushed.
 - `future_watch_institutional_trading_20260626`: fixed institutional source parsing and date fallback; pushed.
@@ -38,8 +38,8 @@
 - Focused regression: `11 passed, 227 deselected`.
 - Read-only sample render: 2356/2376/2421 use spaced layout with blank lines.
 - Full `tests/test_generator_report.py` not rerun this turn.
-- Git completion gate: pending commit/push.
+- Git completion gate passed after push to `origin/main`.
 
 ## Next Action
 
-- Commit and push spaced layout fix, then run git completion and closeout gates.
+- None for this task after git completion and closeout gates pass.
