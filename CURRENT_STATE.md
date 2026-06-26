@@ -48,6 +48,7 @@
 - Full `tests/test_generator_report.py`:
   - `46 failed, 190 passed`
   - Not a completion blocker for this focused patch, but remains a cleanup risk.
+- Git completion gate passed after push to `origin/main`.
 
 ## Known Findings
 

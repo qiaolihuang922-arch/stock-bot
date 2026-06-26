@@ -37,6 +37,7 @@
 - Focused final-output regression: `14 passed, 219 deselected`.
 - Exact QA regression: `4 passed`.
 - Full `tests/test_generator_report.py`: `46 failed, 190 passed`; failures are not treated as pass and remain a cleanup item.
+- Git completion gate passed after push to `origin/main`.
 
 ## Next Action
 
